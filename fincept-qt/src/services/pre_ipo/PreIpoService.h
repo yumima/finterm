@@ -3,9 +3,11 @@
 #include "screens/pre_ipo/PreIpoTypes.h"
 #include "services/finnhub/FinnhubService.h"
 
+#include <QHash>
 #include <QJsonObject>
 #include <QObject>
 #include <QSet>
+#include <QStringList>
 #include <QString>
 #include <QVector>
 
@@ -88,6 +90,40 @@ class PreIpoService : public QObject {
     /// opened, cached for the session, is the right shape — and a company with
     /// no XBRL facts is remembered so it is asked for only once.
     void fetch_financials_for(const QString& company_id);
+
+    /// Read one company's whole EDGAR footprint, on demand.
+    ///
+    /// The universe sweep is a 180-day, 120-filing slice of a Form D feed that
+    /// carries well over ten thousand filings in that window, so which
+    /// companies it happens to contain is close to arbitrary — and a company
+    /// added by hand, or one whose last raise predates the window, arrives
+    /// with nothing at all. This resolves the name to the CIK that files its
+    /// own Form D and then reads that filer's complete history from the
+    /// submissions API, which has no window: every round, the officers and
+    /// directors named on each, the issuer's stated revenue band, and the SPVs
+    /// raising to buy into it.
+    ///
+    /// One company at a time, when its dossier is opened. A full read is ~40
+    /// EDGAR requests at the 0.4s spacing SEC asks for.
+    void fetch_dossier_for(const QString& company_id);
+
+    /// What the EDGAR lookup for @p company_id has established so far, so the
+    /// UI can say which of "not asked", "in flight" and "this company has no
+    /// filings under that name" applies rather than showing one blank for all
+    /// three.
+    enum class DossierState { NotAsked, Fetching, NoFiler, Failed, Loaded };
+    DossierState dossier_state(const QString& company_id) const;
+    /// Filers EDGAR does list under that name, when none of them is the
+    /// company itself — usually the SPVs named after it. Lets the UI show what
+    /// it found instead of asserting the company does not exist.
+    QStringList dossier_candidates(const QString& company_id) const {
+        return dossier_candidates_.value(company_id);
+    }
+    /// Machine-readable reason behind a NoFiler state, or empty when EDGAR
+    /// simply lists nothing under the name.
+    QString dossier_reason(const QString& company_id) const {
+        return dossier_reason_.value(company_id);
+    }
 
   signals:
     void data_loaded(fincept::pre_ipo::PreIpoSummary summary);
@@ -214,6 +250,43 @@ class PreIpoService : public QObject {
     /// leaves no other trace, and the FUNDAMENTALS pane re-requests every time
     /// it renders without data: one SEC round-trip per repaint, forever.
     QSet<QString> fin_answered_;
+
+    /// Per-company EDGAR dossier lookup state. Requested / in flight, answered
+    /// with filings, and answered with "no such filer" are three different
+    /// things and the UI says which.
+    QSet<QString> dossier_requested_;
+    QSet<QString> dossier_loaded_;
+    QSet<QString> dossier_no_filer_;
+    /// EDGAR did not answer, and when. Distinct from NoFiler — it says nothing
+    /// about the company — but it stops the read being reissued on every
+    /// repaint, which would otherwise spend forty EDGAR requests per failure.
+    /// It expires: a failure is a moment, not a fact, so reopening the company
+    /// after the cool-off tries again.
+    QHash<QString, qint64> dossier_failed_at_;
+    static constexpr qint64 kDossierRetryMs = 60'000;
+    QHash<QString, QStringList> dossier_candidates_;
+    /// Why the lookup produced no filer, when the reason is not "EDGAR has
+    /// nothing" — e.g. a name with nothing distinctive to search by.
+    QHash<QString, QString> dossier_reason_;
+    /// The EDGAR answer itself, kept so it can be re-applied after any source
+    /// rebuilds companies_. The sweep's view of a company is a subset of its
+    /// filer history, and letting a background N-PORT reply overwrite the full
+    /// history with the sweep's one filing would undo the read.
+    QHash<QString, QJsonObject> dossier_cache_;
+    /// Fold a cached EDGAR dossier into @p c. Idempotent.
+    void apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject& o);
+    /// Re-apply every cached dossier after a load rebuilds the universe.
+    void reapply_dossiers();
+    /// SPVs found by a per-company dossier read, kept apart from spv_raw_.
+    /// The deep SPV scan REPLACES spv_raw_ wholesale when it lands, so
+    /// anything appended there by a dossier is erased a couple of minutes
+    /// later; attach_spv_activity joins both tables instead.
+    QVector<pre_ipo::SpvActivity> dossier_spv_;
+    /// Write a resolved CIK back into the user's own seed entry so the lookup
+    /// is not repeated next session. Only entries the user added are touched —
+    /// the shipped seed is replaced wholesale on override, so writing a
+    /// two-field entry over a curated one would erase its description.
+    void persist_resolved_cik(const QString& id, const QString& cik);
 
   public:
     /// True once SEC has confirmed this company tags no XBRL financials, so

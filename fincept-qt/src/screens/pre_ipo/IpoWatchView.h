@@ -188,6 +188,13 @@ class IpoWatchView : public QWidget {
     void    rebuild_margins_chart(const Entry& e);   // mutates margins_chart_view_
     /// Private-company $/share trend from N-PORT fund marks, drawn into the
     /// PRICE chart host. Returns true iff a trend line was plotted (≥2 quarters);
+    /// Holds the EDGAR dossier read until the reader stops moving. Arrowing
+    /// down a sixty-row list fired one ~40-request read per row — thousands of
+    /// SEC requests, and every Python slot in the app occupied for minutes,
+    /// for companies nobody stopped on.
+    class QTimer* dossier_debounce_ = nullptr;
+    QString       dossier_pending_id_;
+
     /// false when only a placeholder was shown (caller hides the tab).
     bool    rebuild_fundmark_chart(const pre_ipo::PrivateCompany& c);
 

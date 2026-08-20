@@ -38,6 +38,11 @@ struct RelatedPerson {
 /// One Form D filing. A company typically has multiple over its life.
 struct PrimaryRound {
     QString accession;
+    QString form;                 // "D" or "D/A"
+    /// A later D/A restated this same offering. The filing is real and stays
+    /// on the table, but its amount is an earlier reading of a number that has
+    /// since moved, so it must not be added into a total.
+    bool    superseded = false;
     QDate   filed_date;
     QDate   first_sale_date;
     double  amount_sold_m   = 0;  // $M actually sold so far
@@ -198,6 +203,19 @@ struct PrivateCompany {
     QDate     last_round_date;
     QString   last_round_name;
     double    revenue_est_usd = 0;      // $M
+    /// Form D Item 5, verbatim: "$1,000,000 - $4,999,999", "Decline to
+    /// Disclose", "No Revenues". The only revenue figure a private company
+    /// states on a filing before it registers an S-1 — coarse, frequently
+    /// declined, and the sole authentic alternative to a press estimate.
+    QString   revenue_range;
+    /// The filing that stated the band. The search walks newest-first past
+    /// "Decline to Disclose", so the band on show is not always the newest
+    /// filing's and must be dated rather than described as current.
+    QDate     revenue_range_as_of;
+    /// Form D filings EDGAR lists for this filer, and whether every one of
+    /// them was read. The cumulative below covers what was read.
+    int       form_d_filings_total = 0;
+    bool      form_d_rounds_complete = true;
     double    cumulative_raised_m = 0;
     QStringList key_investors;
     QStringList public_comps;

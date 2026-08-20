@@ -17,6 +17,10 @@ Actions (PythonRunner):
                   for PreIpoService::parse_sec_summary().
   form_d_recent — flat list of recent filings only.
   company_rounds — primary rounds for a single CIK (payload: {"cik": "0001234567"}).
+  resolve_cik    — company name -> the CIK that files its own Form D.
+  company_dossier— one company's whole EDGAR footprint: every Form D round, the
+                   officers and directors named on them, the issuer's stated
+                   revenue band, and the SPVs raising to buy into it.
 
 All endpoints are public, no API key. EDGAR requires a descriptive User-Agent.
 """
@@ -247,20 +251,52 @@ def build_spv_activity(filings, parse_xml_max=24):
 
 # ── EDGAR full-text search ─────────────────────────────────────────────────────
 
-def search_filings(forms, days_back, max_hits=200, q=None):
+# Set by search_filings when a request to EDGAR failed outright (timeout, 429,
+# connection reset). _get swallows those and returns None, which reaches the
+# caller as an empty result set — indistinguishable from "EDGAR has nothing".
+# Callers that turn an empty result into a statement about the world ("no
+# company files under this name") must check this first.
+_LAST_SEARCH_FAILED = False
+# Set when EDGAR stopped answering PART WAY through a paged search: real hits
+# came back, but not all of them. A caller that would conclude "no such filer"
+# from what it got must not, because the filer may be on the page that failed.
+_LAST_SEARCH_PARTIAL = False
+
+
+def search_filings(forms, days_back, max_hits=200, q=None, entity_name=None):
     """List filings of given forms (D, S-1, F-1, S-11) over a date window.
 
     `q` runs an EDGAR full-text query (phrase-quoted by the caller); used to
     pull every SPV that mentions a target company across the full history,
-    not just whatever shows up in the recent unfiltered feed."""
+    not just whatever shows up in the recent unfiltered feed.
+
+    `entity_name` searches FILER NAMES instead of document text. For "which
+    company is this", that is the question being asked — a full-text query for
+    "Ramp" ranks documents that happen to say the word and buries the filer
+    called it."""
     start = (date.today() - timedelta(days=days_back)).isoformat()
     end = date.today().isoformat()
     out = []
     fetched = 0
     from_ = 0
+    # EDGAR full-text search indexes by ROOT form: "D" already covers "D/A",
+    # "S-1" covers "S-1/A". Naming the amendment explicitly does not widen the
+    # search, it narrows it to near-nothing — a query for "Shield AI" returns
+    # 39 filings under forms=D and 4 under forms=D,D/A, and an S-1 sweep asking
+    # for S-1,S-1/A,F-1,F-1/A came back with amendments only, no original S-1
+    # or F-1 at all. Normalise to root forms and let EDGAR include the
+    # amendments, which it does by default.
+    root_forms = []
+    for f in forms:
+        root = f.split("/")[0]
+        if root not in root_forms:
+            root_forms.append(root)
+    global _LAST_SEARCH_FAILED, _LAST_SEARCH_PARTIAL
+    _LAST_SEARCH_FAILED = False
+    _LAST_SEARCH_PARTIAL = False
     while fetched < max_hits:
         params = {
-            "forms": ",".join(forms),
+            "forms": ",".join(root_forms),
             "dateRange": "custom",
             "startdt": start,
             "enddt": end,
@@ -268,12 +304,20 @@ def search_filings(forms, days_back, max_hits=200, q=None):
         }
         if q:
             params["q"] = q
+        if entity_name:
+            params["entityName"] = entity_name
         r = _get(EDGAR_SEARCH, params=params)
         if r is None:
+            # Nothing back at all is a failure; a later page failing is a
+            # partial answer. Both are distinct from "EDGAR has nothing".
+            _LAST_SEARCH_FAILED = not out
+            _LAST_SEARCH_PARTIAL = bool(out)
             break
         try:
             data = r.json()
         except Exception:
+            _LAST_SEARCH_FAILED = not out
+            _LAST_SEARCH_PARTIAL = bool(out)
             break
         hits = data.get("hits", {}).get("hits", [])
         if not hits:
@@ -471,14 +515,32 @@ def fetch_form_d_xml(cik, adsh):
         if name:
             related.append({"name": name, "roles": rel_types})
 
+    # A D/A names the filing it amends. That is the offering's identity, stated
+    # by the filer — better than inferring it from the date of first sale,
+    # which an original Form D leaves blank whenever the issuer ticks "Yet to
+    # Occur", and which two genuinely separate offerings can share.
+    previous_accession = (root.findtext(".//previousAccessionNumber", default="") or "").strip()
+
     yoi = (primary.findtext("yearOfIncorporation/value", default="") or
            primary.findtext("yearOfIncorporation", default="")).strip()
     if yoi == "OverFiveYearsAgo":
         yoi = "older"
 
+    # Item 5 of Form D. Coarse, and often "Decline to Disclose", but it is the
+    # issuer's own statement of its revenue band — the only revenue figure a
+    # private company puts on a filing before it files an S-1. Everything else
+    # in circulation for private companies is a press estimate.
+    revenue_range = ""
+    if primary is not None:
+        revenue_range = (primary.findtext(".//issuerSize/revenueRange", default="") or
+                         primary.findtext(".//revenueRange", default="") or "").strip()
+    if not revenue_range and offering is not None:
+        revenue_range = (offering.findtext(".//revenueRange", default="") or "").strip()
+
     return {
         "cik": _cik_padded(cik),
         "name": (primary.findtext("entityName", default="") or "").strip(),
+        "revenue_range": revenue_range,
         "city": city,
         "state": state_code,
         "state_desc": state_desc,
@@ -496,6 +558,7 @@ def fetch_form_d_xml(cik, adsh):
         "sales_commissions_usd": sales_commissions,
         "use_of_proceeds": use_of_proceeds,
         "first_sale_date": first_sale,
+        "previous_accession": previous_accession,
         "related_persons": related,
         "edgar_url": f"{EDGAR_ARCHIVE}/{_cik_unpadded(cik)}/{adsh.replace('-', '')}/primary_doc.xml",
     }
@@ -520,16 +583,31 @@ def _is_operating_company(industry_group):
     return industry_group not in _OPERATING_SECTORS_EXCLUDE
 
 
+# Set by _filings_for_cik when data.sec.gov did not answer. Same reason as
+# _LAST_SEARCH_FAILED: the call returns [] for "nothing on file" and for "SEC
+# rate-limited us", and only one of those is a statement about the company.
+_LAST_SUBMISSIONS_FAILED = False
+# Set when the filer's submissions JSON overflowed into `filings.files[]`
+# shards, which this function does not read. Only filers with more than ~1000
+# filings overflow, but for those the "recent" block is not the whole history
+# and nothing downstream may claim it is.
+_LAST_SUBMISSIONS_TRUNCATED = False
+
+
 def _filings_for_cik(cik, forms=("D", "D/A"), limit=10):
     """Fetch a CIK's recent filings of a given form set from data.sec.gov/submissions.
 
     Logs a stderr line on 404 so misspelled CIKs in KNOWN_PRIVATE_CIKS are
     visible during development rather than silently masked by `r is None`.
     """
+    global _LAST_SUBMISSIONS_FAILED, _LAST_SUBMISSIONS_TRUNCATED
+    _LAST_SUBMISSIONS_FAILED = False
+    _LAST_SUBMISSIONS_TRUNCATED = False
     cik_pad = _cik_padded(cik)
     url = f"{EDGAR_SUBMISSIONS}/CIK{cik_pad}.json"
     r = _get(url, headers={**UA_ARCHIVE, "Host": "data.sec.gov"})
     if r is None:
+        _LAST_SUBMISSIONS_FAILED = True
         # _get already swallowed the exception, but for known-CIK lookups
         # surface it on stderr so the operator notices a stale curated entry.
         print(f"sec_form_d_data: submissions lookup failed for CIK {cik_pad}",
@@ -538,8 +616,10 @@ def _filings_for_cik(cik, forms=("D", "D/A"), limit=10):
     try:
         data = r.json()
     except Exception:
+        _LAST_SUBMISSIONS_FAILED = True
         print(f"sec_form_d_data: invalid JSON for CIK {cik_pad}", file=sys.stderr)
         return []
+    _LAST_SUBMISSIONS_TRUNCATED = bool(data.get("filings", {}).get("files"))
     recent = data.get("filings", {}).get("recent", {})
     forms_ = recent.get("form", []) or []
     adshes = recent.get("accessionNumber", []) or []
@@ -791,6 +871,385 @@ def build_spv_deep(spv_days_back=1825, spv_hits_per_target=30, spv_parse_max=40,
     }
 
 
+# ── One company, its whole filing history ──────────────────────────────────────
+#
+# The universe sweep is a 180-day, 120-filing slice of an EDGAR-wide Form D
+# feed that carries well over ten thousand filings in that window, so which
+# companies land in it is close to arbitrary. That is the right shape for
+# "what was filed lately" and the wrong shape for "tell me about THIS company":
+# Shield AI has filed ten Form Ds since 2016 and none of them are in the slice.
+#
+# So a company is looked up by name once, resolved to its CIK, and then read
+# from the submissions API, which is per-filer and has no window at all.
+
+# Suffixes EDGAR carries and people do not type.
+# Corporate-form words only, and deliberately nothing else. "Holdings",
+# "Group" and "Technologies" are part of a company's NAME: stripping them let
+# "Ramp Holdings Inc" — a video-search company that stopped filing years ago —
+# answer to a search for Ramp, and attributing one company's filings to
+# another is worse than finding nothing.
+_LEGAL_SUFFIXES = (
+    "inc", "inc.", "incorporated", "corp", "corp.", "corporation", "co",
+    "llc", "l l c", "lp", "l p", "ltd", "limited", "plc",
+)
+
+
+def _strip_legal(norm):
+    """Drop trailing legal-form words from an already-normalised name."""
+    words = norm.split()
+    while words and words[-1] in _LEGAL_SUFFIXES:
+        words.pop()
+    return " ".join(words)
+
+
+def _is_spv_name(norm):
+    """True when the entity is a feeder/SPV named after its target rather than
+    the operating company itself — 'HII Shield AI-04, a Series of ...'.
+
+    Whole tokens only. As a substring test "fund" matches Fundrise and Fundbox,
+    and "access" matches Accesso — real operating companies that would then be
+    unable to resolve to their own CIK at all.
+    """
+    padded = " " + norm + " "
+    if " a series of " in padded or " series " in padded:
+        return True
+    # Whole tokens, and spelled out. _SPV_INDICATORS holds the stem
+    # "opportunit" for _resolve_spv's substring test, which as a token matches
+    # neither "opportunities" nor "opportunity" — so the words are listed here
+    # in the forms filers actually write.
+    tokens = set(_SPV_INDICATORS) | {"opportunities", "opportunity"}
+    tokens.discard("opportunit")
+    tokens.discard("co invest")
+    tokens.discard("coinvest")
+    if " co invest " in padded or " coinvest " in padded or " co-invest " in padded:
+        return True
+    return any((" " + ind + " ") in padded for ind in tokens)
+
+
+def resolve_cik(name, days_back=9000, max_hits=100):
+    """Resolve a company NAME to the CIK of the operating company that files
+    its own Form D.
+
+    Returns {"cik", "name", "candidates": [...]}. `candidates` is filled when
+    nothing matched exactly, so the caller can say who it did find rather than
+    reporting a bare miss — every SPV named after the company shows up in the
+    same search, and offering one of those as the company would be worse than
+    finding nothing.
+    """
+    q = (name or "").strip()
+    if not q:
+        return {"error": "name required"}
+    want = _strip_legal(_norm_name(q).strip())
+    if not want:
+        # A name made only of legal-form words ("Group Holdings") strips to
+        # nothing, and an empty target compares equal to every filer.
+        return {"cik": "", "name": "", "candidates": [], "error": "name_too_generic"}
+    hits = search_filings(["D", "D/A"], days_back=days_back, max_hits=max_hits,
+                          entity_name=q)
+    if _LAST_SEARCH_FAILED:
+        # EDGAR did not answer. Saying "no filer" here would cache one
+        # rate-limited minute as a fact about the company.
+        return {"cik": "", "name": "", "candidates": [], "error": "search_unavailable"}
+    partial = _LAST_SEARCH_PARTIAL
+
+    by_cik = {}
+    for h in hits:
+        ciks = h.get("ciks") or []
+        names = h.get("display_names") or []
+        if not ciks or not names:
+            continue
+        cik = _cik_padded(ciks[0])
+        # EDGAR appends "  (CIK 0001234567)" to the display name.
+        disp = re.sub(r"\s*\(CIK\s*\d+\)\s*$", "", names[0]).strip()
+        rec = by_cik.setdefault(cik, {"cik": cik, "name": disp, "filings": 0, "latest": ""})
+        rec["filings"] += 1
+        fd = h.get("filed_date", "")
+        if fd > rec["latest"]:
+            rec["latest"] = fd
+
+    exact, candidates = [], []
+    for rec in by_cik.values():
+        norm = _norm_name(rec["name"]).strip()
+        stripped = _strip_legal(norm)
+        if stripped == want:
+            # An exact match to what was asked for is the company itself, even
+            # when its legal name contains a word that marks feeders elsewhere:
+            # Fund That Flip, Access Softek and Opportunity Financial are real
+            # operating companies, and refusing to resolve them would leave
+            # their own filer listed under "these are feeder vehicles".
+            exact.append(rec)
+        elif _is_spv_name(norm):
+            candidates.append(rec)
+        else:
+            candidates.append(rec)
+
+    if exact:
+        # Most filings wins when a name genuinely has two filers behind it
+        # (a holding company and an operating subsidiary, say).
+        exact.sort(key=lambda r: (r["filings"], r["latest"]), reverse=True)
+        return {"cik": exact[0]["cik"], "name": exact[0]["name"],
+                "candidates": exact[1:] + candidates[:5]}
+
+    # Second tier: a filer whose name BEGINS with what was asked for — "Ramp
+    # Business Corp" for Ramp, "Acme Robotics Inc" for Acme Robotics — and only
+    # when exactly one such filer exists. Two of them ("Anduril Investors LLC"
+    # and "Anduril Investors II LLC") is an ambiguity, and guessing between
+    # them would attribute one company's filings to another. Ambiguity falls
+    # through to the candidate list, where the reader decides.
+    prefix = [r for r in candidates
+              if not _is_spv_name(_norm_name(r["name"]).strip())
+              and _norm_name(r["name"]).strip().startswith(want + " ")]
+    if len(prefix) == 1:
+        return {"cik": prefix[0]["cik"], "name": prefix[0]["name"],
+                "matched_by": "prefix",
+                "candidates": [c for c in candidates if c is not prefix[0]][:5]}
+
+    candidates.sort(key=lambda r: (r["filings"], r["latest"]), reverse=True)
+    if partial:
+        # Some pages of the search never arrived, and the filer could be on
+        # one of them. "Not found in what we got" is not "does not exist".
+        return {"cik": "", "name": "", "candidates": candidates[:8],
+                "error": "search_unavailable"}
+    return {"cik": "", "name": "", "candidates": candidates[:8]}
+
+
+def company_dossier(name="", cik="", aliases=None, max_rounds=12, spv_parse_max=10,
+                    spv_hits=60):
+    """Everything EDGAR states about one private company.
+
+    Primary rounds and the people on them come from the company's own Form D
+    filings, read from the submissions API so the whole history is covered
+    rather than whatever the recent sweep happened to catch. Secondary interest
+    comes from the SPVs that name the company in their own filings — resolved
+    from the company's name rather than from a hardcoded target list, so it
+    works for any company and not only for the three dozen someone listed.
+    """
+    resolved = {}
+    if not cik:
+        resolved = resolve_cik(name)
+        cik = resolved.get("cik", "")
+        # A company often files under a name nobody calls it: SpaceX files as
+        # Space Exploration Technologies Corp. The aliases the dossier already
+        # carries are exactly that list, so they are tried before concluding
+        # the company does not file.
+        transient = resolved.get("error") in ("search_unavailable",
+                                              "submissions_unavailable")
+        for alt in (aliases or [])[:3]:
+            if cik:
+                break
+            if not alt or _norm_name(alt).strip() == _norm_name(name).strip():
+                continue
+            alt_res = resolve_cik(alt)
+            if alt_res.get("cik"):
+                resolved = alt_res
+                cik = alt_res["cik"]
+            elif alt_res.get("error") in ("search_unavailable", "submissions_unavailable"):
+                # A clean miss on the name followed by a rate-limited alias
+                # lookup is not evidence the company does not file, and the
+                # first result being error-free must not hide the second.
+                transient = True
+        if not cik and transient:
+            return {"cik": "", "name": name, "error": "search_unavailable",
+                    "candidates": resolved.get("candidates", [])}
+        if not cik and resolved.get("error"):
+            return {"cik": "", "name": name, "error": resolved["error"],
+                    "candidates": resolved.get("candidates", [])}
+    if not cik:
+        return {
+            "cik": "", "name": name, "rounds": [], "leadership": [],
+            "spv_activity": [],
+            "candidates": resolved.get("candidates", []),
+            "resolution": "no_filer",
+        }
+
+    # The whole list, so the count is the company's real one; the XML behind
+    # each filing is fetched only for the newest max_rounds of them, because
+    # every fetch is a 0.4s EDGAR round-trip.
+    filings = _filings_for_cik(cik, ("D", "D/A"), limit=400)
+    if _LAST_SUBMISSIONS_FAILED:
+        # Without this the reply is a resolved CIK with no rounds, which the UI
+        # states as "this filer has no Form D on record" — a claim about the
+        # company built out of a rate-limited minute.
+        return {"cik": _cik_padded(cik), "name": name, "error": "submissions_unavailable",
+                "rounds": [], "leadership": [], "spv_activity": []}
+    filings.sort(key=lambda f: f.get("filed_date", ""), reverse=True)
+
+    rounds, leadership, order = [], {}, []
+    industry_group = revenue_range = year_inc = ""
+    revenue_range_as_of = ""
+    hq = {}
+    official_name = ""
+    for f in filings[:max_rounds]:
+        x = fetch_form_d_xml(cik, f["adsh"])
+        if not x:
+            continue
+        official_name = official_name or x.get("name", "")
+        industry_group = industry_group or x.get("industry_group", "")
+        # "Decline to Disclose" IS the answer on many filings; keep looking for
+        # a filing that stated a band, but do not overwrite one that did.
+        if not revenue_range or revenue_range == "Decline to Disclose":
+            stated = x.get("revenue_range", "") or ""
+            if stated and stated != revenue_range:
+                revenue_range = stated
+                revenue_range_as_of = f.get("filed_date", "")
+            elif stated and not revenue_range_as_of:
+                revenue_range_as_of = f.get("filed_date", "")
+        year_inc = year_inc or x.get("year_of_incorporation", "")
+        if not hq and (x.get("city") or x.get("state")):
+            hq = {"city": x.get("city", ""), "state": x.get("state", ""),
+                  "state_desc": x.get("state_desc", ""), "zip": x.get("zip", "")}
+        rounds.append({
+            "accession": f["adsh"],
+            "filed_date": f.get("filed_date", ""),
+            "form": f.get("form", "D"),
+            "first_sale_date": x.get("first_sale_date", ""),
+            "previous_accession": x.get("previous_accession", ""),
+            "amount_offered_usd": x.get("total_offering_usd", 0.0),
+            "amount_sold_usd": x.get("total_sold_usd", 0.0),
+            "minimum_investment_usd": x.get("minimum_investment_usd", 0.0),
+            "exemption": ", ".join(x.get("federal_exemptions", []) or []),
+            "securities_types": x.get("securities_types", []),
+            "investors": x.get("already_invested_count", 0),
+            "use_of_proceeds": x.get("use_of_proceeds", ""),
+            "related_persons": x.get("related_persons", []),
+            "edgar_url": x.get("edgar_url", ""),
+        })
+        # Officers and directors, as named on the filings. Roles accumulate
+        # across filings and the newest filing a person appears on is kept, so
+        # a board that changed over ten years reads as one list with dates
+        # rather than ten copies of itself.
+        for p in x.get("related_persons", []) or []:
+            key = _norm_name(p.get("name", "")).strip()
+            if not key:
+                continue
+            if key not in leadership:
+                leadership[key] = {"name": p.get("name", ""), "roles": [],
+                                   "last_seen": f.get("filed_date", ""),
+                                   "first_seen": f.get("filed_date", "")}
+                order.append(key)
+            entry = leadership[key]
+            for role in p.get("roles", []) or []:
+                if role not in entry["roles"]:
+                    entry["roles"].append(role)
+            fd = f.get("filed_date", "")
+            if fd and fd < entry["first_seen"]:
+                entry["first_seen"] = fd
+
+    # One offering, several filings. A Form D/A restates the SAME offering with
+    # a higher amount sold — Shield AI's 2023 raise was filed at $114.4M and
+    # amended to $199.2M and then $281.3M — so adding the filings up reports
+    # $595M for a round that raised $281.3M. Group by the offering's date of
+    # first sale, which is what the amendments carry forward, and count each
+    # offering once at its latest stated amount.
+    # Walk each filing back through the accessions it amends: every filing in
+    # one offering's chain resolves to the same root, whether or not the chain
+    # is fully within the filings that were read.
+    prev_of = {r["accession"]: r.get("previous_accession", "") for r in rounds}
+
+    def offering_root(adsh):
+        seen = set()
+        cur = adsh
+        while True:
+            prev = prev_of.get(cur, "")
+            if not prev or prev in seen or prev == cur:
+                return cur
+            seen.add(cur)
+            cur = prev
+
+    groups = {}
+    for r in rounds:            # newest first
+        # The chain root, always. Falling back to the date of first sale for a
+        # filing that is its own root splits the chain instead of joining it:
+        # the original Form D is its own root, its amendments resolve TO that
+        # accession, and keying the original by date put it in a group of its
+        # own — counting one offering twice and inflating the total.
+        key = offering_root(r["accession"])
+        if key not in groups:
+            # The newest filing on an offering states the current amount. Not
+            # the largest: a corrective D/A that LOWERS an over-reported total
+            # is the authoritative one, and keeping the bigger number would
+            # total a figure the issuer has withdrawn and label the live filing
+            # "restated".
+            groups[key] = r
+        else:
+            r["superseded"] = True
+        r["offering_key"] = key
+    for r in rounds:
+        r.setdefault("superseded", False)
+    cumulative_usd = sum(g["amount_sold_usd"] for g in groups.values())
+
+    # Secondary interest: SPVs that named this company in their own Form D.
+    spv = []
+    if name or official_name:
+        target = (name or official_name).strip()
+        want = _strip_legal(_norm_name(target).strip())
+    else:
+        want = ""
+    if want:
+        # Also name-scoped: an SPV is named after the company it buys into, so
+        # the filer index is where they are, and it does not drag in every
+        # filing that merely mentions the company in its text.
+        hits = search_filings(["D", "D/A"], days_back=9000, max_hits=spv_hits,
+                              entity_name=target)
+        seen, parsed = set(), 0
+        for h in sorted(hits, key=lambda f: f.get("filed_date", ""), reverse=True):
+            ciks = h.get("ciks") or []
+            names = h.get("display_names") or []
+            if not ciks or not names:
+                continue
+            spv_cik = _cik_padded(ciks[0])
+            if spv_cik == _cik_padded(cik) or spv_cik in seen:
+                continue
+            disp = re.sub(r"\s*\(CIK\s*\d+\)\s*$", "", names[0]).strip()
+            norm = _norm_name(disp).strip()
+            if want not in norm or not _is_spv_name(norm):
+                continue   # names the company AND is a feeder, not a namesake
+            seen.add(spv_cik)
+            sponsor = ""
+            for tok, label in _SPV_SPONSORS:
+                if (" " + tok + " ") in _norm_name(disp):
+                    sponsor = label
+                    break
+            rec = {"spv_name": disp, "cik": spv_cik, "sponsor": sponsor,
+                   "filed_date": h.get("filed_date", ""), "amount_sold_m": 0.0,
+                   "amount_offered_m": 0.0, "num_investors": 0, "edgar_url": ""}
+            if parsed < spv_parse_max:
+                x = fetch_form_d_xml(spv_cik, h["adsh"])
+                parsed += 1
+                if x:
+                    rec["amount_sold_m"] = (x.get("total_sold_usd", 0.0) or 0.0) / 1e6
+                    rec["amount_offered_m"] = (x.get("total_offering_usd", 0.0) or 0.0) / 1e6
+                    rec["num_investors"] = x.get("already_invested_count", 0)
+                    rec["edgar_url"] = x.get("edgar_url", "")
+            spv.append(rec)
+
+    return {
+        "cik": _cik_padded(cik),
+        "name": official_name or name,
+        "resolution": "cik" if resolved == {} else "name",
+        "industry_group": industry_group,
+        "revenue_range": revenue_range,
+        # Which filing stated it. The walk is newest-first and keeps looking
+        # past a "Decline to Disclose", so the band on show is not necessarily
+        # from the newest filing and the UI must not claim it is.
+        "revenue_range_as_of": revenue_range_as_of,
+        "year_of_incorporation": year_inc,
+        "hq": hq,
+        "rounds": rounds,
+        "offerings": len(groups),
+        "cumulative_raised_usd": cumulative_usd,
+        # True when every Form D this filer has was read, so the cumulative
+        # covers the company's whole history rather than its recent part.
+        "rounds_complete": len(rounds) >= len(filings) and not _LAST_SUBMISSIONS_TRUNCATED,
+        "rounds_read": len(rounds),
+        "leadership": [leadership[k] for k in order],
+        "spv_activity": spv,
+        "filings_total": len(filings),
+        "candidates": resolved.get("candidates", []),
+        "as_of": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+    }
+
+
 def handle_action(action, payload):
     if action == "all_data":
         return build_all_data(
@@ -834,6 +1293,17 @@ def handle_action(action, payload):
                     "edgar_url": x.get("edgar_url", ""),
                 })
         return rounds
+    if action == "resolve_cik":
+        return resolve_cik(payload.get("name", ""),
+                           days_back=payload.get("days_back", 9000),
+                           max_hits=payload.get("max_hits", 60))
+    if action == "company_dossier":
+        return company_dossier(name=payload.get("name", ""),
+                               cik=payload.get("cik", ""),
+                               aliases=payload.get("aliases", []),
+                               max_rounds=payload.get("max_rounds", 12),
+                               spv_parse_max=payload.get("spv_parse_max", 10),
+                               spv_hits=payload.get("spv_hits", 60))
     if action == "ipo_pipeline":
         return fetch_ipo_pipeline(days_back=payload.get("days_back", 120), max_hits=payload.get("max_hits", 80))
     return {"error": f"Unknown action: {action}"}

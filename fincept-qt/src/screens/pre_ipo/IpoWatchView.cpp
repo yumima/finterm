@@ -2331,6 +2331,29 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
         services::PreIpoService::instance().company(company_id);
     if (c.id.isEmpty()) { render_detail(nullptr); return; }
 
+    // Read this company's own EDGAR filer history, once per session. The
+    // universe sweep is a 180-day, 120-filing slice of a Form D feed carrying
+    // well over ten thousand filings in that window: a company can be on the
+    // list with one of its ten filings, or with none of them. Settling on a
+    // company is the moment it is worth spending the ~40 EDGAR requests to
+    // read the filer instead of the window.
+    //
+    // Settling, not passing through: this pane also renders on every
+    // currentCellChanged, so holding Down through the list would otherwise
+    // queue one read per row — thousands of SEC requests, and all three Python
+    // slots busy for minutes, for rows the reader only scrolled past.
+    if (!dossier_debounce_) {
+        dossier_debounce_ = new QTimer(this);
+        dossier_debounce_->setSingleShot(true);
+        dossier_debounce_->setInterval(600);
+        connect(dossier_debounce_, &QTimer::timeout, this, [this]() {
+            if (!dossier_pending_id_.isEmpty())
+                services::PreIpoService::instance().fetch_dossier_for(dossier_pending_id_);
+        });
+    }
+    dossier_pending_id_ = company_id;
+    dossier_debounce_->start();
+
     const QString css = build_detail_css();
     auto esc = [](const QString& s) { return s.toHtmlEscaped(); };
     // $M → "$8.3B" / "$420.0M" / "—".
@@ -2499,6 +2522,28 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
     // ── FUNDAMENTALS: XBRL financials (present for S-1 filers) ────────────────
     {
         QString h = css;
+        // Form D Item 5, before the XBRL block. A private company publishes no
+        // financial statements, so this band — the issuer's own statement of
+        // its revenue on the filing — is the only revenue figure here that
+        // comes from the company rather than from someone's estimate. It is
+        // coarse and often declined, and it is printed verbatim for that
+        // reason: "Decline to Disclose" is an answer, and paraphrasing it into
+        // a number would be inventing one.
+        if (!c.revenue_range.isEmpty()) {
+            h += "<div class='sec'>REVENUE BAND (FORM D ITEM 5)</div>";
+            h += QString("<table class='grid'><tr><td class='k'>AS FILED</td>"
+                         "<td>%1</td></tr><tr><td class='k'>FILING</td>"
+                         "<td>%2</td></tr></table>")
+                     .arg(esc(c.revenue_range))
+                     .arg(c.revenue_range_as_of.isValid()
+                              ? c.revenue_range_as_of.toString("MMM d, yyyy")
+                              : QStringLiteral("—"));
+            // Dated rather than described as current: the search walks
+            // newest-first past filings that declined to state a band, so the
+            // one shown can be older than the newest filing.
+            h += "<p class='muted'>The issuer's own revenue band, from the most recent Form D "
+                 "that stated one. Issuers may decline to state it, and many do.</p>";
+        }
         // Availability is c.fin.as_of, NOT "some number is nonzero". Those are
         // different questions, and the difference is visible: a filer whose
         // XBRL we simply never fetched used to look identical to one that
@@ -2558,14 +2603,34 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
     {
         QString h = css;
         if (!c.rounds.isEmpty()) {
-            h += QString("<div class='sec'>PRIMARY ROUNDS (FORM D · %1 filings, %2 cumulative)</div>")
-                     .arg(c.rounds.size()).arg(fmt_raised_m(c.cumulative_raised_m));
+            int offerings = 0;
+            for (const auto& r : c.rounds)
+                if (!r.superseded) ++offerings;
+            // Say what the total covers. A company with more Form Ds than were
+            // read gets a cumulative over the ones that were, and a header
+            // claiming the whole history would be the wrong claim.
+            const bool partial = !c.form_d_rounds_complete &&
+                                 c.form_d_filings_total > c.rounds.size();
+            h += QString("<div class='sec'>PRIMARY ROUNDS (FORM D · %1 · %2 offerings, "
+                         "%3 cumulative)</div>")
+                     .arg(partial ? QString("%1 of %2 filings read")
+                                        .arg(c.rounds.size())
+                                        .arg(c.form_d_filings_total)
+                                  : QString("%1 filings").arg(c.rounds.size()))
+                     .arg(offerings > 0 ? offerings : c.rounds.size())
+                     .arg(fmt_raised_m(c.cumulative_raised_m));
             h += "<table class='grid'><tr><td class='k'>FILED</td><td class='k'>SOLD</td>"
                  "<td class='k'>OFFERED</td><td class='k'>EXEMPTION</td></tr>";
             for (const auto& r : c.rounds) {
                 QString amt = money_m(r.amount_sold_m);
                 if (!r.edgar_url.isEmpty())
                     amt = QString("<a href='%1'>%2</a>").arg(esc(r.edgar_url)).arg(amt);
+                // A D/A restates its offering rather than announcing a new
+                // one. The filing is real and stays on the table, but its
+                // amount is an earlier reading of a number that has since
+                // moved, and the cumulative counts each offering once.
+                if (r.superseded)
+                    amt += " <span class='k'>· restated</span>";
                 h += QString("<tr><td>%1</td><td>%2</td><td>%3</td><td class='k'>%4</td></tr>")
                          .arg(r.filed_date.isValid() ? r.filed_date.toString("MMM d, yyyy") : "—")
                          .arg(amt)
@@ -2681,9 +2746,72 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
             h += "</table>";
         }
         if (c.rounds.isEmpty() && c.fund_marks.isEmpty() && c.spv_activity.isEmpty() &&
-            c.secondary.isEmpty())
-            h += "<i class='muted'>No primary rounds, fund marks, or secondary activity "
-                 "on file yet for this company.</i>";
+            c.secondary.isEmpty()) {
+            // Why it is empty, and what is being done about it. The universe
+            // sweep reads a 180-day, 120-filing slice of a Form D feed that
+            // carries more than ten thousand filings in that window, so a
+            // company can easily be in the list with none of its filings —
+            // Shield AI has filed ten Form Ds since 2016 and the sweep caught
+            // none of them. The fix is to read the company's own filer history
+            // instead of hoping the sweep contained it.
+            auto& svc = services::PreIpoService::instance();
+            using DS = services::PreIpoService::DossierState;
+            switch (svc.dossier_state(c.id)) {
+            case DS::NoFiler: {
+                if (svc.dossier_reason(c.id) == QLatin1String("name_too_generic")) {
+                    // EDGAR was never asked: the name strips to legal-form
+                    // words with nothing left to search by.
+                    h += "<i class='muted'>This company's name has nothing distinctive to "
+                         "search EDGAR by once the legal form is removed. Add its full legal "
+                         "name — or its CIK — and the filing history can be read.</i>";
+                    break;
+                }
+                // Only Form D was searched, so only Form D is claimed. The
+                // company may well file other forms under this name.
+                QString msg = "<i class='muted'>EDGAR lists no Form D filer under this name, "
+                              "so there are no primary rounds to show. A company that raises "
+                              "outside Regulation D — or under an exemption with no notice "
+                              "filing — leaves no public trace of a round.";
+                const QStringList cands = svc.dossier_candidates(c.id);
+                if (!cands.isEmpty()) {
+                    msg += "<br><br>Filers EDGAR does list under that name: ";
+                    QStringList shown;
+                    for (const auto& n : cands.mid(0, 5)) shown << esc(n);
+                    msg += shown.join(", ");
+                    msg += " — these are feeder vehicles named after the company, not the "
+                           "company itself.";
+                }
+                h += msg + "</i>";
+                break;
+            }
+            case DS::Loaded:
+                h += "<i class='muted'>This company's EDGAR filer has no Form D on record, "
+                     "and no fund or SPV filing names it.</i>";
+                break;
+            case DS::Failed:
+                // Says nothing about the company. EDGAR rate-limits, and a
+                // minute of that must not be reported as an absence of
+                // filings.
+                h += "<i class='muted'>EDGAR did not answer when this company's filing "
+                     "history was requested, so nothing can be said about its rounds yet. "
+                     "Open the company again in a minute to retry.</i>";
+                break;
+            case DS::Fetching:
+                h += "<i class='muted'>Reading this company's EDGAR filing history\xe2\x80\xa6 "
+                     "Every Form D it has filed, the officers and directors named on them, "
+                     "and any SPV raising to buy into it.</i>";
+                break;
+            default:
+                // NotAsked, and it stays that way: the read needs a name or a
+                // CIK to look up, and an entry that reached this screen with
+                // neither — an SPV stub named only by its target — has
+                // nothing to ask EDGAR about. Claiming a read is in progress
+                // would promise data that is not coming.
+                h += "<i class='muted'>No company name or SEC filer to look up, so there is "
+                     "no filing history to read.</i>";
+                break;
+            }
+        }
         if (page_funding_) page_funding_->setText(h);
     }
 

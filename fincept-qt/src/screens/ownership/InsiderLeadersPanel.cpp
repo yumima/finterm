@@ -15,6 +15,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QItemSelectionModel>
 #include <QLineEdit>
 #include <QPointer>
 #include <QPushButton>
@@ -69,9 +70,14 @@ InsiderLeadersPanel::InsiderLeadersPanel(QWidget* parent) : QWidget(parent) {
         // and "F" matches half the market — opening the first of those
         // instead of the ticker the reader typed is not what Enter promised.
         auto open_row = [this](int r) {
-            const bool already_current = table_->currentRow() == r;
+            // Current is not the same as selected: a re-render can leave a row
+            // current with nothing selected, and then selectRow DOES change
+            // the selection and the handler announces it. Gate on the
+            // selection itself, or Enter opens the register twice.
+            const bool already_selected =
+                table_->selectionModel() && table_->selectionModel()->isRowSelected(r);
             table_->selectRow(r);
-            if (!already_current)
+            if (!already_selected)
                 return;   // the selection change announced it
             // selectRow is silent when the row is already current, so an Enter
             // that re-opens the row the reader is on is announced here.
@@ -122,7 +128,14 @@ InsiderLeadersPanel::InsiderLeadersPanel(QWidget* parent) : QWidget(parent) {
     window_->addItem(QStringLiteral("Last 5 days"), 5);
     window_->addItem(QStringLiteral("Last 10 days"), 10);
     window_->addItem(QStringLiteral("Last 30 days"), 30);
-    connect(window_, &QComboBox::currentIndexChanged, this, [this]() { reload(); });
+    connect(window_, &QComboBox::currentIndexChanged, this, [this]() {
+        // "N days of the selected window still unread" was measured against
+        // the window that was selected then. Change the window and it is a
+        // statement about a different span — a 5-day window can be fully read
+        // while the 30-day one it was measured on was not.
+        scan_note_.clear();
+        reload();
+    });
     bar->addWidget(window_);
 
     bar->addStretch(1);

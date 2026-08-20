@@ -252,21 +252,32 @@ void OwnershipScreen::build_ui() {
                 return;
             }
         }
-        // No usable suggestion — the search is in flight, found nothing, or is
-        // unavailable. Take the typed text only if it can be a symbol: "Apple"
-        // upper-cased is not AAPL, and loading APPLE spends the round-trips to
-        // prove it.
-        if (ownership::looks_like_ticker(typed)) {
+        // Typed in capitals, and shaped like a symbol: that is a ticker and
+        // the reader said so. Open it without waiting for a search.
+        const bool shaped = ownership::looks_like_ticker(typed);
+        if (shaped && typed == typed.toUpper()) {
             show_symbol(typed);
             return;
         }
-        // A name nothing can resolve yet. Say which, rather than swallowing
-        // the keystroke: silence here is indistinguishable from a dead box.
+        // Lower case is ambiguous — "aapl" is a ticker, "google" is a company —
+        // so if a search is already on its way, it gets to answer. The debounce
+        // holds the first 220ms of one, and treating that window as a miss
+        // would load GOOGLE rather than resolving GOOGL.
+        const bool asking = !ticker_pending_query_.isEmpty() || ticker_debounce_->isActive();
+        if (asking) {
+            ticker_note_->setText(
+                QStringLiteral("Still searching for “%1” — press Enter again in a moment.")
+                    .arg(typed));
+            return;
+        }
+        // Nothing is coming. Take the typed text if it can be a symbol at all;
+        // otherwise say so, because silence here reads as a dead box.
+        if (shaped) {
+            show_symbol(typed);
+            return;
+        }
         ticker_note_->setText(
-            ticker_pending_query_.isEmpty()
-                ? QStringLiteral("No security matches “%1”. Try its ticker.").arg(typed)
-                : QStringLiteral("Still searching for “%1” — press Enter again in a moment.")
-                      .arg(typed));
+            QStringLiteral("No security matches “%1”. Try its ticker.").arg(typed));
     });
     connect(completer, QOverload<const QString&>::of(&QCompleter::activated), this,
             [this](const QString& choice) { show_symbol(choice); });

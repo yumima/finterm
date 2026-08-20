@@ -99,6 +99,18 @@ QString slugify(const QString& s) {
 // passes must be added below, or it will be lost when `other` is removed.
 void merge_company_into(PrivateCompany& primary, const PrivateCompany& other) {
     if (primary.cik.isEmpty())        primary.cik = other.cik;
+    // The EDGAR-read fields travel with the rounds they describe. Without
+    // this, a merged duplicate keeps the loser's rounds (below) while the
+    // coverage flags stay at their defaults, and the funding header prints a
+    // partial read as though it were the company's whole history.
+    if (primary.revenue_range.isEmpty()) {
+        primary.revenue_range      = other.revenue_range;
+        primary.revenue_range_as_of = other.revenue_range_as_of;
+    }
+    if (primary.form_d_filings_total == 0) {
+        primary.form_d_filings_total   = other.form_d_filings_total;
+        primary.form_d_rounds_complete = other.form_d_rounds_complete;
+    }
     if (primary.name.isEmpty())       primary.name = other.name;
     if (primary.sector.isEmpty())     primary.sector = other.sector;
     if (primary.sub_sector.isEmpty()) primary.sub_sector = other.sub_sector;
@@ -227,6 +239,14 @@ void PreIpoService::refresh_internal(bool force) {
     if (loading_) return;
     loading_ = true;
     force_refresh_ = force;
+    if (force) {
+        // The user asked for fresh data. The cached dossiers stay — they are
+        // EDGAR's own answer and still true — but the "already asked" marks go,
+        // so opening a company reads its filer again.
+        dossier_loaded_.clear();
+        dossier_no_filer_.clear();
+        dossier_failed_at_.clear();
+    }
     pending_bits_ = FB_All;
     failed_bits_  = 0;
 
@@ -469,6 +489,325 @@ void PreIpoService::run_nport_marks_fetch() {
         /*stream*/ {}, /*timeout*/ 240'000);
 }
 
+void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject& o) {
+    const QString cik = o.value(QStringLiteral("cik")).toString();
+    if (cik.isEmpty())
+        return;
+    const auto to_date = [](const QString& s) { return QDate::fromString(s, Qt::ISODate); };
+
+    if (c.cik.isEmpty())
+        c.cik = cik;
+
+    QVector<pre_ipo::PrimaryRound> rounds;
+    for (const auto& v : o.value(QStringLiteral("rounds")).toArray()) {
+        const auto r = v.toObject();
+        pre_ipo::PrimaryRound pr;
+        pr.accession  = r.value(QStringLiteral("accession")).toString();
+        pr.form       = r.value(QStringLiteral("form")).toString();
+        pr.superseded = r.value(QStringLiteral("superseded")).toBool();
+        pr.filed_date = to_date(r.value(QStringLiteral("filed_date")).toString());
+        pr.first_sale_date = to_date(r.value(QStringLiteral("first_sale_date")).toString());
+        pr.amount_sold_m = r.value(QStringLiteral("amount_sold_usd")).toDouble() / 1e6;
+        pr.amount_offered_m = r.value(QStringLiteral("amount_offered_usd")).toDouble() / 1e6;
+        pr.minimum_investment_usd =
+            r.value(QStringLiteral("minimum_investment_usd")).toDouble();
+        pr.exemption = r.value(QStringLiteral("exemption")).toString();
+        pr.edgar_url = r.value(QStringLiteral("edgar_url")).toString();
+        for (const auto& pv : r.value(QStringLiteral("related_persons")).toArray()) {
+            const auto po = pv.toObject();
+            pre_ipo::RelatedPerson person;
+            person.name = po.value(QStringLiteral("name")).toString();
+            for (const auto& rv : po.value(QStringLiteral("roles")).toArray())
+                person.roles << rv.toString();
+            if (!person.name.isEmpty())
+                pr.related_persons.push_back(person);
+        }
+        rounds.push_back(pr);
+    }
+
+    QVector<pre_ipo::SpvActivity> spvs;
+    for (const auto& v : o.value(QStringLiteral("spv_activity")).toArray()) {
+        const auto sv = v.toObject();
+        pre_ipo::SpvActivity a;
+        a.underlying_id    = c.id;
+        a.underlying_name  = c.name;
+        a.spv_name         = sv.value(QStringLiteral("spv_name")).toString();
+        a.cik              = sv.value(QStringLiteral("cik")).toString();
+        a.sponsor          = sv.value(QStringLiteral("sponsor")).toString();
+        a.filed_date       = to_date(sv.value(QStringLiteral("filed_date")).toString());
+        a.amount_sold_m    = sv.value(QStringLiteral("amount_sold_m")).toDouble();
+        a.amount_offered_m = sv.value(QStringLiteral("amount_offered_m")).toDouble();
+        a.num_investors    = sv.value(QStringLiteral("num_investors")).toInt();
+        a.edgar_url        = sv.value(QStringLiteral("edgar_url")).toString();
+        if (!a.spv_name.isEmpty())
+            spvs.push_back(a);
+    }
+
+    if (!rounds.isEmpty()) {
+        // The complete filer history replaces whatever the window sweep
+        // caught: same source, read per filer instead of per window, so it is
+        // a superset rather than a competing answer.
+        c.rounds = rounds;
+        // Amendment-aware. Adding the filings up counts one offering as many —
+        // a raise filed at $114M and amended to $199M and then $281M is
+        // $281M, not $595M — so the total comes from the script, which groups
+        // the filings by their date of first sale.
+        c.cumulative_raised_m =
+            o.value(QStringLiteral("cumulative_raised_usd")).toDouble() / 1e6;
+        for (const auto& r : rounds) {
+            if (r.filed_date.isValid() &&
+                (!c.last_round_date.isValid() || r.filed_date > c.last_round_date))
+                c.last_round_date = r.filed_date;
+        }
+        // The label travels with the date. Left alone it kept whatever the
+        // sweep had written — "Form D (Mar 2016)" — and the overview row,
+        // which prints name and date side by side, read "Form D (Mar 2016)
+        // (Nov 2024)".
+        if (c.last_round_date.isValid()) {
+            c.last_round_name =
+                QStringLiteral("Form D (%1)").arg(c.last_round_date.toString("MMM yyyy"));
+        }
+    }
+    // Outside the rounds guard: if the filer has thirty filings and every XML
+    // fetch failed, the company keeps the sweep's one round, and a "complete"
+    // default would print that single filing as its whole history.
+    if (o.contains(QStringLiteral("filings_total"))) {
+        c.form_d_filings_total = o.value(QStringLiteral("filings_total")).toInt();
+        c.form_d_rounds_complete =
+            o.value(QStringLiteral("rounds_complete")).toBool(true) &&
+            c.form_d_filings_total <= c.rounds.size();
+    }
+    // Into their own table, not spv_raw_ and not straight onto the company.
+    // attach_spv_activity() clears and rebuilds every company's spv_activity
+    // from the side tables on each emit, and the deep SPV scan REPLACES
+    // spv_raw_ wholesale when it lands — so an append there is erased a couple
+    // of minutes later, and a direct write to the company survives only to the
+    // next repaint. Both tables are joined, so the deep scan's finds and the
+    // dossier's add up instead of taking turns overwriting each other.
+    const auto same_filing = [](const pre_ipo::SpvActivity& a,
+                                const pre_ipo::SpvActivity& b) {
+        return a.cik == b.cik && a.filed_date == b.filed_date &&
+               a.underlying_id == b.underlying_id;
+    };
+    for (const auto& a : spvs) {
+        bool known = false;
+        for (const auto& e : dossier_spv_) {
+            if (same_filing(e, a)) { known = true; break; }
+        }
+        if (!known)
+            dossier_spv_.push_back(a);
+    }
+    // Visible immediately, without waiting for the next emit_summary().
+    for (const auto& a : spvs) {
+        bool shown = false;
+        for (const auto& e : c.spv_activity) {
+            if (same_filing(e, a)) { shown = true; break; }
+        }
+        if (!shown)
+            c.spv_activity.push_back(a);
+    }
+    // attach_spv_activity sorts newest-first, but it does not run until the
+    // next emit. Without this the rows just added sit at the bottom of a
+    // date-sorted table, a 2026 feeder below a 2019 one.
+    std::sort(c.spv_activity.begin(), c.spv_activity.end(),
+              [](const pre_ipo::SpvActivity& x, const pre_ipo::SpvActivity& y) {
+                  return x.filed_date > y.filed_date;
+              });
+    const QString industry = o.value(QStringLiteral("industry_group")).toString();
+    if (c.sector.isEmpty() && !industry.isEmpty())
+        c.sector = industry;
+    c.revenue_range = o.value(QStringLiteral("revenue_range")).toString();
+    c.revenue_range_as_of =
+        QDate::fromString(o.value(QStringLiteral("revenue_range_as_of")).toString(),
+                          Qt::ISODate);
+    const auto hq = o.value(QStringLiteral("hq")).toObject();
+    if (c.hq_city.isEmpty())
+        c.hq_city = hq.value(QStringLiteral("city")).toString();
+    if (c.hq_state.isEmpty())
+        c.hq_state = hq.value(QStringLiteral("state")).toString();
+}
+
+void PreIpoService::reapply_dossiers() {
+    if (dossier_cache_.isEmpty())
+        return;
+    for (auto& c : companies_) {
+        const auto it = dossier_cache_.constFind(c.id);
+        if (it != dossier_cache_.constEnd())
+            apply_dossier(c, *it);
+    }
+}
+
+PreIpoService::DossierState PreIpoService::dossier_state(const QString& company_id) const {
+    const auto f = dossier_failed_at_.constFind(company_id);
+    if (f != dossier_failed_at_.constEnd() &&
+        QDateTime::currentMSecsSinceEpoch() - *f < kDossierRetryMs)
+        return DossierState::Failed;
+    if (dossier_no_filer_.contains(company_id)) return DossierState::NoFiler;
+    if (dossier_loaded_.contains(company_id))   return DossierState::Loaded;
+    if (dossier_requested_.contains(company_id)) return DossierState::Fetching;
+    return DossierState::NotAsked;
+}
+
+void PreIpoService::persist_resolved_cik(const QString& id, const QString& cik) {
+    if (id.isEmpty() || cik.isEmpty())
+        return;
+    QString data_dir = qEnvironmentVariable("FINCEPT_DATA_DIR");
+    if (data_dir.isEmpty())
+        data_dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    const QString path = data_dir + "/pre_ipo_valuation_seed.json";
+    QFile in(path);
+    if (!in.open(QIODevice::ReadOnly))
+        return;   // no user overrides — nothing of the user's to update
+    const QJsonDocument doc = QJsonDocument::fromJson(in.readAll());
+    in.close();
+    if (!doc.isObject())
+        return;
+    QJsonObject root = doc.object();
+    QJsonArray entries = root.value(QStringLiteral("entries")).toArray();
+    bool touched = false;
+    for (int i = 0; i < entries.size(); ++i) {
+        QJsonObject e = entries[i].toObject();
+        if (e.value(QStringLiteral("id")).toString() != id)
+            continue;
+        if (e.value(QStringLiteral("cik")).toString() == cik)
+            return;   // already recorded
+        e[QStringLiteral("cik")] = cik;
+        entries[i] = e;
+        touched = true;
+        break;
+    }
+    if (!touched)
+        return;   // a curated entry, not the user's — leave the shipped seed alone
+    root[QStringLiteral("entries")] = entries;
+    QFile out(path);
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        LOG_WARN("PreIpo", QString("could not record resolved CIK in %1").arg(path));
+        return;
+    }
+    out.write(QJsonDocument(root).toJson(QJsonDocument::Indented));
+    out.close();
+}
+
+void PreIpoService::fetch_dossier_for(const QString& company_id) {
+    if (company_id.isEmpty())
+        return;
+    if (dossier_requested_.contains(company_id) || dossier_loaded_.contains(company_id) ||
+        dossier_no_filer_.contains(company_id))
+        return;
+    // A recent failure blocks the retry only briefly: long enough that the
+    // repaint its own reply triggers cannot reissue the read, short enough
+    // that coming back to the company tries again.
+    const auto failed_at = dossier_failed_at_.constFind(company_id);
+    if (failed_at != dossier_failed_at_.constEnd() &&
+        QDateTime::currentMSecsSinceEpoch() - *failed_at < kDossierRetryMs)
+        return;
+
+    QString name, cik;
+    QStringList aliases;
+    bool found = false;
+    for (const auto& c : companies_) {
+        if (c.id == company_id) {
+            name = c.name;
+            cik  = c.cik;
+            // A company often files under a name nobody calls it — SpaceX
+            // files as Space Exploration Technologies Corp — and the aliases
+            // already on the dossier are that list.
+            aliases = c.aliases;
+            found = true;
+            break;
+        }
+    }
+    if (!found || (name.isEmpty() && cik.isEmpty()))
+        return;
+
+    dossier_requested_.insert(company_id);
+    QJsonObject payload;
+    payload[QStringLiteral("name")] = name;
+    payload[QStringLiteral("cik")]  = cik;
+    payload[QStringLiteral("aliases")] = QJsonArray::fromStringList(aliases);
+    payload[QStringLiteral("max_rounds")]    = 12;
+    payload[QStringLiteral("spv_parse_max")] = 12;
+
+    QPointer<PreIpoService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_form_d_data.py"),
+        {QStringLiteral("company_dossier"),
+         QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
+        [self, company_id](python::PythonResult result) {
+            if (!self) return;
+            self->dossier_requested_.remove(company_id);
+            // A failed REQUEST is not an answer about the company, so it is
+            // never recorded as "no such filer". But it cannot be left as
+            // "never asked" either: the pane re-requests whenever it renders
+            // without data, and the reply repaints the pane, so a failure that
+            // clears the request flag and repaints spends forty EDGAR requests
+            // per round trip for as long as the dossier is open. It is marked
+            // failed, which stops the loop and is cleared by Refresh.
+            const auto fail = [self, company_id](const QString& why) {
+                LOG_WARN("PreIpo", "dossier fetch failed for " + company_id + ": " + why);
+                self->dossier_failed_at_[company_id] = QDateTime::currentMSecsSinceEpoch();
+                emit self->company_updated(company_id);
+            };
+            if (!result.success || result.output.trimmed().isEmpty()) {
+                fail(result.error.left(200));
+                return;
+            }
+            const QJsonDocument doc =
+                QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
+            if (!doc.isObject()) {
+                fail(QStringLiteral("no JSON in reply"));
+                return;
+            }
+            const QJsonObject o = doc.object();
+            if (o.contains(QStringLiteral("error"))) {
+                const QString err = o.value(QStringLiteral("error")).toString();
+                // Only EDGAR not answering is transient. "name_too_generic" is
+                // a local, permanent answer — the name strips to nothing to
+                // search by, EDGAR was never asked — and dressing it as a
+                // failure promises a retry that cannot succeed.
+                if (err == QLatin1String("search_unavailable") ||
+                    err == QLatin1String("submissions_unavailable")) {
+                    fail(err);
+                } else {
+                    self->dossier_reason_[company_id] = err;
+                    self->dossier_no_filer_.insert(company_id);
+                    emit self->company_updated(company_id);
+                }
+                return;
+            }
+
+            const QString cik = o.value(QStringLiteral("cik")).toString();
+            if (cik.isEmpty()) {
+                // EDGAR answered: nothing files under this name. Remember the
+                // filers it DID list, which for a company people build SPVs
+                // around is a list of those SPVs.
+                QStringList cands;
+                for (const auto& v : o.value(QStringLiteral("candidates")).toArray()) {
+                    const auto c = v.toObject();
+                    const QString nm = c.value(QStringLiteral("name")).toString();
+                    if (!nm.isEmpty())
+                        cands << nm;
+                }
+                self->dossier_candidates_[company_id] = cands;
+                self->dossier_no_filer_.insert(company_id);
+                emit self->company_updated(company_id);
+                return;
+            }
+
+            self->dossier_cache_[company_id] = o;
+            for (auto& c : self->companies_) {
+                if (c.id == company_id) {
+                    self->apply_dossier(c, o);
+                    break;
+                }
+            }
+            self->dossier_loaded_.insert(company_id);
+            self->persist_resolved_cik(company_id, cik);
+            emit self->company_updated(company_id);
+        },
+        /*stream*/ {}, /*timeout*/ 300'000);
+}
+
 void PreIpoService::fetch_financials_for(const QString& company_id) {
     if (company_id.isEmpty())
         return;
@@ -688,7 +1027,23 @@ void PreIpoService::parse_spv_response(const QJsonObject& root) {
 
 void PreIpoService::attach_spv_activity() {
     for (auto& c : companies_) c.spv_activity.clear();
-    if (spv_raw_.isEmpty()) return;
+    // Both tables. The deep scan owns spv_raw_ and replaces it wholesale;
+    // per-company dossier reads accumulate in dossier_spv_. Joining only the
+    // first would drop everything the dossiers found on the next deep scan.
+    QVector<SpvActivity> all = spv_raw_;
+    for (const auto& d : dossier_spv_) {
+        bool known = false;
+        for (const auto& e : spv_raw_) {
+            if (e.cik == d.cik && e.filed_date == d.filed_date &&
+                e.underlying_id == d.underlying_id) {
+                known = true;
+                break;
+            }
+        }
+        if (!known)
+            all.push_back(d);
+    }
+    if (all.isEmpty()) return;
 
     QHash<QString, int> by_any_id;
     for (int i = 0; i < companies_.size(); ++i) {
@@ -696,7 +1051,7 @@ void PreIpoService::attach_spv_activity() {
         for (const auto& al : companies_[i].aliases) by_any_id[al] = i;
     }
 
-    for (const auto& s : spv_raw_) {
+    for (const auto& s : all) {
         int idx = -1;
         if (auto it = by_any_id.find(s.underlying_id); it != by_any_id.end()) idx = *it;
         if (idx < 0) {
@@ -1579,6 +1934,12 @@ void PreIpoService::emit_summary() {
     // stub), and apply valuations AFTER recompute_analytics (which zeroes
     // last_valuation_usd on every pass).
     seed_ensure_companies();
+    // Before the join and before the emit. A load rebuilds companies_ from the
+    // sweep, whose view of a company is a subset of what its own filer history
+    // says; folding the EDGAR reads back in AFTER the emit left the screen
+    // showing the sweep's single filing and its naive total until some
+    // unrelated event repainted it.
+    reapply_dossiers();
     attach_spv_activity();  // re-join the SPV side table to the latest companies_
     recompute_analytics();
     seed_apply_valuation();

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`8c09ce80a`](https://github.com/yumima/finterm/commit/8c09ce80a) ownership: search the filers on the left, a security on the right
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
