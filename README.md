@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`979ce4f58`](https://github.com/yumima/finterm/commit/979ce4f58) pre-ipo: read the company's own filings, not the window they might be in
 - [`8c09ce80a`](https://github.com/yumima/finterm/commit/8c09ce80a) ownership: search the filers on the left, a security on the right
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

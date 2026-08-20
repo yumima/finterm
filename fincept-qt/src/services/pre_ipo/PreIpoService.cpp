@@ -246,6 +246,12 @@ void PreIpoService::refresh_internal(bool force) {
         dossier_loaded_.clear();
         dossier_no_filer_.clear();
         dossier_failed_at_.clear();
+        // The explanations go with them. A company that once resolved to
+        // "nothing distinctive to search by" and has since been given its
+        // legal name would keep showing that line over the answer it just
+        // got, candidates and all.
+        dossier_reason_.clear();
+        dossier_candidates_.clear();
     }
     pending_bits_ = FB_All;
     failed_bits_  = 0;
@@ -631,7 +637,19 @@ void PreIpoService::reapply_dossiers() {
     if (dossier_cache_.isEmpty())
         return;
     for (auto& c : companies_) {
-        const auto it = dossier_cache_.constFind(c.id);
+        auto it = dossier_cache_.constFind(c.id);
+        // Also by alias. seed_ensure_companies() merges duplicates and demotes
+        // the loser's id to an alias, so a dossier read under the old id would
+        // otherwise be dropped on the next load and the funding pane would
+        // revert to the sweep's single filing — the same reason
+        // attach_spv_activity joins on ids AND aliases.
+        if (it == dossier_cache_.constEnd()) {
+            for (const auto& al : c.aliases) {
+                it = dossier_cache_.constFind(al);
+                if (it != dossier_cache_.constEnd())
+                    break;
+            }
+        }
         if (it != dossier_cache_.constEnd())
             apply_dossier(c, *it);
     }

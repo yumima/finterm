@@ -1202,7 +1202,10 @@ def company_dossier(name="", cik="", aliases=None, max_rounds=12, spv_parse_max=
                 continue
             disp = re.sub(r"\s*\(CIK\s*\d+\)\s*$", "", names[0]).strip()
             norm = _norm_name(disp).strip()
-            if want not in norm or not _is_spv_name(norm):
+            # Whole tokens: "ramp" must not match "Rampart Opportunities Fund
+            # LP", which names no one and would be listed as secondary
+            # interest in Ramp.
+            if (" " + want + " ") not in (" " + norm + " ") or not _is_spv_name(norm):
                 continue   # names the company AND is a feeder, not a namesake
             seen.add(spv_cik)
             sponsor = ""

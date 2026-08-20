@@ -105,9 +105,11 @@ InsiderLeadersPanel::InsiderLeadersPanel(QWidget* parent) : QWidget(parent) {
             }
         }
         // Nothing in the ranking. Fall through to what was typed, but only if
-        // it can be a ticker: "Palantir" upper-cased is not PLTR, and loading
-        // a register for PALANTIR spends EDGAR round-trips to prove it.
-        if (ownership::looks_like_ticker(q))
+        // the reader typed a symbol: "Palantir" upper-cased is not PLTR, and
+        // loading a register for PALANTIR spends EDGAR round-trips to prove
+        // it. Capitals only here — this panel has no symbol search to resolve
+        // "intel" or "adobe" with, so lower case stays a company name.
+        if (ownership::typed_as_ticker(q))
             emit issuer_selected(q.toUpper(), QString());
     });
     bar->addWidget(filter_);
@@ -302,7 +304,7 @@ void InsiderLeadersPanel::apply_filter() {
     // go through the search box over the register, which can resolve one, so
     // the line points there rather than promising a key that does nothing.
     const QString no_match =
-        ownership::looks_like_ticker(q)
+        ownership::typed_as_ticker(q)
             ? QStringLiteral("No scanned issuer matches \u201C%1\u201D. Press Enter to open its "
                              "ownership register on the right.")
                   .arg(q)

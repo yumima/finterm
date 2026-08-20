@@ -2802,13 +2802,21 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
                      "and any SPV raising to buy into it.</i>";
                 break;
             default:
-                // NotAsked, and it stays that way: the read needs a name or a
-                // CIK to look up, and an entry that reached this screen with
-                // neither — an SPV stub named only by its target — has
-                // nothing to ask EDGAR about. Claiming a read is in progress
-                // would promise data that is not coming.
-                h += "<i class='muted'>No company name or SEC filer to look up, so there is "
-                     "no filing history to read.</i>";
+                // NotAsked covers two different situations. This pane renders
+                // in the same call that starts the debounce, so the common one
+                // is "the read is about to be issued" — printing "nothing to
+                // look up" there told the reader the app had no name for a
+                // company it was in the middle of reading. The genuine case is
+                // an entry with neither name nor CIK — an SPV stub named only
+                // by its target — which fetch_dossier_for declines.
+                if (!c.name.isEmpty() || !c.cik.isEmpty()) {
+                    h += "<i class='muted'>Reading this company's EDGAR filing "
+                         "history\xe2\x80\xa6 Every Form D it has filed, the officers and "
+                         "directors named on them, and any SPV raising to buy into it.</i>";
+                } else {
+                    h += "<i class='muted'>No company name or SEC filer to look up, so there "
+                         "is no filing history to read.</i>";
+                }
                 break;
             }
         }

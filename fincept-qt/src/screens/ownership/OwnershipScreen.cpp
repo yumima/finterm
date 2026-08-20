@@ -255,7 +255,7 @@ void OwnershipScreen::build_ui() {
         // Typed in capitals, and shaped like a symbol: that is a ticker and
         // the reader said so. Open it without waiting for a search.
         const bool shaped = ownership::looks_like_ticker(typed);
-        if (shaped && typed == typed.toUpper()) {
+        if (ownership::typed_as_ticker(typed)) {
             show_symbol(typed);
             return;
         }

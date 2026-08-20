@@ -38,6 +38,17 @@ inline bool looks_like_ticker(const QString& text) {
     return text == text.toUpper() || text == text.toLower();
 }
 
+/// Did the reader type a SYMBOL, as opposed to something symbol-shaped?
+///
+/// Lower case is ambiguous — "aapl" is a ticker and "intel", "adobe" and
+/// "block" are companies — so where there is no symbol search to resolve the
+/// ambiguity, only capitals are taken as a ticker. Somewhere that can ask
+/// (the ownership screen's search box) may act on the looser test once its
+/// suggestions have come back empty.
+inline bool typed_as_ticker(const QString& text) {
+    return looks_like_ticker(text) && text == text.toUpper();
+}
+
 /// How an insider's filing history looks over multiple years.
 ///
 /// Cohen, Malloy and Pomorski separate insiders who trade the same calendar
