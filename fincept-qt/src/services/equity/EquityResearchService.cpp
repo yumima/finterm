@@ -255,6 +255,29 @@ void EquityResearchService::schedule_search(const QString& query) {
     search_debounce_->start();
 }
 
+namespace {
+
+QVector<SearchResult> parse_search_results(const QJsonObject& result) {
+    const auto arr = result.value("results").toArray();
+    QVector<SearchResult> results;
+    results.reserve(arr.size());
+    for (const auto& v : arr) {
+        auto o = v.toObject();
+        SearchResult r;
+        r.symbol = o["symbol"].toString();
+        r.name = o["name"].toString();
+        r.exchange = o["exchange"].toString();
+        r.type = o["type"].toString();
+        r.currency = o["currency"].toString();
+        r.industry = o["industry"].toString();
+        if (!r.symbol.isEmpty())
+            results.append(r);
+    }
+    return results;
+}
+
+} // namespace
+
 void EquityResearchService::search_symbols(const QString& query) {
     if (query.trimmed().isEmpty())
         return;
@@ -266,22 +289,7 @@ void EquityResearchService::search_symbols(const QString& query) {
             LOG_WARN("EquityResearch", "Symbol search failed: " + err);
             return;
         }
-        const auto arr = result.value("results").toArray();
-        QVector<SearchResult> results;
-        results.reserve(arr.size());
-        for (const auto& v : arr) {
-            auto o = v.toObject();
-            SearchResult r;
-            r.symbol = o["symbol"].toString();
-            r.name = o["name"].toString();
-            r.exchange = o["exchange"].toString();
-            r.type = o["type"].toString();
-            r.currency = o["currency"].toString();
-            r.industry = o["industry"].toString();
-            if (!r.symbol.isEmpty())
-                results.append(r);
-        }
-        emit search_results_loaded(results);
+        emit search_results_loaded(parse_search_results(result));
     });
 }
 
@@ -766,6 +774,28 @@ void EquityResearchService::fetch_quote(const QString& symbol) {
 }
 
 // ── Load symbol (quote + info + historical in parallel) ───────────────────────
+void EquityResearchService::search_symbols_for(
+    const QString& query, std::function<void(QString, QVector<SearchResult>)> cb) {
+    const QString q = query.trimmed();
+    if (q.isEmpty() || !cb)
+        return;
+    QJsonObject payload;
+    payload["query"] = q;
+    payload["limit"] = 20;
+    run_daemon("search", payload, [q, cb = std::move(cb)](bool ok, QJsonObject result, QString err) {
+        // Answered even on failure. The broadcast path can afford to log and
+        // drop, because nothing is waiting on it; a caller that asked a
+        // question is owed an answer, if only an empty one, or its box sits
+        // there looking like the search is still running.
+        if (!ok) {
+            LOG_WARN("EquityResearch", "Symbol search failed: " + err);
+            cb(q, {});
+            return;
+        }
+        cb(q, parse_search_results(result));
+    });
+}
+
 void EquityResearchService::load_symbol(const QString& symbol, const QString& period) {
     if (symbol.isEmpty())
         return;

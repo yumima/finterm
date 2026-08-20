@@ -137,7 +137,11 @@ void SmartMoneyPanel::render() {
                              "filings for the largest filers straight from EDGAR.")
             : QStringLiteral("Download two quarterly SEC 13F data sets — every filer, every "
                              "position — and index them locally. Runs once."));
-    build_btn_->setVisible(chrome_);
+    // Embedded, the host screen owns the index controls — except when there
+    // is no index. Then this tile's own text says "Press BUILD 13F INDEX
+    // above", and Equity Research's ownership tab has no such button anywhere
+    // else on the screen, so hiding it made the instruction point at nothing.
+    build_btn_->setVisible(chrome_ || !svc.index_ready());
     build_btn_->setEnabled(!svc.index_busy());
     sort_->setVisible(svc.index_ready());
     if (symbol_.isEmpty()) {

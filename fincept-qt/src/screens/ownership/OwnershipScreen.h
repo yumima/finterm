@@ -4,10 +4,13 @@
 #include "screens/IStatefulScreen.h"
 
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QSplitter;
 class QStackedWidget;
+class QStringListModel;
 class QTabWidget;
+class QTimer;
 
 namespace fincept::screens {
 
@@ -56,8 +59,19 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     void build_ui();
     void apply_theme();
     void refresh_index_ui(const QString& msg);
+    /// Put @p symbol's register in the detail pane and offer the way back.
+    /// Every route to a security — a holding in a firm's book, an issuer in
+    /// the insider ranking, the search box — lands here, so they cannot drift
+    /// apart in what they show or in how the reader gets out.
+    void show_symbol(const QString& symbol);
 
     QPushButton*    index_btn_  = nullptr;
+    QLineEdit*      ticker_     = nullptr;
+    QStringListModel* ticker_model_ = nullptr;
+    /// Says what the search box is doing when it cannot just open something —
+    /// still looking, or nothing by that name.
+    QLabel*         ticker_note_ = nullptr;
+    QTimer*         ticker_debounce_ = nullptr;
     QPushButton*    map_btn_    = nullptr;
     QLabel*         index_lbl_  = nullptr;
     QWidget*        empty_page_ = nullptr;
@@ -70,6 +84,20 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     QTabWidget*          left_         = nullptr;
     QPushButton*         back_btn_     = nullptr;
     QString              selected_firm_name_;
+    /// Set once a filer has actually been picked. The display name cannot
+    /// stand in for this — a 13F record with an empty name would read as "no
+    /// firm selected" and hide the way back out of a holding.
+    QString              selected_firm_cik_;
+    /// What the detail pane is currently showing, so a late suggestion list
+    /// does not pop open over a register the reader has already opened.
+    QString              shown_symbol_;
+    /// The query the suggestions in @ref ticker_model_ answer, as reported by
+    /// the search itself rather than read off the box when they arrive — two
+    /// requests can be in flight and land out of order, and a list left over
+    /// from "Alphabet" must not resolve an Enter pressed on "Berkshire".
+    QString              ticker_results_query_;
+    /// A search is out for this text; nothing has come back for it yet.
+    QString              ticker_pending_query_;
     QWidget*             split_        = nullptr;
     bool            loaded_once_ = false;
 };

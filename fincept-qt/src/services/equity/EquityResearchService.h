@@ -21,6 +21,17 @@ class EquityResearchService : public QObject {
     void search_symbols(const QString& query);
     void schedule_search(const QString& query); // debounced entry point
 
+    /// Symbol search answered to ONE caller, carrying the query that produced
+    /// the results.
+    ///
+    /// search_symbols() broadcasts on search_results_loaded, which cannot say
+    /// whose results it is delivering: a second search box on another screen,
+    /// or an MCP tool call, receives every other caller's results as if they
+    /// were its own, and two requests in flight can land out of order. A
+    /// caller that needs to know what it asked for uses this instead.
+    void search_symbols_for(const QString& query,
+                            std::function<void(QString, QVector<SearchResult>)> cb);
+
     /// Fetches quote + info + historical in parallel (three Python calls)
     void load_symbol(const QString& symbol, const QString& period = "1y");
 

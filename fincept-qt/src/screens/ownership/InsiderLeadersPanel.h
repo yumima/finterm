@@ -4,6 +4,7 @@
 
 class QComboBox;
 class QLabel;
+class QLineEdit;
 class QPushButton;
 class QTableWidget;
 
@@ -37,15 +38,26 @@ class InsiderLeadersPanel : public QWidget {
 
   private:
     void reload();
+    /// Narrow the ranking to the typed issuer. Local to the rows already on
+    /// screen — the scan is the expensive part and it has already run — so
+    /// this is a filter over a ranking, not a search of EDGAR.
+    void apply_filter();
     /// Label the insiders behind the current ranking (per-owner EDGAR fetch).
     void classify();
     void run_scan();
 
+    QLineEdit*    filter_    = nullptr;
     QComboBox*    direction_ = nullptr;
     QComboBox*    window_    = nullptr;
     QPushButton*  scan_btn_  = nullptr;
     QLabel*       status_    = nullptr;
     QTableWidget* table_     = nullptr;
+    /// What the ranking itself says, before the filter adds its own line.
+    QString       status_base_;
+    /// "N days of the window still unread" — true of the ranking itself, so it
+    /// travels with the base line rather than being written over the status
+    /// once and lost to the next thing that writes there.
+    QString       scan_note_;
     bool          scanning_  = false;
     bool          loading_   = false;
     /// A request arrived while one was in flight; re-run when it lands so the

@@ -10,6 +10,7 @@
 
 #include <QDate>
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -17,6 +18,25 @@
 #include <optional>
 
 namespace fincept::ownership {
+
+/// Could @p text be a ticker rather than a company name?
+///
+/// Length alone does not separate them — Cisco, Intel, Delta and Apple are all
+/// short enough to pass for symbols, and upper-casing one produces a ticker
+/// that does not exist and a fetch that can only come back empty. Case is the
+/// tell: a symbol is typed in one case ("AAPL", "aapl") and a company name is
+/// capitalised ("Apple"), so mixed case is read as a name.
+///
+/// Shared rather than repeated per screen because the answer is a promise to
+/// the reader: the insider ranking's status line offers "press Enter to open
+/// its register" on the strength of it, and the ownership screen decides
+/// whether to honour that on the same question. Two copies can disagree.
+inline bool looks_like_ticker(const QString& text) {
+    static const QRegularExpression shape(QStringLiteral("^[A-Za-z][A-Za-z0-9.\\-]{0,5}$"));
+    if (!shape.match(text).hasMatch())
+        return false;
+    return text == text.toUpper() || text == text.toLower();
+}
 
 /// How an insider's filing history looks over multiple years.
 ///

@@ -2,21 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-19)
+## Today's commits (2026-08-20)
 
 Latest first.
 
-- [`b0b76bbb2`](https://github.com/yumima/finterm/commit/b0b76bbb2) surfaces: the curve, real yields and breakevens come from FRED now
-- [`02147a8e4`](https://github.com/yumima/finterm/commit/02147a8e4) surfaces: compute the risk charts from the bars, and draw nothing where there is no feed
-- [`d60239876`](https://github.com/yumima/finterm/commit/d60239876) video: when the direct path cannot hold a live stream, use the one that can
-- [`aa45f11df`](https://github.com/yumima/finterm/commit/aa45f11df) video: a click that raises the window is not a click on the video
-- [`9a7ea6f2e`](https://github.com/yumima/finterm/commit/9a7ea6f2e) ownership: bound the stakes check by count as well as by clock
-- [`33bc46bda`](https://github.com/yumima/finterm/commit/33bc46bda) review fixes: two relays racing, a lineage that lied the other way, a ghost article
-- [`2ce1fd8a3`](https://github.com/yumima/finterm/commit/2ce1fd8a3) video: a YouTube live session dies in ~20s, so rotate it under the player
-- [`6a69b6ab1`](https://github.com/yumima/finterm/commit/6a69b6ab1) surface: refuse a spot-priced fetch without a spot, rather than sending 0
-- [`0b4c5ec2b`](https://github.com/yumima/finterm/commit/0b4c5ec2b) data surfaces: say where every number came from, or do not show it
-- [`57ccdb3a0`](https://github.com/yumima/finterm/commit/57ccdb3a0) ownership: a CIK's filings are not all ABOUT that CIK
-- [`7dd67b04c`](https://github.com/yumima/finterm/commit/7dd67b04c) **fix:** a live stream that dies is invisible to Qt, so nothing recovered it
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

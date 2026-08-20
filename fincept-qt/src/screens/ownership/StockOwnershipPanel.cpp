@@ -394,8 +394,19 @@ void StockOwnershipPanel::build_ui() {
     // Initial proportions only. Qt's own splitter behaviour is what the user
     // expects, so nothing is pinned and nothing intercepts the drag — these
     // are a starting point, not a constraint.
-    cols->setStretchFactor(0, 3);
-    cols->setStretchFactor(1, 5);
+    //
+    // Equal halves. The insider table carries six columns — date, insider,
+    // action, shares, value, pattern — and at three eighths of the pane the
+    // last two were off the right edge, so the column that says whether a
+    // trade was routine or opportunistic, the one piece of Form 4 with an
+    // evidence base behind it, was invisible until the reader dragged the
+    // handle. The quadrant beside it is a chart and reads fine at half width.
+    cols->setStretchFactor(0, 1);
+    cols->setStretchFactor(1, 1);
+    // Stretch factors only divide what is left after each side's size hint is
+    // met, and a populated six-column table hints much wider than a chart.
+    // Seeding equal sizes is what actually opens the split down the middle.
+    cols->setSizes({1000, 1000});
     side->setStretchFactor(0, 3);   // read-through
     side->setStretchFactor(1, 4);   // holders + quadrant
     side->setStretchFactor(2, 2);   // float and short
@@ -443,6 +454,8 @@ void StockOwnershipPanel::load(const QString& symbol) {
     symbol_ = sym;
     if (search_->text().toUpper() != sym)
         search_->setText(sym);
+    if (body_)
+        body_->setCurrentIndex(0);   // a named security outranks the empty page
     services::OwnershipService::instance().load(sym);
     // Point the panel at the symbol but do not auto-fetch: reading every
     // tracked manager's 13F is minutes of EDGAR round-trips and must be the
@@ -554,8 +567,13 @@ void StockOwnershipPanel::render_insiders(const OwnershipSnapshot& s) {
         insiders_tbl_->setItem(i, 0, date_item);
 
         auto* who = cell(t.insider);
-        if (!t.roles.isEmpty())
-            who->setToolTip(t.roles.join(QStringLiteral(", ")));
+        // The name is elided at the column cap, so the tooltip has to carry it
+        // as well as the roles — otherwise a truncated name has nowhere to be
+        // read in full.
+        who->setToolTip(t.roles.isEmpty()
+                            ? t.insider
+                            : QStringLiteral("%1 — %2")
+                                  .arg(t.insider, t.roles.join(QStringLiteral(", "))));
         insiders_tbl_->setItem(i, 1, who);
 
         insiders_tbl_->setItem(
@@ -585,6 +603,10 @@ void StockOwnershipPanel::render_insiders(const OwnershipSnapshot& s) {
     }
     insiders_tbl_->setUpdatesEnabled(true);
     insiders_tbl_->resizeColumnsToContents();
+    // The insider name is the one unbounded column, and at content width a
+    // filer like "WESTERN INVESTMENT HEDGED EQUITY FUND LP" pushes value and
+    // pattern off the pane. Capped and elided, with the full name on hover.
+    insiders_tbl_->setColumnWidth(1, qMin(insiders_tbl_->columnWidth(1), 200));
 
     QStringList notes;
     if (s.filings_found > 0) {
@@ -814,8 +836,14 @@ void StockOwnershipPanel::set_chrome_visible(bool on) {
 void StockOwnershipPanel::refresh_index_ui(const QString& msg) {
     auto& svc = services::OwnershipService::instance();
     const bool ready = svc.index_ready();
+    // The build-index page owns the screen only while there is nothing else to
+    // show. Once a security is named, most of this screen does not depend on
+    // the 13F index at all — Form 4 insider filings, the 5% stakes and short
+    // interest come straight from EDGAR and FINRA — and hiding them behind
+    // "build the index" answered "what did insiders do here" with a download
+    // prompt. The holders tile says its own piece about the missing index.
     if (body_)
-        body_->setCurrentIndex(ready ? 0 : 1);
+        body_->setCurrentIndex(ready || !symbol_.isEmpty() ? 0 : 1);
     // The toolbar control is redundant while the empty page owns the action.
     // chrome_ gates these too: embedded, the host screen owns the index
     // controls, and showing a second MAP MORE SYMBOLS beside its own is a

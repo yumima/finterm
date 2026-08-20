@@ -3,17 +3,24 @@
 #include "screens/ownership/FirmBookPanel.h"
 #include "screens/ownership/FirmDetailPanel.h"
 #include "screens/ownership/InsiderLeadersPanel.h"
+#include "screens/ownership/OwnershipTypes.h"
 #include "screens/ownership/StockOwnershipPanel.h"
+#include "services/equity/EquityResearchService.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <QCompleter>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
+#include <QPointer>
 #include <QPushButton>
 #include <QShowEvent>
 #include <QSplitter>
+#include <QStringListModel>
 #include <QTabWidget>
+#include <QTimer>
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
@@ -58,8 +65,8 @@ void OwnershipScreen::build_ui() {
     bar->addWidget(title);
 
     auto* sub = new QLabel(QStringLiteral(
-        "Who is running the money, and what they own. For a single stock's register, "
-        "open it in Equity Research → Ownership."));
+        "Who is running the money, and what they own. Search a stock on the right for its "
+        "own register — insiders, holders and short interest."));
     sub->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     bar->addWidget(sub, 1);
 
@@ -114,36 +121,189 @@ void OwnershipScreen::build_ui() {
     connect(back_btn_, &QPushButton::clicked, this, [this]() {
         detail_stack_->setCurrentIndex(0);
         back_btn_->setVisible(false);
+        // The box names the pane. Back to the firm's book, and it is naming a
+        // security that is no longer on screen.
+        shown_symbol_.clear();
+        ticker_results_query_.clear();
+        ticker_pending_query_.clear();
+        if (ticker_)
+            ticker_->clear();
+        if (ticker_note_)
+            ticker_note_->clear();
     });
+
+    // A security is reachable by name, not only by finding a firm that happens
+    // to hold it. The detail pane is where a stock's register is read, so its
+    // own search box belongs on top of it — the left pane searches filers, the
+    // right pane searches securities, and each box sits over what it changes.
+    ticker_ = new QLineEdit;
+    ticker_->setPlaceholderText(QStringLiteral("Search a stock — ticker or name, e.g. AAPL"));
+    ticker_->setClearButtonEnabled(true);
+    ticker_->setMinimumWidth(260);
+    ticker_->setMaximumWidth(320);
+    ticker_->setToolTip(QStringLiteral(
+        "Open any security's ownership register — insiders' Form 4 filings, the 13F holders, "
+        "the 5% stakes and the short interest. Type a ticker, or a company name and pick from "
+        "the suggestions."));
+
+    // Names, not just tickers: a reader who wants Palantir's insider filings
+    // should not have to know it is PLTR. Suggestions come from the same
+    // symbol search Equity Research uses, so the two agree on what exists.
+    ticker_model_ = new QStringListModel(this);
+    auto* completer = new QCompleter(ticker_model_, this);
+    completer->setCaseSensitivity(Qt::CaseInsensitive);
+    completer->setCompletionMode(QCompleter::UnfilteredPopupCompletion);
+    completer->setMaxVisibleItems(12);
+    ticker_->setCompleter(completer);
+
+    // A line to say what the box is doing when it has nothing to open yet.
+    // Without it, Enter on a name the search cannot resolve does nothing at
+    // all — no register, no message — which reads as a broken box.
+    ticker_note_ = new QLabel;
+    ticker_note_->setStyleSheet(QString("color:%1;font-size:12px;")
+                                    .arg(ui::colors::TEXT_SECONDARY()));
+
+    // Debounced: a keystroke is not a question. The search is asked through
+    // the per-caller entry point rather than the broadcast one, so results
+    // arrive tagged with the query that produced them and this box cannot be
+    // handed Equity Research's — or an MCP tool call's — answers.
+    ticker_debounce_ = new QTimer(this);
+    ticker_debounce_->setSingleShot(true);
+    ticker_debounce_->setInterval(220);
+    connect(ticker_debounce_, &QTimer::timeout, this, [this]() {
+        const QString q = ticker_->text().trimmed();
+        if (q.isEmpty())
+            return;
+        ticker_pending_query_ = q;
+        // The reply outlives nothing: the service is a singleton and this
+        // screen is not, so the callback holds a guard rather than a raw this.
+        QPointer<OwnershipScreen> self = this;
+        services::equity::EquityResearchService::instance().search_symbols_for(
+            q, [self](QString query, QVector<services::equity::SearchResult> results) {
+                if (!self)
+                    return;
+                if (self->ticker_pending_query_.compare(query, Qt::CaseInsensitive) == 0)
+                    self->ticker_pending_query_.clear();
+                // Results are only ever attributed to the query that asked for
+                // them, however late they land.
+                QStringList rows;
+                rows.reserve(results.size());
+                for (const auto& r : results) {
+                    rows << (r.name.isEmpty() ? r.symbol
+                                              : QStringLiteral("%1 — %2").arg(r.symbol, r.name));
+                }
+                const QString current = self->ticker_->text().trimmed();
+                if (current.compare(query, Qt::CaseInsensitive) != 0)
+                    return;   // the reader has typed past this question
+                self->ticker_model_->setStringList(rows);
+                self->ticker_results_query_ = query;
+                self->ticker_note_->setText(
+                    rows.isEmpty() ? QStringLiteral("Nothing found for “%1”.").arg(query)
+                                   : QString());
+                // Do not pop the list open over a register already showing —
+                // a debounced search lands after Enter has done its work — nor
+                // when the reader has moved focus elsewhere.
+                if (rows.isEmpty() || !self->ticker_->hasFocus())
+                    return;
+                if (!self->shown_symbol_.isEmpty() &&
+                    current.compare(self->shown_symbol_, Qt::CaseInsensitive) == 0)
+                    return;
+                self->ticker_->completer()->complete();
+            });
+    });
+    connect(ticker_, &QLineEdit::textEdited, this, [this](const QString& text) {
+        // The suggestions on hand answer the previous text, not this one. The
+        // model goes with the query: Qt re-opens the popup on every keystroke,
+        // and a click on a row left over from two letters ago opens a company
+        // that is not what the box says.
+        ticker_results_query_.clear();
+        ticker_model_->setStringList({});
+        ticker_note_->clear();
+        if (text.trimmed().isEmpty()) {
+            ticker_debounce_->stop();
+            ticker_pending_query_.clear();
+            return;
+        }
+        ticker_debounce_->start();
+    });
+    // Enter takes what is typed; picking a suggestion takes the symbol off the
+    // front of it. Both land in show_symbol, which is idempotent, so the
+    // activated-then-returnPressed pair Qt emits for Enter opens once.
+    connect(ticker_, &QLineEdit::returnPressed, this, [this]() {
+        const QString typed = ticker_->text().trimmed();
+        if (typed.isEmpty())
+            return;
+        // Unfiltered completion means no suggestion is ever current until the
+        // reader arrows into the list, so Enter on a typed NAME arrives here.
+        // Resolve it through the suggestions first — and only through ones
+        // that answer what is typed now, since a stale list would open the
+        // company the reader was looking at two keystrokes ago.
+        if (ticker_results_query_.compare(typed, Qt::CaseInsensitive) == 0) {
+            const QStringList rows = ticker_model_->stringList();
+            for (const QString& row : rows) {
+                if (row.section(QStringLiteral(" — "), 0, 0)
+                        .compare(typed, Qt::CaseInsensitive) == 0) {
+                    show_symbol(row);   // the typed text IS a symbol
+                    return;
+                }
+            }
+            if (!rows.isEmpty()) {
+                show_symbol(rows.first());   // what the popup was offering
+                return;
+            }
+        }
+        // No usable suggestion — the search is in flight, found nothing, or is
+        // unavailable. Take the typed text only if it can be a symbol: "Apple"
+        // upper-cased is not AAPL, and loading APPLE spends the round-trips to
+        // prove it.
+        if (ownership::looks_like_ticker(typed)) {
+            show_symbol(typed);
+            return;
+        }
+        // A name nothing can resolve yet. Say which, rather than swallowing
+        // the keystroke: silence here is indistinguishable from a dead box.
+        ticker_note_->setText(
+            ticker_pending_query_.isEmpty()
+                ? QStringLiteral("No security matches “%1”. Try its ticker.").arg(typed)
+                : QStringLiteral("Still searching for “%1” — press Enter again in a moment.")
+                      .arg(typed));
+    });
+    connect(completer, QOverload<const QString&>::of(&QCompleter::activated), this,
+            [this](const QString& choice) { show_symbol(choice); });
+
+    auto* head = new QHBoxLayout;
+    head->setSpacing(8);
+    head->addWidget(back_btn_);
+    head->addStretch(1);
+    head->addWidget(ticker_note_);
+    head->addWidget(ticker_);
 
     auto* detail_host = new QWidget;
     auto* dv = new QVBoxLayout(detail_host);
     dv->setContentsMargins(0, 0, 0, 0);
     dv->setSpacing(4);
-    dv->addWidget(back_btn_);
+    dv->addLayout(head);
     dv->addWidget(detail_stack_, 1);
 
     connect(firm_book_, &FirmBookPanel::firm_selected, this, [this](const QString& cik) {
         firm_detail_->set_firm(cik);
         detail_stack_->setCurrentIndex(0);
         back_btn_->setVisible(false);
+        selected_firm_cik_  = cik;
         selected_firm_name_ = firm_book_->selected_firm_name();
+        shown_symbol_.clear();
+        ticker_results_query_.clear();
+        ticker_pending_query_.clear();
+        if (ticker_)
+            ticker_->clear();
+        if (ticker_note_)
+            ticker_note_->clear();   // the pane is a firm's book again
     });
     // A holding is a security, and the question after "they own this" is "who
     // else does". Answer it in place rather than sending the reader to another
     // screen and losing the firm they were reading.
     connect(firm_detail_, &FirmDetailPanel::navigate_to_symbol, this,
-            [this](const QString& ticker) {
-                if (ticker.isEmpty())
-                    return;
-                stock_panel_->set_symbol(ticker);
-                detail_stack_->setCurrentIndex(1);
-                back_btn_->setText(QStringLiteral("←  Back to %1")
-                                       .arg(selected_firm_name_.isEmpty()
-                                                ? QStringLiteral("the firm's holdings")
-                                                : selected_firm_name_));
-                back_btn_->setVisible(true);
-            });
+            [this](const QString& ticker) { show_symbol(ticker); });
 
     // Two aggregated views, one detail pane. BY FIRM asks who is running the
     // money; INSIDERS asks where the people who run the companies are putting
@@ -152,12 +312,7 @@ void OwnershipScreen::build_ui() {
     insiders_ = new InsiderLeadersPanel;
     connect(insiders_, &InsiderLeadersPanel::issuer_selected, this,
             [this](const QString& symbol, const QString&) {
-                if (symbol.isEmpty())
-                    return;   // the filing named no security to open
-                stock_panel_->set_symbol(symbol);
-                detail_stack_->setCurrentIndex(1);
-                back_btn_->setText(QStringLiteral("←  Back to the firm's holdings"));
-                back_btn_->setVisible(true);
+                show_symbol(symbol);   // empty when the filing named no security
             });
 
     left_ = new QTabWidget;
@@ -221,6 +376,36 @@ void OwnershipScreen::build_ui() {
 
     firm_stack_->addWidget(empty_page_);   // 1 — swapped in when there is no index
     root->addWidget(split_, 1);
+}
+
+void OwnershipScreen::show_symbol(const QString& symbol) {
+    // A completer row is "AAPL — Apple Inc."; a typed one is just the ticker.
+    // Split on the em-dash separator this screen wrote, not on any dash, so a
+    // ticker that legitimately contains one (BRK-B) survives.
+    QString sym = symbol.section(QStringLiteral(" — "), 0, 0).trimmed().toUpper();
+    if (sym.isEmpty())
+        return;
+    stock_panel_->set_symbol(sym);
+    detail_stack_->setCurrentIndex(1);
+    shown_symbol_ = sym;
+    if (ticker_note_)
+        ticker_note_->clear();
+    // Name what the pane is showing, however the reader got here. Arriving by
+    // click and leaving a stale ticker in the box makes the box look like it
+    // is in charge of a pane it is not showing.
+    if (ticker_ && ticker_->text() != sym)
+        ticker_->setText(sym);   // textEdited is not emitted, so no re-search
+    // Offer the way back only when there is a book to go back TO. Before a
+    // firm has been picked — arriving from the insider ranking, or from the
+    // search box on a fresh screen — index 0 is an empty firm pane, and a
+    // button promising "the firm's holdings" led there. Keyed on the CIK, not
+    // on the display name: a filer whose 13F record carries no name still has
+    // a book, and hiding the button would strand the reader on the security.
+    back_btn_->setText(QStringLiteral("←  Back to %1")
+                           .arg(selected_firm_name_.isEmpty()
+                                    ? QStringLiteral("the firm's holdings")
+                                    : selected_firm_name_));
+    back_btn_->setVisible(!selected_firm_cik_.isEmpty());
 }
 
 void OwnershipScreen::refresh_index_ui(const QString& msg) {

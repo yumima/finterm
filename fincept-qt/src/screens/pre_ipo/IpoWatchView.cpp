@@ -560,13 +560,16 @@ void IpoWatchView::build_workspace(QVBoxLayout* root) {
     // ── Detail rail (middle + right columns) ──
     build_detail_rail(splitter_);
 
-    // Stretch 2 : 4 : 2 → list ≈ 25%, middle ≈ 50%, right ≈ 25%. The user
-    // wanted the IPO list narrower (~1/3 max) so the company research area
-    // gets the bulk of the screen.
-    splitter_->setStretchFactor(0, 2);
+    // Equal halves for the list and the dossier, with the charts rail taking
+    // the remainder. The list carries up to eight columns — pricing, size,
+    // range, the flags — and at a quarter of the width the ones on the right
+    // were scrolled off, so the scan the screen exists for could not be done
+    // without dragging a divider first. The dossier reflows at any width; the
+    // table does not.
+    splitter_->setStretchFactor(0, 4);
     splitter_->setStretchFactor(1, 4);
     splitter_->setStretchFactor(2, 2);
-    splitter_->setSizes({420, 840, 420});
+    splitter_->setSizes({700, 700, 350});
     // A drag by the user is a decision; automatic weighting defers to it from
     // then on. splitterMoved also fires for programmatic setSizes on some
     // styles, so the flag is only set for a genuine interactive move.
@@ -2311,8 +2314,12 @@ void IpoWatchView::apply_pane_weights(bool chart_heavy) {
     if (!splitter_ || splitter_->count() != 3 || splitter_user_sized_)
         return;
     const int total = splitter_->width() > 0 ? splitter_->width() : 1680;
-    const int list_w  = total * 22 / 100;
     const int chart_w = chart_heavy ? total * 26 / 100 : total * 14 / 100;
+    // The list and the dossier split what the charts leave, evenly. Sizing the
+    // list to a fixed 22% is what pushed its right-hand columns off the pane;
+    // the pane that has to shrink when the charts grow is the dossier, which
+    // is prose and reflows, not a table that simply loses columns.
+    const int list_w = (total - chart_w) / 2;
     splitter_->setSizes({list_w, total - list_w - chart_w, chart_w});
 }
 

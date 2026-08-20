@@ -1,5 +1,7 @@
 #include "screens/ownership/InsiderLeadersPanel.h"
 
+#include "screens/ownership/OwnershipTypes.h"
+
 #include "python/PythonRunner.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -13,6 +15,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPointer>
 #include <QPushButton>
 #include <QTableWidget>
@@ -40,6 +43,68 @@ InsiderLeadersPanel::InsiderLeadersPanel(QWidget* parent) : QWidget(parent) {
 
     auto* bar = new QHBoxLayout;
     bar->setSpacing(6);
+
+    // The ranking is up to sixty issuers deep and the reader often arrives
+    // with a name already in mind — "did anyone inside Palantir buy". Scanning
+    // sixty rows by eye to answer that is work the box does instead, and when
+    // the name is not in the ranking at all, Enter opens its register on the
+    // right rather than leaving the reader with an empty table and no next
+    // move.
+    filter_ = new QLineEdit;
+    filter_->setPlaceholderText(QStringLiteral("Filter — ticker or company"));
+    filter_->setClearButtonEnabled(true);
+    filter_->setMaximumWidth(220);
+    filter_->setToolTip(QStringLiteral(
+        "Narrows the ranking below to matching issuers. This filters what the scan already "
+        "read — an issuer with no open-market Form 4 in the window will not appear, however "
+        "it is spelled.\n\nPress Enter to open the typed ticker's ownership register on the "
+        "right, whether or not it is in the ranking."));
+    connect(filter_, &QLineEdit::textChanged, this, [this]() { apply_filter(); });
+    connect(filter_, &QLineEdit::returnPressed, this, [this]() {
+        const QString q = filter_->text().trimmed();
+        if (q.isEmpty())
+            return;   // Enter on an empty box is not a request to open anything
+        // An exact ticker wins over any substring hit. The filter matches
+        // company names too, so "Apple" also matches Apple Hospitality REIT
+        // and "F" matches half the market — opening the first of those
+        // instead of the ticker the reader typed is not what Enter promised.
+        auto open_row = [this](int r) {
+            const bool already_current = table_->currentRow() == r;
+            table_->selectRow(r);
+            if (!already_current)
+                return;   // the selection change announced it
+            // selectRow is silent when the row is already current, so an Enter
+            // that re-opens the row the reader is on is announced here.
+            const auto* sym  = table_->item(r, 0);
+            const auto* name = table_->item(r, 1);
+            emit issuer_selected(sym ? sym->data(Qt::UserRole).toString() : QString(),
+                                 name ? name->text() : QString());
+        };
+        for (int r = 0; r < table_->rowCount(); ++r) {
+            const auto* it = table_->item(r, 0);
+            const QString sym = it ? it->data(Qt::UserRole).toString() : QString();
+            if (!sym.isEmpty() && sym.compare(q, Qt::CaseInsensitive) == 0) {
+                open_row(r);
+                return;
+            }
+        }
+        // Otherwise the best the ranking has: the first visible row that names
+        // a security. Rows whose filing carried no symbol have nothing to
+        // open, so they are skipped rather than swallowing the keystroke.
+        for (int r = 0; r < table_->rowCount(); ++r) {
+            const auto* it = table_->item(r, 0);
+            if (!table_->isRowHidden(r) && it && !it->data(Qt::UserRole).toString().isEmpty()) {
+                open_row(r);
+                return;
+            }
+        }
+        // Nothing in the ranking. Fall through to what was typed, but only if
+        // it can be a ticker: "Palantir" upper-cased is not PLTR, and loading
+        // a register for PALANTIR spends EDGAR round-trips to prove it.
+        if (ownership::looks_like_ticker(q))
+            emit issuer_selected(q.toUpper(), QString());
+    });
+    bar->addWidget(filter_);
 
     direction_ = new QComboBox;
     direction_->addItem(QStringLiteral("Insider buying"), QStringLiteral("buy"));
@@ -141,7 +206,12 @@ void InsiderLeadersPanel::run_scan() {
             self->scanning_ = false;
             self->scan_btn_->setEnabled(true);
             if (!result.success) {
-                self->status_->setText(QStringLiteral("Scan failed: ") + result.error);
+                // The base line, not just the visible one: typing in the
+                // filter would otherwise paint a match count over the failure
+                // and clearing the box would restore the ranking line from
+                // before the scan, leaving nothing that says it did not run.
+                self->status_base_ = QStringLiteral("Scan failed: ") + result.error;
+                self->status_->setText(self->status_base_);
                 self->status_->setStyleSheet(
                     QString("color:%1;font-size:12px;").arg(ui::colors::AMBER()));
                 return;
@@ -152,12 +222,16 @@ void InsiderLeadersPanel::run_scan() {
             const auto root =
                 QJsonDocument::fromJson(python::extract_json(result.output).toUtf8()).object();
             const int left = root.value(QStringLiteral("days_remaining")).toInt();
+            self->scan_note_ =
+                left > 0 ? QStringLiteral("%1 day(s) of the selected window still unread — press "
+                                          "SCAN EDGAR again to fetch them.")
+                               .arg(left)
+                         : QString();
             if (left > 0)
                 self->status_->setText(
-                    QStringLiteral("Read %1 more day(s). %2 day(s) of the selected window still "
-                                   "unread — press SCAN EDGAR again to fetch them.")
+                    QStringLiteral("Read %1 more day(s). %2")
                         .arg(root.value(QStringLiteral("days_read")).toInt())
-                        .arg(left));
+                        .arg(self->scan_note_));
             // Show the ranking straight away, then label the insiders behind
             // it. Classification is a per-owner fetch from EDGAR and would
             // otherwise hold an already-usable table hostage to it.
@@ -178,6 +252,56 @@ void InsiderLeadersPanel::classify() {
                 self->reload();   // the labels are cached now; re-read with them
         },
         /*on_line=*/{}, 5 * 60 * 1000);
+}
+
+void InsiderLeadersPanel::apply_filter() {
+    const QString q = filter_ ? filter_->text().trimmed() : QString();
+    int shown = 0;
+    // Whatever the status line is already saying about the ranking as a whole
+    // outranks a match count: a failed load, an unscanned window and a scan in
+    // progress are all things the reader has to know, and none of them are
+    // made truer by "0 of 0 issuers match".
+    for (int r = 0; r < table_->rowCount(); ++r) {
+        bool match = q.isEmpty();
+        if (!match) {
+            const auto* sym  = table_->item(r, 0);
+            const auto* name = table_->item(r, 1);
+            match = (sym && sym->text().contains(q, Qt::CaseInsensitive)) ||
+                    (name && name->text().contains(q, Qt::CaseInsensitive));
+        }
+        table_->setRowHidden(r, !match);
+        shown += match ? 1 : 0;
+    }
+    if (q.isEmpty()) {
+        if (!scanning_)
+            status_->setText(status_base_);
+        return;
+    }
+    // No ranking on screen — a failed load, or nothing scanned yet. The base
+    // line says which, in its own colour; a match count over zero rows would
+    // replace an error with a blank.
+    if (table_->rowCount() == 0 || scanning_)
+        return;
+    // Say what the filter did to the count, and — when it matched nothing —
+    // what the reader can do instead. An empty table with no explanation reads
+    // as "no insider owns this", which is not what it means.
+    // Enter only opens what it can resolve — a ticker. A company name has to
+    // go through the search box over the register, which can resolve one, so
+    // the line points there rather than promising a key that does nothing.
+    const QString no_match =
+        ownership::looks_like_ticker(q)
+            ? QStringLiteral("No scanned issuer matches \u201C%1\u201D. Press Enter to open its "
+                             "ownership register on the right.")
+                  .arg(q)
+            : QStringLiteral("No scanned issuer matches \u201C%1\u201D. Search it by name in the "
+                             "box above the register on the right.")
+                  .arg(q);
+    status_->setText(shown == 0
+                         ? no_match
+                         : QStringLiteral("%1 of %2 issuers match \u201C%3\u201D · %4")
+                               .arg(shown)
+                               .arg(table_->rowCount())
+                               .arg(q, status_base_));
 }
 
 void InsiderLeadersPanel::reload() {
@@ -209,8 +333,15 @@ void InsiderLeadersPanel::reload() {
                 return;
             }
             self->table_->setRowCount(0);
+            self->status_base_.clear();
             if (!result.success) {
+                // The base line owns this too. Left empty, clearing the filter
+                // box replaced the error with nothing at all and the panel sat
+                // there blank, looking like a ranking with no entries.
+                self->status_base_ = result.error;
                 self->status_->setText(result.error);
+                self->status_->setStyleSheet(
+                    QString("color:%1;font-size:12px;").arg(ui::colors::AMBER()));
                 return;
             }
             const auto root =
@@ -226,9 +357,14 @@ void InsiderLeadersPanel::reload() {
                  buying ? QStringLiteral("Stake +") : QStringLiteral("—"),
                  QStringLiteral("Roles"), QStringLiteral("Latest")});
             if (rows.isEmpty()) {
-                self->status_->setText(QStringLiteral(
+                self->status_base_ = QStringLiteral(
                     "Nothing scanned yet. Press SCAN EDGAR to read the last few days of Form 4 "
-                    "filings — every issuer, not a watchlist."));
+                    "filings — every issuer, not a watchlist.");
+                self->status_->setText(self->status_base_);
+                // An earlier failure left this label amber. This line is an
+                // instruction, not a failure, and in amber it reads as one.
+                self->status_->setStyleSheet(
+                    QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
                 return;
             }
             self->table_->setRowCount(rows.size());
@@ -340,14 +476,24 @@ void InsiderLeadersPanel::reload() {
             // is news — off the pane. Both elide with the full text on hover.
             self->table_->setColumnWidth(1, qMin(self->table_->columnWidth(1), 190));
             self->table_->setColumnWidth(5, qMin(self->table_->columnWidth(5), 150));
-            self->status_->setText(
+            self->status_base_ =
                 QStringLiteral("%1 issuers · %2 with more than one insider · open-market %3 only, "
                                "grants and option exercises excluded")
                     .arg(rows.size())
                     .arg(clusters)
-                    .arg(buying ? QStringLiteral("purchases") : QStringLiteral("sales")));
+                    .arg(buying ? QStringLiteral("purchases") : QStringLiteral("sales"));
+            // An incompletely scanned window is a fact about this ranking, so
+            // it rides with it. Written to the status line alone it lasted
+            // until the next thing wrote there — the first keystroke in the
+            // filter box — and the reader was left believing the window was
+            // fully read.
+            if (!self->scan_note_.isEmpty())
+                self->status_base_ += QStringLiteral(" · ") + self->scan_note_;
             self->status_->setStyleSheet(
                 QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+            // A fresh ranking arrives unfiltered; re-apply what is typed so the
+            // table never shows rows the filter box says it has excluded.
+            self->apply_filter();
         },
         /*on_line=*/{}, 60'000);
 }
