@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`1ebd0d8c8`](https://github.com/yumima/finterm/commit/1ebd0d8c8) ai forecast: the tab recorded three contradictory numbers as one forecast
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

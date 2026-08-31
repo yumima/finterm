@@ -126,6 +126,7 @@ void NewsCategoryWidget::on_articles(const QVariant& v) {
         const auto& a = articles[i];
         const QString time =
             (a.sort_ts > 0)
+                // EVENT-STAMP: a publication instant, not a trading session.
                 ? QDateTime::fromSecsSinceEpoch(a.sort_ts).toString("HH:mm")
                 : a.time;
         const QString line = QString("[%1]  %2").arg(time, a.headline);

@@ -1277,7 +1277,13 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
                 for (const auto& v : arr) {
                     const auto o = v.toObject();
                     const qint64 ts = static_cast<qint64>(o["timestamp"].toDouble());
-                    const QDate d = QDateTime::fromSecsSinceEpoch(ts, QTimeZone::UTC).date();
+                    // Daily BAR stamps (interval "1d"), so exchange-midnight —
+                    // and the benchmark is often not a US index:
+                    // default_benchmark_for_currency() maps JPY to ^N225, HKD to
+                    // ^HSI, INR to ^NSEI. ^N225's midnight JST is 15:00 UTC the
+                    // PREVIOUS day, so a UTC decode shifted the whole benchmark
+                    // series one session against the NAV it is plotted with.
+                    const QDate d = fincept::core::bartime::bar_date(ts);
                     dates.append(d.toString(Qt::ISODate));
                     closes.append(o["close"].toDouble());
                 }

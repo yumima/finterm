@@ -1513,8 +1513,10 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
         lbl->setPalette(pal);
     };
 
-    const QDateTime dt = QDateTime::fromSecsSinceEpoch(c.timestamp, QTimeZone::UTC);
-    primary_date_lbl_->setText(dt.toString("ddd dd MMM yyyy"));
+    // c.date(), not a UTC decode: the crosshair read-out was a day early on
+    // every exchange east of Greenwich, while the same file's OHLC tooltip
+    // twenty lines up already used bar_date correctly.
+    primary_date_lbl_->setText(c.date().toString("ddd dd MMM yyyy"));
     primary_ohlc_lbl_->setText(QString("O %1  H %2  L %3  C %4")
                                    .arg(fmt_p(c.open), fmt_p(c.high),
                                         fmt_p(c.low),  fmt_p(c.close)));

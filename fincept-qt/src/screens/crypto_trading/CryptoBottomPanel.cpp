@@ -346,6 +346,7 @@ void CryptoBottomPanel::set_market_info(const MarketInfoData& info) {
     fees_label_->setText(
         QString("%1% / %2%").arg(info.maker_fee * 100, 0, 'f', 3).arg(info.taker_fee * 100, 0, 'f', 3));
     if (info.next_funding_time > 0)
+        // EVENT-STAMP: perp funding time — an instant on a 24h venue with no session.
         next_funding_label_->setText(QDateTime::fromSecsSinceEpoch(info.next_funding_time).toString("HH:mm:ss"));
 }
 

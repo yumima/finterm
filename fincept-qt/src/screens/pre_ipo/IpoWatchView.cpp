@@ -3547,6 +3547,7 @@ QString IpoWatchView::build_news_html(const Entry& e) const {
         bool ok = false;
         const qint64 epoch = n.ts.toLongLong(&ok);
         if (ok && epoch > 1e9) {
+            // EVENT-STAMP: a news publication instant.
             when = QDateTime::fromSecsSinceEpoch(epoch).toString("MMM d");
         } else {
             const QDateTime iso = QDateTime::fromString(n.ts.left(10), "yyyy-MM-dd");

@@ -1,5 +1,6 @@
 // src/services/equity/EquityResearchModels.h
 #pragma once
+#include "core/util/BarTime.h"
 #include <QJsonObject>
 #include <QString>
 #include <QVector>
@@ -107,12 +108,18 @@ struct StockInfo {
 
 // ── Historical OHLCV candle ───────────────────────────────────────────────────
 struct Candle {
+    /// Midnight in the EXCHANGE's own zone — a session, not an instant. Decode
+    /// it with date() below, never with a bare fromSecsSinceEpoch(): see
+    /// core/util/BarTime.h for why that has been wrong five times.
     qint64 timestamp = 0;
     double open = 0.0;
     double high = 0.0;
     double low = 0.0;
     double close = 0.0;
     qint64 volume = 0;
+
+    /// The session this bar covers, on the exchange's calendar.
+    QDate date() const { return core::bartime::bar_date(timestamp); }
 };
 
 // ── Financial statements ──────────────────────────────────────────────────────

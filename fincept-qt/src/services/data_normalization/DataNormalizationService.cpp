@@ -273,6 +273,8 @@ QJsonValue DataNormalizationService::apply_transform(const QJsonValue& val, cons
 
     if (transform == "unix_s_to_iso") {
         qint64 s = val.isDouble() ? static_cast<qint64>(val.toDouble()) : val.toString().toLongLong();
+        // EVENT-STAMP: a generic unix->ISO transform over an arbitrary instant;
+        // the caller's field could be anything, so UTC is the only neutral read.
         return QJsonValue(QDateTime::fromSecsSinceEpoch(s, QTimeZone::UTC).toString(Qt::ISODate));
     }
 

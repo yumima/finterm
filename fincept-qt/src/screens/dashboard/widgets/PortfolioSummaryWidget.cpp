@@ -695,6 +695,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
                                                   : QString("-$%1").arg(-(it->price - it->regular) * h.shares * h.fx_rate,
                                                                         0, 'f', 2))
                                    : QString())
+                          // EVENT-STAMP: when we fetched — a real moment, shown as a clock time.
                           .arg(QDateTime::fromSecsSinceEpoch(it->fetched_at).toString("HH:mm:ss"));
         }
         cell(kColAft, aft_str, aft_color)->setToolTip(aft_tip);

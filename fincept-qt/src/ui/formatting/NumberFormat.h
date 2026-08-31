@@ -1,4 +1,5 @@
 #pragma once
+#include "core/util/BarTime.h"
 #include <QDateTime>
 #include <QLocale>
 #include <QString>
@@ -58,7 +59,7 @@ inline QString placeholder() {
 /// NOT for announcement/event timestamps (earnings prints carry a real time of
 /// day) — those need a real timezone, not this midnight-stamp decode.
 inline QDate bar_date(qint64 unix_secs) {
-    return QDateTime::fromSecsSinceEpoch(unix_secs + 14 * 3600, QTimeZone::utc()).date();
+    return fincept::core::bartime::bar_date(unix_secs);
 }
 
 /// Compact magnitude: K / M / B / T with a single decimal convention.

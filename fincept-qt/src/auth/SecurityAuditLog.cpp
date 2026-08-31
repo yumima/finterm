@@ -47,6 +47,7 @@ QList<AuditEvent> SecurityAuditLog::recent(int limit) {
     while (q.next()) {
         AuditEvent e;
         e.id = q.value(0).toLongLong();
+        // EVENT-STAMP: when something actually happened — an audit record.
         e.timestamp = QDateTime::fromSecsSinceEpoch(q.value(1).toLongLong());
         e.event = q.value(2).toString();
         e.detail = q.value(3).toString();

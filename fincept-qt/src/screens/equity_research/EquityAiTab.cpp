@@ -430,7 +430,7 @@ void PredictionChart::paintEvent(QPaintEvent*) {
                 p.setPen(Qt::NoPen);
                 p.drawEllipse(QPointF(cx, cy), 3, 3);
                 draw_box(QPointF(cx, cy),
-                         {QDateTime::fromSecsSinceEpoch(near->timestamp).date().toString(QStringLiteral("MMM d, yyyy"))
+                         {near->date().toString(QStringLiteral("MMM d, yyyy"))
                           + QStringLiteral("   ") + fmt::format_money(near->close)},
                          colors::BORDER_MED());
             }

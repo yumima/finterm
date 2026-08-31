@@ -174,6 +174,7 @@ template <typename Points, typename Accept>
 int nearest_within_window(const Points& points, qint64 report_ts, Accept accept) {
     const QTimeZone et("America/New_York");
     const auto day_of = [&et](qint64 ts) {
+        // EVENT-STAMP: earnings announcement — ET.
         return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
     };
     const QDate want = day_of(report_ts);
@@ -352,6 +353,7 @@ void EquityEarningsTab::apply_state(const services::query::QueryStore::State& s)
     // while the store stamps it "now" and the freshness chip reads "just now"
     // over a quarter-hour-old consensus.
     data_fetched_at_ = analysis.as_of > 0
+                           // EVENT-STAMP: the daemon's upstream fetch instant.
                            ? QDateTime::fromSecsSinceEpoch(analysis.as_of)
                            : s.fetched_at;
     populate(analysis);
@@ -622,6 +624,7 @@ void EquityEarningsTab::fill_predictions(const EarningsAnalysis& a, const Earnin
             // company had already reported — must not draw as one.
             const QDate observed = QDate::fromString(r.observed_on, Qt::ISODate);
             if (observed.isValid() &&
+                // EVENT-STAMP: earnings announcement — ET.
                 observed >= QDateTime::fromSecsSinceEpoch(run.points[i].timestamp)
                                 .toTimeZone(QTimeZone("America/New_York")).date())
                 continue;
@@ -1029,6 +1032,7 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
         // Render in US market time, not the viewer's: "30 Jul, after close" is
         // a fact about the exchange session. Read locally it would drift a
         // date for anyone west of ET and mislabel every after-close print.
+        // EVENT-STAMP: earnings announcement — ET.
         const auto when = QDateTime::fromSecsSinceEpoch(*a.next.timestamp)
                               .toTimeZone(QTimeZone("America/New_York"));
         next_date_->setText(when.toString("ddd d MMM yyyy"));
@@ -1233,6 +1237,7 @@ void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const Earn
     // even though it is plainly the same event.
     const QTimeZone et("America/New_York");
     auto et_date = [&et](qint64 ts) {
+        // EVENT-STAMP: earnings announcement — ET.
         return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
     };
     // Nearest print within kSignalMatchWindowDays wins — the same rule
@@ -1384,6 +1389,7 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
         // the viewer's local date showed every AMC quarter a day late for
         // anyone east of roughly UTC+3 — disagreeing with the card above and
         // with the filing date.
+        // EVENT-STAMP: earnings announcement — ET.
         const auto when = QDateTime::fromSecsSinceEpoch(p.timestamp)
                               .toTimeZone(QTimeZone("America/New_York"));
         // The projected row is amber end-to-end in its identity columns: this

@@ -1433,6 +1433,7 @@ int days_to_next_earnings(const EarningsAnalysis& a, const QDateTime& now) {
     // for every viewer west of New York — which is most of them.
     const QTimeZone et("America/New_York");
     const QDate today = now.toTimeZone(et).date();
+    // EVENT-STAMP: earnings announcement — ET, for the countdown.
     const QDate report = QDateTime::fromSecsSinceEpoch(*a.next.timestamp).toTimeZone(et).date();
     return static_cast<int>(today.daysTo(report));
 }

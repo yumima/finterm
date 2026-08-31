@@ -1,4 +1,5 @@
 #pragma once
+#include "core/util/BarTime.h"
 #include "core/result/Result.h"
 
 #    include "datahub/Producer.h"
@@ -77,12 +78,28 @@ struct InfoData {
 };
 
 struct HistoryPoint {
-    qint64 timestamp = 0; // seconds since epoch
+    /// Midnight in the EXCHANGE's own zone — a session, not an instant. Same
+    /// convention as Candle::timestamp, from the same daemon. Decode it with
+    /// date(); see core/util/BarTime.h for what a bare fromSecsSinceEpoch()
+    /// costs (a day, in the wrong direction, per exchange or per viewer).
+    qint64 timestamp = 0; // seconds since epoch, exchange midnight
     double open = 0;
     double high = 0;
     double low = 0;
     double close = 0;
     qint64 volume = 0;
+
+    /// The session this bar covers, on the exchange's calendar. Valid for the
+    /// 1d / 1wk / 1mo intervals fetch_history() serves; a weekly or monthly
+    /// bar is stamped at the start of its period.
+    ///
+    /// UNENFORCED PRECONDITION: fetch_history() takes `interval` as a free-form
+    /// QString, so nothing stops an intraday one. All current callers pass
+    /// "1d"; an intraday bar is a real instant, and bar_date()'s +14h would
+    /// silently roll a 15:30 ET bar into the next day with no diagnostic. If an
+    /// intraday path is ever added, it must not call this — decode those in a
+    /// real timezone instead.
+    QDate date() const { return core::bartime::bar_date(timestamp); }
 };
 
 struct TickerDef {

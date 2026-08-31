@@ -65,10 +65,19 @@ QVector<PayoffPoint> compute_payoff(const Strategy& s, const PayoffComputeOption
 /// interpolation between consecutive samples.
 QVector<double> compute_breakevens(const QVector<PayoffPoint>& curve);
 
-/// Min / max of pnl_expiry across the curve, plus tail-direction flags
+/// Max profit and max loss at expiry, with the unbounded tails flagged —
 /// derived from the strategy's net CE position (calls dominate the
 /// asymptotic behaviour on the upside).
-MaxPnL compute_max_pnl(const QVector<PayoffPoint>& curve, const Strategy& s);
+///
+/// Computed from the strategy, NOT from a sampled curve. An expiry payoff is
+/// piecewise linear with kinks only at strikes, so its extrema over [0, inf)
+/// are attained at S = 0, at a strike, or in a tail — all of which this
+/// evaluates exactly. Reading them off the display curve instead reported
+/// whatever the chart happened to span: on the default +/-30% window a short
+/// 24000 PE at 200 showed a max loss of 350k against a true 1.19m at S -> 0,
+/// and that number is what OrderConfirmDialog puts in front of a trader about
+/// to send the order.
+MaxPnL compute_max_pnl(const Strategy& s);
 
 /// Probability of profit under a GBM model with current spot, time t,
 /// risk-free r, and volatility sigma. Integrates the lognormal density

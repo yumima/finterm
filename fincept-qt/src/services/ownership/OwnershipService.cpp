@@ -77,6 +77,7 @@ QDate epoch_date(const QJsonObject& o, const char* key) {
     const auto v = o.value(QLatin1String(key));
     if (!v.isDouble())
         return {};
+    // EVENT-STAMP: a date-only as-of stamp at midnight UTC — UTC is the decode that recovers it.
     return QDateTime::fromSecsSinceEpoch(static_cast<qint64>(v.toDouble()), QTimeZone::UTC).date();
 }
 

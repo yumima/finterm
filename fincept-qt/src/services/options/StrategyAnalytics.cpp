@@ -15,8 +15,11 @@ using fincept::trading::InstrumentType;
 
 namespace {
 
-/// Days-to-expiry for a leg, actual/365. Floors at 1 day so expiry-day
-/// strategies don't collapse the target curve into intrinsic immediately.
+/// Days-to-expiry for a leg, actual/365, floored at 0 — an expiry-day leg has
+/// no time value left and its target curve IS the payoff. (This comment used
+/// to claim a floor of 1 "so expiry-day strategies don't collapse into
+/// intrinsic"; the code has always floored at 0, and the curve has always
+/// collapsed. The code is the defensible behaviour; the comment was not.)
 int days_to_expiry(const QString& expiry) {
     QDate exp = QDate::fromString(expiry, "dd-MMM-yy");
     if (!exp.isValid())
@@ -31,7 +34,14 @@ double t_years(int days) {
     return std::max(days, 0) / 365.0;
 }
 
-/// Per-leg P/L at a given spot — intrinsic at expiry. Returns (pnl, signed_units).
+/// Per-leg P/L at a given spot — intrinsic at expiry.
+///
+/// CE and PE only. A FUT leg would price as worthless here (intrinsic stays 0)
+/// and report a P/L of −entry × units at every spot, which is not a futures
+/// payoff at all. That is currently unreachable — templates emit CE/PE and the
+/// chain can only add CE/PE — but LegEditorTable already renders "FUT", so if a
+/// futures leg ever becomes constructible this is the first thing that must
+/// grow a branch (P/L is simply signed_units × (S − entry_price); no strike).
 double leg_pnl_expiry(const StrategyLeg& leg, double S) {
     const double signed_units = double(leg.lots) * double(leg.lot_size);
     double intrinsic = 0;
@@ -68,19 +78,6 @@ double net_call_lots(const Strategy& s) {
         if (!leg.is_active)
             continue;
         if (leg.type == InstrumentType::CE)
-            n += double(leg.lots) * double(leg.lot_size);
-    }
-    return n;
-}
-
-/// Net put lots — drives downside-tail behaviour (capped at S=0 always,
-/// but still useful when computing left-tail POP regions).
-[[maybe_unused]] double net_put_lots(const Strategy& s) {
-    double n = 0;
-    for (const auto& leg : s.legs) {
-        if (!leg.is_active)
-            continue;
-        if (leg.type == InstrumentType::PE)
             n += double(leg.lots) * double(leg.lot_size);
     }
     return n;
@@ -171,18 +168,51 @@ QVector<double> compute_breakevens(const QVector<PayoffPoint>& curve) {
     return bes;
 }
 
-MaxPnL compute_max_pnl(const QVector<PayoffPoint>& curve, const Strategy& s) {
+MaxPnL compute_max_pnl(const Strategy& s) {
     MaxPnL m;
-    if (curve.isEmpty())
+
+    // The expiry payoff is piecewise LINEAR in S with kinks only at strikes, so
+    // every extremum over [0, inf) sits at S = 0, at a strike, or in a tail.
+    // Evaluating exactly those points is exact — and, unlike a scan of the
+    // display curve, independent of whatever window the chart is drawn over.
+    //
+    // That independence is the entire point. This used to read the extrema off
+    // the sampled curve, whose default window is the anchor +/-30%, so a short
+    // put's max loss was its loss at -30% spot rather than at S -> 0: a short
+    // 24000 PE at 200 reported 350k against a true 1.19m. OrderConfirmDialog
+    // shows this figure on the screen where the order is sent.
+    QVector<double> probes;
+    probes.reserve(s.legs.size() + 2);
+    probes.append(0.0);                      // the true downside end of the axis
+    double max_strike = 0.0;
+    int active = 0;
+    for (const auto& leg : s.legs) {
+        if (!leg.is_active)
+            continue;
+        ++active;
+        probes.append(leg.strike);
+        max_strike = std::max(max_strike, leg.strike);
+    }
+    if (active == 0)
         return m;
+    // One point past every kink, so a bounded upside is measured on its final
+    // flat segment rather than at the last strike.
+    probes.append(max_strike * 2.0 + 1.0);
+
     m.max_profit = -std::numeric_limits<double>::infinity();
     m.max_loss = std::numeric_limits<double>::infinity();
-    for (const auto& p : curve) {
-        if (p.pnl_expiry > m.max_profit)
-            m.max_profit = p.pnl_expiry;
-        if (p.pnl_expiry < m.max_loss)
-            m.max_loss = p.pnl_expiry;
+    for (const double S : probes) {
+        double pnl = 0;
+        for (const auto& leg : s.legs)
+            if (leg.is_active)
+                pnl += leg_pnl_expiry(leg, S);
+        m.max_profit = std::max(m.max_profit, pnl);
+        m.max_loss = std::min(m.max_loss, pnl);
     }
+
+    // Tails. The downside is genuinely bounded — S = 0 is a real point and it
+    // is in `probes` — so only the upside can run away, and its slope is the
+    // net call position.
     const double net_calls = net_call_lots(s);
     if (net_calls > 0) {
         m.profit_unbounded = true;
@@ -299,7 +329,7 @@ StrategyAnalytics compute_all(const Strategy& s, const OptionChain& chain,
         o.current_spot = chain.spot;
 
     const QVector<PayoffPoint> curve = compute_payoff(s, o);
-    const MaxPnL pnl = compute_max_pnl(curve, s);
+    const MaxPnL pnl = compute_max_pnl(s);
     const QVector<double> bes = compute_breakevens(curve);
 
     // Pick a t for POP — the strategy's nearest leg that has not already

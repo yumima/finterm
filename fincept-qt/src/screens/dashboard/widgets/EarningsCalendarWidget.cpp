@@ -694,7 +694,12 @@ void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJ
     for (const auto& v : dates) {
         const auto o = v.toObject();
         const qint64 ts = static_cast<qint64>(o["timestamp"].toDouble());
-        const QDate d = QDateTime::fromSecsSinceEpoch(ts, QTimeZone::UTC).date();
+        // Read in ET like the ER Earnings tab reads the same field
+        // (EquityEarningsTab's et_date). In UTC a 20:00 ET print falls on the
+        // next day, so the dashboard calendar listed it one day after the tab.
+        // EVENT-STAMP: an announcement instant, not a session.
+        const QDate d = QDateTime::fromSecsSinceEpoch(ts)
+                            .toTimeZone(QTimeZone("America/New_York")).date();
         if (!d.isValid())
             continue;
         Point p;

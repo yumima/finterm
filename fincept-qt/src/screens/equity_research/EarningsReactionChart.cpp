@@ -166,6 +166,7 @@ QString EarningsReactionChart::tooltip_for(const Column& c) const {
     // UTC put a 20:00+ ET print on the next day, viewer-local shifted with
     // the reader.
     const auto when =
+        // EVENT-STAMP: earnings announcement — ET, the session it names.
         QDateTime::fromSecsSinceEpoch(c.timestamp).toTimeZone(QTimeZone("America/New_York"));
     rows << QString("<b>%1</b>").arg(c.projected ? QString("Next report · %1").arg(when.toString("d MMM yyyy"))
                                                  : when.toString("d MMM yyyy"));
@@ -525,6 +526,7 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         const double cx = cx_of(plot, col_w, i);
         // Announcement timestamps → ET, same rationale as the tooltip above.
         const auto when =
+            // EVENT-STAMP: earnings announcement — ET, matching the tab beside it.
             QDateTime::fromSecsSinceEpoch(cols[i].timestamp).toTimeZone(QTimeZone("America/New_York"));
         const QString tick = cols[i].projected
                                  ? (cols[i].metric ? when.toString("MMM yy") + QStringLiteral(" est")

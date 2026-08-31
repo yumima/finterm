@@ -839,6 +839,7 @@ void NewsService::connect_live_feed(const QString& ws_url) {
         article.link = obj["link"].toString(obj["url"].toString());
         article.category = obj["category"].toString("MARKETS");
         article.sort_ts = obj["timestamp"].toInteger(QDateTime::currentSecsSinceEpoch());
+        // EVENT-STAMP: a publication instant.
         article.time = QDateTime::fromSecsSinceEpoch(article.sort_ts).toString("MMM dd, HH:mm");
         article.tier = obj["tier"].toInt(2);
 

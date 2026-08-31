@@ -788,6 +788,7 @@ void PolymarketDetailPanel::set_comments(const QVector<pmx::Comment>& comments) 
             body->setWordWrap(true);
 
             auto* meta = new QLabel(
+                // EVENT-STAMP: when a comment was posted.
                 QDateTime::fromSecsSinceEpoch(c.created_at, QTimeZone::UTC).toString("yyyy-MM-dd HH:mm") +
                 (c.likes > 0 ? QString("  · %1 likes").arg(c.likes) : ""));
             meta->setStyleSheet(

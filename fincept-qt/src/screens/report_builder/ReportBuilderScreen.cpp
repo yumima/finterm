@@ -231,12 +231,16 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
                         for (int i = 0; i < history.size(); i += step) {
                             const auto& pt = history[i];
                             pts << QString::number(pt.close, 'f', 2);
-                            QDateTime dt = QDateTime::fromSecsSinceEpoch(pt.timestamp);
-                            lbls << dt.toString("MMM d");
+                            // Bar stamps, decoded on the exchange's calendar. This
+                            // had no timezone at all, so it fell to the viewer's
+                            // local zone and every label in an exported report was
+                            // a day early for anyone west of the exchange — in a
+                            // document read without the chart beside it.
+                            lbls << pt.date().toString("MMM d");
                         }
                         if ((history.size() - 1) % step != 0) {
                             pts << QString::number(history.last().close, 'f', 2);
-                            lbls << QDateTime::fromSecsSinceEpoch(history.last().timestamp).toString("MMM d");
+                            lbls << history.last().date().toString("MMM d");
                         }
                         auto cfg2 = comps2[idx2].config;
                         cfg2["data"] = pts.join(",");

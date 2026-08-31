@@ -274,6 +274,7 @@ ZerodhaTick ZerodhaWebSocket::parse_full_packet(const uchar* p) const {
     t.oi_day_low = read_i32(p + 56);
 
     qint32 ex_ts = read_i32(p + 60);
+    // EVENT-STAMP: a live tick instant during a session.
     t.exchange_timestamp = QDateTime::fromSecsSinceEpoch(ex_ts, QTimeZone::UTC);
 
     // Depth: 5 bids then 5 asks, each 12 bytes
