@@ -1,8 +1,9 @@
 // src/services/equity/EarningsSignal.cpp
 #include "services/equity/EarningsSignal.h"
 
+#include "core/util/BarTime.h"
+
 #include <QDateTime>
-#include <QTimeZone>
 
 #include <algorithm>
 #include <cmath>
@@ -1431,10 +1432,8 @@ int days_to_next_earnings(const EarningsAnalysis& a, const QDateTime& now) {
     // statement about sessions. Counting intervals labels a print 20 hours
     // out as "today", and reading the dates locally drifts the answer by one
     // for every viewer west of New York — which is most of them.
-    const QTimeZone et("America/New_York");
-    const QDate today = now.toTimeZone(et).date();
-    // EVENT-STAMP: earnings announcement — ET, for the countdown.
-    const QDate report = QDateTime::fromSecsSinceEpoch(*a.next.timestamp).toTimeZone(et).date();
+    const QDate today = core::bartime::market_date_et(now);
+    const QDate report = core::bartime::market_date_et(*a.next.timestamp);
     return static_cast<int>(today.daysTo(report));
 }
 

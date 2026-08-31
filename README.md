@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`4c72cceec`](https://github.com/yumima/finterm/commit/4c72cceec) review fixes: two bounds that could only ever fail in one direction
 - [`a92739fbb`](https://github.com/yumima/finterm/commit/a92739fbb) crypto swap: the confirm dialog stated a slippage the transaction did not carry
 - [`836f1d9c4`](https://github.com/yumima/finterm/commit/836f1d9c4) options: max loss was read off the chart's edge, not the strategy's
 - [`1ebd0d8c8`](https://github.com/yumima/finterm/commit/1ebd0d8c8) ai forecast: the tab recorded three contradictory numbers as one forecast

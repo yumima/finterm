@@ -1,6 +1,8 @@
 // src/screens/dashboard/widgets/EarningsCalendarWidget.cpp
 #include "screens/dashboard/widgets/EarningsCalendarWidget.h"
 
+#include "core/util/BarTime.h"
+
 #include "screens/dashboard/widgets/EarningsMath.h"
 
 #include "core/logging/Logger.h"
@@ -37,9 +39,7 @@ namespace {
 /// Tokyo at 01:00 JST has a local date a day ahead of ET, so an evening ET
 /// print still eight hours away was filed as past, dropped out of `future`,
 /// and vanished from the dashboard for exactly the hours before it mattered.
-QDate market_today() {
-    return QDateTime::currentDateTime().toTimeZone(QTimeZone("America/New_York")).date();
-}
+QDate market_today() { return core::bartime::market_today_et(); }
 
 } // namespace
 
@@ -714,9 +714,7 @@ void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJ
         // Read in ET like the ER Earnings tab reads the same field
         // (EquityEarningsTab's et_date). In UTC a 20:00 ET print falls on the
         // next day, so the dashboard calendar listed it one day after the tab.
-        // EVENT-STAMP: an announcement instant, not a session.
-        const QDate d = QDateTime::fromSecsSinceEpoch(ts)
-                            .toTimeZone(QTimeZone("America/New_York")).date();
+        const QDate d = core::bartime::market_date_et(ts);
         if (!d.isValid())
             continue;
         Point p;

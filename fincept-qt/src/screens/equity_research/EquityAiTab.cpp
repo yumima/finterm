@@ -1,6 +1,8 @@
 // src/screens/equity_research/EquityAiTab.cpp
 #include "screens/equity_research/EquityAiTab.h"
 
+#include "core/util/BarTime.h"
+
 #include "screens/equity_research/AiForecastMath.h"
 
 #include "ai_chat/LlmService.h"
@@ -12,7 +14,6 @@
 #include "ui/theme/Theme.h"
 
 #include <QCheckBox>
-#include <QTimeZone>
 #include <QComboBox>
 #include <QDateTime>
 #include <QHBoxLayout>
@@ -117,9 +118,7 @@ double dist_to_segment(const QPointF& p, const QPointF& a, const QPointF& b) {
 // basis: resolve_date is compared against ui::formatting::bar_date() (an
 // exchange calendar date), so writing it from a UTC or a viewer-local clock
 // puts the horizon a day out for anyone east or west of the exchange.
-QDate market_today() {
-    return QDateTime::currentDateTime().toTimeZone(QTimeZone("America/New_York")).date();
-}
+QDate market_today() { return fincept::core::bartime::market_today_et(); }
 
 // Is the session this candle covers definitely over?
 //

@@ -1,6 +1,8 @@
 // src/screens/equity_research/EquityEarningsTab.cpp
 #include "screens/equity_research/EquityEarningsTab.h"
 
+#include "core/util/BarTime.h"
+
 #include "services/equity/EquityResearchService.h"
 #include "storage/repositories/EarningsSignalRepository.h"
 #include "ui/formatting/NumberFormat.h"
@@ -172,11 +174,7 @@ constexpr int kSignalMatchWindowDays = 5;
 /// the window; -1 when nothing is close enough. `accept` screens candidates.
 template <typename Points, typename Accept>
 int nearest_within_window(const Points& points, qint64 report_ts, Accept accept) {
-    const QTimeZone et("America/New_York");
-    const auto day_of = [&et](qint64 ts) {
-        // EVENT-STAMP: earnings announcement — ET.
-        return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
-    };
+    const auto day_of = [](qint64 ts) { return core::bartime::market_date_et(ts); };
     const QDate want = day_of(report_ts);
     int best = -1, best_gap = kSignalMatchWindowDays + 1;
     for (int i = 0; i < points.size(); ++i) {
@@ -625,8 +623,7 @@ void EquityEarningsTab::fill_predictions(const EarningsAnalysis& a, const Earnin
             const QDate observed = QDate::fromString(r.observed_on, Qt::ISODate);
             if (observed.isValid() &&
                 // EVENT-STAMP: earnings announcement — ET.
-                observed >= QDateTime::fromSecsSinceEpoch(run.points[i].timestamp)
-                                .toTimeZone(QTimeZone("America/New_York")).date())
+                observed >= core::bartime::market_date_et(run.points[i].timestamp))
                 continue;
             // ISO yyyy-MM-dd, so lexicographic order is chronological order.
             const auto seen = best_for_point.constFind(i);
@@ -1255,11 +1252,7 @@ void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const Earn
     // Yahoo routinely shifts a scheduled 16:00 placeholder to the actual
     // announcement time once the company reports, so the seconds never agree
     // even though it is plainly the same event.
-    const QTimeZone et("America/New_York");
-    auto et_date = [&et](qint64 ts) {
-        // EVENT-STAMP: earnings announcement — ET.
-        return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
-    };
+    const auto et_date = [](qint64 ts) { return core::bartime::market_date_et(ts); };
     // Nearest print within kSignalMatchWindowDays wins — the same rule
     // fill_predictions() plots by, so a reading that settles is a reading that
     // draws.
@@ -1298,7 +1291,7 @@ void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const Earn
     EarningsSignalRecord rec;
     rec.symbol = a.symbol;
     rec.report_ts = *a.next.timestamp;
-    rec.observed_on = QDateTime::currentDateTime().toTimeZone(et).date().toString(Qt::ISODate);
+    rec.observed_on = core::bartime::market_today_et().toString(Qt::ISODate);
     rec.captured_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     rec.days_to_report = days;
     rec.verdict = v.label;
