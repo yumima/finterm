@@ -30,6 +30,16 @@ namespace fincept::wallet {
 class PumpFunSwapService : public QObject {
     Q_OBJECT
   public:
+    /// The slippage range this service will actually send, in whole percent.
+    ///
+    /// Public because the UI mirrors it: SwapMath.h derives the settings
+    /// slider's range and the figure shown on the confirm dialog from these,
+    /// so widening the service cannot leave the UI silently capping users at a
+    /// tolerance the venue would have accepted. These were file-local
+    /// constants and the mirror was a comment; a comment is not a coupling.
+    static constexpr int kSlippagePctMin = 1;
+    static constexpr int kSlippagePctMax = 5;
+
     enum class Action { Buy, Sell };
 
     /// Result returned by `build_swap()`. Mirrors the shape of

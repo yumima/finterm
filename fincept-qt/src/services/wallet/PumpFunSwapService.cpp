@@ -17,8 +17,8 @@ namespace {
 
 constexpr const char* kTradeLocalUrl = "https://pumpportal.fun/api/trade-local";
 
-constexpr int kSlippageMin = 1;
-constexpr int kSlippageMax = 5;
+constexpr int kSlippageMin = PumpFunSwapService::kSlippagePctMin;
+constexpr int kSlippageMax = PumpFunSwapService::kSlippagePctMax;
 constexpr double kPriorityFeeMin = 0.00001;
 constexpr double kPriorityFeeMax = 0.005;
 

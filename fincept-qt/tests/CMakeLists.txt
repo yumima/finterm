@@ -527,6 +527,20 @@ if(Python3_Interpreter_FOUND)
                          PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
+# ── Swap slippage: displayed vs sent ─────────────────────────────────────────
+# A configured tolerance (basis points) and an effective one (integer percent,
+# what the transaction carries) are different numbers, and the UI quoted the
+# first while sending the second — including on the confirm dialog, whose
+# warning named the figure it showed as the bound the trade would be rejected
+# past. 0.25% shown, 1% sent, before an irreversible on-chain swap.
+add_executable(test_swap_math
+    screens/test_swap_math.cpp
+)
+target_include_directories(test_swap_math PRIVATE ../src)
+target_link_libraries(test_swap_math PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_swap_math PROPERTIES AUTOMOC ON)
+add_test(NAME swap_math COMMAND test_swap_math)
+
 # ── Options strategy max profit / max loss ───────────────────────────────────
 # These were read off the sampled payoff curve, whose default window is spot
 # +/-30% — so a short put's "max loss" was its loss at the edge of the chart,

@@ -1,5 +1,7 @@
 #include "screens/crypto_center/tabs/SettingsTab.h"
 
+#include "screens/crypto_center/SwapMath.h"
+
 #include "core/logging/Logger.h"
 #include "services/wallet/WalletService.h"
 #include "storage/secure/SecureStorage.h"
@@ -30,10 +32,15 @@ QString settings_font_stack() {
         "'Consolas','Cascadia Mono','JetBrains Mono','SF Mono',monospace");
 }
 
+/// Always the EFFECTIVE tolerance — the whole percent a swap can actually
+/// express. See SwapMath.h: this slider used to offer 0.10%…5.00% in 0.05%
+/// steps and render two decimals, all of which PumpPortal's integer-percent
+/// API discards. Offering precision that is thrown away is what let the swap
+/// panel and the confirm dialog quote a tolerance the transaction did not
+/// carry, so the granularity is removed here rather than compensated for
+/// downstream.
 QString format_bps(int bps) {
-    return QStringLiteral("%1.%2%")
-        .arg(bps / 100)
-        .arg(bps % 100, 2, 10, QChar('0'));
+    return fincept::screens::swapmath::format_pct(bps);
 }
 
 } // namespace
@@ -199,10 +206,13 @@ void SettingsTab::build_ui() {
         row->setSpacing(8);
         slippage_slider_ = new QSlider(Qt::Horizontal, panel);
         slippage_slider_->setObjectName(QStringLiteral("settingsTabSlider"));
-        slippage_slider_->setMinimum(10);   // 0.10%
+        // Whole percent only: 1%…5%, the range PumpFunSwapService clamps to.
+        // A finer slider was a promise the transaction could not keep.
+        slippage_slider_->setMinimum(100);  // 1.00%
         slippage_slider_->setMaximum(kMaxSlippageBps);
-        slippage_slider_->setSingleStep(5);
-        slippage_slider_->setTickInterval(50);
+        slippage_slider_->setSingleStep(100);
+        slippage_slider_->setPageStep(100);
+        slippage_slider_->setTickInterval(100);
         slippage_slider_->setTickPosition(QSlider::TicksBelow);
         slippage_slider_->setValue(kDefaultSlippageBps);
         slippage_slider_->setFixedHeight(28);
@@ -337,7 +347,19 @@ void SettingsTab::load_initial_values() {
     if (slip_res.is_ok()) {
         bool ok = false;
         const auto v = slip_res.value().toInt(&ok);
-        if (ok && v >= 10 && v <= kMaxSlippageBps) bps = v;
+        // A value stored by the old fine-grained slider is rounded UP to the
+        // percent it will actually be sent as, so what this screen shows is
+        // what the transaction will carry. Showing a legacy 0.25% here would
+        // reintroduce the very mismatch this removes.
+        if (ok && v >= 10 && v <= kMaxSlippageBps) {
+            bps = fincept::screens::swapmath::effective_bps(v);
+            // …and write it back, once. Displaying the normalised value while
+            // leaving the raw one on disk leaves the stored key permanently
+            // disagreeing with every screen that reads it.
+            if (bps != v)
+                SecureStorage::instance().store(QString::fromLatin1(kSlippageKey),
+                                                QString::number(bps));
+        }
     }
     QSignalBlocker b(slippage_slider_);
     slippage_slider_->setValue(bps);
@@ -398,9 +420,20 @@ void SettingsTab::on_clear_helius_key() {
 }
 
 void SettingsTab::on_slippage_changed(int bps) {
-    slippage_value_->setText(format_bps(bps));
+    // SNAP. setSingleStep/setTickInterval do not quantize a QSlider — they
+    // govern arrow keys and draw decoration — so a dragged handle still lands
+    // anywhere in the range. Without this the label read "3.00%" while the
+    // handle sat visibly between ticks at 250 bps, 250 was persisted, and the
+    // handle jumped to 3% by itself on the next visit. Snapping here is what
+    // makes "whole percent only" true rather than merely documented.
+    const int snapped = fincept::screens::swapmath::effective_bps(bps);
+    if (snapped != bps) {
+        QSignalBlocker b(slippage_slider_);
+        slippage_slider_->setValue(snapped);
+    }
+    slippage_value_->setText(format_bps(snapped));
     SecureStorage::instance().store(QString::fromLatin1(kSlippageKey),
-                                    QString::number(bps));
+                                    QString::number(snapped));
 }
 
 void SettingsTab::apply_mode_to_buttons(bool is_stream) {

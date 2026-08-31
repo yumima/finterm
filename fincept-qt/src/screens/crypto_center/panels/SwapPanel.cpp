@@ -3,6 +3,7 @@
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "screens/crypto_center/WalletActionConfirmDialog.h"
+#include "screens/crypto_center/SwapMath.h"
 #include "screens/crypto_center/WalletActionSummary.h"
 #include "services/wallet/PumpFunSwapService.h"
 #include "services/wallet/SolanaRpcClient.h"
@@ -46,12 +47,6 @@ QString font_stack() {
 QString format_token(double v, int max_dp = 4) {
     if (v <= 0.0) return QStringLiteral("0");
     return QLocale::system().toString(v, 'f', max_dp);
-}
-
-QString format_bps(int bps) {
-    return QStringLiteral("%1.%2%")
-        .arg(bps / 100)
-        .arg(bps % 100, 2, 10, QChar('0'));
 }
 
 } // namespace
@@ -392,7 +387,7 @@ void SwapPanel::showEvent(QShowEvent* e) {
     }
     hub.subscribe(this, QStringLiteral("market:price:fncpt"),
                   [this](const QVariant& v) { on_price_update(v); });
-    slippage_label_->setText(format_bps(slippage_bps()));
+    slippage_label_->setText(swapmath::format_pct(slippage_bps()));
     route_label_->setText(QStringLiteral("PumpSwap (auto)"));
 }
 
@@ -504,25 +499,35 @@ void SwapPanel::recompute_estimate() {
     //
     // Slippage is the user-set lower bound on what they'll accept; show the
     // worst-case to set expectations correctly.
-    const double slippage_factor = 1.0 - (slippage_pct() / 100.0);
+    // These are FLOORS, not approximations, so they say "at least" rather than
+    // "≈". At the 5% maximum a reader taking "≈ 950" as "about 950" would
+    // typically receive ~1000 — a 5% understatement dressed as an estimate, in
+    // a screen whose whole point is that the number shown is the number
+    // promised.
+    // Applied to the USD figure too. It used to be left at spot while the token
+    // amount beside it was slippage-reduced, so one line quoted two different
+    // scenarios: "you receive at least X, worth about Y" where Y was the value
+    // of a larger X than the one shown.
+    const double slippage_factor = swapmath::factor(slippage_bps());
     QString out_text;
     if (mode_ == Mode::BuyFncpt) {
         const double est_fncpt = (ui_amount / last_fncpt_sol_price_) * slippage_factor;
-        const double est_usd = ui_amount * last_fncpt_usd_price_ / last_fncpt_sol_price_;
-        out_text = QStringLiteral("≈ %1 $FNCPT  (~$%2)")
+        const double est_usd =
+            ui_amount * last_fncpt_usd_price_ / last_fncpt_sol_price_ * slippage_factor;
+        out_text = tr("at least %1 $FNCPT  (~$%2)")
                        .arg(format_token(est_fncpt, 2))
                        .arg(format_token(est_usd, 2));
     } else {
         const double est_sol = ui_amount * last_fncpt_sol_price_ * slippage_factor;
-        const double est_usd = ui_amount * last_fncpt_usd_price_;
-        out_text = QStringLiteral("≈ %1 SOL  (~$%2)")
+        const double est_usd = ui_amount * last_fncpt_usd_price_ * slippage_factor;
+        out_text = tr("at least %1 SOL  (~$%2)")
                        .arg(format_token(est_sol, 6))
                        .arg(format_token(est_usd, 2));
     }
     out_amount_label_->setText(out_text);
     route_label_->setText(QStringLiteral("PumpSwap (auto)"));
     impact_label_->setText(tr("set by PumpSwap; capped by slippage"));
-    slippage_label_->setText(format_bps(slippage_bps()));
+    slippage_label_->setText(swapmath::format_pct(slippage_bps()));
     status_label_->setText(tr("Ready. Click SWAP to build the transaction."));
     clear_error_strip();
     swap_button_->setEnabled(can_submit());
@@ -575,12 +580,10 @@ int SwapPanel::slippage_bps() const {
 }
 
 int SwapPanel::slippage_pct() const {
-    // PumpPortal expects integer percent; round up so we never under-tolerate.
-    const int bps = slippage_bps();
-    int pct = (bps + 99) / 100;
-    if (pct < 1) pct = 1;
-    if (pct > 5) pct = 5;
-    return pct;
+    // The EFFECTIVE tolerance — what goes into the transaction. See SwapMath.h
+    // for why it differs from the configured bps, and why every user-facing
+    // figure has to quote this one rather than the setting.
+    return swapmath::effective_pct(slippage_bps());
 }
 
 // ── Submit flow ────────────────────────────────────────────────────────────
@@ -598,7 +601,12 @@ void SwapPanel::on_swap_clicked() {
 
     const auto pubkey = current_pubkey_;
     const int slip_pct = slippage_pct();
-    const int slip_bps_for_display = slippage_bps();
+    // No separate "for display" value any more — the dialog quotes exactly what
+    // the transaction carries. It used to show the configured bps beside a
+    // warning that named it as the tolerance the trade would be rejected past,
+    // while the transaction carried the rounded-up percent: a 0.25% setting was
+    // shown as 0.25% and sent as 1%, so the swap could fill four times worse
+    // than the screen promised.
     const auto action = (mode_ == Mode::BuyFncpt)
                             ? fincept::wallet::PumpFunSwapService::Action::Buy
                             : fincept::wallet::PumpFunSwapService::Action::Sell;
@@ -615,31 +623,36 @@ void SwapPanel::on_swap_clicked() {
     summary.title = QStringLiteral("SWAP");
     summary.lede = tr("Approve in your wallet to forward this transaction "
                       "to the network. The terminal does not hold any funds.");
+    // Worst case, like the panel's estimate. The dialog used to quote the raw
+    // spot output with no tolerance applied, so the authoritative screen was
+    // the OPTIMISTIC one — the panel said "at least 950" and the confirmation
+    // said "≈ 960".
+    const double confirm_factor = swapmath::factor(slippage_bps());
     if (mode_ == Mode::BuyFncpt) {
-        const double est_fncpt = ui_amount / last_fncpt_sol_price_;
+        const double est_fncpt = ui_amount / last_fncpt_sol_price_ * confirm_factor;
         summary.rows.append({QStringLiteral("ROUTE"),
                              QStringLiteral("PumpSwap (pool=auto)"), true});
         summary.rows.append({QStringLiteral("YOU PAY"),
                              QStringLiteral("%1 SOL").arg(format_token(ui_amount, 6)),
                              true});
         summary.rows.append({QStringLiteral("YOU RECEIVE"),
-                             tr("≈ %1 $FNCPT (PumpSwap fills at execution)")
+                             tr("at least %1 $FNCPT (PumpSwap fills at execution)")
                                  .arg(format_token(est_fncpt, 2)),
                              true});
     } else {
-        const double est_sol = ui_amount * last_fncpt_sol_price_;
+        const double est_sol = ui_amount * last_fncpt_sol_price_ * confirm_factor;
         summary.rows.append({QStringLiteral("ROUTE"),
                              QStringLiteral("PumpSwap (pool=auto)"), true});
         summary.rows.append({QStringLiteral("YOU PAY"),
                              QStringLiteral("%1 $FNCPT").arg(format_token(ui_amount, 2)),
                              true});
         summary.rows.append({QStringLiteral("YOU RECEIVE"),
-                             tr("≈ %1 SOL (PumpSwap fills at execution)")
+                             tr("at least %1 SOL (PumpSwap fills at execution)")
                                  .arg(format_token(est_sol, 6)),
                              true});
     }
     summary.rows.append({QStringLiteral("MAX SLIPPAGE"),
-                         format_bps(slip_bps_for_display), true});
+                         swapmath::format_pct(slippage_bps()), true});
     summary.rows.append({QStringLiteral("PRIORITY FEE"),
                          QStringLiteral("%1 SOL")
                              .arg(format_token(kDefaultPriorityFeeSol, 6)),
