@@ -128,9 +128,35 @@ class TestAiForecastMath : public QObject {
         QVERIFY2(f.incoherent, "falling back is exactly the case a reader should be told about");
     }
 
+    void an_absurd_target_is_rejected_in_BOTH_directions() {
+        // The bound used to be abs(pct) <= 100, which is silently one-sided: a
+        // move computed from a positive target can never be below -100%, so it
+        // could only ever reject on the upside. The same decimal slip that
+        // produced $2,500 on a $320 stock (caught) produces $3.20 (waved
+        // through, stored as a confident "down" call worth -99%, and averaged
+        // into a metric over rows that are never rewritten).
+        const Forecast down = reconcile(320.0, 3.20, -4.0);
+        QVERIFY2(!down.empty, "the plausible stated percentage should survive");
+        QVERIFY2(std::abs(down.predicted_pct - (-4.0)) < 1e-9,
+                 "the -99% target must not become the recorded forecast");
+        QVERIFY(down.incoherent);
+
+        // …and with no usable fallback, nothing is recorded at all.
+        QVERIFY(reconcile(320.0, 3.20, std::nullopt).empty);
+        QVERIFY(reconcile(320.0, 2500.0, std::nullopt).empty);
+    }
+
+    void the_bound_is_symmetric_in_ratio() {
+        // A doubling and a halving are the same size of claim.
+        QVERIFY(!reconcile(100.0, 200.0, std::nullopt).empty);   // +100%, at the edge
+        QVERIFY(!reconcile(100.0, 50.0, std::nullopt).empty);    // -50%,  its mirror
+        QVERIFY(reconcile(100.0, 200.01, std::nullopt).empty);
+        QVERIFY(reconcile(100.0, 49.99, std::nullopt).empty);
+    }
+
     void two_absurd_figures_are_not_a_forecast_at_all() {
-        const Forecast f = reconcile(320.0, 2500.0, 900.0);
-        QVERIFY(f.empty);
+        QVERIFY(reconcile(320.0, 2500.0, 900.0).empty);
+        QVERIFY(reconcile(320.0, 3.20, -900.0).empty);   // and the mirror
     }
 
     void a_large_but_plausible_call_is_kept_intact() {

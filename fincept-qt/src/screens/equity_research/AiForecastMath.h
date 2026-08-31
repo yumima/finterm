@@ -26,14 +26,34 @@ namespace fincept::screens::ai_forecast {
 /// +0.4% that bucketed to "flat", and marked wrong for landing where it said.
 inline constexpr double kFlatBandPct = 1.0;
 
-/// Beyond this, a "forecast" is a slip rather than a call.
+/// Beyond this ratio to the current price, a "forecast" is a slip rather than
+/// a call: a doubling on the upside, or its mirror, a halving on the downside.
 ///
 /// Not a view on what a stock can do — it is a bound on what a MODEL's number
-/// is allowed to do to a permanent record. A $2,500 target on a $320 stock
-/// (+681%) is a units error or a confused security, and because the tab's
-/// "avg miss" metric averages |predicted − actual| over immutable rows, one
-/// such row moves that average by hundreds of points for that ticker forever.
-inline constexpr double kMaxPlausibleMovePct = 100.0;
+/// is allowed to do to a permanent record. The tab's "avg miss" metric averages
+/// |predicted − actual| over rows that are never rewritten, so one bad row
+/// moves a ticker's average by hundreds of points forever.
+///
+/// Expressed as a RATIO, not a percentage, because a percentage bound is
+/// silently one-sided. A move computed from a positive target is bounded below
+/// by −100% by construction, so "abs(pct) <= 100" can only ever reject on the
+/// upside: it caught a $2,500 target on a $320 stock (+681%) and waved through
+/// a $3.20 one (−99%) — the same decimal slip, the other direction, stored as
+/// a confident "down" call and contributing ~99 points to the average.
+inline constexpr double kMaxPlausibleRatio = 2.0;
+
+/// Is `target` close enough to `price_now` to be a forecast rather than a slip?
+inline bool plausible_target(double target, double price_now) {
+    return price_now > 0.0 && target > 0.0 &&
+           target >= price_now / kMaxPlausibleRatio &&
+           target <= price_now * kMaxPlausibleRatio;
+}
+
+/// The same bound stated as a percentage move: −50% … +100%.
+inline bool plausible_move_pct(double pct) {
+    return pct >= (1.0 / kMaxPlausibleRatio - 1.0) * 100.0 &&
+           pct <= (kMaxPlausibleRatio - 1.0) * 100.0;
+}
 
 inline QString bucket_direction(double pct, double flat_band = kFlatBandPct) {
     if (pct > flat_band) return QStringLiteral("up");
@@ -83,7 +103,6 @@ inline Forecast reconcile(double price_now, double stated_target,
     if (!(price_now > 0.0))
         return f;   // no anchor; nothing here can be made coherent
 
-    const auto plausible = [](double pct) { return std::abs(pct) <= kMaxPlausibleMovePct; };
     const auto from_pct = [&](double pct) {
         f.predicted_pct = pct;
         f.target_price  = price_now * (1.0 + pct / 100.0);
@@ -92,7 +111,7 @@ inline Forecast reconcile(double price_now, double stated_target,
 
     if (stated_target > 0.0) {
         const double derived = (stated_target - price_now) / price_now * 100.0;
-        if (plausible(derived)) {
+        if (plausible_target(stated_target, price_now)) {
             f.target_price  = stated_target;
             f.predicted_pct = derived;
             f.empty = false;
@@ -102,7 +121,7 @@ inline Forecast reconcile(double price_now, double stated_target,
             if (stated_pct)
                 f.incoherent = std::abs(*stated_pct - derived) >
                                std::max(0.5, 0.10 * std::abs(derived));
-        } else if (stated_pct && plausible(*stated_pct)) {
+        } else if (stated_pct && plausible_move_pct(*stated_pct)) {
             // The target is not a forecast. Fall back to the percentage, which
             // is the model's other claim about the same move, and say the two
             // disagreed — deriving from the target here is what would put +681
@@ -111,7 +130,7 @@ inline Forecast reconcile(double price_now, double stated_target,
             f.incoherent = true;
         }
         // Both absurd: nothing usable, and `empty` stays true.
-    } else if (stated_pct && plausible(*stated_pct)) {
+    } else if (stated_pct && plausible_move_pct(*stated_pct)) {
         // A stated 0 is a real flat call, not a missing field — see above.
         from_pct(*stated_pct);
     }

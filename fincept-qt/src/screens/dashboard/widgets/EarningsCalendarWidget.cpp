@@ -27,6 +27,23 @@
 
 namespace fincept::screens::widgets {
 
+namespace {
+
+/// Today on the market's calendar.
+///
+/// The print dates on this widget are decoded in ET, so anything compared
+/// against them has to be too. They were compared against the VIEWER's date,
+/// which put the two halves of `d < today` on different calendars: a viewer in
+/// Tokyo at 01:00 JST has a local date a day ahead of ET, so an evening ET
+/// print still eight hours away was filed as past, dropped out of `future`,
+/// and vanished from the dashboard for exactly the hours before it mattered.
+QDate market_today() {
+    return QDateTime::currentDateTime().toTimeZone(QTimeZone("America/New_York")).date();
+}
+
+} // namespace
+
+
 using earnings::fmt_eps;
 using earnings::Growth;
 using earnings::growth_verdict;
@@ -382,7 +399,7 @@ void EarningsCalendarWidget::load_week() {
     // "This week" = today through Friday. On a weekend there is nothing left in
     // the current week, so roll forward to the next one — an empty list would
     // read as a data failure.
-    QDate start = QDate::currentDate();
+    QDate start = market_today();
     if (start.dayOfWeek() > 5)
         start = start.addDays(8 - start.dayOfWeek()); // Sat→Mon(+2), Sun→Mon(+1)
     const QDate end = start.addDays(5 - start.dayOfWeek());
@@ -677,7 +694,7 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
 
 void EarningsCalendarWidget::apply_symbol_result(const QString& symbol, const QJsonObject& result,
                                                  bool portfolio_view) {
-    const QDate today = QDate::currentDate();
+    const QDate today = market_today();
     const auto dates = result.value("dates").toArray();
 
     struct Point {
@@ -849,7 +866,7 @@ void EarningsCalendarWidget::populate() {
         return;
     }
 
-    const QDate today = QDate::currentDate();
+    const QDate today = market_today();
     bool alt = false;
     QDate prev_date;
 

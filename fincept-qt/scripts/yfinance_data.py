@@ -1950,15 +1950,20 @@ def _session_is_final(idx, i):
         if i < len(idx) - 1:
             return True
         ts = pd.Timestamp(idx[i])
-        now = pd.Timestamp.now(tz=ts.tz) if ts.tz is not None else pd.Timestamp.now()
-        if ts.date() < now.date():
-            return True     # yesterday or older, on the venue's own calendar
-        if ts.date() > now.date():
-            return True     # a venue ahead of us; it cannot be a live bar here
+        if ts.tz is None:
+            # No zone on the stamp, so any "now" we build is the HOST's clock,
+            # which says nothing about the venue. A naive Tokyo bar for a
+            # session still trading reads as "tomorrow" to a host west of it —
+            # and calling that final writes a running close into a record that
+            # resolve() never revisits. Wait for a later bar instead.
+            return False
+        now = pd.Timestamp.now(tz=ts.tz)
+        if ts.date() != now.date():
+            return True     # not the venue's current session, on its own calendar
         # Same day. Only for US Eastern do we know the close well enough to
         # say. Elsewhere, wait for midnight in the venue's own timezone — a
         # few hours of extra caution on a number that is written down once.
-        if ts.tz is None or str(ts.tz) not in _US_EASTERN_TZ_NAMES:
+        if str(ts.tz) not in _US_EASTERN_TZ_NAMES:
             return False
         return (now.hour, now.minute) >= (16, 20)
     except Exception:

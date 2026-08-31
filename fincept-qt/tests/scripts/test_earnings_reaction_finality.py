@@ -164,6 +164,23 @@ def test_a_non_us_bar_is_never_judged_by_the_us_clock():
         pd.Timestamp.now = original
 
 
+def test_a_naive_stamp_is_never_judged_by_the_host_clock():
+    # With no timezone on the stamp, any "now" we build is the HOST's clock,
+    # which says nothing about the venue. A naive bar for a session still
+    # trading can read as "tomorrow" to a host west of it, and calling that
+    # final writes a running close into a record resolve() never revisits.
+    naive = pd.DatetimeIndex([pd.Timestamp("2026-08-13") - pd.Timedelta(days=k)
+                              for k in range(4, -1, -1)])
+    original = _freeze(pd.Timestamp("2026-08-12 10:05", tz=ET))
+    try:
+        check("a naive trailing stamp is never called final",
+              yd._session_is_final(naive, len(naive) - 1) is False)
+        check("…but a naive stamp with a successor still is",
+              yd._session_is_final(naive, len(naive) - 2) is True)
+    finally:
+        pd.Timestamp.now = original
+
+
 def test_a_later_bar_settles_it_whatever_the_clock():
     # The exact test: if a LATER bar exists the earlier one is closed, and no
     # holiday, half-day or exchange calendar can argue with that.

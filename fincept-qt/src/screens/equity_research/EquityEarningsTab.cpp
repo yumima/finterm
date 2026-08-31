@@ -1165,14 +1165,34 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                                 "mostly about this print.");
         if (a.next.implied.has_value() && a.next.implied->total_move_pct.has_value()) {
             const auto& imp = *a.next.implied;
-            why = QString(
-                      "The nearest post-report expiry (%1) is still far enough out that the "
-                      "straddle — %2% of spot — is dominated by ordinary volatility rather "
-                      "than by the print, so the event component cannot be separated from it "
-                      "yet. Quoting the whole straddle beside a single-session EXPECTED MOVE "
-                      "would overstate what the market is pricing for this report. It fills "
-                      "in as the date approaches.")
-                      .arg(expiry_text(imp.expiry), QString::number(*imp.total_move_pct, 'f', 1));
+            // The daemon withholds the event component at BOTH ends: when
+            // ordinary drift dominates the straddle (expiry far out) and when
+            // it removed almost nothing (a calm name whose expiry is a day or
+            // two away). Describing only the first told a reader whose expiry
+            // was imminent that it "fills in as the date approaches" — the
+            // exact opposite of the truth, since it will not. Days to expiry
+            // separates the two without needing the daemon to report which.
+            const QDate expiry = QDate::fromString(imp.expiry, Qt::ISODate);
+            const int days_out = expiry.isValid() ? QDate::currentDate().daysTo(expiry) : 99;
+            why = days_out > 7
+                      ? QString("The nearest post-report expiry (%1) is far enough out that "
+                                "the straddle — %2% of spot — is dominated by ordinary "
+                                "volatility rather than by the print, so the event component "
+                                "cannot be separated from it yet. Quoting the whole straddle "
+                                "beside a single-session EXPECTED MOVE would overstate what "
+                                "the market is pricing for this report. It fills in as the "
+                                "date approaches.")
+                            .arg(expiry_text(imp.expiry),
+                                 QString::number(*imp.total_move_pct, 'f', 1))
+                      : QString("The %1 straddle is %2% of spot, and taking out the ordinary "
+                                "sessions between now and then removes so little that the "
+                                "split carries no information — the subtraction is a residual "
+                                "between two nearly equal numbers, which is more sensitive to "
+                                "the volatility estimate than to the print. The straddle "
+                                "itself is the market's price; it is simply not separable "
+                                "into an event component here.")
+                            .arg(expiry_text(imp.expiry),
+                                 QString::number(*imp.total_move_pct, 'f', 1));
         }
         setup_implied_->setToolTip(implied_tooltip() + "\n\n" + why);
     }
