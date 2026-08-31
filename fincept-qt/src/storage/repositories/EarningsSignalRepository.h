@@ -71,8 +71,20 @@ class EarningsSignalRepository : public BaseRepository<EarningsSignalRecord> {
     /// Record what a print did. Fills every unresolved reading about that
     /// report at once — they were all observations of the same event — and
     /// touches only the outcome columns. Returns rows updated.
+    ///
+    /// `print_day` (ISO yyyy-MM-dd, market time) is the day the print landed,
+    /// and it is REQUIRED: only a reading observed strictly before it was a
+    /// prediction. Yahoo's schedule routinely lags the real announcement, so
+    /// a reading written under a stale "upcoming" date can have been taken
+    /// after the numbers were public — settling one of those would launder
+    /// hindsight into the hit rate. Rows on or after `print_day` are left
+    /// unresolved, and therefore out of every statistic drawn from this
+    /// table. The filter lives HERE rather than in the caller because
+    /// resolution is per-report: a caller that screens one row cannot stop
+    /// this from settling its siblings.
     int resolve(const QString& symbol, qint64 report_ts, std::optional<double> actual_eps,
-                std::optional<double> surprise_pct, double actual_move_pct);
+                std::optional<double> surprise_pct, double actual_move_pct,
+                const QString& print_day);
 
   private:
     static EarningsSignalRecord map_row(QSqlQuery& q);

@@ -509,6 +509,24 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(extended_hours PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
+# ── An earnings reaction must come from a session that has closed ────────────
+# yfinance returns a bar for the CURRENT session as soon as it opens, with a
+# running close. Read as p_after that turned a mid-morning quote into a
+# finished "1-day earnings reaction" — and the signal ledger settles a print
+# against it PERMANENTLY, since resolve() only touches unresolved rows. Pins
+# the split: reaction_pct only once the session closes, reaction_live_pct until
+# then, and settled history untouched by either.
+
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME earnings_reaction_finality
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_earnings_reaction_finality.py
+    )
+    set_tests_properties(earnings_reaction_finality
+                         PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
+endif()
+
 # ── IPO Watch pure parse/format ──────────────────────────────────────────────
 # Both helpers have shipped a wrong-but-plausible number: a half-parsed price
 # range reported as a confident low side, and a share count run through the

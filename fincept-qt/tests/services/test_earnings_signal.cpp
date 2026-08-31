@@ -899,17 +899,63 @@ class TestEarningsSignal : public QObject {
     // The reconstruction's band must be visibly narrower than a live reading's
     // — that gap IS the explanation for the flat dotted stretch, so if the two
     // ever match, the chart has stopped telling the truth about it.
+    //
+    // The live figure is read off the shipped PredictorRun rather than
+    // recomputed here: a test that rebuilt the formula would keep passing
+    // while the engine's own band drifted away from it, which is exactly how
+    // the live band came to be cut from a different quantity than the point
+    // it was supposed to cap.
     void a_reconstructions_band_is_narrower_than_a_live_one() {
-        const auto full = evaluate_earnings(bullish_fixture());
-        const double live_bound = full.typical_move_pct * full.confidence;
+        const auto a = bullish_fixture();
+        const auto full = evaluate_earnings(a);
+        const auto runs = compare_predictors(a, full);
+        const PredictorRun* scorecard = nullptr;
+        for (const auto& r : runs)
+            if (r.predictor == MovePredictor::Scorecard) scorecard = &r;
+        QVERIFY(scorecard != nullptr);
+        QVERIFY(scorecard->next_bound_pct.has_value());
+        const double live_bound = *scorecard->next_bound_pct;
         QVERIFY(live_bound > 0);
 
-        const auto rec = reconstruct_predictions(bullish_fixture());
+        const auto rec = reconstruct_predictions(a);
         QVERIFY(!rec.isEmpty());
         QVERIFY(rec.last().bound_pct.has_value());
         QVERIFY2(*rec.last().bound_pct < live_bound,
                  qPrintable(QString("reconstruction band %1 vs live %2")
                                 .arg(*rec.last().bound_pct).arg(live_bound)));
+    }
+
+    // The live scorecard estimate must sit inside the band drawn around it.
+    //
+    // The band used to be cut from `typical_move_pct` (the plain trailing mean
+    // of past |move|) while the point was cut from `expected_move_pct` (that
+    // mean blended with recent realised volatility). Whenever 20-session vol
+    // ran above half the earnings-day average — a calm reporter in a turbulent
+    // tape, which is an ordinary configuration and not a corner case — the
+    // blend exceeded the average and the chart drew the estimate OUTSIDE the
+    // envelope labelled "the most it could have said either way".
+    //
+    // The fixture below is exactly that shape: a name that moves 4% on a print
+    // sitting in a 3.5%-a-day regime.
+    void the_live_estimate_stays_inside_its_own_band() {
+        EarningsAnalysis a = bullish_fixture();
+        a.pre_vol_pct = 3.5;                 // > 0.5 x the 4.0 typical move
+        const auto v = evaluate_earnings(a);
+        QVERIFY(v.predicted_move_pct.has_value());
+        QVERIFY2(v.expected_move_pct > v.typical_move_pct,
+                 "fixture no longer exercises the case it exists for");
+
+        const auto runs = compare_predictors(a, v);
+        const PredictorRun* scorecard = nullptr;
+        for (const auto& r : runs)
+            if (r.predictor == MovePredictor::Scorecard) scorecard = &r;
+        QVERIFY(scorecard != nullptr);
+        QVERIFY(scorecard->next_move_pct.has_value());
+        QVERIFY(scorecard->next_bound_pct.has_value());
+        QVERIFY2(std::abs(*scorecard->next_move_pct) <= *scorecard->next_bound_pct + 1e-9,
+                 qPrintable(QString("live estimate %1 outside its own band %2")
+                                .arg(*scorecard->next_move_pct)
+                                .arg(*scorecard->next_bound_pct)));
     }
 
     // ── Competing predictors ─────────────────────────────────────────────────

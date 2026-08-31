@@ -12,6 +12,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QScrollArea>
+#include <QHash>
 #include <QSet>
 #include <QTimeZone>
 
@@ -154,6 +155,41 @@ void set_stat(QLabel* l, const QString& text, const QString& color, int px = 16)
                          .arg(color).arg(px));
 }
 
+/// How far a recorded reading's report date may sit from the print it is
+/// about, in ET days.
+///
+/// Yahoo's scheduled date is a placeholder that firms up — often by a day or
+/// two, occasionally more — so a reading keyed under the placeholder has to be
+/// matched with slack or it never finds its print. Five days spans a reporting
+/// week; quarters are ~90 days apart, so the window cannot reach the wrong
+/// print. ONE constant because there are two matchers (settling a reading, and
+/// plotting it), and when they were written independently the settler used ±5
+/// days while the chart demanded an exact date — so precisely the readings the
+/// window existed to rescue were the ones that never drew.
+constexpr int kSignalMatchWindowDays = 5;
+
+/// Index of the point in `points` whose date is nearest `report_ts`, within
+/// the window; -1 when nothing is close enough. `accept` screens candidates.
+template <typename Points, typename Accept>
+int nearest_within_window(const Points& points, qint64 report_ts, Accept accept) {
+    const QTimeZone et("America/New_York");
+    const auto day_of = [&et](qint64 ts) {
+        return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
+    };
+    const QDate want = day_of(report_ts);
+    int best = -1, best_gap = kSignalMatchWindowDays + 1;
+    for (int i = 0; i < points.size(); ++i) {
+        if (!accept(points[i]))
+            continue;
+        const int gap = std::abs(static_cast<int>(want.daysTo(day_of(points[i].timestamp))));
+        if (gap < best_gap) {
+            best_gap = gap;
+            best = i;
+        }
+    }
+    return best;
+}
+
 QTableWidgetItem* cell(const QString& text, const QString& color = QString(),
                        Qt::Alignment align = Qt::AlignRight | Qt::AlignVCenter) {
     auto* it = new QTableWidgetItem(text);
@@ -197,6 +233,32 @@ QString opt_num(const std::optional<double>& v, int dp = 2) {
 QString opt_compact(const std::optional<double>& v) {
     if (!v.has_value()) return ui::formatting::placeholder();
     return ui::formatting::format_compact(*v, 1);
+}
+
+/// "11 Sep" from an ISO expiry, falling back to the raw string.
+QString expiry_text(const QString& iso) {
+    const QDate d = QDate::fromString(iso, Qt::ISODate);
+    return d.isValid() ? d.toString("d MMM") : iso;
+}
+
+/// Standing explanation of the MARKET-IMPLIED stat. Factored out because
+/// populate() appends this print's actual decomposition to it, and the two
+/// halves must not drift.
+QString implied_tooltip() {
+    return QStringLiteral(
+        "What the option market is pricing for THIS print, and the only genuinely "
+        "forward-looking figure on the tab: everything else is derived from what the "
+        "company already did.\n\n"
+        "It is the at-the-money straddle expiring just after the report, with ordinary "
+        "volatility taken out in quadrature — event² = straddle² − (daily vol × √sessions)². "
+        "That subtraction is what makes the number comparable with EXPECTED MOVE beside "
+        "it, which is a single-session forecast: a straddle prices every session to "
+        "expiry, so the raw quote weeks ahead of a print is mostly calendar time and "
+        "reads several times too large.\n\n"
+        "Implied above the historical estimate means the market is braced for more than "
+        "this name usually does; below, less. Unlike the rest of the tab this cannot be "
+        "backtested here (no historical option data), so it is reported as the market's "
+        "pricing and never scored.");
 }
 
 QString opt_count(const std::optional<double>& v) {
@@ -283,7 +345,15 @@ void EquityEarningsTab::apply_state(const services::query::QueryStore::State& s)
     }
     message_label_->hide();
     content_widget_->show();
-    data_fetched_at_ = s.fetched_at;
+    // The payload's own `as_of` — stamped by the daemon when it actually went
+    // upstream — outranks the store's resolve time. The daemon caches an
+    // earnings payload for up to 15 minutes (2 minutes within three days of a
+    // print), so a C++ refetch on the 180s TTL can be answered from that cache
+    // while the store stamps it "now" and the freshness chip reads "just now"
+    // over a quarter-hour-old consensus.
+    data_fetched_at_ = analysis.as_of > 0
+                           ? QDateTime::fromSecsSinceEpoch(analysis.as_of)
+                           : s.fetched_at;
     populate(analysis);
 }
 
@@ -467,19 +537,7 @@ QWidget* EquityEarningsTab::build_summary_row() {
         "It has no established accuracy — that is precisely why every reading is written down "
         "before the print and held against the outcome in SIGNAL vs OUTCOME below. Treat the "
         "TYPICAL MOVE beside it as the range that matters far more than the point."));
-    setup_implied_->setToolTip(QStringLiteral(
-        "What the option market itself is pricing for this print — the at-the-money "
-        "straddle expiring just after the report date, as a percent of spot. This is the "
-        "number professional earnings screens lead with, and the only genuinely "
-        "forward-looking figure on this tab: everything else is derived from what the "
-        "company already did.\n\n"
-        "Only shown when an expiry lands within ten days after the print. A straddle "
-        "prices every session to expiry, so a far expiry would quote weeks of ordinary "
-        "volatility as if it were the earnings move.\n\n"
-        "Compare it with EXPECTED MOVE: implied well above the historical estimate means "
-        "the market is braced for more than this name usually does, and vice versa. "
-        "Unlike the rest of the tab this figure cannot be backtested here (no historical "
-        "option data), so it is reported as the market's pricing, never scored."));
+    setup_implied_->setToolTip(implied_tooltip());
     setup_move_->setToolTip(QStringLiteral(
         "Forecast of how big this print's session will be, regardless of direction — the one "
         "genuinely forecastable part of an earnings reaction.\n\n"
@@ -530,29 +588,53 @@ void EquityEarningsTab::fill_predictions(const EarningsAnalysis& a, const Earnin
     // A reading genuinely written down before a print replaces the scorecard's
     // reconstruction for that quarter. Only the scorecard has such records —
     // the others are fits over history and have no live counterpart.
-    const QTimeZone et("America/New_York");
-    auto et_date = [&et](qint64 ts) {
-        return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
-    };
     int recorded_pairs = 0;
+    // Held in a named vector: the map below stores pointers into it.
+    const auto records = EarningsSignalRepository::instance().for_symbol(a.symbol);
     for (auto& run : predictor_runs_) {
         if (run.predictor != services::equity::MovePredictor::Scorecard)
             continue;
-        for (const auto& r : EarningsSignalRepository::instance().for_symbol(a.symbol)) {
+        // The reading to plot for a print is its LAST one taken before it —
+        // the least horizon-muted, and the one a reader would call "what the
+        // signal said going in".
+        //
+        // That has to be decided by `observed_on`, not by iteration order.
+        // for_symbol() sorts observed_on DESC only WITHIN one report_ts, and
+        // since the match widened to ±5 days two placeholder dates can land on
+        // the same print — at which point "first to arrive" merely means
+        // "highest report_ts". A reading taken 100 days out under a later
+        // placeholder would win over one taken 5 days out under an earlier
+        // one, which is the exact failure the window was widened to fix.
+        QHash<int, const EarningsSignalRecord*> best_for_point;
+        for (const auto& r : records) {
             if (!r.predicted_move_pct) continue;
-            for (auto& q : run.points) {
-                if (et_date(q.timestamp) != et_date(r.report_ts)) continue;
-                // Rows arrive observed_on DESC, so the first record to reach
-                // a print is its LAST pre-print reading — the one to plot.
-                // Overwriting on every later (i.e. earlier-observed) record
-                // ended with the oldest, horizon-muted reading on the chart,
-                // and counted the same print once per observation day.
-                if (!q.reconstructed) break;   // newest observation already applied
-                q.predicted_move_pct = r.predicted_move_pct;
-                q.reconstructed = false;
-                ++recorded_pairs;
-                break;
-            }
+            // Same ±5-day rule the ledger settles by. This used to demand an
+            // exact date match, so a reading whose placeholder date had since
+            // firmed up settled but never drew — the line stayed dotted and
+            // recorded_pairs_ under-reported the evidence that exists.
+            const int i = nearest_within_window(
+                run.points, r.report_ts,
+                [](const services::equity::QuarterPrediction&) { return true; });
+            if (i < 0) continue;
+            // The same hindsight screen the ledger applies. The chart marks
+            // these points "recorded before the print" in so many words, so a
+            // reading taken on the print day itself — after a before-open
+            // company had already reported — must not draw as one.
+            const QDate observed = QDate::fromString(r.observed_on, Qt::ISODate);
+            if (observed.isValid() &&
+                observed >= QDateTime::fromSecsSinceEpoch(run.points[i].timestamp)
+                                .toTimeZone(QTimeZone("America/New_York")).date())
+                continue;
+            // ISO yyyy-MM-dd, so lexicographic order is chronological order.
+            const auto seen = best_for_point.constFind(i);
+            if (seen == best_for_point.constEnd() || r.observed_on > seen.value()->observed_on)
+                best_for_point.insert(i, &r);
+        }
+        for (auto it = best_for_point.constBegin(); it != best_for_point.constEnd(); ++it) {
+            auto& q = run.points[it.key()];
+            q.predicted_move_pct = it.value()->predicted_move_pct;
+            q.reconstructed = false;
+            ++recorded_pairs;
         }
     }
     recorded_pairs_ = recorded_pairs;
@@ -1026,17 +1108,53 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                  ? QString("±%1%").arg(QString::number(verdict.expected_move_pct, 'f', 1))
                  : ui::formatting::placeholder(),
              ui::colors::TEXT_PRIMARY(), 13);
-    if (a.next.implied.has_value() && a.next.implied->total_move_pct.has_value()) {
+    // The EVENT component, never the raw straddle. A straddle prices every
+    // session to expiry, so weeks ahead of a print most of it is ordinary
+    // volatility: ORCL quoted 12.1% to its 11 Sep expiry against an event
+    // component of 3.4%. Printing 12.1% beside a single-session EXPECTED MOVE
+    // — which the tooltip invites — overstates the market's earnings estimate
+    // by 3.5x. Where the ordinary days cannot be stripped out informatively
+    // the stat stays empty and the tooltip says why: a wrong implied move is
+    // worse than none, because it is the number a reader trusts most.
+    if (a.next.implied.has_value() && a.next.implied->event_move_pct.has_value()) {
         const auto& imp = *a.next.implied;
-        // The straddle expires a few sessions after the print; saying so on the
-        // stat keeps "±7.5% through Aug 28" from being read as a same-day move.
         set_stat(setup_implied_,
-                 QString("±%1%  by %2")
-                     .arg(QString::number(*imp.total_move_pct, 'f', 1))
-                     .arg(QDate::fromString(imp.expiry, Qt::ISODate).toString("MMM d")),
+                 QString("±%1%").arg(QString::number(*imp.event_move_pct, 'f', 1)),
                  ui::colors::TEXT_PRIMARY(), 13);
+        setup_implied_->setToolTip(
+            implied_tooltip() +
+            QString("\n\nThis print: the straddle expiring %1 (%2 after the report) costs "
+                    "%3% of spot; stripping the ordinary sessions between now and then "
+                    "leaves the %4% shown.")
+                .arg(expiry_text(imp.expiry),
+                     imp.days_after_print == 1 ? QStringLiteral("1 day")
+                                               : QString("%1 days").arg(imp.days_after_print),
+                     QString::number(imp.total_move_pct.value_or(0.0), 'f', 1),
+                     QString::number(*imp.event_move_pct, 'f', 1)));
     } else {
         set_stat(setup_implied_, ui::formatting::placeholder(), ui::colors::TEXT_PRIMARY(), 13);
+        // Three different reasons land here and they are not interchangeable
+        // to a reader deciding whether to go and look the number up elsewhere.
+        QString why = !a.next.timestamp.has_value()
+                          ? QStringLiteral(
+                                "There is no published report date to price a straddle against.")
+                          : QStringLiteral(
+                                "No listed expiry lands within ten days after the report date — "
+                                "either none is quoted that close to it, or this security has no "
+                                "options at all. Without one there is no straddle whose price is "
+                                "mostly about this print.");
+        if (a.next.implied.has_value() && a.next.implied->total_move_pct.has_value()) {
+            const auto& imp = *a.next.implied;
+            why = QString(
+                      "The nearest post-report expiry (%1) is still far enough out that the "
+                      "straddle — %2% of spot — is dominated by ordinary volatility rather "
+                      "than by the print, so the event component cannot be separated from it "
+                      "yet. Quoting the whole straddle beside a single-session EXPECTED MOVE "
+                      "would overstate what the market is pricing for this report. It fills "
+                      "in as the date approaches.")
+                      .arg(expiry_text(imp.expiry), QString::number(*imp.total_move_pct, 'f', 1));
+        }
+        setup_implied_->setToolTip(implied_tooltip() + "\n\n" + why);
     }
     // Beat rate is descriptive only now — the track-record leg scores the size
     // of the surprise against its own spread, because nearly every large cap
@@ -1101,38 +1219,29 @@ void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const Earn
     auto et_date = [&et](qint64 ts) {
         return QDateTime::fromSecsSinceEpoch(ts).toTimeZone(et).date();
     };
-    // A ±5-day window, nearest print wins. Exact-date matching left rows
-    // unresolved forever whenever Yahoo's scheduled date firmed up more than
-    // a day away from the placeholder the reading was keyed under — those
-    // rows then silently thinned the hit-rate statistics. Five days spans a
-    // reporting week; quarters are ~90 days apart, so the window can never
-    // reach the wrong print.
+    // Nearest print within kSignalMatchWindowDays wins — the same rule
+    // fill_predictions() plots by, so a reading that settles is a reading that
+    // draws.
+    //
+    // A quarter with only `reaction_live_pct` is deliberately no match: its
+    // session is still trading, and settling against a running close would
+    // freeze the outcome at whatever the tape said mid-morning. The row waits
+    // for the close, which is one refresh away.
     for (const auto& pending : ledger.unresolved(a.symbol)) {
-        const QDate want = et_date(pending.report_ts);
-        const services::equity::EarningsPoint* best = nullptr;
-        int best_gap = 6;
-        for (const auto& p : a.history) {
-            if (p.is_estimate || !p.reaction_pct.has_value())
-                continue;   // no settled reaction yet — leave it open
-            const int gap = std::abs(static_cast<int>(want.daysTo(et_date(p.timestamp))));
-            if (gap < best_gap) {
-                best_gap = gap;
-                best = &p;
-            }
-        }
-        if (!best)
+        const int i = nearest_within_window(
+            a.history, pending.report_ts, [](const services::equity::EarningsPoint& p) {
+                return !p.is_estimate && p.reaction_pct.has_value();
+            });
+        if (i < 0)
             continue;
-        // Only a reading taken strictly BEFORE the matched print's date is a
-        // prediction. When Yahoo's schedule lagged the real announcement, a
-        // reading written under the stale "upcoming" date may actually have
-        // been observed after the print — grading it would launder hindsight
-        // into the hit rate. Such rows stay unresolved (and out of the
-        // statistics) rather than being settled as calls they never were.
-        const QDate observed = QDate::fromString(pending.observed_on, Qt::ISODate);
-        if (observed.isValid() && observed >= et_date(best->timestamp))
-            continue;
-        ledger.resolve(a.symbol, pending.report_ts, best->eps_actual, best->surprise_pct,
-                       *best->reaction_pct);
+        const auto& best = a.history[i];
+        // Only a reading taken strictly BEFORE the print is a prediction.
+        // The screen is the repository's, not this loop's: resolution is
+        // per-report, so a caller that skipped one row here would still have
+        // settled that row's siblings on the next pending row's turn — which
+        // is exactly how this guard used to be defeated.
+        ledger.resolve(a.symbol, pending.report_ts, best.eps_actual, best.surprise_pct,
+                       *best.reaction_pct, et_date(best.timestamp).toString(Qt::ISODate));
     }
 
     // ── Write today's reading ────────────────────────────────────────────────
@@ -1323,6 +1432,22 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
                 "Where the price sits right now against the close after the last reported "
                 "print — a live number that is still moving, not a finished one-day "
                 "reaction. It is never counted in the averages or the correlations."));
+            history_table_->setItem(row, 6, it);
+        } else if (p.reaction_live_pct.has_value()) {
+            // The reaction session is still trading. Same "→" marker the projected
+            // row uses, for the same reason: this number is still moving, and
+            // nothing on the tab counts it. Without the split it arrived in
+            // reaction_pct and read as a finished close-to-close move — which is
+            // what let the signal ledger settle a print, permanently, against
+            // whatever the tape happened to say mid-morning.
+            auto* it = cell(QString("→%1").arg(opt_pct(p.reaction_live_pct, 2)),
+                            color_for(*p.reaction_live_pct));
+            it->setToolTip(QStringLiteral(
+                "The session after this print is still open — this is where the stock is "
+                "trading right now, not a completed close-to-close reaction.\n\n"
+                "It is excluded from the typical move, the beat-reaction average, the "
+                "correlations and every predictor's record until that session closes, and "
+                "the signal ledger leaves this print unsettled until then."));
             history_table_->setItem(row, 6, it);
         } else {
             history_table_->setItem(row, 6, cell(opt_pct(p.reaction_pct, 2),

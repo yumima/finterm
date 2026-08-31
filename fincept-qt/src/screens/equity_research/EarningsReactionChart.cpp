@@ -109,9 +109,15 @@ QVector<EarningsReactionChart::Column> EarningsReactionChart::columns() const {
         }
         // A quarter with neither number is a blank slot in the series, not a
         // column worth the horizontal space.
-        if (!m.has_value() && !p.reaction_pct.has_value())
+        if (!m.has_value() && !p.reaction_pct.has_value() && !p.reaction_live_pct.has_value())
             continue;
-        cols.append({p.timestamp, m, p.reaction_pct, false, std::nullopt});
+        // `reaction_live_pct` is carried but NOT plotted: the reaction session
+        // is still trading, and this line is the realised-move series. It is
+        // here so the tooltip can account for the gap in the line — the table
+        // beside the chart shows "→x%" for the same quarter, and a point that
+        // vanishes with no explanation reads as missing data rather than as a
+        // number that has deliberately not been counted yet.
+        cols.append({p.timestamp, m, p.reaction_pct, false, p.reaction_live_pct});
     }
     return cols;
 }
@@ -176,6 +182,13 @@ QString EarningsReactionChart::tooltip_for(const Column& c) const {
         rows << QString("<span style='color:%1'>Solid line</span> — this print hasn't happened. "
                         "The dashed leg carries the price to today: <b>%2</b> since the last "
                         "print's close.")
+                    .arg(kLineColor, pct_label(*c.live_move, 2));
+    } else if (c.live_move) {
+        // A reported quarter whose reaction session has not closed yet.
+        rows << QString("<span style='color:%1'>Solid line</span> — no point yet: the session "
+                        "after this print is still open. The stock is <b>%2</b> against the "
+                        "pre-print close, but that is a running number, and the line plots "
+                        "settled closes only. It joins up after the bell.")
                     .arg(kLineColor, pct_label(*c.live_move, 2));
     }
 
@@ -261,17 +274,24 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         if (c.metric) metric_vals.append(*c.metric);
         if (c.reaction) reaction_vals.append(*c.reaction);
         // The live move shares the price axis, so it has to size it too —
-        // otherwise a big inter-print drift would be drawn off the top.
-        if (c.live_move) reaction_vals.append(*c.live_move);
+        // otherwise a big inter-print drift would be drawn off the top. Only
+        // the projected column's is DRAWN, though, and only drawn values may
+        // stretch the axis: a still-open reaction is carried for the tooltip
+        // alone and would otherwise squeeze the line for a point nobody sees.
+        if (c.projected && c.live_move) reaction_vals.append(*c.live_move);
         // The prediction is a move on the same session as the reaction, so it
         // belongs on that axis — and has to be allowed to stretch it, or a
         // bold estimate would be drawn clipped against the frame.
-        // Every predictor shares this axis, and the band is drawn, so both
-        // have to fit — sizing to the reaction line alone would clip them.
+        //
+        // The BAND only sizes the axis when it is actually drawn, which is
+        // only when a single series is up. Bounds are wider than the estimates
+        // they cap, so counting them while they were invisible squeezed the
+        // realised-move line for envelopes nobody could see — and the default
+        // selection is two series, so that was the ordinary case.
         for (const auto& s : series_) {
             if (const auto* q = point_at(s, c.timestamp)) {
                 reaction_vals.append(*q->predicted_move_pct);
-                if (q->bound_pct) reaction_vals.append(*q->bound_pct);
+                if (q->bound_pct && series_.size() == 1) reaction_vals.append(*q->bound_pct);
             }
         }
     }

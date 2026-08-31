@@ -1621,6 +1621,7 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         p.eps_qoq_pct  = opt_num(o, "eps_qoq_pct");
         p.eps_yoy_pct  = opt_num(o, "eps_yoy_pct");
         p.reaction_pct = opt_num(o, "reaction_pct");
+        p.reaction_live_pct = opt_num(o, "reaction_live_pct");
         p.runup_pct    = opt_num(o, "runup_pct");
         p.runup_20d_pct = opt_num(o, "runup_20d_pct");
         p.pre_vol_pct  = opt_num(o, "pre_vol_pct");
@@ -1686,10 +1687,8 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
     const auto recent = obj.value("recent").toObject();
     a.runup_5d_pct        = opt_num(recent, "runup_5d");
     a.runup_20d_pct       = opt_num(recent, "runup_20d");
-    a.runup_60d_pct       = opt_num(recent, "runup_60d");
     a.runup_90d_pct       = opt_num(recent, "runup_90d");
     a.rel_runup_20d_pct   = opt_num(recent, "rel_runup_20d");
-    a.rel_runup_90d_pct   = opt_num(recent, "rel_runup_90d");
     a.pct_from_52w_high   = opt_num(recent, "pct_from_52w_high");
     a.pre_vol_pct         = opt_num(recent, "pre_vol_pct");
 
@@ -1700,11 +1699,20 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
                                                         query::QueryStore::Callback cb) {
     if (symbol.isEmpty()) return;
     // Version segment for the same reason as kTechnicalsSchemaTag: the payload
-    // shape changes with the engine (v2 added per-row runup_20d_pct and moved
-    // runup_90d to a calendar basis), and although the 180s TTL makes stale
+    // shape changes with the engine, and although the 180s TTL makes stale
     // shapes self-heal in minutes, this project has been bitten by unversioned
     // cache keys before — a version segment makes the window zero instead.
-    const QString key = "equity:earnings_analysis:v2:" + symbol;
+    //
+    //   v2  per-row runup_20d_pct; runup_90d moved to a calendar basis.
+    //   v3  reaction_pct is withheld until the reaction session closes (the
+    //       live figure moved to reaction_live_pct); runup_60d and
+    //       rel_runup_90d dropped.
+    //
+    // v3 is not cosmetic and the TTL is not good enough here. A v2 entry
+    // carries a reaction_pct that may be a still-running close, and
+    // record_and_resolve would settle that print into earnings_signal_records
+    // — a write resolve() never revisits. The bump makes that window zero.
+    const QString key = "equity:earnings_analysis:v3:" + symbol;
     auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve,
                                        query::QueryStore::Rejecter reject) {
         const auto cached_aged = fincept::CacheManager::instance().try_get_aged(key);

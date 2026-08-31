@@ -318,6 +318,14 @@ struct EarningsPoint {
     std::optional<double> eps_qoq_pct;
     std::optional<double> eps_yoy_pct;
     std::optional<double> reaction_pct;   // close-to-close move over the print
+    /// The same move while the reaction session is still trading, in the slot
+    /// nothing scores. yfinance publishes a bar for the open session with a
+    /// running close, so the day after a print `reaction_pct` would otherwise
+    /// be a half-formed number — and the signal ledger settles against it
+    /// permanently. Set instead of `reaction_pct`, never as well as: exactly
+    /// the separation `move_since_last_pct` uses below. Displayed, marked as
+    /// live, and invisible to every average, correlation and predictor.
+    std::optional<double> reaction_live_pct;
     std::optional<double> runup_pct;      // 5 sessions into the print
     // 20 sessions into the print — the window the crowding leg is calibrated
     // for. The historical reconstruction needs it per-row; feeding runup_pct
@@ -432,15 +440,16 @@ struct EarningsAnalysis {
     // EarningsPoint::runup_pct so the two compare directly.
     std::optional<double> runup_5d_pct;
     std::optional<double> runup_20d_pct;
-    // Longer windows, for racing the price against the consensus number over
-    // the same period — the difference is how much of the move was earnings
-    // and how much was the multiple.
-    std::optional<double> runup_60d_pct;
+    // 90 CALENDAR days, for racing the price against the consensus number
+    // over the same period — the difference is how much of the move was
+    // earnings and how much was the multiple. Calendar, not sessions, because
+    // eps_trend's d90 is a calendar-dated field.
     std::optional<double> runup_90d_pct;
-    // The same run-ups with the index's move removed. A stock up 8% into a
-    // print in a week the market rose 7% has not been bid up for its earnings.
+    // The 20-session run-up with the index's move removed. A stock up 8% into
+    // a print in a week the market rose 7% has not been bid up for its
+    // earnings. Only the crowding leg reads a relative run-up — the
+    // expectations gap deliberately uses the absolute move.
     std::optional<double> rel_runup_20d_pct;
-    std::optional<double> rel_runup_90d_pct;
     // Distance from the 52-week high; 0 = sitting on it, negative = below.
     std::optional<double> pct_from_52w_high;
     // Same 20-session realised volatility, as it stands going into the coming

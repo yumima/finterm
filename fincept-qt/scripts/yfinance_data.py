@@ -1906,6 +1906,67 @@ def _eps_change_pct(value, base):
     return (value - base) / abs(base) * 100.0
 
 
+# The timezones yfinance stamps US equity bars with. Only for these do we know
+# the session's closing time well enough to judge a same-day bar by the clock.
+_US_EASTERN_TZ_NAMES = frozenset(("America/New_York", "US/Eastern", "EST5EDT"))
+
+
+def _session_is_final(idx, i):
+    """Has the session at row `i` of a daily index actually closed?
+
+    yfinance hands back a bar for the CURRENT session the moment it opens,
+    with a running close that keeps moving all day. Reading that as a settled
+    close turns a half-formed session into a "1-day earnings reaction" — and
+    the signal ledger writes the number it settles on down PERMANENTLY, since
+    resolve() only ever touches rows that are still unresolved. A print on
+    Monday night would have its whole recorded outcome fixed by whatever the
+    tape happened to say at 10:05 on Tuesday.
+
+    Two independent tests, either of which is sufficient:
+
+      * a LATER bar exists in the series — then this one is closed, whatever
+        the clock or the exchange calendar says. Exact, and it is what makes
+        holidays and half-days a non-question.
+      * the bar is dated before today, or it is today and the ET clock is past
+        16:20. This one applies ONLY to bars stamped on US Eastern, because
+        16:00 is the only close this codebase knows — exchange_sessions is
+        US-centric by construction. Applying it to a bar stamped elsewhere
+        fails in the UNSAFE direction: XETRA and Euronext close at 17:30
+        local, so a 16:20 cutoff would call a German reaction bar final more
+        than an hour before its session ended. Elsewhere the same-day case
+        waits for midnight in the venue's own timezone instead — a few hours
+        of extra caution on a number that is written down once, and unlike
+        refusing outright it still settles a bar that is merely stale (thin
+        trading, an old fetch) rather than live.
+
+    The 20-minute margin is not cosmetic either. For the first few minutes
+    after the bell the last daily close can still be the 15:59 print rather
+    than the official closing auction — the same ~0.05-0.1pp gap the
+    extended-hours work already had to correct for — and a ledger row settled
+    at 16:01 keeps whichever one it happened to see. Twenty minutes of extra
+    caution costs a label; getting it wrong costs a permanent record.
+    """
+    try:
+        if i < len(idx) - 1:
+            return True
+        ts = pd.Timestamp(idx[i])
+        now = pd.Timestamp.now(tz=ts.tz) if ts.tz is not None else pd.Timestamp.now()
+        if ts.date() < now.date():
+            return True     # yesterday or older, on the venue's own calendar
+        if ts.date() > now.date():
+            return True     # a venue ahead of us; it cannot be a live bar here
+        # Same day. Only for US Eastern do we know the close well enough to
+        # say. Elsewhere, wait for midnight in the venue's own timezone — a
+        # few hours of extra caution on a number that is written down once.
+        if ts.tz is None or str(ts.tz) not in _US_EASTERN_TZ_NAMES:
+            return False
+        return (now.hour, now.minute) >= (16, 20)
+    except Exception:
+        # Unreadable stamp: treat as unfinished. Withholding a settled number
+        # for one refresh is recoverable; freezing a live one is not.
+        return False
+
+
 def _earnings_price_reaction(hist, event_ts):
     """Realised price action around one earnings print.
 
@@ -1917,11 +1978,18 @@ def _earnings_price_reaction(hist, event_ts):
     roughly half the reactions.
 
     Returns (reaction_pct, runup_pct, runup_20d_pct, price_before,
-    price_after) — any element None when the surrounding sessions aren't in
-    `hist`.
+    price_after, reaction_live_pct) — any element None when the surrounding
+    sessions aren't in `hist`.
+
+    `reaction_pct` and `price_after` are populated ONLY once the session after
+    the print has closed. While it is still open the same number is returned
+    as `reaction_live_pct` instead, which nothing scores, correlates or
+    settles — the same separation `move_since_last_pct` already uses for the
+    trailing row, and for the same reason: a live number must never enter the
+    record as a finished observation.
     """
     if hist is None or getattr(hist, "empty", True):
-        return None, None, None, None, None
+        return None, None, None, None, None, None
     try:
         closes = hist["Close"]
         idx = hist.index
@@ -1936,7 +2004,7 @@ def _earnings_price_reaction(hist, event_ts):
         before_pos = [i for i, d in enumerate(days) if d < event_day]
         on_after_pos = [i for i, d in enumerate(days) if d >= event_day]
         if not before_pos or not on_after_pos:
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         prev_i = before_pos[-1]
         same_i = on_after_pos[0] if days[on_after_pos[0]] == event_day else None
@@ -1954,11 +2022,18 @@ def _earnings_price_reaction(hist, event_ts):
             i_before = prev_i
             i_after = same_i if same_i is not None else prev_i + 1
         if i_after >= len(closes) or i_before < 0:
-            return None, None, None, None, None
+            return None, None, None, None, None, None
 
         p_before = float(closes.iloc[i_before])
         p_after = float(closes.iloc[i_after])
         reaction = ((p_after - p_before) / p_before * 100.0) if p_before else None
+        # The reaction session may still be open. Hand the number over in the
+        # live slot until it closes; see _session_is_final.
+        reaction_live = None
+        if not _session_is_final(idx, i_after):
+            reaction_live = reaction
+            reaction = None
+            p_after = None
 
         # Five-session run-up into the print — the "is the move already priced
         # in" half of the question.
@@ -1978,9 +2053,9 @@ def _earnings_price_reaction(hist, event_ts):
 
         runup = _runup_from(5)
         runup20 = _runup_from(20)
-        return reaction, runup, runup20, p_before, p_after
+        return reaction, runup, runup20, p_before, p_after, reaction_live
     except Exception:
-        return None, None, None, None, None
+        return None, None, None, None, None, None
 
 
 _INDEX_CLOSES = {"ts": 0.0, "closes": None}
@@ -2128,11 +2203,22 @@ def _implied_earnings_move(ticker, earnings_ts, hist):
     about its earnings move. Anything more than `_IMPLIED_MAX_GAP_DAYS` past
     the print is refused rather than reported misleadingly.
 
-    Second, even a tight expiry covers the jump *plus* the ordinary days around
-    it. Variance adds, so the event component is the straddle's implied move
-    with the ordinary drift taken out in quadrature:
+    Second, even a tight expiry covers the jump *plus* the ordinary days
+    between now and it. Variance adds, so the event component is the
+    straddle's implied move with the ordinary drift taken out in quadrature:
 
         event = sqrt(max(total^2 - (daily_vol * sqrt(sessions))^2, 0))
+
+    `event_move_pct` is the figure the terminal displays, and `total_move_pct`
+    travels with it for context only. Showing the raw straddle instead reported
+    ORCL as "±12.1%" eleven sessions before its print — beside a SINGLE-SESSION
+    expected move, which is the comparison the panel invites — overstating what
+    the market was pricing for the report by more than 3x.
+
+    The subtraction is only reported when it is well conditioned; see the
+    threshold below. That is what keeps this from trading an overstatement for
+    an understatement, since the ordinary leg is a realised-volatility proxy
+    for an implied quantity.
 
     Returns None whenever any leg is missing — a wrong implied move is worse
     than none, because it is the number a reader would trust most.
@@ -2206,7 +2292,10 @@ def _implied_earnings_move(ticker, earnings_ts, hist):
 
     # Ordinary (non-event) vol over the same window, from realised daily moves.
     event_pct = None
-    sessions = max(1, int(round((expiry_day - _dt.date.today()).days * 5.0 / 7.0)))
+    # ET, not the host's local date: the daemon can run west of UTC, where
+    # `date.today()` is a day behind the market it is pricing.
+    today_et = pd.Timestamp.now(tz="America/New_York").date()
+    sessions = max(1, int(round((expiry_day - today_et).days * 5.0 / 7.0)))
     try:
         if hist is not None and not getattr(hist, "empty", True):
             daily = hist["Close"].pct_change().dropna().tail(60)
@@ -2220,10 +2309,26 @@ def _implied_earnings_move(ticker, earnings_ts, hist):
                 mad = float(daily.abs().median() * 100.0) * 1.4826
                 ordinary = mad * (sessions ** 0.5)
                 ev = (max(total_pct ** 2 - ordinary ** 2, 0.0)) ** 0.5
-                # Report the split only when it is informative. A degenerate
-                # subtraction (nothing left, or nothing taken out) means the
-                # window is wrong for this print, not that the event is free.
-                if 0.15 * total_pct < ev < 0.98 * total_pct:
+                # Report the split only when the subtraction is well
+                # conditioned. event = sqrt(total^2 - ordinary^2) is a
+                # difference of squares, so as `ordinary` approaches `total`
+                # the answer becomes a small residual between two large,
+                # uncertain numbers — and `ordinary` is a REALISED-volatility
+                # proxy for an IMPLIED quantity, so it carries real error.
+                #
+                # Requiring the event to keep at least half the straddle (a
+                # quarter of the variance) bounds that leverage: below it, a
+                # 25% miss on the ordinary leg can move the answer by more
+                # than the answer itself. The old floor was 0.15, which
+                # accepted subtracting 98% of the variance and reported ORCL
+                # at 3.4% off a 12.1% straddle eleven sessions before the
+                # print — a number with almost no signal left in it.
+                #
+                # What this means in practice: the figure appears in the last
+                # sessions before a report, which is both when it is most
+                # decision-relevant and when the straddle genuinely is mostly
+                # the event. Further out the caller shows nothing and says why.
+                if 0.5 * total_pct < ev < 0.98 * total_pct:
                     event_pct = ev
     except Exception:
         event_pct = None
@@ -2429,7 +2534,8 @@ def get_earnings_analysis(symbol, quarters=12):
                 # Past date with no reported figure: Yahoo sometimes lags a day
                 # or two. Keep it (the UI shows "pending") but don't score it.
                 pass
-            reaction, runup, runup20, p_before, p_after = _earnings_price_reaction(hist, ts)
+            reaction, runup, runup20, p_before, p_after, reaction_live = \
+                _earnings_price_reaction(hist, ts)
             history.append({
                 "timestamp":    int(ts.timestamp()),
                 "pre_vol_pct":  _pre_event_vol(hist, ts),
@@ -2438,6 +2544,9 @@ def get_earnings_analysis(symbol, quarters=12):
                 "surprise_pct": sur,
                 "surprise_suspect": _surprise_basis_suspect(est, act, sur),
                 "reaction_pct": reaction,
+                # Set instead of reaction_pct while the reaction session is
+                # still trading. Displayed, never scored or settled.
+                "reaction_live_pct": reaction_live,
                 "runup_pct":    runup,
                 "runup_20d_pct": runup20,
                 "price_before": p_before,
@@ -2496,8 +2605,8 @@ def get_earnings_analysis(symbol, quarters=12):
     # number over the SAME window, which is how it can tell "the numbers went
     # up" from "the multiple went up". Relative versions strip the index out,
     # so a stock that merely rode the market isn't read as crowded.
-    recent = {"runup_5d": None, "runup_20d": None, "runup_60d": None, "runup_90d": None,
-              "rel_runup_20d": None, "rel_runup_90d": None, "pct_from_52w_high": None,
+    recent = {"runup_5d": None, "runup_20d": None, "runup_90d": None,
+              "rel_runup_20d": None, "pct_from_52w_high": None,
               "pre_vol_pct": None}
     if hist is not None and not getattr(hist, "empty", True):
         try:
@@ -2508,8 +2617,7 @@ def get_earnings_analysis(symbol, quarters=12):
             # calendar-dated d60/d90 estimate fields — see _pct_back_calendar.
             for key, back in (("runup_5d", 5), ("runup_20d", 20)):
                 recent[key] = _pct_back(closes, back)
-            for key, days in (("runup_60d", 60), ("runup_90d", 90)):
-                recent[key] = _pct_back_calendar(closes, days)
+            recent["runup_90d"] = _pct_back_calendar(closes, 90)
             # Distance from the 52-week high: 0 means sitting on it. A stock at
             # its high into a print carries a higher bar than the same stock
             # 30% off it, whatever the fundamentals say.
@@ -2529,15 +2637,15 @@ def get_earnings_analysis(symbol, quarters=12):
             pass
     idx_closes = _index_closes()
     if idx_closes is not None:
-        # Each relative leg must strip the index over the SAME window basis as
-        # its own leg: 20d is sessions, 90d is calendar (see above).
-        for key, own_key, idx_fn in (
-                ("rel_runup_20d", "runup_20d", lambda c: _pct_back(c, 20)),
-                ("rel_runup_90d", "runup_90d", lambda c: _pct_back_calendar(c, 90))):
-            own = recent.get(own_key)
-            idx = idx_fn(idx_closes)
-            if own is not None and idx is not None:
-                recent[key] = own - idx
+        # The relative leg strips the index over the SAME window basis as its
+        # own leg — 20d is sessions. Only the crowding leg reads a relative
+        # run-up; the expectations gap deliberately races the ABSOLUTE price
+        # move against the estimate, because a re-rating raises the bar
+        # whether it came from the sector, the market or the name.
+        own = recent.get("runup_20d")
+        idx = _pct_back(idx_closes, 20)
+        if own is not None and idx is not None:
+            recent["rel_runup_20d"] = own - idx
     out["recent"] = recent
 
     # ── next report: merge the calendar's consensus onto the date ────────────
@@ -2655,6 +2763,7 @@ def get_earnings_analysis(symbol, quarters=12):
             # live stand-in and is kept in its own field so it can never be
             # counted as a completed observation.
             "reaction_pct": None,
+            "reaction_live_pct": None,
             "move_since_last_pct": move_since_last,
             "price_now":    last_close,
             "runup_pct":    recent.get("runup_5d"),

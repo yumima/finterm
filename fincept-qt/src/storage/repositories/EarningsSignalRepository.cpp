@@ -92,13 +92,21 @@ QVector<EarningsSignalRecord> EarningsSignalRepository::unresolved(const QString
 int EarningsSignalRepository::resolve(const QString& symbol, qint64 report_ts,
                                       std::optional<double> actual_eps,
                                       std::optional<double> surprise_pct,
-                                      double actual_move_pct) {
+                                      double actual_move_pct,
+                                      const QString& print_day) {
+    // A print day is mandatory — see the header. Without one there is no way
+    // to tell a prediction from a reading taken after the fact, and settling
+    // both would quietly flatter every statistic computed from this table.
+    if (print_day.isEmpty())
+        return 0;
     // Every reading about this print resolves together — they were all
-    // observations of one event, taken on different days. The hit is judged
-    // per row, because each row carries the verdict as it stood that day.
+    // observations of one event, taken on different days — EXCEPT any taken
+    // on or after the print itself. The hit is judged per row, because each
+    // row carries the verdict as it stood that day.
     const auto rows = query_list(
-        "SELECT * FROM earnings_signal_records WHERE symbol = ? AND report_ts = ? AND resolved = 0",
-        {symbol.toUpper(), report_ts}, map_row);
+        "SELECT * FROM earnings_signal_records WHERE symbol = ? AND report_ts = ? "
+        "AND resolved = 0 AND observed_on < ?",
+        {symbol.toUpper(), report_ts, print_day}, map_row);
     if (rows.is_err())
         return 0;
 
@@ -116,8 +124,10 @@ int EarningsSignalRepository::resolve(const QString& symbol, qint64 report_ts,
 
         auto w = exec_write(
             "UPDATE earnings_signal_records SET resolved = 1, actual_eps = ?, surprise_pct = ?, "
-            "actual_move_pct = ?, direction_hit = ?, resolved_at = ? WHERE id = ? AND resolved = 0",
-            {to_variant(actual_eps), to_variant(surprise_pct), actual_move_pct, hit, now, row.id});
+            "actual_move_pct = ?, direction_hit = ?, resolved_at = ? "
+            "WHERE id = ? AND resolved = 0 AND observed_on < ?",
+            {to_variant(actual_eps), to_variant(surprise_pct), actual_move_pct, hit, now, row.id,
+             print_day});
         if (w.is_ok())
             ++updated;
     }

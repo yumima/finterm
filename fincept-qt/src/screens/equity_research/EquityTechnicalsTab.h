@@ -55,6 +55,12 @@ class EquityTechnicalsTab : public QWidget {
     static QString non_voting_note(const QString& col_key);
     static const char* signal_color(services::equity::TechSignal s);
     static QString interpretation(const QString& col_key, double value);
+    /// How to print one indicator's value at `dp` decimal places. Cumulative
+    /// running totals (OBV, ADI) ignore `dp` and print compactly — see the
+    /// definition. The two call sites want different precision: the key cards
+    /// are 16px bold and read at a glance (2), the detail table is monospace
+    /// and read for exactness (4).
+    static QString value_text(const QString& col_key, double value, int dp);
     static QString col_key_for(const QString& name);
     static QString indicator_help(const QString& col_key);
     static QString period_btn_style_active();

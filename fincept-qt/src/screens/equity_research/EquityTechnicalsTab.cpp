@@ -256,11 +256,11 @@ QString EquityTechnicalsTab::interpretation(const QString& col_key, double value
         return "Moderate — watching for trend development";
     }
     if (col_key == "obv")
-        return "On-balance volume — confirms price trend with volume";
+        return "Running volume total — read the direction, not the level";
     if (col_key == "vwap")
         return "Rolling volume-weighted avg price — price above = bullish";
     if (col_key == "adi")
-        return "Accumulation/distribution — confirms money flow";
+        return "Cumulative money flow — read the direction, not the level";
     if (col_key == "ichimoku_base")
         return "Midpoint of the 26-period range — the equilibrium price";
     if (col_key.startsWith("sma_") || col_key.startsWith("ema_") || col_key.startsWith("wma_") || col_key == "kama")
@@ -276,6 +276,22 @@ QString EquityTechnicalsTab::interpretation(const QString& col_key, double value
     if (col_key == "ao")
         return value > 0 ? "Bullish — momentum above zero line" : "Bearish — momentum below zero line";
     return "";
+}
+
+/// How to print one indicator's value at `dp` decimal places.
+///
+/// OBV and ADI are running totals from the first bar fetched, so their
+/// ABSOLUTE level is an artefact of the window, not a reading: on AAPL the
+/// same session shows OBV 1.59bn under the 1Y button and 3.15bn under 5Y, a
+/// 2x jump on a control whose tooltip promises it changes nothing. Only the
+/// slope is read (the rating scores it over five bars), so they are shown
+/// compactly — four decimal places on a billion implied a precision that
+/// nothing about the number has. `dp` does not apply to them: the compact
+/// form's own precision is not the caller's business.
+QString EquityTechnicalsTab::value_text(const QString& col_key, double value, int dp) {
+    if (col_key == "obv" || col_key == "adi")
+        return ui::formatting::format_compact(value, 2);
+    return QString::number(value, 'f', dp);
 }
 
 /// Display name → the snake_case column key used by interpretation() and
@@ -407,7 +423,10 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
         return "On-Balance Volume (OBV)\n\n"
                "Running total that adds the day's volume on up closes and subtracts it on down "
                "closes. Rising OBV confirms an uptrend has volume behind it; OBV falling while "
-               "price rises warns the rally is thin.";
+               "price rises warns the rally is thin.\n\n"
+               "The level itself is arbitrary — the total starts at zero on the first bar "
+               "fetched, so it moves with the PERIOD selection. Only the slope carries meaning, "
+               "and that is what the rating scores.";
     if (col_key == "vwap")
         return "Rolling VWAP (14-period)\n\n"
                "The average traded price weighted by volume over the last 14 bars. This is a "
@@ -423,7 +442,10 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
         return "Accumulation/Distribution Index (ADI)\n\n"
                "Cumulative volume weighted by where each close lands within its bar's range. "
                "Rising ADI shows accumulation confirming the trend; divergence from price "
-               "warns of a hidden shift in flow.";
+               "warns of a hidden shift in flow.\n\n"
+               "The level itself is arbitrary — the total starts at zero on the first bar "
+               "fetched, so it moves with the PERIOD selection. Only the slope carries meaning, "
+               "and that is what the rating scores.";
     if (col_key.startsWith("sma_"))
         return "Simple Moving Average (SMA)\n\n"
                "The arithmetic average close over the period \xe2\x80\x94 the plain trend baseline. "
@@ -710,6 +732,39 @@ void EquityTechnicalsTab::build_ui() {
     make_count(GRAY, "NEUTRAL", neutral_count_);
     make_count(LTRED, "SELL", sell_count_);
     make_count(ui::colors::NEGATIVE, "STR.SELL", strong_sell_count_);
+
+    // The two readings the verdict is actually cut from. Directly under the
+    // gauge, because that is where a reader looks for the derivation — the
+    // vote tally used to sit here and be read as one, which it has not been
+    // since the trend-structure rewrite.
+    basis_label_ = new QLabel;
+    basis_label_->setAlignment(Qt::AlignCenter);
+    basis_label_->setWordWrap(true);
+    basis_label_->setStyleSheet(
+        QString("color:%1;font-size:12px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
+    rp_vl->addWidget(basis_label_);
+
+    // …and only then the tally, captioned so it cannot be mistaken for the
+    // derivation. It is worth showing — the detail is useful, and a rating the
+    // user cannot argue with is a rating they cannot trust — but a stock can
+    // read STRONG BUY on a well-stacked MA fan while half the oscillators
+    // below are stretched, and the layout has to say which one the headline
+    // came from.
+    auto* tally_caption = new QLabel("WHAT THE INDICATORS SAY");
+    tally_caption->setAlignment(Qt::AlignCenter);
+    tally_caption->setToolTip(
+        "The table's own tally, not the verdict.\n\n"
+        "The verdict above comes from how the 10/20/50/100/200-day averages are stacked "
+        "and how far price sits from the 50-day, in ATRs. Averaging ~20 correlated "
+        "indicator votes scored 80% against a 40-day trend label; those two readings score "
+        "96% on held-out years, so the tally is reported rather than counted.\n\n"
+        "The two disagreeing is normal and informative: oscillators fire against a move "
+        "while the trend structure describes it.");
+    tally_caption->setStyleSheet(
+        QString("color:%1;font-size:12px;font-weight:600;letter-spacing:1px;"
+                "background:transparent;border:0;")
+            .arg(ui::colors::TEXT_TERTIARY()));
+    rp_vl->addWidget(tally_caption);
     rp_vl->addLayout(counts);
 
     total_label_ = new QLabel("0 INDICATORS");
@@ -717,15 +772,6 @@ void EquityTechnicalsTab::build_ui() {
     total_label_->setStyleSheet(QString("color:%1;font-size:12px;letter-spacing:1px;background:transparent;border:0;")
                                     .arg(ui::colors::TEXT_SECONDARY()));
     rp_vl->addWidget(total_label_);
-
-    // The four bucket scores the verdict was averaged from. A rating the user
-    // cannot argue with is a rating they cannot trust.
-    basis_label_ = new QLabel;
-    basis_label_->setAlignment(Qt::AlignCenter);
-    basis_label_->setWordWrap(true);
-    basis_label_->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
-    rp_vl->addWidget(basis_label_);
 
     // What this panel is, stated on the panel. Measured over 178 large caps
     // across twelve years with the shipped scorer: the verdict agrees with the
@@ -922,7 +968,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
         // Value + signal row
         auto* vr = new QHBoxLayout;
         vr->setSpacing(8);
-        auto* val = new QLabel(QString::number(ti.value, 'f', 2));
+        auto* val = new QLabel(value_text(col_key, ti.value, 2));
         val->setStyleSheet(QString("color:%1;font-size:16px;font-weight:700;font-family:'Consolas',monospace;"
                                    "background:transparent;border:0;")
                                .arg(ui::colors::TEXT_PRIMARY()));
@@ -1077,7 +1123,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             rl->addWidget(name_lbl, 2);
 
             // Value
-            auto* val_lbl = new QLabel(QString::number(ti.value, 'f', 4));
+            auto* val_lbl = new QLabel(value_text(col_key, ti.value, 4));
             val_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
             val_lbl->setStyleSheet(
                 QString("color:%1;font-size:12px;font-family:'Consolas',monospace;background:transparent;border:0;")
@@ -1208,7 +1254,14 @@ void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& p
             // exchange, so a freshly opened week on an eastern exchange
             // (Tokyo Monday) can have bar_date a day AHEAD of it — requiring
             // bar_date <= today read exactly that live week as complete.
-            const bool forming = today < bar_date.addDays(7);
+            // The week is done once its Friday session has closed, i.e. five
+            // days on from the Monday stamp — not seven. addDays(7) kept a
+            // finished week labelled "still forming" right through the
+            // weekend, which is when someone reviewing positions actually
+            // reads it. Five still covers the Tokyo-Monday case the westward
+            // `today` was chosen for: a bar stamped a day AHEAD of today is
+            // correctly a live week.
+            const bool forming = today < bar_date.addDays(5);
             bits << QString("Latest bar: week of %1%2")
                         .arg(bar_date.toString("MMM d"),
                              forming ? QStringLiteral(" — still forming") : QString());

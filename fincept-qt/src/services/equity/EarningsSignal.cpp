@@ -1213,8 +1213,16 @@ QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const Earnin
         "is answering with about a third of the model it will have live.");
     scorecard.points = reconstruct_predictions(a);
     scorecard.next_move_pct = live.predicted_move_pct;
-    if (live.typical_move_pct > 0)
-        scorecard.next_bound_pct = live.typical_move_pct * live.confidence;
+    // expected_move_pct, NOT typical_move_pct: the point estimate above is
+    // built from the volatility-blended size, so a band cut from the plain
+    // trailing average is a different quantity. Whenever recent realised vol
+    // runs above half the name's earnings-day average — a calm reporter in a
+    // turbulent tape — the blend exceeds the average and the live estimate was
+    // drawn OUTSIDE the band documented as "the most it could have said either
+    // way". The reconstruction already scales both from the same size; this is
+    // the live path catching up with it.
+    if (live.expected_move_pct > 0)
+        scorecard.next_bound_pct = live.expected_move_pct * live.confidence;
     runs.append(scorecard);
 
     PredictorRun eps;
