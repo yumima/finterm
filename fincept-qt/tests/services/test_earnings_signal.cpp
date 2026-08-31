@@ -896,6 +896,66 @@ class TestEarningsSignal : public QObject {
         QVERIFY(checked > 0);
     }
 
+    // ── The growth leg does not read the "index" column ─────────────────────
+    //
+    // Yahoo's growth_estimates carries an indexTrend beside the company's
+    // stockTrend, and the leg used to score the difference as a market-relative
+    // read. It is not one: the field is a single number shared by every
+    // security (0.4853 for the current quarter when this was measured,
+    // identical to four decimals across twenty large caps). Subtracting a
+    // constant from the company's own growth leaves the company's own growth,
+    // so the leg was scoring EPS at 70% of its weight while advertising 45%.
+    //
+    // These two cases are the property that matters, and they are cheap:
+    // moving the index column must not move the verdict at all.
+    void the_growth_leg_ignores_the_index_column() {
+        EarningsAnalysis a = bullish_fixture();
+        const auto baseline = evaluate_earnings(a);
+        const auto* base_leg = leg(baseline, QStringLiteral("EXPECTED GROWTH"));
+        QVERIFY(base_leg != nullptr);
+        QVERIFY(base_leg->available);
+
+        // Same company, an index column swung from well below its growth to
+        // far above it. Nothing about the company changed.
+        for (auto& g : a.growth)
+            g.index = 5.0;                      // 500%, past any clamp
+        const auto swung = evaluate_earnings(a);
+        const auto* swung_leg = leg(swung, QStringLiteral("EXPECTED GROWTH"));
+        QVERIFY(swung_leg != nullptr);
+        QCOMPARE(swung_leg->score, base_leg->score);
+        QCOMPARE(swung.score, baseline.score);
+
+        // …and dropping the column entirely is equally inert. A leg that
+        // needed it would lose availability here.
+        a.growth.clear();
+        const auto bare = evaluate_earnings(a);
+        const auto* bare_leg = leg(bare, QStringLiteral("EXPECTED GROWTH"));
+        QVERIFY(bare_leg != nullptr);
+        QVERIFY(bare_leg->available);
+        QCOMPARE(bare_leg->score, base_leg->score);
+        QCOMPARE(bare.score, baseline.score);
+        QCOMPARE(bare.confidence, baseline.confidence);
+    }
+
+    // The leg is EPS and revenue, 60/40, and says so. Pinned because the
+    // weights drifted from their advertised split once already — silently,
+    // because the third term was a function of the first.
+    void the_growth_leg_is_eps_and_revenue_only() {
+        EarningsAnalysis a = bullish_fixture();
+        a.next.eps_growth = 0.25;    // full marks on its own scale
+        a.next.rev_growth = 0.0;     // neutral
+        a.growth.clear();
+        const auto* only_eps = leg(evaluate_earnings(a), QStringLiteral("EXPECTED GROWTH"));
+        QVERIFY(only_eps != nullptr);
+        QVERIFY(std::abs(only_eps->score - 0.60) < 1e-9);
+
+        a.next.eps_growth = 0.0;
+        a.next.rev_growth = 0.15;    // full marks on its own scale
+        const auto* only_rev = leg(evaluate_earnings(a), QStringLiteral("EXPECTED GROWTH"));
+        QVERIFY(only_rev != nullptr);
+        QVERIFY(std::abs(only_rev->score - 0.40) < 1e-9);
+    }
+
     // The reconstruction's band must be visibly narrower than a live reading's
     // — that gap IS the explanation for the flat dotted stretch, so if the two
     // ever match, the chart has stopped telling the truth about it.

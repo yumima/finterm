@@ -22,7 +22,6 @@ constexpr double kFullRevision30Pct = 3.0;   // 30-day drift in consensus EPS
 constexpr double kFullRevision90Pct = 6.0;   // 90-day drift
 constexpr double kFullEpsGrowth     = 0.25;  // 25% YoY EPS growth
 constexpr double kFullRevGrowth     = 0.15;  // 15% YoY revenue growth
-constexpr double kFullGrowthEdge    = 0.15;  // growth advantage over the index
 constexpr double kFullTargetUpside  = 0.20;  // distance to mean analyst target
 
 constexpr double kFullExpectationGap = 20.0;  // pts of price-vs-estimate divergence
@@ -147,11 +146,10 @@ const EarningsRevisionRow* find_revision(const EarningsAnalysis& a, const QStrin
     return nullptr;
 }
 
-const EarningsGrowthRow* find_growth(const EarningsAnalysis& a, const QString& period) {
-    for (const auto& r : a.growth)
-        if (r.period == period) return &r;
-    return nullptr;
-}
+// No find_growth() here on purpose. `a.growth` carries Yahoo's stock-vs-index
+// trend rows and the tab renders them in full under FUTURE · VS INDEX, but
+// nothing in the engine reads them — see score_growth() for why the index
+// column cannot be scored.
 
 QString pct_str(double v, int decimals = 1) {
     return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', decimals));
@@ -599,20 +597,25 @@ SignalComponent score_growth(const EarningsAnalysis& a) {
     c.axis = SignalAxis::Setup;
     c.explanation = QStringLiteral(
         "What the coming quarter is expected to deliver against the year-ago "
-        "quarter, and whether that growth beats the index the stock sits in.");
+        "quarter, on both lines.\n\n"
+        "Deliberately NOT measured against the index. Yahoo publishes an "
+        "'index trend' beside the company's, and scoring the difference looked "
+        "like a market-relative read — but the field is a single number that is "
+        "identical for every security (0.4853 for the current quarter when this "
+        "was measured, the same to four decimals across twenty large caps). "
+        "Subtracting a constant from the company's own growth leaves the "
+        "company's own growth, so the leg was scoring EPS twice: 45% under its "
+        "own name and another 25% wearing the index's. At that constant it also "
+        "pinned to full marks either way on 85% of names, turning a graded "
+        "reading into a 'grew more than ~49%?' flag that fell bearish on 14 of "
+        "20. Both halves of the growth read now come from the company.");
 
     const auto eps_g = a.next.eps_growth;
     const auto rev_g = a.next.rev_growth;
-    std::optional<double> edge;
-    if (const auto* g = find_growth(a, QStringLiteral("0q"))) {
-        if (g->stock.has_value() && g->index.has_value())
-            edge = *g->stock - *g->index;
-    }
 
     const auto s_eps  = eps_g ? std::optional<double>(clamp_unit(*eps_g / kFullEpsGrowth)) : std::nullopt;
     const auto s_rev  = rev_g ? std::optional<double>(clamp_unit(*rev_g / kFullRevGrowth)) : std::nullopt;
-    const auto s_edge = edge  ? std::optional<double>(clamp_unit(*edge / kFullGrowthEdge)) : std::nullopt;
-    const auto blended = blend({{s_eps, 0.45}, {s_rev, 0.30}, {s_edge, 0.25}});
+    const auto blended = blend({{s_eps, 0.60}, {s_rev, 0.40}});
     if (!blended) {
         c.detail = QStringLiteral("No forward growth estimates published");
         return c;
@@ -623,7 +626,6 @@ SignalComponent score_growth(const EarningsAnalysis& a) {
     QStringList bits;
     if (eps_g) bits << QString("EPS %1 YoY").arg(pct_str(*eps_g * 100.0));
     if (rev_g) bits << QString("revenue %1 YoY").arg(pct_str(*rev_g * 100.0));
-    if (edge)  bits << QString("%1 vs index").arg(pct_str(*edge * 100.0));
     c.detail = bits.join(" · ");
     return c;
 }

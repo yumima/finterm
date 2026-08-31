@@ -996,6 +996,22 @@ QWidget* EquityEarningsTab::build_future_panel() {
     auto* growth_panel = make_panel("FUTURE · VS INDEX", "#60a5fa", &growth_body);
     growth_table_ = new QTableWidget;
     style_table(growth_table_, {"PERIOD", "STOCK", "INDEX", "EDGE"});
+    // The INDEX column reads like a sector benchmark and is not one. Saying so
+    // here is the same call the scorer makes: the engine stopped reading this
+    // column because a constant cannot rank anything, and a reader looking at
+    // "48.53%" beside a 7% grower deserves the same warning the code got.
+    growth_table_->setToolTip(QStringLiteral(
+        "Yahoo's expected earnings growth for this company against its published "
+        "index trend.\n\n"
+        "The INDEX column is one market-wide number, not this stock's sector or peer "
+        "group: it was identical to four decimals across twenty large caps when this "
+        "was last checked, and it is the same in every row of every security's table. "
+        "So EDGE is the company's own growth shifted by a constant — useful as "
+        "context for how the quarter sits against the market's, and useless for "
+        "ranking one name against another.\n\n"
+        "It is reported here and deliberately not scored. The EXPECTED GROWTH leg of "
+        "the signal reads the company's EPS and revenue only; scoring the difference "
+        "against a constant would have counted EPS growth twice under an index label."));
     growth_body->addWidget(growth_table_);
     hl->addWidget(growth_panel, 1);
 

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`5551ac5b9`](https://github.com/yumima/finterm/commit/5551ac5b9) ER audit: a print's outcome could be settled from a session still trading
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
