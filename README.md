@@ -2,11 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-30)
+## Today's commits (2026-08-31)
 
 Latest first.
 
-- [`5551ac5b9`](https://github.com/yumima/finterm/commit/5551ac5b9) ER audit: a print's outcome could be settled from a session still trading
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

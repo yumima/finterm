@@ -527,6 +527,20 @@ if(Python3_Interpreter_FOUND)
                          PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
+# ── AI Forecast reconciliation ───────────────────────────────────────────────
+# A model asked for a direction, a target price and a percentage returns three
+# figures that need not agree, and the tab stored all three — so the table, the
+# chart and the accuracy metric could each quote a different one as "the"
+# forecast. Pins that one claim comes out, and that a prediction and an outcome
+# are bucketed by the same dead band.
+add_executable(test_ai_forecast_math
+    screens/test_ai_forecast_math.cpp
+)
+target_include_directories(test_ai_forecast_math PRIVATE ../src)
+target_link_libraries(test_ai_forecast_math PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_ai_forecast_math PROPERTIES AUTOMOC ON)
+add_test(NAME ai_forecast_math COMMAND test_ai_forecast_math)
+
 # ── IPO Watch pure parse/format ──────────────────────────────────────────────
 # Both helpers have shipped a wrong-but-plausible number: a half-parsed price
 # range reported as a confident low side, and a share count run through the

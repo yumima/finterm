@@ -1,6 +1,8 @@
 // src/screens/equity_research/EquityAiTab.cpp
 #include "screens/equity_research/EquityAiTab.h"
 
+#include "screens/equity_research/AiForecastMath.h"
+
 #include "ai_chat/LlmService.h"
 #include "services/equity/EquityResearchService.h"
 #include "services/query/QueryStore.h"
@@ -48,7 +50,9 @@ namespace fmt    = fincept::ui::formatting;
 
 namespace {
 
-constexpr double kFlatBand = 1.0;   // |move| < 1% counts as "flat"
+// One dead band for the prediction and the outcome alike, and one function
+// that applies it to each — see AiForecastMath.h.
+namespace aif = fincept::screens::ai_forecast;
 
 // Return over the last `n` candles as a percent, or NaN if not enough history.
 double pct_over(const QVector<Candle>& c, int n) {
@@ -108,6 +112,44 @@ double dist_to_segment(const QPointF& p, const QPointF& a, const QPointF& b) {
     const QPointF d = p - (a + t * ab);
     return std::sqrt(d.x() * d.x() + d.y() * d.y());
 }
+
+// Today on the US market's calendar. The tab's dates all have to sit on ONE
+// basis: resolve_date is compared against ui::formatting::bar_date() (an
+// exchange calendar date), so writing it from a UTC or a viewer-local clock
+// puts the horizon a day out for anyone east or west of the exchange.
+QDate market_today() {
+    return QDateTime::currentDateTime().toTimeZone(QTimeZone("America/New_York")).date();
+}
+
+// Is the session this candle covers definitely over?
+//
+// The daily series carries a bar for the CURRENT session from the moment it
+// opens, with a close that moves all day. Resolving a prediction against it
+// freezes the outcome at whatever the tape said mid-morning — and
+// AiPredictionRepository::resolve() writes once (WHERE resolved = 0) and never
+// revisits. A later bar existing settles it exactly; otherwise fall back to the
+// same westernmost-exchange "today" the technicals tab uses, which errs toward
+// calling a finished bar unfinished rather than the reverse.
+bool candle_session_closed(const QVector<Candle>& candles, qsizetype i) {
+    if (i < 0 || i >= candles.size()) return false;
+    if (i < candles.size() - 1) return true;
+    const QDate today = QDateTime::currentDateTimeUtc().addSecs(-9 * 3600).date();
+    return ui::formatting::bar_date(candles[i].timestamp) < today;
+}
+
+// History window for this tab.
+//
+// Two years, not one, and the reason is arithmetic: a "1y" fetch returns ~251
+// sessions, while the 1-year return needs 252 closes plus the one it is
+// measured against. The tab asked for both, so the model was handed
+// "Returns — ... 1y n/a" for EVERY stock, and the "52-week range" beside it was
+// a 251-session range wearing a 52-week label. Two years also lands on the same
+// cache key the Technicals tab already fills (equity:candles:<sym>:2y), so this
+// is one fetch fewer per symbol rather than one more.
+//
+// Named once because the QueryStore key is rebuilt by hand for the unsubscribe
+// and the two must not drift.
+const QString kHistoryPeriod = QStringLiteral("2y");
 
 // Epoch-seconds for a prediction's resolve_date / created_at, for the chart X.
 qint64 ymd_to_secs(const QString& ymd) {
@@ -189,15 +231,39 @@ void PredictionChart::paintEvent(QPaintEvent*) {
     for (const auto& c : candles_)
         if (c.timestamp >= t_min) { p_min = std::min(p_min, c.low > 0 ? c.low : c.close);
                                     p_max = std::max(p_max, c.high > 0 ? c.high : c.close); }
+    // Real prices have had their say; model output may stretch the axis only
+    // within a generous multiple of that. One hallucinated target — $2,500 on a
+    // $320 stock, which is a parse slip away at any time — would otherwise set
+    // the scale on its own and flatten the entire actual-price line into the
+    // bottom row of pixels. Out-of-range points are still drawn, pinned at the
+    // frame, so "off the scale" reads as off the scale rather than as a chart
+    // that silently redrew itself around a bad number.
+    const double axis_lo = p_min > 0 ? p_min * 0.5 : p_min;
+    const double axis_hi = p_max > 0 ? p_max * 2.0 : p_max;
     for (const auto& pr : preds_) {
-        for (double v : {pr.price_at_pred, pr.target_price, pr.price_at_resolve})
+        // price_at_pred and price_at_resolve are OURS — real closes we recorded
+        // — so they set the scale unconditionally. Bounding them would pin a
+        // genuine two-year-old entry price at the frame and draw its forecast
+        // as if it began at the bottom of the axis. Only target_price is the
+        // model's, and only it is bounded.
+        for (double v : {pr.price_at_pred, pr.price_at_resolve})
             if (v > 0) { p_min = std::min(p_min, v); p_max = std::max(p_max, v); }
+        if (pr.target_price > 0 && pr.target_price >= axis_lo && pr.target_price <= axis_hi) {
+            p_min = std::min(p_min, pr.target_price);
+            p_max = std::max(p_max, pr.target_price);
+        }
     }
     if (p_max <= p_min) { p_max = p_min + 1; }
     const double pad = (p_max - p_min) * 0.06; p_min -= pad; p_max += pad;
 
     auto X = [&](qint64 t) { return area.left() + (double(t - t_min) / double(t_max - t_min)) * area.width(); };
-    auto Y = [&](double v) { return area.bottom() - (double(v - p_min) / double(p_max - p_min)) * area.height(); };
+    // Clamped to the plot: a point outside the axis is pinned at the frame
+    // rather than drawn off-widget, and off_scale() says so for the marker.
+    auto Y = [&](double v) {
+        const double y = area.bottom() - (double(v - p_min) / double(p_max - p_min)) * area.height();
+        return std::clamp(y, area.top(), area.bottom());
+    };
+    auto off_scale = [&](double v) { return v > 0 && (v < p_min || v > p_max); };
 
     // ── Grid + y labels ───────────────────────────────────────────────────────
     p.setPen(QPen(QColor(colors::BORDER_DIM()), 1));
@@ -247,6 +313,17 @@ void PredictionChart::paintEvent(QPaintEvent*) {
         p.drawLine(a, b);
         p.setBrush(QColor(col));
         p.drawEllipse(b, 3.0, 3.0);
+        if (off_scale(pr.target_price)) {
+            // Chevron into the margin, the same convention the earnings
+            // reaction chart uses: a pinned point must never read as a value
+            // that happened to land exactly on the frame.
+            const double dir = pr.target_price > p_max ? -1.0 : 1.0;
+            QPainterPath chev;
+            chev.moveTo(b.x() - 4.0, b.y() + dir * 3.0);
+            chev.lineTo(b.x(), b.y() + dir * 8.0);
+            chev.lineTo(b.x() + 4.0, b.y() + dir * 3.0);
+            p.fillPath(chev, QColor(col));
+        }
         // For a resolved prediction, draw the ERROR BAR: a dotted line from the
         // predicted target to where the stock ACTUALLY landed — the gap is the
         // deviation (longer = bigger miss).
@@ -538,7 +615,7 @@ void EquityAiTab::set_symbol(const QString& symbol) {
     if (current_symbol_.isEmpty()) return;
     const QString sym = current_symbol_;
     services::equity::EquityResearchService::instance().subscribe_historical(
-        this, sym, QStringLiteral("1y"),
+        this, sym, kHistoryPeriod,
         [this, sym](const services::query::QueryStore::State& s) {
             if (sym != current_symbol_) return;   // belt-and-suspenders: drop a stale-symbol delivery
             const auto candles = s.data.value<QVector<Candle>>();
@@ -555,7 +632,8 @@ void EquityAiTab::set_symbol(const QString& symbol) {
                     "from — this is expected for pre-IPO or untradable tickers.").arg(sym));
             }
         });
-    current_historical_key_ = QStringLiteral("equity:candles:") + sym + QStringLiteral(":1y");
+    current_historical_key_ =
+        QStringLiteral("equity:candles:") + sym + QStringLiteral(":") + kHistoryPeriod;
 }
 
 void EquityAiTab::set_info(const StockInfo& info) {
@@ -579,9 +657,34 @@ void EquityAiTab::show_idle_analysis() {
     analysis_populated_ = true;
     for (const AiPrediction& p : AiPredictionRepository::instance().for_ticker(current_symbol_)) {
         if (!p.analysis.isEmpty()) {
+            // A stored thesis is anchored to the price it was written at — it
+            // names entry zones and targets in dollars. Shown under a bare date
+            // it reads as current advice, so an "accumulate near $210" from six
+            // weeks ago sits unqualified over a stock now at $320. State the
+            // anchor and how far the price has travelled since, and say plainly
+            // when the forecast in it has already been settled.
+            QStringList head;
+            head << QString("Latest AI analysis · %1").arg(p.created_at.left(10));
+            if (p.price_at_pred > 0) {
+                head << QString("written at %1").arg(fmt::format_money(p.price_at_pred));
+                if (!candles_.isEmpty() && candles_.last().close > 0) {
+                    const double since =
+                        (candles_.last().close - p.price_at_pred) / p.price_at_pred * 100.0;
+                    head << QString("now %1 (%2 since)")
+                                .arg(fmt::format_money(candles_.last().close), pct_str(since));
+                }
+            }
+            if (p.resolved)
+                head << QString("its %1 forecast resolved %2")
+                            .arg(p.direction.toUpper(),
+                                 p.correct ? QStringLiteral("correct") : QStringLiteral("wrong"));
+            else if (!p.resolve_date.isEmpty())
+                head << QString("its forecast resolves %1").arg(p.resolve_date);
+
             analysis_view_->setPlainText(
-                QString("Latest AI analysis · %1\n\n%2\n\n— Click “Run AI Analysis” for a fresh read.")
-                    .arg(p.created_at.left(10), p.analysis));
+                QString("%1\n\n%2\n\n— Written at the price above, not re-checked since. "
+                        "Click “Run AI Analysis” for a fresh read.")
+                    .arg(head.join(QStringLiteral(" · ")), p.analysis));
             return;
         }
     }
@@ -903,7 +1006,11 @@ void EquityAiTab::toggle_voice_mode() {
 void EquityAiTab::maybe_auto_forecast() {
     if (!auto_chk_ || !auto_chk_->isChecked()) return;
     if (forecasting_ || current_symbol_.isEmpty() || candles_.size() < 20) return;
-    const QString today = QDate::currentDate().toString(Qt::ISODate);
+    // exists_on_day compares substr(created_at, 1, 10), and created_at is UTC —
+    // so the guard has to ask in UTC too. It used a viewer-local date against a
+    // UTC column, which let the once-a-day auto-forecast fire twice for anyone
+    // whose local date differed from UTC's.
+    const QString today = QDateTime::currentDateTimeUtc().date().toString(Qt::ISODate);
     if (AiPredictionRepository::instance().exists_on_day(current_symbol_, today)) return;
     run_forecast(true);
 }
@@ -1077,26 +1184,71 @@ void EquityAiTab::run_forecast(bool automatic) {
                 }
                 AiPrediction p;
                 p.ticker         = sym;
+                // UTC, and it has to stay UTC. for_ticker() sorts
+                // ORDER BY created_at DESC over the raw string and v044 indexes
+                // it that way, so an offset-bearing local stamp
+                // ("…T11:00:00-04:00") sorts BELOW a same-instant "…T15:00:00Z"
+                // written before the change — every new forecast would file
+                // itself under the older ones, and "Latest AI analysis" would
+                // show the stale thesis. The market calendar is used where a
+                // DAY is meant (resolve_date), not for this instant.
                 p.created_at      = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
                 p.model          = model;
                 p.horizon_days   = horizon;
-                p.resolve_date   = QDate::currentDate().addDays(horizon).toString(Qt::ISODate);
+                p.resolve_date   = market_today().addDays(horizon).toString(Qt::ISODate);
                 p.price_at_pred  = price_now;
-                p.direction      = f.value(QStringLiteral("direction")).toString().toLower();
-                if (p.direction != "up" && p.direction != "down") p.direction = "flat";
-                p.target_price   = f.value(QStringLiteral("target_price")).toDouble();
-                p.predicted_pct  = f.value(QStringLiteral("predicted_pct")).toDouble();
-                if (p.target_price <= 0 && p.predicted_pct != 0)
-                    p.target_price = price_now * (1.0 + p.predicted_pct / 100.0);
-                if (p.predicted_pct == 0 && p.target_price > 0 && price_now > 0)
-                    p.predicted_pct = (p.target_price - price_now) / price_now * 100.0;
+
+                // ── Reconcile the model's three ways of saying one thing ────
+                // A language model routinely emits a target price, a percentage
+                // and a direction word that do not agree: "$108", "+3%" and
+                // "up" on a $100 stock. Stored as given, the table's DIRECTION
+                // column, its TARGET column, the chart's segment and the
+                // accuracy metric each quote a different one of them, and the
+                // panel presents all four as a single coherent forecast. The
+                // old fallbacks only fired when one was MISSING, which is the
+                // rare case; disagreement is the common one.
+                //
+                // price_at_pred is ours and exact, so the arithmetic tying a
+                // target to a percentage is arithmetic we can do correctly. The
+                // target wins — it is what the chart draws and what a reader
+                // anchors on — and the percentage is derived from it.
+                // Missing and zero are different claims — see reconcile().
+                const std::optional<double> stated_pct =
+                    f.contains(QStringLiteral("predicted_pct"))
+                        ? std::optional<double>(f.value(QStringLiteral("predicted_pct")).toDouble())
+                        : std::nullopt;
+                const aif::Forecast fc = aif::reconcile(
+                    price_now, f.value(QStringLiteral("target_price")).toDouble(), stated_pct);
+                if (fc.empty) {
+                    // A reply with a direction word but no usable numbers is not
+                    // a forecast. Recording it would store a "flat" call the
+                    // model never made and then grade it against real closes,
+                    // counting it in the headline hit rate. Same exit as a
+                    // missing JSON block.
+                    self->status_lbl_->setText(QStringLiteral(
+                        "The model returned no usable target or percentage — not recorded."));
+                    return;
+                }
+                p.target_price  = fc.target_price;
+                p.predicted_pct = fc.predicted_pct;
+                p.direction     = fc.direction;
+                const bool incoherent = fc.incoherent;
+
                 p.confidence     = std::clamp(f.value(QStringLiteral("confidence")).toInt(), 0, 100);
                 p.recommendation = f.value(QStringLiteral("recommendation")).toString().toLower();
                 p.rationale      = f.value(QStringLiteral("rationale")).toString();
                 p.analysis       = prose_only(snap);
 
-                if (AiPredictionRepository::instance().insert(p) > 0)
-                    self->status_lbl_->setText(QStringLiteral("Forecast recorded — resolves %1.").arg(p.resolve_date));
+                if (AiPredictionRepository::instance().insert(p) > 0) {
+                    QString msg = QStringLiteral("Forecast recorded — resolves %1.").arg(p.resolve_date);
+                    if (incoherent)
+                        msg += QStringLiteral("  Note: the model's stated %1% did not match its own "
+                                              "%2 target (%3% from here).")
+                                   .arg(QString::number(stated_pct.value_or(0.0), 'f', 1),
+                                        fmt::format_money(p.target_price),
+                                        QString::number(p.predicted_pct, 'f', 1));
+                    self->status_lbl_->setText(msg);
+                }
                 self->refresh_track_record();
             }, Qt::QueuedConnection);
         },
@@ -1129,15 +1281,27 @@ void EquityAiTab::resolve_due() {
     for (const AiPrediction& p : repo.for_ticker(current_symbol_)) {
         if (p.resolved) continue;
         if (p.resolve_date > last_ymd) continue;   // not due — no real close yet
-        // First real close on or after the resolve date.
+        // First real close on or after the resolve date. Decoded with bar_date
+        // like the gate above — this scan used plain UTC, which is the exact
+        // decoder the comment three lines up says not to use, and it picked a
+        // candle a day early for every exchange east of Greenwich.
         double close = 0.0;
-        for (const Candle& c : candles_) {
-            const QString cymd = QDateTime::fromSecsSinceEpoch(c.timestamp, QTimeZone::UTC).date().toString(Qt::ISODate);
-            if (cymd >= p.resolve_date) { close = c.close; break; }
+        for (qsizetype i = 0; i < candles_.size(); ++i) {
+            const QString cymd =
+                ui::formatting::bar_date(candles_[i].timestamp).toString(Qt::ISODate);
+            if (cymd < p.resolve_date) continue;
+            // The resolving session must be OVER. Settling against a bar that
+            // is still trading writes a mid-session quote into the track record
+            // permanently — resolve() only ever touches unresolved rows.
+            if (!candle_session_closed(candles_, i)) break;
+            close = candles_[i].close;
+            break;
         }
         if (close <= 0.0 || p.price_at_pred <= 0.0) continue;
         const double actual_pct = (close - p.price_at_pred) / p.price_at_pred * 100.0;
-        const QString realized = actual_pct > kFlatBand ? "up" : actual_pct < -kFlatBand ? "down" : "flat";
+        // The same bucketing the prediction went through — one function, so the
+        // two sides of the comparison cannot drift onto different scales again.
+        const QString realized = aif::bucket_direction(actual_pct);
         const bool correct = (realized == p.direction);
         repo.resolve(p.id, close, actual_pct,
                      correct, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));

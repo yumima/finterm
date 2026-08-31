@@ -39,7 +39,12 @@ qint64 AiPredictionRepository::insert(const AiPrediction& p) {
         " direction, target_price, predicted_pct, confidence, recommendation, "
         " rationale, analysis) "
         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        {p.ticker, p.created_at, p.model, p.horizon_days, p.resolve_date, p.price_at_pred,
+        // Upper-cased on the way in, because every read path
+        // (for_ticker, exists_on_day) queries with toUpper(). A caller that
+        // passed a lower-case ticker would have written a row nothing could
+        // ever read back — including the duplicate guard, which would then let
+        // the auto-forecast write one row per refresh.
+        {p.ticker.toUpper(), p.created_at, p.model, p.horizon_days, p.resolve_date, p.price_at_pred,
          p.direction, p.target_price, p.predicted_pct, p.confidence, p.recommendation,
          p.rationale, p.analysis});
     return r.is_ok() ? r.value() : 0;
