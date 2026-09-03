@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`749eae0ca`](https://github.com/yumima/finterm/commit/749eae0ca) news brief: the model never got the day, and on this box never answered at all
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

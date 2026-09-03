@@ -888,15 +888,19 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                     // that apart from the news having changed.
                     scope.temperature = 0.0;
                     // Run briefs on the fast role rather than the configured
-                    // chat model. Measured against hearth: fast_chat (qwen3:14b)
-                    // returns 495 completion tokens in 30s, primary_chat
-                    // (qwen3:30b-a3b) 1554 in 40s standalone — and far worse
-                    // in-app, because 30b-a3b exceeds this GPU's VRAM and
-                    // spills to CPU. It also ignores think:false. Resolve the
-                    // bound model for the "news" role, falling back to the
-                    // hearth alias only when we are actually on hearth: on a
-                    // cloud provider that alias is a model name it never heard
-                    // of. See AiRoles.h.
+                    // chat model. fast_chat is a hearth ROLE ALIAS, not a model
+                    // name — it resolved to qwen3:14b when these numbers were
+                    // taken and to qwen3.5:9b later, so read the figures as the
+                    // shape of the gap rather than as a fixed model: fast_chat
+                    // returned 495 completion tokens in 30s against
+                    // primary_chat's (qwen3:30b-a3b) 1554 in 40s standalone —
+                    // and far worse in-app, because 30b-a3b exceeds this GPU's
+                    // VRAM and spills to CPU.
+                    //
+                    // Resolve the bound model for the "news" role, falling back
+                    // to the hearth alias only when we are actually on hearth:
+                    // on a cloud provider that alias is a model name it never
+                    // heard of. See AiRoles.h.
                     {
                         const auto target = ai_chat::LlmService::instance().scope_for_role(
                             QStringLiteral("news"), QString::fromLatin1(kBriefModelRole));
@@ -957,15 +961,18 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                     //
                     // The old 900 assumed think=false takes effect, and on
                     // Ollama's /v1 route it does not. Measured on this prompt:
-                    // qwen3:14b (the model the news role resolves to) spent all
-                    // 900 tokens reasoning and returned finish_reason=length
-                    // with an EMPTY message; qwen3.5:9b did the same at 2000,
-                    // because the reasoning simply expands to fill whatever it
-                    // is given. That is the reported "brief keeps stopping
-                    // after two categories", and no prompt or budget change can
-                    // reach it — which is why these calls now route to Ollama's
-                    // native API, where think=false actually holds (see
-                    // LlmService::use_ollama_native).
+                    // qwen3:14b spent all 900 tokens reasoning and returned
+                    // finish_reason=length with an EMPTY message; qwen3.5:9b
+                    // did the same at 2000, because the reasoning expands to
+                    // fill whatever it is given.
+                    //
+                    // That is a DIRECT-OLLAMA failure, not a universal one.
+                    // Behind hearth — the zero-config default — the same
+                    // request returns a complete brief with no reasoning at
+                    // all, because hearth forwards `think` to Ollama's native
+                    // API where /v1 drops it. Both are reached correctly: the
+                    // native probe 404s on hearth and falls back to its /v1.
+                    // See LlmService::use_ollama_native.
                     //
                     // The headroom stays for the paths that route can't cover —
                     // a cloud reasoning model, or a local one behind a tool

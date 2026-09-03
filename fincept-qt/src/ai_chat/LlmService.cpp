@@ -733,14 +733,17 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // cloud model never receives this non-standard field (they'd 400), even
     // when the configured provider is local — and vice versa.
     //
-    // BEST EFFORT, NOT A GUARANTEE. `think` is an Ollama NATIVE option, and
-    // this request goes to /v1/chat/completions — the OpenAI-compatible shim,
-    // which silently drops fields it does not know. Measured against
-    // qwen3.5:9b on localhost:11434: think:false via /v1 has no effect at all
-    // (the model reasons for ~900 tokens before writing a word), while the
-    // same flag on /api/chat suppresses reasoning completely and halves the
-    // latency. `chat_template_kwargs.enable_thinking` and the `/no_think` soft
-    // switch were both tried here and are also ignored.
+    // BEST EFFORT, NOT A GUARANTEE — and which it is depends on what is
+    // listening, not on the field. `think` is an Ollama NATIVE option, so a
+    // server's /v1 shim is free to drop it. Measured:
+    //
+    //   Ollama /v1 direct (:11434), qwen3.5:9b — DROPPED. The model reasons
+    //     for the whole budget and returns an empty message.
+    //   hearth /v1 (:11435)                    — HONOURED. hearth forwards it
+    //     to Ollama's native API; reasoning is fully suppressed.
+    //
+    // `chat_template_kwargs.enable_thinking` and the `/no_think` soft switch
+    // were both tried against Ollama's /v1 and are ignored there too.
     //
     // So a caller must NOT size max_tokens on the assumption that reasoning is
     // suppressed. Against a reasoning model the budget has to hold the

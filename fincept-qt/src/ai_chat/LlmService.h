@@ -91,10 +91,11 @@ struct PersonaScope {
     // win for short structured one-shots. Ignored for cloud providers (an API
     // key is set), which would reject the unknown field.
     //
-    // A REQUEST, not a guarantee: whether it takes effect depends on the local
-    // endpoint, and against Ollama's OpenAI-compatible /v1 route (which is the
-    // one this service posts to) it does nothing. Never size max_tokens as
-    // though reasoning were suppressed — see build_openai_request.
+    // A REQUEST, not a guarantee: whether it takes effect depends on which
+    // local endpoint answers. hearth forwards it to Ollama's native API and it
+    // holds; Ollama's own /v1 shim drops it and the model reasons through the
+    // whole budget. Never size max_tokens as though reasoning were suppressed
+    // — see build_openai_request for the measurements.
     bool think = true;
     // Ask the backend to constrain decoding to a single JSON object
     // (OpenAI `response_format`, which hearth forwards to Ollama's grammar
@@ -291,9 +292,11 @@ class LlmService : public QObject {
     // /v1 route this service otherwise uses drops the `think` field silently,
     // and there is no budget that survives that: the reasoning simply expands
     // to fill whatever max_tokens allows. Measured against qwen3.5:9b on the
-    // news-brief prompt — 800 tokens and 2000 tokens both returned
-    // finish_reason=length with an EMPTY message, while the same request on
-    // /api/chat answered in 26s with no reasoning at all.
+    // news-brief prompt, posted DIRECTLY to Ollama — 800 tokens and 2000
+    // tokens both returned finish_reason=length with an EMPTY message, while
+    // the same request on /api/chat answered in 26s with no reasoning at all.
+    // (Behind hearth the /v1 route honours `think` and needs none of this;
+    // the native probe simply 404s there and falls back to it.)
     //
     // So a caller that sets think=false against a local endpoint, with no
     // tools, is routed to the native API instead. Narrow on purpose: tools,
