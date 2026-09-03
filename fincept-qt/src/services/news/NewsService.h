@@ -1,4 +1,5 @@
 #pragma once
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QNetworkAccessManager>
@@ -152,7 +153,30 @@ class NewsService : public QObject
     /// loop with (ok, title, body). On failure body is empty and ok=false.
     void extract_article_body(const QString& url, BodyCallback cb);
 
-    /// Summarize top N headlines via AI. Cached for 10 min per headline signature.
+    /// url -> body text, for the URLs that yielded one. Missing key = the
+    /// extractor could not read that article; callers carry on without it.
+    using BodiesCallback = std::function<void(QHash<QString, QString>)>;
+
+    /// Extract several article bodies in one Python process.
+    ///
+    /// Shares the per-URL cache with extract_article_body(), so a story the
+    /// reader has already opened costs nothing here and vice versa. Only the
+    /// cache misses are sent to the helper. Callback fires on the Qt event
+    /// loop, and fires even when every URL fails — with an empty map — so a
+    /// caller sequencing work behind it cannot be stranded.
+    void extract_article_bodies(const QStringList& urls, BodiesCallback cb);
+
+    /// Build the AI news brief over `articles`.
+    ///
+    /// `count` bounds the number of distinct STORIES the brief is written
+    /// from, not the number of articles read: the pool is clustered first, so
+    /// six outlets carrying one story cost one slot rather than six. Every
+    /// category present is guaranteed a slot before the rest are filled on
+    /// rank, so the breakdown covers the day rather than the loudest sector.
+    ///
+    /// Cached twice — once against the input pool, once against the generated
+    /// prompt — so an unchanged feed and an unchanged SELECTION both return
+    /// the previous brief verbatim. Callback fires on the Qt event loop.
     void summarize_headlines(const QVector<NewsArticle>& articles, int count, SummaryCallback cb);
 
     int feed_count() const { return feed_count_; }
@@ -192,6 +216,12 @@ class NewsService : public QObject
     static void enrich_article(NewsArticle& article);
     static QString strip_html(const QString& html);
 
+    /// Cache slot for one article's extracted body. Hashed because raw URLs
+    /// carry query strings and tracking params that bloat the key and include
+    /// characters SQLite handles awkwardly. Shared by the single-URL and batch
+    /// extraction paths so a body fetched by either serves both.
+    static QString article_body_cache_key(const QString& url);
+
     QNetworkAccessManager* nam_ = nullptr;
     QTimer* refresh_timer_ = nullptr;
     static constexpr int kArticleCacheTtlSec = 600; // 10 min
@@ -201,6 +231,16 @@ class NewsService : public QObject
     // (same session or after restart, since CacheManager persists) hits
     // memory and renders instantly.
     static constexpr int kArticleBodyTtlSec = 7 * 24 * 60 * 60; // 7 days
+    // The brief cache is addressed by the prompt text, so a hit is always the
+    // brief those exact stories produced — reuse stays correct however old the
+    // entry is. An hour, rather than the pool cache's ten minutes, because the
+    // point of that tier is that a feed which keeps re-delivering the same top
+    // stories keeps showing the same brief instead of rewording it hourly.
+    static constexpr int kBriefCacheTtlSec = 60 * 60;
+    // A brief that lost one of its two halves is worth showing but not worth
+    // keeping: short enough that the next press retries the missing half,
+    // long enough to absorb a double-click.
+    static constexpr int kPartialBriefCacheTtlSec = 60;
     int feed_count_ = 0;
     QStringList active_sources_;
 

@@ -12,6 +12,7 @@
 // Header-only and Qt-Core-only, so the renderer and its test can use it
 // without pulling in NewsService and its network stack.
 
+#include <QLatin1StringView>
 #include <QRegularExpression>
 #include <QSet>
 #include <QString>
@@ -20,6 +21,14 @@
 #include <iterator>
 
 namespace fincept::news {
+
+/// Separates the top summary from the per-category detail in a model brief.
+///
+/// Lives here rather than beside the renderer because both ends need it: the
+/// service assembles a brief around it and the reading pane splits on it, and
+/// a service that had to include a screen header to name one string would be
+/// the wrong dependency in the wrong direction.
+inline constexpr QLatin1StringView kCategoryMarker{"<<<CATEGORIES>>>"};
 
 /// One category and the substrings that signal it in lowercased article text.
 struct CategoryRule {
@@ -36,20 +45,26 @@ struct CategoryRule {
 /// "Bitcoin miners' quarterly results" is EARNINGS, not CRYPTO, because a
 /// results story is a results story whatever the sector.
 ///
-/// This table is the extracted form of the if/else-if chain enrich_article()
-/// used to carry inline — same order, same keywords, same first-match-wins
-/// semantics — so moving it here changed no classification.
+/// A keyword written with SURROUNDING SPACES matches whole words only; every
+/// other keyword is a plain substring. The distinction is per-keyword because
+/// it is per-keyword knowledge: "tech" is meant to catch fintech and biotech,
+/// while a bare "eps" caught Epstein and filed three of one day's stories
+/// under EARNINGS. The same trap was live in " nato " (senator, donator),
+/// " gdp " (GDPR) and " fed " (surfed) — short letter runs that occur inside
+/// unrelated common words. Bounding those also made them match MORE of what
+/// they are for, since the boundary view normalises punctuation: bare "fed "
+/// missed "Fed's" and "Fed-Hike" outright.
 inline constexpr CategoryRule kCategoryRules[] = {
-    {"EARNINGS", {"earnings", "quarterly results", "eps", "guidance", nullptr}},
+    {"EARNINGS", {"earnings", "quarterly results", " eps ", "guidance", nullptr}},
     {"CRYPTO", {"crypto", "bitcoin", "ethereum", "blockchain", nullptr}},
     {"DEFENSE", {"missile", "troops", "pentagon", "military", nullptr}},
     {"ECONOMIC",
-     {"fed ", "federal reserve", "inflation", "gdp", "interest rate", "central bank", nullptr}},
+     {" fed ", "federal reserve", "inflation", " gdp ", "interest rate", "central bank", nullptr}},
     {"MARKETS", {"s&p 500", "nasdaq", "dow jones", "stock market", nullptr}},
     {"ENERGY", {"energy", "crude", "opec", "natural gas", "oil price", nullptr}},
     {"TECH", {"tech", " ai ", "artificial intelligence", "semiconductor", "startup", nullptr}},
     {"GEOPOLITICS",
-     {"nato", "ukraine", "russia", "china", "gaza", "sanctions", "geopolit", nullptr}},
+     {" nato ", "ukraine", "russia", "china", "gaza", "sanctions", "geopolit", nullptr}},
 };
 
 /// classify() walks each keyword list until it hits the nullptr, so a list
@@ -126,14 +141,39 @@ inline const QStringList& prompt_menu() {
 /// CRYPTO" is asked which of those two it is, not which of all eight, so a
 /// passing mention of Russia cannot drag it into GEOPOLITICS — a section the
 /// model did not put it in.
+/// `lowered` with every run of non-alphanumerics collapsed to one space and a
+/// space at each end, so a space-delimited keyword matches a whole word
+/// wherever it sits — including against the punctuation real headlines carry
+/// ("Fed's", "Fed-Hike", "EPS:") and at the very start or end of the text.
+inline QString word_bounded_view(const QString& lowered) {
+    static const QRegularExpression kNonWord(QStringLiteral("[^a-z0-9]+"));
+    QString v = lowered;
+    v.replace(kNonWord, QStringLiteral(" "));
+    return QLatin1Char(' ') + v.trimmed() + QLatin1Char(' ');
+}
+
 inline QString classify(const QString& lowered, const QSet<QString>& allowed = {}) {
+    // Built at most once per call, lazily. In practice "nearly always": the
+    // first rule's third keyword is " eps ", so almost every classification
+    // reaches it. The laziness is worth keeping anyway for the early-exit
+    // cases ("earnings" hits first) and for a restricted `allowed` set that
+    // skips the EARNINGS rule entirely — which is the renderer's hot path,
+    // called per bullet per stream chunk.
+    QString bounded;
     for (const auto& r : kCategoryRules) {
         const QString name = QString::fromLatin1(r.name);
         if (!allowed.isEmpty() && !allowed.contains(name))
             continue;
         for (int i = 0; r.keywords[i] != nullptr; ++i) {
-            if (lowered.contains(QLatin1String(r.keywords[i])))
+            const QLatin1String kw(r.keywords[i]);
+            if (kw.size() > 2 && kw.front() == QLatin1Char(' ') && kw.back() == QLatin1Char(' ')) {
+                if (bounded.isNull())
+                    bounded = word_bounded_view(lowered);
+                if (bounded.contains(kw))
+                    return name;
+            } else if (lowered.contains(kw)) {
                 return name;
+            }
         }
     }
     return {};

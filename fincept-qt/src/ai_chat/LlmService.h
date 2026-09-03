@@ -12,6 +12,7 @@
 #include <QMutex>
 #include <QNetworkAccessManager>
 #include <QObject>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -89,6 +90,11 @@ struct PersonaScope {
     // chain-of-thought via the `think:false` request extension — a large latency
     // win for short structured one-shots. Ignored for cloud providers (an API
     // key is set), which would reject the unknown field.
+    //
+    // A REQUEST, not a guarantee: whether it takes effect depends on the local
+    // endpoint, and against Ollama's OpenAI-compatible /v1 route (which is the
+    // one this service posts to) it does nothing. Never size max_tokens as
+    // though reasoning were suppressed — see build_openai_request.
     bool think = true;
     // Ask the backend to constrain decoding to a single JSON object
     // (OpenAI `response_format`, which hearth forwards to Ollama's grammar
@@ -114,6 +120,18 @@ struct PersonaScope {
     QString model = {};
     QString api_key = {};
     QString base_url = {};
+    /// Per-call sampling temperature. Negative = omit the field entirely and
+    /// let the provider use its own default, which is what every request built
+    /// here did unconditionally before this existed.
+    ///
+    /// A default temperature is right for chat and wrong for anything the user
+    /// expects to be able to re-run. The news brief is generated from a
+    /// content-addressed prompt and cached against it, so two runs over an
+    /// unchanged feed are meant to produce the same brief — at the provider
+    /// default they instead produce two differently-worded reads of the same
+    /// stories, and the reader has no way to tell that apart from the news
+    /// having changed. 0 makes the cache the only source of variation.
+    double temperature = -1.0;
     /// Per-call output cap, 0 = the configured max_tokens.
     ///
     /// A short structured one-shot does not need the chat budget. Left at 4096
@@ -266,6 +284,56 @@ class LlmService : public QObject {
     QStringList resolve_tool_globs(const PersonaScope& persona) const;
 
     // Request builders → QJsonObject
+    // ── Ollama native route ──────────────────────────────────────────────
+    //
+    // A local reasoning model that is asked to skip its chain-of-thought only
+    // actually does so on Ollama's NATIVE /api/chat. The OpenAI-compatible
+    // /v1 route this service otherwise uses drops the `think` field silently,
+    // and there is no budget that survives that: the reasoning simply expands
+    // to fill whatever max_tokens allows. Measured against qwen3.5:9b on the
+    // news-brief prompt — 800 tokens and 2000 tokens both returned
+    // finish_reason=length with an EMPTY message, while the same request on
+    // /api/chat answered in 26s with no reasoning at all.
+    //
+    // So a caller that sets think=false against a local endpoint, with no
+    // tools, is routed to the native API instead. Narrow on purpose: tools,
+    // streaming, cloud providers and ordinary think=true chat all keep the
+    // OpenAI path unchanged.
+    /// True when this target refuses an explicit `temperature`. OpenAI's
+    /// reasoning line (gpt-5, o1, o3) accepts only its own default and 400s on
+    /// anything else, so a caller's determinism preference has to yield there
+    /// rather than fail the request. Matched by prefix, the way ModelCatalog
+    /// matches its output caps.
+    bool model_rejects_temperature(const PersonaScope& persona) const;
+
+    /// All three run UNLOCKED, from do_request. They read config members the
+    /// same way the other build_*_request paths do.
+    bool use_ollama_native(const PersonaScope& persona, bool use_tools) const;
+    QString ollama_native_url(const PersonaScope& persona) const;
+    /// Bases known NOT to serve /api/chat, so the probe is paid once rather
+    /// than on every request. Keyed by the native URL.
+    ///
+    /// Guarded by its OWN mutex, not mutex_: chat() deliberately releases
+    /// mutex_ before do_request so a slow call cannot freeze the UI thread,
+    /// and do_request is where this set is read and written. The news brief
+    /// runs its two halves concurrently on a private pool, so two do_request
+    /// calls with the same persona reach the insert at the same instant on the
+    /// very first TL;DR press — and on the zero-config install both of them
+    /// get the 404 that triggers it.
+    ///
+    /// Needed because "hearth" and "ollama" are the same provider id here, and
+    /// only one of them is Ollama: hearth is finterm's own OpenAI-compatible
+    /// gateway on :11435 (and the zero-config default — see reload()), and
+    /// vLLM, llama.cpp and LM Studio are all configured under this provider by
+    /// changing the base URL. None of them has a native route. Probing by
+    /// request and remembering the answer is the only test that stays right
+    /// when the user repoints the base URL.
+    mutable QSet<QString> no_native_route_;
+    mutable QMutex no_native_route_mutex_;
+    QJsonObject build_ollama_native_request(const QString& user_message,
+                                            const std::vector<ConversationMessage>& history,
+                                            const PersonaScope& persona) const;
+
     QJsonObject build_openai_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                                      bool stream, bool with_tools = true, const PersonaScope& persona = {});
     QJsonObject build_anthropic_request(const QString& user_message, const std::vector<ConversationMessage>& history,

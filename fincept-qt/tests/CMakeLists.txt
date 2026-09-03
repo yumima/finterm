@@ -624,6 +624,23 @@ target_link_libraries(test_news_brief_format PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_news_brief_format PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME news_brief_format COMMAND test_news_brief_format)
 
+# ── News brief story selection ───────────────────────────────────────────────
+# What the brief is written FROM, which is where its two shipped failures
+# lived: six outlets carrying one story ate six of the sample's slots, and a
+# high-volume category filled every slot so the breakdown could not name the
+# others. Both produced a well-formed brief that covered half the day, and
+# neither logged anything. Also pins the ordering as a total order — the brief
+# is content-addressed, so a selection that reshuffles on equal scores makes
+# the cache miss and the brief reword itself for no visible reason.
+add_executable(test_news_brief_selection
+    services/test_news_brief_selection.cpp
+    ../src/services/news/NewsClusterService.cpp
+)
+target_include_directories(test_news_brief_selection PRIVATE ../src)
+target_link_libraries(test_news_brief_selection PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+set_target_properties(test_news_brief_selection PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME news_brief_selection COMMAND test_news_brief_selection)
+
 # ── External-link scheme guard ───────────────────────────────────────────────
 # open_external_link() sits in front of QDesktopServices::openUrl, which hands
 # a URL to the desktop's scheme handler rather than to a browser. Dashboard

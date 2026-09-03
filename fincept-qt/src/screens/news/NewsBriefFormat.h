@@ -25,11 +25,15 @@
 namespace fincept::screens::brief {
 
 /// Separates the top summary from the per-category detail in a model brief.
-/// Both prompts are told to emit this on its own line. When it is absent — an
-/// older cached brief, or a model that ignored the instruction — split() falls
-/// back to the first "### NAME" section, because the category half identifies
-/// itself and does not actually need the sentinel.
-inline constexpr QLatin1StringView kCategoryMarker{"<<<CATEGORIES>>>"};
+/// The service joins the two halves on this. When it is absent — an older
+/// cached brief, or a half that failed to generate — split() falls back to the
+/// first "### NAME" section, because the category half identifies itself and
+/// does not actually need the sentinel.
+///
+/// Defined in NewsCategories.h, which both the service that writes it and the
+/// pane that reads it already depend on; re-exported here so callers that
+/// think of it as a formatting concern find it where they look.
+using news::kCategoryMarker;
 
 /// Collapses repeated "### NAME" sections in the per-category half of a brief,
 /// and takes apart headings that name more than one category.

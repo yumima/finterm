@@ -2,14 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-08-31)
+## Today's commits (2026-09-03)
 
 Latest first.
 
-- [`4c72cceec`](https://github.com/yumima/finterm/commit/4c72cceec) review fixes: two bounds that could only ever fail in one direction
-- [`a92739fbb`](https://github.com/yumima/finterm/commit/a92739fbb) crypto swap: the confirm dialog stated a slippage the transaction did not carry
-- [`836f1d9c4`](https://github.com/yumima/finterm/commit/836f1d9c4) options: max loss was read off the chart's edge, not the strategy's
-- [`1ebd0d8c8`](https://github.com/yumima/finterm/commit/1ebd0d8c8) ai forecast: the tab recorded three contradictory numbers as one forecast
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

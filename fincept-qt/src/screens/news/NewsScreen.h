@@ -99,7 +99,6 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
                                  const QMap<QString, int>& category_counts, int bullish, int bearish, int neutral);
     void update_monitors();
     void compute_deviations();
-    void sort_articles(QVector<services::NewsArticle>& articles) const;
 
     int64_t time_window_seconds() const;
 

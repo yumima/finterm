@@ -35,6 +35,8 @@
 #include <QVariant>
 #include <QtConcurrent/QtConcurrent>
 
+#include <algorithm>
+
 namespace fincept::ai_chat {
 
 static constexpr const char* TAG = "LlmService";
@@ -441,6 +443,102 @@ void LlmService::set_openai_max_tokens(QJsonObject& body, const PersonaScope& pe
         body["max_tokens"] = mx;
 }
 
+bool LlmService::model_rejects_temperature(const PersonaScope& persona) const {
+    if (eff_provider(persona).compare(QLatin1String("openai"), Qt::CaseInsensitive) != 0)
+        return false;
+    const QString model = eff_model(persona).toLower();
+    // Same families ModelCatalog lists for this provider's reasoning line.
+    for (const auto* prefix : {"gpt-5", "o1", "o3", "o4"}) {
+        if (model.startsWith(QLatin1String(prefix)))
+            return true;
+    }
+    return false;
+}
+
+bool LlmService::use_ollama_native(const PersonaScope& persona, bool use_tools) const {
+    // Called with mutex_ held.
+    //
+    // `think` is the whole reason this route exists, so a caller that has not
+    // asked to suppress reasoning gets no behaviour change at all.
+    if (persona.think)
+        return false;
+    // Local only. The field is an Ollama extension; a cloud endpoint has
+    // neither the field nor the path.
+    if (!eff_api_key(persona).isEmpty() || !is_hearth_provider(eff_provider(persona)))
+        return false;
+    // /api/chat speaks Ollama's own tool schema, not OpenAI's, and this
+    // service's whole tool loop is written against the latter. A tool-using
+    // request keeps the /v1 route and its reasoning; that is a latency cost on
+    // a path that is already multi-round-trip, not a correctness one.
+    return !use_tools;
+}
+
+QString LlmService::ollama_native_url(const PersonaScope& persona) const {
+    // Called with mutex_ held. Mirrors get_endpoint_url's base resolution so a
+    // custom base_url reaches both routes.
+    const QString cfg_base = eff_base_url(persona);
+    const QString base =
+        cfg_base.isEmpty() ? QStringLiteral("http://localhost:11434") : normalize_llm_base(cfg_base);
+    return base + QStringLiteral("/api/chat");
+}
+
+QJsonObject LlmService::build_ollama_native_request(const QString& user_message,
+                                                    const std::vector<ConversationMessage>& history,
+                                                    const PersonaScope& persona) const {
+    // Called with mutex_ held.
+    QJsonArray messages;
+    const QString sys = system_prompt_;
+    if (!sys.isEmpty())
+        messages.append(QJsonObject{{"role", "system"}, {"content", sys}});
+    for (const auto& m : history)
+        messages.append(QJsonObject{{"role", m.role}, {"content", m.content}});
+    messages.append(QJsonObject{{"role", "user"}, {"content", user_message}});
+
+    QJsonObject req;
+    req["model"] = eff_model(persona);
+    req["messages"] = messages;
+    req["stream"] = false;
+    // The point of the route.
+    req["think"] = false;
+
+    // Sampling and length live under `options` here, not at the top level.
+    // Putting them where the OpenAI body puts them is the classic way to have
+    // a native request silently ignore both.
+    QJsonObject options;
+    const int predict = resolved_max_tokens(persona);
+    options["num_predict"] = predict;
+    if (persona.temperature >= 0.0)
+        options["temperature"] = persona.temperature;
+
+    // num_ctx holds the prompt AND the completion, and Ollama defaults it to
+    // 4096 (see ModelCatalog's Ollama block). Overflow is not an error: the
+    // prompt is silently truncated FROM THE FRONT, which for these prompts
+    // discards the instruction block and leaves the model holding story data
+    // with no format rules — a failure that looks like the model ignoring
+    // instructions it was never shown.
+    //
+    // Measured on the news brief: 2253 prompt tokens against a 1800 budget, and
+    // 1603 against 2400. Both land just under 4096, which is not a margin worth
+    // trusting — one busier news day, or one longer article lead, crosses it.
+    //
+    // So size it from the actual request. 3 chars per token deliberately
+    // over-counts (English prose measures ~4.5 here); over-counting costs a
+    // little KV cache, under-counting costs the instructions. Only sent when it
+    // exceeds the default, so ordinary short calls keep the server's own sizing
+    // and its VRAM footprint.
+    int prompt_chars = 0;
+    for (const auto& m : messages)
+        prompt_chars += m.toObject()["content"].toString().size();
+    const int needed = prompt_chars / 3 + predict + 256; // +256: template overhead
+    if (needed > 4096)
+        options["num_ctx"] = std::min(needed, 32768);
+    req["options"] = options;
+
+    if (persona.json_object)
+        req["format"] = QStringLiteral("json");
+    return req;
+}
+
 QString LlmService::get_endpoint_url(const PersonaScope& persona) const {
     // Called with mutex_ held
     const QString p = eff_provider(persona);
@@ -631,11 +729,23 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // a cloud role binding from ever taking effect.
     req["model"] = eff_model(persona);
     req["messages"] = messages;
-    // Local-only `think:false` (hearth → Ollama native think control). Gated on
-    // the EFFECTIVE key so a role bound to a cloud model never receives this
-    // non-standard field (they'd 400), even when the configured provider is
-    // local — and vice versa. Skips the model's chain-of-thought for a
-    // big latency win on short structured one-shots that opt in via the persona.
+    // Local-only `think:false`. Gated on the EFFECTIVE key so a role bound to a
+    // cloud model never receives this non-standard field (they'd 400), even
+    // when the configured provider is local — and vice versa.
+    //
+    // BEST EFFORT, NOT A GUARANTEE. `think` is an Ollama NATIVE option, and
+    // this request goes to /v1/chat/completions — the OpenAI-compatible shim,
+    // which silently drops fields it does not know. Measured against
+    // qwen3.5:9b on localhost:11434: think:false via /v1 has no effect at all
+    // (the model reasons for ~900 tokens before writing a word), while the
+    // same flag on /api/chat suppresses reasoning completely and halves the
+    // latency. `chat_template_kwargs.enable_thinking` and the `/no_think` soft
+    // switch were both tried here and are also ignored.
+    //
+    // So a caller must NOT size max_tokens on the assumption that reasoning is
+    // suppressed. Against a reasoning model the budget has to hold the
+    // chain-of-thought as well, or the request returns finish_reason=length
+    // with an empty message — see the budgets in NewsService::summarize_headlines.
     if (!persona.think && eff_api_key(persona).isEmpty())
         req["think"] = false;
     // Constrained JSON decoding, gated on local for the same reason as `think`:
@@ -646,7 +756,17 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // request in three without it, and none with it.
     if (persona.json_object && eff_api_key(persona).isEmpty())
         req["response_format"] = QJsonObject{{"type", "json_object"}};
-    // Temperature intentionally omitted — each provider uses its own default.
+    // Temperature: omitted unless the caller pinned one, so chat keeps each
+    // provider's own default. A caller that sets it is asking for a
+    // reproducible answer — see PersonaScope::temperature.
+    //
+    // Except on the models that refuse to be asked. OpenAI's reasoning line
+    // (gpt-5, o1, o3) rejects any temperature but its own default outright —
+    // "Unsupported value: 'temperature' does not support 0" — and the news role
+    // can legitimately be bound to one of them. Sending it there would turn a
+    // determinism preference into a hard failure, so the preference yields.
+    if (persona.temperature >= 0.0 && !model_rejects_temperature(persona))
+        req["temperature"] = persona.temperature;
     // OpenAI deprecated max_tokens; gpt-5 / o-series require max_completion_tokens.
     // xAI also prefers max_completion_tokens. Other OpenAI-compatible providers
     // still expect max_tokens.
@@ -706,7 +826,10 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     req["model"] = eff_model(persona);
     req["messages"] = messages;
     req["max_tokens"] = resolved_max_tokens(persona);
-    // Temperature intentionally omitted — Anthropic defaults to 1.0.
+    // Anthropic defaults to 1.0; a caller that pinned a temperature is
+    // asking for a reproducible answer — see PersonaScope::temperature.
+    if (persona.temperature >= 0.0)
+        req["temperature"] = persona.temperature;
     QString sys = system_prompt_;
     // Only the agentic chat (tools on) gets persona + ambient context — not a
     // tool-less one-shot call. (Anthropic has no with_tools param; tools_enabled_
@@ -782,14 +905,28 @@ PersonaScope LlmService::next_quota_fallback(const PersonaScope& current) const 
                 continue;
             if (p.provider.compare(provider, Qt::CaseInsensitive) == 0)
                 continue;  // already there
-            PersonaScope local;
-            local.think = current.think;
-            local.prompt = current.prompt;
-            local.tool_globs = current.tool_globs;
-            local.valid = current.valid;
+            // Carry the caller's REQUEST settings across the hop, not just
+            // its identity. This used to copy think/prompt/tool_globs/valid
+            // and drop the rest, so a news brief that fell back here was
+            // generated at the provider's default temperature under the 4096
+            // chat budget — and then cached under a key whose whole premise is
+            // that the prompt determines the output. Two runs over an
+            // identical selection would then disagree, which is the exact
+            // failure PersonaScope::temperature exists to prevent.
+            //
+            // Start from `current` and override only what the hop changes, so
+            // a field added to PersonaScope later cannot be silently lost here
+            // the way these two were.
+            PersonaScope local = current;
             local.provider = p.provider;
             local.model = p.model;
             local.base_url = p.base_url;
+            // The new target is keyless by construction (the loop skips
+            // providers that require one), so the old key must not ride along:
+            // eff_api_key() would hand a cloud secret to a local endpoint, and
+            // the local-only gates for think/json_object/native routing all
+            // read "no key" as "local".
+            local.api_key.clear();
             return local;
         }
     }
@@ -834,7 +971,10 @@ QJsonObject LlmService::build_gemini_request(bool use_tools, const QString& user
     contents.append(QJsonObject{{"role", "user"}, {"parts", QJsonArray{QJsonObject{{"text", user_message}}}}});
 
     QJsonObject gen_cfg;
-    // Temperature intentionally omitted — Gemini defaults to 1.0.
+    // Gemini defaults to 1.0; a caller that pinned a temperature is asking
+    // for a reproducible answer — see PersonaScope::temperature.
+    if (persona.temperature >= 0.0)
+        gen_cfg["temperature"] = persona.temperature;
     gen_cfg["maxOutputTokens"] = resolved_max_tokens(persona);
 
     QJsonObject req;
@@ -1224,7 +1364,29 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     auto hdr = get_headers(persona);
     QJsonObject req_body;
 
-    if (eff_provider(persona) == "anthropic") {
+    // Ollama's native route, for a local think=false one-shot. See
+    // use_ollama_native() — on /v1 the think flag is dropped and the model
+    // spends the entire token budget reasoning, returning an empty message.
+    //
+    // Attempted, not assumed. The provider id cannot tell us whether the thing
+    // listening is Ollama: "hearth" and "ollama" share it, and hearth — the
+    // zero-config default — is an OpenAI-compatible gateway with no /api/chat,
+    // as are vLLM, llama.cpp and LM Studio behind a custom base URL. So the
+    // request is tried and a 404/405 falls back to the /v1 body below, with
+    // the base remembered so the miss is paid once. Getting this wrong the
+    // other way would have broken TL;DR, DIGEST and article analysis on a
+    // default install.
+    const QString native_url = use_ollama_native(persona, use_tools) ? ollama_native_url(persona)
+                                                                     : QString();
+    bool native = false;
+    if (!native_url.isEmpty()) {
+        QMutexLocker route_lock(&no_native_route_mutex_);
+        native = !no_native_route_.contains(native_url);
+    }
+    if (native) {
+        url = native_url;
+        req_body = build_ollama_native_request(user_message, history, persona);
+    } else if (eff_provider(persona) == "anthropic") {
         req_body = build_anthropic_request(user_message, history, false, persona);
     } else if (eff_provider(persona) == "gemini" || eff_provider(persona) == "google") {
         req_body = build_gemini_request(use_tools, user_message, history, persona);
@@ -1247,6 +1409,40 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
 
     auto http = blocking_post(url, req_body, hdr);
 
+    // The native attempt did not work out. Rebuild the request in OpenAI shape
+    // and retry once on the /v1 route — the caller asked for a brief, not for a
+    // routing opinion, and /v1 is the path that has always worked.
+    //
+    // ANY failure falls back, not just 404/405. The route can be rejected in
+    // more ways than a missing path: a gateway that answers unknown paths with
+    // 400 or 501, or Ollama itself 400-ing the `think` field on a model with no
+    // thinking capability — a user on llama3 or mistral would otherwise see
+    // TL;DR, DIGEST and article analysis all fail outright, with no retry.
+    //
+    // Only a 4xx is REMEMBERED. That is the endpoint saying it will not serve
+    // this, which will be just as true next time. A 5xx or a transport error is
+    // a bad moment, not a missing feature, so the native route is re-tried on
+    // the next call rather than written off for the life of the process.
+    if (native && !http.success) {
+        const bool permanent = http.status >= 400 && http.status < 500;
+        LOG_INFO(TAG, QString("Native route at %1 failed (HTTP %2: %3) — falling back to /v1%4")
+                          .arg(url).arg(http.status)
+                          .arg(http.error.left(120),
+                               permanent ? QStringLiteral(" and not retrying it") : QString()));
+        if (permanent) {
+            QMutexLocker route_lock(&no_native_route_mutex_);
+            no_native_route_.insert(native_url);
+        }
+        native = false;
+        url = get_endpoint_url(persona);
+        if (url.isEmpty()) {
+            resp.error = "No endpoint URL for provider: " + eff_provider(persona);
+            return resp;
+        }
+        req_body = build_openai_request(user_message, history, false, use_tools, persona);
+        http = blocking_post(url, req_body, hdr);
+    }
+
     if (!http.success) {
         resp.error = http.error;
         return resp;
@@ -1260,6 +1456,31 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     QJsonObject rj = doc.object();
 
     // ── Extract content by provider ──────────────────────────────────────
+
+    if (native) {
+        // {"message":{"role":"assistant","content":"..."},"done_reason":"stop",
+        //  "prompt_eval_count":N,"eval_count":M}
+        const QJsonObject msg = rj["message"].toObject();
+        resp.content = msg["content"].toString();
+        resp.prompt_tokens = rj["prompt_eval_count"].toInt();
+        resp.completion_tokens = rj["eval_count"].toInt();
+        resp.total_tokens = resp.prompt_tokens + resp.completion_tokens;
+        if (resp.content.trimmed().isEmpty()) {
+            // Say which of the two it was. "length" means the answer did not
+            // fit; anything else means the model genuinely returned nothing,
+            // and the two want opposite fixes.
+            const QString why = rj["done_reason"].toString();
+            resp.error = why == QLatin1String("length")
+                             ? QStringLiteral("model hit the output limit before answering "
+                                              "(%1 tokens)").arg(resp.completion_tokens)
+                             : QStringLiteral("model returned an empty message (done_reason=%1)")
+                                   .arg(why.isEmpty() ? QStringLiteral("none") : why);
+            LOG_WARN(TAG, "Ollama native: " + resp.error);
+            return resp;
+        }
+        resp.success = true;
+        return resp;
+    }
 
     if (eff_provider(persona) == "anthropic") {
         QJsonArray content = rj["content"].toArray();

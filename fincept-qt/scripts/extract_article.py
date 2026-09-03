@@ -253,12 +253,18 @@ def extract(url: str) -> dict:
         return {"success": False, "error": "fetch failed (network, 4xx/5xx, or paywall)"}
 
     # Try extractors in quality order; first one that yields text wins.
-    candidates = (
-        _via_trafilatura(html, url),
-        _via_readability(html),
-        _via_soup(html),
-    )
-    for result in candidates:
+    #
+    # Lazily — the fallbacks exist for pages trafilatura cannot handle, and a
+    # tuple of already-evaluated calls ran readability AND BeautifulSoup over
+    # every page even when trafilatura had already succeeded. That is two
+    # full DOM parses per article thrown away, which the batch path multiplies
+    # by the number of stories in the brief.
+    for extractor in (
+        lambda: _via_trafilatura(html, url),
+        lambda: _via_readability(html),
+        lambda: _via_soup(html),
+    ):
+        result = extractor()
         if result:
             result["success"] = True
             result["url"] = url
