@@ -1774,6 +1774,15 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
         "Sell-side analyst consensus, as published by the data vendor — not "
         "computed here. Targets are twelve-month price objectives; the badge is "
         "the vendor's summary of the individual ratings behind them.\n\n"
+        "CONSENSUS is the mean of the individual ratings on a 1–5 scale where 5 "
+        "is Strong Buy — the orientation Bloomberg's ANR standardises every "
+        "contributor onto. The vendor publishes this figure INVERTED (its 1 is "
+        "Strong Buy), so the number here is 6 minus the raw value; compare it "
+        "against a vendor screen with that in mind.\n\n"
+        "One discipline this consensus does NOT have: Bloomberg drops a "
+        "contributor from ANR once its rating is a year stale. The vendor "
+        "applies no such rule and publishes no per-analyst dates, so a rating "
+        "here may rest partly on views nobody has revisited in some time.\n\n"
         "This is a fundamental view, and it is measuring something different "
         "from the STRONG BUY … STRONG SELL verdict on the Technicals tab, which "
         "describes the trend currently in the price. The two routinely disagree, "
@@ -1784,6 +1793,7 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
     target_mean_val_ = add_row(p, "MEAN", YELLOW);
     target_low_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
     analyst_count_val_ = add_row(p, "ANALYSTS", CYAN);
+    rec_consensus_val_ = add_row(p, "CONSENSUS", CYAN);
 
     rec_key_label_ = new QLabel("\xe2\x80\x94");
     rec_key_label_->setAlignment(Qt::AlignCenter);
@@ -1791,6 +1801,18 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
                                           "font-size:12px;font-weight:700;")
                                       .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY()));
     static_cast<QVBoxLayout*>(p->layout())->addWidget(rec_key_label_);
+
+    // The horizon is DATA, not a footnote — Bloomberg's ANR carries the price
+    // target time period as its own field beside the targets and the consensus,
+    // and it is the single fact that stops this panel reading as a rebuttal of
+    // the Technicals verdict. Shown permanently rather than on hover, because
+    // the reader confused by the disagreement is exactly the reader who never
+    // thinks to hover.
+    horizon_note_ = new QLabel(QStringLiteral("12-month targets · sell-side consensus"));
+    horizon_note_->setWordWrap(true);
+    horizon_note_->setStyleSheet(QString("color:%1;font-size:10px;background:transparent;border:0;")
+                                     .arg(ui::colors::TEXT_SECONDARY()));
+    static_cast<QVBoxLayout*>(p->layout())->addWidget(horizon_note_);
 
     targets_note_ = new QLabel;
     targets_note_->setWordWrap(true);
@@ -1923,7 +1945,7 @@ void EquityOverviewTab::clear_info_panels() {
                       institutions_val_, short_pct_val_,
                       w52h_val_, w52l_val_, avg_vol_val_,
                       target_high_val_, target_mean_val_, target_low_val_,
-                      analyst_count_val_,
+                      analyst_count_val_, rec_consensus_val_,
                       gross_margin_val_, op_margin_val_, profit_margin_val_,
                       roa_val_, roe_val_,
                       rev_growth_val_, earnings_growth_val_,
@@ -1963,6 +1985,23 @@ void EquityOverviewTab::refresh_target_rows() {
     target_mean_val_->setText(target_text(info.target_mean));
     target_low_val_->setText(target_text(info.target_low));
     analyst_count_val_->setText(info.analyst_count > 0 ? QString::number(info.analyst_count) : "N/A");
+
+    // The bucket word alone discards most of what the vendor sent: "STRONG BUY"
+    // spans a raw mean anywhere from 1.0 to 1.49, and the score is what
+    // separates a unanimous book from one that barely cleared the boundary.
+    // ANR leads with this number for that reason. It was already fetched,
+    // parsed and stored on EquityInfo — only the panel never read it.
+    //
+    // Re-oriented to Bloomberg's convention (5 = Strong Buy), because "1.4 out
+    // of 5" reads as bearish to anyone who does not know the vendor inverts its
+    // scale. Guarded to the documented 1..5 domain: a value outside it is not a
+    // rating that can be re-oriented, and 6 - x would silently invent one.
+    if (rec_consensus_val_) {
+        const double m = info.recommendation_mean;
+        const bool sane = std::isfinite(m) && m >= 1.0 && m <= 5.0;
+        rec_consensus_val_->setText(sane ? QString("%1 / 5").arg(6.0 - m, 0, 'f', 1)
+                                         : ui::formatting::placeholder());
+    }
 }
 
 void EquityOverviewTab::apply_quote_state(const services::query::QueryStore::State& s) {

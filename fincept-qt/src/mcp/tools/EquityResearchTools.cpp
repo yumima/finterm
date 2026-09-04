@@ -111,7 +111,15 @@ QJsonObject info_to_json(const services::equity::StockInfo& i) {
         {"target_high", i.target_high},
         {"target_low", i.target_low},
         {"target_mean", i.target_mean},
+        // Raw vendor orientation, kept as-is so existing consumers don't shift
+        // under them — but the Overview panel renders 6 - this on Bloomberg's
+        // ANR footing (5 = Strong Buy), so an agent quoting the bare number
+        // would contradict the tab for the same stock. The scale travels with
+        // the value rather than living only in a tooltip a model never sees.
         {"recommendation_mean", i.recommendation_mean},
+        {"recommendation_mean_scale",
+         QStringLiteral("1=strong buy … 5=strong sell (vendor orientation; the "
+                        "Overview panel shows 6 minus this, so that 5=strong buy)")},
         {"recommendation_key", i.recommendation_key},
         {"analyst_count", i.analyst_count},
     };

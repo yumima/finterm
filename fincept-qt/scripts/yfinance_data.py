@@ -3196,6 +3196,11 @@ def _resolve_for_history(symbols, period, auto_adjust=True):
                 interval="1d",
                 group_by="ticker",
                 auto_adjust=auto_adjust,
+                # Carries the "Stock Splits" column the repair reads. Without it
+                # the only way to learn a symbol's splits is a per-symbol
+                # Ticker fetch, which is both an ungated concurrent download and
+                # the opposite of what this bulk path exists to do.
+                actions=True,
                 progress=False,
                 threads=True,
             )
@@ -3209,9 +3214,46 @@ def _resolve_for_history(symbols, period, auto_adjust=True):
 
     def closes_for(ticker):
         try:
-            if single:
-                return data["Close"].dropna()
-            return data[ticker]["Close"].dropna()
+            # .copy() is load-bearing, not defensive: data[ticker] is a slice
+            # view of the bulk frame, and the repair's writes into a view are
+            # the SettingWithCopy case pandas explicitly does not promise to
+            # honour. Copying also keeps one symbol's repair from reaching into
+            # the shared frame the other symbols are still read from.
+            # group_by="ticker" returns MultiIndex columns even for a single
+            # ticker (multi_level_index defaults True), so the old `data`
+            # shortcut for the one-candidate case made frame["Close"] a KeyError
+            # that closes_for swallowed into "missing". A portfolio whose only
+            # holding is a suffixed or hyphenated symbol — BTC-USD, RY.TO,
+            # ^GSPC, none of which generate extra suffix candidates — got no NAV
+            # backfill at all. Both shapes are handled rather than pinning
+            # multi_level_index, which older yfinance does not accept.
+            frame = (data[ticker] if isinstance(data.columns, pd.MultiIndex)
+                     else data).copy()
+            # Splits and dividends are INDEPENDENT axes, and only one of them is
+            # this caller's to decline. Bloomberg splits the same decision three
+            # ways — CapChg for splits, spin-offs and stock dividends,
+            # CshAdjNormal for regular cash dividends, CshAdjAbnormal for
+            # specials — so a request can carry raw, dividend-inclusive prices
+            # while still being on one consistent share basis. auto_adjust is a
+            # single boolean and cannot express that.
+            #
+            # auto_adjust gates CshAdjNormal only: yfinance applies CapChg
+            # unconditionally (NVDA's 10:1 comes back at ~118 on 2024-06-05 with
+            # auto_adjust=False, not ~1180). These callers therefore already
+            # receive split-adjusted prices, and the repair restores that basis
+            # when the vendor fails to deliver it — it is not introducing an
+            # adjustment they opted out of.
+            #
+            # NOT claimed here: that this makes portfolio NAV correct across a
+            # split. PortfolioLedger replays a SPLIT row as quantity *= ratio,
+            # so a pre-split date holds the PRE-split share count while the
+            # price for that date is already POST-split — the backfill is out by
+            # the ratio for any holding whose splits are entered as SPLIT rows,
+            # which is exactly what get_portfolio_closes_history's docstring
+            # asks users to do. Separate, pre-existing defect in the
+            # ledger/price pairing; this repair neither causes nor cures it.
+            frame = _repair_unadjusted_splits(frame, ticker)
+            return frame["Close"].dropna()
         except Exception:
             return None
 
@@ -3302,8 +3344,12 @@ def _yf_ticker_with_fallback(symbol):
 # 1: at k=1.5 with a 25% window, a correctly-adjusted 3-for-2 on a day the stock
 # fell 11% lands inside the accept band, and "repairing" it manufactures a 50%
 # up-gap — the same harm as the bug, pointing the other way. Requiring k >= 1.8
-# (or <= 0.55) at a 15% window means the applied case would need a 35% single-bar
-# crash on the exact effective date to be mistaken for an unapplied split.
+# (or <= 0.55) at a 15% window means the applied case would need a real move on
+# the exact effective bar of -35% to -52% (at the forward cutoff) or +58% to
+# +114% (at the reverse cutoff) to be mistaken for an unapplied split. Forward is
+# the looser of the two — a 35% crash is likelier than a 58% single-bar gain —
+# which is why the forward cutoff is the one pushed out to 1.8 rather than being
+# set symmetrically at 1/0.55.
 #
 # The cost is that 3:2 and 5:4 splits are never repaired. That is the right
 # trade: they are genuinely undecidable from the price series alone, and every
@@ -3314,51 +3360,62 @@ _SPLIT_MIN_FORWARD = 1.8
 _SPLIT_MAX_REVERSE = 0.55
 
 
-def _repair_unadjusted_splits(hist, ticker, symbol=""):
+def _repair_unadjusted_splits(hist, symbol=""):
     """Back-adjust a history whose splits the vendor announced but never applied.
 
     On the session a split takes effect Yahoo flips the quote to the new basis
-    before it rewrites the historical bars, so `history()` returns the split in
-    `.splits` while every pre-split bar is still quoted on the old one. The
-    series then carries a one-bar cliff of exactly the split ratio, and nothing
-    downstream can tell it from a crash: APH's 2-for-1 on 2026-09-03 put the
-    price 43% under all six moving averages, drove CCI to -539 and Aroon-down to
-    100, and the Technicals verdict came back SELL on a stock trading near its
-    highs. The 52-week low, the chart and every moving-average distance were
-    wrong the same way, because all of them read this one series. yfinance
-    normally gets this right — LRCX, NFLX, PANW, KLAC, ANET and CRWD all
-    back-adjust cleanly in the same window — so the exposure is the day or two
-    after a split, which is exactly when someone looks at the ticker.
+    before it rewrites the historical bars, so the frame reports the split in
+    its actions column while every pre-split bar is still quoted on the old one.
+    The series then carries a one-bar cliff of exactly the split ratio, and
+    nothing downstream can tell it from a crash: APH's 2-for-1 on 2026-09-03 put
+    the price 43% under all six moving averages, drove CCI to -539 and
+    Aroon-down to 100, and the Technicals verdict came back SELL on a stock
+    trading near its highs. The 52-week low, the chart and every moving-average
+    distance were wrong the same way, because all of them read this one series.
+    yfinance normally gets this right — LRCX, NFLX, PANW, KLAC, ANET and CRWD
+    all back-adjust cleanly in the same window — so the exposure is the day or
+    two after a split, which is exactly when someone looks at the ticker.
 
-    Detection is the announced ratio, never the size of the gap; see the
-    cutoffs above. That is why a genuine 33% earnings gap (ORCL, DELL, MRVL and
-    IONQ each have one in this window) is never touched: no split is announced
-    on those dates at all.
+    Splits are read from the frame's own "Stock Splits" column rather than from
+    Ticker.splits. That is not a stylistic preference: a fresh Ticker's .splits
+    triggers its own history fetch, which would put one ungated network call per
+    symbol inside a path whose entire purpose is a single bulk download, and
+    concurrent yfinance downloads return each other's tickers. Reading the
+    column also means the split timestamp IS an index value, so there is no
+    timezone to reconcile and no way for the splits to describe a different
+    series than the bars.
 
-    The boundary is found positionally rather than by comparing timestamps to
-    the split instant, because bar stamping differs by interval and the naive
-    comparison silently disables the whole repair on the 1W toggle. A weekly bar
-    is stamped at the START of its week, so the bar that straddles a mid-week
-    split sorts BEFORE the split instant even though its close is already on the
-    new basis — for APH every one of the 105 weekly bars sorted before
-    2026-09-03, leaving nothing on the far side to compare against and skipping
-    the repair entirely while the 47% cliff stayed in the weekly rating. Testing
-    both candidate boundaries and letting the ratio pick the winner covers daily
-    and weekly with one rule.
+    Detection is the announced ratio, never the size of the gap; see the cutoffs
+    above. That is why a genuine 33% earnings gap (ORCL, DELL, MRVL and IONQ
+    each have one in this window) is never touched: no split is announced on
+    those dates at all.
+
+    The boundary is positional, which is what makes one rule cover every
+    interval. A weekly bar is stamped at the start of its week and carries the
+    split on that same bar, so searchsorted lands on the first bar of the new
+    basis for daily and weekly alike; comparing timestamps against the split
+    instant instead put all 105 of APH's weekly bars on the "before" side and
+    skipped the repair entirely while the 47% cliff stayed in the weekly rating
+    (the 1W toggle is a live path). The j-1 candidate is defence for any feed
+    that stamps the action on the preceding bar — the ratio test decides which
+    boundary is real, so an extra candidate cannot pick a wrong one.
 
     Volume moves the other way, as yfinance's own adjustment does; MFI, OBV, CMF
     and VWAP all read it.
 
-    Fail-soft by construction: the caller wraps everything in `except Exception`
-    and turns a raise into `{"error": ...}`, which would blank the chart, the
-    technicals AND the 52-week band. A repair that cannot run must leave the
-    series alone, not delete it.
+    Fail-soft by construction: callers wrap this in `except Exception` and turn a
+    raise into an error result, which would blank the chart, the technicals AND
+    the 52-week band. A repair that cannot run must leave the series alone, not
+    delete it.
     """
     try:
-        splits = getattr(ticker, "splits", None)
-        if splits is None or len(splits) == 0 or hist is None or hist.empty:
+        if hist is None or hist.empty or "Close" not in hist.columns:
             return hist
-        if "Close" not in hist.columns:
+        actions = hist.get("Stock Splits")
+        if actions is None:
+            return hist
+        announced = actions[actions.notna() & (actions != 0)]
+        if announced.empty:
             return hist
         price_cols = [c for c in ("Open", "High", "Low", "Close", "Adj Close")
                       if c in hist.columns]
@@ -3366,27 +3423,15 @@ def _repair_unadjusted_splits(hist, ticker, symbol=""):
             return hist
 
         idx = hist.index
-        for split_ts, ratio in splits.items():
+        for split_ts, ratio in announced.items():
             try:
                 k = float(ratio)
             except (TypeError, ValueError):
                 continue
             if not (k >= _SPLIT_MIN_FORWARD or 0 < k <= _SPLIT_MAX_REVERSE):
                 continue
-            try:
-                split_ts = (split_ts.tz_convert(idx.tz) if idx.tz is not None
-                            else split_ts.tz_localize(None))
-            except (TypeError, AttributeError):
-                pass  # already on the index's tz footing
-            try:
-                j = int(idx.searchsorted(split_ts))
-            except TypeError:
-                continue  # index/split timezone mismatch we cannot reconcile
-
+            j = int(idx.searchsorted(split_ts))
             closes = hist["Close"]
-            # j  — the split-date bar is the first on the new basis (daily).
-            # j-1 — the bar straddling the split already is (weekly, and any
-            #       interval coarser than the split's own session).
             for boundary in (j, j - 1):
                 if boundary <= 0 or boundary >= len(idx):
                     continue
@@ -3404,19 +3449,34 @@ def _repair_unadjusted_splits(hist, ticker, symbol=""):
                 if abs(observed - k) > _SPLIT_TOLERANCE * k:
                     continue
 
-                mask = hist.index[:boundary]
+                # A boolean mask indexes .loc BY POSITION, which is the only
+                # form that survives a duplicated timestamp. Selecting with
+                # labels (idx[:boundary]) matches EVERY occurrence of a repeated
+                # stamp, so a bar sitting after the boundary that shares a label
+                # with one before it was divided by k too — a correctly-basised
+                # bar silently halved. yfinance does emit duplicate stamps
+                # (synthetic action rows, DST/exchange-date collisions), and the
+                # detection above is already positional, so the write must agree.
+                sel = [i < boundary for i in range(len(hist))]
                 for col in price_cols:
-                    hist.loc[mask, col] = hist.loc[mask, col] / k
+                    hist.loc[sel, col] = hist.loc[sel, col] / k
+                # Per-share cash amounts sit on the same basis as the prices: a
+                # dividend declared before a 2:1, quoted post-split, is half the
+                # figure. Rescaled so the frame this hands back is internally
+                # consistent, even though no caller reads these columns yet.
+                for col in ("Dividends", "Capital Gains"):
+                    if col in hist.columns:
+                        hist.loc[sel, col] = hist.loc[sel, col] / k
                 if "Volume" in hist.columns:
-                    # int64 in, float out: assigning floats into an int column
-                    # is a FutureWarning in pandas 2 and raises in pandas 3, and
-                    # a raise here costs the whole series (see docstring).
+                    # int64 in, float out: assigning floats into an int column is
+                    # a FutureWarning in pandas 2 and raises in pandas 3, and a
+                    # raise here costs the whole series (see docstring).
                     hist["Volume"] = hist["Volume"].astype("float64")
-                    hist.loc[mask, "Volume"] = hist.loc[mask, "Volume"] * k
+                    hist.loc[sel, "Volume"] = hist.loc[sel, "Volume"] * k
                 import sys
                 print("[yfinance_data] split-repair %s: vendor left its %g:1 on %s "
                       "unadjusted (observed ratio %.3f); back-adjusted %d bars"
-                      % (symbol or getattr(ticker, "ticker", "?"), k,
+                      % (symbol or "?", k,
                          getattr(split_ts, "date", lambda: split_ts)(),
                          observed, boundary),
                       file=sys.stderr)
@@ -3462,7 +3522,6 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
         if hist.empty:
             ticker_alt, _ = _yf_ticker_with_fallback(symbol)
             if ticker_alt.ticker != symbol:
-                ticker = ticker_alt  # .splits below must match the bars we got
                 with contextlib.redirect_stdout(_buf):
                     if is_range:
                         hist = ticker_alt.history(start=range_start, end=range_end,
@@ -3477,7 +3536,7 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
         # A split Yahoo has announced but not yet applied to the bars would
         # otherwise reach the chart, the technicals and the 52-week band as a
         # ~50% crash. Repaired here, at the one chokepoint all three share.
-        hist = _repair_unadjusted_splits(hist, ticker, symbol)
+        hist = _repair_unadjusted_splits(hist, symbol)
 
         # PRICE BASIS is the CALLER's decision, defaulting to total-return
         # (auto_adjust=True) and pinned rather than inherited from a library

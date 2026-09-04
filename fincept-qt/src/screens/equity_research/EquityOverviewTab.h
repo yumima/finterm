@@ -371,7 +371,9 @@ class EquityOverviewTab : public QWidget {
     QLabel* target_mean_val_ = nullptr;
     QLabel* target_low_val_ = nullptr;
     QLabel* analyst_count_val_ = nullptr;
+    QLabel* rec_consensus_val_ = nullptr;
     QLabel* rec_key_label_ = nullptr;
+    QLabel* horizon_note_ = nullptr;
     /// Says WHY the target rows are blank — "no analyst coverage" and "we did
     /// not get the data" are different facts and a trader must not read one
     /// as the other.
