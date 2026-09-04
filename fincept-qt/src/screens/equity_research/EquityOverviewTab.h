@@ -45,9 +45,6 @@ class ResearchCandleCanvas : public QWidget {
     /// Earnings markers — drawn as dashed vertical lines at each event
     /// whose timestamp lies within the visible candle window.
     void set_earnings_events(const QVector<services::equity::EarningsEvent>& events);
-    /// 52-week high for the crosshair "vs 52w-high" comparator. Set by the
-    /// tab when StockInfo arrives; 0 ⇒ comparator suppressed.
-    void set_week52_high(double v);
 
   signals:
     /// Fired whenever the crosshair lands on a different candle (mouseMove)
@@ -85,7 +82,6 @@ class ResearchCandleCanvas : public QWidget {
     bool show_sma50_  = false;
     bool show_sma200_ = false;
     QVector<services::equity::EarningsEvent> earnings_events_;
-    double week52_high_ = 0.0;
 
     // Comparison overlay state. Each series is rendered as a single line
     // normalized to the primary symbol's first visible close — so the user
@@ -193,6 +189,17 @@ class EquityOverviewTab : public QWidget {
     /// signal/slot machinery.
     void apply_quote_state(const services::query::QueryStore::State& s);
     void apply_info_state(const services::query::QueryStore::State& s);
+    /// Re-render the analyst-target rows from cached_info_ against the CURRENT
+    /// quote. Called from both the info and quote paths: each row states its
+    /// target's distance from the live price, and the quote TTL is far shorter
+    /// than info's, so rendering it once at info time let the percentage drift
+    /// away from the price shown three rows above it.
+    void refresh_target_rows();
+    /// Reset every label apply_info_state writes back to the missing
+    /// placeholder. Called on symbol change: info is the slowest of the three
+    /// fetches and errors leave it unwritten, so without this the previous
+    /// company's fundamentals sit under the new header indefinitely.
+    void clear_info_panels();
     void apply_historical_state(const services::query::QueryStore::State& s);
     void apply_earnings_state(const services::query::QueryStore::State& s);
     /// Bind or drop the earnings subscription depending on the EARN toggle
@@ -365,6 +372,10 @@ class EquityOverviewTab : public QWidget {
     QLabel* target_low_val_ = nullptr;
     QLabel* analyst_count_val_ = nullptr;
     QLabel* rec_key_label_ = nullptr;
+    /// Says WHY the target rows are blank — "no analyst coverage" and "we did
+    /// not get the data" are different facts and a trader must not read one
+    /// as the other.
+    QLabel* targets_note_ = nullptr;
 
     // 52 Week Range
     QLabel* w52h_val_ = nullptr;

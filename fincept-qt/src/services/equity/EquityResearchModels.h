@@ -65,6 +65,11 @@ struct StockInfo {
     QString country;
     QString currency;
     QString exchange;
+    /// Yahoo quoteType: EQUITY / ETF / MUTUALFUND / INDEX / CRYPTOCURRENCY.
+    /// Lets a panel say WHY a figure is absent — an ETF has no analyst target
+    /// because none exists, a stock has none because the fetch came back
+    /// short, and rendering both as a dash tells the user neither.
+    QString quote_type;
     int employees = 0;
 
     // Valuation
@@ -269,32 +274,6 @@ struct NewsArticle {
     QString publisher;
     QString published_date;
 };
-
-// ── Optional market sentiment snapshot ──────────────────────────────────────
-struct SentimentSourceSnapshot {
-    QString source_id;
-    QString label;
-    bool available = false;
-    double buzz_score = 0.0;
-    double bullish_pct = 0.0;
-    double sentiment_score = 0.0;
-    double activity_count = 0.0;
-};
-
-struct MarketSentimentSnapshot {
-    QString symbol;
-    bool configured = false;
-    bool available = false;
-    QString status;
-    QString message;
-    double average_buzz = 0.0;
-    double average_bullish_pct = 0.0;
-    int coverage = 0;
-    QString source_alignment;
-    QVector<SentimentSourceSnapshot> sources;
-    QString fetched_at;
-};
-
 // ── Earnings event ───────────────────────────────────────────────────────────
 // Single earnings announcement — used to draw markers on the price chart.
 // Surprise percentage is signed: positive = beat, negative = miss.

@@ -702,24 +702,50 @@ namespace {
 /// Thread pool for brief generation, kept off QThreadPool::globalInstance().
 ///
 /// Each half of a brief blocks a thread for the whole request — up to 120s per
-/// hop, times the quota-fallback chain, plus a collapse retry. Two halves run
-/// concurrently, and TL;DR and DIGEST are separate pipelines over different
-/// pools, so a user who presses both has four threads parked on the network.
-/// The global pool defaults to the core count and is what
-/// NewsScreen::apply_filters_async and cluster_articles run on; on a four-core
-/// box those briefs would hold the whole pool and the feed would stop
-/// responding to filter changes for minutes.
+/// hop, times the quota-fallback chain, plus a collapse retry. TL;DR and
+/// DIGEST are separate pipelines, so a user who presses both has several
+/// threads parked on the network. The global pool defaults to the core count
+/// and is what NewsScreen::apply_filters_async and cluster_articles run on; on
+/// a four-core box those briefs would hold the whole pool and the feed would
+/// stop responding to filter changes for minutes.
 ///
-/// Four threads: enough for both surfaces at once, and a fifth request queues
-/// rather than adding another parked thread.
-QThreadPool& brief_pool() {
+/// SIZE DEPENDS ON THE PROVIDER. One thread against a LOCAL model, four
+/// against a hosted one. The two halves are separate requests and a local
+/// Ollama executes them one at a time whatever we do — issuing both at once
+/// does not make the pair finish sooner, it just means the queued request
+/// spends its own timeout sitting in someone else's queue.
+///
+/// Measured against hearth/qwen3.5:9b with an identical toy prompt: two
+/// concurrent calls returned in 27s and 61s — 27s of work behind 34s of
+/// waiting. The request timeout is 120s and a real brief prompt is several
+/// times that toy, so the second half is the one that times out, and it
+/// surfaces to the user as "the model returned nothing". Serialising costs
+/// nothing in wall clock and gives each half its own full timeout.
+///
+/// ONE pool, shared by TL;DR and DIGEST, deliberately.
+///
+/// At size 1 the second surface queues behind the first, so pressing both on
+/// a local model means DIGEST waits out TL;DR before its request is issued.
+/// That is the correct trade, not an oversight. A per-surface pool would not
+/// avoid the wait — a local Ollama has one execution slot, so DIGEST would
+/// simply wait inside OLLAMA's queue instead of ours, and there its own 120s
+/// timeout is already running. Waiting in our queue costs a longer spinner;
+/// waiting in theirs costs a spurious "the model returned nothing".
+///
+/// A hosted provider takes want == 4 and neither queue exists.
+QThreadPool& brief_pool(const QString& provider) {
     static QThreadPool pool;
     static bool configured = [] {
-        pool.setMaxThreadCount(4);
         pool.setObjectName(QStringLiteral("news-brief"));
         return true;
     }();
     Q_UNUSED(configured)
+    const QString eff = provider.isEmpty()
+                            ? ai_chat::LlmService::instance().active_provider()
+                            : provider;
+    const int want = ai_chat::is_hearth_provider(eff) ? 1 : 4;
+    if (pool.maxThreadCount() != want)
+        pool.setMaxThreadCount(want);
     return pool;
 }
 
@@ -1022,7 +1048,7 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                                          }
                                          finish();
                                      });
-                    top_watcher->setFuture(QtConcurrent::run(&brief_pool(), [top_prompt, top_scope]() {
+                    top_watcher->setFuture(QtConcurrent::run(&brief_pool(scope.provider), [top_prompt, top_scope]() {
                         return news_run_brief_call(top_prompt, top_scope, "top half");
                     }));
 
@@ -1059,7 +1085,7 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                                          }
                                          finish();
                                      });
-                    cat_watcher->setFuture(QtConcurrent::run(&brief_pool(), [breakdown_prompt, cat_scope]() {
+                    cat_watcher->setFuture(QtConcurrent::run(&brief_pool(scope.provider), [breakdown_prompt, cat_scope]() {
                         return news_run_brief_call(breakdown_prompt, cat_scope, "breakdown");
                     }));
                 });

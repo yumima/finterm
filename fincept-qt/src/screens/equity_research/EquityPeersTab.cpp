@@ -259,9 +259,23 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
     // NaN is "the vendor did not supply this". Every comparison against it is
     // false, so without an explicit branch an unknown ratio falls through to
     // the worst-case colour and reads as a red flag the data never supported.
+    // Shared by P/E, FWD P/E, P/B, P/S, PEG and D/E — "lower is better" on a
+    // good/warn scale. Three cases the scale itself cannot express:
+    //   absent   -> grey. Nothing is known.
+    //   negative -> RED. Real and adverse, and the scale does not apply: a
+    //               negative P/E or PEG means the company is losing money, and
+    //               a negative debtToEquity means negative shareholders'
+    //               equity (MCD, HD, PM all report one). Painting those green
+    //               would put the worst names at the top of a column someone
+    //               scans for the cheapest and safest.
+    //   zero     -> falls through to the normal scale, which already returns
+    //               green because every call site's `good` is above zero. A
+    //               debt-free peer genuinely is best-in-basket.
     auto color_ratio = [](double v, double good, double warn) -> QColor {
-        if (!std::isfinite(v) || v <= 0.0)
+        if (!std::isfinite(v))
             return QColor("#6b7280");
+        if (v < 0.0)
+            return QColor(ui::colors::NEGATIVE());
         if (v <= good)
             return QColor(ui::colors::POSITIVE());
         if (v <= warn)
@@ -331,10 +345,15 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
         set_cell(r, 13, fmt(p.debt_to_equity, 2), color_ratio(p.debt_to_equity, 0.5, 2.0));
         set_cell(r, 14, fmt_pct(p.dividend_yield),
                  p.dividend_yield > 0 ? QColor(ui::colors::POSITIVE()) : QColor("#6b7280"));
+        // MAGNITUDE, not sign. A mild negative beta is a real and useful
+        // reading (gold miners, inverse funds) and should not wear the
+        // high-volatility red — but a 3x inverse ETF at beta -3 moves three
+        // times the market and must not read as calm either. This column is a
+        // volatility gauge, so it grades |beta|.
         set_cell(r, 15, fmt(p.beta, 2),
                  !std::isfinite(p.beta) ? QColor("#6b7280")
-                 : (p.beta >= 0 && p.beta <= 1.5) ? QColor(ui::colors::POSITIVE())
-                                                  : QColor(ui::colors::NEGATIVE()));
+                 : (std::abs(p.beta) <= 1.5) ? QColor(ui::colors::POSITIVE())
+                                             : QColor(ui::colors::NEGATIVE()));
 
         // COMP — explicit QCheckBox widget (last column). For the primary
         // row it's shown but disabled (self-comparison is meaningless).

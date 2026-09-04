@@ -13,6 +13,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
+#include <QRegularExpression>
 
 #include <algorithm>
 #include <cmath>
@@ -154,13 +155,20 @@ void update_symbol_cache(const QString& symbol, const QString& key,
     const QString fname = symbol_filename(symbol);
     QJsonObject root = disk_cache().load(fname).object();
     root.insert(key, value);
-    // A versioned sub-key leaves its predecessor behind: nothing reads the
-    // old one once the hydrator moves to "<key>_vN", but every save would
-    // keep re-serialising a payload that can never be used again. Drop it
-    // when writing the successor. ("info" carried dividend_yield as Yahoo's
-    // percentage; that is the whole reason the key moved.)
-    if (key.endsWith(QLatin1String("_v2")))
-        root.remove(key.chopped(3));
+    // A versioned sub-key leaves its predecessors behind: nothing reads them
+    // once the hydrator moves to "<base>_vN", but every save would keep
+    // re-serialising payloads that can never be used again. Drop the whole
+    // lineage — the unversioned original and every earlier version — rather
+    // than only the immediate predecessor, so a second bump does not strand
+    // the one before it.
+    static const QRegularExpression kVersioned(QStringLiteral("^(.*)_v(\\d+)$"));
+    if (const auto m = kVersioned.match(key); m.hasMatch()) {
+        const QString base = m.captured(1);
+        const int ver = m.captured(2).toInt();
+        root.remove(base);
+        for (int v = 2; v < ver; ++v)
+            root.remove(base + QStringLiteral("_v") + QString::number(v));
+    }
     disk_cache().save(fname, QJsonDocument(root));
 }
 
@@ -252,12 +260,14 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
         // quote / info / financials / news live in the root, peers as array
         if (root.contains("quote"))
             repopulate("quote", "equity:quote:", kQuoteTtlSec);
-        // "info_v2": the pre-v2 disk blobs carry dividend_yield as Yahoo's
-        // PERCENTAGE. Rehydrating those into the v2 key would put a 100x
-        // value back in front of the user, which is exactly what the key
-        // bump exists to prevent — so the disk sub-key moves with it.
-        if (root.contains("info_v2"))
-            repopulate("info_v2", "equity:info:v2:", kInfoTtlSec);
+        // "info_v3": adds quote_type, which v2 blobs lack — without it an
+        // ETF served from a warm entry has no way to say it HAS no analysts
+        // and falls into the "incomplete profile, refresh to retry" branch.
+        // (v2 itself existed because pre-v2 blobs carried dividend_yield as
+        // Yahoo's PERCENTAGE.) The disk sub-key moves with the key so a
+        // stale blob cannot rehydrate into the new one.
+        if (root.contains("info_v3"))
+            repopulate("info_v3", "equity:info:v3:", kInfoTtlSec);
         if (root.contains("financials"))
             repopulate("financials", "equity:financials:", kFinancialsTtlSec);
         if (root.contains("news"))
@@ -452,10 +462,10 @@ void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbo
 void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol,
                                            query::QueryStore::Callback cb) {
     if (symbol.isEmpty()) return;
-    const QString key = "equity:info:v2:" + symbol;
+    const QString key = "equity:info:v3:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
                                    query::QueryStore::Rejecter reject) {
-        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:v2:" + symbol);
+        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:v3:" + symbol);
         const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
         if (!icv.isNull()) {
             StockInfo parsed = parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object());
@@ -479,10 +489,10 @@ void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol
                     return;
                 }
                 fincept::CacheManager::instance().put(
-                    "equity:info:v2:" + symbol,
+                    "equity:info:v3:" + symbol,
                     QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
                     kInfoTtlSec, "equity");
-                update_symbol_cache(symbol, "info_v2", obj);
+                update_symbol_cache(symbol, "info_v3", obj);
                 update_symbol_cache(symbol, "symbol", symbol);
                 StockInfo parsed = parse_info(obj);
                 emit info_loaded(parsed);
@@ -727,7 +737,7 @@ void EquityResearchService::subscribe_peers(QObject* owner, const QString& symbo
     QStringList sorted_peers = peer_symbols;
     std::sort(sorted_peers.begin(), sorted_peers.end());
     const QString basket = sorted_peers.join(",");
-    const QString key = "equity:peers:v3:" + symbol + ":" + basket;
+    const QString key = "equity:peers:v4:" + symbol + ":" + basket;
     auto fetcher = [this, symbol, peer_symbols](query::QueryStore::Resolver resolve,
                                                  query::QueryStore::Rejecter reject) {
         // No cache short-circuit at this layer — fetch_peers's own cache
@@ -903,7 +913,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
 
     // ── Info ─────────────────────────────────────────────────────────────────
     {
-        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:v2:" + symbol);
+        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:v3:" + symbol);
         const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
         if (!icv.isNull()) {
             emit info_loaded(parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object()));
@@ -921,10 +931,10 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                         return;
                     }
                     fincept::CacheManager::instance().put(
-                        "equity:info:v2:" + symbol,
+                        "equity:info:v3:" + symbol,
                         QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec,
                         "equity");
-                    update_symbol_cache(symbol, "info_v2", obj);
+                    update_symbol_cache(symbol, "info_v3", obj);
                     update_symbol_cache(symbol, "symbol", symbol);
                     emit info_loaded(parse_info(obj));
                 });
@@ -1167,7 +1177,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
     QStringList key_syms;
     key_syms.append(symbol);
     key_syms.append(peer_symbols);
-    const QString cache_key = "equity:peers:v3:" + key_syms.join(",");
+    const QString cache_key = "equity:peers:v4:" + key_syms.join(",");
 
     // Tier 0: SWR cache — peer ratios are stable over hour-scale.
     {
@@ -1356,6 +1366,7 @@ StockInfo EquityResearchService::parse_info(const QJsonObject& o) const {
     s.country = str(o, "country");
     s.currency = str(o, "currency");
     s.exchange = str(o, "exchange");
+    s.quote_type = str(o, "quote_type");
     s.employees = o["employees"].toInt();
 
     s.market_cap = num(o, "market_cap");

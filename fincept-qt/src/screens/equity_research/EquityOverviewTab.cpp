@@ -203,13 +203,6 @@ void ResearchCandleCanvas::set_earnings_events(const QVector<services::equity::E
     update();
 }
 
-void ResearchCandleCanvas::set_week52_high(double v) {
-    if (qFuzzyCompare(week52_high_, v)) return;
-    week52_high_ = v;
-    // 52w high only affects the hover overlay readout, not the cached
-    // pixmap — no need to dirty. The overlay redraws on every mouse move.
-}
-
 void ResearchCandleCanvas::resizeEvent(QResizeEvent* e) {
     QWidget::resizeEvent(e);
     dirty_ = true;
@@ -683,6 +676,12 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     // otherwise it lingers for the duration of the historical+info fetch.
     cached_candles_.clear();
     cached_info_ = {};
+    // Same trap as cached_quote_ below: {} leaves valid at its default (true),
+    // so the guard on refresh_target_rows() would pass with a blank profile
+    // and the first quote — 60s TTL, almost always ahead of info's 1800s —
+    // would overwrite the "—" clear_info_panels() just wrote with a confident
+    // "N/A" analyst count for a symbol whose profile had not loaded.
+    cached_info_.valid = false;
     // Provenance is cleared with the data it describes. Left set, data_as_of()
     // kept aging the PREVIOUS symbol's timestamps, so the freshness chip
     // reported an age for numbers that were no longer on screen — and kept
@@ -704,6 +703,8 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     if (low_val_)        low_val_->setText(QStringLiteral("--"));
     if (prev_close_val_) prev_close_val_->setText(QStringLiteral("--"));
     if (vol_val_)        vol_val_->setText(QStringLiteral("--"));
+
+    clear_info_panels();
     update_primary_stats_row(-1);
     if (loading_overlay_)
         loading_overlay_->show_loading("LOADING OVERVIEW\xe2\x80\xa6");
@@ -1490,6 +1491,7 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
         primary_delta_lbl_->clear();
         primary_vol_lbl_->clear();
         primary_52w_lbl_->clear();
+        primary_52w_lbl_->setToolTip({});
         primary_sma50_lbl_->clear();
         return;
     }
@@ -1544,6 +1546,20 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
     if (w52h > 0.0) {
         const double off_high = (c.close - w52h) / w52h * 100.0;
         primary_52w_lbl_->setText(QString("52w-hi %1%").arg(off_high, 0, 'f', 1));
+        // Which basis this actually used depends on whether the loaded window
+        // spans a year; say the one that was used rather than assuming.
+        primary_52w_lbl_->setToolTip(
+            derived_hi > 0.0
+                ? QStringLiteral(
+                      "Distance from the 52-week high of the ADJUSTED series drawn on "
+                      "this chart — basis-consistent with the crosshair's close.\n"
+                      "The 52 WEEK RANGE panel quotes the raw band instead, to match "
+                      "the quote header and the analyst targets.")
+                : QStringLiteral(
+                      "The loaded window is shorter than a year, so this uses the "
+                      "vendor's RAW 52-week high — measured against an adjusted "
+                      "close, and identical to the 52 WEEK RANGE panel.\n"
+                      "Select 1Y or longer for a basis-consistent figure."));
         // Green when close to the high (within 5%), dim otherwise. Always
         // negative for normal data so we don't bother with a "+" prefix.
         set_fg(primary_52w_lbl_,
@@ -1551,6 +1567,7 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
                                : QColor(ui::colors::TEXT_SECONDARY()));
     } else {
         primary_52w_lbl_->clear();
+        primary_52w_lbl_->setToolTip({});
     }
 
     // SMA50 delta — needs at least 50 candles ending at idx.
@@ -1753,12 +1770,26 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
                                           "font-size:12px;font-weight:700;")
                                       .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY()));
     static_cast<QVBoxLayout*>(p->layout())->addWidget(rec_key_label_);
+
+    targets_note_ = new QLabel;
+    targets_note_->setWordWrap(true);
+    targets_note_->setStyleSheet(QString("color:%1;font-size:10px;background:transparent;border:0;")
+                                     .arg(ui::colors::TEXT_SECONDARY()));
+    targets_note_->hide();
+    static_cast<QVBoxLayout*>(p->layout())->addWidget(targets_note_);
+
     static_cast<QVBoxLayout*>(p->layout())->addStretch();
     return p;
 }
 
 QWidget* EquityOverviewTab::build_52w_panel() {
     auto* p = make_panel("52 WEEK RANGE", YELLOW);
+    p->setToolTip(QStringLiteral(
+        "Unadjusted (raw) prices, the same basis as the quote header and the "
+        "analyst targets — so all three can be compared directly.\n\n"
+        "The chart and its crosshair use split/dividend-ADJUSTED prices, which "
+        "answer a different question (total return). For a dividend payer the "
+        "two bands differ by roughly the cumulative yield over the year."));
     w52h_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     w52l_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
     avg_vol_val_ = add_row(p, "AVG VOL", CYAN);
@@ -1852,6 +1883,67 @@ QDateTime EquityOverviewTab::data_as_of() const {
     return oldest;
 }
 
+void EquityOverviewTab::clear_info_panels() {
+    // Every label apply_info_state writes describes the PREVIOUS symbol, and
+    // info is the slowest of the three fetches — so without this, AAPL's
+    // market cap, P/E, margins, share stats, analyst targets, business
+    // description and cash/debt all sit under the SPY header until info
+    // lands, and PERMANENTLY if that fetch errors (apply_info_state returns
+    // early on an invalid payload). The loading overlay is parented to the
+    // chart canvas, so it hides none of this.
+    //
+    // Listed exhaustively rather than "the ones that looked stalest": a
+    // partial clear is worse than none, because the labels that DO reset stop
+    // contradicting the ones that do not, and the panel then reads as a
+    // coherent picture of the wrong company.
+    for (QLabel* l : {mktcap_val_, pe_val_, fwd_pe_val_, peg_val_, pb_val_,
+                      div_val_, beta_val_,
+                      shares_out_val_, float_val_, insiders_val_,
+                      institutions_val_, short_pct_val_,
+                      w52h_val_, w52l_val_, avg_vol_val_,
+                      target_high_val_, target_mean_val_, target_low_val_,
+                      analyst_count_val_,
+                      gross_margin_val_, op_margin_val_, profit_margin_val_,
+                      roa_val_, roe_val_,
+                      rev_growth_val_, earnings_growth_val_,
+                      cash_val_, debt_val_, free_cf_val_,
+                      company_emp_, company_web_, company_currency_}) {
+        if (l)
+            l->setText(ui::formatting::placeholder());
+    }
+    if (company_desc_)
+        company_desc_->clear();
+    if (rec_key_label_)
+        rec_key_label_->setText(ui::formatting::placeholder());
+    if (targets_note_)
+        targets_note_->hide();
+}
+
+void EquityOverviewTab::refresh_target_rows() {
+    const auto& info = cached_info_;
+    // ── Analyst Targets ──────────────────────────────────────────────────────
+    // Each target is shown with its distance from the CURRENT price, which is
+    // the number the panel exists to convey — "mean $571" is only actionable
+    // next to "+14% from here". Both sides are raw prices: targets are quoted
+    // raw and the live quote is raw, so they compare like with like. (The
+    // chart's series is split/dividend-adjusted and must NOT be used here.)
+    const double ref_px = std::isfinite(cached_quote_.price) ? cached_quote_.price
+                                                             : info.current_price;
+    const auto target_text = [&](double t) {
+        if (!std::isfinite(t))
+            return ui::formatting::placeholder();
+        const QString px = fmt_price(t);
+        if (!std::isfinite(ref_px) || ref_px <= 0.0)
+            return px;
+        const double up = (t / ref_px - 1.0) * 100.0;
+        return QString("%1  %2%3%").arg(px, up >= 0 ? "+" : "").arg(up, 0, 'f', 1);
+    };
+    target_high_val_->setText(target_text(info.target_high));
+    target_mean_val_->setText(target_text(info.target_mean));
+    target_low_val_->setText(target_text(info.target_low));
+    analyst_count_val_->setText(info.analyst_count > 0 ? QString::number(info.analyst_count) : "N/A");
+}
+
 void EquityOverviewTab::apply_quote_state(const services::query::QueryStore::State& s) {
     if (s.fetched_at.isValid())
         quote_as_of_ = s.fetched_at;
@@ -1864,6 +1956,14 @@ void EquityOverviewTab::apply_quote_state(const services::query::QueryStore::Sta
     if (!q.valid)
         return;
     cached_quote_ = q;
+    // The analyst-target rows state each target's distance from the LIVE
+    // price, so they have to be re-rendered whenever that price moves.
+    // kQuoteTtlSec is 60 and kInfoTtlSec is 1800: info usually resolves from
+    // cache before the first quote arrives, so rendering these once at info
+    // time pinned the percentages to a reference up to half an hour old while
+    // the header price beside them updated every minute.
+    if (cached_info_.valid)
+        refresh_target_rows();
     open_val_->setText(fmt_price(q.open));
     high_val_->setText(fmt_price(q.high));
     low_val_->setText(fmt_price(q.low));
@@ -1881,10 +1981,6 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
         return;
     cached_info_ = info;
     current_currency_ = info.currency;
-    // Feed the 52-week high to the canvas so the hover crosshair can show
-    // "vs 52w-high" relative %. Zero suppresses the readout cleanly.
-    if (candle_canvas_)
-        candle_canvas_->set_week52_high(info.week52_high);
     // The 52w-hi cell on the always-visible primary stats strip depends on
     // cached_info_.week52_high. If info arrives after candles (common —
     // .info is the slowest yfinance call), the strip rendered earlier
@@ -1920,18 +2016,73 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
     institutions_val_->setText(fmt_pct(info.held_institutions_pct));
     short_pct_val_->setText(fmt_pct(info.short_pct_of_float));
 
-    // 52 Week Range — same source as the crosshair readout, so the panel and
-    // the chart cannot disagree about what the band is.
-    const auto band = week52_from_candles(cached_candles_);
-    w52h_val_->setText(fmt_price(band.first  > 0.0 ? band.first  : info.week52_high));
-    w52l_val_->setText(fmt_price(band.second > 0.0 ? band.second : info.week52_low));
+    // 52 Week Range — RAW, deliberately, and on one basis always.
+    //
+    // This is a level someone trades against: "how far below its actual high
+    // is it now", and the two figures it will be read next to — the header
+    // price and the analyst targets — are both raw. Quoting an adjusted band
+    // beside them compares different definitions of price. The chart's own
+    // band stays adjusted (a dividend IS performance, which is the question
+    // the chart answers); the two are labelled so the difference is visible
+    // rather than silent.
+    //
+    // It previously used the adjusted candle band with a fallback to these
+    // raw fields, so the same two labels meant different things depending on
+    // whether the series had loaded. Measured over 69 cached symbols the
+    // bases differ by >1% on the high for 7 of them, and JEPQ's low by 8.45%.
+    w52h_val_->setText(fmt_price(info.week52_high));
+    w52l_val_->setText(fmt_price(info.week52_low));
     avg_vol_val_->setText(fmt_large(info.avg_volume));
 
-    // Analyst Targets
-    target_high_val_->setText(fmt_price(info.target_high));
-    target_mean_val_->setText(fmt_price(info.target_mean));
-    target_low_val_->setText(fmt_price(info.target_low));
-    analyst_count_val_->setText(info.analyst_count > 0 ? QString::number(info.analyst_count) : "N/A");
+    refresh_target_rows();
+
+    // Blank targets have three different causes and they are not
+    // interchangeable: a fund has no analysts by construction, a stock with a
+    // degraded payload has analysts we failed to fetch, and only the third
+    // case is genuinely "nobody covers this". Saying which is the difference
+    // between "no upside published" and "go look somewhere else".
+    if (targets_note_) {
+        const bool have_targets = std::isfinite(info.target_mean) ||
+                                  std::isfinite(info.target_high) ||
+                                  std::isfinite(info.target_low);
+        const QString qt = info.quote_type.toUpper();
+        const bool is_fund = qt == "ETF" || qt == "MUTUALFUND" || qt == "INDEX" ||
+                             qt == "CRYPTOCURRENCY" || qt == "CURRENCY";
+        // Plural nouns, not qt.toLower() + "s" — that produced "indexs",
+        // "cryptocurrencys" and "currencys" for three of the five values.
+        static const QHash<QString, QString> kFundNoun = {
+            {"ETF", QStringLiteral("ETFs")},
+            {"MUTUALFUND", QStringLiteral("mutual funds")},
+            {"INDEX", QStringLiteral("indices")},
+            {"CRYPTOCURRENCY", QStringLiteral("cryptocurrencies")},
+            {"CURRENCY", QStringLiteral("currency pairs")},
+        };
+        if (have_targets) {
+            targets_note_->hide();
+        } else if (is_fund) {
+            targets_note_->setText(QStringLiteral("Analysts do not publish price targets "
+                                                  "for %1.").arg(kFundNoun.value(qt, qt.toLower())));
+            targets_note_->show();
+        } else if (!std::isfinite(info.profit_margins) && info.recommendation_key.isEmpty()) {
+            // Discriminate on a field only Yahoo's financialData module
+            // supplies. current_price cannot do it any more: it now falls back
+            // to regularMarketPrice, which comes from the QUOTE module and is
+            // present for any live symbol — so keying on it would report the
+            // degraded BRK.B-class payload as "no analyst coverage", asserting
+            // a fact about coverage the data never supported.
+            //
+            // Margins and the recommendation key ride in the same module as
+            // the targets. A genuinely uncovered small-cap still reports
+            // margins, so "margins present, targets absent" really is no
+            // coverage; "both absent" is a module that did not arrive.
+            targets_note_->setText(QStringLiteral("Estimates unavailable — the vendor "
+                                                  "returned an incomplete profile. Refresh to retry."));
+            targets_note_->show();
+        } else {
+            targets_note_->setText(QStringLiteral("No analyst coverage reported."));
+            targets_note_->show();
+        }
+    }
 
     QString rec = info.recommendation_key.toUpper().replace("_", " ");
     const char* rec_color = ui::colors::TEXT_SECONDARY;

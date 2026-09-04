@@ -170,7 +170,8 @@ def fetch_company_data(ticker: str) -> dict:
             "operating": _safe_float(info.get("operatingMargins")),
             "ebitda": _safe_float(info.get("ebitdaMargins")),
             "net": _safe_float(info.get("profitMargins")),
-            "debt_to_equity": _safe_float(info.get("debtToEquity")),
+            # Percentage from Yahoo -> ratio, as in yfinance_data._pct_to_ratio.
+            "debt_to_equity": _safe_float(info.get("debtToEquity")) / 100.0,
             "current_ratio": _safe_float(info.get("currentRatio")),
             "quick_ratio": _safe_float(info.get("quickRatio")),
         }

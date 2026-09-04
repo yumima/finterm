@@ -3482,9 +3482,11 @@ QString IpoWatchView::build_range_html(const Entry& e) const {
     QString h = QString("<div class='big'>$%1 <span class='muted'>–</span> $%2</div>")
                     .arg(info.week52_low, 0, 'f', 2).arg(info.week52_high, 0, 'f', 2);
     if (e.last_price > 0) {
-        // Clamped here rather than inside position_bar: last_price can sit
-        // outside the band (the daily range can extend the 52-week one
-        // intraday), and a bar position is only meaningful in [0,1].
+        // Clamped here because the int(pos * 100) in the text below cannot
+        // reach position_bar's own clamp: last_price can sit outside the band
+        // (the daily range can extend the 52-week one intraday), which would
+        // print "sits at 103% of the band". position_bar clamps separately —
+        // do not remove either one as redundant.
         const double pos = std::clamp((e.last_price - info.week52_low) /
                                           (info.week52_high - info.week52_low),
                                       0.0, 1.0);

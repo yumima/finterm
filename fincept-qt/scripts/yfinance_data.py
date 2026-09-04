@@ -343,6 +343,29 @@ def _round_price(value, symbol=None):
         return value
 
 
+def _pct_to_ratio(value):
+    """A Yahoo percentage as a plain ratio, or None when absent.
+
+    Yahoo is inconsistent about which fields carry a percentage and which
+    carry a fraction, and it is not inferable from the value — so each field
+    is converted explicitly at its own call site rather than by a heuristic.
+    Verified against cached data before applying: dividendYield and
+    debtToEquity are percentages; margins, ROE, ROA, growth, insider and
+    institutional holdings and short-percent are already fractions and must
+    NOT be run through this.
+    """
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    import math as _m
+    if not _m.isfinite(f):
+        return None
+    return f / 100.0
+
+
 def _dividend_yield_fraction(value):
     """Yahoo's dividendYield as a FRACTION, which is this app's contract.
 
@@ -698,9 +721,65 @@ def get_info(symbol):
         ticker = yf.Ticker(symbol)
         info = ticker.info
 
+        # Class-share dot notation (BRK.B, BF.B) returns a degraded info dict
+        # from Yahoo — the financialData module comes back empty, so analyst
+        # targets, the recommendation and every margin are missing while the
+        # symbol still "works". get_historical_period has had this fallback
+        # since the same problem hit charts; info never got it, which is why
+        # BRK.B showed no analyst targets and BRK-B showed a full set.
+        #
+        # Narrow trigger, on the SUFFIX. An absent currentPrice is the normal
+        # state for a fund or an index rather than a symptom, and quoteType
+        # alone does not separate the cases that matter: BP.L, VOD.L and Tokyo
+        # .T listings are all quoteType == "EQUITY", so gating on that admits
+        # exactly the foreign symbols _yf_ticker_with_fallback would mangle
+        # (its regex rewrites any single trailing capital, so BP.L -> BP-L,
+        # despite a docstring claiming exchange suffixes are left alone).
+        #
+        # US class shares in practice use A-D — BRK.A/B, BF.A/B, LEN.B,
+        # GEF.B, HEI.A, CWEN.A, PBR.A — while the single-letter exchange
+        # suffixes that collide are L, T, F and V. Restricting to A-D keeps
+        # the foreign listings out and costs nothing: a class share outside
+        # that range would simply not get the retry.
+        qt = (info.get("quoteType") or "").upper()
+        if qt in ("", "EQUITY") and re.search(r"\.[A-D]$", symbol) \
+                and not info.get("currentPrice") and not info.get("targetMeanPrice"):
+            # Its own try: yfinance raises for an unknown ticker, and the
+            # fabricated alt symbol often IS unknown. Sharing the outer try
+            # would throw away the good primary payload we already hold and
+            # blank the whole overview.
+            try:
+                ticker_alt, alt = _yf_ticker_with_fallback(symbol)
+                if alt != symbol:
+                    info_alt = ticker_alt.info
+                    # Adopt only if it is the SAME COMPANY. The rewrite is a
+                    # guess — BP.L -> BP-L is a real, unrelated listing — and
+                    # the result is cached under the symbol the user asked
+                    # for, so a mismatch would silently serve one company's
+                    # name, sector, targets and margins under another's
+                    # ticker. Better a thin profile than a wrong one.
+                    def _name(d):
+                        return (d.get("longName") or d.get("shortName") or "").strip().lower()
+                    same = _name(info_alt) and _name(info_alt) == _name(info)
+                    if same and (info_alt.get("currentPrice") or
+                                 info_alt.get("targetMeanPrice")):
+                        info = info_alt
+            except Exception:
+                # Swallowed, like every other best-effort lookup in this file.
+                # stdout is the daemon's JSON frame channel, so there is no
+                # printing here; the primary payload is already in `info` and
+                # is what the caller gets.
+                pass
+
         # Extract comprehensive information - many more fields available from yfinance
         info_data = {
             "symbol": symbol,
+            # EQUITY / ETF / MUTUALFUND / INDEX / CRYPTOCURRENCY. The panels
+            # need this to say WHY a figure is missing: an ETF has no analyst
+            # target because none exists, a stock has none because the fetch
+            # came back short. Rendered identically, those are very different
+            # facts for someone setting a price target.
+            "quote_type": info.get('quoteType'),
             "company_name": info.get('longName', info.get('shortName', 'N/A')),
             "sector": info.get('sector', 'N/A'),
             "industry": info.get('industry', 'N/A'),
@@ -732,7 +811,12 @@ def get_info(symbol):
                 if o.get("name")
             ],
             # Additional comprehensive metrics
-            "current_price": info.get('currentPrice'),
+            # `or`, not a get-default: currentPrice comes from the
+            # financialData module and is absent for funds, indices and many
+            # non-US listings, where regularMarketPrice is the real quote. The
+            # overview uses this field to decide whether a profile came back
+            # incomplete, so a missing one there reads as a fetch failure.
+            "current_price": info.get('currentPrice') or info.get('regularMarketPrice'),
             "target_high_price": info.get('targetHighPrice'),
             "target_low_price": info.get('targetLowPrice'),
             "target_mean_price": info.get('targetMeanPrice'),
@@ -1750,7 +1834,15 @@ def get_financial_ratios(symbol):
             "priceToBook": info.get("priceToBook"),
             "priceToSales": info.get("priceToSalesTrailing12Months"),
             "pegRatio": info.get("trailingPegRatio"),
-            "debtToEquity": info.get("debtToEquity"),
+            # Yahoo reports debtToEquity as a PERCENTAGE — MSFT 29.12, MS
+            # 517.28 — while every consumer treats it as a ratio: the peers
+            # table grades it on a 0.5/2.0 scale, so 21 of 25 cached peers
+            # rendered red including MSFT at a conservative 0.29x, and IPO
+            # Watch and the report builder print it raw as "Debt / Equity
+            # 29.12". Converted here, at the one boundary it enters, exactly
+            # as dividendYield is. Same evidence: 21 of 25 values exceed 3,
+            # which is impossible for a ratio across that many large caps.
+            "debtToEquity": _pct_to_ratio(info.get("debtToEquity")),
             "returnOnEquity": info.get("returnOnEquity"),
             "returnOnAssets": info.get("returnOnAssets"),
             "profitMargin": info.get("profitMargins"),
@@ -1771,7 +1863,11 @@ def get_financial_ratios(symbol):
             # absent for ETFs, indices and many non-US listings — the same
             # fallback get_company_profile uses, or the new PRICE column would
             # stay empty for exactly those peer rows.
-            "price": info.get("currentPrice", info.get("regularMarketPrice")),
+            # `or`, not a get-default: a default only fires for a MISSING key,
+            # and Yahoo sends currentPrice present-but-null for halted and
+            # delisted names — the very rows the fallback exists for. (This is
+            # the same trap the comment above warns about; I walked into it.)
+            "price": info.get("currentPrice") or info.get("regularMarketPrice"),
             "beta": info.get("beta"),
             "marketCap": info.get("marketCap"),
             "revenueGrowth": info.get("revenueGrowth"),
