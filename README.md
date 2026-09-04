@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`2d8074d1c`](https://github.com/yumima/finterm/commit/2d8074d1c) ER: analyst targets, the 52-week basis, and a D/E column that was red for everyone
 - [`0fefadc8e`](https://github.com/yumima/finterm/commit/0fefadc8e) equity research: remove the Sentiment tab
 - [`ef6510ce3`](https://github.com/yumima/finterm/commit/ef6510ce3) peers + market info: the vendor's "0" meant "we don't know", and three columns were never sent
 

@@ -580,6 +580,26 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(priceless_bars PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
 endif()
 
+# ── Unapplied stock splits ───────────────────────────────────────────────────
+# On the day a split takes effect Yahoo flips the quote to the new basis before
+# it rewrites the historical bars, so history() reports the split in .splits
+# while every prior bar is still on the old one. The series then carries a
+# one-bar cliff of exactly the split ratio, and the chart, the 52-week band and
+# the Technicals rating all read it as a crash — APH came back SELL at -0.399
+# the day after its 2-for-1 while TradingView read the same tape at +0.467.
+# Pins that detection keys on the ANNOUNCED RATIO, never on the size of the
+# gap: real 30%+ earnings moves (ORCL, DELL, MRVL, IONQ all have one) must
+# survive untouched, and a split yfinance already applied must not be adjusted
+# twice.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME split_repair
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_split_repair.py
+    )
+    set_tests_properties(split_repair PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+endif()
+
 # ── AI Forecast reconciliation ───────────────────────────────────────────────
 # A model asked for a direction, a target price and a percentage returns three
 # figures that need not agree, and the tab stored all three — so the table, the

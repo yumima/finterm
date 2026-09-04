@@ -1759,6 +1759,27 @@ QWidget* EquityOverviewTab::build_col4() {
 
 QWidget* EquityOverviewTab::build_analyst_panel() {
     auto* p = make_panel("ANALYST TARGETS", MAGENTA);
+    // Say whose opinion this is and over what horizon, because the same word
+    // appears on the Technicals gauge one tab over meaning something else
+    // entirely. IONQ carried a SELL there (correctly: below all four moving
+    // averages, -37% in three months) while showing STRONG BUY here
+    // (correctly: 13 analysts, mean rating 1.38, a $67.68 mean target against
+    // $39.28 spot). Neither is wrong and they must not be reconciled — one
+    // describes the tape, the other is a twelve-month fundamental view, and a
+    // falling price against unchanged targets widens the gap mechanically.
+    // What was missing is that only the technical badge said so: the gauge
+    // prints its own hit rates, this one asserted a verdict with no horizon
+    // and no provenance at all, and the asymmetry read as a contradiction.
+    p->setToolTip(QStringLiteral(
+        "Sell-side analyst consensus, as published by the data vendor — not "
+        "computed here. Targets are twelve-month price objectives; the badge is "
+        "the vendor's summary of the individual ratings behind them.\n\n"
+        "This is a fundamental view, and it is measuring something different "
+        "from the STRONG BUY … STRONG SELL verdict on the Technicals tab, which "
+        "describes the trend currently in the price. The two routinely disagree, "
+        "and most sharply when price has moved a long way from where analysts "
+        "last set their targets. That gap is information; it is not an error in "
+        "either reading."));
     target_high_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     target_mean_val_ = add_row(p, "MEAN", YELLOW);
     target_low_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
