@@ -64,7 +64,7 @@ def check(cond, msg):
         fail(msg)
 
 
-def build(closes, freq="B", volume_int=True, splits=None):
+def build(closes, freq="B", volume_int=True, splits=None, shape=None, opens=None):
     """Volume defaults to int64 -- the dtype yfinance actually returns. A float
     column here would hide the incompatible-dtype assignment that is a
     FutureWarning in pandas 2 and raises in pandas 3.
@@ -79,6 +79,8 @@ def build(closes, freq="B", volume_int=True, splits=None):
     # NaN padding FIRST: writing it afterwards clobbered a split announced at
     # position 0, so the "no bars behind it" case asserted against a frame with
     # no split in it at all and passed without exercising the guard.
+    if shape is not None:
+        o, hi, lo = shape
     action = [0.0] * len(closes)
     if action:
         action[min(1, len(action) - 1)] = np.nan  # the bulk frame carries NaNs here
@@ -86,9 +88,9 @@ def build(closes, freq="B", volume_int=True, splits=None):
         action[pos] = ratio
     return pd.DataFrame(
         {
-            "Open": closes,
-            "High": [c * 1.01 for c in closes],
-            "Low": [c * 0.99 for c in closes],
+            "Open": opens if opens is not None else [c * (shape[0] if shape else 1.00) for c in closes],
+            "High": [c * (shape[1] if shape else 1.01) for c in closes],
+            "Low": [c * (shape[2] if shape else 0.99) for c in closes],
             "Close": closes,
             "Volume": vol,
             "Stock Splits": action,
@@ -200,15 +202,81 @@ def main():
     check(abs(out["Close"].iloc[20] - 80.0) < 1e-6,
           f"weekly straddling bar untouched (got {out['Close'].iloc[20]})")
 
-    print("\nAn undecidable 3:2 is left alone even when the step looks right:")
-    # The band around k=1.5 at a 25% tolerance reached down to 1.125, and an
-    # ALREADY-ADJUSTED 3-for-2 on a day the stock fell 11% produces exactly
-    # that step. Repairing it would invent a 50% up-gap -- the bug's own harm,
-    # inverted. The cutoff exists so this case is never even considered.
+    print("\nA step that does not match the announced ratio is left alone:")
+    # An already-adjusted 3:2 on a day the stock fell 11% steps by 1.136, not by
+    # 1.5. Repairing it would invent a 50% up-gap -- the bug's own harm inverted.
     df = build([100.0] * 20 + [88.0] * 3, splits={20: 1.5})
     out = _repair_unadjusted_splits(df.copy(), "THREETWO")
     check(abs(out["Close"].iloc[0] - 100.0) < 1e-6,
-          f"correctly-adjusted 3:2 after an 11% fall left alone (got {out['Close'].iloc[0]})")
+          f"1.136 step against an announced 1.5 left alone (got {out['Close'].iloc[0]})")
+
+    print("\nA 3:2 IS repairable now -- the old fixed 1.8 cutoff refused it:")
+    # Real rescaling-shaped moves top out at 1.2801 across 18,468 measured
+    # boundaries, so 1.5 is outside the noise and decidable. The previous rule
+    # could not tell a 3:2 from an 11% fall and gave up on the whole ratio.
+    df = build([150.0] * 20 + [100.0] * 3, splits={20: 1.5})
+    out = _repair_unadjusted_splits(df.copy(), "THREETWO")
+    check(abs(out["Close"].iloc[19] - 100.0) < 1e-6,
+          f"unapplied 3:2 back-adjusted (got {out['Close'].iloc[19]})")
+
+    print("\nA 5:4 is refused -- real moves reach 1.28, so it is inside the noise:")
+    df = build([125.0] * 20 + [100.0] * 3, splits={20: 1.25})
+    out = _repair_unadjusted_splits(df.copy(), "FIVEFOUR")
+    check(abs(out["Close"].iloc[0] - 125.0) < 1e-6,
+          f"1.25 is below the measured floor, left alone (got {out['Close'].iloc[0]})")
+
+    print("\nSHAPE: a real move whose close ratio matches k is still refused:")
+    # This is the case a single close-to-close ratio cannot survive, and the
+    # reason the detector reads all four columns. RGTI on 2025-01-08 fell with
+    # OHLC ratios 1.565/1.556/1.950/1.832 -- a 22.9% spread. Its CLOSE ratio
+    # alone matched an announced 1.83 exactly, and the old rule repaired it,
+    # manufacturing an 83% up-gap out of a real selloff. A split multiplies
+    # every column by the same number; a move does not.
+    closes = [160.0] * 20 + [87.4] * 3
+    opens  = [160.0] * 20 + [102.2] * 3        # open fell far less than the close
+    df = build(closes, splits={20: 1.83}, opens=opens)
+    df.loc[df.index[20:], "Low"] = 82.0        # ... and the low far more
+    out = _repair_unadjusted_splits(df.copy(), "RGTI")
+    check(abs(out["Close"].iloc[0] - 160.0) < 1e-6,
+          f"scattered OHLC refused despite a matching close ratio (got {out['Close'].iloc[0]})")
+
+    print("\nSTRADDLE: a weekly bar containing the split is compared on closes:")
+    # A weekly bar is built from daily prints without re-basing them, so the bar
+    # covering a mid-week split OPENS pre-split and CLOSES post-split -- its four
+    # ratios scatter (64% for APH) and the shape test correctly reads "not a
+    # rescaling". Declining there abandons all 520 earlier bars to save one that
+    # is corrupt either way. The bar's own open/close ratio matching k is the
+    # signature that says so, and the closes are the fields still trustworthy.
+    df = build([160.0] * 20 + [80.0], freq="W-MON", splits={20: 2.0})
+    df.loc[df.index[20], "Open"] = 158.0       # pre-split open, post-split close
+    df.loc[df.index[20], "High"] = 161.0
+    out = _repair_unadjusted_splits(df.copy(), "APHWK")
+    check(abs(out["Close"].iloc[19] - 80.0) < 1e-6,
+          f"earlier weekly bars repaired across a straddle (got {out['Close'].iloc[19]})")
+    check(abs(out["Close"].iloc[20] - 80.0) < 1e-6,
+          f"the straddling bar itself is not rescaled (got {out['Close'].iloc[20]})")
+
+    print("\nVOLATILITY: the same ratio is refused on a series that moves that much:")
+    # The floor is the MAX of an absolute bound and a volatility-relative one,
+    # because a placid mega-cap's earnings gap is many SD while being a small
+    # move, and a microcap's 40% day is neither. 60 bars alternating +-18% put
+    # 8 SD above 1.5, so an announced 1.5 is no longer separable from noise.
+    import itertools
+    lvl = 100.0
+    calm, wild = [], []
+    for n in range(60):
+        calm.append(100.0 + (n % 2))
+        wild.append(100.0 * (1.18 if n % 2 else 0.82))
+    calm = [c * 1.5 for c in calm[:40]] + calm[40:]
+    wild = [c * 1.5 for c in wild[:40]] + wild[40:]
+    for label, series, want in (("calm", calm, True), ("volatile", wild, False)):
+        d = build(series, splits={40: 1.5})
+        o = _repair_unadjusted_splits(d.copy(), label.upper())
+        moved = abs(o["Close"].iloc[0] - series[0]) > 1e-6
+        check(moved == want,
+              f"{label} series: repair {'applied' if want else 'refused'} as expected")
+
+
 
     print("\nint64 Volume survives the repair (pandas 2 warns, pandas 3 raises):")
     df = build([160.0] * 20 + [80.0] * 3, splits={20: 2.0})

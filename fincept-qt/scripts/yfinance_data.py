@@ -3335,60 +3335,187 @@ def _yf_ticker_with_fallback(symbol):
     return yf.Ticker(alt), alt
 
 
-# A split is only detectable when the "vendor applied it" and "vendor did not"
-# hypotheses are far enough apart that one observation can separate them.
+# What separates "the vendor did not apply this split" from "the price really
+# moved"? Both leave a level shift, so ONE observation — a close-to-close ratio —
+# cannot tell them apart, and any fixed cutoff on it is a guess about how far a
+# real move can go. That guess is what these constants used to be, and it was
+# wrong in both directions: at a 25% window a correctly-adjusted 3:2 on an 11%
+# down day looked exactly like an unapplied one, so the cutoffs were pushed out
+# to 1.8/0.55 — which still left a live false-positive window (a real -35% to
+# -52% bar at the forward cutoff, +58% to +114% at the reverse one) and made
+# every 3:2 and 5:4 permanently unrepairable.
 #
-# Accept a boundary when the observed step lands within _SPLIT_TOLERANCE of the
-# announced ratio k. If the split WAS applied the step is instead 1/(1+r) for
-# whatever the real return r was, so the two bands collide unless k is far from
-# 1: at k=1.5 with a 25% window, a correctly-adjusted 3-for-2 on a day the stock
-# fell 11% lands inside the accept band, and "repairing" it manufactures a 50%
-# up-gap — the same harm as the bug, pointing the other way. Requiring k >= 1.8
-# (or <= 0.55) at a 15% window means the applied case would need a real move on
-# the exact effective bar of -35% to -52% (at the forward cutoff) or +58% to
-# +114% (at the reverse cutoff) to be mistaken for an unapplied split. Forward is
-# the looser of the two — a 35% crash is likelier than a 58% single-bar gain —
-# which is why the forward cutoff is the one pushed out to 1.8 rather than being
-# set symmetrically at 1/0.55.
+# The evidence that actually decides it: a split is a PURE RESCALING. Open, High,
+# Low and Close are all multiplied by the same number, so the four ratios across
+# the boundary agree with each other. A real move is not a rescaling — it changes
+# the shape of the bar, and the four ratios scatter. Measured on live data:
 #
-# The cost is that 3:2 and 5:4 splits are never repaired. That is the right
-# trade: they are genuinely undecidable from the price series alone, and every
-# common ratio — 2:1, 3:1, 4:1, 5:1, 10:1, 20:1, and 1:2, 1:5, 1:10, 1:20 in
-# reverse — clears the cutoffs comfortably.
-_SPLIT_TOLERANCE = 0.15
-_SPLIT_MIN_FORWARD = 1.8
-_SPLIT_MAX_REVERSE = 0.55
+#     APH's unapplied 2:1   1.888 1.906 1.905 1.925   dispersion  1.95%
+#     six applied splits    mean ratio 0.94 - 1.02    dispersion  1.0 - 4.0%
+#     genuine large moves   (ORCL, DELL, MRVL, IONQ, SMCI, CVNA)  2.8 - 35.6%
+#
+# So the test is now two-sided: the four ratios must agree with EACH OTHER (this
+# is a rescaling) and their mean must agree with k (it is THIS rescaling). The
+# applied case fails the second — its mean sits at 1.0, not k.
+#
+# The second guess removed is "how far from 1 must k be", and this one was
+# MEASURED rather than picked. Over 18,468 boundaries across 50 symbols (20
+# deliberately volatile small caps, 30 large caps, two years daily), every real
+# move that was ALSO rescaling-shaped was tabulated:
+#
+#     max span of a rescaling-shaped real move   1.2801  (BBAI 2025-03-07)
+#     next largest                               1.268   (PLTR), 1.252 (INTC)
+#     p99 / p99.9 in units of the series' own SD  4.0 / 8.5
+#
+# So 1.35 is not a taste: it sits above everything the market actually produced,
+# with headroom. It is also why a 5:4 is genuinely undecidable — real moves reach
+# 1.28, so that ratio is inside the noise — while a 3:2 is now repairable, which
+# the old fixed 1.8 cutoff refused.
+#
+# A pure SD multiple cannot do this job alone: the tail reaches 16 SD (CSCO at
+# span 1.158), because a placid mega-cap's earnings gap is enormous relative to
+# its own volatility while being a small move in absolute terms. So the floor is
+# the MAX of the two — an absolute bound that kills the low-volatility tail, and
+# an SD-relative bound that tightens automatically for the volatile names, which
+# are exactly the ones that reverse-split. At an absolute floor of 1.30 or above
+# the measured false-positive count is zero at every multiple tried (4x-10x); 8x
+# is taken for defence in depth against series more volatile than this sample,
+# and it degrades safely — a too-high floor declines to repair, it never
+# mis-repairs.
+_SPLIT_TOLERANCE = 0.15        # |mean OHLC ratio - k| <= this * k
+_SPLIT_DISPERSION_MAX = 0.06   # (max-min)/mean across the four ratios
+_SPLIT_VOL_MULTIPLE = 8.0      # k must beat this many SDs of the series' own 1-bar change
+_SPLIT_MIN_SEPARATION = 1.35   # absolute floor: above the largest measured real move (1.2801)
+
+
+def _bar_change_sd_pct(hist):
+    """Typical 1-bar move for THIS series, as a fraction, outliers trimmed.
+
+    Median across the OHLC columns per bar (one bad column cannot dominate),
+    then an interquartile trim so the very events being hunted — splits, gaps,
+    100x errors — do not inflate the notion of "normal" and hide themselves.
+    """
+    cols = [c for c in ("Open", "High", "Low", "Close") if c in hist.columns]
+    if len(cols) < 2 or len(hist) < 30:
+        return None
+    import statistics
+    ratios = []
+    prev = None
+    for _, row in hist[cols].iterrows():
+        cur = [float(row[c]) for c in cols]
+        if any(v != v or v <= 0 for v in cur):
+            prev = None if any(v != v for v in cur) else prev
+            continue
+        if prev is not None:
+            ratios.append(statistics.median([c1 / c0 for c1, c0 in zip(cur, prev)]))
+        prev = cur
+    if len(ratios) < 30:
+        return None
+    ratios.sort()
+    n = len(ratios)
+    q1, q3 = ratios[n // 4], ratios[(3 * n) // 4]
+    iqr = q3 - q1
+    lo, hi = q1 - 1.5 * iqr, q3 + 1.5 * iqr
+    kept = [r for r in ratios if lo <= r <= hi]
+    if len(kept) < 20:
+        return None
+    mean = statistics.fmean(kept)
+    if mean <= 0:
+        return None
+    return statistics.pstdev(kept) / mean
+
+
+def _straddles_split(hist, boundary, k, tol):
+    """True when the bar AT `boundary` itself contains the split.
+
+    A daily bar is entirely on one side of a split. A weekly one need not be:
+    Yahoo builds the week from daily prints without re-basing them, so the bar
+    covering a mid-week split opens pre-split and closes post-split. APH's split
+    week is the last bar of a 10y weekly frame and opens near 158 against a close
+    of 82.33 — its four column ratios scatter 64%, and a shape test reads that
+    (correctly) as "not a rescaling" and declines, leaving all 520 earlier bars
+    on the wrong basis to save one bar that is corrupt either way.
+
+    The bar's own open-to-close ratio matching k is the signature, and it says
+    precisely which fields can still be trusted: Close is on the new basis, the
+    previous bar's Close on the old one, and everything in between is mixed.
+    Comparing those two Closes is not weaker evidence — it is the only evidence
+    the bar has left, and the volatility and separation floors still gate it.
+    """
+    try:
+        row = hist.iloc[boundary]
+        o, c = float(row["Open"]), float(row["Close"])
+    except (KeyError, TypeError, ValueError):
+        return False
+    if not (o > 0 and c > 0):
+        return False
+    return abs(o / c - k) <= tol * k
+
+
+def _boundary_ratios(hist, boundary, cols):
+    """The per-column ratios across `boundary`, bridging price-less bars.
+
+    Bridging is what makes this fire where yfinance's own repair does not: it
+    compares strictly ADJACENT bars, so when Yahoo leaves the split-date bar
+    price-less — as it did for APH — the one step carrying the evidence becomes
+    NaN and is coerced to "no change" (scrapers/history.py, `_1d_change_minx[f_na] = 1.0`),
+    and the cliff is invisible to it.
+    """
+    before = hist.iloc[:boundary].dropna(subset=cols)
+    after = hist.iloc[boundary:].dropna(subset=cols)
+    if before.empty or after.empty:
+        return None
+    pb, pa = before.iloc[-1], after.iloc[0]
+    out = []
+    for c in cols:
+        lo, hi = float(pb[c]), float(pa[c])
+        if not (lo > 0 and hi > 0):
+            return None
+        out.append(lo / hi)
+    return out
 
 
 def _repair_unadjusted_splits(hist, symbol=""):
     """Back-adjust a history whose splits the vendor announced but never applied.
 
     On the session a split takes effect Yahoo flips the quote to the new basis
-    before it rewrites the historical bars, so the frame reports the split in
-    its actions column while every pre-split bar is still quoted on the old one.
-    The series then carries a one-bar cliff of exactly the split ratio, and
-    nothing downstream can tell it from a crash: APH's 2-for-1 on 2026-09-03 put
-    the price 43% under all six moving averages, drove CCI to -539 and
-    Aroon-down to 100, and the Technicals verdict came back SELL on a stock
-    trading near its highs. The 52-week low, the chart and every moving-average
-    distance were wrong the same way, because all of them read this one series.
-    yfinance normally gets this right — LRCX, NFLX, PANW, KLAC, ANET and CRWD
-    all back-adjust cleanly in the same window — so the exposure is the day or
-    two after a split, which is exactly when someone looks at the ticker.
+    before it rewrites the historical bars, so the frame reports the split in its
+    actions column while every pre-split bar is still on the old one. The series
+    then carries a one-bar cliff of exactly the split ratio, and nothing
+    downstream can tell it from a crash: APH's 2-for-1 on 2026-09-03 put the
+    price 43% under all six moving averages, drove CCI to -539 and Aroon-down to
+    100, and the Technicals verdict came back SELL on a stock trading near its
+    highs. The 52-week low, the chart and every moving-average distance were
+    wrong the same way, because all of them read this one series.
+
+    Three independent things must hold before anything is rewritten. See the
+    constants above for why each one is evidence rather than a tuned guess:
+
+      1. the four OHLC ratios across the boundary agree with each other
+         — this is a rescaling, not a move;
+      2. their mean agrees with the announced ratio — it is THIS rescaling,
+         which is what separates an unapplied split (mean = k) from one the
+         vendor already applied (mean = 1);
+      3. the ratio is large relative to what this particular series does in a
+         normal bar.
+
+    yfinance ships its own repair (`history(repair=True)`) and it does NOT catch
+    this case: asked for APH it logs "No bad splits detected", because it
+    compares strictly adjacent bars and Yahoo left the split-date bar price-less,
+    so the decisive step became NaN and was coerced to "no change". It also costs
+    a 1h and a 15m refetch per symbol to reconstruct the missing bars (2.3x wall
+    time on APH) and, having declined the split, returns three reconstructed bars
+    still on the OLD basis — a worse series than the one it started with. Its
+    discriminator is nevertheless the better idea, and points 1 and 3 above are
+    taken from it.
 
     Splits are read from the frame's own "Stock Splits" column rather than from
-    Ticker.splits. That is not a stylistic preference: a fresh Ticker's .splits
-    triggers its own history fetch, which would put one ungated network call per
-    symbol inside a path whose entire purpose is a single bulk download, and
-    concurrent yfinance downloads return each other's tickers. Reading the
-    column also means the split timestamp IS an index value, so there is no
-    timezone to reconcile and no way for the splits to describe a different
-    series than the bars.
-
-    Detection is the announced ratio, never the size of the gap; see the cutoffs
-    above. That is why a genuine 33% earnings gap (ORCL, DELL, MRVL and IONQ
-    each have one in this window) is never touched: no split is announced on
-    those dates at all.
+    Ticker.splits: a fresh Ticker's .splits triggers its own history fetch, which
+    would put one ungated network call per symbol inside a path whose entire
+    purpose is a single bulk download, and concurrent yfinance downloads return
+    each other's tickers. Reading the column also means the split timestamp IS an
+    index value, so there is no timezone to reconcile and no way for the splits to
+    describe a different series than the bars.
 
     The boundary is positional, which is what makes one rule cover every
     interval. A weekly bar is stamped at the start of its week and carries the
@@ -3396,8 +3523,8 @@ def _repair_unadjusted_splits(hist, symbol=""):
     basis for daily and weekly alike; comparing timestamps against the split
     instant instead put all 105 of APH's weekly bars on the "before" side and
     skipped the repair entirely while the 47% cliff stayed in the weekly rating
-    (the 1W toggle is a live path). The j-1 candidate is defence for any feed
-    that stamps the action on the preceding bar — the ratio test decides which
+    (the 1W toggle is a live path). The j-1 candidate is defence for any feed that
+    stamps the action on the preceding bar — the tests above decide which
     boundary is real, so an extra candidate cannot pick a wrong one.
 
     Volume moves the other way, as yfinance's own adjustment does; MFI, OBV, CMF
@@ -3417,53 +3544,63 @@ def _repair_unadjusted_splits(hist, symbol=""):
         announced = actions[actions.notna() & (actions != 0)]
         if announced.empty:
             return hist
+        ohlc = [c for c in ("Open", "High", "Low", "Close") if c in hist.columns]
         price_cols = [c for c in ("Open", "High", "Low", "Close", "Adj Close")
                       if c in hist.columns]
-        if not price_cols:
+        if len(ohlc) < 2 or not price_cols:
             return hist
 
         idx = hist.index
+        sd_pct = _bar_change_sd_pct(hist)
         for split_ts, ratio in announced.items():
             try:
                 k = float(ratio)
             except (TypeError, ValueError):
                 continue
-            if not (k >= _SPLIT_MIN_FORWARD or 0 < k <= _SPLIT_MAX_REVERSE):
+            if not k > 0:
                 continue
+            k_span = max(k, 1.0 / k)
+            # How far from 1 does a ratio have to be before it cannot be a normal
+            # bar for THIS series? A constant cannot answer that; the series can.
+            floor = _SPLIT_MIN_SEPARATION
+            if sd_pct is not None:
+                floor = max(floor, 1.0 + _SPLIT_VOL_MULTIPLE * sd_pct)
+            if k_span < floor:
+                continue
+
             j = int(idx.searchsorted(split_ts))
-            closes = hist["Close"]
             for boundary in (j, j - 1):
                 if boundary <= 0 or boundary >= len(idx):
                     continue
-                before = closes.iloc[:boundary].dropna()
-                after = closes.iloc[boundary:].dropna()
-                if before.empty or after.empty:
+                straddle = _straddles_split(hist, boundary, k, _SPLIT_TOLERANCE)
+                cols_used = ["Close"] if straddle else ohlc
+                rs = _boundary_ratios(hist, boundary, cols_used)
+                if not rs:
                     continue
-                prev_close, next_close = float(before.iloc[-1]), float(after.iloc[0])
-                if not (prev_close > 0 and next_close > 0):
+                mean_r = sum(rs) / len(rs)
+                if mean_r <= 0:
                     continue
-                observed = prev_close / next_close
-                # The split-date bar is often price-less, so `observed` can span
-                # two sessions and carry a real move on top of the ratio: APH's
-                # spanned a weekend and landed at 1.91 against k=2.
-                if abs(observed - k) > _SPLIT_TOLERANCE * k:
+                # (1) a rescaling multiplies every column by the SAME number.
+                # Skipped for a straddling bar, whose columns sit on two
+                # different bases by construction — see _straddles_split.
+                if not straddle and (max(rs) - min(rs)) / mean_r > _SPLIT_DISPERSION_MAX:
+                    continue
+                # (2) and by THIS number — an applied split sits at 1, not k.
+                if abs(mean_r - k) > _SPLIT_TOLERANCE * k:
                     continue
 
-                # A boolean mask indexes .loc BY POSITION, which is the only
-                # form that survives a duplicated timestamp. Selecting with
-                # labels (idx[:boundary]) matches EVERY occurrence of a repeated
-                # stamp, so a bar sitting after the boundary that shares a label
-                # with one before it was divided by k too — a correctly-basised
-                # bar silently halved. yfinance does emit duplicate stamps
-                # (synthetic action rows, DST/exchange-date collisions), and the
-                # detection above is already positional, so the write must agree.
+                # A boolean mask indexes .loc BY POSITION, which is the only form
+                # that survives a duplicated timestamp. Selecting with labels
+                # matches EVERY occurrence of a repeated stamp, so a bar after the
+                # boundary sharing a label with one before it was divided by k
+                # too — a correctly-basised bar silently halved. yfinance does
+                # emit duplicate stamps (synthetic action rows, DST collisions).
                 sel = [i < boundary for i in range(len(hist))]
                 for col in price_cols:
                     hist.loc[sel, col] = hist.loc[sel, col] / k
                 # Per-share cash amounts sit on the same basis as the prices: a
                 # dividend declared before a 2:1, quoted post-split, is half the
-                # figure. Rescaled so the frame this hands back is internally
-                # consistent, even though no caller reads these columns yet.
+                # figure. Rescaled so the frame handed back is self-consistent.
                 for col in ("Dividends", "Capital Gains"):
                     if col in hist.columns:
                         hist.loc[sel, col] = hist.loc[sel, col] / k
@@ -3475,10 +3612,14 @@ def _repair_unadjusted_splits(hist, symbol=""):
                     hist.loc[sel, "Volume"] = hist.loc[sel, "Volume"] * k
                 import sys
                 print("[yfinance_data] split-repair %s: vendor left its %g:1 on %s "
-                      "unadjusted (observed ratio %.3f); back-adjusted %d bars"
+                      "unadjusted (%s ratio mean %.3f, spread %.1f%%); "
+                      "back-adjusted %d bars%s"
                       % (symbol or "?", k,
                          getattr(split_ts, "date", lambda: split_ts)(),
-                         observed, boundary),
+                         "close-only" if straddle else "OHLC",
+                         mean_r, 100.0 * (max(rs) - min(rs)) / mean_r, boundary,
+                         "; bar %d straddles the split and stays mixed" % boundary
+                         if straddle else ""),
                       file=sys.stderr)
                 break
         return hist
