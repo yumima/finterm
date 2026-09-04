@@ -14,7 +14,7 @@
     { "id": "trade_viz",         "title": "Trade Viz",          "category": "Trading",     "description": "Order and position visualisation on price charts",         "tags": ["trade","visualise","orders"] },
 
     { "id": "portfolio",         "title": "Portfolio",          "category": "Research",    "description": "Holdings, P&L, allocation and performance attribution",    "tags": ["portfolio","pnl","holdings"] },
-    { "id": "equity_research",   "title": "Equity Research",    "category": "Research",    "description": "Fundamentals, technicals, peers, sentiment in one view",   "tags": ["research","fundamentals","peers"] },
+    { "id": "equity_research",   "title": "Equity Research",    "category": "Research",    "description": "Fundamentals, technicals, peers and ownership in one view", "tags": ["research","fundamentals","peers","ownership"] },
     { "id": "derivatives",       "title": "Derivatives",        "category": "Research",    "description": "Bond, option, swap and CDS pricing",                       "tags": ["derivatives","pricing","options"] },
     { "id": "surface_analytics", "title": "Surface Analytics",  "category": "Research",    "description": "Volatility surfaces, Greeks, yield curves, correlation",   "tags": ["surface","vol","greeks"] },
     { "id": "ma_analytics",      "title": "M&A Analytics",      "category": "Research",    "description": "Deal comparables, accretion/dilution, event studies",      "tags": ["m&a","deals","comparables"] },

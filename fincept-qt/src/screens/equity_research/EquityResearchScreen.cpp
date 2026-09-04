@@ -15,7 +15,6 @@
 #include "screens/equity_research/EquityNewsTab.h"
 #include "screens/equity_research/EquityOverviewTab.h"
 #include "screens/equity_research/EquityPeersTab.h"
-#include "screens/equity_research/EquitySentimentTab.h"
 #include "screens/equity_research/EquityTalippTab.h"
 #include "screens/equity_research/EquityTechnicalsTab.h"
 #include "screens/relationship_map/RelationshipMapScreen.h"
@@ -364,7 +363,6 @@ void EquityResearchScreen::build_ui() {
     talipp_tab_ = new EquityTalippTab;
     peers_tab_ = new EquityPeersTab;
     news_tab_ = new EquityNewsTab;
-    sentiment_tab_ = new EquitySentimentTab;
     // Relationships tab — reuses the full RelationshipMapScreen widget in
     // embedded mode (header/status bar hidden, since ER's title bar already
     // exposes the symbol + freshness chip). The screen still owns its filter
@@ -386,7 +384,6 @@ void EquityResearchScreen::build_ui() {
     tab_widget_->addTab(talipp_tab_, "TALIpp");
     tab_widget_->addTab(peers_tab_, "Peers");
     tab_widget_->addTab(news_tab_, "News");
-    tab_widget_->addTab(sentiment_tab_, "Sentiment");
     tab_widget_->addTab(relationships_tab_, "Relationships");
 
     // Ownership: who among the tracked managers holds this and what they did.
@@ -739,8 +736,6 @@ void EquityResearchScreen::on_tab_changed(int index) {
     } else if (tab == news_tab_) {
         news_tab_->set_symbol(current_symbol_);
         svc.fetch_news(current_symbol_);
-    } else if (tab == sentiment_tab_) {
-        sentiment_tab_->set_symbol(current_symbol_);
     } else if (tab == ownership_tab_) {
         // Every other tab re-syncs its symbol on activation, and ownership was
         // the one that did not — so if it ever missed a load_symbol (created
@@ -810,7 +805,6 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     if (talipp_tab_) talipp_tab_->set_symbol(symbol);
     if (peers_tab_) peers_tab_->set_symbol(symbol);
     if (news_tab_) news_tab_->set_symbol(symbol);
-    if (sentiment_tab_) sentiment_tab_->set_symbol(symbol);
     // Earnings: forward only when it's the visible tab. The fetch pulls three
     // years of daily bars plus four estimate frames — too heavy to fire for
     // every ticker the user flips past. on_tab_changed picks it up on

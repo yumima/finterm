@@ -1,5 +1,5 @@
-// Alternative Data connectors (9): RavenPack, Bloomberg Second Measure, SafeGraph, Orbital Insight,
-// Refinitiv Tick History, Earnest Research, Thinknum, Revelio Labs, Adanos Market Sentiment
+// Alternative Data connectors (8): RavenPack, Bloomberg Second Measure, SafeGraph, Orbital Insight,
+// Refinitiv Tick History, Earnest Research, Thinknum, Revelio Labs
 #include "screens/data_sources/ConnectorRegistry.h"
 
 namespace fincept::screens::datasources {
@@ -167,17 +167,6 @@ static QVector<ConnectorConfig> alt_data_configs() {
             {"Attrition Rate", "attrition"},
             {"Skill Demand", "skills"}}}}},
 
-        {"adanos-market-sentiment",
-         "Adanos Market Sentiment",
-         "adanos-market-sentiment",
-         Category::AlternativeData,
-         "A",
-         "#C06524",
-         "Cross-source US equity market sentiment across Reddit, X, finance news, and Polymarket. Exposed as an optional overlay in Equity Research.",
-         true,
-         true,
-         {{"apiKey", "API Key", FieldType::Password, "sk_live_...", true, "", {}},
-          {"defaultUniverse", "Default Universe (optional)", FieldType::Text, "AAPL,MSFT,NVDA", false, "", {}}}},
     };
 }
 

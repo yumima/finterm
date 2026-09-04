@@ -187,32 +187,6 @@ set_target_properties(test_extended_hours_math PROPERTIES
 
 add_test(NAME extended_hours_math COMMAND test_extended_hours_math)
 
-# ── Market sentiment parse tests ─────────────────────────────────────────────
-# /compare returns up to ten tickers sorted by buzz score, so the row the
-# caller wants is rarely the first one. Pure JSON-in/struct-out — no network,
-# no API key, no widgets.
-
-add_executable(test_market_sentiment_parse
-    services/test_market_sentiment_parse.cpp
-    ../src/services/equity/MarketSentimentSupport.cpp
-)
-
-target_include_directories(test_market_sentiment_parse PRIVATE
-    ../src
-)
-
-target_link_libraries(test_market_sentiment_parse PRIVATE
-    Qt6::Core
-    Qt6::Test
-)
-
-set_target_properties(test_market_sentiment_parse PROPERTIES
-    UNITY_BUILD OFF
-    AUTOMOC ON
-)
-
-add_test(NAME market_sentiment_parse COMMAND test_market_sentiment_parse)
-
 # ── Earnings signal tests ────────────────────────────────────────────────────
 # The pre-earnings BUY/HOLD/SELL scorer. Pure struct-in/verdict-out — no
 # network, no widgets — so its calibration and its missing-data behaviour can

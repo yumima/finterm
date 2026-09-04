@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`ef6510ce3`](https://github.com/yumima/finterm/commit/ef6510ce3) peers + market info: the vendor's "0" meant "we don't know", and three columns were never sent
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

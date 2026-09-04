@@ -28,7 +28,6 @@ class EquityTechnicalsTab;
 class EquityTalippTab;
 class EquityPeersTab;
 class EquityNewsTab;
-class EquitySentimentTab;
 class RelationshipMapScreen;
 
 class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
@@ -126,7 +125,6 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     EquityTalippTab* talipp_tab_ = nullptr;
     EquityPeersTab* peers_tab_ = nullptr;
     EquityNewsTab* news_tab_ = nullptr;
-    EquitySentimentTab* sentiment_tab_ = nullptr;
     RelationshipMapScreen* relationships_tab_ = nullptr;
     /// "Which large managers hold this, at what weight in THEIR book." The
     /// stock-perspective view of the 13F index; the same widget the OWNERSHIP

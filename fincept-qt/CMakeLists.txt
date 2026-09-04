@@ -921,8 +921,6 @@ set(SERVICE_SOURCES
     src/services/equity/EarningsSignal.cpp
     src/services/equity/EquityResearchService.cpp
     src/services/equity/TechnicalRating.cpp
-    src/services/equity/MarketSentimentService.cpp
-    src/services/equity/MarketSentimentSupport.cpp
     src/services/finnhub/FinnhubService.cpp
     src/services/finnhub/FinnhubLiveTicks.cpp
     src/services/video/LiveHlsProxy.cpp
@@ -1445,7 +1443,6 @@ set(SCREEN_SOURCES
     src/screens/equity_research/EquityTalippTab.cpp
     src/screens/equity_research/EquityPeersTab.cpp
     src/screens/equity_research/EquityNewsTab.cpp
-    src/screens/equity_research/EquitySentimentTab.cpp
 
     # Portfolio
     src/screens/portfolio/PortfolioScreen.cpp
@@ -1680,7 +1677,6 @@ set_source_files_properties(
     src/screens/equity_research/PriceRangeStrip.cpp
     src/screens/equity_research/EquityPeersTab.cpp
     src/screens/equity_research/EquityResearchScreen.cpp
-    src/screens/equity_research/EquitySentimentTab.cpp
     src/screens/equity_research/EquityTalippTab.cpp
     src/screens/equity_research/EquityTechnicalsTab.cpp
     src/screens/excel/ExcelScreen.cpp

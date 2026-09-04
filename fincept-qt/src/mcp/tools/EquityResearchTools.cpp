@@ -12,7 +12,6 @@
 //   9. get_equity_news               — recent news articles for a symbol
 //  10. compute_equity_talipp         — run a talipp indicator (generic)
 //  11. list_equity_talipp_indicators — talipp indicator catalog (sync)
-//  12. get_equity_sentiment          — MarketSentimentService snapshot
 //
 // EquityResearchService signals do NOT carry a per-call request_id; most
 // carry the symbol (or indicator) so we filter by that. Concurrent calls
@@ -25,7 +24,6 @@
 #include "mcp/AsyncDispatch.h"
 #include "mcp/ToolSchemaBuilder.h"
 #include "services/equity/EquityResearchService.h"
-#include "services/equity/MarketSentimentService.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -240,34 +238,6 @@ QJsonArray news_to_json(const QVector<services::equity::NewsArticle>& xs) {
         });
     }
     return arr;
-}
-
-QJsonObject sentiment_to_json(const services::equity::MarketSentimentSnapshot& s) {
-    QJsonArray sources;
-    for (const auto& src : s.sources) {
-        sources.append(QJsonObject{
-            {"source_id", src.source_id},
-            {"label", src.label},
-            {"available", src.available},
-            {"buzz_score", src.buzz_score},
-            {"bullish_pct", src.bullish_pct},
-            {"sentiment_score", src.sentiment_score},
-            {"activity_count", src.activity_count},
-        });
-    }
-    return QJsonObject{
-        {"symbol", s.symbol},
-        {"configured", s.configured},
-        {"available", s.available},
-        {"status", s.status},
-        {"message", s.message},
-        {"average_buzz", s.average_buzz},
-        {"average_bullish_pct", s.average_bullish_pct},
-        {"coverage", s.coverage},
-        {"source_alignment", s.source_alignment},
-        {"fetched_at", s.fetched_at},
-        {"sources", sources},
-    };
 }
 
 // Hand-curated talipp catalogue mirrored from EquityTalippTab::categories().
@@ -801,46 +771,6 @@ std::vector<ToolDef> get_equity_research_tools() {
                 });
             }
             return ToolResult::ok_data(arr);
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── 12. get_equity_sentiment ────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "get_equity_sentiment";
-        t.description = "Get a market-sentiment snapshot for a symbol (buzz, bullish %, multi-source coverage).";
-        t.category = "equity-research";
-        t.default_timeout_ms = kEquityResearchTimeoutMs;
-        t.input_schema = ToolSchemaBuilder()
-            .string("symbol", "Ticker symbol").required().length(1, 32)
-            .integer("days", "Lookback window in days").default_int(7).between(1, 90)
-            .boolean("force", "Bypass cache").default_bool(false)
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
-            const QString sym = args["symbol"].toString().toUpper();
-            const int days = args["days"].toInt(7);
-            const bool force = args["force"].toBool(false);
-            auto* svc = &services::equity::MarketSentimentService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, sym, days, force](auto resolve) {
-                    auto* holder = new QObject(svc);
-                    QObject::connect(svc, &services::equity::MarketSentimentService::snapshot_loaded, holder,
-                                      [sym, resolve, holder](QString s,
-                                                              services::equity::MarketSentimentSnapshot snap) {
-                                          if (s.toUpper() != sym) return;
-                                          resolve(ToolResult::ok_data(sentiment_to_json(snap)));
-                                          holder->deleteLater();
-                                      });
-                    QObject::connect(svc, &services::equity::MarketSentimentService::error_occurred, holder,
-                                      [resolve, holder](QString, QString msg) {
-                                          resolve(ToolResult::fail(msg));
-                                          holder->deleteLater();
-                                      });
-                    svc->fetch_snapshot(sym, days, force);
-                });
         };
         tools.push_back(std::move(t));
     }
