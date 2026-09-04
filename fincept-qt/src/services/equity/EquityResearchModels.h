@@ -5,9 +5,14 @@
 #include <QString>
 #include <QVector>
 
+#include <limits>
 #include <optional>
 
 namespace fincept::services::equity {
+
+/// "The vendor did not supply this number." Distinct from a real 0.0.
+inline constexpr double kUnknown = std::numeric_limits<double>::quiet_NaN();
+
 
 // ── Symbol search ─────────────────────────────────────────────────────────────
 struct SearchResult {
@@ -20,22 +25,35 @@ struct SearchResult {
 };
 
 // ── Real-time quote ───────────────────────────────────────────────────────────
+/// Numeric fields default to kUnknown (NaN), like StockInfo's.
+///
+/// Both quote producers emit JSON null for a field they have no value for:
+/// _quote_via_fast_info when fast_info lacks open/day_high/day_low, and
+/// _quote_via_full_info on an empty column. That is the ordinary case for an
+/// index, a fund, an FX pair, or any symbol before its session opens — not an
+/// error. A 0.0 default made those indistinguishable from a real $0.00 print.
 struct QuoteData {
     QString symbol;
     bool valid = true;
-    double price = 0.0;
-    double change = 0.0;
-    double change_pct = 0.0;
-    double open = 0.0;
-    double high = 0.0;
-    double low = 0.0;
-    double prev_close = 0.0;
-    double volume = 0.0;
+    double price = kUnknown;
+    double change = kUnknown;
+    double change_pct = kUnknown;
+    double open = kUnknown;
+    double high = kUnknown;
+    double low = kUnknown;
+    double prev_close = kUnknown;
+    double volume = kUnknown;
     QString exchange;
     qint64 timestamp = 0;
 };
 
 // ── Company fundamentals ──────────────────────────────────────────────────────
+/// Numeric fields default to kUnknown (NaN), not 0.0.
+///
+/// yfinance's `info` is routinely partial, and a default-constructed
+/// StockInfo is also what the panels render before the fetch resolves. With
+/// a 0.0 default both states claimed the company had a zero margin, zero
+/// float and zero growth. Per NumberFormat.h: gate on NaN, never on == 0.0.
 struct StockInfo {
     QString symbol;
     bool valid = true;
@@ -50,58 +68,58 @@ struct StockInfo {
     int employees = 0;
 
     // Valuation
-    double market_cap = 0.0;
-    double enterprise_value = 0.0;
-    double pe_ratio = 0.0;
-    double forward_pe = 0.0;
-    double peg_ratio = 0.0;
-    double price_to_book = 0.0;
-    double ev_to_revenue = 0.0;
-    double ev_to_ebitda = 0.0;
+    double market_cap = kUnknown;
+    double enterprise_value = kUnknown;
+    double pe_ratio = kUnknown;
+    double forward_pe = kUnknown;
+    double peg_ratio = kUnknown;
+    double price_to_book = kUnknown;
+    double ev_to_revenue = kUnknown;
+    double ev_to_ebitda = kUnknown;
 
     // Profitability
-    double gross_margins = 0.0;
-    double operating_margins = 0.0;
-    double ebitda_margins = 0.0;
-    double profit_margins = 0.0;
-    double roe = 0.0;
-    double roa = 0.0;
-    double gross_profits = 0.0;
+    double gross_margins = kUnknown;
+    double operating_margins = kUnknown;
+    double ebitda_margins = kUnknown;
+    double profit_margins = kUnknown;
+    double roe = kUnknown;
+    double roa = kUnknown;
+    double gross_profits = kUnknown;
 
     // Per share / cash
-    double book_value = 0.0;
-    double revenue_per_share = 0.0;
-    double free_cashflow = 0.0;
-    double operating_cashflow = 0.0;
-    double total_cash = 0.0;
-    double total_debt = 0.0;
-    double total_revenue = 0.0;
+    double book_value = kUnknown;
+    double revenue_per_share = kUnknown;
+    double free_cashflow = kUnknown;
+    double operating_cashflow = kUnknown;
+    double total_cash = kUnknown;
+    double total_debt = kUnknown;
+    double total_revenue = kUnknown;
 
     // Growth
-    double earnings_growth = 0.0;
-    double revenue_growth = 0.0;
+    double earnings_growth = kUnknown;
+    double revenue_growth = kUnknown;
 
     // Share data
-    double shares_outstanding = 0.0;
-    double float_shares = 0.0;
-    double held_insiders_pct = 0.0;
-    double held_institutions_pct = 0.0;
-    double short_ratio = 0.0;
-    double short_pct_of_float = 0.0;
+    double shares_outstanding = kUnknown;
+    double float_shares = kUnknown;
+    double held_insiders_pct = kUnknown;
+    double held_institutions_pct = kUnknown;
+    double short_ratio = kUnknown;
+    double short_pct_of_float = kUnknown;
 
     // Price range / risk
-    double week52_high = 0.0;
-    double week52_low = 0.0;
-    double avg_volume = 0.0;
-    double beta = 0.0;
-    double dividend_yield = 0.0;
-    double current_price = 0.0;
+    double week52_high = kUnknown;
+    double week52_low = kUnknown;
+    double avg_volume = kUnknown;
+    double beta = kUnknown;
+    double dividend_yield = kUnknown;
+    double current_price = kUnknown;
 
     // Analyst targets
-    double target_high = 0.0;
-    double target_low = 0.0;
-    double target_mean = 0.0;
-    double recommendation_mean = 0.0;
+    double target_high = kUnknown;
+    double target_low = kUnknown;
+    double target_mean = kUnknown;
+    double recommendation_mean = kUnknown;
     QString recommendation_key;
     int analyst_count = 0;
 };

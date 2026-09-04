@@ -100,7 +100,11 @@ def fetch_company_data(ticker: str) -> dict:
             "target_mean": _safe_float(info.get("targetMeanPrice")),
             "target_median": _safe_float(info.get("targetMedianPrice")),
             "analyst_count": _safe_int(info.get("numberOfAnalystOpinions")),
-            "dividend_yield": _safe_float(info.get("dividendYield")),
+            # Yahoo reports dividendYield as a PERCENTAGE (0.73 means 0.73%)
+            # since early 2025; this app's contract is a fraction, and every
+            # display site multiplies by 100. Same conversion as
+            # yfinance_data._dividend_yield_fraction.
+            "dividend_yield": _safe_float(info.get("dividendYield")) / 100.0,
             "payout_ratio": _safe_float(info.get("payoutRatio")),
             "trailing_eps": _safe_float(info.get("trailingEps")),
             "forward_eps": _safe_float(info.get("forwardEps")),

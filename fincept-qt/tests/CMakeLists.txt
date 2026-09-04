@@ -570,6 +570,24 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(bar_timestamp_decoders PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
 endif()
 
+# ── The `info` payload's contracts ───────────────────────────────────────────
+# Two ways a number from yfinance's `info` dict lied. (1) It is routinely
+# PARTIAL — beta absent in 148 of 231 cached payloads, the margins in 72 — and
+# every absent field arrived as JSON null, which toDouble() reads as 0.0, so a
+# third of the time the panels reported a real 0.00% margin. (2) Yahoo reports
+# dividendYield as a PERCENTAGE while every consumer multiplies by 100, so MSFT
+# showed a 73.00% yield and the portfolio's weighted yield was 100x. Guards
+# that absent stays absent, and that the /100 stays on that ONE field — every
+# other percentage-like field is already a fraction.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME info_contract
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_info_contract.py
+    )
+    set_tests_properties(info_contract PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+endif()
+
 # ── Price-less bars ──────────────────────────────────────────────────────────
 # yfinance emits an all-NaN OHLC row for a session it has no prices for yet.
 # _sanitize_for_json must turn each NaN into JSON null (bare NaN is invalid

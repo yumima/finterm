@@ -1911,7 +1911,7 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
     peg_val_->setText(info.peg_ratio > 0 ? QString::number(info.peg_ratio, 'f', 2) : "N/A");
     pb_val_->setText(info.price_to_book > 0 ? QString::number(info.price_to_book, 'f', 2) : "N/A");
     div_val_->setText(info.dividend_yield > 0 ? fmt_pct(info.dividend_yield) : "N/A");
-    beta_val_->setText(info.beta != 0.0 ? QString::number(info.beta, 'f', 2) : "N/A");
+    beta_val_->setText(std::isfinite(info.beta) ? QString::number(info.beta, 'f', 2) : "N/A");
 
     // Share Stats
     shares_out_val_->setText(fmt_large(info.shares_outstanding));
@@ -2047,6 +2047,8 @@ void EquityOverviewTab::rebuild_chart(const QVector<services::equity::Candle>& c
 // ── Formatters ────────────────────────────────────────────────────────────────
 
 QString EquityOverviewTab::fmt_large(double v) {
+    if (!std::isfinite(v))
+        return ui::formatting::placeholder();   // absent ≠ 0 (FLOAT, AVG VOL)
     bool neg = v < 0;
     double av = qAbs(v);
     QString s;
@@ -2064,6 +2066,11 @@ QString EquityOverviewTab::fmt_large(double v) {
 }
 
 QString EquityOverviewTab::fmt_pct(double v) {
+    // Absent is not zero. yfinance's info is routinely partial, and printing
+    // "0.00%" for a margin the vendor never sent stated a fact about the
+    // company. A real 0.0 still renders as 0.00% — see NumberFormat.h.
+    if (!std::isfinite(v))
+        return ui::formatting::placeholder();
     return QString("%1%").arg(v * 100.0, 0, 'f', 2);
 }
 
@@ -2118,8 +2125,10 @@ QString EquityOverviewTab::currency_symbol(const QString& currency_code) {
 }
 
 QString EquityOverviewTab::fmt_price(double v) const {
-    if (v == 0.0)
-        return "\xe2\x80\x94";
+    // Gate on absence, not on zero — NumberFormat.h's rule. (A price of
+    // exactly 0.00 is odd but it is a fact; a missing one is not.)
+    if (!std::isfinite(v))
+        return ui::formatting::placeholder();
     const QString sym = current_currency_.isEmpty() ? "$" : currency_symbol(current_currency_);
     return QString("%1%2").arg(sym).arg(v, 0, 'f', 2);
 }

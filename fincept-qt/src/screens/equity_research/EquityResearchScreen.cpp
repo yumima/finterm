@@ -24,7 +24,10 @@
 #include "services/finnhub/FinnhubService.h"
 #include "services/markets/MarketDataService.h"
 #include "services/query/QueryStore.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
+
+#include <cmath>
 
 #include <QApplication>
 #include <QFontMetrics>
@@ -890,20 +893,37 @@ void EquityResearchScreen::update_quote_bar(const services::equity::QuoteData& q
 
     const QString cs = EquityOverviewTab::currency_symbol(current_currency_.isEmpty() ? "USD" : current_currency_);
 
-    sym_label_->setText(q.symbol);
-    price_label_->setText(QString("%1%2").arg(cs).arg(q.price, 0, 'f', 2));
+    // QuoteData carries kUnknown (NaN) for a field the vendor did not supply —
+    // routine for indices, funds and FX, and for anything before its session
+    // opens. Printed raw, a NaN renders as the literal text "nan", so every
+    // number here is gated. The em-dash is the app-wide missing sentinel.
+    const QString dash = ui::formatting::placeholder();
+    const auto px = [&](double v) {
+        return std::isfinite(v) ? QString("%1%2").arg(cs).arg(v, 0, 'f', 2) : dash;
+    };
 
-    bool up = q.change_pct >= 0;
+    sym_label_->setText(q.symbol);
+    price_label_->setText(px(q.price));
+
+    // NaN >= 0 is false, which would silently paint an unknown change red.
+    // Absent is its own state: no arrow, no colour, no sign.
+    const bool have_chg = std::isfinite(q.change_pct);
+    bool up = have_chg && q.change_pct >= 0;
     QString arrow = up ? "\xe2\x96\xb2" : "\xe2\x96\xbc";
-    QString chg_color = up ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
-    change_label_->setText(QString("%1%2  %3%4%")
-                               .arg(up ? "+" : "")
-                               .arg(q.change, 0, 'f', 2)
-                               .arg(arrow)
-                               .arg(qAbs(q.change_pct), 0, 'f', 2));
+    QString chg_color = have_chg ? (up ? ui::colors::POSITIVE() : ui::colors::NEGATIVE())
+                                 : QString(ui::colors::TEXT_SECONDARY());
+    change_label_->setText(have_chg
+                               ? QString("%1%2  %3%4%")
+                                     .arg(up ? "+" : "")
+                                     .arg(std::isfinite(q.change) ? QString::number(q.change, 'f', 2) : dash)
+                                     .arg(arrow)
+                                     .arg(qAbs(q.change_pct), 0, 'f', 2)
+                               : dash);
     change_label_->setStyleSheet(QString("font-size:13px; font-weight:600; color:%1;").arg(chg_color));
 
-    auto fmt_vol = [](double v) -> QString {
+    auto fmt_vol = [&dash](double v) -> QString {
+        if (!std::isfinite(v))
+            return dash;
         if (v >= 1e9)
             return QString("%1B").arg(v / 1e9, 0, 'f', 1);
         if (v >= 1e6)
@@ -914,7 +934,7 @@ void EquityResearchScreen::update_quote_bar(const services::equity::QuoteData& q
     };
 
     vol_label_->setText("VOL: " + fmt_vol(q.volume));
-    hl_label_->setText(QString("H:%1%2  L:%1%3").arg(cs).arg(q.high, 0, 'f', 2).arg(q.low, 0, 'f', 2));
+    hl_label_->setText(QString("H:%1  L:%2").arg(px(q.high), px(q.low)));
 }
 
 // ── Market-status badge ──────────────────────────────────────────────────────

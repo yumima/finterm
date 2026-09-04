@@ -3,6 +3,8 @@
 
 #include "services/equity/EquityResearchService.h"
 #include "ui/formatting/NumberFormat.h"
+
+#include <cmath>
 #include "ui/theme/Theme.h"
 
 #include <QFrame>
@@ -229,21 +231,29 @@ void EquityAnalysisTab::apply_info_state(const services::query::QueryStore::Stat
     short_rat_val_->setText(info.short_ratio > 0 ? fmt(info.short_ratio) : "—");
 }
 
+// The three below gate on NaN rather than on 0.0. StockInfo now carries
+// kUnknown (NaN) for a field the vendor did not supply, which is the
+// distinction these helpers previously could not make: treating 0.0 as the
+// "no data" sentinel hid a company's real zero (no debt, no dividend) behind
+// an em-dash, and could not have shown the absent case any differently.
+// NumberFormat.h states the rule — gate on NaN / optional, never on == 0.0.
+
 QString EquityAnalysisTab::fmt(double v, int decimals) {
-    // The equity feed uses 0.0 as its "no data" sentinel, so a real 0.0 renders
-    // as the canonical missing placeholder.
-    return v != 0.0 ? QString::number(v, 'f', decimals) : ui::formatting::placeholder();
+    return std::isfinite(v) ? QString::number(v, 'f', decimals)
+                            : ui::formatting::placeholder();
 }
 
 QString EquityAnalysisTab::fmt_large(double v) {
     // Unified K/M/B/T at one decimal via the shared layer (was M@1dp but B/T@2dp,
-    // and lacked a K tier). 0.0 is the feed's "no data" sentinel here.
-    return v != 0.0 ? ui::formatting::format_compact(v, 1) : ui::formatting::placeholder();
+    // and lacked a K tier).
+    return std::isfinite(v) ? ui::formatting::format_compact(v, 1)
+                            : ui::formatting::placeholder();
 }
 
 QString EquityAnalysisTab::fmt_pct(double v) {
     // 2dp, matching EquityPeersTab (now unified). Input is a fraction (×100).
-    return v != 0.0 ? ui::formatting::format_percent(v * 100.0, 2) : ui::formatting::placeholder();
+    return std::isfinite(v) ? ui::formatting::format_percent(v * 100.0, 2)
+                            : ui::formatting::placeholder();
 }
 
 } // namespace fincept::screens

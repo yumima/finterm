@@ -204,12 +204,12 @@ def main():
         return 1
     if ran_behaviour:
         print("All price-less-bar guards hold.")
-    else:
-        # Say so rather than printing an unqualified pass: the structural half
-        # is dependency-free and always runs, but a reader must not take this
-        # run as evidence that _has_prices itself still behaves.
-        print("Structural guards hold (behaviour checks skipped — no pandas).")
-    return 0
+        return 0
+    # 77 = ctest SKIPPED. The structural half ran and fails loudly above if
+    # violated, but _has_prices' own behaviour was not exercised — a green
+    # "Passed" here would overstate what was checked.
+    print("Structural guards hold; behaviour checks did NOT run — reporting as skipped.")
+    return 77
 
 
 if __name__ == "__main__":

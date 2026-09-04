@@ -51,6 +51,38 @@ bool row_has_prices(const QJsonObject& o) {
     return true;
 }
 
+/// A string field, with the daemon's "N/A" filler treated as absent.
+///
+/// get_info defaults longName / sector / industry / country / exchange /
+/// longBusinessSummary to the literal string "N/A" when Yahoo has none. Left
+/// as-is, every isEmpty() check reads it as a real value: the AI prompt told
+/// the model "Company: N/A / Sector: N/A / N/A" as though those were facts,
+/// and the overview rendered it as the company description.
+/// MarketDataService::fetch_info already scrubs this; parse_info did not.
+QString str(const QJsonObject& o, const char* key) {
+    const QString v = o.value(QLatin1String(key)).toString();
+    return v == QLatin1String("N/A") ? QString() : v;
+}
+
+/// A numeric field, or NaN when the vendor did not supply one.
+///
+/// yfinance's `info` dict is routinely PARTIAL — measured over 231 cached
+/// payloads, beta was absent in 148, revenue_growth in 114, float_shares in
+/// 82, market_cap and held_percent_institutions in 76, and the margins in 72.
+/// _sanitize_for_json sends each absent value as JSON null, and a bare
+/// toDouble() reads null as 0.0, so a third of the time the research panels
+/// stated that a company had a 0.00% gross margin, 0 float and 0% growth —
+/// with the same confidence as a real figure.
+///
+/// NaN is the representation the rest of the app already asks for:
+/// NumberFormat.h's rule is "callers must gate on NaN / optional, never on
+/// == 0.0", and a real 0.0 must render as 0. NaN also fails every `> 0` test
+/// the panels already perform, and Qt writes it back out as JSON null, so the
+/// MCP tools report "unknown" to an agent instead of a fabricated zero.
+double num(const QJsonObject& o, const char* key) {
+    return o.value(QLatin1String(key)).toDouble(std::numeric_limits<double>::quiet_NaN());
+}
+
 QJsonArray priced_rows(const QJsonArray& arr, const QString& what) {
     const bool all_priced = std::all_of(arr.begin(), arr.end(), [](const QJsonValue& v) {
         return row_has_prices(v.toObject());
@@ -122,6 +154,13 @@ void update_symbol_cache(const QString& symbol, const QString& key,
     const QString fname = symbol_filename(symbol);
     QJsonObject root = disk_cache().load(fname).object();
     root.insert(key, value);
+    // A versioned sub-key leaves its predecessor behind: nothing reads the
+    // old one once the hydrator moves to "<key>_vN", but every save would
+    // keep re-serialising a payload that can never be used again. Drop it
+    // when writing the successor. ("info" carried dividend_yield as Yahoo's
+    // percentage; that is the whole reason the key moved.)
+    if (key.endsWith(QLatin1String("_v2")))
+        root.remove(key.chopped(3));
     disk_cache().save(fname, QJsonDocument(root));
 }
 
@@ -213,8 +252,12 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
         // quote / info / financials / news live in the root, peers as array
         if (root.contains("quote"))
             repopulate("quote", "equity:quote:", kQuoteTtlSec);
-        if (root.contains("info"))
-            repopulate("info", "equity:info:", kInfoTtlSec);
+        // "info_v2": the pre-v2 disk blobs carry dividend_yield as Yahoo's
+        // PERCENTAGE. Rehydrating those into the v2 key would put a 100x
+        // value back in front of the user, which is exactly what the key
+        // bump exists to prevent — so the disk sub-key moves with it.
+        if (root.contains("info_v2"))
+            repopulate("info_v2", "equity:info:v2:", kInfoTtlSec);
         if (root.contains("financials"))
             repopulate("financials", "equity:financials:", kFinancialsTtlSec);
         if (root.contains("news"))
@@ -409,10 +452,10 @@ void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbo
 void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol,
                                            query::QueryStore::Callback cb) {
     if (symbol.isEmpty()) return;
-    const QString key = "equity:info:" + symbol;
+    const QString key = "equity:info:v2:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
                                    query::QueryStore::Rejecter reject) {
-        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:" + symbol);
+        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:v2:" + symbol);
         const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
         if (!icv.isNull()) {
             StockInfo parsed = parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object());
@@ -436,10 +479,10 @@ void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol
                     return;
                 }
                 fincept::CacheManager::instance().put(
-                    "equity:info:" + symbol,
+                    "equity:info:v2:" + symbol,
                     QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
                     kInfoTtlSec, "equity");
-                update_symbol_cache(symbol, "info", obj);
+                update_symbol_cache(symbol, "info_v2", obj);
                 update_symbol_cache(symbol, "symbol", symbol);
                 StockInfo parsed = parse_info(obj);
                 emit info_loaded(parsed);
@@ -684,7 +727,7 @@ void EquityResearchService::subscribe_peers(QObject* owner, const QString& symbo
     QStringList sorted_peers = peer_symbols;
     std::sort(sorted_peers.begin(), sorted_peers.end());
     const QString basket = sorted_peers.join(",");
-    const QString key = "equity:peers:" + symbol + ":" + basket;
+    const QString key = "equity:peers:v2:" + symbol + ":" + basket;
     auto fetcher = [this, symbol, peer_symbols](query::QueryStore::Resolver resolve,
                                                  query::QueryStore::Rejecter reject) {
         // No cache short-circuit at this layer — fetch_peers's own cache
@@ -860,7 +903,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
 
     // ── Info ─────────────────────────────────────────────────────────────────
     {
-        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:" + symbol);
+        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:v2:" + symbol);
         const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
         if (!icv.isNull()) {
             emit info_loaded(parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object()));
@@ -878,10 +921,10 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                         return;
                     }
                     fincept::CacheManager::instance().put(
-                        "equity:info:" + symbol,
+                        "equity:info:v2:" + symbol,
                         QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec,
                         "equity");
-                    update_symbol_cache(symbol, "info", obj);
+                    update_symbol_cache(symbol, "info_v2", obj);
                     update_symbol_cache(symbol, "symbol", symbol);
                     emit info_loaded(parse_info(obj));
                 });
@@ -1124,7 +1167,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
     QStringList key_syms;
     key_syms.append(symbol);
     key_syms.append(peer_symbols);
-    const QString cache_key = "equity:peers:" + key_syms.join(",");
+    const QString cache_key = "equity:peers:v2:" + key_syms.join(",");
 
     // Tier 0: SWR cache — peer ratios are stable over hour-scale.
     {
@@ -1289,14 +1332,14 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
 QuoteData EquityResearchService::parse_quote(const QJsonObject& o) const {
     QuoteData q;
     q.symbol = o["symbol"].toString();
-    q.price = o["price"].toDouble();
-    q.change = o["change"].toDouble();
-    q.change_pct = o["change_percent"].toDouble();
-    q.open = o["open"].toDouble();
-    q.high = o["high"].toDouble();
-    q.low = o["low"].toDouble();
-    q.prev_close = o["previous_close"].toDouble();
-    q.volume = o["volume"].toDouble();
+    q.price = num(o, "price");
+    q.change = num(o, "change");
+    q.change_pct = num(o, "change_percent");
+    q.open = num(o, "open");
+    q.high = num(o, "high");
+    q.low = num(o, "low");
+    q.prev_close = num(o, "previous_close");
+    q.volume = num(o, "volume");
     q.exchange = o["exchange"].toString();
     q.timestamp = static_cast<qint64>(o["timestamp"].toDouble());
     return q;
@@ -1304,64 +1347,64 @@ QuoteData EquityResearchService::parse_quote(const QJsonObject& o) const {
 
 StockInfo EquityResearchService::parse_info(const QJsonObject& o) const {
     StockInfo s;
-    s.symbol = o["symbol"].toString();
-    s.company_name = o["company_name"].toString();
-    s.sector = o["sector"].toString();
-    s.industry = o["industry"].toString();
-    s.description = o["description"].toString();
-    s.website = o["website"].toString();
-    s.country = o["country"].toString();
-    s.currency = o["currency"].toString();
-    s.exchange = o["exchange"].toString();
+    s.symbol = str(o, "symbol");
+    s.company_name = str(o, "company_name");
+    s.sector = str(o, "sector");
+    s.industry = str(o, "industry");
+    s.description = str(o, "description");
+    s.website = str(o, "website");
+    s.country = str(o, "country");
+    s.currency = str(o, "currency");
+    s.exchange = str(o, "exchange");
     s.employees = o["employees"].toInt();
 
-    s.market_cap = o["market_cap"].toDouble();
-    s.enterprise_value = o["enterprise_value"].toDouble();
-    s.pe_ratio = o["pe_ratio"].toDouble();
-    s.forward_pe = o["forward_pe"].toDouble();
-    s.peg_ratio = o["peg_ratio"].toDouble();
-    s.price_to_book = o["price_to_book"].toDouble();
-    s.ev_to_revenue = o["enterprise_to_revenue"].toDouble();
-    s.ev_to_ebitda = o["enterprise_to_ebitda"].toDouble();
+    s.market_cap = num(o, "market_cap");
+    s.enterprise_value = num(o, "enterprise_value");
+    s.pe_ratio = num(o, "pe_ratio");
+    s.forward_pe = num(o, "forward_pe");
+    s.peg_ratio = num(o, "peg_ratio");
+    s.price_to_book = num(o, "price_to_book");
+    s.ev_to_revenue = num(o, "enterprise_to_revenue");
+    s.ev_to_ebitda = num(o, "enterprise_to_ebitda");
 
-    s.gross_margins = o["gross_margins"].toDouble();
-    s.operating_margins = o["operating_margins"].toDouble();
-    s.ebitda_margins = o["ebitda_margins"].toDouble();
-    s.profit_margins = o["profit_margins"].toDouble();
-    s.roe = o["return_on_equity"].toDouble();
-    s.roa = o["return_on_assets"].toDouble();
-    s.gross_profits = o["gross_profits"].toDouble();
+    s.gross_margins = num(o, "gross_margins");
+    s.operating_margins = num(o, "operating_margins");
+    s.ebitda_margins = num(o, "ebitda_margins");
+    s.profit_margins = num(o, "profit_margins");
+    s.roe = num(o, "return_on_equity");
+    s.roa = num(o, "return_on_assets");
+    s.gross_profits = num(o, "gross_profits");
 
-    s.book_value = o["book_value"].toDouble();
-    s.revenue_per_share = o["revenue_per_share"].toDouble();
-    s.free_cashflow = o["free_cashflow"].toDouble();
-    s.operating_cashflow = o["operating_cashflow"].toDouble();
-    s.total_cash = o["total_cash"].toDouble();
-    s.total_debt = o["total_debt"].toDouble();
-    s.total_revenue = o["total_revenue"].toDouble();
+    s.book_value = num(o, "book_value");
+    s.revenue_per_share = num(o, "revenue_per_share");
+    s.free_cashflow = num(o, "free_cashflow");
+    s.operating_cashflow = num(o, "operating_cashflow");
+    s.total_cash = num(o, "total_cash");
+    s.total_debt = num(o, "total_debt");
+    s.total_revenue = num(o, "total_revenue");
 
-    s.earnings_growth = o["earnings_growth"].toDouble();
-    s.revenue_growth = o["revenue_growth"].toDouble();
+    s.earnings_growth = num(o, "earnings_growth");
+    s.revenue_growth = num(o, "revenue_growth");
 
-    s.shares_outstanding = o["shares_outstanding"].toDouble();
-    s.float_shares = o["float_shares"].toDouble();
-    s.held_insiders_pct = o["held_percent_insiders"].toDouble();
-    s.held_institutions_pct = o["held_percent_institutions"].toDouble();
-    s.short_ratio = o["short_ratio"].toDouble();
-    s.short_pct_of_float = o["short_percent_of_float"].toDouble();
+    s.shares_outstanding = num(o, "shares_outstanding");
+    s.float_shares = num(o, "float_shares");
+    s.held_insiders_pct = num(o, "held_percent_insiders");
+    s.held_institutions_pct = num(o, "held_percent_institutions");
+    s.short_ratio = num(o, "short_ratio");
+    s.short_pct_of_float = num(o, "short_percent_of_float");
 
-    s.week52_high = o["fifty_two_week_high"].toDouble();
-    s.week52_low = o["fifty_two_week_low"].toDouble();
-    s.avg_volume = o["average_volume"].toDouble();
-    s.beta = o["beta"].toDouble();
-    s.dividend_yield = o["dividend_yield"].toDouble();
-    s.current_price = o["current_price"].toDouble();
+    s.week52_high = num(o, "fifty_two_week_high");
+    s.week52_low = num(o, "fifty_two_week_low");
+    s.avg_volume = num(o, "average_volume");
+    s.beta = num(o, "beta");
+    s.dividend_yield = num(o, "dividend_yield");
+    s.current_price = num(o, "current_price");
 
-    s.target_high = o["target_high_price"].toDouble();
-    s.target_low = o["target_low_price"].toDouble();
-    s.target_mean = o["target_mean_price"].toDouble();
-    s.recommendation_mean = o["recommendation_mean"].toDouble();
-    s.recommendation_key = o["recommendation_key"].toString();
+    s.target_high = num(o, "target_high_price");
+    s.target_low = num(o, "target_low_price");
+    s.target_mean = num(o, "target_mean_price");
+    s.recommendation_mean = num(o, "recommendation_mean");
+    s.recommendation_key = str(o, "recommendation_key");
     s.analyst_count = o["number_of_analyst_opinions"].toInt();
     return s;
 }

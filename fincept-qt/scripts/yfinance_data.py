@@ -343,6 +343,35 @@ def _round_price(value, symbol=None):
         return value
 
 
+def _dividend_yield_fraction(value):
+    """Yahoo's dividendYield as a FRACTION, which is this app's contract.
+
+    Yahoo changed this field to a PERCENTAGE in early 2025 (0.73 means 0.73%),
+    and yfinance passes quoteSummary through untouched — verified against both
+    pinned versions, 0.2.66 and 1.3.0, neither of which mentions the field.
+    Every C++ consumer still multiplies by 100 to display it (fmt_pct, the
+    portfolio heatmap, the peers table, the knowledge panels), so the raw value
+    rendered as 100x its true size: MSFT showed a 73.00% dividend yield.
+
+    Checked against 231 cached info payloads — AAPL 0.33, MSFT 0.73, AVGO 0.70,
+    HD 2.75, LMT 2.53, TXT 0.08 — each matching that ticker's real percentage
+    yield to two decimals. There is no reading of those numbers as fractions.
+
+    Converted here, at the one boundary the value enters, rather than at the
+    eight display sites that would each have to remember.
+    """
+    if value is None:
+        return None
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return None
+    import math as _m
+    if not _m.isfinite(f):
+        return None
+    return f / 100.0
+
+
 def _has_prices(*values):
     """True only if every value is a real number — present and finite.
 
@@ -678,7 +707,9 @@ def get_info(symbol):
             "market_cap": info.get('marketCap'),
             "pe_ratio": info.get('trailingPE'),
             "forward_pe": info.get('forwardPE'),
-            "dividend_yield": info.get('dividendYield'),
+            # Yahoo reports this as a percentage; the app's contract is a
+            # fraction. See _dividend_yield_fraction.
+            "dividend_yield": _dividend_yield_fraction(info.get('dividendYield')),
             "beta": info.get('beta'),
             "fifty_two_week_high": info.get('fiftyTwoWeekHigh'),
             "fifty_two_week_low": info.get('fiftyTwoWeekLow'),
@@ -1705,7 +1736,8 @@ def get_financial_ratios(symbol):
             "grossMargin": info.get("grossMargins", 0),
             "currentRatio": info.get("currentRatio", 0),
             "quickRatio": info.get("quickRatio", 0),
-            "dividendYield": info.get("dividendYield", 0),
+            # Percentage from Yahoo -> fraction, as in the "info" action.
+            "dividendYield": _dividend_yield_fraction(info.get("dividendYield")),
             "revenuePerShare": info.get("revenuePerShare", 0),
             "bookValuePerShare": info.get("bookValue", 0),
             "freeCashFlowPerShare": fcf_per_share,

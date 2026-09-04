@@ -38,6 +38,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <initializer_list>
 #include <cstdlib>
 #include <limits>
 #include <memory>
@@ -1040,26 +1041,63 @@ QString EquityAiTab::stock_data_block() const {
     if (info_ready_) {
         if (!info_.company_name.isEmpty()) L << QString("Company: %1").arg(info_.company_name);
         if (!info_.sector.isEmpty())       L << QString("Sector: %1 / %2").arg(info_.sector, info_.industry);
+        // Every gate below asks "did the vendor supply this", which is
+        // isfinite — not `!= 0`. Two reasons the old test was wrong in both
+        // directions: StockInfo now carries NaN for an absent field, and NaN
+        // != 0 is TRUE, so the line would have printed a literal "nan" INTO
+        // THE MODEL'S PROMPT; and a company with genuinely zero debt or flat
+        // revenue growth was silently dropped as though unknown.
+        //
+        // n() guards each value individually. A line gated on one field often
+        // prints several, and they are supplied independently — P/E without a
+        // forward P/E is the common case, not the odd one.
+        const auto n = [](double v, int dp) {
+            return std::isfinite(v) ? QString::number(v, 'f', dp)
+                                    : QStringLiteral("n/a");
+        };
+        const auto pct = [&n](double v, int dp) {
+            return std::isfinite(v) ? n(v * 100.0, dp) + QStringLiteral("%")
+                                    : QStringLiteral("n/a");
+        };
+        // Gated on ANY of the line's fields being present, not one of them.
+        // Yahoo supplies these independently — it routinely omits
+        // enterpriseToEbitda for banks, insurers and REITs while supplying
+        // priceToBook, and P/B is the primary valuation metric for exactly
+        // those names, so a single-field gate dropped it from the prompt.
+        const auto any = [](std::initializer_list<double> vs) {
+            for (double v : vs) if (std::isfinite(v)) return true;
+            return false;
+        };
+        // format_money already renders a non-finite value as the placeholder.
         if (info_.market_cap > 0)          L << QString("Market cap: %1").arg(fmt::format_money(info_.market_cap, "USD", true));
-        if (info_.pe_ratio > 0)            L << QString("P/E: %1 (fwd %2)").arg(info_.pe_ratio, 0, 'f', 1).arg(info_.forward_pe, 0, 'f', 1);
+        // Yahoo omits trailingPE for any company without trailing earnings —
+        // a recent IPO, a biotech, anyone in a loss year — while still
+        // supplying forwardPE. Gating on the trailing figure dropped the
+        // forward multiple for exactly the names where it is the only one
+        // that exists.
+        if (any({info_.pe_ratio, info_.forward_pe}))
+            L << QString("P/E: %1 (fwd %2)").arg(n(info_.pe_ratio, 1), n(info_.forward_pe, 1));
         if (info_.total_revenue > 0)       L << QString("Revenue (ttm): %1%2")
                                                   .arg(fmt::format_money(info_.total_revenue, "USD", true),
-                                                       info_.revenue_growth != 0
-                                                           ? QString(", YoY growth %1%").arg(info_.revenue_growth * 100, 0, 'f', 1)
+                                                       std::isfinite(info_.revenue_growth)
+                                                           ? QString(", YoY growth %1").arg(pct(info_.revenue_growth, 1))
                                                            : QString());
-        if (info_.profit_margins != 0)     L << QString("Margins — gross %1%, operating %2%, net %3%")
-                                                  .arg(info_.gross_margins * 100, 0, 'f', 1)
-                                                  .arg(info_.operating_margins * 100, 0, 'f', 1)
-                                                  .arg(info_.profit_margins * 100, 0, 'f', 1);
-        if (info_.roe != 0)                L << QString("ROE: %1%  ROA: %2%").arg(info_.roe * 100, 0, 'f', 1).arg(info_.roa * 100, 0, 'f', 1);
-        if (info_.free_cashflow != 0)      L << QString("Free cash flow: %1").arg(fmt::format_money(info_.free_cashflow, "USD", true));
-        if (info_.total_cash != 0 || info_.total_debt != 0)
+        if (any({info_.gross_margins, info_.operating_margins, info_.profit_margins}))
+            L << QString("Margins — gross %1, operating %2, net %3")
+                     .arg(pct(info_.gross_margins, 1), pct(info_.operating_margins, 1),
+                          pct(info_.profit_margins, 1));
+        if (any({info_.roe, info_.roa}))
+            L << QString("ROE: %1  ROA: %2").arg(pct(info_.roe, 1), pct(info_.roa, 1));
+        if (std::isfinite(info_.free_cashflow))
+            L << QString("Free cash flow: %1").arg(fmt::format_money(info_.free_cashflow, "USD", true));
+        if (std::isfinite(info_.total_cash) || std::isfinite(info_.total_debt))
             L << QString("Cash / debt: %1 / %2").arg(fmt::format_money(info_.total_cash, "USD", true),
                                                      fmt::format_money(info_.total_debt, "USD", true));
-        if (info_.ev_to_ebitda != 0)       L << QString("EV/EBITDA: %1  P/B: %2  PEG: %3")
-                                                  .arg(info_.ev_to_ebitda, 0, 'f', 1).arg(info_.price_to_book, 0, 'f', 1).arg(info_.peg_ratio, 0, 'f', 1);
-        if (info_.beta != 0)               L << QString("Beta: %1").arg(info_.beta, 0, 'f', 2);
-        if (info_.dividend_yield > 0)      L << QString("Dividend yield: %1%").arg(info_.dividend_yield * 100, 0, 'f', 2);
+        if (any({info_.ev_to_ebitda, info_.price_to_book, info_.peg_ratio}))
+            L << QString("EV/EBITDA: %1  P/B: %2  PEG: %3")
+                     .arg(n(info_.ev_to_ebitda, 1), n(info_.price_to_book, 1), n(info_.peg_ratio, 1));
+        if (std::isfinite(info_.beta))     L << QString("Beta: %1").arg(n(info_.beta, 2));
+        if (info_.dividend_yield > 0)      L << QString("Dividend yield: %1").arg(pct(info_.dividend_yield, 2));
         if (info_.target_mean > 0)         L << QString("Analyst price target: mean %1 (range %2 – %3)")
                                                   .arg(fmt::format_money(info_.target_mean), fmt::format_money(info_.target_low), fmt::format_money(info_.target_high));
     }
