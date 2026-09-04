@@ -570,6 +570,24 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(bar_timestamp_decoders PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
 endif()
 
+# ── Price-less bars ──────────────────────────────────────────────────────────
+# yfinance emits an all-NaN OHLC row for a session it has no prices for yet.
+# _sanitize_for_json must turn each NaN into JSON null (bare NaN is invalid
+# JSON and Qt rejects the whole document), and QJsonValue::toDouble() then
+# reads that null back as 0.0 — so "no price" becomes "priced at zero", one
+# zero low drags a chart's y-range to 0, and the log axis flattens every real
+# candle into the top 1% of the plot. Guards both halves: that the guard is
+# still applied at every builder, and that it stays a finiteness test rather
+# than a positivity test (^IRX closed at 0.000; CL=F settled at -37.63).
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME priceless_bars
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_priceless_bars.py
+    )
+    set_tests_properties(priceless_bars PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+endif()
+
 # ── AI Forecast reconciliation ───────────────────────────────────────────────
 # A model asked for a direction, a target price and a percentage returns three
 # figures that need not agree, and the tab stored all three — so the table, the

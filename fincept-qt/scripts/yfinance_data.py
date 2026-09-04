@@ -343,6 +343,43 @@ def _round_price(value, symbol=None):
         return value
 
 
+def _has_prices(*values):
+    """True only if every value is a real number — present and finite.
+
+    Deliberately NOT a positivity test. Zero and negative prints are real
+    market data: ^IRX (13-week bill) closed at 0.000 for long stretches of
+    2020-2021 and CL=F settled at -37.63 on 2020-04-20, and both are on this
+    app's own watchlists. Dropping those bars would delete history rather
+    than repair it.
+
+    What this rejects is the row yfinance emits for a session it has no
+    prices for yet — typically today's bar before the feed fills it in, all
+    four OHLC fields NaN. Volume is usually present on that row, so it looks
+    like a bar and isn't one.
+
+    Such a row must never leave the daemon. _sanitize_for_json turns each NaN
+    into JSON null (it has to — bare NaN is not valid JSON and Qt rejects the
+    whole document), and on the C++ side QJsonValue::toDouble() reads null
+    back as 0.0 without complaint. "No price" then silently becomes "priced
+    at zero": one such bar drags a chart's y-range low to 0, and a log axis
+    spanning 1e-9…hi flattens every real candle into the top 1% of the plot.
+    Dropping the row here is the only place that fixes every consumer at
+    once — charts, technicals and TALIpp each read this payload by a
+    different route.
+    """
+    import math as _m
+    for v in values:
+        if v is None:
+            return False
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            return False
+        if not _m.isfinite(f):
+            return False
+    return True
+
+
 def _quote_via_fast_info(symbol):
     """Quote via ticker.fast_info. Returns None if fast_info doesn't have a
     usable price (caller should fall back). Raises on yfinance errors."""
@@ -487,6 +524,9 @@ def get_historical(symbol, start_date, end_date, interval='1d'):
 
         historical_data = []
         for index, row in hist.iterrows():
+            # A bar with no prices is not a bar — see _has_prices.
+            if not _has_prices(row['Open'], row['High'], row['Low'], row['Close']):
+                continue
             historical_data.append({
                 "symbol": symbol,
                 "timestamp": int(index.timestamp()),
@@ -494,7 +534,9 @@ def get_historical(symbol, start_date, end_date, interval='1d'):
                 "high": _round_price(row['High']),
                 "low": _round_price(row['Low']),
                 "close": _round_price(row['Close']),
-                "volume": int(row['Volume']),
+                # See get_historical_period: int() raises on NaN and the
+                # function-level except would blank the entire series.
+                "volume": int(row['Volume']) if _has_prices(row['Volume']) else 0,
                 # Same value as "close" — kept for payload compatibility.
                 # yfinance already applied any adjustment upstream; there is
                 # no separate raw/adjusted pair here, and the name implying
@@ -593,15 +635,23 @@ def get_historical_price(symbol, target_date):
 
         for index, row in hist.iterrows():
             idx_date = index.to_pydatetime().replace(tzinfo=None)
-            if idx_date.date() <= target.date():
+            # Skip price-less rows (see _has_prices) — taking one would report
+            # a confident price of 0 for the date rather than "no data".
+            if idx_date.date() <= target.date() and _has_prices(row['Close']):
                 closest_date = idx_date
                 closest_price = _round_price(row['Close'])
 
         if closest_price is None:
-            # If no date before or on target, take the first available
-            first_row = hist.iloc[0]
-            closest_date = hist.index[0].to_pydatetime()
-            closest_price = _round_price(first_row['Close'])
+            # If no date before or on target, take the first PRICED row.
+            for index, row in hist.iterrows():
+                if _has_prices(row['Close']):
+                    closest_date = index.to_pydatetime()
+                    closest_price = _round_price(row['Close'])
+                    break
+
+        if closest_price is None:
+            return {"found": False, "error": "No priced bar in this date range",
+                    "symbol": symbol}
 
         return {
             "found": True,
@@ -3137,13 +3187,22 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
         # and yield.
         historical_data = []
         for index, row in hist.iterrows():
+            # A bar with no prices is not a bar — see _has_prices.
+            if not _has_prices(row['Open'], row['High'], row['Low'], row['Close']):
+                continue
             historical_data.append({
                 "timestamp": int(index.timestamp()),
                 "open": _round_price(row['Open']),
                 "high": _round_price(row['High']),
                 "low": _round_price(row['Low']),
                 "close": _round_price(row['Close']),
-                "volume": int(row['Volume'])
+                # int() is the only conversion in this row that RAISES on NaN
+                # rather than passing a bad value along, and the caller's
+                # except-Exception would turn that into {"error": ...} — one
+                # bad volume cell blanking the whole multi-year series, and
+                # with it the chart, technicals and TALIpp. A priced bar with
+                # an unknown volume is still a priced bar.
+                "volume": int(row['Volume']) if _has_prices(row['Volume']) else 0
             })
 
         return historical_data

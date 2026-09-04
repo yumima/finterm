@@ -72,8 +72,13 @@ void PriceRangeStrip::set_candles(const QVector<services::equity::Candle>& candl
         lo = lo > 0 ? std::min(lo, c.low) : c.low;
         ++in_window;
     }
-    if (in_window < 30 || hi <= lo)
-        return;   // stats_ stays invalid; paint shows why
+    if (in_window < 30 || hi <= lo) {
+        // stats_ stays invalid. Repaint anyway: stats_ was already reset
+        // above, so returning without update() left the PREVIOUS symbol's
+        // band painted on screen with no repaint ever scheduled.
+        update();
+        return;
+    }
 
     stats_.last  = candles.last().close;
     stats_.hi52  = hi;
@@ -91,7 +96,7 @@ void PriceRangeStrip::set_candles(const QVector<services::equity::Candle>& candl
     for (qsizetype i = std::max<qsizetype>(1, candles.size() - 252); i < candles.size(); ++i) {
         const double p0 = candles[i - 1].close, p1 = candles[i].close;
         if (p0 <= 0.0 || p1 <= 0.0)
-            continue;
+            continue;   // log(0) is -inf; a real 0.000 print (^IRX) reaches here
         const double r = std::log(p1 / p0);
         sum += r;
         sumsq += r * r;

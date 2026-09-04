@@ -14,11 +14,59 @@
 #include <QJsonObject>
 #include <QPointer>
 
+#include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace fincept::services::equity {
 
 namespace {
+
+/// True only if all four OHLC fields are present and finite.
+///
+/// Deliberately NOT a positivity test. Zero and negative prints are real
+/// market data — ^IRX closed at 0.000 through much of 2020-2021 and CL=F
+/// settled at -37.63 on 2020-04-20, both on this app's watchlists — so a
+/// `> 0` rule would delete history rather than repair it.
+///
+/// What this rejects is the all-NaN row yfinance emits for a session it has
+/// no prices for yet, typically today's bar. The daemon drops those at the
+/// source (_has_prices in yfinance_data.py); this is the C++ boundary that
+/// keeps payloads cached before that fix — and anything else that ever sends
+/// a null — out of the app.
+///
+/// Why a null is dangerous rather than merely absent: the daemon's
+/// _sanitize_for_json must turn NaN into JSON null, because bare NaN is not
+/// valid JSON and QJsonDocument::fromJson rejects the whole document. But
+/// QJsonValue::toDouble() then reads that null back as 0.0 without
+/// complaint, so "no price" becomes "priced at zero" silently.
+bool row_has_prices(const QJsonObject& o) {
+    static const char* kFields[] = {"open", "high", "low", "close"};
+    for (const char* f : kFields) {
+        const double v = o.value(QLatin1String(f))
+                             .toDouble(std::numeric_limits<double>::quiet_NaN());
+        if (!std::isfinite(v))
+            return false;
+    }
+    return true;
+}
+
+QJsonArray priced_rows(const QJsonArray& arr, const QString& what) {
+    const bool all_priced = std::all_of(arr.begin(), arr.end(), [](const QJsonValue& v) {
+        return row_has_prices(v.toObject());
+    });
+    if (all_priced)
+        return arr;
+    QJsonArray out;
+    for (const auto& v : arr) {
+        if (row_has_prices(v.toObject()))
+            out.append(v);
+    }
+    LOG_WARN("EquityResearch",
+             QString("%1: dropped %2 price-less bar(s) of %3 — vendor sent null/NaN OHLC")
+                 .arg(what).arg(arr.size() - out.size()).arg(arr.size()));
+    return out;
+}
 
 // A daemon reply carrying an error — or no rows at all — is not data.
 //
@@ -955,8 +1003,17 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     QPointer<EquityResearchService> self = this;
 
     // ── Stage 2: compute via daemon, given a candles array ───────────────────
-    auto run_compute = [self, symbol, period, interval, tech_key, inflight_key](const QJsonArray& candles) {
+    auto run_compute = [self, symbol, period, interval, tech_key, inflight_key](const QJsonArray& raw) {
         if (!self) { return; }  // (key remains held — process is exiting anyway)
+        // This path never builds Candles, so parse_candles' guard does not
+        // apply: the array goes straight back to Python. Note what does and
+        // does not already protect it there — compute_technicals_from_candles
+        // coerces all four OHLC columns and then drops on CLOSE only, so a
+        // row with a good close but a null high/low survives into every
+        // rolling window that reads them (ATR, Bollinger, Stochastic, Aroon)
+        // as NaN. This filter is what covers those columns, and it covers
+        // both callers below, including the disk-cache hit.
+        const QJsonArray candles = priced_rows(raw, "technicals " + symbol);
         QJsonObject payload;
         payload["candles"] = candles;
         python::PythonWorker::instance().submit("compute_technicals", payload,
@@ -1149,7 +1206,14 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
 // ── TALIpp ────────────────────────────────────────────────────────────────────
 void EquityResearchService::compute_talipp(const QString& symbol, const QString& indicator, const QVariantMap& params,
                                            const QString& period) {
-    auto run_talipp = [this, symbol, indicator, params](const QString& hist_json) {
+    // Takes the array rather than the serialized string so both callers get
+    // the price-less-bar filter. equity_talipp.py builds its series with
+    // float(r.get("open", 0)) — the default only applies to a MISSING key, so
+    // a present null reaches float(None) and raises TypeError, failing the
+    // whole indicator rather than the one bar.
+    auto run_talipp = [this, symbol, indicator, params](const QJsonArray& raw) {
+        const QString hist_json = QString::fromUtf8(
+            QJsonDocument(priced_rows(raw, "talipp " + symbol)).toJson(QJsonDocument::Compact));
         QJsonObject p_obj;
         for (auto it = params.constBegin(); it != params.constEnd(); ++it)
             p_obj[it.key()] = QJsonValue::fromVariant(it.value());
@@ -1177,8 +1241,17 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
     const QString candles_key = "equity:candles:" + symbol + ":" + period;
     const auto cached_candles_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
     const QVariant cached_candles = cached_candles_aged ? QVariant(cached_candles_aged->value) : QVariant();
-    if (!cached_candles.isNull()) {
-        run_talipp(cached_candles.toString());
+    const auto cached_doc = cached_candles.isNull()
+                                ? QJsonDocument()
+                                : QJsonDocument::fromJson(cached_candles.toString().toUtf8());
+    // A cached blob that no longer parses as an array is not a cache hit.
+    // .array() would hand back an empty array, which equity_talipp.py does
+    // reject ("OHLCV data must be a non-empty JSON array") — so the user saw
+    // an error rather than a blank overlay, but an error for a recoverable
+    // condition. Falling through to the fetch is the better answer. Same
+    // test fetch_technicals already uses on its own cache read.
+    if (cached_doc.isArray()) {
+        run_talipp(cached_doc.array());
     } else {
         // Dedup: with errors (correctly) never cached, every parameter tweak
         // during an outage would otherwise fire its own full RPC for the
@@ -1207,7 +1280,7 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
                            emit error_occurred(symbol, "TALIpp", history_error_text(result));
                            return;
                        }
-                       run_talipp(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact)));
+                       run_talipp(arr);
                    });
     }
 }
@@ -1298,6 +1371,12 @@ QVector<Candle> EquityResearchService::parse_candles(const QJsonArray& arr) cons
     candles.reserve(arr.size());
     for (const auto& v : arr) {
         auto o = v.toObject();
+        // A price-less row must never become a zero-priced Candle: one such
+        // bar drags a chart's y-range low to 0, and on the log axis that
+        // spans 1e-9…hi and flattens every real candle into the top 1% of
+        // the plot. See row_has_prices.
+        if (!row_has_prices(o))
+            continue;
         Candle c;
         c.timestamp = static_cast<qint64>(o["timestamp"].toDouble());
         c.open = o["open"].toDouble();
