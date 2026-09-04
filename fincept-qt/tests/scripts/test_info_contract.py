@@ -64,6 +64,9 @@ MODELS = os.path.join(SRC, "services", "equity", "EquityResearchModels.h")
 OVERVIEW = os.path.join(SRC, "screens", "equity_research", "EquityOverviewTab.cpp")
 ANALYSIS = os.path.join(SRC, "screens", "equity_research", "EquityAnalysisTab.cpp")
 AITAB = os.path.join(SRC, "screens", "equity_research", "EquityAiTab.cpp")
+PEERSTAB = os.path.join(SRC, "screens", "equity_research", "EquityPeersTab.cpp")
+MKTSVC = os.path.join(SRC, "services", "markets", "MarketDataService.cpp")
+MKTHDR = os.path.join(SRC, "services", "markets", "MarketDataService.h")
 
 failures = []
 
@@ -138,7 +141,7 @@ def check_absent_is_not_zero():
     m = re.search(r"struct StockInfo \{.*?\n\};", models, re.DOTALL)
     check(m is not None, "found the StockInfo struct")
     if m:
-        zero_defaults = re.findall(r"double\s+(\w+)\s*=\s*0\.0\s*;", m.group(0))
+        zero_defaults = re.findall(r"double\s+(\w+)\s*=\s*0(?:\.0+)?\s*;", m.group(0))
         check(not zero_defaults,
               "StockInfo numeric fields default to kUnknown, not 0.0",
               "a default-constructed StockInfo is what the panels render "
@@ -169,7 +172,7 @@ def check_absent_is_not_zero():
     m = re.search(r"struct QuoteData \{.*?\n\};", models, re.DOTALL)
     check(m is not None, "found the QuoteData struct")
     if m:
-        zero_defaults = re.findall(r"double\s+(\w+)\s*=\s*0\.0\s*;", m.group(0))
+        zero_defaults = re.findall(r"double\s+(\w+)\s*=\s*0(?:\.0+)?\s*;", m.group(0))
         check(not zero_defaults,
               "QuoteData numeric fields default to kUnknown, not 0.0",
               "it shares fmt_price with StockInfo; two sentinels in one "
@@ -246,9 +249,78 @@ def check_behaviour():
     return True
 
 
+# ── 3. The peers / financial_ratios payload, same contract ───────────────────
+#
+# get_financial_ratios used to default every field to 0 with `info.get(k, 0)`.
+# That was wrong twice over: the default only fires for a MISSING key, and
+# Yahoo far more often sends the key with a None value (trailingPegRatio was
+# null in 421 cached peer rows), so it usually did not apply; and where it did
+# apply it destroyed the very distinction the consumer needed. The peers tab
+# said so itself — "the peer feed uses 0.0 as its no-data sentinel (no
+# NaN/optional is available at this layer)".
+
+def check_ratios_contract():
+    daemon = read(DAEMON)
+    m = re.search(r"def get_financial_ratios\(.*?\n    except", daemon, re.DOTALL)
+    check(m is not None, "found get_financial_ratios")
+    if m:
+        # \w+ for the key: "priceToSalesTrailing12Months" contains digits and
+        # a [A-Za-z]+ class silently skipped it.
+        defaulted = re.findall(r'info\.get\(\s*["\'](\w+)["\']\s*,\s*[-\d.]+\s*\)',
+                               m.group(0))
+        check(not defaulted,
+              "get_financial_ratios uses no numeric `, 0` defaults",
+              "a default cannot be told from a real 0 by any consumer, and it "
+              f"does not even fire for the common null case: {defaulted}")
+
+    models = read(MODELS)
+    m = re.search(r"struct PeerData \{.*?\n\};", models, re.DOTALL)
+    check(m is not None, "found the PeerData struct")
+    if m:
+        zeros = re.findall(r"double\s+(\w+)\s*=\s*0(?:\.0+)?\s*;", m.group(0))
+        check(not zeros, "PeerData numeric fields default to kUnknown", str(zeros))
+
+    svc = read(SERVICE)
+    m = re.search(r"QVector<PeerData> EquityResearchService::parse_peers.*?\n\}",
+                  svc, re.DOTALL)
+    check(m is not None, "found parse_peers")
+    if m:
+        raw = re.findall(r'o\["[A-Za-z_]+"\]\.toDouble\(\)', m.group(0))
+        check(not raw, "parse_peers reads no field with a bare toDouble()", str(raw))
+
+    hdr = read(MKTHDR)
+    m = re.search(r"struct InfoData \{.*?\n\};", hdr, re.DOTALL)
+    check(m is not None, "found the InfoData struct")
+    if m:
+        zeros = re.findall(r"double\s+(\w+)\s*=\s*0(?:\.0+)?\s*;", m.group(0))
+        check(not zeros, "InfoData numeric fields default to kUnknownNum", str(zeros))
+
+    mkt = read(MKTSVC)
+    raw = re.findall(r'shared->info\.\w+\s*=\s*o\["[A-Za-z_]+"\]\.toDouble\(\)', mkt)
+    check(not raw,
+          "MarketDataService reads no InfoData number with a bare toDouble()",
+          str(raw))
+
+    # The peers table's formatters and colour helpers must decide on absence.
+    peers = read(PEERSTAB)
+    for name, pat in (("fmt", r"auto fmt = \[\]\(double v[^)]*\)[^{]*\{(.*?)\n    \};"),
+                      ("fmt_pct", r"auto fmt_pct = \[\]\(double v\)[^{]*\{(.*?)\n    \};"),
+                      ("color_ratio", r"auto color_ratio = .*?\{(.*?)\n    \};"),
+                      ("color_pct_pos", r"auto color_pct_pos = .*?\{(.*?)\n    \};")):
+        m = re.search(pat, peers, re.DOTALL)
+        check(m is not None, f"found EquityPeersTab::{name}",
+              "the scan lost this helper; fix the pattern")
+        if m:
+            check("isfinite" in m.group(1),
+                  f"EquityPeersTab::{name} gates on NaN",
+                  "an unknown ratio otherwise falls through to the worst-case "
+                  "colour and reads as a red flag the data never supported")
+
+
 def main():
     check_dividend_producers()
     check_absent_is_not_zero()
+    check_ratios_contract()
     ran = check_behaviour()
     print()
     if failures:

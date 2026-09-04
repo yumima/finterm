@@ -727,7 +727,7 @@ void EquityResearchService::subscribe_peers(QObject* owner, const QString& symbo
     QStringList sorted_peers = peer_symbols;
     std::sort(sorted_peers.begin(), sorted_peers.end());
     const QString basket = sorted_peers.join(",");
-    const QString key = "equity:peers:v2:" + symbol + ":" + basket;
+    const QString key = "equity:peers:v3:" + symbol + ":" + basket;
     auto fetcher = [this, symbol, peer_symbols](query::QueryStore::Resolver resolve,
                                                  query::QueryStore::Rejecter reject) {
         // No cache short-circuit at this layer — fetch_peers's own cache
@@ -1167,7 +1167,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
     QStringList key_syms;
     key_syms.append(symbol);
     key_syms.append(peer_symbols);
-    const QString cache_key = "equity:peers:v2:" + key_syms.join(",");
+    const QString cache_key = "equity:peers:v3:" + key_syms.join(",");
 
     // Tier 0: SWR cache — peer ratios are stable over hour-scale.
     {
@@ -1592,21 +1592,30 @@ QVector<PeerData> EquityResearchService::parse_peers(const QJsonArray& arr) cons
     for (const auto& v : arr) {
         auto o = v.toObject();
         PeerData p;
-        p.symbol = o["symbol"].toString();
-        p.pe_ratio = o["peRatio"].toDouble();
-        p.forward_pe = o["forwardPE"].toDouble();
-        p.price_to_book = o["priceToBook"].toDouble();
-        p.price_to_sales = o["priceToSales"].toDouble();
-        p.peg_ratio = o["pegRatio"].toDouble();
-        p.debt_to_equity = o["debtToEquity"].toDouble();
-        p.roe = o["returnOnEquity"].toDouble();
-        p.roa = o["returnOnAssets"].toDouble();
-        p.profit_margin = o["profitMargin"].toDouble();
-        p.operating_margin = o["operatingMargin"].toDouble();
-        p.gross_margin = o["grossMargin"].toDouble();
-        p.current_ratio = o["currentRatio"].toDouble();
-        p.quick_ratio = o["quickRatio"].toDouble();
-        p.dividend_yield = o["dividendYield"].toDouble();
+        p.symbol = str(o, "symbol");
+        p.pe_ratio = num(o, "peRatio");
+        p.forward_pe = num(o, "forwardPE");
+        p.price_to_book = num(o, "priceToBook");
+        p.price_to_sales = num(o, "priceToSales");
+        p.peg_ratio = num(o, "pegRatio");
+        p.debt_to_equity = num(o, "debtToEquity");
+        p.roe = num(o, "returnOnEquity");
+        p.roa = num(o, "returnOnAssets");
+        p.profit_margin = num(o, "profitMargin");
+        p.operating_margin = num(o, "operatingMargin");
+        p.gross_margin = num(o, "grossMargin");
+        p.current_ratio = num(o, "currentRatio");
+        p.quick_ratio = num(o, "quickRatio");
+        p.dividend_yield = num(o, "dividendYield");
+        // PRICE, REV GRWTH and BETA are columns in the peers table; without
+        // these assignments they rendered empty for every row.
+        p.price = num(o, "price");
+        p.beta = num(o, "beta");
+        p.market_cap = num(o, "marketCap");
+        p.revenue_growth = num(o, "revenueGrowth");
+        p.earnings_growth = num(o, "earningsGrowth");
+        p.name = str(o, "name");
+        p.sector = str(o, "sector");
         peers.append(p);
     }
     return peers;

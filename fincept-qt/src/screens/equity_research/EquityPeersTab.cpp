@@ -3,6 +3,8 @@
 
 #include "services/equity/EquityResearchService.h"
 #include "ui/formatting/NumberFormat.h"
+
+#include <cmath>
 #include "ui/theme/Theme.h"
 
 #include <QCheckBox>
@@ -254,8 +256,11 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
     peer_table_->setHorizontalHeaderLabels(headers);
 
     // Color helpers
+    // NaN is "the vendor did not supply this". Every comparison against it is
+    // false, so without an explicit branch an unknown ratio falls through to
+    // the worst-case colour and reads as a red flag the data never supported.
     auto color_ratio = [](double v, double good, double warn) -> QColor {
-        if (v <= 0.0)
+        if (!std::isfinite(v) || v <= 0.0)
             return QColor("#6b7280");
         if (v <= good)
             return QColor(ui::colors::POSITIVE());
@@ -264,7 +269,7 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
         return QColor(ui::colors::NEGATIVE());
     };
     auto color_pct_pos = [](double v) -> QColor {
-        if (v == 0.0)
+        if (!std::isfinite(v) || v == 0.0)
             return QColor("#6b7280");
         if (v > 0.0)
             return QColor(ui::colors::POSITIVE());
@@ -280,15 +285,19 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
         peer_table_->setItem(row, col, item);
     };
 
-    // The peer feed uses 0.0 as its "no data" sentinel (no NaN/optional is
-    // available at this layer), so a 0.0 ratio renders as the canonical missing
-    // placeholder. Percent is now 2dp — matching EquityAnalysisTab, which used
-    // to disagree (this tab was 1dp). fmt_pct's input is a fraction (×100).
+    // The peer feed now carries NaN for a value the vendor did not supply, so
+    // these gate on absence rather than on 0.0 — the sentinel this tab used to
+    // have to borrow, which could not tell an unknown margin from a real zero
+    // and showed both as "—". Percent is 2dp — matching EquityAnalysisTab,
+    // which used to disagree (this tab was 1dp). fmt_pct's input is a
+    // fraction (×100).
     auto fmt = [](double v, int dec = 2) -> QString {
-        return v != 0.0 ? QString::number(v, 'f', dec) : ui::formatting::placeholder();
+        return std::isfinite(v) ? QString::number(v, 'f', dec)
+                                : ui::formatting::placeholder();
     };
     auto fmt_pct = [](double v) -> QString {
-        return v != 0.0 ? ui::formatting::format_percent(v * 100.0, 2) : ui::formatting::placeholder();
+        return std::isfinite(v) ? ui::formatting::format_percent(v * 100.0, 2)
+                                : ui::formatting::placeholder();
     };
 
     for (int r = 0; r < peers.size(); ++r) {
@@ -323,7 +332,9 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
         set_cell(r, 14, fmt_pct(p.dividend_yield),
                  p.dividend_yield > 0 ? QColor(ui::colors::POSITIVE()) : QColor("#6b7280"));
         set_cell(r, 15, fmt(p.beta, 2),
-                 p.beta >= 0 && p.beta <= 1.5 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE()));
+                 !std::isfinite(p.beta) ? QColor("#6b7280")
+                 : (p.beta >= 0 && p.beta <= 1.5) ? QColor(ui::colors::POSITIVE())
+                                                  : QColor(ui::colors::NEGATIVE()));
 
         // COMP — explicit QCheckBox widget (last column). For the primary
         // row it's shown but disabled (self-comparison is meaningless).

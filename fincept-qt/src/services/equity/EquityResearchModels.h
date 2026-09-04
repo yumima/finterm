@@ -230,30 +230,35 @@ struct TechnicalsData {
 };
 
 // ── Peer comparison ───────────────────────────────────────────────────────────
+/// Numeric fields default to kUnknown (NaN), like StockInfo's.
+///
+/// get_financial_ratios sends absent as null (it used to send 0, which the
+/// peers table could not tell from a real 0.0 — its own comment called 0.0
+/// "the no-data sentinel (no NaN/optional is available at this layer)").
 struct PeerData {
     QString symbol;
     QString name;
     QString sector;
-    double market_cap = 0.0;
-    double pe_ratio = 0.0;
-    double forward_pe = 0.0;
-    double price_to_book = 0.0;
-    double price_to_sales = 0.0;
-    double peg_ratio = 0.0;
-    double roe = 0.0;
-    double roa = 0.0;
-    double profit_margin = 0.0;
-    double operating_margin = 0.0;
-    double gross_margin = 0.0;
-    double revenue_growth = 0.0;
-    double earnings_growth = 0.0;
-    double debt_to_equity = 0.0;
-    double current_ratio = 0.0;
-    double quick_ratio = 0.0;
-    double dividend_yield = 0.0;
-    double beta = 0.0;
-    double price = 0.0;
-    double change_pct = 0.0;
+    double market_cap = kUnknown;
+    double pe_ratio = kUnknown;
+    double forward_pe = kUnknown;
+    double price_to_book = kUnknown;
+    double price_to_sales = kUnknown;
+    double peg_ratio = kUnknown;
+    double roe = kUnknown;
+    double roa = kUnknown;
+    double profit_margin = kUnknown;
+    double operating_margin = kUnknown;
+    double gross_margin = kUnknown;
+    double revenue_growth = kUnknown;
+    double earnings_growth = kUnknown;
+    double debt_to_equity = kUnknown;
+    double current_ratio = kUnknown;
+    double quick_ratio = kUnknown;
+    double dividend_yield = kUnknown;
+    double beta = kUnknown;
+    double price = kUnknown;
+    double change_pct = kUnknown;
 };
 
 // ── News article ──────────────────────────────────────────────────────────────

@@ -11,8 +11,12 @@
 #include <QVector>
 
 #include <functional>
+#include <limits>
 
 namespace fincept::services {
+
+/// "The vendor did not supply this number." Distinct from a real 0.
+inline constexpr double kUnknownNum = std::numeric_limits<double>::quiet_NaN();
 
 struct QuoteData {
     QString symbol;
@@ -48,6 +52,14 @@ struct OfficerInfo {
     QString title;
 };
 
+/// Numeric fields default to kUnknownNum (NaN), not 0.
+///
+/// Both producers behind this struct send JSON null for a field Yahoo did
+/// not supply — get_info has never defaulted its numerics, and
+/// get_financial_ratios no longer does. Read with a bare toDouble() those
+/// became 0.0, indistinguishable from a real zero: the IPO Watch rail
+/// reported a 0.00% profit margin, and a peer chart drew a zero-height bar,
+/// for companies the vendor simply had no figure for.
 struct InfoData {
     QString symbol;
     QString name;
@@ -55,20 +67,20 @@ struct InfoData {
     QString industry;
     QString country;
     QString currency;
-    double market_cap = 0;
-    double pe_ratio = 0;
-    double forward_pe = 0;
-    double price_to_book = 0;
-    double dividend_yield = 0;
-    double beta = 0;
-    double week52_high = 0;
-    double week52_low = 0;
-    double avg_volume = 0;
-    double eps = 0; // revenuePerShare as proxy
-    double roe = 0;
-    double profit_margin = 0;
-    double debt_to_equity = 0;
-    double current_ratio = 0;
+    double market_cap = kUnknownNum;
+    double pe_ratio = kUnknownNum;
+    double forward_pe = kUnknownNum;
+    double price_to_book = kUnknownNum;
+    double dividend_yield = kUnknownNum;
+    double beta = kUnknownNum;
+    double week52_high = kUnknownNum;
+    double week52_low = kUnknownNum;
+    double avg_volume = kUnknownNum;
+    double eps = kUnknownNum; // revenuePerShare as proxy
+    double roe = kUnknownNum;
+    double profit_margin = kUnknownNum;
+    double debt_to_equity = kUnknownNum;
+    double current_ratio = kUnknownNum;
     // Narrative + leadership — used by the IPO Watch detail rail to render
     // a "who's behind this company" section beyond pure numbers.
     QString description;     // longBusinessSummary

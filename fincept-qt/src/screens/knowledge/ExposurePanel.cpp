@@ -11,6 +11,9 @@
 #include <QRegularExpression>
 #include <QVBoxLayout>
 
+#include <cmath>
+#include <limits>
+
 namespace fincept::knowledge {
 
 namespace {
@@ -78,7 +81,11 @@ double pluck_metric(const services::InfoData& info, const QString& metric) {
     if (metric == "eps") return info.eps;
     if (metric == "roe") return info.roe;
     if (metric == "debt_to_equity") return info.debt_to_equity;
-    return 0.0;
+    // NaN, not 0.0. parse_criterion passes an unmapped metric name straight
+    // through, and 0.0 is a value that compares: a "payout ratio < 60%"
+    // criterion on a name this function does not know would have reported
+    // EVERY holding in the portfolio as a match. NaN compares false both ways.
+    return std::numeric_limits<double>::quiet_NaN();
 }
 
 } // namespace
@@ -169,7 +176,10 @@ void ExposurePanel::load_holdings_and_evaluate() {
                 ++*shared_count;
                 if (ok) {
                     const double v = pluck_metric(info, crit.metric);
-                    if (v != 0.0 && compare(v, crit.op, crit.threshold))
+                    // isfinite, not `!= 0`: NaN passes a `!= 0` test, and a
+                    // real 0.0 is a legitimate value to match on (a
+                    // "yield < 1%" screen should find the non-payers).
+                    if (std::isfinite(v) && compare(v, crit.op, crit.threshold))
                         shared_matches->push_back(sym.toUpper());
                 }
                 if (*shared_count >= total) {

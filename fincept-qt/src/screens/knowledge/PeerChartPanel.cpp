@@ -3,6 +3,8 @@
 #include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
 
+#include <cmath>
+
 #include <QBarCategoryAxis>
 #include <QBarSeries>
 #include <QBarSet>
@@ -94,7 +96,12 @@ void PeerChartPanel::load() {
                     QStringList categories;
                     double maxv = 0.0;
                     for (const auto& peer : guard->peers_) {
-                        const double v = shared_values->value(peer.toUpper(), 0.0);
+                        // A bar chart has no way to draw "unknown", so an
+                        // absent metric plots as 0 — the same as a peer whose
+                        // fetch failed. NaN would render an empty bar with a
+                        // "nan" label instead.
+                        const double raw = shared_values->value(peer.toUpper(), 0.0);
+                        const double v = std::isfinite(raw) ? raw : 0.0;
                         *set << v;
                         categories << peer.toUpper();
                         maxv = std::max(maxv, v);

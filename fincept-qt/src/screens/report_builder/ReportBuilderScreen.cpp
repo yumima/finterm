@@ -15,6 +15,8 @@
 #include "services/report_builder/ReportBuilderService.h"
 #include "ui/theme/Theme.h"
 
+#include <cmath>
+
 #include <QComboBox>
 #include <QDateTime>
 #include <QDialog>
@@ -145,21 +147,26 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
                                         return;
                                     auto comps2 = s.components();
                                     QStringList lines;
+                                    // InfoData carries NaN for a field the vendor
+                                    // did not supply. `v != 0` is TRUE for NaN, so
+                                    // these printed a literal "nan" — and when the
+                                    // financial_ratios call fails while get_info
+                                    // succeeds, that is every ratio line at once.
                                     auto fmt_dbl = [](double v, int dec = 2) -> QString {
-                                        return v != 0 ? QString::number(v, 'f', dec) : "—";
+                                        return std::isfinite(v) ? QString::number(v, 'f', dec) : "—";
                                     };
                                     auto fmt_pct = [](double v) -> QString {
-                                        return v != 0 ? QString::number(v * 100, 'f', 2) + "%" : "—";
+                                        return std::isfinite(v) ? QString::number(v * 100, 'f', 2) + "%" : "—";
                                     };
                                     auto fmt_mcap = [](double v) -> QString {
-                                        if (v <= 0) return QString("—");
+                                        if (!std::isfinite(v) || v <= 0) return QString("—");
                                         if (v >= 1e12) return QString::number(v / 1e12, 'f', 2) + "T";
                                         if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
                                         if (v >= 1e6) return QString::number(v / 1e6, 'f', 2) + "M";
                                         return QString::number(v, 'f', 0);
                                     };
                                     auto fmt_vol = [](double v) -> QString {
-                                        if (v <= 0) return QString("—");
+                                        if (!std::isfinite(v) || v <= 0) return QString("—");
                                         if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
                                         if (v >= 1e6) return QString::number(v / 1e6, 'f', 2) + "M";
                                         if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
@@ -184,11 +191,11 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
                                         lines << "Avg Volume: " + fmt_vol(info.avg_volume);
                                         lines << "ROE: " + fmt_pct(info.roe);
                                         lines << "Profit Margin: " + fmt_pct(info.profit_margin);
-                                        if (info.debt_to_equity != 0)
+                                        if (std::isfinite(info.debt_to_equity))
                                             lines << "Debt/Equity: " + fmt_dbl(info.debt_to_equity);
-                                        if (info.current_ratio != 0)
+                                        if (std::isfinite(info.current_ratio))
                                             lines << "Current Ratio: " + fmt_dbl(info.current_ratio);
-                                        if (info.eps != 0) lines << "Rev/Share: " + fmt_dbl(info.eps);
+                                        if (std::isfinite(info.eps)) lines << "Rev/Share: " + fmt_dbl(info.eps);
                                     }
                                     auto cfg = comps2[idx2].config;
                                     cfg["data"] = lines.join("\n");

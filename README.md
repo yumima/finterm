@@ -2,13 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-09-03)
+## Today's commits (2026-09-04)
 
 Latest first.
 
-- [`e7f977a17`](https://github.com/yumima/finterm/commit/e7f977a17) candles: a bar with no prices became a bar priced at zero
-- [`a9ef66353`](https://github.com/yumima/finterm/commit/a9ef66353) news brief: correcting the previous commit — hearth was never the broken path
-- [`749eae0ca`](https://github.com/yumima/finterm/commit/749eae0ca) news brief: the model never got the day, and on this box never answered at all
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

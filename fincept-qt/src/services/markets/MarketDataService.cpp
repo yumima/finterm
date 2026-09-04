@@ -16,12 +16,29 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
+
+#include <cmath>
 #include <QTimer>
 #include <QUrl>
 
 #include <memory>
 
 namespace fincept::services {
+
+namespace {
+
+/// A numeric field, or NaN when the vendor did not supply one.
+///
+/// The daemon's _sanitize_for_json sends every absent value as JSON null, and
+/// QJsonValue::toDouble() reads null as 0.0 without complaint — so "Yahoo has
+/// no profit margin for this company" and "this company's margin is 0.00%"
+/// arrived identically. InfoData's fields default to kUnknownNum for the same
+/// reason; this is what keeps them that way after a fetch.
+double num(const QJsonObject& o, const char* key) {
+    return o.value(QLatin1String(key)).toDouble(kUnknownNum);
+}
+
+} // namespace
 
 MarketDataService& MarketDataService::instance() {
     static MarketDataService s;
@@ -794,12 +811,19 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                              shared->info.country = scrub(o["country"]);
                                              shared->info.currency = scrub(o["currency"]);
                                              if (shared->info.currency.isEmpty()) shared->info.currency = "USD";
-                                             shared->info.market_cap = o["market_cap"].toDouble();
-                                             shared->info.beta = o["beta"].toDouble();
-                                             shared->info.week52_high = o["fifty_two_week_high"].toDouble();
-                                             shared->info.week52_low = o["fifty_two_week_low"].toDouble();
-                                             shared->info.avg_volume = o["average_volume"].toDouble();
-                                             shared->info.eps = o["revenue_per_share"].toDouble();
+                                             shared->info.market_cap = num(o, "market_cap");
+                                             shared->info.beta = num(o, "beta");
+                                             shared->info.week52_high = num(o, "fifty_two_week_high");
+                                             shared->info.week52_low = num(o, "fifty_two_week_low");
+                                             shared->info.avg_volume = num(o, "average_volume");
+                                             // Symmetric with the ratios callback
+                                             // below: the two run in parallel with
+                                             // independent cache entries and can
+                                             // disagree, so neither may clear a
+                                             // value the other supplied.
+                                             if (const double rps = num(o, "revenue_per_share");
+                                                 std::isfinite(rps))
+                                                 shared->info.eps = rps;
                                              shared->info.description = scrub(o["description"]);
                                              shared->info.website = scrub(o["website"]);
                                              shared->info.employees = o["employees"].toInt();
@@ -828,15 +852,23 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                                  try_complete();
                                                  return;
                                              }
-                                             shared->info.pe_ratio = o["peRatio"].toDouble();
-                                             shared->info.forward_pe = o["forwardPE"].toDouble();
-                                             shared->info.price_to_book = o["priceToBook"].toDouble();
-                                             shared->info.dividend_yield = o["dividendYield"].toDouble();
-                                             shared->info.roe = o["returnOnEquity"].toDouble();
-                                             shared->info.profit_margin = o["profitMargin"].toDouble();
-                                             shared->info.debt_to_equity = o["debtToEquity"].toDouble();
-                                             shared->info.current_ratio = o["currentRatio"].toDouble();
-                                             shared->info.eps = o["revenuePerShare"].toDouble();
+                                             shared->info.pe_ratio = num(o, "peRatio");
+                                             shared->info.forward_pe = num(o, "forwardPE");
+                                             shared->info.price_to_book = num(o, "priceToBook");
+                                             shared->info.dividend_yield = num(o, "dividendYield");
+                                             shared->info.roe = num(o, "returnOnEquity");
+                                             shared->info.profit_margin = num(o, "profitMargin");
+                                             shared->info.debt_to_equity = num(o, "debtToEquity");
+                                             shared->info.current_ratio = num(o, "currentRatio");
+                                             // get_info runs in PARALLEL with this
+                                             // and already set eps from its own
+                                             // revenue_per_share. Only overwrite
+                                             // with a real number — whichever reply
+                                             // lands second must not clear a value
+                                             // the other one supplied.
+                                             if (const double rps = num(o, "revenuePerShare");
+                                                 std::isfinite(rps))
+                                                 shared->info.eps = rps;
                                              shared->ratios_ok = true;
                                              try_complete();
                                          },

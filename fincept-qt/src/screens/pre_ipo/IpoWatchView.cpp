@@ -3241,13 +3241,17 @@ void IpoWatchView::render_detail(const Entry* e) {
 // ── Small format helpers shared by the per-tab builders ─────────────────────
 namespace {
 const char* pct_cls(double v) { return v >= 0 ? "pos" : "neg"; }
+// Gate on absence, not on zero. Callers now test std::isfinite before
+// deciding whether to emit a row at all; hiding a real 0.00 here as well
+// meant the widened gate produced "Profit margin —" rather than the intended
+// "Profit margin 0.00%".
 QString fmt_pct(double v, int prec = 1) {
-    if (std::abs(v) < 1e-9) return QStringLiteral("—");
+    if (!std::isfinite(v)) return QStringLiteral("—");
     const double pct = v * 100.0;
     return QString("%1%2%").arg(pct >= 0 ? "+" : "").arg(pct, 0, 'f', prec);
 }
 QString fmt_num(double v, int prec = 2) {
-    if (std::abs(v) < 1e-9) return QStringLiteral("—");
+    if (!std::isfinite(v)) return QStringLiteral("—");
     return QString::number(v, 'f', prec);
 }
 QString kvg_row(const QString& k, const QString& v) {
@@ -3353,19 +3357,23 @@ QString IpoWatchView::build_fundamentals_html(const services::InfoData& info, bo
     if (info.forward_pe > 0)       h += kvg_row("P/E (forward)",  QString::number(info.forward_pe, 'f', 1) + "x");
     if (info.price_to_book > 0)    h += kvg_row("Price / Book",   QString::number(info.price_to_book, 'f', 2) + "x");
     if (info.dividend_yield > 0)   h += kvg_row("Dividend yield", fmt_pct(info.dividend_yield, 2));
-    if (info.beta > 0)             h += kvg_row("Beta",           fmt_num(info.beta));
+    // > 0 hid both a real 0.00 (debt-free, uncorrelated) and a real negative
+    // beta, which gold miners and inverse funds genuinely have.
+    if (std::isfinite(info.beta))  h += kvg_row("Beta",           fmt_num(info.beta));
     // Share count, not dollars — format_money would print "$12M" for a
     // 12,000,000-share average, the same class of error the lock-up
     // SHARES column had.
     if (info.avg_volume > 0)       h += kvg_row("Avg volume",     format_count(info.avg_volume));
-    if (info.profit_margin != 0)
+    if (std::isfinite(info.profit_margin))
         h += kvg_row("Profit margin",
                      QString("<span class='%1'>%2</span>").arg(pct_cls(info.profit_margin), fmt_pct(info.profit_margin)));
-    if (info.roe != 0)
+    if (std::isfinite(info.roe))
         h += kvg_row("Return on equity",
                      QString("<span class='%1'>%2</span>").arg(pct_cls(info.roe), fmt_pct(info.roe)));
-    if (info.debt_to_equity > 0)   h += kvg_row("Debt / Equity",  fmt_num(info.debt_to_equity));
-    if (info.current_ratio > 0)    h += kvg_row("Current ratio",  fmt_num(info.current_ratio));
+    if (std::isfinite(info.debt_to_equity))
+        h += kvg_row("Debt / Equity",  fmt_num(info.debt_to_equity));
+    if (std::isfinite(info.current_ratio))
+        h += kvg_row("Current ratio",  fmt_num(info.current_ratio));
     h += "</table>";
 
     // Annual revenue / margin trend (same data source EquityResearch's
@@ -3465,13 +3473,21 @@ QString IpoWatchView::build_pipeline_html(const Entry& e) const {
 QString IpoWatchView::build_range_html(const Entry& e) const {
     const services::InfoData info = info_cache_.value(e.ticker, {});
     const bool have_info = info_cache_.contains(e.ticker);
-    if (!have_info || info.week52_high <= info.week52_low || info.week52_low <= 0)
+    // isfinite first: every comparison against NaN is false, so absent 52-week
+    // fields sailed through this guard and rendered "$nan – $nan" — and then
+    // int(pos * 100) and std::round(pos) on a NaN are undefined behaviour.
+    if (!have_info || !std::isfinite(info.week52_high) || !std::isfinite(info.week52_low) ||
+        info.week52_high <= info.week52_low || info.week52_low <= 0)
         return "<div class='muted'>52-week range data not yet available.</div>";
     QString h = QString("<div class='big'>$%1 <span class='muted'>–</span> $%2</div>")
                     .arg(info.week52_low, 0, 'f', 2).arg(info.week52_high, 0, 'f', 2);
     if (e.last_price > 0) {
-        const double pos = (e.last_price - info.week52_low) /
-                           (info.week52_high - info.week52_low);
+        // Clamped here rather than inside position_bar: last_price can sit
+        // outside the band (the daily range can extend the 52-week one
+        // intraday), and a bar position is only meaningful in [0,1].
+        const double pos = std::clamp((e.last_price - info.week52_low) /
+                                          (info.week52_high - info.week52_low),
+                                      0.0, 1.0);
         h += QString("<div class='muted' style='margin-top:6px;'>Current $%1 sits at %2% of the band</div>")
                  .arg(e.last_price, 0, 'f', 2).arg(int(pos * 100));
         h += "<div style='margin-top:6px;'>" + position_bar(pos, "#d97706") + "</div>";

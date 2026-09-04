@@ -100,7 +100,10 @@ void LiveDataPanel::apply_value(int row_index, double raw_value, bool ok) {
     if (row_index < 0 || row_index >= value_labels_.size())
         return;
     auto* lbl = value_labels_[row_index];
-    if (!ok || raw_value == 0.0) {
+    // `ok` now carries absence on its own (InfoData holds NaN for a field the
+    // vendor did not supply), so a value of exactly 0.0 is a fact to show, not
+    // a missing one to hide — a company with no debt has a real 0.00 D/E.
+    if (!ok) {
         lbl->setText("n/a");
         lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
                                .arg(ui::colors::TEXT_SECONDARY(), MONO));
@@ -119,9 +122,13 @@ QString LiveDataPanel::format_metric(const QString& metric, double v) {
         return QString("$%1").arg(v, 0, 'f', 0);
     }
     if (metric == "dividend_yield" || metric == "roe" || metric == "profit_margin") {
-        // yfinance returns these as decimals (0.025 = 2.5%) — multiply.
-        const double pct = v <= 1.0 ? v * 100.0 : v;
-        return QString("%1%").arg(pct, 0, 'f', 2);
+        // All three arrive as fractions (0.025 = 2.5%). This used to guess —
+        // "v <= 1.0 ? v * 100 : v" — which silently mis-scaled any value over
+        // 1.0: an ROE of 1.5 is 150%, and the guess rendered it as "1.50%".
+        // The guess existed because dividend_yield really did arrive as a
+        // percentage; that is now converted at the producer, so all three
+        // units agree and there is nothing left to infer.
+        return QString("%1%").arg(v * 100.0, 0, 'f', 2);
     }
     if (metric == "week52_high" || metric == "week52_low") {
         return QString("$%1").arg(v, 0, 'f', 2);
