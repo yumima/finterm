@@ -1,25 +1,32 @@
 #pragma once
-// Fetches everything the OWNERSHIP screen shows, for one symbol at a time.
+// Fetches everything Ownership shows: the per-stock register and the
+// market-wide scans.
 //
-// Two independent sources, deliberately not merged into one call:
+// Per stock, four independent sources, issued together and rendered as each
+// lands, so the fast halves are on screen while EDGAR is still parsing:
 //
-//   sec_ownership_data.py  — Form 4 insider transactions and SC 13D/G stakes,
-//                            parsed from EDGAR. Free, no key, but slow: each
-//                            Form 4 is its own XML document and SEC asks for
-//                            <=10 req/s, so a busy issuer takes tens of
-//                            seconds.
-//   yfinance_data.py       — institutional holders and short interest. Fast.
+//   sec_ownership_data.py    Form 4 insider transactions and SC 13D/G stakes,
+//                            parsed from EDGAR. Free, no key, slow: each Form 4
+//                            is its own XML document at SEC's rate limit.
+//   sec_13f_bulk.py          the 13F holders from the local index. ~20ms.
+//   yfinance (worker)        share count, float, the vendor's percentages.
+//   finra_short_interest.py  the settled short position, twice a month, a
+//                            year deep.
 //
-// They are issued together and rendered as each returns, so the fast half is
-// on screen while the slow half is still parsing. Either can fail without
-// taking the other down; the snapshot records which one did.
+// Market-wide, three scans over the same local stores plus a daily Form 4
+// ingest that this service schedules itself — the scan used to be a button,
+// and a screen that is empty until a button is pressed is a screen nobody
+// opens twice.
 
 #include "screens/ownership/OwnershipTypes.h"
 
 #include <QHash>
-#include <QSet>
 #include <QObject>
+#include <optional>
+#include <QSet>
 #include <QString>
+
+class QTimer;
 
 namespace fincept::services {
 
@@ -28,144 +35,123 @@ class OwnershipService : public QObject {
   public:
     static OwnershipService& instance();
 
-    /// Load ownership data for @p symbol. Emits snapshot_updated once per
-    /// source as each returns, so the UI fills in progressively.
-    ///
-    /// Serves a cached snapshot immediately when one is fresh enough — the
-    /// underlying data is the slowest-moving on any screen (Form 4s land in
-    /// two business days, 13F quarterly, short interest twice monthly), so a
-    /// re-visit within the TTL has nothing new to show and would only pay the
-    /// EDGAR round-trips again.
-    void load(const QString& symbol);
+    // ── Per stock ───────────────────────────────────────────────────────────
 
+    /// Load the register for @p symbol. Emits snapshot_updated once per source
+    /// as each returns. Serves a cached snapshot when one is fresh enough —
+    /// the underlying data is the slowest-moving on any screen.
+    void load(const QString& symbol);
     /// Discard the cached snapshot for @p symbol and fetch again.
     void refresh(const QString& symbol);
-
-    /// The current snapshot for @p symbol, or a default-constructed one.
     ownership::OwnershipSnapshot snapshot(const QString& symbol) const;
-
     /// True while any source for @p symbol is still outstanding.
     bool is_loading(const QString& symbol) const;
 
-    // ── Firms ───────────────────────────────────────────────────────────────
-    //
-    // No curated list. It existed only to work around not having the universe;
-    // with every filer indexed, "which firms do I track" is answered by
-    // searching 10,647 of them instead of maintaining twenty.
+    /// Fetch the 13F holders for a symbol whose snapshot lacks them — the
+    /// case where the register loaded while the index probe was still in
+    /// flight. Cheap and idempotent; nothing else is re-fetched.
+    void ensure_holders(const QString& symbol);
 
-    /// Search indexed filers by name. Results arrive on firms_found.
-    /// Two legitimate rankings of the same universe, both data-driven — no
-    /// hand-picked list of "important" firms. LargestBooks answers "who
-    /// manages the most money"; Concentrated answers "who is actually running
-    /// a book with a view in it", which is the list a trader means by the big
-    /// investment firms. Neither is a subset of the other, so the reader picks.
-    enum class FirmRanking { LargestBooks, Concentrated };
-    void search_firms(const QString& query, FirmRanking ranking = FirmRanking::LargestBooks);
+    enum class HolderSort { BySize, ByWeight };
+    /// Re-rank the holder rows. Position size is the default (Bloomberg HDS);
+    /// weight in the filer's own book is the second view, and it carries a
+    /// book-size floor the script applies.
+    void set_holder_sort(const QString& symbol, HolderSort sort);
+    HolderSort holder_sort(const QString& symbol) const;
+
+    // ── Market-wide scans ───────────────────────────────────────────────────
+
+    void load_insider_buys(const ownership::InsiderBuyQuery& q);
+    const ownership::InsiderBuys& insider_buys() const { return insider_buys_; }
+    bool insider_buys_loading() const { return insider_buys_loading_; }
+
+    void load_short_rank(const QString& sort = QStringLiteral("sirio"));
+    const ownership::ShortRank& short_rank() const { return short_rank_; }
+    bool short_rank_loading() const { return short_rank_loading_; }
+
+    void load_movers(const QString& sort = QStringLiteral("breadth_up"));
+    const ownership::Movers& movers() const { return movers_; }
+    bool movers_loading() const { return movers_loading_; }
+
+    /// Keep the Form 4 store current: read any unread business day in the
+    /// trailing window, a few days per pass, and check again periodically.
+    /// Idempotent; safe to call on every screen show.
+    void ensure_form4_current();
+    bool form4_scanning() const { return form4_scanning_; }
+    QString form4_status() const { return form4_status_; }
+
+    // ── Filers ──────────────────────────────────────────────────────────────
+
+    void search_firms(const QString& query);
     QVector<ownership::Manager> last_firm_results() const { return firm_results_; }
-
-    void load_smart_money(const QString& symbol);
-
-    /// Load the two-axis demand read: every discretionary holder placed on
-    /// conviction against direction. Local index query, so it runs on a symbol
-    /// change like the holder list.
-    void load_demand(const QString& symbol);
-
-    /// Daily short-sale volume from FINRA. The only flow series here that is
-    /// not quarterly, so it is fetched alongside the register rather than
-    /// behind the index.
-    void load_short_volume(const QString& symbol);
-
-    // ── Local 13F index ─────────────────────────────────────────────────────
-    //
-    // SEC publishes every 13F as a bulk quarterly data set: 10,647 filers and
-    // 3.3m positions for one quarter. Ingested into SQLite once, a holder
-    // lookup is a local query in ~20ms with no network, which is what makes it
-    // affordable to load on a symbol change rather than behind a button. It is
-    // also what removes the curated list: Bloomberg's HDS does not curate
-    // because it has the whole universe, and so does this.
-
-    /// True when at least one quarter has been ingested locally.
-    bool index_ready() const;
-    /// Human-readable state of the local index (quarter, filers, rows).
-    QString index_status_text() const;
-    /// Download and index the newest quarterly data set. Emits index_changed.
-    void build_index();
-    /// Resolve CUSIP -> ticker for the largest @p limit unmapped securities.
-    void resolve_symbols(int limit = 2000);
-    bool index_busy() const { return index_busy_; }
-    /// Ask SEC whether a data set exists that this index has not ingested.
-    /// Without this the index silently ages: it still answers, and nothing
-    /// says the answers are a quarter behind.
-    void check_for_newer_quarter();
-
-    /// Pull the current quarter straight from EDGAR for the @p top largest
-    /// filers. SEC's bulk data sets publish only after their filing window
-    /// closes, so they run a full quarter behind — Q2 filings were on EDGAR the
-    /// day they were due while the newest bulk set still covered Q1. This
-    /// closes that gap for the filers whose weights the screen is about.
-    void pull_current_quarter(int top = 400);
-
-    // ── BY FIRM: one manager's whole book ───────────────────────────────────
-
-    /// Fetch @p cik's disclosed equity book and its quarter-over-quarter moves.
-    /// Emits book_updated when it lands.
     void load_book(const QString& cik);
-
-    /// The cached book for @p cik, or a default-constructed one.
     ownership::ManagerBook book(const QString& cik) const;
-
     bool is_book_loading(const QString& cik) const;
 
+    // ── Local 13F index ─────────────────────────────────────────────────────
+
+    bool index_ready() const;
+    QString index_status_text() const;
+    void build_index();
+    void resolve_symbols(int limit = 2000);
+    bool index_busy() const { return index_busy_; }
+    void check_for_newer_quarter();
+
   signals:
-    /// A source returned and the snapshot changed. Carries the symbol so a
-    /// late reply for a symbol the user has navigated away from can be
-    /// ignored by the view.
     void snapshot_updated(QString symbol);
-    /// Both halves have settled, successfully or not.
     void load_finished(QString symbol);
-    /// A manager's book finished loading (or failed — check ManagerBook::error).
+    void insider_buys_updated();
+    void short_rank_updated();
+    void movers_updated();
+    void form4_status_changed(QString status);
     void book_updated(QString cik);
-    /// The tracked-manager list changed (seeded or edited).
     void firms_found();
-    /// The local 13F index changed state (ingest or symbol resolution).
     void index_changed(QString summary);
 
   private:
-    OwnershipService() = default;
-
-    void load_index_holders(const QString& symbol);
-    void probe_index();
-    /// Price the disclosed book. Runs after the book lands, because the
-    /// tickers to fetch are only known once it has.
-    void price_book(const QString& cik);
-    /// CIKs with a price fetch outstanding. Without this, moving through the
-    /// ranked firm list fires one wide download per row.
-    QSet<QString> pricing_in_flight_;
+    OwnershipService();
 
     void fetch_edgar(const QString& symbol);
     void fetch_market(const QString& symbol);
+    void fetch_holders(const QString& symbol, HolderSort sort);
+    void fetch_short_history(const QString& symbol);
+    void fetch_short_volume(const QString& symbol);
+    /// Forward returns on the Form 4 rows, once EDGAR has landed.
+    void price_transactions(const QString& symbol);
+    /// Forward returns on the insider-buys scan rows.
+    void price_insider_buys();
     void note_source_done(const QString& symbol, const QString& source);
-
-    QVector<ownership::Manager> firm_results_;
+    void run_form4_scan();
+    void probe_index();
+    void price_book(const QString& cik);
 
     QHash<QString, ownership::OwnershipSnapshot> cache_;
-    QHash<QString, qint64> fetched_at_;   ///< ms since epoch, per symbol
-    /// Outstanding sources per symbol, BY NAME rather than as a count.
-    ///
-    /// A bare counter conflated three independent fetches. Smart money is
-    /// opt-in and takes minutes; while it ran, the counter was non-zero, and
-    /// load()'s "already in flight" guard then refused to fetch the register at
-    /// all — so clicking LOAD 13F POSITIONS before the page had loaded left the
-    /// rest of the screen permanently empty. Naming the sources lets each guard
-    /// on its own.
+    QHash<QString, qint64> fetched_at_;
     QHash<QString, QSet<QString>> pending_;
+    QHash<QString, HolderSort> holder_sort_;
 
+    ownership::InsiderBuys insider_buys_;
+    bool insider_buys_loading_ = false;
+    /// A query that arrived while one was running; issued when it lands, so
+    /// the table always ends up matching the controls.
+    std::optional<ownership::InsiderBuyQuery> queued_insider_query_;
+    ownership::ShortRank short_rank_;
+    bool short_rank_loading_ = false;
+    ownership::Movers movers_;
+    bool movers_loading_ = false;
+
+    bool    form4_scanning_ = false;
+    QString form4_status_;
+    QTimer* form4_timer_ = nullptr;
+    int     form4_passes_ = 0;
+
+    QVector<ownership::Manager> firm_results_;
     QHash<QString, ownership::ManagerBook> books_;
     QSet<QString> books_in_flight_;
+    QSet<QString> pricing_in_flight_;
+
     bool    index_busy_ = false;
-    /// The on-disk index has been read successfully at least once.
     mutable bool index_probed_ = false;
-    /// A probe is in flight — stops every render() from queueing another.
     mutable bool index_probing_ = false;
     mutable QString index_status_;
 };

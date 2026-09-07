@@ -1,368 +1,174 @@
 #include "screens/ownership/OwnershipScreen.h"
 
-#include "screens/ownership/FirmBookPanel.h"
 #include "screens/ownership/FirmDetailPanel.h"
-#include "screens/ownership/InsiderLeadersPanel.h"
-#include "screens/ownership/OwnershipTypes.h"
-#include "screens/ownership/StockOwnershipPanel.h"
-#include "services/equity/EquityResearchService.h"
+#include "screens/ownership/OwnershipUi.h"
+#include "screens/ownership/ScanPanels.h"
 #include "services/ownership/OwnershipService.h"
-#include "ui/theme/Theme.h"
+#include "ui/components/TooltipText.h"
 #include "ui/theme/ThemeManager.h"
 
-#include <QCompleter>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
-#include <QPointer>
+#include <QListWidget>
 #include <QPushButton>
 #include <QShowEvent>
-#include <QSplitter>
-#include <QStringListModel>
+#include <QStackedWidget>
 #include <QTabWidget>
 #include <QTimer>
-#include <QStackedWidget>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
 
+using namespace fincept::screens::ownership_ui;
+
 OwnershipScreen::OwnershipScreen(QWidget* parent) : QWidget(parent) {
     build_ui();
-    apply_theme();
+    setStyleSheet(table_stylesheet() +
+                  QString("QTabBar::tab{color:%1;background:%2;padding:6px 16px;font-size:12px;"
+                          "letter-spacing:1px;border:1px solid %3;margin-right:2px;}"
+                          "QTabBar::tab:selected{color:%4;background:%5;}"
+                          "QTabWidget::pane{border:0;}"
+                          "QLineEdit{color:%4;background:%2;border:1px solid %3;padding:4px 8px;font-size:12px;}"
+                          "QListWidget{background:%2;border:1px solid %3;font-size:12px;}")
+                      .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM(),
+                           ui::colors::TEXT_PRIMARY(), ui::colors::BG_SURFACE()));
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
-            [this]() { apply_theme(); });
+            [this]() { setStyleSheet(table_stylesheet()); });
 
     auto& svc = services::OwnershipService::instance();
     connect(&svc, &services::OwnershipService::index_changed, this,
             [this](const QString& msg) { refresh_index_ui(msg); });
+    connect(&svc, &services::OwnershipService::firms_found, this, [this]() {
+        filer_results_->clear();
+        const auto firms = services::OwnershipService::instance().last_firm_results();
+        for (const auto& m : firms) {
+            auto* it = new QListWidgetItem(QStringLiteral("%1   ·   %2 · %3 names")
+                                               .arg(m.name, fmt::format_compact(m.book_value))
+                                               .arg(m.position_count));
+            it->setData(Qt::UserRole, m.cik);
+            it->setData(Qt::UserRole + 1, m.name);
+            filer_results_->addItem(it);
+        }
+        filer_results_->setVisible(!firms.isEmpty() && filer_search_->hasFocus());
+    });
     refresh_index_ui({});
-}
-
-// Painted here rather than inherited: the tables are the screen, and Qt's
-// default palette renders them light-on-light against the terminal's dark
-// ground — near-white text on Qt's own alternating-row grey.
-void OwnershipScreen::apply_theme() {
-    setStyleSheet(QString("QWidget{background:%1;color:%2;}"
-                          "QTableWidget{background:%1;gridline-color:%3;"
-                          "alternate-background-color:%6;color:%2;}"
-                          "QTableWidget::item{color:%2;}"
-                          "QHeaderView::section{background:%4;color:%5;padding:4px;border:0;}")
-                      .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
-                           ui::colors::BORDER_DIM(), ui::colors::BG_RAISED(),
-                           ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE()));
 }
 
 void OwnershipScreen::build_ui() {
     auto* root = new QVBoxLayout(this);
-    root->setContentsMargins(8, 6, 8, 6);
-    root->setSpacing(6);
+    root->setContentsMargins(10, 8, 10, 8);
+    root->setSpacing(8);
 
+    // ── Top bar: title, index state, filer search ───────────────────────────
     auto* bar = new QHBoxLayout;
-    bar->setSpacing(8);
+    bar->setSpacing(10);
     auto* title = new QLabel(QStringLiteral("OWNERSHIP"));
-    title->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;letter-spacing:1px;")
+    title->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;letter-spacing:2px;")
                              .arg(ui::colors::ORANGE()));
     bar->addWidget(title);
-
-    auto* sub = new QLabel(QStringLiteral(
-        "Who is running the money, and what they own. Search a stock on the right for its "
-        "own register — insiders, holders and short interest."));
+    auto* sub = new QLabel(QStringLiteral("Where the informed parties are acting. Every row is a stock; "
+                                          "click one to open it in Equity Research."));
     sub->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     bar->addWidget(sub, 1);
 
-    // The index controls live on the top bar, not inside a panel: without an
-    // index every view here is empty, so "how do I fix that" must be the most
-    // findable thing on the screen rather than something to hunt for.
+    index_lbl_ = new QLabel;
+    index_lbl_->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+    index_lbl_->setWordWrap(true);
     index_btn_ = new QPushButton;
-    connect(index_btn_, &QPushButton::clicked, this, [this]() {
+    connect(index_btn_, &QPushButton::clicked, this, []() {
         auto& svc = services::OwnershipService::instance();
         if (!svc.index_ready())
             svc.build_index();
         else
-            svc.resolve_symbols(2000);
+            svc.resolve_symbols();
     });
     bar->addWidget(index_btn_);
-    root->addLayout(bar);
 
-    index_lbl_ = new QLabel;
-    index_lbl_->setVisible(false);   // shown only when it has something to add
-    index_lbl_->setWordWrap(true);
-    index_lbl_->setStyleSheet(QString("color:%1;font-size:12px;")
-                                  .arg(ui::colors::TEXT_SECONDARY()));
+    filer_search_ = new QLineEdit;
+    filer_search_->setPlaceholderText(QStringLiteral("Filer — e.g. Berkshire, Citadel"));
+    filer_search_->setClearButtonEnabled(true);
+    filer_search_->setMinimumWidth(240);
+    filer_search_->setMaximumWidth(300);
+    filer_search_->setToolTip(ui::tooltip_wrap(QStringLiteral(
+        "Open one 13F filer's whole disclosed equity book — what they hold, at what weight, and "
+        "what moved last quarter. A drill, not a ranking: the question starts with a firm you have "
+        "in mind.")));
+    bar->addWidget(filer_search_);
+    root->addLayout(bar);
+    // The index state gets its own line: on the title bar it ran off the
+    // right edge the moment it had something to say.
     root->addWidget(index_lbl_);
 
-    // The whole window. This is the one view that exists nowhere else, and
-    // sharing the screen with a per-security register left the ranked list of
-    // filers in a third of the width with its columns scrolled off.
-    // Left: the scan across filers. Right: whatever the reader just clicked.
-    // Keeping the list fixed while the right half changes is what makes
-    // comparing two firms possible without losing your place in the ranking.
-    firm_book_ = new FirmBookPanel;
-    firm_detail_ = new FirmDetailPanel;
-    stock_panel_ = new StockOwnershipPanel;
-    stock_panel_->set_chrome_visible(false);   // the click supplies the symbol
-
-    detail_stack_ = new QStackedWidget;
-    detail_stack_->addWidget(firm_detail_);   // 0 — a firm's book
-    detail_stack_->addWidget(stock_panel_);   // 1 — a security's register
-
-    // A way back. Opening a holding replaced the firm's book with the
-    // security's register and left no route back to it — the only escape was
-    // clicking the firm in the ranked list again, which is not something a
-    // reader can be expected to guess.
-    back_btn_ = new QPushButton;
-    back_btn_->setCursor(Qt::PointingHandCursor);
-    back_btn_->setVisible(false);
-    back_btn_->setStyleSheet(QString("QPushButton{color:%1;background:%2;border:1px solid %3;"
-                                     "padding:3px 10px;text-align:left;}"
-                                     "QPushButton:hover{color:%4;}")
-                                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
-                                      ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
-    connect(back_btn_, &QPushButton::clicked, this, [this]() {
-        detail_stack_->setCurrentIndex(0);
-        back_btn_->setVisible(false);
-        // The box names the pane. Back to the firm's book, and it is naming a
-        // security that is no longer on screen.
-        shown_symbol_.clear();
-        ticker_results_query_.clear();
-        ticker_pending_query_.clear();
-        if (ticker_)
-            ticker_->clear();
-        if (ticker_note_)
-            ticker_note_->clear();
+    // Suggestions drop under the search box; the list is the completer.
+    filer_results_ = new QListWidget(this);
+    filer_results_->setWindowFlags(Qt::ToolTip);
+    filer_results_->setMinimumWidth(420);
+    filer_results_->setMaximumHeight(260);
+    filer_results_->hide();
+    connect(filer_results_, &QListWidget::itemClicked, this, [this](QListWidgetItem* it) {
+        filer_results_->hide();
+        show_filer(it->data(Qt::UserRole).toString(), it->data(Qt::UserRole + 1).toString());
     });
-
-    // A security is reachable by name, not only by finding a firm that happens
-    // to hold it. The detail pane is where a stock's register is read, so its
-    // own search box belongs on top of it — the left pane searches filers, the
-    // right pane searches securities, and each box sits over what it changes.
-    ticker_ = new QLineEdit;
-    ticker_->setPlaceholderText(QStringLiteral("Search a stock — ticker or name, e.g. AAPL"));
-    ticker_->setClearButtonEnabled(true);
-    ticker_->setMinimumWidth(260);
-    ticker_->setMaximumWidth(320);
-    ticker_->setToolTip(QStringLiteral(
-        "Open any security's ownership register — insiders' Form 4 filings, the 13F holders, "
-        "the 5% stakes and the short interest. Type a ticker, or a company name and pick from "
-        "the suggestions."));
-
-    // Names, not just tickers: a reader who wants Palantir's insider filings
-    // should not have to know it is PLTR. Suggestions come from the same
-    // symbol search Equity Research uses, so the two agree on what exists.
-    ticker_model_ = new QStringListModel(this);
-    auto* completer = new QCompleter(ticker_model_, this);
-    completer->setCaseSensitivity(Qt::CaseInsensitive);
-    completer->setCompletionMode(QCompleter::UnfilteredPopupCompletion);
-    completer->setMaxVisibleItems(12);
-    ticker_->setCompleter(completer);
-
-    // A line to say what the box is doing when it has nothing to open yet.
-    // Without it, Enter on a name the search cannot resolve does nothing at
-    // all — no register, no message — which reads as a broken box.
-    ticker_note_ = new QLabel;
-    ticker_note_->setStyleSheet(QString("color:%1;font-size:12px;")
-                                    .arg(ui::colors::TEXT_SECONDARY()));
-
-    // Debounced: a keystroke is not a question. The search is asked through
-    // the per-caller entry point rather than the broadcast one, so results
-    // arrive tagged with the query that produced them and this box cannot be
-    // handed Equity Research's — or an MCP tool call's — answers.
-    ticker_debounce_ = new QTimer(this);
-    ticker_debounce_->setSingleShot(true);
-    ticker_debounce_->setInterval(220);
-    connect(ticker_debounce_, &QTimer::timeout, this, [this]() {
-        const QString q = ticker_->text().trimmed();
-        if (q.isEmpty())
-            return;
-        ticker_pending_query_ = q;
-        // The reply outlives nothing: the service is a singleton and this
-        // screen is not, so the callback holds a guard rather than a raw this.
-        QPointer<OwnershipScreen> self = this;
-        services::equity::EquityResearchService::instance().search_symbols_for(
-            q, [self](QString query, QVector<services::equity::SearchResult> results) {
-                if (!self)
-                    return;
-                if (self->ticker_pending_query_.compare(query, Qt::CaseInsensitive) == 0)
-                    self->ticker_pending_query_.clear();
-                // Results are only ever attributed to the query that asked for
-                // them, however late they land.
-                QStringList rows;
-                rows.reserve(results.size());
-                for (const auto& r : results) {
-                    rows << (r.name.isEmpty() ? r.symbol
-                                              : QStringLiteral("%1 — %2").arg(r.symbol, r.name));
-                }
-                const QString current = self->ticker_->text().trimmed();
-                if (current.compare(query, Qt::CaseInsensitive) != 0)
-                    return;   // the reader has typed past this question
-                self->ticker_model_->setStringList(rows);
-                self->ticker_results_query_ = query;
-                self->ticker_note_->setText(
-                    rows.isEmpty() ? QStringLiteral("Nothing found for “%1”.").arg(query)
-                                   : QString());
-                // Do not pop the list open over a register already showing —
-                // a debounced search lands after Enter has done its work — nor
-                // when the reader has moved focus elsewhere.
-                if (rows.isEmpty() || !self->ticker_->hasFocus())
-                    return;
-                if (!self->shown_symbol_.isEmpty() &&
-                    current.compare(self->shown_symbol_, Qt::CaseInsensitive) == 0)
-                    return;
-                self->ticker_->completer()->complete();
-            });
-    });
-    connect(ticker_, &QLineEdit::textEdited, this, [this](const QString& text) {
-        // The suggestions on hand answer the previous text, not this one. The
-        // model goes with the query: Qt re-opens the popup on every keystroke,
-        // and a click on a row left over from two letters ago opens a company
-        // that is not what the box says.
-        ticker_results_query_.clear();
-        ticker_model_->setStringList({});
-        ticker_note_->clear();
-        if (text.trimmed().isEmpty()) {
-            ticker_debounce_->stop();
-            ticker_pending_query_.clear();
+    filer_debounce_ = new QTimer(this);
+    filer_debounce_->setSingleShot(true);
+    filer_debounce_->setInterval(250);
+    connect(filer_debounce_, &QTimer::timeout, this, [this]() {
+        const QString q = filer_search_->text().trimmed();
+        if (q.length() < 2) {
+            filer_results_->hide();
             return;
         }
-        ticker_debounce_->start();
+        const QPoint at = filer_search_->mapToGlobal(QPoint(0, filer_search_->height()));
+        filer_results_->move(at);
+        services::OwnershipService::instance().search_firms(q);
     });
-    // Enter takes what is typed; picking a suggestion takes the symbol off the
-    // front of it. Both land in show_symbol, which is idempotent, so the
-    // activated-then-returnPressed pair Qt emits for Enter opens once.
-    connect(ticker_, &QLineEdit::returnPressed, this, [this]() {
-        const QString typed = ticker_->text().trimmed();
-        if (typed.isEmpty())
-            return;
-        // Unfiltered completion means no suggestion is ever current until the
-        // reader arrows into the list, so Enter on a typed NAME arrives here.
-        // Resolve it through the suggestions first — and only through ones
-        // that answer what is typed now, since a stale list would open the
-        // company the reader was looking at two keystrokes ago.
-        if (ticker_results_query_.compare(typed, Qt::CaseInsensitive) == 0) {
-            const QStringList rows = ticker_model_->stringList();
-            for (const QString& row : rows) {
-                if (row.section(QStringLiteral(" — "), 0, 0)
-                        .compare(typed, Qt::CaseInsensitive) == 0) {
-                    show_symbol(row);   // the typed text IS a symbol
-                    return;
-                }
-            }
-            if (!rows.isEmpty()) {
-                show_symbol(rows.first());   // what the popup was offering
-                return;
-            }
+    connect(filer_search_, &QLineEdit::textEdited, this, [this](const QString&) { filer_debounce_->start(); });
+    connect(filer_search_, &QLineEdit::returnPressed, this, [this]() {
+        if (filer_results_->count() > 0) {
+            auto* it = filer_results_->item(0);
+            filer_results_->hide();
+            show_filer(it->data(Qt::UserRole).toString(), it->data(Qt::UserRole + 1).toString());
         }
-        // Typed in capitals, and shaped like a symbol: that is a ticker and
-        // the reader said so. Open it without waiting for a search.
-        const bool shaped = ownership::looks_like_ticker(typed);
-        if (ownership::typed_as_ticker(typed)) {
-            show_symbol(typed);
-            return;
-        }
-        // Lower case is ambiguous — "aapl" is a ticker, "google" is a company —
-        // so if a search is already on its way, it gets to answer. The debounce
-        // holds the first 220ms of one, and treating that window as a miss
-        // would load GOOGLE rather than resolving GOOGL.
-        const bool asking = !ticker_pending_query_.isEmpty() || ticker_debounce_->isActive();
-        if (asking) {
-            ticker_note_->setText(
-                QStringLiteral("Still searching for “%1” — press Enter again in a moment.")
-                    .arg(typed));
-            return;
-        }
-        // Nothing is coming. Take the typed text if it can be a symbol at all;
-        // otherwise say so, because silence here reads as a dead box.
-        if (shaped) {
-            show_symbol(typed);
-            return;
-        }
-        ticker_note_->setText(
-            QStringLiteral("No security matches “%1”. Try its ticker.").arg(typed));
     });
-    connect(completer, QOverload<const QString&>::of(&QCompleter::activated), this,
-            [this](const QString& choice) { show_symbol(choice); });
 
-    auto* head = new QHBoxLayout;
-    head->setSpacing(8);
-    head->addWidget(back_btn_);
-    head->addStretch(1);
-    head->addWidget(ticker_note_);
-    head->addWidget(ticker_);
+    // ── Body: the three scans, or the empty state, or a filer's book ────────
+    stack_ = new QStackedWidget;
+    root->addWidget(stack_, 1);
 
-    auto* detail_host = new QWidget;
-    auto* dv = new QVBoxLayout(detail_host);
-    dv->setContentsMargins(0, 0, 0, 0);
-    dv->setSpacing(4);
-    dv->addLayout(head);
-    dv->addWidget(detail_stack_, 1);
+    tabs_ = new QTabWidget;
+    insider_buys_ = new InsiderBuysPanel;
+    short_rank_ = new ShortRankPanel;
+    movers_ = new MoversPanel;
+    for (auto* p : {static_cast<QWidget*>(insider_buys_), static_cast<QWidget*>(short_rank_),
+                    static_cast<QWidget*>(movers_)})
+        p->setContentsMargins(0, 8, 0, 0);
+    tabs_->addTab(insider_buys_, QStringLiteral("INSIDER BUYS"));
+    tabs_->addTab(short_rank_, QStringLiteral("SHORT-CONSTRAINED"));
+    tabs_->addTab(movers_, QStringLiteral("13F MOVERS"));
+    connect(tabs_, &QTabWidget::currentChanged, this, [this](int i) { load_tab(i); });
+    auto open = [this](const QString& sym) {
+        emit navigate_to_screen(QStringLiteral("equity_research"), sym);
+    };
+    connect(insider_buys_, &InsiderBuysPanel::stock_activated, this, open);
+    connect(short_rank_, &ShortRankPanel::stock_activated, this, open);
+    connect(movers_, &MoversPanel::stock_activated, this, open);
+    stack_->addWidget(tabs_);   // 0
 
-    connect(firm_book_, &FirmBookPanel::firm_selected, this, [this](const QString& cik) {
-        firm_detail_->set_firm(cik);
-        detail_stack_->setCurrentIndex(0);
-        back_btn_->setVisible(false);
-        selected_firm_cik_  = cik;
-        selected_firm_name_ = firm_book_->selected_firm_name();
-        shown_symbol_.clear();
-        ticker_results_query_.clear();
-        ticker_pending_query_.clear();
-        if (ticker_)
-            ticker_->clear();
-        if (ticker_note_)
-            ticker_note_->clear();   // the pane is a firm's book again
-    });
-    // A holding is a security, and the question after "they own this" is "who
-    // else does". Answer it in place rather than sending the reader to another
-    // screen and losing the firm they were reading.
-    connect(firm_detail_, &FirmDetailPanel::navigate_to_symbol, this,
-            [this](const QString& ticker) { show_symbol(ticker); });
-
-    // Two aggregated views, one detail pane. BY FIRM asks who is running the
-    // money; INSIDERS asks where the people who run the companies are putting
-    // their own. Both hand the same right-hand pane a thing to open, so the
-    // reader never loses their place in either list.
-    insiders_ = new InsiderLeadersPanel;
-    connect(insiders_, &InsiderLeadersPanel::issuer_selected, this,
-            [this](const QString& symbol, const QString&) {
-                show_symbol(symbol);   // empty when the filing named no security
-            });
-
-    left_ = new QTabWidget;
-    // Only the firm view depends on the 13F index. INSIDERS reads Form 4 from
-    // EDGAR and works with no index at all, so the "build an index" page
-    // belongs inside this tab rather than over the whole screen.
-    firm_stack_ = new QStackedWidget;
-    firm_stack_->addWidget(firm_book_);   // 0
-    left_->addTab(firm_stack_, QStringLiteral("BY FIRM"));
-    left_->addTab(insiders_, QStringLiteral("INSIDERS"));
-
-    auto* split = new QSplitter(Qt::Horizontal);
-    split->setChildrenCollapsible(false);
-    split->addWidget(left_);
-    split->addWidget(detail_host);
-    split->setStretchFactor(0, 5);
-    split->setStretchFactor(1, 5);
-    split->setSizes({760, 900});
-    split_ = split;
-
-    // ── Empty state ─────────────────────────────────────────────────────────
-    // Without an index the screen has exactly one thing to say and one button
-    // to offer, so it says it once, in the middle.
     auto* empty = new QWidget;
     auto* ev = new QVBoxLayout(empty);
     ev->addStretch(1);
-    auto* etitle = new QLabel(QStringLiteral("No 13F ownership index yet"));
+    auto* etitle = new QLabel(QStringLiteral("No 13F index yet"));
     etitle->setAlignment(Qt::AlignCenter);
-    etitle->setStyleSheet(QString("color:%1;font-size:20px;font-weight:700;")
-                              .arg(ui::colors::TEXT_PRIMARY()));
+    etitle->setStyleSheet(QString("color:%1;font-size:20px;font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
     ev->addWidget(etitle);
     auto* ebody = new QLabel(QStringLiteral(
-        "Downloads two quarterly SEC 13F data sets — around 10,600 filers and 2.4 million "
-        "positions each — and indexes them locally. Every filer then gets its complete "
-        "book and its quarter-over-quarter changes, answered in milliseconds with no "
-        "network.\n\nRuns once, takes a couple of minutes."));
+        "The short-interest ranking and the 13F movers need the local index: two quarterly SEC 13F "
+        "data sets — around 10,600 filers and 3 million positions each — indexed once. About 200 MB, "
+        "a couple of minutes. Insider buys work without it and are on the first tab."));
     ebody->setAlignment(Qt::AlignCenter);
     ebody->setWordWrap(true);
-    ebody->setMaximumWidth(620);
+    ebody->setMaximumWidth(640);
     ebody->setStyleSheet(QString("color:%1;font-size:13px;").arg(ui::colors::TEXT_SECONDARY()));
     auto* ebrow = new QHBoxLayout;
     ebrow->addStretch(1);
@@ -384,73 +190,101 @@ void OwnershipScreen::build_ui() {
     ev->addLayout(ebtnrow);
     ev->addStretch(2);
     empty_page_ = empty;
+    stack_->addWidget(empty_page_);   // 1
 
-    firm_stack_->addWidget(empty_page_);   // 1 — swapped in when there is no index
-    root->addWidget(split_, 1);
+    filer_page_ = new QWidget;
+    auto* fp = new QVBoxLayout(filer_page_);
+    fp->setContentsMargins(0, 0, 0, 0);
+    fp->setSpacing(6);
+    auto* fh = new QHBoxLayout;
+    back_btn_ = new QPushButton(QStringLiteral("←  Back to the scans"));
+    back_btn_->setCursor(Qt::PointingHandCursor);
+    back_btn_->setStyleSheet(QString("QPushButton{color:%1;background:%2;border:1px solid %3;"
+                                     "padding:4px 12px;text-align:left;font-size:12px;}"
+                                     "QPushButton:hover{color:%4;}")
+                                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
+                                      ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
+    connect(back_btn_, &QPushButton::clicked, this, [this]() {
+        stack_->setCurrentIndex(services::OwnershipService::instance().index_ready() ? 0 : 1);
+    });
+    fh->addWidget(back_btn_);
+    filer_title_ = new QLabel;
+    filer_title_->setStyleSheet(QString("color:%1;font-size:13px;font-weight:600;").arg(ui::colors::AMBER()));
+    fh->addWidget(filer_title_, 1);
+    fp->addLayout(fh);
+    filer_ = new FirmDetailPanel;
+    connect(filer_, &FirmDetailPanel::navigate_to_symbol, this, [this](const QString& ticker) {
+        emit navigate_to_screen(QStringLiteral("equity_research"), ticker);
+    });
+    fp->addWidget(filer_, 1);
+    stack_->addWidget(filer_page_);   // 2
 }
 
-void OwnershipScreen::show_symbol(const QString& symbol) {
-    // A completer row is "AAPL — Apple Inc."; a typed one is just the ticker.
-    // Split on the em-dash separator this screen wrote, not on any dash, so a
-    // ticker that legitimately contains one (BRK-B) survives.
-    QString sym = symbol.section(QStringLiteral(" — "), 0, 0).trimmed().toUpper();
-    if (sym.isEmpty())
+void OwnershipScreen::show_filer(const QString& cik, const QString& name) {
+    filer_title_->setText(name);
+    filer_->set_firm(cik);
+    stack_->setCurrentIndex(2);
+}
+
+void OwnershipScreen::load_tab(int index) {
+    if (index < 0 || index > 2 || loaded_[index])
         return;
-    stock_panel_->set_symbol(sym);
-    detail_stack_->setCurrentIndex(1);
-    shown_symbol_ = sym;
-    if (ticker_note_)
-        ticker_note_->clear();
-    // Name what the pane is showing, however the reader got here. Arriving by
-    // click and leaving a stale ticker in the box makes the box look like it
-    // is in charge of a pane it is not showing.
-    if (ticker_ && ticker_->text() != sym)
-        ticker_->setText(sym);   // textEdited is not emitted, so no re-search
-    // Offer the way back only when there is a book to go back TO. Before a
-    // firm has been picked — arriving from the insider ranking, or from the
-    // search box on a fresh screen — index 0 is an empty firm pane, and a
-    // button promising "the firm's holdings" led there. Keyed on the CIK, not
-    // on the display name: a filer whose 13F record carries no name still has
-    // a book, and hiding the button would strand the reader on the security.
-    back_btn_->setText(QStringLiteral("←  Back to %1")
-                           .arg(selected_firm_name_.isEmpty()
-                                    ? QStringLiteral("the firm's holdings")
-                                    : selected_firm_name_));
-    back_btn_->setVisible(!selected_firm_cik_.isEmpty());
+    loaded_[index] = true;
+    if (index == 0)
+        insider_buys_->refresh();
+    else if (index == 1)
+        short_rank_->refresh();
+    else
+        movers_->refresh();
 }
 
 void OwnershipScreen::refresh_index_ui(const QString& msg) {
     auto& svc = services::OwnershipService::instance();
     const bool ready = svc.index_ready();
-    if (firm_stack_)
-        firm_stack_->setCurrentIndex(ready ? 0 : 1);
-    // The toolbar control is redundant while the empty page owns the action.
-    index_btn_->setVisible(ready);
-    index_lbl_->setVisible(ready && !msg.isEmpty());
-    index_btn_->setText(ready ? QStringLiteral("MAP MORE SYMBOLS")
-                              : QStringLiteral("BUILD 13F INDEX"));
-    index_btn_->setToolTip(
-        ready ? QStringLiteral("Resolve more CUSIPs to tickers via OpenFIGI so more securities "
-                               "are searchable by symbol.")
-              : QStringLiteral("Download one quarterly SEC 13F data set — every filer, every "
-                               "position — and index it locally. About 100 MB, runs once."));
+    // The insider scan works with no index at all, so the empty page only
+    // takes over when there is nothing else to show — and never over a
+    // filer's book the reader has open.
+    if (stack_->currentIndex() != 2)
+        stack_->setCurrentIndex(ready ? 0 : 1);
+    index_btn_->setText(ready ? QStringLiteral("MAP MORE SYMBOLS") : QStringLiteral("BUILD 13F INDEX"));
+    index_btn_->setToolTip(ui::tooltip_wrap(
+        ready ? QStringLiteral("Resolve more CUSIPs to tickers via OpenFIGI so more securities are "
+                               "searchable and rankable by symbol.")
+              : QStringLiteral("Download two quarterly SEC 13F data sets — every filer, every position "
+                               "— and index them locally. About 200 MB, runs once.")));
     index_btn_->setEnabled(!svc.index_busy());
-    index_lbl_->setText(msg.isEmpty() ? svc.index_status_text() : msg);
+    index_btn_->setVisible(ready);
+    index_lbl_->setText(msg.isEmpty() ? (ready ? svc.index_status_text() : QString()) : msg);
+    filer_search_->setEnabled(ready);
+    if (ready && shown_once_) {
+        // The index arriving is what makes two of the scans answerable.
+        if (tabs_->currentIndex() == 1 && !svc.short_rank().loaded) short_rank_->refresh();
+        if (tabs_->currentIndex() == 2 && !svc.movers().loaded) movers_->refresh();
+    }
 }
 
 void OwnershipScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
-    if (!loaded_once_) {
-        loaded_once_ = true;
-        services::OwnershipService::instance().check_for_newer_quarter();
+    auto& svc = services::OwnershipService::instance();
+    // The Form 4 store fills itself: a few business days per pass, checked
+    // again every few hours. A scan that waits for a button is a tab that is
+    // empty on every first open.
+    svc.ensure_form4_current();
+    if (!shown_once_) {
+        shown_once_ = true;
+        svc.check_for_newer_quarter();
+        load_tab(tabs_->currentIndex());
     }
 }
 
-void OwnershipScreen::restore_state(const QVariantMap& /*state*/) {
-    // Nothing per-ticker survives here any more: the firm list is the screen,
-    // and which firm is selected is a browse position rather than a setting.
+void OwnershipScreen::restore_state(const QVariantMap& state) {
+    const int tab = state.value(QStringLiteral("tab"), 0).toInt();
+    if (tab >= 0 && tab < 3)
+        tabs_->setCurrentIndex(tab);
 }
 
-QVariantMap OwnershipScreen::save_state() const { return {}; }
+QVariantMap OwnershipScreen::save_state() const {
+    return {{QStringLiteral("tab"), tabs_->currentIndex()}};
+}
 
 } // namespace fincept::screens

@@ -126,9 +126,8 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     EquityPeersTab* peers_tab_ = nullptr;
     EquityNewsTab* news_tab_ = nullptr;
     RelationshipMapScreen* relationships_tab_ = nullptr;
-    /// "Which large managers hold this, at what weight in THEIR book." The
-    /// stock-perspective view of the 13F index; the same widget the OWNERSHIP
-    /// screen embeds, so there is one implementation of the question.
+    /// Who holds this, what the insiders did, what the shorts hold — the one
+    /// per-security ownership surface in the app.
     StockOwnershipPanel* ownership_tab_ = nullptr;
 
     QTimer* refresh_timer_ = nullptr;

@@ -34,7 +34,9 @@ WHAT IS DELIBERATELY NOT COUNTED AS A HOLDING
 ACTIONS
     status   {}                        what is ingested locally
     ingest   {"url"?, "quarter"?}      download + index one quarterly data set
-    holders  {"ticker"|"cusip", "limit"?, "min_weight"?}
+    holders  {"ticker"|"cusip", "limit"?, "sort"?: value|weight}
+    movers   {"limit"?, "sort"?, "min_holders"?}   breadth change per security
+    ticker_totals {"quarter"?}         13F shares and holder count per ticker
     book     {"cik"|"manager"}         one manager's whole book from the index
     resolve  {"ticker"}                ticker -> CUSIP via OpenFIGI
 """
@@ -555,12 +557,45 @@ MIN_BOOK_POSITIONS = 5          # a book too narrow for a weight to mean anythin
 MAX_DISCRETIONARY_POSITIONS = 1000
 
 
+# Below this book size a "% of their book" ranking surfaces two-person
+# advisers with one name in the account, not conviction. Bloomberg's HDS sorts
+# by position size; the weight sort is the second view, and it needs a floor
+# an order of magnitude above the one the value sort uses.
+MIN_BOOK_FOR_WEIGHT_SORT = 1_000_000_000.0
+
+# The five passive complexes, by name. Breadth (stock_count) already labels a
+# 40,000-name book as broad; the names are here so an index arm is called what
+# it is rather than "broad". Kept short and visible: it is a label, not a filter.
+PASSIVE_COMPLEXES = ("blackrock", "vanguard", "state street", "geode", "ssga")
+
+
+def holder_tier(manager, stock_count):
+    """'index' for a named passive complex, 'broad' for a book too wide to hold
+    a view on any one name, 'focused' otherwise. 13F cannot tell a hedge fund
+    from a pension, so this never claims to."""
+    m = (manager or "").lower()
+    if any(k in m for k in PASSIVE_COMPLEXES):
+        return "index"
+    if (stock_count or 0) >= MAX_DISCRETIONARY_POSITIONS:
+        return "broad"
+    return "focused"
+
+
 def holders(ticker=None, cusip=None, limit=60, quarter=None,
             min_book=MIN_BOOK_VALUE, min_positions=MIN_BOOK_POSITIONS,
-            max_positions=None):
-    """Every filer holding this security, ranked by weight in their own book."""
+            max_positions=None, sort="value"):
+    """Every filer holding this security.
+
+    `sort` is "value" — position size, the HDS default — or "weight", the
+    position as a share of the filer's own book, which answers a different
+    question and carries a book-size floor so the answer is Berkshire rather
+    than a shell. Totals, counts and concentration are computed over EVERY
+    holder before the display limit is applied.
+    """
     con = connect()
     try:
+        if sort == "weight":
+            min_book = max(float(min_book), MIN_BOOK_FOR_WEIGHT_SORT)
         name = ""
         if not cusip:
             res = resolve_ticker(ticker, con)
@@ -624,6 +659,7 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                 "put_call": pc, "is_derivative": bool(pc),
                 "value": value, "shares": shares,
                 "weight": weight, "book_total": book_total, "position_count": book_count,
+                "tier": holder_tier(m, book_count),
             }
             if prior_q and not pc:
                 if prior_shares is None:
@@ -645,8 +681,23 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                                      else ("added" if delta > 0 else "trimmed"))
                 rec["prior_shares"] = prior_shares
             out.append(rec)
-        out.sort(key=lambda r: (r["weight"] or 0), reverse=True)
+        if sort == "weight":
+            out.sort(key=lambda r: (r["weight"] or 0), reverse=True)
+        else:
+            sort = "value"
+            out.sort(key=lambda r: (r["value"] or 0), reverse=True)
         stock = [r for r in out if not r["is_derivative"]]
+
+        # Concentration, over every holder rather than the rows shown. The
+        # first version of this screen computed "top five" over the 80 rows it
+        # displayed and printed 93% for Apple; the figure across all 6,004
+        # filers is 39%. A number computed over a slice must not be labelled
+        # as the register's.
+        by_value = sorted((r["value"] or 0.0 for r in stock), reverse=True)
+        value_all = sum(by_value)
+        top10_share = (sum(by_value[:10]) / value_all) if value_all > 0 else None
+        broad_value = sum((r["value"] or 0.0) for r in stock if r["tier"] != "focused")
+        broad_share = (broad_value / value_all) if value_all > 0 else None
 
         # Filers who held this last quarter and do not now. They cannot appear
         # in the query above — it is driven by CURRENT holdings — but "twelve
@@ -686,7 +737,8 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                                       AND ch.cusip = ph.cusip AND ch.put_call = '')
             """, (quarter, cusip, prior_q, float(min_book), int(min_positions),
                   int(max_positions or 0), int(max_positions or 0))).fetchone()[0]
-        buyers = sum(1 for r in stock if r.get("action") in ("added", "new"))
+        buyers = sum(1 for r in stock if r.get("action") == "added")
+        new = sum(1 for r in stock if r.get("action") == "new")
         sellers = sum(1 for r in stock if r.get("action") == "trimmed")
         # Totals across EVERY filer, not just the rows returned. This is what
         # makes an institutional-ownership percentage computable from the
@@ -700,8 +752,10 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
                 "total_shares_held": total_shares,
                 "total_value_held": total_value,
                 "prior_quarter": prior_q,
-                "buyers": buyers, "sellers": sellers, "exited": exited,
+                "buyers": buyers, "new": new, "sellers": sellers, "exited": exited,
                 "exited_shares": exited_shares,
+                "top10_share": top10_share, "broad_share": broad_share,
+                "sort": sort,
                 "newer_partial": newer_partial,
                 "min_book_value": min_book, "min_book_positions": min_positions,
                 "max_book_positions": max_positions or 0,
@@ -1059,323 +1113,219 @@ def ingest_current(top=400, progress=None):
         con.close()
 
 
-# ── Institutional demand ────────────────────────────────────────────────────
+# ── Whole-universe aggregates: ticker totals and breadth ────────────────────
 #
-# Two axes, because one number hides the answer. AAPL last quarter gained 91
-# holders and 14.2m shares — "accumulation" by any single measure — while the
-# funds with the LARGEST stakes were net sellers, 1,124 trimming against 824
-# adding. The aggregate and the conviction-weighted read pointed opposite ways,
-# and only the second is a statement about what informed holders think.
-#
-# So: every holder is placed on conviction (share of THEIR book) against
-# direction (change in shares), and the four quadrants are counted. The caller
-# gets the cloud and the counts, not a verdict.
+# Two market-wide questions need one pass over every holding in a quarter:
+# "how many 13F shares are out there for each ticker" (the denominator of
+# short interest ÷ institutional shares) and "how many filers hold each name,
+# and how did that change" (breadth of ownership — Chen, Hong and Stein, and
+# one of the two ownership signals that replicates cleanly). Both are
+# computed once per quarter into cache tables, because a GROUP BY over 3.3m
+# rows is seconds, not milliseconds, and the answer does not change until the
+# next data set is ingested.
 
-def demand(ticker=None, cusip=None, quarter=None,
-           min_book=None, min_positions=None, max_points=1200):
+def _ensure_totals(con, quarter):
+    con.execute("""CREATE TABLE IF NOT EXISTS ticker_totals (
+        quarter TEXT, cusip TEXT, ticker TEXT, holders INTEGER, shares REAL, value REAL,
+        focused_holders INTEGER, focused_shares REAL, top10_share REAL,
+        PRIMARY KEY (quarter, cusip))""")
+    con.execute("CREATE INDEX IF NOT EXISTS ix_tt_ticker ON ticker_totals(quarter, ticker)")
+    if con.execute("SELECT 1 FROM ticker_totals WHERE quarter=? LIMIT 1", (quarter,)).fetchone():
+        return
+    con.execute("DROP TABLE IF EXISTS _q")
+    # Every filer counts here, blank CIK or not: a filing missing from
+    # SUBMISSION.tsv still holds real shares. Only the cross-quarter
+    # comparison below needs the CIK, because only it has to match filers.
+    con.execute("""CREATE TEMP TABLE _q AS
+        SELECT h.cusip, b.accession, h.shares, h.value,
+               CASE WHEN b.stock_count < ? THEN 1 ELSE 0 END AS focused
+          FROM holdings h JOIN books b ON b.accession = h.accession
+         WHERE h.quarter = ? AND h.put_call = ''
+           AND b.stock_value >= ? AND b.stock_count >= ?""",
+        (MAX_DISCRETIONARY_POSITIONS, quarter, MIN_BOOK_VALUE, MIN_BOOK_POSITIONS))
+    con.execute("CREATE INDEX _q_cusip ON _q(cusip, value)")
+    con.execute("""INSERT INTO ticker_totals
+        SELECT ?, q.cusip, ct.ticker, COUNT(DISTINCT q.accession), SUM(q.shares), SUM(q.value),
+               SUM(q.focused), SUM(CASE WHEN q.focused THEN q.shares ELSE 0 END), NULL
+          FROM _q q LEFT JOIN cusip_ticker ct ON ct.cusip = q.cusip
+         GROUP BY q.cusip""", (quarter,))
+    # Top-10 share per CUSIP: a window function over the temp table.
+    con.execute("""WITH ranked AS (
+            SELECT cusip, value,
+                   ROW_NUMBER() OVER (PARTITION BY cusip ORDER BY value DESC) AS rn
+              FROM _q),
+         top AS (SELECT cusip, SUM(value) AS v10 FROM ranked WHERE rn <= 10 GROUP BY cusip)
+        UPDATE ticker_totals SET top10_share =
+            (SELECT top.v10 / ticker_totals.value FROM top WHERE top.cusip = ticker_totals.cusip)
+         WHERE quarter = ? AND value > 0""", (quarter,))
+    con.execute("DROP TABLE IF EXISTS _q")
+    con.commit()
+
+
+# 13F issuer names for the things that are not companies. An ETF's short
+# interest is a hedge, not a view on a business, and the short-side evidence
+# is about stocks; a levered ETF tops any SI ÷ 13F ranking by construction.
+# Matched on the filers' own issuer strings, which is a heuristic and is said
+# so wherever the exclusion is applied.
+FUND_WORDS = ("ETF", "ETN", " ET ", "ISHARES", "PROSHARES", "DIREX", "SPDR", "INVESCO",
+              "VANGUARD", "TRUST", " TR ", "FUND", "INDEX", "PORTFOLIO", "PHYSICAL",
+              "GRANITESHARES", "WISDOMTREE", "GLOBAL X", "ARK ", "VANECK",
+              "FIRST TRUST", "SCHWAB STRATEGIC", "JPMORGAN EXCHANGE", "PACER",
+              "ULTRA", "BULL", "BEAR", " 2X", " 3X", "LEVERAGED", "INVERSE", "IPATH", " VIX",
+              "STRATEGIC INV", "CLOSED-END", "CLOSED END", "MUNI", "SELECT SECTOR")
+
+
+def is_fund(name):
+    n = " " + (name or "").upper() + " "
+    return any(w in n for w in FUND_WORDS)
+
+
+def shares_by_ticker(quarter=None):
+    """{ticker: {shares, holders, name, fund}} for the newest complete quarter."""
     con = connect()
     try:
-        mb = MIN_BOOK_VALUE if min_book is None else float(min_book)
-        mp = MIN_BOOK_POSITIONS if min_positions is None else int(min_positions)
-        # Discretionary by default — an index book's "change" is a rebalance.
-        h = holders(ticker, cusip, limit=100000, quarter=quarter,
-                    min_book=mb, min_positions=mp,
-                    max_positions=MAX_DISCRETIONARY_POSITIONS)
-        if h.get("error"):
-            return h
-
-        rows = [r for r in h["holders"]
-                if not r["is_derivative"] and r.get("weight") is not None]
-        if not rows:
-            return {**{k: h[k] for k in ("ticker", "cusip", "company", "quarter")},
-                    "error": "no discretionary holders in the indexed quarter"}
-
-        weights = sorted(r["weight"] for r in rows)
-        median_weight = weights[len(weights) // 2]
-
-        # A fund is "high conviction" relative to the OTHER holders of this
-        # security, not against an absolute cut: 3% of a book means something
-        # different for a 20-name book than a 900-name one, and the median
-        # holder is the only honest reference point available.
-        quads = {"high_add": 0, "high_cut": 0, "low_add": 0, "low_cut": 0}
-        flat = 0
-        points = []
-        for r in rows:
-            d = r.get("shares_delta")
-            hi = r["weight"] >= median_weight
-            if d is None or abs(d) < 1:
-                flat += 1
-            elif hi and d > 0:
-                quads["high_add"] += 1
-            elif hi and d < 0:
-                quads["high_cut"] += 1
-            elif d > 0:
-                quads["low_add"] += 1
-            else:
-                quads["low_cut"] += 1
-            points.append({
-                "manager": r["manager"],
-                "weight": r["weight"],
-                "shares": r["shares"],
-                "value": r["value"],
-                "delta": d,
-                # Percent change is the readable y-axis, but a new position has
-                # no prior to divide by — those are carried as a flag rather
-                # than as an infinite percentage.
-                "pct": r.get("pct_change"),
-                "action": r.get("action") or "",
-            })
-
-        # Densest region first would hide the names that matter, so the cloud is
-        # capped by POSITION VALUE: the biggest holders always survive the cut.
-        points.sort(key=lambda p: p["value"] or 0, reverse=True)
-        # The ten largest are named on the chart rather than lost in the cloud:
-        # "where do the biggest holders sit" is the question the scatter exists
-        # to answer, and an unlabelled dot answers nothing.
-        for i, p in enumerate(points):
-            p["top"] = i < 10
-            p["rank"] = i + 1 if i < 10 else 0
-        truncated = max(0, len(points) - int(max_points))
-
-        # ── Trend, derived from the cloud rather than eyeballed ──────────────
-        #
-        # The scatter shows the distribution; these reduce it to something a
-        # reader can act on. Three independent statistics, because they can
-        # disagree and the disagreement is the interesting case:
-        #
-        #   net_value_flow  — shares added minus shares cut, valued at the
-        #                     quarter's own price. The only figure in actual
-        #                     money: "the institutions put $2.1B in".
-        #   weighted_pct    — the average position's percentage change, weighted
-        #                     by position size, so a 40% cut by a large holder
-        #                     outweighs a 40% add by a small one.
-        #   fit             — least squares of percentage change on log
-        #                     conviction. A positive slope means the holders
-        #                     with the most at stake are the ones adding;
-        #                     negative means the big holders are selling into
-        #                     buying by smaller ones, which is the distribution
-        #                     pattern a breadth count alone would miss.
-        #
-        # r is reported with the slope and is usually small. A slope without it
-        # would read as a prediction; the pair reads as a tilt, which is what it
-        # is.
-        import math
-        n = 0
-        sx = sy = sxx = sxy = syy = 0.0
-        wnum = wden = 0.0
-        inflow = outflow = 0.0
-        # One price for the whole security, from the quarter's own filings, so
-        # exits — which have no current row and therefore no price of their own
-        # — can be valued on the same basis as everything else.
-        px_all = None
-        pv = [(r["value"], r["shares"]) for r in rows
-              if r.get("shares") and r.get("value")]
-        if pv:
-            tot_v = sum(v for v, _ in pv)
-            tot_s = sum(sh for _, sh in pv)
-            px_all = (tot_v / tot_s) if tot_s else None
-        for r in rows:
-            d = r.get("shares_delta")
-            # A filer appearing for the first time has no prior position to
-            # measure against. Treating the whole holding as a purchase inflates
-            # inflow with filers who may have held it for years and only now
-            # crossed the reporting threshold.
-            if r.get("action") == "first seen":
-                continue
-            px = None
-            if r.get("shares") and r.get("value"):
-                px = r["value"] / r["shares"] if r["shares"] else None
-            if d is not None and px:
-                if d > 0:
-                    inflow += d * px
-                elif d < 0:
-                    outflow += -d * px
-            pct = r.get("pct_change")
-            val = r.get("value") or 0.0
-            if pct is not None and val > 0:
-                wnum += pct * val
-                wden += val
-            if pct is None or not r.get("weight"):
-                continue
-            x = math.log10(max(r["weight"], 1e-6))
-            y = pct
-            n += 1
-            sx += x; sy += y; sxx += x * x; sxy += x * y; syy += y * y
-        # The mean percentage change is worthless here: a holder going from 100
-        # shares to 1,000 is +900%, and a handful of those drag the average
-        # somewhere no actual holder is. The median is what "the typical holder
-        # did" means.
-        pcts = sorted(r["pct_change"] for r in rows if r.get("pct_change") is not None)
-        median_pct = pcts[len(pcts) // 2] if pcts else None
-
-        fit = None
-        if n >= 30:
-            dx = n * sxx - sx * sx
-            dy = n * syy - sy * sy
-            if dx > 1e-12:
-                slope = (n * sxy - sx * sy) / dx
-                intercept = (sy - slope * sx) / n
-                denom = math.sqrt(dx * dy) if dy > 1e-12 else 0.0
-                r_corr = ((n * sxy - sx * sy) / denom) if denom > 0 else 0.0
-                fit = {"slope": slope, "intercept": intercept,
-                       "r": r_corr, "n": n}
-
-        # Filers who sold the position out entirely are absent from the current
-        # quarter's rows, so without this a quarter of heavy exits could read as
-        # net accumulation.
-        if px_all and h.get("exited_shares"):
-            outflow += float(h["exited_shares"]) * px_all
-
-        return {
-            "ticker": h.get("ticker"), "cusip": h.get("cusip"),
-            "company": h.get("company"), "quarter": h.get("quarter"),
-            "prior_quarter": h.get("prior_quarter"),
-            "holders_now": len(rows),
-            "holders_prior": None,
-            "buyers": h.get("buyers"), "sellers": h.get("sellers"),
-            "exited": h.get("exited"),
-            "median_weight": median_weight,
-            "quadrants": quads, "unchanged": flat,
-            "net_value_flow": inflow - outflow,
-            "value_bought": inflow, "value_sold": outflow,
-            "weighted_pct": (wnum / wden) if wden > 0 else None,
-            "median_pct": median_pct,
-            "fit": fit,
-            "points": points[:int(max_points)],
-            "points_truncated": truncated,
-            "min_book_value": mb, "min_book_positions": mp,
-            "max_book_positions": MAX_DISCRETIONARY_POSITIONS,
-        }
+        if not quarter:
+            row = con.execute(
+                "SELECT quarter FROM quarters WHERE COALESCE(partial,0)=0 "
+                "ORDER BY quarter DESC LIMIT 1").fetchone()
+            if not row:
+                return {"error": "no complete 13F quarter ingested yet", "by_ticker": {}}
+            quarter = row[0]
+        _ensure_totals(con, quarter)
+        out = {}
+        for ticker, holders_n, shares, name in con.execute(
+                "SELECT t.ticker, SUM(t.holders), SUM(t.shares), MAX(ct.name) "
+                "FROM ticker_totals t LEFT JOIN cusip_ticker ct ON ct.cusip = t.cusip "
+                "WHERE t.quarter=? AND t.ticker IS NOT NULL AND t.ticker<>'' "
+                "GROUP BY t.ticker", (quarter,)):
+            out[ticker] = {"shares": shares, "holders": holders_n, "name": name or "",
+                           "fund": is_fund(name)}
+        return {"quarter": quarter, "by_ticker": out}
     finally:
         con.close()
 
 
-def top_firms(limit=50, quarter=None, max_positions=None, min_positions=None):
-    """The largest DISCRETIONARY books, with what each did last quarter.
+def _ensure_breadth(con, cur_q, prior_q):
+    """Per-CUSIP change between two quarters, among filers who filed in BOTH.
 
-    Ranked by book value among books narrow enough to carry a view. Ranking by
-    size alone returns BlackRock, Vanguard, State Street, Fidelity and Morgan
-    Stanley — every one an index or platform book of three to eight thousand
-    names, whose quarterly change is a rebalance. As a list of "who is holding
-    what and what are they doing" that is the wrong fifty firms.
+    A filer that stopped filing has not sold, and one that started has not
+    bought — they were simply not visible. Counting either as a decision is
+    the mistake this join exists to avoid.
     """
+    con.execute("""CREATE TABLE IF NOT EXISTS breadth (
+        quarter TEXT, prior_quarter TEXT, cusip TEXT,
+        holders_prior INTEGER, new_holders INTEGER, closed INTEGER,
+        added INTEGER, reduced INTEGER,
+        focused_net_shares REAL,
+        PRIMARY KEY (quarter, prior_quarter, cusip))""")
+    # A run marker, not "any row present": a quarter pair with no comparable
+    # filer at all is a legitimate (empty) answer and must not be recomputed
+    # on every call.
+    con.execute("""CREATE TABLE IF NOT EXISTS breadth_runs (
+        quarter TEXT, prior_quarter TEXT, computed_at TEXT, PRIMARY KEY (quarter, prior_quarter))""")
+    if con.execute("SELECT 1 FROM breadth_runs WHERE quarter=? AND prior_quarter=?",
+                   (cur_q, prior_q)).fetchone():
+        return
+    for tag, q in (("_c", cur_q), ("_p", prior_q)):
+        con.execute(f"DROP TABLE IF EXISTS {tag}")
+        con.execute(f"""CREATE TEMP TABLE {tag} AS
+            SELECT h.cusip, b.cik, h.shares,
+                   CASE WHEN b.stock_count < ? THEN 1 ELSE 0 END AS focused
+              FROM holdings h JOIN books b ON b.accession = h.accession
+             WHERE h.quarter = ? AND h.put_call = '' AND b.cik <> ''
+               AND b.stock_value >= ? AND b.stock_count >= ?""",
+            (MAX_DISCRETIONARY_POSITIONS, q, MIN_BOOK_VALUE, MIN_BOOK_POSITIONS))
+        con.execute(f"CREATE INDEX {tag}_k ON {tag}(cusip, cik)")
+    con.execute("DROP TABLE IF EXISTS _both")
+    con.execute("""CREATE TEMP TABLE _both AS
+        SELECT cik FROM books WHERE quarter=? AND cik<>''
+        INTERSECT SELECT cik FROM books WHERE quarter=? AND cik<>''""", (cur_q, prior_q))
+    con.execute("CREATE INDEX _both_k ON _both(cik)")
+    con.execute("""INSERT INTO breadth
+        SELECT ?, ?, cusip,
+               SUM(had), SUM(is_new), SUM(is_closed), SUM(is_added), SUM(is_reduced),
+               SUM(focused_delta)
+          FROM (
+            SELECT COALESCE(c.cusip, p.cusip) AS cusip,
+                   CASE WHEN p.cik IS NOT NULL THEN 1 ELSE 0 END AS had,
+                   CASE WHEN c.cik IS NOT NULL AND p.cik IS NULL THEN 1 ELSE 0 END AS is_new,
+                   CASE WHEN c.cik IS NULL AND p.cik IS NOT NULL THEN 1 ELSE 0 END AS is_closed,
+                   CASE WHEN c.cik IS NOT NULL AND p.cik IS NOT NULL
+                             AND c.shares > p.shares * 1.01 THEN 1 ELSE 0 END AS is_added,
+                   CASE WHEN c.cik IS NOT NULL AND p.cik IS NOT NULL
+                             AND c.shares < p.shares * 0.99 THEN 1 ELSE 0 END AS is_reduced,
+                   CASE WHEN COALESCE(c.focused, p.focused) = 1
+                        THEN COALESCE(c.shares, 0) - COALESCE(p.shares, 0) ELSE 0 END
+                        AS focused_delta
+              FROM _c c
+              FULL OUTER JOIN _p p ON p.cusip = c.cusip AND p.cik = c.cik
+             WHERE COALESCE(c.cik, p.cik) IN (SELECT cik FROM _both))
+         GROUP BY cusip""", (cur_q, prior_q))
+    for tag in ("_c", "_p", "_both"):
+        con.execute(f"DROP TABLE IF EXISTS {tag}")
+    con.execute("INSERT OR REPLACE INTO breadth_runs VALUES (?,?,datetime('now'))", (cur_q, prior_q))
+    con.commit()
+
+
+def movers(limit=100, sort="breadth_up", min_holders=20, quarter=None, include_funds=False):
+    """Securities by how their holder base changed between the two indexed
+    quarters. `sort`: breadth_up, breadth_down, new, closed, focused_buying,
+    focused_selling, concentration. Funds are dropped by name unless asked
+    for: VTI gaining 146 holders is flow into an index, not a view on one."""
     con = connect()
     try:
         qs = quarter_pair(con)
-        if not qs:
-            return {"error": "no 13F data ingested yet"}
+        if len(qs) < 2:
+            return {"error": "two complete 13F quarters are needed for a comparison"}
         cur_q = quarter or qs[0]
         prior_q = next((x for x in qs if x < cur_q), None)
-        mx = int(max_positions or MAX_DISCRETIONARY_POSITIONS)
-        # A floor as well as a ceiling. Tightening max_positions to surface
-        # concentrated managers also surfaces holders that are not managers at
-        # all: a corporate cross-holding, an endowment sitting on the shares of
-        # the company that founded it, a bank holding one name. Those are real
-        # 13F filers but they are not running a book, and "what are they doing
-        # with the stock" has no answer for a filer with one position.
-        mn = int(min_positions if min_positions is not None else MIN_BOOK_POSITIONS)
-
-        rows = con.execute("""
-            SELECT cik, manager, accession, stock_value, stock_count
-              FROM books
-             WHERE quarter=? AND cik<>'' AND stock_count<=? AND stock_count>=?
-               AND stock_value>=?
-             ORDER BY stock_value DESC LIMIT ?
-        """, (cur_q, mx, mn, MIN_BOOK_VALUE, int(limit))).fetchall()
-
-        out = []
-        for cik, manager, acc, value, count in rows:
-            rec = {"cik": cik, "manager": manager, "accession": acc,
-                   "book_value": value, "position_count": count}
-            top = con.execute(
-                "SELECT h.issuer, ct.ticker, h.value FROM holdings h "
-                "LEFT JOIN cusip_ticker ct ON ct.cusip=h.cusip "
-                "WHERE h.accession=? AND h.put_call='' ORDER BY h.value DESC LIMIT 1",
-                (acc,)).fetchone()
-            if top:
-                rec["top_name"] = top[0]
-                rec["top_ticker"] = top[1] or ""
-                rec["top_weight"] = (top[2] / value) if value else None
-
-            if prior_q:
-                pacc = con.execute("SELECT accession FROM books WHERE cik=? AND quarter=?",
-                                   (cik, prior_q)).fetchone()
-                if pacc:
-                    # Counted per SECURITY, not per share: "added four, cut
-                    # three" is what a reader can act on; a net share number
-                    # across unrelated names is not comparable to anything.
-                    agg = con.execute("""
-                        SELECT
-                          SUM(CASE WHEN p.shares IS NULL THEN 1 ELSE 0 END),
-                          SUM(CASE WHEN p.shares IS NOT NULL
-                                    AND c.shares > p.shares * 1.01 THEN 1 ELSE 0 END),
-                          SUM(CASE WHEN p.shares IS NOT NULL
-                                    AND c.shares < p.shares * 0.99 THEN 1 ELSE 0 END)
-                        FROM holdings c
-                        LEFT JOIN holdings p
-                               ON p.accession=? AND p.cusip=c.cusip AND p.put_call=''
-                       WHERE c.accession=? AND c.put_call=''
-                    """, (pacc[0], acc)).fetchone()
-                    exits = con.execute("""
-                        SELECT COUNT(*) FROM holdings p
-                         WHERE p.accession=? AND p.put_call=''
-                           AND NOT EXISTS (SELECT 1 FROM holdings c
-                                            WHERE c.accession=? AND c.cusip=p.cusip
-                                              AND c.put_call='')
-                    """, (pacc[0], acc)).fetchone()[0]
-                    rec.update({"new": agg[0] or 0, "added": agg[1] or 0,
-                                "trimmed": agg[2] or 0, "exited": exits,
-                                "prior_quarter": prior_q})
-
-                    # Counts say how busy a filer was; they do not say what it
-                    # DID. "236 added" is very nearly the same row for every
-                    # large filer, while "added $10.5B of GOOGL" is the reason
-                    # to stop and look. Biggest move by DOLLAR change, valued at
-                    # this quarter's price, in each of the three directions.
-                    def biggest(sql, args):
-                        r = con.execute(sql, args).fetchone()
-                        if not r or r[2] is None:
-                            return None
-                        return {"issuer": r[0], "ticker": r[1] or "", "value": r[2]}
-
-                    rec["top_add"] = biggest("""
-                        SELECT c.issuer, ct.ticker,
-                               (c.shares - COALESCE(p.shares,0)) * (c.value / NULLIF(c.shares,0))
-                          FROM holdings c
-                          LEFT JOIN holdings p
-                                 ON p.accession=? AND p.cusip=c.cusip AND p.put_call=''
-                          LEFT JOIN cusip_ticker ct ON ct.cusip=c.cusip
-                         WHERE c.accession=? AND c.put_call='' AND c.shares > 0
-                           AND c.shares > COALESCE(p.shares,0)
-                         ORDER BY 3 DESC LIMIT 1
-                    """, (pacc[0], acc))
-                    rec["top_trim"] = biggest("""
-                        SELECT c.issuer, ct.ticker,
-                               (COALESCE(p.shares,0) - c.shares) * (c.value / NULLIF(c.shares,0))
-                          FROM holdings c
-                          JOIN holdings p
-                                 ON p.accession=? AND p.cusip=c.cusip AND p.put_call=''
-                          LEFT JOIN cusip_ticker ct ON ct.cusip=c.cusip
-                         WHERE c.accession=? AND c.put_call='' AND c.shares > 0
-                           AND p.shares > c.shares
-                         ORDER BY 3 DESC LIMIT 1
-                    """, (pacc[0], acc))
-                    # An exit has no current row, so it is valued at the price
-                    # it was carried at in the last quarter it was still held.
-                    rec["top_exit"] = biggest("""
-                        SELECT p.issuer, ct.ticker, p.value
-                          FROM holdings p
-                          LEFT JOIN cusip_ticker ct ON ct.cusip=p.cusip
-                         WHERE p.accession=? AND p.put_call=''
-                           AND NOT EXISTS (SELECT 1 FROM holdings c
-                                            WHERE c.accession=? AND c.cusip=p.cusip
-                                              AND c.put_call='')
-                         ORDER BY p.value DESC LIMIT 1
-                    """, (pacc[0], acc))
-            out.append(rec)
-
-        return {"quarter": cur_q, "prior_quarter": prior_q,
-                "max_book_positions": mx, "firms": out}
+        if not prior_q:
+            return {"error": "no prior quarter to compare against"}
+        _ensure_totals(con, cur_q)
+        _ensure_breadth(con, cur_q, prior_q)
+        order = {
+            "breadth_up": "(t.holders - b.holders_prior) DESC",
+            "breadth_down": "(t.holders - b.holders_prior) ASC",
+            "new": "b.new_holders DESC",
+            "closed": "b.closed DESC",
+            "focused_buying": "b.focused_net_shares DESC",
+            "focused_selling": "b.focused_net_shares ASC",
+            "concentration": "t.top10_share DESC",
+        }.get(sort)
+        if not order:
+            sort, order = "breadth_up", "(t.holders - b.holders_prior) DESC"
+        # LEFT JOIN: a security with no comparable filer has zero change, not
+        # no row. The COALESCEs make the ORDER BY well-defined for those.
+        order = order.replace("b.holders_prior", "COALESCE(b.holders_prior,0)") \
+                     .replace("b.new_holders", "COALESCE(b.new_holders,0)") \
+                     .replace("b.closed", "COALESCE(b.closed,0)") \
+                     .replace("b.focused_net_shares", "COALESCE(b.focused_net_shares,0)")
+        rows = con.execute(f"""
+            SELECT t.cusip, t.ticker, ct.name, t.holders, COALESCE(b.holders_prior,0),
+                   COALESCE(b.new_holders,0), COALESCE(b.closed,0), COALESCE(b.added,0),
+                   COALESCE(b.reduced,0), t.shares, t.value, t.focused_holders,
+                   b.focused_net_shares, t.top10_share
+              FROM ticker_totals t
+              LEFT JOIN breadth b ON b.cusip = t.cusip AND b.quarter = t.quarter
+                                  AND b.prior_quarter = ?
+              LEFT JOIN cusip_ticker ct ON ct.cusip = t.cusip
+             WHERE t.quarter = ? AND t.holders >= ? AND t.ticker IS NOT NULL AND t.ticker <> ''
+             ORDER BY {order} LIMIT ?""", (prior_q, cur_q, int(min_holders),
+                                          int(limit) * (1 if include_funds else 3))).fetchall()
+        funds_dropped = 0
+        if not include_funds:
+            kept = [r for r in rows if not is_fund(r[2])]
+            funds_dropped = len(rows) - len(kept)
+            rows = kept[:int(limit)]
+        out = [{"cusip": r[0], "ticker": r[1], "name": r[2] or "",
+                "fund": is_fund(r[2]),
+                "holders": r[3], "holders_prior": r[4],
+                "delta_holders": (r[3] or 0) - (r[4] or 0),
+                "new": r[5], "closed": r[6], "added": r[7], "reduced": r[8],
+                "shares": r[9], "value": r[10], "focused_holders": r[11],
+                "focused_net_shares": r[12], "top10_share": r[13]} for r in rows]
+        return {"quarter": cur_q, "prior_quarter": prior_q, "sort": sort,
+                "min_holders": int(min_holders), "funds_dropped": funds_dropped, "rows": out}
     finally:
         con.close()
 
@@ -1414,20 +1364,18 @@ def handle_action(action, payload):
             if not r.get("remaining") or r.get("resolved", 0) + r.get("unrecognised", 0) == 0:
                 break
         return total
-    if action == "demand":
-        return demand(payload.get("ticker"), payload.get("cusip"),
-                      payload.get("quarter"), payload.get("min_book"),
-                      payload.get("min_positions"),
-                      int(payload.get("max_points") or 1200))
     if action == "holders":
         return holders(payload.get("ticker"), payload.get("cusip"),
                        payload.get("limit") or 60, payload.get("quarter"),
                        float(payload.get("min_book") or MIN_BOOK_VALUE),
                        int(payload.get("min_positions") or MIN_BOOK_POSITIONS),
-                       payload.get("max_positions"))
-    if action == "top_firms":
-        return top_firms(int(payload.get("limit") or 50), payload.get("quarter"),
-                         payload.get("max_positions"), payload.get("min_positions"))
+                       payload.get("max_positions"), payload.get("sort") or "value")
+    if action == "movers":
+        return movers(int(payload.get("limit") or 100), payload.get("sort") or "breadth_up",
+                      int(payload.get("min_holders") or 20), payload.get("quarter"),
+                      bool(payload.get("include_funds", False)))
+    if action == "ticker_totals":
+        return shares_by_ticker(payload.get("quarter"))
     if action == "firms":
         return firms(payload.get("query") or "", int(payload.get("limit") or 40),
                      payload.get("quarter"))

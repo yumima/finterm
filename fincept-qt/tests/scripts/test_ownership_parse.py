@@ -144,6 +144,29 @@ def test_absent_fields_are_absent_not_zero():
     check("absent: shares still present", grant.get("shares") == 800.0)
 
 
+def test_ten_percent_owner_and_plan_flags():
+    # The two exclusions the evidence turns on. A 10% owner's buys rank
+    # inverted (Lakonishok & Lee); a 10b5-1 plan trade was decided months
+    # before it printed. Both must travel with every row — and the plan flag
+    # must be ABSENT on a filing that predates the checkbox, not False.
+    rows = so.parse_form4(FORM4, "u")
+    check("flags: an ordinary officer is not a 10% owner", rows[0]["ten_percent_owner"] is False)
+    check("flags: no checkbox on the filing -> no plan key at all", "plan_10b5_1" not in rows[0],
+          str(rows[0].get("plan_10b5_1")))
+
+    flagged = FORM4.replace(b"<issuer>", b"<aff10b5One>1</aff10b5One>\n  <issuer>", 1) \
+                   .replace(b"<isOfficer>1</isOfficer>",
+                            b"<isOfficer>1</isOfficer>\n      <isTenPercentOwner>true</isTenPercentOwner>", 1)
+    rows2 = so.parse_form4(flagged, "u")
+    check("flags: 10% owner read from the relationship block", rows2[0]["ten_percent_owner"] is True)
+    check("flags: 10% owner appears in roles too", "10% owner" in rows2[0]["roles"], str(rows2[0]["roles"]))
+    check("flags: plan checkbox read as True on every row", all(r.get("plan_10b5_1") is True for r in rows2))
+    unflagged = FORM4.replace(b"<issuer>", b"<aff10b5One>0</aff10b5One>\n  <issuer>", 1)
+    rows3 = so.parse_form4(unflagged, "u")
+    check("flags: an unticked checkbox is False, which is not the same as absent",
+          rows3[0].get("plan_10b5_1") is False, str(rows3[0].get("plan_10b5_1")))
+
+
 def test_open_market_flag_separates_decisions_from_mechanics():
     rows = so.parse_form4(FORM4, "u")
     by_code = {r["code"]: r for r in rows}

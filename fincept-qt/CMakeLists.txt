@@ -1406,14 +1406,14 @@ set(SCREEN_SOURCES
     src/screens/pre_ipo/views/PipelineView.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
+    src/screens/ownership/OwnershipHeader.cpp
+    src/screens/ownership/HoldersTable.cpp
+    src/screens/ownership/InsidersPanel.cpp
+    src/screens/ownership/InsiderTimeline.cpp
+    src/screens/ownership/ShortInterestPanel.cpp
+    src/screens/ownership/ScanPanels.cpp
     src/screens/ownership/FirmDetailPanel.cpp
     src/screens/ownership/Form4Dialog.cpp
-    src/screens/ownership/ReadThroughStrip.cpp
-    src/screens/ownership/InsiderLeadersPanel.cpp
-    src/screens/ownership/DemandQuadrant.cpp
-    src/screens/ownership/HoldersChart.cpp
-    src/screens/ownership/FirmBookPanel.cpp
-    src/screens/ownership/SmartMoneyPanel.cpp
     src/services/ownership/OwnershipService.cpp
     src/services/pre_ipo/PreIpoService.cpp
 
@@ -1554,14 +1554,14 @@ set_source_files_properties(
     src/screens/pre_ipo/views/PipelineView.cpp
     src/screens/ownership/OwnershipScreen.cpp
     src/screens/ownership/StockOwnershipPanel.cpp
+    src/screens/ownership/OwnershipHeader.cpp
+    src/screens/ownership/HoldersTable.cpp
+    src/screens/ownership/InsidersPanel.cpp
+    src/screens/ownership/InsiderTimeline.cpp
+    src/screens/ownership/ShortInterestPanel.cpp
+    src/screens/ownership/ScanPanels.cpp
     src/screens/ownership/FirmDetailPanel.cpp
     src/screens/ownership/Form4Dialog.cpp
-    src/screens/ownership/ReadThroughStrip.cpp
-    src/screens/ownership/InsiderLeadersPanel.cpp
-    src/screens/ownership/DemandQuadrant.cpp
-    src/screens/ownership/HoldersChart.cpp
-    src/screens/ownership/FirmBookPanel.cpp
-    src/screens/ownership/SmartMoneyPanel.cpp
     src/services/ownership/OwnershipService.cpp
     src/services/pre_ipo/PreIpoService.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp

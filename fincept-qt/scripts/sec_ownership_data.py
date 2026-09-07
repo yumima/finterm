@@ -257,13 +257,25 @@ def parse_form4(xml_bytes, source_url):
     issuer_name = _text(issuer, "issuerName") or ""
     issuer_symbol = _text(issuer, "issuerTradingSymbol") or ""
 
+    # Document-level 10b5-1 flag (a checkbox mandatory since the 2023 form
+    # revision). A trade under a written plan was decided months earlier, and
+    # the literature's "routine vs opportunistic" split is a proxy for exactly
+    # this. Absent on pre-2023 filings, which is a different fact from false —
+    # so it is carried as None, not defaulted.
+    plan_flag = None
+    for node in root.iter("aff10b5One"):
+        plan_flag = (node.text or "").strip().lower() in ("1", "true")
+        break
+
     owners = []
     for ro in root.findall("reportingOwner"):
         name = _text(ro, "reportingOwnerId/rptOwnerName") or ""
         owner_cik = _text(ro, "reportingOwnerId/rptOwnerCik") or ""
         rel = ro.find("reportingOwnerRelationship")
         roles = []
+        ten_pct = False
         if rel is not None:
+            ten_pct = (_text(rel, "isTenPercentOwner") or "") in ("1", "true")
             if (_text(rel, "isDirector") or "") in ("1", "true"):
                 roles.append("Director")
             if (_text(rel, "isOfficer") or "") in ("1", "true"):
@@ -272,11 +284,15 @@ def parse_form4(xml_bytes, source_url):
                 roles.append("10% owner")
             if (_text(rel, "isOther") or "") in ("1", "true"):
                 roles.append(_text(rel, "otherText") or "Other")
-        owners.append({"name": name, "cik": owner_cik, "roles": roles})
+        owners.append({"name": name, "cik": owner_cik, "roles": roles, "ten_pct": ten_pct})
 
     owner_name = owners[0]["name"] if owners else ""
     owner_cik_first = owners[0]["cik"] if owners else ""
     owner_roles = owners[0]["roles"] if owners else []
+    # A 10% owner is a holder, not an insider in the sense the evidence is
+    # about: their purchase ranking inverts (Lakonishok & Lee), so the flag
+    # travels with every row and the scoring layer excludes them.
+    owner_ten_pct = any(o["ten_pct"] for o in owners)
 
     rows = []
     tables = [("nonDerivativeTable/nonDerivativeTransaction", False),
@@ -315,7 +331,10 @@ def parse_form4(xml_bytes, source_url):
                 "derivative": is_deriv,
                 "open_market": (code or "") in OPEN_MARKET,
                 "source_url": source_url,
+                "ten_percent_owner": owner_ten_pct,
             }
+            if plan_flag is not None:
+                row["plan_10b5_1"] = plan_flag
             if shares is not None:
                 row["shares"] = shares
             if price is not None:

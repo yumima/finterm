@@ -147,12 +147,18 @@ void FirmDetailPanel::render() {
                              ? QStringLiteral("Holdings")
                              : b.manager + QStringLiteral(" — disclosed equity holdings"));
 
-    QString head = QStringLiteral("%1 positions · %2 · %3")
+    // Breadth is stated with the size: a book of 49,751 names is an index
+    // book whatever its value, and the reader should know which kind of
+    // book they are reading before they read a weight in it.
+    QString head = QStringLiteral("%1 positions%2 · %3 · quarter end %4 · filed by %5")
                        .arg(b.position_count)
+                       .arg(b.position_count >= 1000 ? QStringLiteral(" (a broad book — rebalances rather than decides)")
+                                                     : QString())
                        .arg(fmt::format_compact(b.total_value),
-                            b.period.toString(QStringLiteral("MMM yyyy")));
+                            b.period.toString(QStringLiteral("d MMM yyyy")),
+                            b.period.addDays(45).toString(QStringLiteral("d MMM yyyy")));
     if (b.prior_period.isValid())
-        head += QStringLiteral(" vs ") + b.prior_period.toString(QStringLiteral("MMM yyyy"));
+        head += QStringLiteral(" · vs ") + b.prior_period.toString(QStringLiteral("MMM yyyy"));
     if (b.book_return_since_quarter_end && b.return_coverage >= ownership::kMinReturnCoverage) {
         // "Since quarter end", never "since filed": 13F is due 45 days after the
         // quarter closes and the SEC data sets carry no filing date at all, so

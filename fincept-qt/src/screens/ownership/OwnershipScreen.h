@@ -6,37 +6,30 @@
 class QLabel;
 class QLineEdit;
 class QPushButton;
-class QSplitter;
 class QStackedWidget;
-class QStringListModel;
 class QTabWidget;
 class QTimer;
+class QListWidget;
 
 namespace fincept::screens {
 
-class FirmBookPanel;
 class FirmDetailPanel;
-class InsiderLeadersPanel;
-class StockOwnershipPanel;
+class InsiderBuysPanel;
+class MoversPanel;
+class ShortRankPanel;
 
-/// OWNERSHIP — the 13F universe keyed by MANAGER.
+/// OWNERSHIP — where the informed parties are acting, market-wide.
 ///
-/// "Who is holding what, and what are they doing with it" has two readings,
-/// and they want different screens. Keyed by security it answers "who owns
-/// AAPL", which belongs inside the workflow where someone is already looking
-/// at AAPL — Equity Research, where StockOwnershipPanel now lives. Keyed by
-/// manager it answers "what does this firm own", which is a browse: you arrive
-/// without a ticker in mind and leave with one. Bloomberg splits the same way,
-/// HDS from the security and the portfolio functions from the portfolio.
+/// Three scans, each a list of STOCKS, each row opening Equity Research:
+/// insiders buying (Form 4, daily), the short side constrained (FINRA joined
+/// to 13F), and holder bases moving (13F breadth). The reader arrives without
+/// a ticker and leaves with one.
 ///
-/// Carrying both on one screen meant the per-security half duplicated the
-/// Equity Research tab exactly, and the manager half — the part that is only
-/// here — was squeezed into a third of the width.
-///
-/// So this screen is the browse. The ranked list of filers and the selected
-/// firm's book get the whole window, and the index's own state (build it, pull
-/// the current quarter, map more symbols) lives in the toolbar because that is
-/// the one place it is not repeated per ticker.
+/// The per-security register is not here — it is the Ownership tab in Equity
+/// Research, where a security is already on screen. A filer's book is a
+/// drill, reached from the search box at the top right or from a holder row
+/// on the stock page, never a landing page: nobody arrives with "show me
+/// Capital World Investors" as the question.
 class OwnershipScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
   public:
@@ -46,7 +39,7 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     void restore_state(const QVariantMap& state) override;
     QVariantMap save_state() const override;
     QString state_key() const override { return QStringLiteral("ownership"); }
-    int state_version() const override { return 2; }
+    int state_version() const override { return 3; }
 
   signals:
     /// Ask the shell to open another screen for @p ticker (Equity Research).
@@ -57,49 +50,30 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
 
   private:
     void build_ui();
-    void apply_theme();
     void refresh_index_ui(const QString& msg);
-    /// Put @p symbol's register in the detail pane and offer the way back.
-    /// Every route to a security — a holding in a firm's book, an issuer in
-    /// the insider ranking, the search box — lands here, so they cannot drift
-    /// apart in what they show or in how the reader gets out.
-    void show_symbol(const QString& symbol);
+    void load_tab(int index);
+    void show_filer(const QString& cik, const QString& name);
 
-    QPushButton*    index_btn_  = nullptr;
-    QLineEdit*      ticker_     = nullptr;
-    QStringListModel* ticker_model_ = nullptr;
-    /// Says what the search box is doing when it cannot just open something —
-    /// still looking, or nothing by that name.
-    QLabel*         ticker_note_ = nullptr;
-    QTimer*         ticker_debounce_ = nullptr;
-    QPushButton*    map_btn_    = nullptr;
-    QLabel*         index_lbl_  = nullptr;
-    QWidget*        empty_page_ = nullptr;
-    FirmBookPanel*       firm_book_    = nullptr;
-    FirmDetailPanel*     firm_detail_  = nullptr;
-    StockOwnershipPanel* stock_panel_  = nullptr;
-    QStackedWidget*      detail_stack_ = nullptr;
-    QStackedWidget*      firm_stack_   = nullptr;
-    InsiderLeadersPanel* insiders_     = nullptr;
-    QTabWidget*          left_         = nullptr;
-    QPushButton*         back_btn_     = nullptr;
-    QString              selected_firm_name_;
-    /// Set once a filer has actually been picked. The display name cannot
-    /// stand in for this — a 13F record with an empty name would read as "no
-    /// firm selected" and hide the way back out of a holding.
-    QString              selected_firm_cik_;
-    /// What the detail pane is currently showing, so a late suggestion list
-    /// does not pop open over a register the reader has already opened.
-    QString              shown_symbol_;
-    /// The query the suggestions in @ref ticker_model_ answer, as reported by
-    /// the search itself rather than read off the box when they arrive — two
-    /// requests can be in flight and land out of order, and a list left over
-    /// from "Alphabet" must not resolve an Enter pressed on "Berkshire".
-    QString              ticker_results_query_;
-    /// A search is out for this text; nothing has come back for it yet.
-    QString              ticker_pending_query_;
-    QWidget*             split_        = nullptr;
-    bool            loaded_once_ = false;
+    QLabel*      index_lbl_ = nullptr;
+    QPushButton* index_btn_ = nullptr;
+    QLineEdit*   filer_search_ = nullptr;
+    QListWidget* filer_results_ = nullptr;
+    QTimer*      filer_debounce_ = nullptr;
+
+    QStackedWidget* stack_ = nullptr;
+    QTabWidget*     tabs_ = nullptr;
+    InsiderBuysPanel* insider_buys_ = nullptr;
+    ShortRankPanel*   short_rank_ = nullptr;
+    MoversPanel*      movers_ = nullptr;
+    QWidget*          empty_page_ = nullptr;
+
+    QWidget*         filer_page_ = nullptr;
+    QPushButton*     back_btn_ = nullptr;
+    QLabel*          filer_title_ = nullptr;
+    FirmDetailPanel* filer_ = nullptr;
+
+    bool loaded_[3] = {false, false, false};
+    bool shown_once_ = false;
 };
 
 } // namespace fincept::screens

@@ -1,103 +1,71 @@
 #pragma once
 #include "screens/ownership/OwnershipTypes.h"
 
-#include <QHideEvent>
-#include <QShowEvent>
 #include <QWidget>
 
+class QAbstractScrollArea;
 class QLabel;
-class QComboBox;
-class QStackedWidget;
-class QLineEdit;
 class QPushButton;
-class QTableWidget;
-class QVBoxLayout;
-
-namespace fincept::screens {
-class SmartMoneyPanel;
-class RankedBarChart;
-class EventTimeline;
-}
+class QScrollArea;
 
 namespace fincept::screens {
 
-/// OWNERSHIP — who owns a security, who is trading it, and what that implies.
+class FirmDetailPanel;
+class HoldersTable;
+class InsidersPanel;
+class OwnershipHeader;
+class ShortInterestPanel;
+
+/// Ownership for one security — the Equity Research tab.
 ///
-/// The Bloomberg analogues are HDS (holders), OWN (ownership breakdown) and SI
-/// (short interest), with the addition Bloomberg splits across other functions:
-/// Form 4 insider transactions, which is the only part of this data with a
-/// durable evidence base behind it.
+/// One header and three panels, top to bottom, in the order the industry
+/// reads them: who holds it (13F), what the insiders did (Form 4), what the
+/// shorts hold (FINRA). Everything scrolls as one page; nothing is a tile
+/// inside a tile, and nothing is hidden behind a button. The host names the
+/// symbol; this panel is told what to show.
 ///
-/// Layout puts the interpretation FIRST. A holder table answers "who owns
-/// this"; the question a trader actually has is "so what does that mean", and
-/// a screen that only ever renders the table leaves that work undone. The
-/// READ-THROUGH panel at the top states what the register implies for the
-/// stock and for how it trades, each line carrying the number that produced it
-/// and the rule that was applied. The tables below are the evidence for those
-/// lines, in the order a reader would check them.
+/// A holder row opens the filer's whole book in place, with a way back, so
+/// "who else does BlackRock own" is answered without leaving the stock.
 class StockOwnershipPanel : public QWidget {
     Q_OBJECT
   public:
     explicit StockOwnershipPanel(QWidget* parent = nullptr);
 
-    /// Point the panel at a security. Equity Research already has a symbol box
-    /// at the top of the screen, so when embedded there the panel's own symbol
-    /// controls are hidden and this is how the ticker arrives.
+    /// Point the panel at a security. Idempotent for the same symbol.
     void set_symbol(const QString& symbol);
-
-    /// Hide the panel's own symbol box and portfolio picker. Two symbol boxes
-    /// on one screen is a question about which one is in charge.
-    void set_chrome_visible(bool on);
-
+    QString symbol() const { return symbol_; }
 
   signals:
-    /// Ask the shell to open another screen for @p ticker (Equity Research).
+    /// Ask the shell to open another screen for @p ticker.
     void navigate_to_screen(const QString& screen_id, const QString& ticker);
 
   protected:
-    void showEvent(QShowEvent* e) override;
+    /// Wheel events over a table that cannot scroll any further go to the
+    /// page, so the reader is never stuck inside a panel.
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
     void build_ui();
-    void apply_theme();
-    void load(const QString& symbol);
     void render();
-    void render_reads(const ownership::OwnershipSnapshot& s);
-    void render_insiders(const ownership::OwnershipSnapshot& s);
-    void render_stakes(const ownership::OwnershipSnapshot& s);
-    void render_holders(const ownership::OwnershipSnapshot& s);
-    void render_short(const ownership::OwnershipSnapshot& s);
-    void reload_portfolio();
-    void refresh_index_ui(const QString& msg);
+    void show_filer(const QString& cik, const QString& name);
+    void show_stock();
 
     QString symbol_;
+    QLabel* status_ = nullptr;
+    QWidget* stock_page_ = nullptr;
+    QScrollArea* scroll_ = nullptr;
+    OwnershipHeader* header_ = nullptr;
+    HoldersTable* holders_ = nullptr;
+    QWidget* no_index_ = nullptr;
+    QLabel* no_index_text_ = nullptr;
+    QPushButton* build_btn_ = nullptr;
+    InsidersPanel* insiders_ = nullptr;
+    ShortInterestPanel* shorts_ = nullptr;
 
-    QLineEdit*   search_       = nullptr;
-    QComboBox*   portfolio_    = nullptr;
-    QPushButton* index_btn_    = nullptr;
-    QLabel*      index_lbl_    = nullptr;
-    QStackedWidget* body_ = nullptr;
-    QWidget*     empty_page_ = nullptr;
-    QPushButton* refresh_btn_  = nullptr;
-    QLabel*      title_        = nullptr;
-    QPushButton* er_btn_       = nullptr;
-    /// False when embedded (Equity Research, or the ownership detail pane),
-    /// where the host already names the symbol and owns the index controls.
-    bool         chrome_       = true;
-    QLabel*      status_       = nullptr;
-    QLabel*      coverage_     = nullptr;
-
-    class ReadThroughStrip* reads_strip_ = nullptr;
-
-    QTableWidget* insiders_tbl_ = nullptr;
-    QTableWidget* stakes_tbl_   = nullptr;
-    /// Says what the stakes list left out — schedules this company filed on
-    /// others, headers that could not be read, filings past the cap.
-    QLabel*      stakes_note_  = nullptr;
-    QLabel*       short_lbl_    = nullptr;
-    SmartMoneyPanel* smart_money_ = nullptr;
-    RankedBarChart*  ownership_mix_ = nullptr;
-    EventTimeline*   insider_timeline_ = nullptr;
+    QWidget* filer_page_ = nullptr;
+    QPushButton* back_btn_ = nullptr;
+    FirmDetailPanel* filer_ = nullptr;
+    class QStackedWidget* stack_ = nullptr;
 };
 
 } // namespace fincept::screens

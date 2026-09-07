@@ -48,8 +48,7 @@ import time
 from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from sec_ownership_data import (_get, parse_form4, UA,  # noqa: E402
-                                owner_filing_dates, ROUTINE_MIN_YEARS)
+from sec_ownership_data import _get, parse_form4  # noqa: E402
 
 BASE = "https://www.sec.gov/Archives"
 # EDGAR asks for <=10 req/s across everything using this User-Agent, and other
@@ -82,6 +81,13 @@ def connect():
     cols = {r[1] for r in con.execute("PRAGMA table_info(tx)")}
     if "held_after" not in cols:
         con.execute("ALTER TABLE tx ADD COLUMN held_after REAL")
+    # Two flags the evidence turns on: a 10% owner's buys rank inverted, and a
+    # 10b5-1 plan trade was decided months before it printed. NULL on rows
+    # read before the columns existed — unknown, not false.
+    if "ten_pct" not in cols:
+        con.execute("ALTER TABLE tx ADD COLUMN ten_pct INTEGER")
+    if "plan" not in cols:
+        con.execute("ALTER TABLE tx ADD COLUMN plan INTEGER")
         # Deliberately NOT deleting the rows that predate this column. They
         # carry NULL and show a blank cell, which is a small cost; deleting
         # them to force a re-read would destroy the store, because scan() only
@@ -92,18 +98,11 @@ def connect():
     # One row per accession so a rescan is incremental rather than a refetch of
     # everything already read.
     con.execute("CREATE TABLE IF NOT EXISTS seen (accession TEXT PRIMARY KEY, filed TEXT)")
-    # Routine-vs-opportunistic needs YEARS of an insider's filings, which a
-    # few days of daily index cannot supply — it is fetched per owner from
-    # EDGAR and cached here, because it changes about as often as a person's
-    # trading habits do.
     # Days already walked, including ones the index had nothing for. Without
     # this a market holiday is never recorded in `seen` (no accessions to
     # record), so every scan would re-walk it and spend its budget on a day
     # that will never have filings.
     con.execute("CREATE TABLE IF NOT EXISTS scanned_days (filed TEXT PRIMARY KEY)")
-    con.execute("""CREATE TABLE IF NOT EXISTS owner_pattern (
-        insider_cik TEXT PRIMARY KEY, pattern TEXT, years INTEGER,
-        trades INTEGER, checked TEXT)""")
     con.commit()
     return con
 
@@ -164,6 +163,10 @@ def _extract_xml(text):
 def scan(days=3, limit=None, max_new_days=None):
     """Read Form 4 filings into the local store, oldest-unread day first.
 
+    A lock held by another writer — a second scan, an orphaned one — is
+    reported, not raised: what was read before it is committed, and the
+    caller retries later rather than treating the pass as a crash.
+
     @days is the window the reader is looking at; @max_new_days bounds how much
     of it one press will fetch, because a day is around 500 submission fetches.
     Days already present in the store are skipped, so pressing again genuinely
@@ -171,6 +174,7 @@ def scan(days=3, limit=None, max_new_days=None):
     a "last 30 days" selector implies is reachable.
     """
     con = connect()
+    parent_at_start = os.getppid()
     try:
         fetched = parsed = skipped = 0
         # A day with any filing recorded has been walked; the index for a given
@@ -184,6 +188,12 @@ def scan(days=3, limit=None, max_new_days=None):
         days_left = budget
         for d in wanted:
             if days_left <= 0:
+                break
+            # An orphan keeps the write lock for the rest of its walk. If the
+            # process that started this pass is gone — the parent pid has
+            # changed, to init or to a subreaper — stop at the day boundary:
+            # everything read so far is committed and the next pass resumes.
+            if os.getppid() != parent_at_start:
                 break
             filed = d.isoformat()
             idx = day_index(d)
@@ -206,10 +216,17 @@ def scan(days=3, limit=None, max_new_days=None):
             skipped += len(idx) - len(todo)
             if limit:
                 todo = todo[:int(limit)]
-            for acc, path in todo:
+            for n, (acc, path) in enumerate(todo, 1):
                 r = _get(f"{BASE}/{path}")
                 time.sleep(REQ_PAUSE)
                 fetched += 1
+                # Commit in small batches. One transaction per day held the
+                # write lock for minutes at a time, and any other process
+                # touching the store — the scan tab's own query, a second
+                # scan — waited out its busy timeout and died with
+                # "database is locked". Twenty-five filings is a few seconds.
+                if n % 25 == 0:
+                    con.commit()
                 con.execute("INSERT OR REPLACE INTO seen VALUES (?,?)", (acc, filed))
                 if not r or not getattr(r, "ok", False):
                     continue
@@ -218,8 +235,12 @@ def scan(days=3, limit=None, max_new_days=None):
                     continue
                 for t in parse_form4(xml, f"{BASE}/{path}"):
                     parsed += 1
+                    plan = t.get("plan_10b5_1")
                     con.execute(
-                        "INSERT INTO tx VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                        "INSERT INTO tx (accession, filed, tx_date, symbol, issuer, insider, "
+                        "insider_cik, roles, code, direction, shares, price, value, "
+                        "open_market, derivative, source_url, held_after, ten_pct, plan) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                         (acc, filed, t.get("date", ""), clean_symbol(t.get("symbol")),
                          t.get("issuer", ""), t.get("insider", ""),
                          t.get("insider_cik", ""), ", ".join(t.get("roles") or []),
@@ -227,7 +248,9 @@ def scan(days=3, limit=None, max_new_days=None):
                          t.get("shares"), t.get("price"), t.get("value"),
                          1 if t.get("open_market") else 0,
                          1 if t.get("derivative") else 0, t.get("source_url", ""),
-                         t.get("shares_held_after")))
+                         t.get("shares_held_after"),
+                         1 if t.get("ten_percent_owner") else 0,
+                         None if plan is None else (1 if plan else 0)))
             con.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)", (filed,))
             con.commit()
         remaining_days = max(0, len(wanted) - budget)
@@ -237,6 +260,13 @@ def scan(days=3, limit=None, max_new_days=None):
                 # >0 means the window asked for is not fully covered yet and
                 # pressing again will fetch more.
                 "days_remaining": remaining_days}
+    except sqlite3.OperationalError as e:
+        if "locked" not in str(e).lower():
+            raise
+        con.rollback()
+        return {"fetched": fetched, "transactions": parsed, "days": int(days),
+                "days_read": 0, "days_remaining": max(1, len(wanted)),
+                "error": "the Form 4 store is locked by another scan — will retry"}
     finally:
         con.close()
 
@@ -254,145 +284,81 @@ def status():
         con.close()
 
 
-def classify(days=10, limit=60):
-    """Label the insiders behind recent open-market buys routine or opportunistic.
+def recent(days=30, min_insiders=1, min_value=25_000.0, exclude_ten_pct=True,
+           exclude_plan=True, limit=200, direction="buy"):
+    """Issuers with open-market insider purchases in the window, one row per
+    issuer, the cluster stated as a count.
 
-    Cohen, Malloy and Pomorski found the distinction is most of the signal in
-    Form 4: an insider who trades the same month every year is following a plan
-    and predicts nothing, while the same trade from someone with no such pattern
-    does. The test needs several years of that person's filings, so it is a
-    per-owner fetch from EDGAR — done for the insiders actually on screen, and
-    cached, rather than for all ten thousand filers.
-
-    An insider without enough history is left UNCLASSIFIED. Calling them
-    opportunistic because no pattern was visible in two years of filings would
-    put the strongest label in the dataset on the weakest evidence.
+    The shape is OpenInsider's: a cluster is not a constant but a group-by with
+    a minimum insider count the reader sets. The two exclusions are the
+    evidence-backed ones — 10% owners (whose buy ranking inverts) and 10b5-1
+    plan trades (decided months before they print) — and both are switches,
+    not silent filters. Sells are available for reading and never ranked.
     """
     con = connect()
     try:
-        cutoff = (date.today() - timedelta(days=int(days) * 2)).isoformat()
-        rows = con.execute("""
-            SELECT DISTINCT t.insider_cik
-              FROM tx t
-              LEFT JOIN owner_pattern p ON p.insider_cik = t.insider_cik
-             WHERE t.open_market=1 AND t.derivative=0 AND t.code='P'
-               AND t.direction='acquired' AND t.filed>=? AND t.insider_cik<>''
-               AND (p.insider_cik IS NULL
-                    -- Re-examine the ones we could not judge. "Unclassified"
-                    -- means too little filing history YET; cached forever it
-                    -- would still say so years after the history existed.
-                    OR (p.pattern='unclassified' AND p.checked < ?))
-             LIMIT ?
-        """, (cutoff, (date.today() - timedelta(days=90)).isoformat(),
-              int(limit))).fetchall()
-        done = 0
-        for (cik,) in rows:
-            dates = owner_filing_dates(cik) or []
-            time.sleep(REQ_PAUSE)
-            years, months = set(), {}
-            for d in dates:
-                try:
-                    y, m = int(d[0:4]), int(d[5:7])
-                except (ValueError, IndexError):
-                    continue
-                years.add(y)
-                months.setdefault(m, set()).add(y)
-            span = len(years)
-            if span < ROUTINE_MIN_YEARS:
-                pattern = "unclassified"
-            elif any(len(ys) >= ROUTINE_MIN_YEARS for ys in months.values()):
-                pattern = "routine"
-            else:
-                pattern = "opportunistic"
-            con.execute("INSERT OR REPLACE INTO owner_pattern VALUES (?,?,?,?,?)",
-                        (cik, pattern, span, len(dates), date.today().isoformat()))
-            # Commit per owner. Holding one transaction across eighty network
-            # round-trips keeps the write lock for minutes, and a scan started
-            # meanwhile exhausts its busy timeout and fails outright.
-            con.commit()
-            done += 1
-        remaining = con.execute("""
-            SELECT COUNT(DISTINCT t.insider_cik)
-              FROM tx t
-              LEFT JOIN owner_pattern p ON p.insider_cik = t.insider_cik
-             WHERE t.open_market=1 AND t.derivative=0 AND t.code='P'
-               AND t.direction='acquired' AND t.filed>=? AND t.insider_cik<>''
-               AND p.insider_cik IS NULL
-        """, (cutoff,)).fetchone()[0]
-        return {"classified": done, "remaining_unknown": remaining}
-    finally:
-        con.close()
-
-
-def leaders(days=5, limit=40, min_value=0.0, direction="buy"):
-    """Issuers ranked by open-market insider conviction in the window.
-
-    Ranked on VALUE, with the distinct-insider count carried alongside rather
-    than folded in: one executive buying $5m and five buying $1m each are
-    different events, and which one matters is the reader's call, not a
-    weighting hidden in a score.
-    """
-    con = connect()
-    try:
-        cutoff = (date.today() - timedelta(days=int(days) * 2)).isoformat()
+        cutoff = (date.today() - timedelta(days=int(days))).isoformat()
         buying = direction != "sell"
-        # P is an open-market purchase and S an open-market sale. Pinning code
-        # to P while asking for disposals matches nothing at all, which read as
-        # "nothing scanned yet" however full the store was.
         want_code = "P" if buying else "S"
         want = "acquired" if buying else "disposed"
-        # Code P only: see the module docstring on why grants and exercises are
-        # excluded rather than merely de-emphasised.
-        rows = con.execute("""
-            SELECT t.symbol, t.issuer,
+        conds = ["t.open_market=1", "t.derivative=0", "t.code=?", "t.direction=?",
+                 "t.filed>=?"]
+        args = [want_code, want, cutoff]
+        if exclude_ten_pct:
+            conds.append("COALESCE(t.ten_pct,0)=0")
+        if exclude_plan:
+            conds.append("COALESCE(t.plan,0)=0")
+        rows = con.execute(f"""
+            SELECT COALESCE(NULLIF(t.symbol,''), t.issuer) AS key,
+                   MAX(t.symbol), MAX(t.issuer),
+                   COUNT(DISTINCT COALESCE(NULLIF(t.insider_cik,''), t.insider)) AS people,
+                   COUNT(*) AS trades,
                    SUM(COALESCE(t.value,0)) AS v,
                    SUM(COALESCE(t.shares,0)) AS sh,
-                   COUNT(DISTINCT t.insider_cik) AS people,
-                   COUNT(*) AS trades,
-                   MAX(t.tx_date) AS latest,
+                   SUM(CASE WHEN t.value IS NOT NULL THEN t.shares ELSE 0 END) AS priced_sh,
+                   MIN(t.tx_date), MAX(t.tx_date), MAX(t.filed),
                    GROUP_CONCAT(DISTINCT t.roles),
-                   COUNT(DISTINCT CASE WHEN p.pattern='opportunistic'
-                                       THEN t.insider_cik END),
-                   COUNT(DISTINCT CASE WHEN p.pattern='routine'
-                                       THEN t.insider_cik END),
-                   -- How much a buy grew the insider's own holding. A $50k
-                   -- purchase by a director already holding $50m is noise; the
-                   -- same purchase from someone holding $200k is not, and only
-                   -- this ratio can tell them apart. Purchases ONLY: after a
-                   -- sale held_after is what is left, and the same arithmetic
-                   -- yields a number that means nothing.
-                   MAX(CASE WHEN t.direction='acquired' AND t.held_after > t.shares
-                                 AND t.shares > 0
-                            THEN t.shares / (t.held_after - t.shares) END)
+                   -- How much the buy grew the buyer's own holding: shares
+                   -- bought over shares held before. Purchases only — after a
+                   -- sale the same arithmetic means nothing.
+                   MAX(CASE WHEN t.held_after > t.shares AND t.shares > 0
+                            THEN t.shares / (t.held_after - t.shares) END),
+                   MAX(COALESCE(t.plan,0)), MAX(COALESCE(t.ten_pct,0)),
+                   SUM(CASE WHEN t.plan IS NULL THEN 1 ELSE 0 END)
               FROM tx t
-              LEFT JOIN owner_pattern p ON p.insider_cik = t.insider_cik
-             WHERE t.open_market=1 AND t.derivative=0 AND t.code=?
-               AND t.direction=? AND t.filed>=?
-             GROUP BY COALESCE(NULLIF(t.symbol,''), t.issuer)
-            HAVING v >= ?
+             WHERE {" AND ".join(conds)}
+             GROUP BY key
+            HAVING people >= ? AND v >= ?
              ORDER BY v DESC LIMIT ?
-        """, (want_code, want, cutoff, float(min_value), int(limit))).fetchall()
+        """, args + [int(min_insiders), float(min_value), int(limit)]).fetchall()
         out = []
-        for (sym, issuer, v, sh, people, trades, latest, roles,
-             opportunistic, routine, stake) in rows:
+        for (key, sym, issuer, people, trades, v, sh, priced_sh, first, last, filed,
+             roles, stake, any_plan, any_ten, plan_unknown) in rows:
+            roles_list = []
+            for r in (roles or "").split(","):
+                r = r.strip()
+                if r and r not in roles_list:
+                    roles_list.append(r)
             out.append({
                 "symbol": sym or "", "issuer": issuer or "",
-                "value": v or 0.0, "shares": sh or 0.0,
                 "insiders": people or 0, "trades": trades or 0,
-                "latest": latest or "",
-                # The pattern the view exists to surface, stated as a fact about
-                # the filings rather than as a rating.
-                "cluster": (people or 0) >= 2,
-                "roles": [r for r in (roles or "").split(",") if r.strip()][:4],
-                "opportunistic": opportunistic or 0,
-                "routine": routine or 0,
-                # None when no filing reported holdings after the trade.
+                "value": v or 0.0, "shares": sh or 0.0,
+                "avg_price": (v / priced_sh) if priced_sh else None,
+                "first_trade": first or "", "last_trade": last or "", "last_filed": filed or "",
+                "roles": roles_list[:5],
                 "stake_increase": stake,
-                # False on the sell view: the metric is about growing a
-                # position, so the UI must not claim the filing was silent.
-                "stake_applies": buying,
+                "any_plan": bool(any_plan), "any_ten_pct": bool(any_ten),
+                "plan_unknown": int(plan_unknown or 0),
             })
-        return {"leaders": out, "days": int(days), "direction": direction}
+        covered = con.execute(
+            "SELECT COUNT(*), MAX(filed) FROM scanned_days WHERE filed>=?", (cutoff,)).fetchone()
+        wanted = sum(1 for d in business_days(int(days) * 7 // 5 + 3)
+                     if d.isoformat() >= cutoff)
+        return {"rows": out, "days": int(days), "direction": direction,
+                "min_insiders": int(min_insiders), "min_value": float(min_value),
+                "exclude_ten_pct": bool(exclude_ten_pct), "exclude_plan": bool(exclude_plan),
+                "days_scanned": covered[0] or 0, "days_wanted": wanted,
+                "last_scanned": covered[1] or ""}
     finally:
         con.close()
 
@@ -402,11 +368,11 @@ def handle_action(action, p):
         return scan(p.get("days") or 3, p.get("limit"), p.get("max_new_days"))
     if action == "status":
         return status()
-    if action == "leaders":
-        return leaders(p.get("days") or 5, p.get("limit") or 40,
-                       p.get("min_value") or 0.0, p.get("direction") or "buy")
-    if action == "classify":
-        return classify(p.get("days") or 10, p.get("limit") or 60)
+    if action == "recent":
+        return recent(p.get("days") or 30, p.get("min_insiders") or 1,
+                      p.get("min_value") if p.get("min_value") is not None else 25_000.0,
+                      p.get("exclude_ten_pct", True), p.get("exclude_plan", True),
+                      p.get("limit") or 200, p.get("direction") or "buy")
     return {"error": f"Unknown action: {action}"}
 
 

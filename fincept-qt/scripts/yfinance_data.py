@@ -618,18 +618,24 @@ def batch_closes(symbols, start_date, end_date):
             data = yf.download(syms, start=start_date, end=end_date, interval="1d",
                                group_by="ticker", progress=False, threads=True,
                                auto_adjust=True)
-        single = len(syms) == 1
 
         def _closes_for(s):
-            # Layouts vary (single vs multi-ticker, ticker on column level 0 or 1).
-            # Mirror the defensive access used elsewhere for grouped downloads.
+            # Layouts vary (ticker on column level 0 or 1, or no ticker level at
+            # all). The single-ticker case is NOT flat on current yfinance: with
+            # group_by="ticker" one symbol still comes back as (Ticker, Price)
+            # columns, so data["Close"] raised and every one-symbol request —
+            # the forward returns on a stock's own Form 4 rows — came back
+            # empty. Look for the ticker on either level first, whatever the
+            # count, and fall back to the flat frame only when there is one.
             try:
-                if single:
-                    return data["Close"]
                 if isinstance(data.columns, pd.MultiIndex):
                     if s in data.columns.get_level_values(0):
                         return data[s]["Close"]
-                    return data.xs(s, axis=1, level=1)["Close"]
+                    if s in data.columns.get_level_values(1):
+                        return data.xs(s, axis=1, level=1)["Close"]
+                    if "Close" in data.columns.get_level_values(0):
+                        return data["Close"]
+                    return None
                 return data["Close"]
             except Exception:
                 return None
@@ -639,6 +645,14 @@ def batch_closes(symbols, start_date, end_date):
             closes = _closes_for(s)
             if closes is None:
                 continue
+            # A one-ticker download still comes back with (Price, Ticker)
+            # column levels on current yfinance, so data["Close"] is a
+            # one-column frame rather than a series; iterating it yields the
+            # column name, not the dates, and every row was silently dropped.
+            if isinstance(closes, pd.DataFrame):
+                if closes.shape[1] == 0:
+                    continue
+                closes = closes.iloc[:, 0]
             series = []
             for idx, val in closes.items():
                 try:

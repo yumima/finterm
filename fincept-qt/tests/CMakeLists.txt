@@ -687,18 +687,20 @@ set_target_properties(test_external_link PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME external_link COMMAND test_external_link)
 
 # ── OWNERSHIP read-throughs ──────────────────────────────────────────────────
-# derive_reads() turns a holder table into sentences, and a sentence is much
-# easier to believe than a number. The negative cases carry most of the weight:
-# a read that fires when its input is missing is a fabricated claim about a
-# real company. Each test starts from a blank snapshot and adds only the field
-# it exercises, so any read that appears is provably caused by that field.
-add_executable(test_ownership_signals
-    screens/test_ownership_signals.cpp
+# The interpretive layer of Ownership: the header figures, the three flags
+# and the forward returns. A flag that fires when its input is missing is a
+# fabricated claim about a real company, so the negative cases carry most of
+# the weight — each test starts from a blank snapshot and adds only the field
+# it exercises. The cluster finder is tested for the two exclusions the
+# evidence turns on (10% owners, 10b5-1 plans), because they are the whole
+# difference between a signal and a leaderboard of grants.
+add_executable(test_ownership_flags
+    screens/test_ownership_flags.cpp
 )
-target_include_directories(test_ownership_signals PRIVATE ../src)
-target_link_libraries(test_ownership_signals PRIVATE Qt6::Core Qt6::Test)
-set_target_properties(test_ownership_signals PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
-add_test(NAME ownership_signals COMMAND test_ownership_signals)
+target_include_directories(test_ownership_flags PRIVATE ../src)
+target_link_libraries(test_ownership_flags PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_ownership_flags PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME ownership_flags COMMAND test_ownership_flags)
 
 # ── Palette contrast ─────────────────────────────────────────────────────────
 # text_dim shipped at 1.91:1 and text_tertiary at 2.53:1 against the ground —
@@ -727,6 +729,19 @@ if(Python3_Interpreter_FOUND)
     add_test(
         NAME ownership_parse
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_ownership_parse.py
+    )
+    # FINRA consolidated short interest: the row decode, the publication lag
+    # and the market-wide ranking's join and fund exclusion, against a fixture
+    # store — no network.
+    add_test(
+        NAME finra_short_interest
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_finra_short_interest.py
+    )
+    # Market-wide Form 4 store: the cluster group-by with its two exclusions,
+    # and the schema migration that added them, against a fixture store.
+    add_test(
+        NAME form4_market
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_form4_market.py
     )
 endif()
 

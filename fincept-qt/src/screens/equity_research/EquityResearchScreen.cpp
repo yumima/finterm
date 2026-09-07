@@ -386,12 +386,11 @@ void EquityResearchScreen::build_ui() {
     tab_widget_->addTab(news_tab_, "News");
     tab_widget_->addTab(relationships_tab_, "Relationships");
 
-    // Ownership: who among the tracked managers holds this and what they did.
-    // Deliberately a tab rather than a strip on Overview — the fetch is minutes
-    // of EDGAR round-trips, so it should only be reachable when the user has
-    // gone looking for it.
+    // Ownership: who holds this (13F), what the insiders did (Form 4), what
+    // the shorts hold (FINRA). A tab rather than a strip on Overview — the
+    // Form 4 half is a minute of EDGAR round-trips, so it loads when the
+    // reader goes looking for it. ER names the symbol; the panel is told.
     ownership_tab_ = new StockOwnershipPanel;
-    ownership_tab_->set_chrome_visible(false);   // ER owns the symbol box
     tab_widget_->addTab(ownership_tab_, "Ownership");
 
     connect(tab_widget_, &QTabWidget::currentChanged, this, &EquityResearchScreen::on_tab_changed);
@@ -776,8 +775,8 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     if (isVisible())
         services::AppContextService::instance().set_current_symbol(symbol);
 
-    // Point the ownership tab at the new symbol. No auto-fetch: reading every
-    // tracked manager's 13F takes minutes, and ER changes symbol constantly.
+    // Point the ownership tab at the new symbol. The panel loads on its own
+    // schedule (the local index in milliseconds, EDGAR behind it).
     if (ownership_tab_)
         ownership_tab_->set_symbol(symbol);
 

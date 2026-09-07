@@ -183,6 +183,32 @@ def main():
                   str(h["total_shares_held"]))
             check("holders: empty CIKs did not join to each other",
                   h["holder_count"] == 4, str(h["holder_count"]))
+            # ── the industry's default sort, a tier per row, concentration ─
+            # Position size first (Bloomberg HDS); weight is the second view
+            # and carries a book-size floor so a shell cannot outrank a firm.
+            check("holders: default sort is by position value, largest first",
+                  h["sort"] == "value" and
+                  [x["value"] for x in h["holders"] if not x["is_derivative"]] ==
+                  sorted((x["value"] for x in h["holders"] if not x["is_derivative"]), reverse=True),
+                  str([x["value"] for x in h["holders"]]))
+            check("holders: every row carries a tier",
+                  all(x["tier"] in ("index", "broad", "focused") for x in h["holders"]),
+                  str([x.get("tier") for x in h["holders"]]))
+            check("holders: a one-name book is focused, not broad",
+                  all(x["tier"] == "focused" for x in h["holders"]), str([x["tier"] for x in h["holders"]]))
+            check("holders: top-10 share over every filer is 100% of a four-filer register",
+                  abs(h["top10_share"] - 1.0) < 1e-9, str(h.get("top10_share")))
+            check("holders: broad share is 0 with no index or broad books",
+                  h["broad_share"] == 0.0, str(h.get("broad_share")))
+            hw = bulk.holders(cusip="111111111", min_book=0, min_positions=0, sort="weight")
+            check("holders: the weight sort raises the book floor to $1B, which this fixture cannot meet",
+                  hw["sort"] == "weight" and hw["min_book_value"] == bulk.MIN_BOOK_FOR_WEIGHT_SORT
+                  and hw["holder_count"] == 0, str((hw["sort"], hw["min_book_value"], hw["holder_count"])))
+            check("tier: a named passive complex is 'index' whatever its breadth",
+                  bulk.holder_tier("BlackRock, Inc.", 12) == "index")
+            check("tier: a thousand-name book is broad", bulk.holder_tier("Some Adviser", 1000) == "broad")
+            check("tier: a fund is recognised by name", bulk.is_fund("DIREX DAIL SEMI BU 3X ET") and
+                  bulk.is_fund("ISHARES CORE S&P 500") and not bulk.is_fund("APPLE INC"))
         finally:
             con.close()
 
@@ -222,6 +248,38 @@ def main():
         # quarters at all, and inventing them is the bug.
         check("exits: blank CIKs do not cross-join into a fabricated count",
               h3["exited"] <= 1, "exited=%s (was 70 with the cross join)" % h3["exited"])
+
+        # ── breadth across the universe, with the same guards ──────────────
+        # Two complete quarters are now indexed. Breadth compares only filers
+        # present in both; the blank-CIK filers cannot be tracked and must not
+        # be counted as new or closed.
+        conm = bulk.connect()
+        try:
+            conm.execute("INSERT OR REPLACE INTO cusip_ticker VALUES ('111111111','WDGT','WIDGET CO','test')")
+            conm.commit()
+        finally:
+            conm.close()
+        # The universe aggregates apply the same book floors as holders() does
+        # by default; this fixture's books are a few dollars, so lower them.
+        saved = (bulk.MIN_BOOK_VALUE, bulk.MIN_BOOK_POSITIONS)
+        bulk.MIN_BOOK_VALUE, bulk.MIN_BOOK_POSITIONS = 0.0, 0
+        mv = bulk.movers(limit=50, sort="breadth_down", min_holders=1)
+        check("movers: answers from the two indexed quarters",
+              mv.get("quarter") == "2026-03-31" and mv.get("prior_quarter") == "2025-12-31", str(mv))
+        widget = next((r for r in mv.get("rows", []) if r["cusip"] == "111111111"), None)
+        check("movers: the security appears with its current holder count",
+              widget is not None and widget["holders"] == 4, str(widget))
+        # The one CIK'd prior holder did not file this quarter, so it has not
+        # sold — it simply cannot be seen. Nothing here is a closed position.
+        check("movers: a filer who stopped filing is not a closed position",
+              widget is not None and widget["closed"] == 0, str(widget and widget["closed"]))
+        check("movers: blank-CIK filers cannot be tracked, so the comparable prior count is zero",
+              widget is not None and widget["holders_prior"] == 0, str(widget and widget["holders_prior"]))
+        tt = bulk.shares_by_ticker("2026-03-31")
+        check("ticker totals: shares summed per ticker for the quarter",
+              tt.get("quarter") == "2026-03-31" and any(v["shares"] == 100000 + 200000 + 5000 + 7000
+                                                        for v in tt["by_ticker"].values()), str(tt)[:300])
+        bulk.MIN_BOOK_VALUE, bulk.MIN_BOOK_POSITIONS = saved
 
         # ── a partial quarter must not become the default answer ───────────
         # ingest_current pulls the newest quarter for the largest filers only,
