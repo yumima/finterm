@@ -7,6 +7,7 @@
 
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -244,9 +245,33 @@ void PythonWorker::launch_process() {
     socket_buf_.clear();
     read_buf_.clear();
 
-    // Socket path in the app's runtime directory (already created at startup).
-    socket_path_ = fincept::AppPaths::runtime() + "/yfinance.sock";
-    QFile::remove(socket_path_); // remove any stale file from a previous crash
+    // Socket path in the app's runtime directory (already created at startup),
+    // named by THIS process. It used to be one fixed name, and a second
+    // instance — another profile, or a duplicate that slipped past the
+    // single-instance guard — deleted the first one's socket on its way up and
+    // again on its way down. The first instance kept its established
+    // connection and nothing on screen said anything; every reconnect after
+    // that failed. A per-process name means one instance can only ever touch
+    // its own file. Sockets left by crashed processes are swept here, and
+    // only when their owner is verifiably gone.
+    const QString runtime_dir = fincept::AppPaths::runtime();
+    socket_path_ = QStringLiteral("%1/yfinance-%2.sock")
+                       .arg(runtime_dir)
+                       .arg(QCoreApplication::applicationPid());
+    QFile::remove(socket_path_); // our own stale file from a previous crash
+    for (const QString& name : QDir(runtime_dir).entryList({QStringLiteral("yfinance-*.sock")},
+                                                           QDir::System | QDir::Files)) {
+        const QString pid = name.mid(9, name.size() - 14);   // yfinance-<pid>.sock
+        bool ok = false;
+        const qint64 owner = pid.toLongLong(&ok);
+        if (!ok || owner == QCoreApplication::applicationPid())
+            continue;
+#ifdef Q_OS_LINUX
+        // A pid with no /proc entry is dead; anything else is left alone.
+        if (!QFileInfo::exists(QStringLiteral("/proc/%1").arg(owner)))
+            QFile::remove(runtime_dir + "/" + name);
+#endif
+    }
 
     proc_ = new QProcess(this);
     proc_->setProcessEnvironment(runner.build_python_env());

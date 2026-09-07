@@ -2,15 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-09-04)
+## Today's commits (2026-09-07)
 
 Latest first.
 
-- [`b48e8335d`](https://github.com/yumima/finterm/commit/b48e8335d) ER: the analyst badge gets a scale and a horizon; splits get repaired on both fetch paths
-- [`aa4799402`](https://github.com/yumima/finterm/commit/aa4799402) technicals: a split the vendor announced but never applied read as a 50% crash
-- [`2d8074d1c`](https://github.com/yumima/finterm/commit/2d8074d1c) ER: analyst targets, the 52-week basis, and a D/E column that was red for everyone
-- [`0fefadc8e`](https://github.com/yumima/finterm/commit/0fefadc8e) equity research: remove the Sentiment tab
-- [`ef6510ce3`](https://github.com/yumima/finterm/commit/ef6510ce3) peers + market info: the vendor's "0" meant "we don't know", and three columns were never sent
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
