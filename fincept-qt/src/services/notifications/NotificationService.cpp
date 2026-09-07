@@ -74,6 +74,7 @@ void NotificationService::send(const NotificationRequest& req) {
     const bool price_on = get_bool("notifications.price_alerts", true);
     const bool orders_on = get_bool("notifications.order_fills", true);
     const bool news_on = get_bool("notifications.news_alerts", false);
+    const bool ownership_on = get_bool("notifications.ownership_alerts", true);
 
     bool trigger_allowed = true;
     switch (req.trigger) {
@@ -85,6 +86,9 @@ void NotificationService::send(const NotificationRequest& req) {
             break;
         case NotifTrigger::NewsAlert:
             trigger_allowed = news_on;
+            break;
+        case NotifTrigger::OwnershipAlert:
+            trigger_allowed = ownership_on;
             break;
         case NotifTrigger::Manual:
         case NotifTrigger::WorkflowNode:

@@ -9,6 +9,7 @@
 #include "screens/dashboard/widgets/EconomicCalendarWidget.h"
 #include "screens/dashboard/widgets/ForexWidget.h"
 #include "screens/dashboard/widgets/IpoCalendarWidget.h"
+#include "screens/dashboard/widgets/OwnershipCalendarWidget.h"
 #include "screens/dashboard/widgets/IndicesWidget.h"
 #include "screens/dashboard/widgets/MarginUsageWidget.h"
 #include "screens/dashboard/widgets/MarketQuoteStripWidget.h"
@@ -92,6 +93,10 @@ WidgetRegistry::WidgetRegistry() {
     register_widget({"ipo_calendar", "IPO Calendar", "Research",
                      "Upcoming and recently priced IPOs — this month and next", 4, 5, 2, 1,
                      [](const QJsonObject&) { return new widgets::IpoCalendarWidget; }});
+
+    register_widget({"ownership_calendar", "Ownership Calendar", "Research",
+                     "13F deadlines, short-interest publication dates, IPO lock-up expiries", 4, 5, 2, 1,
+                     [](const QJsonObject&) { return new widgets::OwnershipCalendarWidget; }});
 
     register_widget({"earnings_calendar", "Earnings Calendar", "Research",
                      "Upcoming earnings — this week's tape, or just your holdings", 4, 5, 2, 1,

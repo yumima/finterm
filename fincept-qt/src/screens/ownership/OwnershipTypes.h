@@ -15,6 +15,7 @@
 // its own dates so that nothing on screen has to be aged by guesswork.
 
 #include <QDate>
+#include <QHash>
 #include <QJsonArray>
 #include <QString>
 #include <QStringList>
@@ -450,6 +451,53 @@ struct Movers {
     QVector<MoverRow> rows;
     QString error;
     bool    loaded = false;
+};
+
+// ── Where ownership reaches the reader: watchlist rows, alerts, a calendar ──
+
+/// One watchlist line, from the three local stores. Absent fields mean the
+/// store has never seen the symbol — never zero.
+struct WatchRow {
+    std::optional<int>    holders;
+    std::optional<int>    delta_holders;
+    std::optional<double> top10_share;
+    std::optional<double> shares_short;
+    std::optional<double> days_to_cover;
+    std::optional<double> si_change_pct;
+    std::optional<double> sirio;
+    int    insider_buys = 0;      ///< scorable open-market buys in the window
+    int    insider_buyers = 0;
+    double insider_buy_value = 0.0;
+    QDate  last_insider_buy;
+};
+
+struct WatchRows {
+    QHash<QString, WatchRow> rows;
+    QDate quarter;            ///< 13F quarter the holder figures describe
+    QDate settlement;         ///< FINRA settlement the short figures describe
+    QDate published_after;
+    QDate form4_scanned_to;
+    int   days = 30;
+    QString error;
+    bool  loaded = false;
+};
+
+/// A dated event that moves the numbers on the ownership screens.
+struct CalendarEntry {
+    enum class Kind { Form13FDeadline, FinraPublication, LockupExpiry };
+    Kind    kind = Kind::Form13FDeadline;
+    QDate   date;             ///< the day the reader is waiting for
+    QDate   basis;            ///< quarter end / settlement date / pricing date
+    QString symbol;           ///< lock-ups only
+    QString company;
+};
+
+struct OwnershipCalendar {
+    QDate as_of;
+    int   days = 90;
+    QVector<CalendarEntry> entries;   ///< by date, soonest first
+    QString error;
+    bool  loaded = false;
 };
 
 } // namespace fincept::ownership

@@ -743,6 +743,20 @@ if(Python3_Interpreter_FOUND)
         NAME form4_market
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_form4_market.py
     )
+    # Ownership where the reader already is: watchlist rows from the three
+    # local stores, the holdings alert query, and the calendar's date math
+    # (13F deadlines, FINRA publication, lock-ups) — fixture stores, stubbed
+    # IPO calendar, no network.
+    add_test(
+        NAME ownership_watch
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_ownership_watch.py
+    )
+    # Twelve months of Form 4: the SEC bulk ingest on a synthetic data set and
+    # the forward-return evaluation on planted closes.
+    add_test(
+        NAME form4_bulk
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_form4_bulk.py
+    )
 endif()
 
 # ── 13F information-table parsing ────────────────────────────────────────────

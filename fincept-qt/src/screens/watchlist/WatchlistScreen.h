@@ -68,6 +68,10 @@ class WatchlistScreen : public QWidget, public IStatefulScreen, public IGroupLin
     // Data
     QVector<fincept::Watchlist> watchlists_;
     QVector<fincept::WatchlistStock> stocks_;
+    /// Ownership columns arrive after the quotes, from the local stores, and
+    /// are re-applied whenever the quote rows are rebuilt.
+    void request_ownership_columns();
+    void apply_ownership_columns();
     QString current_wl_id_;
 
     // Sidebar

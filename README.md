@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`00ebb993f`](https://github.com/yumima/finterm/commit/00ebb993f) ER: retry the info fetch once after a daemon timeout
 - [`73a6e4327`](https://github.com/yumima/finterm/commit/73a6e4327) ownership: the register the industry reads, and three scans that hand you a ticker
 - [`d6e33f939`](https://github.com/yumima/finterm/commit/d6e33f939) python worker: one daemon socket per process, not one per machine
 

@@ -1,6 +1,6 @@
 # Ownership — Redesign
 
-**Status:** Phases 1 and 2 implemented 2026-09-06 (per-stock tab, three market-wide scans, FINRA short interest, daily Form 4 ingest, holder tiers, forward returns); phase 3 (watchlist columns, alerts, calendar, the 12-month forward-return check) not started
+**Status:** All three phases implemented — phases 1 and 2 on 2026-09-06, phase 3 on 2026-09-07 (watchlist ownership columns, insider-buy alerts on holdings and watchlists, the Ownership Calendar dashboard widget, and the twelve-month forward-return check — see `plans/research/form4_forward_returns_2026-09.md`)
 **Replaces:** `src/screens/ownership/*` (7,000 lines), the OWNERSHIP screen's BY FIRM / INSIDERS tabs, and the ER › Ownership tab's tile grid
 **Screen IDs:** `ownership` (market-wide), `equity_research` › Ownership (per-stock)
 **Date:** 2026-09-05
@@ -269,6 +269,13 @@ Items 1, 2, 5 must not survive into phase 1 under any layout.
 | **1 — per-stock** | ER › Ownership: header + HOLDERS + INSIDERS + SHORT INTEREST; FINRA SI history; Form 4 flags; deletions | Every defect in §7 gone; one per-stock surface; −4,500 LOC |
 | **2 — market-wide** | Daily Form 4 ingest; INSIDER BUYS / SHORT-CONSTRAINED / 13F MOVERS scans; filer search + drill; delete the old landing tabs | OWNERSHIP screen answers "where is it happening" without a button press |
 | **3 — integration** | Watchlist/screener columns; portfolio alerts on Form 4 buys; calendar entries; 12-month forward-return check on our own Form 4 data before any flag becomes an alert | Ownership reaches the reader where they already are |
+
+### Phase 3 notes (2026-09-07)
+
+- **Watchlist columns** (`WatchlistScreen`): 13F HOLDERS, Δ HOLDERS, SI ÷ 13F, DAYS TO COVER, INSIDER BUYS 30D, from `ownership_watch.py rows` — the three local stores joined per symbol, milliseconds, no network once a FINRA settlement is cached. Header tooltips carry the three dates. A symbol the stores have never seen shows dashes, never zeros.
+- **Alerts**: after every Form 4 scan pass, `OwnershipService::check_holdings_alerts` asks the store for scorable buys on portfolio + watchlist symbols in the last 7 days, stamps the newest filing date per issuer in `data/ownership_alerts.json`, and posts a toast plus a `NotifTrigger::OwnershipAlert` notification once per new filing. Settings › Notifications › "Insider Buys on Holdings" (default on) gates both.
+- **Calendar**: `OwnershipCalendarWidget` (dashboard, Research) — 13F due dates (45 days after quarter end, moved off weekends), FINRA publication dates (10 business days after each settlement, including a past settlement whose publication is still ahead), IPO lock-up expiries (180 days after pricing from Nasdaq's calendar; SPACs skipped because their lock-up runs to the business combination). Lock-up rows open the stock in ER.
+- **The check**: `sec_form4_bulk.py` ingests SEC's quarterly Insider Transactions Data Sets (five quarters, 139k P/S rows, 18 s) and evaluates forward returns over SPY. Result: cluster buys +5.5 % mean / +2.6 % median excess at one month, 61 % hit rate; 10 %-owner and plan buys weaker or negative — the alert is justified and both exclusions are right. Details and caveats in the research note.
 
 ### Implementation notes (2026-09-06)
 

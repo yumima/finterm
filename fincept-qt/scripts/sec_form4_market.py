@@ -285,7 +285,7 @@ def status():
 
 
 def recent(days=30, min_insiders=1, min_value=25_000.0, exclude_ten_pct=True,
-           exclude_plan=True, limit=200, direction="buy"):
+           exclude_plan=True, limit=200, direction="buy", symbols=None):
     """Issuers with open-market insider purchases in the window, one row per
     issuer, the cluster stated as a count.
 
@@ -308,6 +308,10 @@ def recent(days=30, min_insiders=1, min_value=25_000.0, exclude_ten_pct=True,
             conds.append("COALESCE(t.ten_pct,0)=0")
         if exclude_plan:
             conds.append("COALESCE(t.plan,0)=0")
+        if symbols:
+            syms = sorted({str(x).upper() for x in symbols if x})
+            conds.append("t.symbol IN (%s)" % ",".join("?" * len(syms)))
+            args.extend(syms)
         rows = con.execute(f"""
             SELECT COALESCE(NULLIF(t.symbol,''), t.issuer) AS key,
                    MAX(t.symbol), MAX(t.issuer),
@@ -372,7 +376,7 @@ def handle_action(action, p):
         return recent(p.get("days") or 30, p.get("min_insiders") or 1,
                       p.get("min_value") if p.get("min_value") is not None else 25_000.0,
                       p.get("exclude_ten_pct", True), p.get("exclude_plan", True),
-                      p.get("limit") or 200, p.get("direction") or "buy")
+                      p.get("limit") or 200, p.get("direction") or "buy", p.get("symbols"))
     return {"error": f"Unknown action: {action}"}
 
 

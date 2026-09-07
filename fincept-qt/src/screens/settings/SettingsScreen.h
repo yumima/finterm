@@ -81,6 +81,7 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
     QCheckBox* trigger_inapp_ = nullptr;
     QCheckBox* trigger_price_ = nullptr;
     QCheckBox* trigger_news_ = nullptr;
+    QCheckBox* trigger_ownership_ = nullptr;
     QCheckBox* trigger_orders_ = nullptr;
 
     // News alert sub-options (visible only when trigger_news_ is checked)

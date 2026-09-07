@@ -954,11 +954,16 @@ QWidget* SettingsScreen::build_notifications() {
     trigger_news_->setStyleSheet(check_ss());
     trigger_orders_ = new QCheckBox;
     trigger_orders_->setStyleSheet(check_ss());
+    trigger_ownership_ = new QCheckBox;
+    trigger_ownership_->setStyleSheet(check_ss());
 
     vl->addWidget(
         make_row("In-App Alerts (toast + bell)", trigger_inapp_, "Show slide-in toasts and update bell badge."));
     vl->addWidget(make_row("Price Alerts", trigger_price_, "Notify when price alert thresholds are crossed."));
     vl->addWidget(make_row("News Alerts", trigger_news_, "Enable news notifications (configure which types below)."));
+    vl->addWidget(make_row("Insider Buys on Holdings", trigger_ownership_,
+                           "An open-market insider purchase (Form 4, code P) at a company in your portfolio "
+                           "or watchlists — a filing, not a call. 10% owners and 10b5-1 plan trades excluded."));
 
     // ── News alert sub-options ────────────────────────────────────────────────
     news_subopts_frame_ = new QFrame;
@@ -1008,6 +1013,7 @@ QWidget* SettingsScreen::build_notifications() {
         repo.set("notifications.price_alerts", b(trigger_price_->isChecked()), "notifications");
         repo.set("notifications.news_alerts", b(trigger_news_->isChecked()), "notifications");
         repo.set("notifications.order_fills", b(trigger_orders_->isChecked()), "notifications");
+        repo.set("notifications.ownership_alerts", b(trigger_ownership_->isChecked()), "notifications");
         repo.set("notifications.news_breaking", b(news_breaking_->isChecked()), "notifications");
         repo.set("notifications.news_monitors", b(news_monitors_->isChecked()), "notifications");
         repo.set("notifications.news_deviations", b(news_deviations_->isChecked()), "notifications");
@@ -1046,6 +1052,7 @@ void SettingsScreen::load_notifications() {
         trigger_price_->setChecked(get_bool("notifications.price_alerts", true));
     if (trigger_orders_)
         trigger_orders_->setChecked(get_bool("notifications.order_fills", true));
+        trigger_ownership_->setChecked(get_bool("notifications.ownership_alerts", true));
 
     const bool news_on = get_bool("notifications.news_alerts", false);
     if (trigger_news_)

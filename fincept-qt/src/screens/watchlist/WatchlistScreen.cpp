@@ -4,6 +4,7 @@
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolDragSource.h"
+#include "services/ownership/OwnershipService.h"
 #include "ui/formatting/CsvWriter.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -256,8 +257,14 @@ QWidget* WatchlistScreen::build_main_panel() {
 
     // Table — the main data area
     table_ = new ui::DataTable;
-    table_->set_headers({"SYMBOL", "NAME", "PRICE", "CHANGE", "CHG %", "HIGH", "LOW", "VOLUME"});
-    table_->set_column_widths({100, 160, 100, 90, 80, 90, 90, 110});
+    // The quote columns, then ownership from the local stores (Koyfin's
+    // pattern: ownership as watchlist columns, not only a tab). Each is
+    // dated in its header tooltip once the rows land.
+    table_->set_headers({"SYMBOL", "NAME", "PRICE", "CHANGE", "CHG %", "HIGH", "LOW", "VOLUME",
+                         "13F HOLDERS", "Δ HOLDERS", "SI ÷ 13F", "DAYS TO COVER", "INSIDER BUYS 30D"});
+    table_->set_column_widths({100, 160, 100, 90, 80, 90, 90, 110, 110, 100, 90, 135, 160});
+    connect(&services::OwnershipService::instance(), &services::OwnershipService::watch_updated, this,
+            [this]() { apply_ownership_columns(); });
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
 
@@ -438,6 +445,75 @@ void WatchlistScreen::load_stocks() {
 
     stock_count_->setText(QString("%1 symbols").arg(stocks_.size()));
     fetch_quotes();
+    request_ownership_columns();
+}
+
+void WatchlistScreen::request_ownership_columns() {
+    QStringList syms;
+    for (const auto& s : stocks_)
+        syms << s.symbol;
+    if (!syms.isEmpty())
+        services::OwnershipService::instance().load_watch(syms);
+}
+
+void WatchlistScreen::apply_ownership_columns() {
+    const auto& w = services::OwnershipService::instance().watch_rows();
+    if (!w.loaded || !table_)
+        return;
+    namespace fmt = ui::formatting;
+    const QString dim = colors::TEXT_SECONDARY;
+    // Header tooltips carry the dates: a holder count is true as of a
+    // quarter end, a short figure as of a settlement, and the two differ.
+    if (auto* hh = table_->horizontalHeaderItem(8))
+        hh->setToolTip(QStringLiteral("13F filers holding the name, and the change against the prior quarter — as of %1")
+                           .arg(w.quarter.isValid() ? w.quarter.toString(QStringLiteral("d MMM yyyy")) : QStringLiteral("no index")));
+    if (auto* hh = table_->horizontalHeaderItem(10))
+        hh->setToolTip(QStringLiteral("Short interest ÷ 13F shares (the borrow-fee proxy) and days to cover — FINRA settlement %1, published ~%2")
+                           .arg(w.settlement.isValid() ? w.settlement.toString(QStringLiteral("d MMM yyyy")) : QStringLiteral("—"),
+                                w.published_after.isValid() ? w.published_after.toString(QStringLiteral("d MMM")) : QStringLiteral("—")));
+    if (auto* hh = table_->horizontalHeaderItem(12))
+        hh->setToolTip(QStringLiteral("Open-market insider purchases in the last %1 days — 10%% owners and 10b5-1 plan trades excluded; Form 4 store read to %2")
+                           .arg(w.days).arg(w.form4_scanned_to.isValid() ? w.form4_scanned_to.toString(QStringLiteral("d MMM")) : QStringLiteral("—")));
+    for (int row = 0; row < table_->rowCount(); ++row) {
+        auto* sym_item = table_->item(row, 0);
+        if (!sym_item)
+            continue;
+        const auto it = w.rows.constFind(sym_item->text().trimmed().toUpper());
+        const bool have = it != w.rows.constEnd();
+        auto put = [&](int col, const QString& text, const QString& colour = {}) {
+            auto* item = table_->item(row, col);
+            if (!item) {
+                item = new QTableWidgetItem;
+                item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+                table_->setItem(row, col, item);
+            }
+            item->setText(text);
+            if (!colour.isEmpty())
+                item->setForeground(QColor(colour));
+        };
+        if (!have) {
+            for (int c = 8; c <= 12; ++c)
+                put(c, fmt::placeholder(), dim);
+            continue;
+        }
+        const auto& r = it.value();
+        put(8, r.holders ? QLocale().toString(*r.holders) : fmt::placeholder());
+        put(9, r.delta_holders ? QStringLiteral("%1%2").arg(*r.delta_holders > 0 ? QStringLiteral("+") : QString())
+                                                        .arg(QLocale().toString(*r.delta_holders))
+                               : fmt::placeholder(),
+            r.delta_holders ? (*r.delta_holders > 0 ? QString(colors::POSITIVE)
+                                                     : *r.delta_holders < 0 ? QString(colors::NEGATIVE) : dim)
+                            : dim);
+        put(10, r.sirio ? QString::number(*r.sirio, 'f', 3) : fmt::placeholder(),
+            r.sirio && *r.sirio >= 0.2 ? QString(colors::WARNING) : QString());
+        put(11, r.days_to_cover ? QString::number(*r.days_to_cover, 'f', 1) : fmt::placeholder(),
+            r.days_to_cover && *r.days_to_cover >= 5.0 ? QString(colors::WARNING) : QString());
+        put(12, r.insider_buys > 0
+                    ? QStringLiteral("%1 by %2 · $%3").arg(r.insider_buys).arg(r.insider_buyers)
+                          .arg(fmt::format_compact(r.insider_buy_value))
+                    : QStringLiteral("0"),
+            r.insider_buyers >= 2 ? QString(colors::POSITIVE) : r.insider_buys > 0 ? QString() : dim);
+    }
 }
 
 void WatchlistScreen::fetch_quotes() {
@@ -536,6 +612,7 @@ void WatchlistScreen::populate_table(const QVector<services::QuoteData>& quotes)
             table_->add_row({s.symbol, s.name, "--", "--", "--", "--", "--", "--"});
         }
     }
+    apply_ownership_columns();
 }
 
 // ── Slots ────────────────────────────────────────────────────────────────────

@@ -80,6 +80,22 @@ class OwnershipService : public QObject {
     bool form4_scanning() const { return form4_scanning_; }
     QString form4_status() const { return form4_status_; }
 
+    // ── Where ownership reaches the reader ──────────────────────────────────
+
+    /// One line per symbol for a watchlist, from the local stores. Cheap.
+    void load_watch(const QStringList& symbols);
+    const ownership::WatchRows& watch_rows() const { return watch_; }
+
+    /// 13F deadlines, FINRA publication dates, IPO lock-up expiries.
+    void load_calendar(int days = 90);
+    const ownership::OwnershipCalendar& calendar() const { return calendar_; }
+
+    /// Insider buys on the reader's own holdings and watchlists since the
+    /// last check. Runs after every Form 4 scan pass; posts a toast and a
+    /// notification per new issuer, once. Idempotent across restarts through
+    /// a small stamp file.
+    void check_holdings_alerts();
+
     // ── Filers ──────────────────────────────────────────────────────────────
 
     void search_firms(const QString& query);
@@ -104,6 +120,8 @@ class OwnershipService : public QObject {
     void short_rank_updated();
     void movers_updated();
     void form4_status_changed(QString status);
+    void watch_updated();
+    void calendar_updated();
     void book_updated(QString cik);
     void firms_found();
     void index_changed(QString summary);
@@ -139,6 +157,15 @@ class OwnershipService : public QObject {
     bool short_rank_loading_ = false;
     ownership::Movers movers_;
     bool movers_loading_ = false;
+
+    ownership::WatchRows watch_;
+    bool watch_loading_ = false;
+    QStringList queued_watch_;
+    ownership::OwnershipCalendar calendar_;
+    bool calendar_loading_ = false;
+    bool alerts_checking_ = false;
+    /// Holdings and watchlist symbols, gathered on the GUI thread.
+    QStringList own_symbols() const;
 
     bool    form4_scanning_ = false;
     QString form4_status_;

@@ -13,7 +13,7 @@ namespace fincept::notifications {
 // ── Enumerations ──────────────────────────────────────────────────────────────
 
 enum class NotifLevel { Info, Warning, Alert, Critical };
-enum class NotifTrigger { Manual, PriceAlert, OrderFill, NewsAlert, WorkflowNode };
+enum class NotifTrigger { Manual, PriceAlert, OrderFill, NewsAlert, WorkflowNode, OwnershipAlert };
 
 // ── Data structures ───────────────────────────────────────────────────────────
 

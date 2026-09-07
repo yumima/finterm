@@ -1,11 +1,19 @@
 #include "services/ownership/OwnershipService.h"
 
+#include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
+#include "services/notifications/NotificationService.h"
+#include "storage/repositories/SettingsRepository.h"
+#include "storage/repositories/PortfolioRepository.h"
+#include "storage/repositories/WatchlistRepository.h"
+#include "ui/notifications/ToastService.h"
 #include "python/PythonWorker.h"
 #include "screens/ownership/OwnershipFlags.h"
 
 #include <QDateTime>
+#include <QDir>
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -908,11 +916,244 @@ void OwnershipService::run_form4_scan() {
                 }
             }
             emit self->form4_status_changed(self->form4_status_);
-            // Whatever landed belongs on the scan.
+            // Whatever landed belongs on the scan, and on the reader's own names.
             if (self->insider_buys_.loaded && !self->insider_buys_loading_)
                 self->load_insider_buys(self->insider_buys_.query);
+            if (result.success)
+                self->check_holdings_alerts();
         },
         /*on_line=*/{}, kScanTimeoutMs);
+}
+
+// ── Where ownership reaches the reader ──────────────────────────────────────
+
+void OwnershipService::load_watch(const QStringList& symbols) {
+    QStringList syms;
+    for (const auto& s : symbols) {
+        const QString u = s.trimmed().toUpper();
+        if (!u.isEmpty() && !syms.contains(u))
+            syms << u;
+    }
+    if (syms.isEmpty())
+        return;
+    if (watch_loading_) {
+        queued_watch_ = syms;
+        return;
+    }
+    watch_loading_ = true;
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("ownership_watch.py"),
+        {QStringLiteral("rows"), payload_of({{"symbols", QJsonArray::fromStringList(syms)}, {"days", 30}})},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->watch_loading_ = false;
+            WatchRows w;
+            w.loaded = true;
+            if (!result.success) {
+                w.error = result.error.isEmpty() ? QStringLiteral("ownership rows failed")
+                                                 : result.error.trimmed().section(QLatin1Char('\n'), -1).left(160);
+            } else {
+                const auto o = parse_object(result);
+                w.error = o.value(QStringLiteral("error")).toString();
+                w.quarter         = iso_date(o, "quarter");
+                w.settlement      = iso_date(o, "settlement");
+                w.published_after = iso_date(o, "published_after");
+                w.form4_scanned_to = iso_date(o, "form4_scanned_to");
+                w.days = o.value(QStringLiteral("days")).toInt(30);
+                const auto rows = o.value(QStringLiteral("rows")).toObject();
+                for (auto it = rows.begin(); it != rows.end(); ++it) {
+                    const auto r = it.value().toObject();
+                    WatchRow row;
+                    if (r.contains(QStringLiteral("holders")))
+                        row.holders = r.value(QStringLiteral("holders")).toInt();
+                    if (r.value(QStringLiteral("delta_holders")).isDouble())
+                        row.delta_holders = r.value(QStringLiteral("delta_holders")).toInt();
+                    row.top10_share   = opt_num(r, "top10_share");
+                    row.shares_short  = opt_num(r, "short");
+                    row.days_to_cover = opt_num(r, "dtc");
+                    row.si_change_pct = opt_num(r, "si_change_pct");
+                    row.sirio         = opt_num(r, "sirio");
+                    row.insider_buys   = r.value(QStringLiteral("insider_buys")).toInt();
+                    row.insider_buyers = r.value(QStringLiteral("insider_buyers")).toInt();
+                    row.insider_buy_value = r.value(QStringLiteral("insider_buy_value")).toDouble();
+                    row.last_insider_buy = iso_date(r, "last_insider_buy");
+                    w.rows.insert(it.key(), row);
+                }
+            }
+            self->watch_ = w;
+            emit self->watch_updated();
+            if (!self->queued_watch_.isEmpty()) {
+                const auto next = self->queued_watch_;
+                self->queued_watch_.clear();
+                self->load_watch(next);
+            }
+        },
+        /*on_line=*/{}, 120'000);
+}
+
+void OwnershipService::load_calendar(int days) {
+    if (calendar_loading_)
+        return;
+    calendar_loading_ = true;
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("ownership_watch.py"),
+        {QStringLiteral("calendar"), payload_of({{"days", days}})},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->calendar_loading_ = false;
+            OwnershipCalendar c;
+            c.loaded = true;
+            if (!result.success) {
+                c.error = result.error.isEmpty() ? QStringLiteral("calendar failed")
+                                                 : result.error.trimmed().section(QLatin1Char('\n'), -1).left(160);
+            } else {
+                const auto o = parse_object(result);
+                c.as_of = iso_date(o, "as_of");
+                c.days = o.value(QStringLiteral("days")).toInt(90);
+                for (const auto& v : o.value(QStringLiteral("form13f")).toArray()) {
+                    const auto e = v.toObject();
+                    CalendarEntry ce;
+                    ce.kind = CalendarEntry::Kind::Form13FDeadline;
+                    ce.date = iso_date(e, "due");
+                    ce.basis = iso_date(e, "quarter_end");
+                    c.entries.push_back(ce);
+                }
+                for (const auto& v : o.value(QStringLiteral("finra")).toArray()) {
+                    const auto e = v.toObject();
+                    CalendarEntry ce;
+                    ce.kind = CalendarEntry::Kind::FinraPublication;
+                    ce.date = iso_date(e, "published");
+                    ce.basis = iso_date(e, "settlement");
+                    c.entries.push_back(ce);
+                }
+                for (const auto& v : o.value(QStringLiteral("lockups")).toArray()) {
+                    const auto e = v.toObject();
+                    CalendarEntry ce;
+                    ce.kind = CalendarEntry::Kind::LockupExpiry;
+                    ce.date = iso_date(e, "expiry");
+                    ce.basis = iso_date(e, "priced");
+                    ce.symbol = e.value(QStringLiteral("symbol")).toString();
+                    ce.company = e.value(QStringLiteral("company")).toString();
+                    c.entries.push_back(ce);
+                }
+                std::stable_sort(c.entries.begin(), c.entries.end(),
+                                 [](const CalendarEntry& a, const CalendarEntry& b) { return a.date < b.date; });
+            }
+            self->calendar_ = c;
+            emit self->calendar_updated();
+        },
+        /*on_line=*/{}, 120'000);
+}
+
+QStringList OwnershipService::own_symbols() const {
+    QStringList out;
+    auto add = [&out](const QString& s) {
+        const QString u = s.trimmed().toUpper();
+        if (!u.isEmpty() && !out.contains(u))
+            out << u;
+    };
+    auto& pf = fincept::PortfolioRepository::instance();
+    if (const auto lists = pf.list_portfolios(); lists.is_ok())
+        for (const auto& p : lists.value())
+            if (const auto assets = pf.get_assets(p.id); assets.is_ok())
+                for (const auto& a : assets.value())
+                    add(a.symbol);
+    auto& wl = fincept::WatchlistRepository::instance();
+    if (const auto lists = wl.list_all(); lists.is_ok())
+        for (const auto& w : lists.value())
+            if (const auto stocks = wl.get_stocks(w.id); stocks.is_ok())
+                for (const auto& s : stocks.value())
+                    add(s.symbol);
+    return out;
+}
+
+namespace {
+QString alert_stamps_path() {
+    return fincept::AppPaths::data() + QStringLiteral("/ownership_alerts.json");
+}
+QJsonObject read_stamps() {
+    QFile f(alert_stamps_path());
+    if (!f.open(QIODevice::ReadOnly))
+        return {};
+    return QJsonDocument::fromJson(f.readAll()).object();
+}
+void write_stamps(const QJsonObject& o) {
+    QDir().mkpath(fincept::AppPaths::data());
+    QFile f(alert_stamps_path());
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        f.write(QJsonDocument(o).toJson(QJsonDocument::Compact));
+}
+} // namespace
+
+void OwnershipService::check_holdings_alerts() {
+    if (alerts_checking_)
+        return;
+    // The same switch the notification service honours, read here too so the
+    // in-app toast and the stamp file respect it: off means nothing fires and
+    // nothing is remembered as "already announced".
+    {
+        const auto r = fincept::SettingsRepository::instance().get(QStringLiteral("notifications.ownership_alerts"));
+        if (r.is_ok() && r.value() != QLatin1String("1"))
+            return;
+    }
+    const QStringList syms = own_symbols();
+    if (syms.isEmpty())
+        return;
+    alerts_checking_ = true;
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("ownership_watch.py"),
+        {QStringLiteral("alerts"), payload_of({{"symbols", QJsonArray::fromStringList(syms)}, {"days", 7}})},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->alerts_checking_ = false;
+            if (!result.success)
+                return;
+            const auto o = parse_object(result);
+            QJsonObject stamps = read_stamps();
+            bool changed = false;
+            for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
+                const auto r = v.toObject();
+                const QString sym = r.value(QStringLiteral("symbol")).toString();
+                const QString filed = r.value(QStringLiteral("last_filed")).toString();
+                if (sym.isEmpty() || filed.isEmpty())
+                    continue;
+                // Once per issuer per filing date. The stamp is the newest
+                // filing already announced; anything not newer is old news.
+                if (stamps.value(sym).toString() >= filed)
+                    continue;
+                stamps.insert(sym, filed);
+                changed = true;
+                const int insiders = r.value(QStringLiteral("insiders")).toInt();
+                const double value = r.value(QStringLiteral("value")).toDouble();
+                const QString who = insiders >= 2 ? QStringLiteral("%1 insiders").arg(insiders)
+                                                  : QStringLiteral("an insider");
+                // A filing, stated as one. The evidence line is what the
+                // twelve-month check on our own data found; it is not a call.
+                const QString msg = QStringLiteral(
+                    "%1: %2 bought on the open market (Form 4 filed %3, $%4 in total). "
+                    "On this universe a %5 was followed by a median %6 over the index in a month.")
+                    .arg(sym, who, filed, QString::number(value / 1000.0, 'f', 0) + QStringLiteral("K"),
+                         insiders >= 2 ? QStringLiteral("cluster buy") : QStringLiteral("scorable buy"),
+                         insiders >= 2 ? QStringLiteral("+2.6%") : QStringLiteral("+1.9%"));
+                ui::ToastService::instance().post(ui::ToastService::Severity::Info, msg,
+                                                  QStringLiteral("ownership"));
+                notifications::NotificationRequest req;
+                req.title = QStringLiteral("Insider buy — %1").arg(sym);
+                req.message = msg;
+                req.level = notifications::NotifLevel::Alert;
+                req.trigger = notifications::NotifTrigger::OwnershipAlert;
+                notifications::NotificationService::instance().send(req);
+            }
+            if (changed)
+                write_stamps(stamps);
+        },
+        /*on_line=*/{}, 60'000);
 }
 
 // ── Filers ───────────────────────────────────────────────────────────────────
