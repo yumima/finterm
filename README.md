@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`73a6e4327`](https://github.com/yumima/finterm/commit/73a6e4327) ownership: the register the industry reads, and three scans that hand you a ticker
 - [`d6e33f939`](https://github.com/yumima/finterm/commit/d6e33f939) python worker: one daemon socket per process, not one per machine
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

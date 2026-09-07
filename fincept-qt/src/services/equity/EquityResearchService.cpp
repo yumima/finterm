@@ -11,6 +11,10 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QTimer>
+
+#include <functional>
+#include <memory>
 #include <QJsonObject>
 #include <QPointer>
 #include <QRegularExpression>
@@ -922,22 +926,37 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
             if (acquire_inflight(inflight_key)) {
                 QJsonObject payload;
                 payload["symbol"] = symbol;
-                run_daemon("info", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
-                    release_inflight(inflight_key);
-                    if (!ok || obj.contains("error")) {
-                        emit error_occurred(symbol, "Info", !ok ? err : obj["error"].toString());
-                        StockInfo failed; failed.symbol = symbol; failed.valid = false;
-                        emit info_loaded(failed);
-                        return;
-                    }
-                    fincept::CacheManager::instance().put(
-                        "equity:info:v3:" + symbol,
-                        QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec,
-                        "equity");
-                    update_symbol_cache(symbol, "info_v3", obj);
-                    update_symbol_cache(symbol, "symbol", symbol);
-                    emit info_loaded(parse_info(obj));
-                });
+                // One retry after a TIMEOUT, a few seconds later. A daemon that
+                // did not answer in ten seconds is usually a network blip — a
+                // DNS resolve that timed out took every provider down for four
+                // minutes on 2026-09-06 — and the reader is left with a blank
+                // analyst panel until they reload the symbol. A vendor error
+                // ({"error": …}) is a fact about the symbol and is not retried.
+                auto attempt = std::make_shared<std::function<void(int)>>();
+                *attempt = [this, symbol, inflight_key, payload, attempt](int tries_left) {
+                    run_daemon("info", payload, [this, symbol, inflight_key, attempt, tries_left](bool ok, QJsonObject obj, QString err) {
+                        if (!ok && tries_left > 0 && err.contains(QLatin1String("timeout"), Qt::CaseInsensitive)) {
+                            LOG_WARN("EquityResearch", QString("info timed out for %1 — retrying once").arg(symbol));
+                            QTimer::singleShot(4000, this, [attempt, tries_left]() { (*attempt)(tries_left - 1); });
+                            return;
+                        }
+                        release_inflight(inflight_key);
+                        if (!ok || obj.contains("error")) {
+                            emit error_occurred(symbol, "Info", !ok ? err : obj["error"].toString());
+                            StockInfo failed; failed.symbol = symbol; failed.valid = false;
+                            emit info_loaded(failed);
+                            return;
+                        }
+                        fincept::CacheManager::instance().put(
+                            "equity:info:v3:" + symbol,
+                            QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec,
+                            "equity");
+                        update_symbol_cache(symbol, "info_v3", obj);
+                        update_symbol_cache(symbol, "symbol", symbol);
+                        emit info_loaded(parse_info(obj));
+                    });
+                };
+                (*attempt)(1);
             }
         }
     }
