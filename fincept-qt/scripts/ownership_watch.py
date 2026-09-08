@@ -4,7 +4,9 @@ Ownership where the reader already is: watchlist columns, alerts, a calendar.
 
 The per-stock tab and the OWNERSHIP screen answer "who owns this" and "where
 is it happening". This script answers the three follow-on questions from the
-same three local stores, so the answers cost milliseconds and no network:
+same three local stores — milliseconds, and no network except a once-a-day
+look at FINRA's index of settlement dates and a cached month of Nasdaq's IPO
+calendar:
 
     rows      {"symbols": [...]}         one line per symbol for a watchlist —
                                          13F holders and their change, short
@@ -60,35 +62,64 @@ def _thirteen_f(symbols):
         if prior:
             sec_13f_bulk._ensure_breadth(con, cur, prior)
         for sym in symbols:
-            rows = con.execute(
-                "SELECT t.cusip, t.holders, t.shares, t.top10_share, b.holders_prior "
-                "FROM ticker_totals t LEFT JOIN breadth b ON b.cusip=t.cusip AND b.quarter=t.quarter "
-                "AND b.prior_quarter=? WHERE t.quarter=? AND t.ticker=?",
-                (prior or "", cur, sym)).fetchall()
-            if not rows:
+            # The one CUSIP the stock tab resolves the symbol to, so a
+            # watchlist row and the Ownership tab cannot disagree about the
+            # holder count of the same company.
+            res = sec_13f_bulk.resolve_ticker(sym, con)
+            if res.get("error"):
                 continue
-            holders = sum(r[1] or 0 for r in rows)
-            shares = sum(r[2] or 0 for r in rows)
-            prior_h = sum(r[4] or 0 for r in rows) if prior else None
-            out[sym] = {"holders": holders, "shares": shares,
-                        "top10_share": max((r[3] or 0.0) for r in rows) if rows else None,
-                        "delta_holders": (holders - prior_h) if prior_h is not None else None,
+            r = con.execute(
+                "SELECT t.holders, t.shares, t.top10_share, b.holders_prior "
+                "FROM ticker_totals t LEFT JOIN breadth b ON b.cusip=t.cusip AND b.quarter=t.quarter "
+                "AND b.prior_quarter=? WHERE t.quarter=? AND t.cusip=?",
+                (prior or "", cur, res["cusip"])).fetchone()
+            if not r:
+                continue
+            holders, shares, top10, prior_h = r[0] or 0, r[1] or 0.0, r[2], r[3]
+            out[sym] = {"holders": holders, "shares": shares, "top10_share": top10,
+                        "delta_holders": (holders - (prior_h or 0)) if prior else None,
                         "quarter": cur, "prior_quarter": prior}
         return out, cur
     finally:
         con.close()
 
 
+PROBE_EVERY_HOURS = 24
+
+
+def _newest_complete_settlement(con):
+    """The newest whole settlement file in the store, paging a newer one in
+    when FINRA lists it. The FINRA index is asked at most once a day: a
+    settlement is legitimately two to four weeks old on screen, so "old"
+    is not a reason to ask again, and this runs on the watchlist path."""
+    con.execute("CREATE TABLE IF NOT EXISTS probes (name TEXT PRIMARY KEY, checked_at TEXT)")
+    row = con.execute("SELECT settlement FROM complete_dates ORDER BY settlement DESC LIMIT 1").fetchone()
+    settlement = row[0] if row else None
+    last = con.execute("SELECT checked_at FROM probes WHERE name='finra_dates'").fetchone()
+    fresh = False
+    if last:
+        try:
+            fresh = (datetime.now() - datetime.fromisoformat(last[0])).total_seconds() < PROBE_EVERY_HOURS * 3600
+        except ValueError:
+            fresh = False
+    if not fresh:
+        d = finra.dates()
+        con.execute("INSERT OR REPLACE INTO probes VALUES ('finra_dates', ?)",
+                    (datetime.now().isoformat(timespec="seconds"),))
+        con.commit()
+        newest = (d.get("dates") or [None])[0]
+        if newest and newest != settlement:
+            total, complete = finra._ensure_date(con, newest)
+            if complete:
+                settlement = newest
+    return settlement
+
+
 def _short(symbols):
-    """Latest complete FINRA settlement in the local store; the ranking pages
-    one in when there is none yet (a few seconds, once per settlement)."""
+    """Latest complete FINRA settlement in the local store."""
     con = finra.connect()
     try:
-        row = con.execute("SELECT settlement FROM complete_dates ORDER BY settlement DESC LIMIT 1").fetchone()
-        settlement = row[0] if row else None
-        if not settlement or (date.today() - date.fromisoformat(settlement)).days > 21:
-            r = finra.rank(limit=1)   # pages the newest date into the store
-            settlement = r.get("settlement", settlement)
+        settlement = _newest_complete_settlement(con)
         if not settlement:
             return {}, None
         out = {}
@@ -104,11 +135,17 @@ def _short(symbols):
 
 
 def _insider_buys(symbols, days=30):
-    """{symbol: {buys, insiders, value, last_trade}} — scorable buys only."""
+    """{symbol: {buys, insiders, value, last_trade}} — scorable buys only.
+    A symbol gets a record (possibly zero buys) only when the store has read
+    at least one day inside the window; before that, "0 buys" would be a
+    claim about filings nobody has looked at."""
     con = form4.connect()
     try:
         cutoff = (date.today() - timedelta(days=int(days))).isoformat()
         out = {}
+        covered = con.execute("SELECT COUNT(*) FROM scanned_days WHERE filed>=?", (cutoff,)).fetchone()[0] > 0
+        if not covered:
+            return {}, con.execute("SELECT MAX(filed) FROM scanned_days").fetchone()[0]
         for sym in symbols:
             r = con.execute("""
                 SELECT COUNT(*), COUNT(DISTINCT COALESCE(NULLIF(insider_cik,''), insider)),
@@ -116,8 +153,8 @@ def _insider_buys(symbols, days=30):
                   FROM tx WHERE symbol=? AND open_market=1 AND derivative=0 AND code='P'
                    AND direction='acquired' AND filed>=?
                    AND COALESCE(ten_pct,0)=0 AND COALESCE(plan,0)=0""", (sym, cutoff)).fetchone()
-            if r and r[0]:
-                out[sym] = {"buys": r[0], "insiders": r[1], "value": r[2] or 0.0, "last_trade": r[3] or ""}
+            out[sym] = {"buys": r[0] if r else 0, "insiders": (r[1] if r else 0) or 0,
+                        "value": (r[2] if r else 0.0) or 0.0, "last_trade": (r[3] if r else "") or ""}
         scanned = con.execute("SELECT MAX(filed) FROM scanned_days").fetchone()[0]
         return out, scanned
     finally:
@@ -263,15 +300,51 @@ def lockup_expiries(today, days_ahead, fetch=None):
     return out
 
 
+def _cache_path():
+    root = os.environ.get("FINCEPT_DATA_DIR")
+    if not root:
+        if sys.platform == "darwin":
+            root = os.path.expanduser("~/Library/Application Support/com.fincept.terminal")
+        elif os.name == "nt":
+            root = os.path.join(os.environ.get("LOCALAPPDATA", ""), "com.fincept.terminal")
+        else:
+            root = os.path.join(os.path.expanduser("~"), ".local", "share", "com.fincept.terminal")
+    os.makedirs(root, exist_ok=True)
+    return os.path.join(root, "ownership_watch.sqlite")
+
+
 def _nasdaq_month(yyyymm):
-    if requests is None:
-        return []
+    """Priced IPOs for one month, cached: a closed month never changes, and
+    the current month is asked for again after a day. Four sequential
+    requests per dashboard build was the alternative."""
+    import sqlite3
+    con = sqlite3.connect(_cache_path())
     try:
-        r = requests.get(NASDAQ_IPO.format(yyyymm), headers=NASDAQ_HEADERS, timeout=20)
-        r.raise_for_status()
-        return r.json().get("data", {}).get("priced", {}).get("rows", []) or []
-    except Exception:
-        return []
+        con.execute("CREATE TABLE IF NOT EXISTS ipo_months (month TEXT PRIMARY KEY, rows TEXT, fetched_at TEXT)")
+        hit = con.execute("SELECT rows, fetched_at FROM ipo_months WHERE month=?", (yyyymm,)).fetchone()
+        this_month = date.today().strftime("%Y-%m")
+        if hit:
+            try:
+                age_ok = (datetime.now() - datetime.fromisoformat(hit[1])).total_seconds() < 86400
+            except ValueError:
+                age_ok = False
+            if yyyymm < this_month or age_ok:
+                return json.loads(hit[0])
+        if requests is None:
+            return json.loads(hit[0]) if hit else []
+        try:
+            r = requests.get(NASDAQ_IPO.format(yyyymm), headers=NASDAQ_HEADERS, timeout=20)
+            r.raise_for_status()
+            rows = r.json().get("data", {}).get("priced", {}).get("rows", []) or []
+        except Exception:
+            return json.loads(hit[0]) if hit else []
+        keep = [{k: e.get(k) for k in ("proposedTickerSymbol", "companyName", "pricedDate")} for e in rows]
+        con.execute("INSERT OR REPLACE INTO ipo_months VALUES (?,?,?)",
+                    (yyyymm, json.dumps(keep), datetime.now().isoformat(timespec="seconds")))
+        con.commit()
+        return keep
+    finally:
+        con.close()
 
 
 def calendar(days=90, today=None):

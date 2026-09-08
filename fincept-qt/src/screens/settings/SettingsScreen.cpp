@@ -1052,6 +1052,7 @@ void SettingsScreen::load_notifications() {
         trigger_price_->setChecked(get_bool("notifications.price_alerts", true));
     if (trigger_orders_)
         trigger_orders_->setChecked(get_bool("notifications.order_fills", true));
+    if (trigger_ownership_)
         trigger_ownership_->setChecked(get_bool("notifications.ownership_alerts", true));
 
     const bool news_on = get_bool("notifications.news_alerts", false);

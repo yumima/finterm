@@ -23,8 +23,10 @@ WHAT IS COUNTED
     exclusions the evidence turns on travel as flags, not filters, so the
     report can show what each category did: 10% beneficial owners, 10b5-1
     plan trades (the AFF10B5ONE checkbox), and sells as the wrong-sign check.
-    One EVENT is one issuer on one trade date; a cluster is an issuer with two
-    or more distinct owners buying inside 30 days.
+    One EVENT is one issuer on one FILING date (the day a reader could act);
+    a cluster is a buy with a different owner's scorable buy already on file
+    inside the trailing 30 days — point in time, never with hindsight.
+    Amendments (4/A) are excluded: they restate a trade already counted.
 
 ACTIONS
     ingest    {"quarters"?: 5}            download and index the newest N data sets
@@ -152,7 +154,10 @@ def ingest_dataset(name, url, con=None, data=None):
         z = zipfile.ZipFile(io.BytesIO(data))
         subs = {}
         for row in _read_tsv(z, "SUBMISSION.tsv"):
-            if row.get("DOCUMENT_TYPE", "").startswith("4"):
+            # Originals only. A 4/A restates the same transaction under a new
+            # accession and would count the trade twice — and the daily
+            # ingester the alerts read excludes amendments the same way.
+            if row.get("DOCUMENT_TYPE", "").strip() == "4":
                 subs[row["ACCESSION_NUMBER"]] = row
         owners = {}
         for row in _read_tsv(z, "REPORTINGOWNER.tsv"):
@@ -330,51 +335,54 @@ def evaluate(months=12, benchmark="SPY", refresh_prices=False, today=None, con=N
         today = today or date.today()
         since = (today - timedelta(days=int(months) * 30 + 5)).isoformat()
         rows = con.execute("""
-            SELECT symbol, trans_date, owner_cik, owner_name, ten_pct, plan, code, acquired,
+            SELECT symbol, trans_date, filed, owner_cik, owner_name, ten_pct, plan, code, acquired,
                    shares, price, value
               FROM tx WHERE trans_date >= ? AND trans_date <= ? AND symbol <> '' AND price IS NOT NULL
             """, (since, today.isoformat())).fetchall()
         if not rows:
             return {"error": "no Form 4 rows in the window — run ingest first"}
 
-        # Issuer-day events, by category.
+        # Issuer-day events, by category. The event's day is the FILING day
+        # (or the trade day when a filing precedes it — a data error): the
+        # reader can act on the filing, not on the trade, and a Form 4 lands
+        # two business days after the trade at best. Anchoring on the trade
+        # date would credit the strategy with days nobody could have traded.
         events = {}
-        for sym, day, ocik, oname, ten, plan, code, acq, shares, price, value in rows:
+        for sym, tday, fday, ocik, oname, ten, plan, code, acq, shares, price, value in rows:
             if code == "P" and acq:
                 cat = "ten_pct_buy" if ten else ("plan_buy" if plan else "buy")
             elif code == "S" and not acq:
                 cat = "sell"
             else:
                 continue
+            day = max(fday or "", tday or "") or tday
             key = (sym, day, cat)
-            e = events.setdefault(key, {"symbol": sym, "day": day, "cat": cat, "owners": set(),
-                                        "value": 0.0, "trades": 0})
+            e = events.setdefault(key, {"symbol": sym, "day": day, "trade_day": tday, "cat": cat,
+                                        "owners": set(), "value": 0.0, "trades": 0})
             e["owners"].add(ocik or oname)
             e["value"] += value or 0.0
             e["trades"] += 1
 
-        # Clusters: scorable buys by the same issuer within the window, two
-        # or more distinct owners across the run. Marked on every event in it.
+        # Clusters, point in time: an event is a cluster only when a DIFFERENT
+        # owner's scorable buy was already on file in the trailing window.
+        # The first buy of a run is a single buy — at that moment nobody could
+        # know a second insider would follow — so it is never scored as a
+        # cluster, and the cluster figure is one the alert can actually claim.
         by_sym = {}
         for e in events.values():
             if e["cat"] == "buy":
                 by_sym.setdefault(e["symbol"], []).append(e)
         for sym, evs in by_sym.items():
             evs.sort(key=lambda x: x["day"])
-            i = 0
-            while i < len(evs):
-                j = i
-                while (j + 1 < len(evs) and
-                       (date.fromisoformat(evs[j + 1]["day"]) - date.fromisoformat(evs[j]["day"])).days
-                       <= CLUSTER_WINDOW_DAYS):
-                    j += 1
-                owners = set()
-                for k in range(i, j + 1):
-                    owners |= evs[k]["owners"]
-                if len(owners) >= CLUSTER_MIN_OWNERS:
-                    for k in range(i, j + 1):
-                        evs[k]["cluster"] = True
-                i = j + 1
+            for i, e in enumerate(evs):
+                d_i = date.fromisoformat(e["day"])
+                prior_owners = set()
+                for k in range(i - 1, -1, -1):
+                    if (d_i - date.fromisoformat(evs[k]["day"])).days > CLUSTER_WINDOW_DAYS:
+                        break
+                    prior_owners |= evs[k]["owners"]
+                if len((prior_owners | e["owners"])) >= CLUSTER_MIN_OWNERS and prior_owners - e["owners"]:
+                    e["cluster"] = True
 
         symbols = sorted({e["symbol"] for e in events.values()} | {benchmark})
         end = (today + timedelta(days=1)).isoformat()
@@ -419,11 +427,13 @@ def evaluate(months=12, benchmark="SPY", refresh_prices=False, today=None, con=N
         # Size split on trade value: a proxy for the small-cap effect the
         # literature reports, since the store carries no market cap.
         values = sorted(e["value"] for e in buys)
-        cut = values[len(values) // 3] if values else 0
-        small = pick(lambda e: e["cat"] == "buy" and e["value"] <= cut)
-        large = pick(lambda e: e["cat"] == "buy" and e["value"] > cut * 3) if cut else []
+        lo_cut = values[len(values) // 3] if values else 0
+        hi_cut = values[2 * len(values) // 3] if values else 0
+        small = pick(lambda e: e["cat"] == "buy" and e["value"] <= lo_cut)
+        large = pick(lambda e: e["cat"] == "buy" and e["value"] > hi_cut) if values else []
         report = {
             "months": int(months), "benchmark": benchmark, "as_of": today.isoformat(),
+            "anchor": "filing date (trade date when later)", "amendments": "excluded",
             "rows": len(rows), "events": len(events), "scored": len(scored), "unpriced": unpriced,
             "prices": pr,
             "categories": {
@@ -437,8 +447,8 @@ def evaluate(months=12, benchmark="SPY", refresh_prices=False, today=None, con=N
                              "excess": _summarise(pick(lambda e: e["cat"] == "plan_buy"), "excess")},
                 "sell": {"events": len(pick(lambda e: e["cat"] == "sell")),
                          "excess": _summarise(pick(lambda e: e["cat"] == "sell"), "excess")},
-                "buy_small_value": {"events": len(small), "value_cut": cut, "excess": _summarise(small, "excess")},
-                "buy_large_value": {"events": len(large), "excess": _summarise(large, "excess")},
+                "buy_small_value": {"events": len(small), "value_cut": lo_cut, "excess": _summarise(small, "excess")},
+                "buy_large_value": {"events": len(large), "value_cut": hi_cut, "excess": _summarise(large, "excess")},
             },
         }
         return report

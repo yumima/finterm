@@ -136,7 +136,11 @@ void OwnershipCalendarWidget::populate() {
     }
     set_loading(false);
     if (!c.error.isEmpty()) {
-        set_error(c.error);
+        // Not BaseWidget::set_error — that clears the content layout and
+        // deletes the body this widget keeps pointers into, and the next
+        // refresh or theme change would then touch freed widgets. The
+        // status line is the error surface here.
+        status_label_->setText(QStringLiteral("Calendar unavailable: %1 — refresh to try again.").arg(c.error));
         return;
     }
     const QDate today = c.as_of.isValid() ? c.as_of : QDate::currentDate();

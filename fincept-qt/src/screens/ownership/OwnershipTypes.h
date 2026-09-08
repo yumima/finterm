@@ -465,7 +465,10 @@ struct WatchRow {
     std::optional<double> days_to_cover;
     std::optional<double> si_change_pct;
     std::optional<double> sirio;
-    int    insider_buys = 0;      ///< scorable open-market buys in the window
+    /// Scorable open-market buys in the window. Absent until the Form 4
+    /// store has read a day inside the window — "0" is a fact only about
+    /// filings somebody has looked at.
+    std::optional<int> insider_buys;
     int    insider_buyers = 0;
     double insider_buy_value = 0.0;
     QDate  last_insider_buy;

@@ -7,7 +7,6 @@
 #include "storage/repositories/SettingsRepository.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/WatchlistRepository.h"
-#include "ui/notifications/ToastService.h"
 #include "python/PythonWorker.h"
 #include "screens/ownership/OwnershipFlags.h"
 
@@ -878,6 +877,7 @@ void OwnershipService::run_form4_scan() {
             int remaining = 0;
             const QJsonObject o = result.success ? parse_object(result) : QJsonObject{};
             const QString soft_error = o.value(QStringLiteral("error")).toString();
+            const int fetched = o.value(QStringLiteral("fetched")).toInt();
             if (!result.success || !soft_error.isEmpty()) {
                 // The traceback, if any, sits after a line of dependency
                 // warnings on stderr; keep the tail, which is the part that
@@ -890,7 +890,6 @@ void OwnershipService::run_form4_scan() {
             } else {
                 remaining = o.value(QStringLiteral("days_remaining")).toInt();
                 const int read = o.value(QStringLiteral("days_read")).toInt();
-                const int fetched = o.value(QStringLiteral("fetched")).toInt();
                 if (remaining > 0 && self->form4_passes_ < kScanMaxPasses) {
                     self->form4_status_ = QStringLiteral("Read %1 filings · %2 more business day%3 to go")
                                               .arg(fetched).arg(remaining)
@@ -916,10 +915,11 @@ void OwnershipService::run_form4_scan() {
                 }
             }
             emit self->form4_status_changed(self->form4_status_);
-            // Whatever landed belongs on the scan, and on the reader's own names.
+            // Whatever landed belongs on the scan, and on the reader's own
+            // names — once the cycle has ended, not after every slice.
             if (self->insider_buys_.loaded && !self->insider_buys_loading_)
                 self->load_insider_buys(self->insider_buys_.query);
-            if (result.success)
+            if (result.success && remaining == 0 && fetched > 0)
                 self->check_holdings_alerts();
         },
         /*on_line=*/{}, kScanTimeoutMs);
@@ -975,7 +975,8 @@ void OwnershipService::load_watch(const QStringList& symbols) {
                     row.days_to_cover = opt_num(r, "dtc");
                     row.si_change_pct = opt_num(r, "si_change_pct");
                     row.sirio         = opt_num(r, "sirio");
-                    row.insider_buys   = r.value(QStringLiteral("insider_buys")).toInt();
+                    if (r.contains(QStringLiteral("insider_buys")))
+                        row.insider_buys = r.value(QStringLiteral("insider_buys")).toInt();
                     row.insider_buyers = r.value(QStringLiteral("insider_buyers")).toInt();
                     row.insider_buy_value = r.value(QStringLiteral("insider_buy_value")).toDouble();
                     row.last_insider_buy = iso_date(r, "last_insider_buy");
@@ -1096,8 +1097,10 @@ void OwnershipService::check_holdings_alerts() {
     // in-app toast and the stamp file respect it: off means nothing fires and
     // nothing is remembered as "already announced".
     {
+        // The repository answers "" for a key never saved; that is the
+        // default, and the default is on.
         const auto r = fincept::SettingsRepository::instance().get(QStringLiteral("notifications.ownership_alerts"));
-        if (r.is_ok() && r.value() != QLatin1String("1"))
+        if (r.is_ok() && r.value() == QLatin1String("0"))
             return;
     }
     const QStringList syms = own_symbols();
@@ -1121,28 +1124,38 @@ void OwnershipService::check_holdings_alerts() {
                 const auto r = v.toObject();
                 const QString sym = r.value(QStringLiteral("symbol")).toString();
                 const QString filed = r.value(QStringLiteral("last_filed")).toString();
+                const int trades = r.value(QStringLiteral("trades")).toInt();
+                const int insiders = r.value(QStringLiteral("insiders")).toInt();
                 if (sym.isEmpty() || filed.isEmpty())
                     continue;
-                // Once per issuer per filing date. The stamp is the newest
-                // filing already announced; anything not newer is old news.
-                if (stamps.value(sym).toString() >= filed)
+                // Once per issuer per NEW filing. The stamp is the newest filing
+                // date announced and the trade count seen with it: a second
+                // insider whose filing lands the same day in a later pass is
+                // news, and a re-read of the same filings is not.
+                const QJsonObject prev = stamps.value(sym).toObject();
+                const QString prev_filed = prev.value(QStringLiteral("filed")).toString();
+                const int prev_trades = prev.value(QStringLiteral("trades")).toInt();
+                if (prev_filed > filed || (prev_filed == filed && prev_trades >= trades))
                     continue;
-                stamps.insert(sym, filed);
+                stamps.insert(sym, QJsonObject{{QStringLiteral("filed"), filed}, {QStringLiteral("trades"), trades}});
                 changed = true;
-                const int insiders = r.value(QStringLiteral("insiders")).toInt();
                 const double value = r.value(QStringLiteral("value")).toDouble();
                 const QString who = insiders >= 2 ? QStringLiteral("%1 insiders").arg(insiders)
                                                   : QStringLiteral("an insider");
                 // A filing, stated as one. The evidence line is what the
-                // twelve-month check on our own data found; it is not a call.
+                // twelve-month check found for THIS category, anchored on the
+                // filing date — the day a reader could act — with clusters
+                // marked point in time (plans/research/form4_forward_returns).
+                // It is not a call. One delivery, through the notification
+                // service, which owns the in-app toast and the user's switches.
                 const QString msg = QStringLiteral(
                     "%1: %2 bought on the open market (Form 4 filed %3, $%4 in total). "
-                    "On this universe a %5 was followed by a median %6 over the index in a month.")
+                    "On this universe a %5 was followed by a median %6 over the index in a "
+                    "month, %7 of the time (Jul 2025 – Jun 2026).")
                     .arg(sym, who, filed, QString::number(value / 1000.0, 'f', 0) + QStringLiteral("K"),
-                         insiders >= 2 ? QStringLiteral("cluster buy") : QStringLiteral("scorable buy"),
-                         insiders >= 2 ? QStringLiteral("+2.6%") : QStringLiteral("+1.9%"));
-                ui::ToastService::instance().post(ui::ToastService::Severity::Info, msg,
-                                                  QStringLiteral("ownership"));
+                         insiders >= 2 ? QStringLiteral("cluster buy") : QStringLiteral("single insider buy"),
+                         insiders >= 2 ? QStringLiteral("+1.8%") : QStringLiteral("+1.2%"),
+                         insiders >= 2 ? QStringLiteral("59%") : QStringLiteral("55%"));
                 notifications::NotificationRequest req;
                 req.title = QStringLiteral("Insider buy — %1").arg(sym);
                 req.message = msg;

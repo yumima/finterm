@@ -4,8 +4,9 @@
 Runs the SHIPPED functions from ownership_watch against throwaway stores and
 a stubbed IPO calendar. No network. What is pinned:
 
-  • A symbol none of the three stores has seen gets an EMPTY row — never a
-    zero holder count or a zero short position.
+  • A symbol the 13F or FINRA stores have never seen gets no holder or
+    short figures — never a zero. An insider count is present (possibly 0)
+    only where the Form 4 store has read a day inside the window.
   • The insider-buy count applies the two exclusions (10% owners, 10b5-1
     plans) and counts distinct buyers.
   • 13F due dates are 45 days after quarter end, moved forward off a weekend;
@@ -62,7 +63,6 @@ def main():
     fc.execute("INSERT INTO complete_dates VALUES ('2026-08-14', 1, datetime('now'))")
     fc.commit()
     fc.close()
-    finra.rank = lambda **k: {"settlement": "2026-08-14"}   # never reached: the date is fresh enough? no — see below
 
     con4 = form4.connect()
     today = date.today()
@@ -82,10 +82,13 @@ def main():
     con4.commit()
     con4.close()
 
-    # The FINRA store's newest date is stale relative to a real 'today', so
-    # rows() would try to page a fresh one; make that a no-op that keeps the
-    # fixture's date.
-    finra.rank = lambda limit=1, **k: {"settlement": "2026-08-14"}
+    # The once-a-day look at FINRA's index: stub it to list the date the store
+    # already holds, and count the calls — the second rows() must not ask again.
+    probes = []
+    def fake_dates():
+        probes.append(1)
+        return {"dates": ["2026-08-14", "2026-07-31"]}
+    finra.dates = fake_dates
 
     r = w.rows(["wdgt", "NOPE"])
     row = r["rows"]["WDGT"]
@@ -96,9 +99,43 @@ def main():
     check("rows: scorable insider buys — three rows by two buyers; 10% owner, plan and sell excluded",
           row.get("insider_buys") == 3 and row.get("insider_buyers") == 2, str(row))
     check("rows: buy value summed", abs(row.get("insider_buy_value", 0) - 3500.0) < 1e-9, str(row.get("insider_buy_value")))
-    check("rows: an unknown symbol is an empty row, not zeros", r["rows"]["NOPE"] == {}, str(r["rows"]["NOPE"]))
+    # The 13F and FINRA stores have never seen NOPE: no holder, no short
+    # figure. The Form 4 store reads EVERY issuer's filings, so "no scorable
+    # buy in a window it has read" is a true zero for NOPE as well.
+    nope = r["rows"]["NOPE"]
+    check("rows: an unknown symbol has no holder or short figures, never zeros",
+          "holders" not in nope and "short" not in nope and "sirio" not in nope, str(nope))
+    check("rows: …but a zero insider count, because the store read the window", nope.get("insider_buys") == 0, str(nope))
     check("rows: the three dates travel", r["quarter"] == "2026-03-31" and r["settlement"] == "2026-08-14"
           and r["published_after"] == "2026-08-28" and r["form4_scanned_to"] == d(1), str(r))
+    w.rows(["WDGT"])
+    check("rows: FINRA's index is asked once a day, not once per watchlist load", len(probes) == 1, str(len(probes)))
+
+    # A symbol the 13F store knows but with no scorable buy: zero, stated,
+    # because the store HAS read a day inside the window.
+    con4 = form4.connect()
+    con4.execute("INSERT INTO tx (accession, filed, tx_date, symbol, issuer, insider, insider_cik, roles, code, "
+                 "direction, shares, price, value, open_market, derivative, source_url, held_after, ten_pct, plan) "
+                 "VALUES ('y1',?,?,'QUIET','Quiet Co','Q','21','Director','S','disposed',10,1.0,10.0,1,0,'u',NULL,0,0)",
+                 (d(1), d(2)))
+    con4.commit()
+    con4.close()
+    r2 = w.rows(["WDGT", "QUIET"])
+    check("rows: a name with no buys in a window the store has read shows 0, not absent",
+          r2["rows"]["QUIET"].get("insider_buys") == 0, str(r2["rows"]["QUIET"]))
+    # …and with nothing read inside the window, the count is absent for everyone.
+    con4 = form4.connect()
+    con4.execute("DELETE FROM scanned_days")
+    con4.execute("INSERT INTO scanned_days VALUES (?)", (d(60),))
+    con4.commit()
+    con4.close()
+    r3 = w.rows(["WDGT"])
+    check("rows: nothing read inside the window -> no insider count at all, never a zero",
+          "insider_buys" not in r3["rows"]["WDGT"] and r3["form4_scanned_to"] == d(60), str(r3["rows"]["WDGT"]))
+    con4 = form4.connect()
+    con4.execute("INSERT OR REPLACE INTO scanned_days VALUES (?)", (d(1),))
+    con4.commit()
+    con4.close()
 
     a = w.alerts(["WDGT", "NOPE"], days=7)
     check("alerts: one issuer row, the two scorable buyers", len(a["rows"]) == 1 and a["rows"][0]["insiders"] == 2, str(a["rows"]))

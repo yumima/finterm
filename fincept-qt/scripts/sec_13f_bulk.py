@@ -111,6 +111,9 @@ def connect():
     con = sqlite3.connect(db_path())
     con.execute("PRAGMA journal_mode=WAL")
     con.execute("PRAGMA synchronous=NORMAL")
+    # A reader on the watchlist path can arrive while an ingest is writing;
+    # it should wait its turn, not fail on the first locked page.
+    con.execute("PRAGMA busy_timeout=15000")
     con.executescript("""
         CREATE TABLE IF NOT EXISTS quarters (
             quarter TEXT PRIMARY KEY,     -- e.g. 2026-03-31

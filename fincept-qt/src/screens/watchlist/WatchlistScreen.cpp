@@ -264,7 +264,10 @@ QWidget* WatchlistScreen::build_main_panel() {
                          "13F HOLDERS", "Δ HOLDERS", "SI ÷ 13F", "DAYS TO COVER", "INSIDER BUYS 30D"});
     table_->set_column_widths({100, 160, 100, 90, 80, 90, 90, 110, 110, 100, 90, 135, 160});
     connect(&services::OwnershipService::instance(), &services::OwnershipService::watch_updated, this,
-            [this]() { apply_ownership_columns(); });
+            [this]() {
+                refresh_ownership_headers();
+                apply_ownership_columns();
+            });
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
 
@@ -456,14 +459,13 @@ void WatchlistScreen::request_ownership_columns() {
         services::OwnershipService::instance().load_watch(syms);
 }
 
-void WatchlistScreen::apply_ownership_columns() {
+void WatchlistScreen::refresh_ownership_headers() {
     const auto& w = services::OwnershipService::instance().watch_rows();
     if (!w.loaded || !table_)
         return;
-    namespace fmt = ui::formatting;
-    const QString dim = colors::TEXT_SECONDARY;
-    // Header tooltips carry the dates: a holder count is true as of a
-    // quarter end, a short figure as of a settlement, and the two differ.
+    // A holder count is true as of a quarter end, a short figure as of a
+    // settlement, an insider count as of the last day the store read — three
+    // clocks, stated on the column that runs on each.
     if (auto* hh = table_->horizontalHeaderItem(8))
         hh->setToolTip(QStringLiteral("13F filers holding the name, and the change against the prior quarter — as of %1")
                            .arg(w.quarter.isValid() ? w.quarter.toString(QStringLiteral("d MMM yyyy")) : QStringLiteral("no index")));
@@ -474,6 +476,15 @@ void WatchlistScreen::apply_ownership_columns() {
     if (auto* hh = table_->horizontalHeaderItem(12))
         hh->setToolTip(QStringLiteral("Open-market insider purchases in the last %1 days — 10%% owners and 10b5-1 plan trades excluded; Form 4 store read to %2")
                            .arg(w.days).arg(w.form4_scanned_to.isValid() ? w.form4_scanned_to.toString(QStringLiteral("d MMM")) : QStringLiteral("—")));
+}
+
+void WatchlistScreen::apply_ownership_columns() {
+    const auto& w = services::OwnershipService::instance().watch_rows();
+    if (!w.loaded || !table_)
+        return;
+    namespace fmt = ui::formatting;
+    const QString dim = colors::TEXT_SECONDARY;
+    const QLocale loc;
     for (int row = 0; row < table_->rowCount(); ++row) {
         auto* sym_item = table_->item(row, 0);
         if (!sym_item)
@@ -497,9 +508,9 @@ void WatchlistScreen::apply_ownership_columns() {
             continue;
         }
         const auto& r = it.value();
-        put(8, r.holders ? QLocale().toString(*r.holders) : fmt::placeholder());
+        put(8, r.holders ? loc.toString(*r.holders) : fmt::placeholder());
         put(9, r.delta_holders ? QStringLiteral("%1%2").arg(*r.delta_holders > 0 ? QStringLiteral("+") : QString())
-                                                        .arg(QLocale().toString(*r.delta_holders))
+                                                        .arg(loc.toString(*r.delta_holders))
                                : fmt::placeholder(),
             r.delta_holders ? (*r.delta_holders > 0 ? QString(colors::POSITIVE)
                                                      : *r.delta_holders < 0 ? QString(colors::NEGATIVE) : dim)
@@ -508,11 +519,15 @@ void WatchlistScreen::apply_ownership_columns() {
             r.sirio && *r.sirio >= 0.2 ? QString(colors::WARNING) : QString());
         put(11, r.days_to_cover ? QString::number(*r.days_to_cover, 'f', 1) : fmt::placeholder(),
             r.days_to_cover && *r.days_to_cover >= 5.0 ? QString(colors::WARNING) : QString());
-        put(12, r.insider_buys > 0
-                    ? QStringLiteral("%1 by %2 · $%3").arg(r.insider_buys).arg(r.insider_buyers)
+        // Absent means the Form 4 store has not read this window yet — a
+        // dash, not a zero the store cannot vouch for.
+        put(12, !r.insider_buys ? fmt::placeholder()
+                : *r.insider_buys > 0
+                    ? QStringLiteral("%1 by %2 · $%3").arg(*r.insider_buys).arg(r.insider_buyers)
                           .arg(fmt::format_compact(r.insider_buy_value))
                     : QStringLiteral("0"),
-            r.insider_buyers >= 2 ? QString(colors::POSITIVE) : r.insider_buys > 0 ? QString() : dim);
+            !r.insider_buys ? dim : r.insider_buyers >= 2 ? QString(colors::POSITIVE)
+                                   : *r.insider_buys > 0 ? QString() : dim);
     }
 }
 

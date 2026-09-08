@@ -71,6 +71,9 @@ class WatchlistScreen : public QWidget, public IStatefulScreen, public IGroupLin
     /// Ownership columns arrive after the quotes, from the local stores, and
     /// are re-applied whenever the quote rows are rebuilt.
     void request_ownership_columns();
+    /// Header tooltips carry the three dates; set once per watch result.
+    void refresh_ownership_headers();
+    /// Cell values; re-applied whenever the quote rows are rebuilt.
     void apply_ownership_columns();
     QString current_wl_id_;
 

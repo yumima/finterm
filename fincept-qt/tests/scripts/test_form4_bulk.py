@@ -9,9 +9,11 @@ with a zip shaped exactly like SEC's and closes planted by hand. No network.
     two-digit SEC year into no date rather than a date in the year 25.
   • Forward returns come from the close on the trade date; a window that has
     not elapsed is absent.
-  • The evaluation puts each event in exactly one category, marks a cluster
-    only when two DISTINCT owners bought inside 30 days, and reports excess
-    over the benchmark.
+  • The evaluation anchors on the FILING date (the day a reader could act),
+    puts each event in exactly one category, marks a cluster only when a
+    DIFFERENT owner's scorable buy was already on file inside the trailing
+    30 days — so the first buy of a run is a single buy — and reports excess
+    over the benchmark. An amendment (4/A) is not a second trade.
 """
 
 import io
@@ -47,7 +49,8 @@ def make_zip():
                   ["acc-d", "12-MAR-2026", "10-MAR-2026", "4", "2", "Beta Co", "BETA", "0"],
                   ["acc-e", "20-MAR-2026", "18-MAR-2026", "4", "2", "Beta Co", "BETA", "0"],
                   ["acc-f", "25-JUL-0025", "20-JUL-0025", "4", "2", "Beta Co", "BETA", "0"],
-                  ["acc-3", "05-MAR-2026", "05-MAR-2026", "3", "1", "Alpha Inc", "ALFA", "0"]]
+                  ["acc-3", "05-MAR-2026", "05-MAR-2026", "3", "1", "Alpha Inc", "ALFA", "0"],
+                  ["acc-a2", "04-MAR-2026", "01-MAR-2026", "4/A", "1", "Alpha Inc", "ALFA", "0"]]
     owners = [["ACCESSION_NUMBER", "RPTOWNERCIK", "RPTOWNERNAME", "RPTOWNER_RELATIONSHIP", "RPTOWNER_TITLE"],
               ["acc-a", "11", "Ann", "Director", ""],
               ["acc-b", "12", "Bob", "Officer", "CEO"],
@@ -55,7 +58,8 @@ def make_zip():
               ["acc-d", "21", "Fund LP", "TenPercentOwner", ""],
               ["acc-d", "22", "Fund GP", "Director", ""],      # joint filer: the 10% flag must win
               ["acc-e", "23", "Eve", "Director", ""],
-              ["acc-f", "23", "Eve", "Director", ""]]
+              ["acc-f", "23", "Eve", "Director", ""],
+              ["acc-a2", "11", "Ann", "Director", ""]]
     trans = [["ACCESSION_NUMBER", "NONDERIV_TRANS_SK", "SECURITY_TITLE", "TRANS_DATE", "TRANS_CODE",
               "TRANS_SHARES", "TRANS_PRICEPERSHARE", "TRANS_ACQUIRED_DISP_CD", "SHRS_OWND_FOLWNG_TRANS"],
              ["acc-a", "1", "Common", "02-MAR-2026", "P", "100", "10.0", "A", "1100"],
@@ -64,7 +68,8 @@ def make_zip():
              ["acc-c", "4", "Common", "10-MAR-2026", "A", "500", "", "A", "5750"],      # a grant: not kept
              ["acc-d", "5", "Common", "10-MAR-2026", "P", "10000", "5.0", "A", "90000"],
              ["acc-e", "6", "Common", "18-MAR-2026", "S", "300", "6.0", "D", "700"],
-             ["acc-f", "7", "Common", "20-JUL-0025", "P", "10", "1.0", "A", "10"]]
+             ["acc-f", "7", "Common", "20-JUL-0025", "P", "10", "1.0", "A", "10"],
+             ["acc-a2", "8", "Common", "02-MAR-2026", "P", "100", "10.0", "A", "1100"]]
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
         z.writestr("SUBMISSION.tsv", tsv(submission))
@@ -79,7 +84,7 @@ def main():
     import sec_form4_bulk as fb
 
     r = fb.ingest_dataset("2026q1", "unused", data=make_zip())
-    check("ingest: P and S rows kept, the grant and the Form 3 dropped", r.get("rows") == 6, str(r))
+    check("ingest: P and S rows kept; the grant, the Form 3 and the 4/A amendment dropped", r.get("rows") == 6, str(r))
     con = fb.connect()
     rows = {a: (sym, td, ten, plan, code, acq) for a, sym, td, ten, plan, code, acq in con.execute(
         "SELECT accession, symbol, trans_date, ten_pct, plan, code, acquired FROM tx")}
@@ -111,17 +116,20 @@ def main():
     con.commit()
     rep = fb.evaluate(months=12, benchmark="SPY", today=today, con=con)
     cats = rep["categories"]
-    check("evaluate: the ALFA buys by Ann and Bob are a cluster (two owners inside 30 days)",
-          cats["cluster_buy"]["events"] == 2 and cats["single_buy"]["events"] == 0, str({k: v["events"] for k, v in cats.items()}))
+    # Ann files 3 Mar with nobody before her: a single buy. Bob files 10 Mar
+    # with Ann's buy already on file: a cluster. Point in time, not hindsight.
+    check("evaluate: the first buy of a run is a single buy, the second is the cluster",
+          cats["cluster_buy"]["events"] == 1 and cats["single_buy"]["events"] == 1, str({k: v["events"] for k, v in cats.items()}))
     check("evaluate: the plan buy and the 10% owner buy sit in their own categories",
           cats["plan_buy"]["events"] == 1 and cats["ten_pct_buy"]["events"] == 1, str({k: v["events"] for k, v in cats.items()}))
     check("evaluate: the sell is counted, the undated row is not", cats["sell"]["events"] == 1 and rep["events"] == 5, str(rep["events"]))
     ex = cats["buy"]["excess"]["1m"]
-    # 2 Mar buy: one month lands on 1 Apr (15 / 10). 9 Mar buy: one month
-    # lands on 8 Apr (16 / 11). A flat benchmark leaves the raw returns as
-    # the excess.
-    check("evaluate: excess over a flat benchmark equals the raw return (mean of +50% and +45%)",
-          abs(ex["mean"] - ((15 / 10 - 1) + (16 / 11 - 1)) / 2) < 1e-9 and ex["n"] == 2, str(ex))
+    # Anchored on the FILING date. Ann filed 3 Mar: base is the last close on
+    # or before it (10, on 2 Mar), one month lands on 2 Apr (15). Bob filed
+    # 10 Mar: base 12, one month lands on 9 Apr (16). A flat benchmark leaves
+    # the raw returns as the excess.
+    check("evaluate: returns run from the filing date, excess over a flat benchmark",
+          abs(ex["mean"] - ((15 / 10 - 1) + (16 / 12 - 1)) / 2) < 1e-9 and ex["n"] == 2, str(ex))
     check("evaluate: hit rate", ex["hit_rate"] == 1.0, str(ex))
     con.close()
 
