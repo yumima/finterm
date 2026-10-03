@@ -5,6 +5,7 @@
 #include "screens/ownership/OwnershipUi.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/components/TooltipText.h"
+#include "ui/widgets/LoadingOverlay.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -525,6 +526,7 @@ LargestFundsPanel::LargestFundsPanel(QWidget* parent) : QWidget(parent) {
     lv->setContentsMargins(0, 0, 0, 0);
     lv->setSpacing(6);
     lv->addWidget(table_, 1);
+    loading_ = new ui::LoadingOverlay(table_);
     foot_ = note_label();
     lv->addWidget(foot_);
     split->addWidget(left);
@@ -553,6 +555,12 @@ void LargestFundsPanel::refresh() {
 void LargestFundsPanel::render() {
     auto& svc = services::OwnershipService::instance();
     pull_btn_->setEnabled(!svc.pulling_latest());
+    // Up for the first load and for a reload after an EDGAR pull — the old
+    // ranking stays visible underneath until the new one replaces it.
+    if (svc.top_firms_loading())
+        loading_->show_loading(QStringLiteral("RANKING THE LARGEST FUNDS…"));
+    else
+        loading_->hide_loading();
     const auto& t = svc.top_firms();
     if (!t.loaded) {
         table_->setRowCount(0);

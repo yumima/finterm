@@ -24,6 +24,10 @@ class QPushButton;
 class QSpinBox;
 class QTableWidget;
 
+namespace fincept::ui {
+class LoadingOverlay;
+}
+
 namespace fincept::screens {
 
 class InsiderBuysPanel : public QWidget {
@@ -102,6 +106,7 @@ class LargestFundsPanel : public QWidget {
     // the row describes, so it matches the row's moves even for an
     // EDGAR-pulled quarter.
     FirmDetailPanel* detail_ = nullptr;
+    ui::LoadingOverlay* loading_ = nullptr;   // over the ranking while it (re)loads
     QString selected_cik_;   // re-selected after a reload re-fills the table
 };
 

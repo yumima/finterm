@@ -3,6 +3,7 @@
 #include "services/ownership/OwnershipService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
+#include "ui/widgets/LoadingOverlay.h"
 
 #include <QHeaderView>
 #include <QLabel>
@@ -89,6 +90,7 @@ FirmDetailPanel::FirmDetailPanel(QWidget* parent) : QWidget(parent) {
             emit navigate_to_symbol(ticker);
     });
     root->addWidget(positions_, 1);
+    loading_ = new ui::LoadingOverlay(positions_);
 
     auto& svc = services::OwnershipService::instance();
     connect(&svc, &services::OwnershipService::book_updated, this, [this](const QString& cik) {
@@ -111,6 +113,9 @@ void FirmDetailPanel::set_firm(const QString& cik, const QString& quarter) {
 void FirmDetailPanel::render() {
     auto& svc = services::OwnershipService::instance();
     const QString cik = cik_;
+    // Shown only on the loading path below; every other path hides it, so it
+    // can never be left up over a finished or failed book.
+    loading_->hide_loading();
     if (cik.isEmpty()) {
         status_->setText(svc.index_ready() ? QStringLiteral("Pick a filer.")
                                            : QStringLiteral("No 13F index yet."));
@@ -122,7 +127,8 @@ void FirmDetailPanel::render() {
 
     const auto b = svc.book(cik);
     if (svc.is_book_loading(cik)) {
-        status_->setText(QStringLiteral("Reading the index…"));
+        loading_->show_loading(QStringLiteral("LOADING HOLDINGS…"));
+        status_->setText(QStringLiteral("Loading this fund's holdings from the 13F index…"));
         status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
         // Leaving the previous firm's rows up while a different filer loads
         // attributes one manager's holdings to another for as long as the read

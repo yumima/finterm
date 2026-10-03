@@ -316,6 +316,20 @@ void PythonRunner::run(const QString& script, const QStringList& args, Callback 
     start_next();
 }
 
+void PythonRunner::run_interactive(const QString& script, const QStringList& args, Callback cb,
+                                   int timeout_ms) {
+    if (python_init_done_ && python_path_.isEmpty()) {
+        cb({false, {}, "Python not available — run first-time setup from the app", -1});
+        return;
+    }
+    if (!QFileInfo::exists(scripts_dir_ + "/" + script)) {
+        cb({false, {}, "Script not found: " + scripts_dir_ + "/" + script, -1});
+        return;
+    }
+    interactive_queue_.enqueue({script, args, std::move(cb), {}, timeout_ms});
+    start_next();
+}
+
 /// Run arbitrary Python code (for notebook/colab cells).
 /// Creates a temp file, executes it, returns output.
 void PythonRunner::run_code(const QString& code, Callback cb) {
@@ -346,8 +360,21 @@ void PythonRunner::start_next() {
     if (!python_init_done_)
         return;
 
-    while (active_count_ < max_concurrent_ && !queue_.isEmpty()) {
-        auto req = queue_.dequeue();
+    for (;;) {
+        // Interactive requests first: their own lane, else any free ordinary
+        // slot. `lane` records which pool the process holds so it releases
+        // the same one.
+        QueuedRequest req;
+        bool lane = false;
+        if (!interactive_queue_.isEmpty() &&
+            (interactive_active_ < kInteractiveLanes || active_count_ < max_concurrent_)) {
+            req = interactive_queue_.dequeue();
+            lane = interactive_active_ < kInteractiveLanes;
+        } else if (!queue_.isEmpty() && active_count_ < max_concurrent_) {
+            req = queue_.dequeue();
+        } else {
+            break;
+        }
 
         if (python_path_.isEmpty()) {
             // Python became unavailable — fail the request
@@ -355,7 +382,10 @@ void PythonRunner::start_next() {
             continue;
         }
 
-        ++active_count_;
+        if (lane)
+            ++interactive_active_;
+        else
+            ++active_count_;
 
         // Determine if this is inline code or a script file
         bool is_code = req.script.startsWith("__code__:");
@@ -501,7 +531,7 @@ void PythonRunner::start_next() {
         auto script_name = std::move(req.script);
 
         connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-                [this, proc, shared_cb, done, script_name, is_code, temp_file](int exit_code, QProcess::ExitStatus) {
+                [this, proc, shared_cb, done, script_name, is_code, temp_file, lane](int exit_code, QProcess::ExitStatus) {
                     if (*done) return; // errorOccurred already handled this — skip
                     *done = true;
 
@@ -549,12 +579,12 @@ void PythonRunner::start_next() {
                     }
 
                     (*shared_cb)(std::move(result));
-                    --active_count_;
+                    if (lane) --interactive_active_; else --active_count_;
                     start_next();
                 });
 
         connect(proc, &QProcess::errorOccurred, this,
-                [this, proc, shared_cb, done, is_code, temp_file](QProcess::ProcessError) {
+                [this, proc, shared_cb, done, is_code, temp_file, lane](QProcess::ProcessError) {
             if (*done) return; // finished() already handled this — skip
             *done = true;
 
@@ -572,16 +602,17 @@ void PythonRunner::start_next() {
                 QFile::remove(temp_file);
 
             (*shared_cb)({false, {}, "Process error: " + error_msg, -1});
-            --active_count_;
+            if (lane) --interactive_active_; else --active_count_;
             start_next();
         });
 
-        LOG_INFO("Python", QString("Running (%1/%2 active, %3 queued): %4 %5")
+        LOG_INFO("Python", QString("Running (%1/%2 active, %3 queued%6): %4 %5")
                                .arg(active_count_)
                                .arg(max_concurrent_)
                                .arg(queue_.size())
                                .arg(python_exe)
-                               .arg(script_path));
+                               .arg(script_path)
+                               .arg(lane ? QStringLiteral(", interactive lane") : QString()));
         proc->start(python_exe, full_args);
 
         // Hard timeout — kill hanging scripts so they don't hold a concurrency

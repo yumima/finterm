@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`f412772f1`](https://github.com/yumima/finterm/commit/f412772f1) ownership: a fund's book opens beside the Largest Funds ranking, not over it
 - [`5f9c706eb`](https://github.com/yumima/finterm/commit/5f9c706eb) markets: every remaining quote row opens its chart
 - [`4b0d2cdb4`](https://github.com/yumima/finterm/commit/4b0d2cdb4) markets: click any quote for its chart — centred, with periods, styles and overlays
 - [`94235b2d7`](https://github.com/yumima/finterm/commit/94235b2d7) ownership: the largest funds and what they did, and ER opens beside the list

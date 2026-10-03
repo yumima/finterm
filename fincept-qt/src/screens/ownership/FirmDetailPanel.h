@@ -4,6 +4,10 @@
 class QLabel;
 class QTableWidget;
 
+namespace fincept::ui {
+class LoadingOverlay;
+}
+
 namespace fincept::screens {
 
 /// One manager's disclosed equity book, and what moved in it.
@@ -38,6 +42,9 @@ class FirmDetailPanel : public QWidget {
     QLabel*       status_     = nullptr;
     QLabel*       book_title_ = nullptr;
     QTableWidget* positions_  = nullptr;
+    /// Over the holdings table while a book loads: an empty table with a
+    /// one-line grey status read as "this fund has nothing".
+    ui::LoadingOverlay* loading_ = nullptr;
     /// True while the table is being filled, so nothing a fill does to the
     /// selection can be mistaken for the user picking a holding.
     bool          populating_ = false;

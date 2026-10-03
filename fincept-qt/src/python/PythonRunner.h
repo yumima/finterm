@@ -47,6 +47,15 @@ class PythonRunner : public QObject {
     void run(const QString& script, const QStringList& args, Callback cb,
              StreamCallback on_line = {}, int timeout_ms = kProcessTimeoutMs);
 
+    /// Same as run(), for a short query a reader is actively waiting on — a
+    /// click whose answer comes from a local index in a second or two.
+    /// These skip the ordinary queue and have a lane of their own beyond the
+    /// normal concurrency limit, so they never wait behind network scrapers
+    /// that can hold every ordinary slot for 30 seconds at a time. Not for
+    /// anything slow: a long job here would block the next click instead.
+    void run_interactive(const QString& script, const QStringList& args, Callback cb,
+                         int timeout_ms = kProcessTimeoutMs);
+
     /// Run arbitrary Python code (for notebook/colab cells).
     /// Creates a temp file, executes it, returns stdout/stderr.
     void run_code(const QString& code, Callback cb);
@@ -87,6 +96,10 @@ class PythonRunner : public QObject {
     static constexpr int DEFAULT_MAX_CONCURRENT = 3;
     int max_concurrent_ = DEFAULT_MAX_CONCURRENT;
     int active_count_ = 0;
+    // The interactive lane: run_interactive() requests, which start ahead of
+    // the ordinary queue and may use this many slots beyond max_concurrent_.
+    static constexpr int kInteractiveLanes = 1;
+    int interactive_active_ = 0;
 
     struct QueuedRequest {
         QString        script;
@@ -96,6 +109,7 @@ class PythonRunner : public QObject {
         int            timeout_ms = kProcessTimeoutMs;
     };
     QQueue<QueuedRequest> queue_;
+    QQueue<QueuedRequest> interactive_queue_;
 
     // Incremental output buffering per process
     struct ProcessBuffers {

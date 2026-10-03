@@ -1176,7 +1176,7 @@ void OwnershipService::load_top_firms(bool force) {
         return;
     top_firms_loading_ = true;
     QPointer<OwnershipService> self = this;
-    python::PythonRunner::instance().run(
+    python::PythonRunner::instance().run_interactive(
         QStringLiteral("sec_13f_bulk.py"),
         {QStringLiteral("top_firms"), payload_of({{"limit", 50}})},
         [self](python::PythonResult result) {
@@ -1233,7 +1233,7 @@ void OwnershipService::load_top_firms(bool force) {
             self->top_firms_ = t;
             emit self->top_firms_updated();
         },
-        /*on_line=*/{}, 120'000);
+        120'000);
     emit top_firms_updated();   // so the panel can show "loading"
 }
 
@@ -1281,7 +1281,7 @@ void OwnershipService::pull_latest_filings(int top) {
 void OwnershipService::search_firms(const QString& query) {
     QPointer<OwnershipService> self = this;
     const QString q = query.trimmed();
-    python::PythonRunner::instance().run(
+    python::PythonRunner::instance().run_interactive(
         QStringLiteral("sec_13f_bulk.py"),
         {QStringLiteral("firms"), payload_of({{"query", q}, {"limit", 40}})},
         [self](python::PythonResult result) {
@@ -1303,7 +1303,7 @@ void OwnershipService::search_firms(const QString& query) {
             }
             emit self->firms_found();
         },
-        /*on_line=*/{}, 60'000);
+        60'000);
 }
 
 ownership::ManagerBook OwnershipService::book(const QString& cik) const {
@@ -1325,7 +1325,7 @@ void OwnershipService::load_book(const QString& cik, const QString& quarter) {
     }
     books_in_flight_.insert(key);
     QPointer<OwnershipService> self = this;
-    python::PythonRunner::instance().run(
+    python::PythonRunner::instance().run_interactive(
         QStringLiteral("sec_13f_bulk.py"),
         {QStringLiteral("book"), quarter.isEmpty()
                                       ? payload_of({{"cik", cik}, {"limit", 250}})
@@ -1352,7 +1352,7 @@ void OwnershipService::load_book(const QString& cik, const QString& quarter) {
             if (b.error.isEmpty() && !b.positions.isEmpty())
                 self->price_book(key);
         },
-        /*on_line=*/{}, 60'000);
+        60'000);
 }
 
 void OwnershipService::price_book(const QString& cik) {   // `cik` is the book_key()
