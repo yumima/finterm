@@ -49,6 +49,9 @@ class QuoteTableWidget : public BaseWidget {
     void render_from_cache();
 
     QStringList symbols_;
+    // Raw symbol per displayed row. Rows skip symbols with no quote yet and
+    // show display names, so neither the index nor the text maps back.
+    QStringList row_symbols_;
     QMap<QString, QString> label_map_;
     int price_decimals_;
     ui::DataTable* table_ = nullptr;

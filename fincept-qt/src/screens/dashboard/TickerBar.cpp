@@ -1,5 +1,7 @@
 #include "screens/dashboard/TickerBar.h"
 
+#include "screens/markets/MarketChartDialog.h"
+
 #include "services/markets/MarketDataService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
@@ -8,6 +10,7 @@
 #include <QContextMenuEvent>
 #include <QHBoxLayout>
 #include <QMenu>
+#include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPainter>
 #include <QPointer>
@@ -147,13 +150,16 @@ void TickerBar::set_data(const QVector<Entry>& entries) {
     QFont font(ui::fonts::DATA_FAMILY(), ui::fonts::font_px(-2));
     QFontMetrics fm(font);
     total_width_ = 0;
+    entry_widths_.clear();
     for (const auto& e : entries_) {
         const int symbol_w = fm.horizontalAdvance(e.symbol);
         const int price_w  = fm.horizontalAdvance(QString::number(e.price, 'f', 2));
         const QString change_str =
             QString("%1%2%").arg(e.change >= 0 ? "+" : "").arg(e.change, 0, 'f', 2);
         const int change_w = fm.horizontalAdvance(change_str);
-        total_width_ += symbol_w + kSegmentGap + price_w + kSegmentGap + change_w + kItemSpacing;
+        const int w = symbol_w + kSegmentGap + price_w + kSegmentGap + change_w + kItemSpacing;
+        entry_widths_.append(w);
+        total_width_ += w;
     }
 
     // Preserve scroll offset across periodic re-data. Resetting to 0 made
@@ -302,6 +308,31 @@ void TickerBar::paintEvent(QPaintEvent*) {
             p.drawText(QPointF(x, text_y), change_str);
             x += fm.horizontalAdvance(change_str) + kItemSpacing;
         }
+    }
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Click → chart
+// ─────────────────────────────────────────────────────────────────────────────
+
+void TickerBar::mousePressEvent(QMouseEvent* event) {
+    if (event->button() != Qt::LeftButton || total_width_ <= 0 ||
+        entry_widths_.size() != entries_.size()) {
+        QWidget::mousePressEvent(event);
+        return;
+    }
+    // paintEvent lays entries out from x = -offset_, repeating every
+    // total_width_ pixels; fold the click back into one pass and walk it.
+    double pos = std::fmod(offset_ + event->position().x(), static_cast<double>(total_width_));
+    if (pos < 0)
+        pos += total_width_;
+    for (int i = 0; i < entries_.size(); ++i) {
+        if (pos < entry_widths_[i]) {
+            MarketChartDialog::show_for(entries_[i].symbol, QString(), this);
+            return;
+        }
+        pos -= entry_widths_[i];
     }
 }
 

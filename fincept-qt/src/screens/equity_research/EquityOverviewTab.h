@@ -46,6 +46,16 @@ class ResearchCandleCanvas : public QWidget {
     /// whose timestamp lies within the visible candle window.
     void set_earnings_events(const QVector<services::equity::EarningsEvent>& events);
 
+    /// How the primary series is drawn. Candles is the default (ER keeps it);
+    /// the market chart popup offers all three.
+    enum class SeriesStyle { Candles, Line, Area };
+    void set_series_style(SeriesStyle style);
+    /// Bars are real instants (1-minute … 1-hour) rather than exchange-midnight
+    /// session stamps: the time axis then labels clock times in US market time
+    /// instead of calendar dates, which bar_date() would roll a day forward.
+    void set_intraday(bool on);
+    const QVector<services::equity::Candle>& candles() const { return candles_; }
+
   signals:
     /// Fired whenever the crosshair lands on a different candle (mouseMove)
     /// or the cursor leaves the plot area (-1). Lets the hosting tab keep
@@ -81,6 +91,8 @@ class ResearchCandleCanvas : public QWidget {
     bool show_sma20_  = false;
     bool show_sma50_  = false;
     bool show_sma200_ = false;
+    SeriesStyle series_style_ = SeriesStyle::Candles;
+    bool intraday_ = false;
     QVector<services::equity::EarningsEvent> earnings_events_;
 
     // Comparison overlay state. Each series is rendered as a single line

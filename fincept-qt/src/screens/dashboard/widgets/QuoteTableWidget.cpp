@@ -1,5 +1,7 @@
 #include "screens/dashboard/widgets/QuoteTableWidget.h"
 
+#include "screens/markets/MarketChartDialog.h"
+
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -29,6 +31,14 @@ void QuoteTableWidget::build_table() {
     table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%"});
     table_->set_column_widths({130, 100, 80, 70});
     content_layout()->addWidget(table_);
+    // Left click opens the row's chart.
+    table_->viewport()->setCursor(Qt::PointingHandCursor);
+    connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
+        if (row < 0 || row >= row_symbols_.size())
+            return;
+        const QString sym = row_symbols_[row];
+        MarketChartDialog::show_for(sym, label_map_.value(sym, sym), this);
+    });
 }
 
 void QuoteTableWidget::apply_styles() {
@@ -107,6 +117,7 @@ void QuoteTableWidget::render_from_cache() {
     if (!table_)
         return;
     table_->clear_data();
+    row_symbols_.clear();
     for (const auto& sym : symbols_) {
         auto it = row_cache_.constFind(sym);
         if (it == row_cache_.constEnd())
@@ -119,6 +130,7 @@ void QuoteTableWidget::render_from_cache() {
         QString pct_str = QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2);
 
         table_->add_row({display_name, price_str, chg_str, pct_str});
+        row_symbols_.append(q.symbol);
         int row = table_->rowCount() - 1;
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
         table_->set_cell_color(row, 3, ui::change_color(q.change_pct));
@@ -130,6 +142,7 @@ void QuoteTableWidget::populate(const QVector<services::QuoteData>& quotes) {
     if (!table_)
         build_table();
     table_->clear_data();
+    row_symbols_.clear();
 
     for (const auto& q : quotes) {
         QString display_name = label_map_.value(q.symbol, q.symbol);
@@ -139,6 +152,7 @@ void QuoteTableWidget::populate(const QVector<services::QuoteData>& quotes) {
         QString pct_str = QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2);
 
         table_->add_row({display_name, price_str, chg_str, pct_str});
+        row_symbols_.append(q.symbol);
         int row = table_->rowCount() - 1;
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
         table_->set_cell_color(row, 3, ui::change_color(q.change_pct));

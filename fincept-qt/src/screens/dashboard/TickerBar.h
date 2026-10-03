@@ -47,6 +47,8 @@ class TickerBar : public QWidget {
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    /// Left click opens the chart of the entry under the cursor.
+    void mousePressEvent(QMouseEvent* event) override;
     void resizeEvent(QResizeEvent* event) override;
 
   private:
@@ -68,6 +70,9 @@ class TickerBar : public QWidget {
     QElapsedTimer  scroll_clock_;            ///< last_tick wall-clock for delta
     double         offset_      = 0;
     int            total_width_ = 0;
+    /// Width of each entry as painted (symbol, price, change and the trailing
+    /// spacing), in entries_ order — the hit test walks the same layout.
+    QVector<int>   entry_widths_;
     static constexpr double kScrollPixelsPerSec = 20.0;  ///< matches prior visual speed
 
     // ── Symbol list ──

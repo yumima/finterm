@@ -1,5 +1,6 @@
 #include "screens/markets/MarketsScreen.h"
 
+#include "screens/markets/MarketChartDialog.h"
 #include "screens/markets/MarketPanelEditor.h"
 #include "screens/markets/MarketPanelStore.h"
 #include "services/markets/MarketDataService.h"
@@ -138,6 +139,9 @@ void MarketsScreen::wire_panel(MarketPanel* p) {
     connect(p, &MarketPanel::edit_requested,   this, &MarketsScreen::open_editor);
     connect(p, &MarketPanel::delete_requested, this, &MarketsScreen::on_panel_delete);
     connect(p, &MarketPanel::config_changed,   this, &MarketsScreen::on_panel_config_changed);
+    connect(p, &MarketPanel::symbol_activated, this, [this](const QString& sym, const QString& name) {
+        MarketChartDialog::show_for(sym, name, this);
+    });
 }
 
 void MarketsScreen::rebuild_splitter_layout() {

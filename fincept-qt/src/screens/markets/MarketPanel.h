@@ -41,6 +41,8 @@ class MarketPanel : public QWidget {
     void refresh_finished();
     void edit_requested(const QString& panel_id);
     void delete_requested(const QString& panel_id);
+    /// A row was clicked: open its chart. `name` is the display name, may be empty.
+    void symbol_activated(const QString& symbol, const QString& name);
     void config_changed(const MarketPanelConfig& cfg);  // emitted when columns change
 
   protected:
@@ -65,7 +67,10 @@ class MarketPanel : public QWidget {
     void rebuild_from_cache();
 
     MarketPanelConfig              config_;
-    QVector<services::QuoteData>   cached_quotes_;  // all fetched data; display subset shown
+    QVector<services::QuoteData>   cached_quotes_;
+    // Symbol and name per displayed row, set by populate(): the SYMBOL column
+    // can be hidden or moved, so a click must not read the cell text.
+    QVector<QPair<QString, QString>> row_symbols_;  // all fetched data; display subset shown
     bool has_data_    = false;
     bool fetch_failed_ = false;
 

@@ -22,6 +22,7 @@
 #include <QHBoxLayout>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPainterPath>
 #include <QScrollArea>
 #include <QSizePolicy>
 #include <QVBoxLayout>
@@ -159,6 +160,20 @@ void ResearchCandleCanvas::clear() {
 void ResearchCandleCanvas::set_placeholder_state(PlaceholderState state) {
     if (placeholder_state_ == state) return;
     placeholder_state_ = state;
+    dirty_ = true;
+    update();
+}
+
+void ResearchCandleCanvas::set_series_style(SeriesStyle style) {
+    if (series_style_ == style) return;
+    series_style_ = style;
+    dirty_ = true;
+    update();
+}
+
+void ResearchCandleCanvas::set_intraday(bool on) {
+    if (intraday_ == on) return;
+    intraday_ = on;
     dirty_ = true;
     update();
 }
@@ -360,8 +375,35 @@ void ResearchCandleCanvas::rebuild_cache() {
     const QColor wick_bull("#2a9d5c");
     const QColor wick_bear("#b83a3a");
 
+    // ── Line / area: the close, one point per bar ───────────────────────────
+    if (series_style_ != SeriesStyle::Candles && count > 0) {
+        QPainterPath line;
+        for (int i = 0; i < count; ++i) {
+            const QPointF pt((i + 0.5) * slot_w, py(candles_[start + i].close));
+            if (i == 0) line.moveTo(pt); else line.lineTo(pt);
+        }
+        // Coloured by the window's net direction, as every quote screen does.
+        const bool up = candles_[start + count - 1].close >= candles_[start].close;
+        const QColor col = up ? bull_color : bear_color;
+        if (series_style_ == SeriesStyle::Area) {
+            QPainterPath area = line;
+            area.lineTo((count - 0.5) * slot_w, plot_h);
+            area.lineTo(0.5 * slot_w, plot_h);
+            area.closeSubpath();
+            QLinearGradient g(0, 0, 0, plot_h);
+            QColor top = col; top.setAlpha(90);
+            QColor bot = col; bot.setAlpha(8);
+            g.setColorAt(0, top);
+            g.setColorAt(1, bot);
+            p.fillPath(area, g);
+        }
+        p.setPen(QPen(col, 1.6));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(line);
+    }
+
     // ── Candles ──────────────────────────────────────────────────────────────
-    for (int i = 0; i < count; ++i) {
+    for (int i = 0; i < count && series_style_ == SeriesStyle::Candles; ++i) {
         const auto& c = candles_[start + i];
         const int cx = static_cast<int>((i + 0.5) * slot_w);
         const bool bull = c.close >= c.open;
@@ -570,7 +612,14 @@ void ResearchCandleCanvas::rebuild_cache() {
         // for exchanges east of Greenwich); see ui::formatting::bar_date.
         const QDate d = ui::formatting::bar_date(c.timestamp);
         QString label;
-        if (span_sec > 365LL * 86400)
+        if (intraday_) {
+            // A real instant: read it in market time. Multi-day intraday
+            // windows lead with the weekday so a session boundary is visible.
+            // EVENT-STAMP: intraday bar — ET, the session it belongs to.
+            const auto et = QDateTime::fromSecsSinceEpoch(c.timestamp)
+                                .toTimeZone(QTimeZone("America/New_York"));
+            label = span_sec > 86400 ? et.toString("ddd HH:mm") : et.toString("HH:mm");
+        } else if (span_sec > 365LL * 86400)
             label = d.toString("MMM yy");
         else if (span_sec > 60LL * 86400)
             label = d.toString("dd MMM");

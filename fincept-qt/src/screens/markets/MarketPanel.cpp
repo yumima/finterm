@@ -102,6 +102,12 @@ void MarketPanel::build_ui() {
 
     table_->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(table_, &QTableWidget::customContextMenuRequested, this, &MarketPanel::show_row_context_menu);
+    // Left click opens the row's chart.
+    table_->viewport()->setCursor(Qt::PointingHandCursor);
+    connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
+        if (row >= 0 && row < row_symbols_.size() && !row_symbols_[row].first.isEmpty())
+            emit symbol_activated(row_symbols_[row].first, row_symbols_[row].second);
+    });
 
     table_->setVisible(false);  // hidden until first data arrives
     bl->addWidget(table_);
@@ -350,8 +356,10 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
     const int count   = qMin(quotes.size(), qMax(visible, 0));
     table_->setRowCount(count);
 
+    row_symbols_.resize(count);
     for (int row = 0; row < count; ++row) {
         const auto& q  = quotes[row];
+        row_symbols_[row] = {q.symbol, q.name};
         bool pos          = q.change >= 0;
         const QString cc  = pos ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
         const QString arr = pos ? QString::fromUtf8("\xe2\x96\xb2") : QString::fromUtf8("\xe2\x96\xbc");
