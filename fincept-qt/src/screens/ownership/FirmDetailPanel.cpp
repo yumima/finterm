@@ -119,7 +119,11 @@ FirmDetailPanel::FirmDetailPanel(QWidget* parent) : QWidget(parent) {
     // twice per book, once on the filing and again when prices land.
     positions_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     positions_->horizontalHeader()->setSectionsMovable(true);
-    positions_->horizontalHeader()->setStretchLastSection(true);
+    // Content-width columns, titles left-aligned like the data under them.
+    // Stretching the last column across a wide pane centred "6M" far to the
+    // right of its own numbers; spare width now sits empty at the right edge.
+    positions_->horizontalHeader()->setStretchLastSection(false);
+    positions_->horizontalHeader()->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     // Click a header to sort; click again to reverse. Opens on % of book,
     // largest first — the order the filing itself ranks positions in.
     positions_->horizontalHeader()->setSortIndicatorShown(true);

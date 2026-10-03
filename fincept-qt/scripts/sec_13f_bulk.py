@@ -107,6 +107,41 @@ def _pad_cik(cik):
     return str(cik).lstrip("0").zfill(10)
 
 
+def yahoo_ticker(raw):
+    """An OpenFIGI ticker as the rest of the terminal spells it (Yahoo).
+
+    OpenFIGI writes share classes with a slash — BRK/B, BF/B, HEI/A — where
+    Yahoo, and so Equity Research, the charts and every lookup by symbol, use a
+    dash: BRK-B. And for convertible notes it returns a bond description
+    ("BA 6 10/15/27", "ORCL 6.5 01/15/29 D") in the ticker field; that is not a
+    tradable symbol, and opening it anywhere fails, so it maps to no ticker.
+    No real ticker contains a space.
+    """
+    t = (raw or "").upper().strip()
+    if not t or " " in t:
+        return ""
+    return t.replace("/", "-")
+
+
+def _normalise_tickers(con):
+    """One-off rewrite of a map built before yahoo_ticker() existed — the map
+    itself and ticker_totals, which keeps its own copy of the ticker per
+    quarter and is never rebuilt once a quarter has rows. Checks first, so the
+    common case (nothing to fix) never takes a write lock."""
+    tables = ["cusip_ticker"]
+    if con.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ticker_totals'").fetchone():
+        tables.append("ticker_totals")
+    stale = [t for t in tables
+             if con.execute(f"SELECT 1 FROM {t} WHERE ticker LIKE '%/%' OR ticker LIKE '% %' "
+                            "LIMIT 1").fetchone()]
+    if not stale:
+        return
+    for t in stale:
+        con.execute(f"UPDATE {t} SET ticker='' WHERE ticker LIKE '% %'")
+        con.execute(f"UPDATE {t} SET ticker=REPLACE(ticker, '/', '-') WHERE ticker LIKE '%/%'")
+    con.commit()
+
+
 def connect():
     con = sqlite3.connect(db_path())
     con.execute("PRAGMA journal_mode=WAL")
@@ -178,6 +213,7 @@ def connect():
     if "partial" not in cols:
         con.execute("ALTER TABLE quarters ADD COLUMN partial INTEGER DEFAULT 0")
     con.commit()
+    _normalise_tickers(con)
     return con
 
 
@@ -195,7 +231,15 @@ def resolve_ticker(ticker, con=None):
     own = con is None
     con = con or connect()
     try:
-        t = str(ticker).upper().strip()
+        # The map is in Yahoo form (BRK-B); accept the other spellings of a
+        # share class callers arrive with (BRK.B, BRK/B).
+        t = yahoo_ticker(str(ticker).replace(".", "-"))
+        if not t:
+            # "BRK B", a bond description, blank: not a ticker. Querying for ''
+            # would match an unresolved row and hand back some other security
+            # — attributing its holders to this symbol.
+            return {"error": f"{str(ticker).strip()!r} is not a ticker symbol",
+                    "ticker": str(ticker), "unresolved": True}
         row = con.execute(
             "SELECT cusip, name FROM cusip_ticker WHERE ticker=? LIMIT 1", (t,)).fetchone()
         if row:
@@ -271,7 +315,7 @@ def resolve_cusips(limit=2000, quarter=None, batch=10, progress=None):
                     pick = next((r for r in recs
                                  if (r.get("exchCode") or "").upper() == "US"), recs[0])
                     con.execute("INSERT OR REPLACE INTO cusip_ticker VALUES (?,?,?,?)",
-                                (cusip, (pick.get("ticker") or "").upper(),
+                                (cusip, yahoo_ticker(pick.get("ticker")),
                                  pick.get("name") or "", "openfigi"))
                     resolved += 1
                 else:
