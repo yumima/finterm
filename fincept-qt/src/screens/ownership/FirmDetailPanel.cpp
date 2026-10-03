@@ -98,12 +98,13 @@ FirmDetailPanel::FirmDetailPanel(QWidget* parent) : QWidget(parent) {
     render();
 }
 
-void FirmDetailPanel::set_firm(const QString& cik) {
-    if (cik == cik_)
+void FirmDetailPanel::set_firm(const QString& cik, const QString& quarter) {
+    const QString key = cik.isEmpty() ? QString() : services::OwnershipService::book_key(cik, quarter);
+    if (key == cik_)
         return;
-    cik_ = cik;
-    if (!cik_.isEmpty())
-        services::OwnershipService::instance().load_book(cik_);
+    cik_ = key;
+    if (!cik.isEmpty())
+        services::OwnershipService::instance().load_book(cik, quarter);
     render();
 }
 

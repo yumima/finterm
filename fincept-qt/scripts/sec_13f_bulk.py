@@ -831,6 +831,122 @@ def firms(query="", limit=40, quarter=None):
         con.close()
 
 
+def _book_moves(con, accession, prior_accession):
+    """Position-level moves between two of one filer's filings: counts of new,
+    added, trimmed and exited common-stock positions, the dollar flow those
+    moves imply, and the largest buy and sell. Options are excluded — a put
+    is not a holding.
+
+    Flow is shares changed × the price implied by the filing that carries the
+    position (value ÷ shares): the current filing for new/added/trimmed, the
+    prior one for exits. It is an estimate — 13F shows quarter-end snapshots,
+    not trades — and is labelled as one wherever it is shown.
+    """
+    if not prior_accession:
+        return None
+    rows = con.execute("""
+        SELECT h.cusip, h.issuer, h.value, h.shares, ph.shares, ct.ticker
+          FROM holdings h
+          LEFT JOIN holdings ph ON ph.accession = ? AND ph.cusip = h.cusip AND ph.put_call = ''
+          LEFT JOIN cusip_ticker ct ON ct.cusip = h.cusip
+         WHERE h.accession = ? AND h.put_call = ''
+    """, (prior_accession, accession)).fetchall()
+    m = {"new": 0, "added": 0, "trimmed": 0, "held": 0, "exited": 0,
+         "bought_value": 0.0, "sold_value": 0.0, "top_buy": None, "top_sell": None}
+
+    def note(kind, issuer, ticker, flow):
+        key = "top_buy" if kind == "buy" else "top_sell"
+        cur = m[key]
+        if cur is None or abs(flow) > abs(cur["value"]):
+            m[key] = {"issuer": issuer, "ticker": ticker or "", "value": flow}
+
+    for cusip, issuer, value, shares, prior_shares, ticker in rows:
+        px = (value / shares) if shares else 0.0
+        if prior_shares is None:
+            m["new"] += 1
+            flow = value
+        else:
+            delta = shares - prior_shares
+            if prior_shares > 0 and abs(delta) / prior_shares < 0.01:
+                m["held"] += 1
+                continue
+            m["added" if delta > 0 else "trimmed"] += 1
+            flow = delta * px
+        if flow >= 0:
+            m["bought_value"] += flow
+            note("buy", issuer, ticker, flow)
+        else:
+            m["sold_value"] += -flow
+            note("sell", issuer, ticker, flow)
+    for issuer, value, ticker in con.execute("""
+        SELECT ph.issuer, ph.value, ct.ticker
+          FROM holdings ph
+          LEFT JOIN cusip_ticker ct ON ct.cusip = ph.cusip
+         WHERE ph.accession = ? AND ph.put_call = ''
+           AND ph.cusip NOT IN (SELECT cusip FROM holdings WHERE accession = ? AND put_call = '')
+    """, (prior_accession, accession)).fetchall():
+        m["exited"] += 1
+        m["sold_value"] += value or 0.0
+        note("sell", issuer, ticker, -(value or 0.0))
+    return m
+
+
+def top_firms(limit=50):
+    """The largest 13F filers, each with what it did since its previous filing.
+
+    Ranked by each filer's NEWEST indexed book, which may be a quarter the bulk
+    sets have not reached yet (ingest_current pulls those straight from EDGAR
+    for the largest filers). Every row therefore carries its own quarter and
+    prior quarter, and its moves compare those two filings of that filer — a
+    refreshed filer is never compared against an unrefreshed neighbour's dates.
+
+    13F covers US-listed long equity of managers with SEC filing obligations.
+    That includes most of the world's largest asset managers (and sovereign
+    funds such as Norges Bank) but only their US-listed stock books.
+    """
+    con = connect()
+    try:
+        if not con.execute("SELECT 1 FROM books LIMIT 1").fetchone():
+            return {"error": "no 13F data ingested yet"}
+        # Newest book per filer, then rank. Two indexed quarters plus any
+        # partial current-quarter pull: a few thousand rows to scan.
+        # Only filers still filing: a book whose newest filing predates the
+        # newest complete quarter belongs to a filer that stopped (merged,
+        # closed, or restructured — Vanguard Group Inc gave way to Vanguard
+        # Capital Management and Vanguard Portfolio Management in Q1 2026, and
+        # ranking its stale book beside theirs listed Vanguard twice).
+        qs = quarter_pair(con)
+        floor = qs[0] if qs else ""
+        newest = con.execute("""
+            SELECT b.cik, b.manager, b.quarter, b.accession, b.stock_value, b.stock_count
+              FROM books b
+              JOIN (SELECT cik, MAX(quarter) AS q FROM books WHERE cik <> '' GROUP BY cik) n
+                ON n.cik = b.cik AND n.q = b.quarter
+             WHERE b.quarter >= ?
+             ORDER BY b.stock_value DESC LIMIT ?
+        """, (floor, int(limit))).fetchall()
+        firms_out = []
+        for cik, manager, quarter, accession, value, count in newest:
+            prior = con.execute(
+                "SELECT quarter, accession, stock_value, stock_count FROM books "
+                "WHERE cik=? AND quarter<? ORDER BY quarter DESC LIMIT 1",
+                (cik, quarter)).fetchone()
+            row = {"cik": cik, "manager": manager, "quarter": quarter,
+                   "book_value": value, "position_count": count}
+            if prior:
+                row.update({"prior_quarter": prior[0], "prior_book_value": prior[2],
+                            "prior_position_count": prior[3]})
+                row["moves"] = _book_moves(con, accession, prior[1])
+            firms_out.append(row)
+        newest_q = max((f["quarter"] for f in firms_out), default=None)
+        partial = {r[0] for r in con.execute(
+            "SELECT quarter FROM quarters WHERE COALESCE(partial,0)=1").fetchall()}
+        return {"firms": firms_out, "newest_quarter": newest_q,
+                "partial_quarters": sorted(partial)}
+    finally:
+        con.close()
+
+
 def firm_book(cik=None, quarter=None, limit=250):
     """One filer's whole book from the index, with its quarter-over-quarter moves.
 
@@ -1382,6 +1498,8 @@ def handle_action(action, payload):
     if action == "firms":
         return firms(payload.get("query") or "", int(payload.get("limit") or 40),
                      payload.get("quarter"))
+    if action == "top_firms":
+        return top_firms(int(payload.get("limit") or 50))
     if action == "book":
         return firm_book(payload.get("cik"), payload.get("quarter"),
                          int(payload.get("limit") or 250))

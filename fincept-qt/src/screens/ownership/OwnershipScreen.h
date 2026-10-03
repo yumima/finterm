@@ -16,6 +16,7 @@ namespace fincept::screens {
 class FirmDetailPanel;
 class InsiderBuysPanel;
 class MoversPanel;
+class LargestFundsPanel;
 class ShortRankPanel;
 
 /// OWNERSHIP — where the informed parties are acting, market-wide.
@@ -52,7 +53,7 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     void build_ui();
     void refresh_index_ui(const QString& msg);
     void load_tab(int index);
-    void show_filer(const QString& cik, const QString& name);
+    void show_filer(const QString& cik, const QString& name, const QString& quarter = {});
 
     QLabel*      index_lbl_ = nullptr;
     QPushButton* index_btn_ = nullptr;
@@ -65,6 +66,7 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     InsiderBuysPanel* insider_buys_ = nullptr;
     ShortRankPanel*   short_rank_ = nullptr;
     MoversPanel*      movers_ = nullptr;
+    LargestFundsPanel* largest_funds_ = nullptr;
     QWidget*          empty_page_ = nullptr;
 
     QWidget*         filer_page_ = nullptr;
@@ -72,7 +74,7 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     QLabel*          filer_title_ = nullptr;
     FirmDetailPanel* filer_ = nullptr;
 
-    bool loaded_[3] = {false, false, false};
+    bool loaded_[4] = {false, false, false, false};
     bool shown_once_ = false;
 };
 

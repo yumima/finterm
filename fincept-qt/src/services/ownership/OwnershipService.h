@@ -98,11 +98,28 @@ class OwnershipService : public QObject {
 
     // ── Filers ──────────────────────────────────────────────────────────────
 
+    /// The largest filers by 13F book, with each one's quarter-over-quarter
+    /// moves. Cached for the session once loaded; `force` reloads.
+    void load_top_firms(bool force = false);
+    const ownership::TopFirms& top_firms() const { return top_firms_; }
+    bool top_firms_loading() const { return top_firms_loading_; }
+    /// Pull the newest 13F filings straight from EDGAR for the `top` largest
+    /// filers — the bulk sets run a quarter behind. Reloads the ranking after.
+    void pull_latest_filings(int top = 100);
+    bool pulling_latest() const { return pulling_latest_; }
+
     void search_firms(const QString& query);
     QVector<ownership::Manager> last_firm_results() const { return firm_results_; }
-    void load_book(const QString& cik);
-    ownership::ManagerBook book(const QString& cik) const;
-    bool is_book_loading(const QString& cik) const;
+    /// Load a filer's book. `quarter` (ISO date) pins a specific filing —
+    /// the LARGEST FUNDS ranking passes the quarter its row describes, which
+    /// can be an EDGAR-pulled quarter the default (newest complete bulk
+    /// quarter) would skip. Books are cached and signalled under book_key().
+    void load_book(const QString& cik, const QString& quarter = {});
+    static QString book_key(const QString& cik, const QString& quarter) {
+        return quarter.isEmpty() ? cik : cik + QLatin1Char('@') + quarter;
+    }
+    ownership::ManagerBook book(const QString& key) const;
+    bool is_book_loading(const QString& key) const;
 
     // ── Local 13F index ─────────────────────────────────────────────────────
 
@@ -124,6 +141,9 @@ class OwnershipService : public QObject {
     void calendar_updated();
     void book_updated(QString cik);
     void firms_found();
+    void top_firms_updated();
+    /// Progress / result of pull_latest_filings, for a status line.
+    void latest_pull_status(QString text);
     void index_changed(QString summary);
 
   private:
@@ -157,6 +177,9 @@ class OwnershipService : public QObject {
     bool short_rank_loading_ = false;
     ownership::Movers movers_;
     bool movers_loading_ = false;
+    ownership::TopFirms top_firms_;
+    bool top_firms_loading_ = false;
+    bool pulling_latest_ = false;
 
     ownership::WatchRows watch_;
     bool watch_loading_ = false;

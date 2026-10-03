@@ -392,6 +392,14 @@ void EquityResearchScreen::build_ui() {
     // reader goes looking for it. ER names the symbol; the panel is told.
     ownership_tab_ = new StockOwnershipPanel;
     tab_widget_->addTab(ownership_tab_, "Ownership");
+    // A holding clicked in a filer's book (Ownership › holder › book) is
+    // another security. This was emitted into nothing, so the click did
+    // nothing; we are already the Equity Research screen, so load it here.
+    connect(ownership_tab_, &StockOwnershipPanel::navigate_to_screen, this,
+            [this](const QString& id, const QString& ticker) {
+                if (id == QLatin1String("equity_research") && !ticker.isEmpty())
+                    load_symbol(ticker);
+            });
 
     connect(tab_widget_, &QTabWidget::currentChanged, this, &EquityResearchScreen::on_tab_changed);
 

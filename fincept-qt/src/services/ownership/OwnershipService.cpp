@@ -1171,6 +1171,113 @@ void OwnershipService::check_holdings_alerts() {
 
 // ── Filers ───────────────────────────────────────────────────────────────────
 
+void OwnershipService::load_top_firms(bool force) {
+    if (top_firms_loading_ || (top_firms_.loaded && top_firms_.error.isEmpty() && !force))
+        return;
+    top_firms_loading_ = true;
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_bulk.py"),
+        {QStringLiteral("top_firms"), payload_of({{"limit", 50}})},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->top_firms_loading_ = false;
+            TopFirms t;
+            t.loaded = true;
+            if (!result.success) {
+                t.error = result.error.isEmpty() ? QStringLiteral("13F filer query failed")
+                                                 : result.error.left(200);
+            } else {
+                const auto o = parse_object(result);
+                t.error = o.value(QStringLiteral("error")).toString();
+                t.newest_quarter = iso_date(o, "newest_quarter");
+                for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
+                    t.partial_quarters << v.toString();
+                auto top_move = [](const QJsonValue& v) -> std::optional<FirmMoveTop> {
+                    if (!v.isObject()) return std::nullopt;
+                    const auto m = v.toObject();
+                    return FirmMoveTop{m.value(QStringLiteral("issuer")).toString(),
+                                       m.value(QStringLiteral("ticker")).toString(),
+                                       m.value(QStringLiteral("value")).toDouble()};
+                };
+                for (const auto& v : o.value(QStringLiteral("firms")).toArray()) {
+                    const auto r = v.toObject();
+                    TopFirm f;
+                    f.cik = r.value(QStringLiteral("cik")).toString();
+                    f.manager = r.value(QStringLiteral("manager")).toString();
+                    f.quarter = iso_date(r, "quarter");
+                    f.book_value = r.value(QStringLiteral("book_value")).toDouble();
+                    f.position_count = r.value(QStringLiteral("position_count")).toInt();
+                    if (r.contains(QStringLiteral("prior_quarter"))) {
+                        f.prior_quarter = iso_date(r, "prior_quarter");
+                        f.prior_book_value = r.value(QStringLiteral("prior_book_value")).toDouble();
+                    }
+                    const auto m = r.value(QStringLiteral("moves")).toObject();
+                    if (!m.isEmpty()) {
+                        f.has_moves = true;
+                        f.new_positions = m.value(QStringLiteral("new")).toInt();
+                        f.added = m.value(QStringLiteral("added")).toInt();
+                        f.trimmed = m.value(QStringLiteral("trimmed")).toInt();
+                        f.held = m.value(QStringLiteral("held")).toInt();
+                        f.exited = m.value(QStringLiteral("exited")).toInt();
+                        f.bought_value = m.value(QStringLiteral("bought_value")).toDouble();
+                        f.sold_value = m.value(QStringLiteral("sold_value")).toDouble();
+                        f.top_buy = top_move(m.value(QStringLiteral("top_buy")));
+                        f.top_sell = top_move(m.value(QStringLiteral("top_sell")));
+                    }
+                    if (!f.cik.isEmpty())
+                        t.firms.push_back(f);
+                }
+            }
+            self->top_firms_ = t;
+            emit self->top_firms_updated();
+        },
+        /*on_line=*/{}, 120'000);
+    emit top_firms_updated();   // so the panel can show "loading"
+}
+
+void OwnershipService::pull_latest_filings(int top) {
+    if (pulling_latest_)
+        return;
+    pulling_latest_ = true;
+    emit latest_pull_status(QStringLiteral("Pulling the newest 13F filings from EDGAR for the %1 "
+                                           "largest filers — a few minutes…").arg(top));
+    QPointer<OwnershipService> self = this;
+    python::PythonRunner::instance().run(
+        QStringLiteral("sec_13f_bulk.py"),
+        {QStringLiteral("ingest_current"), payload_of({{"top", top}})},
+        [self](python::PythonResult result) {
+            if (!self)
+                return;
+            self->pulling_latest_ = false;
+            QString msg;
+            if (!result.success) {
+                msg = QStringLiteral("EDGAR pull failed: ") + result.error.left(200);
+            } else {
+                const auto o = parse_object(result);
+                const QString err = o.value(QStringLiteral("error")).toString();
+                msg = !err.isEmpty()
+                          ? QStringLiteral("EDGAR pull failed: ") + err
+                          : QStringLiteral("Pulled the newest 13F for %1 of %2 filers%3 · %4 had "
+                                           "nothing newer · %5 failed.")
+                                .arg(o.value(QStringLiteral("filers_added_total")).toInt())
+                                .arg(o.value(QStringLiteral("requested")).toInt())
+                                .arg(o.value(QStringLiteral("quarter")).toString().isEmpty()
+                                         ? QString()
+                                         : QStringLiteral(" (") + o.value(QStringLiteral("quarter")).toString() +
+                                               QStringLiteral(")"))
+                                .arg(o.value(QStringLiteral("no_newer_filing")).toInt())
+                                .arg(o.value(QStringLiteral("failed")).toInt());
+            }
+            emit self->latest_pull_status(msg);
+            // Holdings changed under every cached book.
+            self->books_.clear();
+            self->load_top_firms(/*force=*/true);
+        },
+        /*on_line=*/{}, 900'000);
+}
+
 void OwnershipService::search_firms(const QString& query) {
     QPointer<OwnershipService> self = this;
     const QString q = query.trimmed();
@@ -1207,20 +1314,23 @@ bool OwnershipService::is_book_loading(const QString& cik) const {
     return books_in_flight_.contains(cik);
 }
 
-void OwnershipService::load_book(const QString& cik) {
-    if (cik.isEmpty() || books_in_flight_.contains(cik))
+void OwnershipService::load_book(const QString& cik, const QString& quarter) {
+    const QString key = book_key(cik, quarter);
+    if (cik.isEmpty() || books_in_flight_.contains(key))
         return;
     // A filed quarter is immutable, so a cached book is never stale in-session.
-    if (books_.contains(cik) && books_.value(cik).error.isEmpty()) {
-        emit book_updated(cik);
+    if (books_.contains(key) && books_.value(key).error.isEmpty()) {
+        emit book_updated(key);
         return;
     }
-    books_in_flight_.insert(cik);
+    books_in_flight_.insert(key);
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_13f_bulk.py"),
-        {QStringLiteral("book"), payload_of({{"cik", cik}, {"limit", 250}})},
-        [self, cik](python::PythonResult result) {
+        {QStringLiteral("book"), quarter.isEmpty()
+                                      ? payload_of({{"cik", cik}, {"limit", 250}})
+                                      : payload_of({{"cik", cik}, {"quarter", quarter}, {"limit", 250}})},
+        [self, cik, key](python::PythonResult result) {
             if (!self)
                 return;
             ManagerBook b;
@@ -1236,16 +1346,16 @@ void OwnershipService::load_book(const QString& cik) {
                 else
                     parse_book_into(root, b);
             }
-            self->books_.insert(cik, b);
-            self->books_in_flight_.remove(cik);
-            emit self->book_updated(cik);
+            self->books_.insert(key, b);
+            self->books_in_flight_.remove(key);
+            emit self->book_updated(key);
             if (b.error.isEmpty() && !b.positions.isEmpty())
-                self->price_book(cik);
+                self->price_book(key);
         },
         /*on_line=*/{}, 60'000);
 }
 
-void OwnershipService::price_book(const QString& cik) {
+void OwnershipService::price_book(const QString& cik) {   // `cik` is the book_key()
     auto b = books_.value(cik);
     if (b.positions.isEmpty() || !b.period.isValid() || pricing_in_flight_.contains(cik))
         return;

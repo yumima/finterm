@@ -23,7 +23,8 @@ class FirmDetailPanel : public QWidget {
     explicit FirmDetailPanel(QWidget* parent = nullptr);
 
     /// Show this filer's book, loading it if it is not cached.
-    void set_firm(const QString& cik);
+    /// `quarter` (ISO) pins a specific filing; empty = newest complete quarter.
+    void set_firm(const QString& cik, const QString& quarter = {});
 
   signals:
     /// A holding was clicked. The register for a security is a question about
@@ -33,7 +34,7 @@ class FirmDetailPanel : public QWidget {
   private:
     void render();
 
-    QString       cik_;
+    QString       cik_;   // the book cache key: OwnershipService::book_key()
     QLabel*       status_     = nullptr;
     QLabel*       book_title_ = nullptr;
     QTableWidget* positions_  = nullptr;

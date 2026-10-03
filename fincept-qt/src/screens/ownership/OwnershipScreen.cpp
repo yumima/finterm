@@ -140,12 +140,15 @@ void OwnershipScreen::build_ui() {
     insider_buys_ = new InsiderBuysPanel;
     short_rank_ = new ShortRankPanel;
     movers_ = new MoversPanel;
+    largest_funds_ = new LargestFundsPanel;
     for (auto* p : {static_cast<QWidget*>(insider_buys_), static_cast<QWidget*>(short_rank_),
-                    static_cast<QWidget*>(movers_)})
+                    static_cast<QWidget*>(movers_), static_cast<QWidget*>(largest_funds_)})
         p->setContentsMargins(0, 8, 0, 0);
     tabs_->addTab(insider_buys_, QStringLiteral("INSIDER BUYS"));
     tabs_->addTab(short_rank_, QStringLiteral("SHORT-CONSTRAINED"));
     tabs_->addTab(movers_, QStringLiteral("13F MOVERS"));
+    // Appended, not inserted: saved tab indices stay valid.
+    tabs_->addTab(largest_funds_, QStringLiteral("LARGEST FUNDS"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int i) { load_tab(i); });
     auto open = [this](const QString& sym) {
         emit navigate_to_screen(QStringLiteral("equity_research"), sym);
@@ -153,6 +156,11 @@ void OwnershipScreen::build_ui() {
     connect(insider_buys_, &InsiderBuysPanel::stock_activated, this, open);
     connect(short_rank_, &ShortRankPanel::stock_activated, this, open);
     connect(movers_, &MoversPanel::stock_activated, this, open);
+    connect(largest_funds_, &LargestFundsPanel::stock_activated, this, open);
+    connect(largest_funds_, &LargestFundsPanel::firm_activated, this,
+            [this](const QString& cik, const QString& name, const QString& quarter) {
+                show_filer(cik, name, quarter);
+            });
     stack_->addWidget(tabs_);   // 0
 
     auto* empty = new QWidget;
@@ -220,22 +228,24 @@ void OwnershipScreen::build_ui() {
     stack_->addWidget(filer_page_);   // 2
 }
 
-void OwnershipScreen::show_filer(const QString& cik, const QString& name) {
+void OwnershipScreen::show_filer(const QString& cik, const QString& name, const QString& quarter) {
     filer_title_->setText(name);
-    filer_->set_firm(cik);
+    filer_->set_firm(cik, quarter);
     stack_->setCurrentIndex(2);
 }
 
 void OwnershipScreen::load_tab(int index) {
-    if (index < 0 || index > 2 || loaded_[index])
+    if (index < 0 || index > 3 || loaded_[index])
         return;
     loaded_[index] = true;
     if (index == 0)
         insider_buys_->refresh();
     else if (index == 1)
         short_rank_->refresh();
-    else
+    else if (index == 2)
         movers_->refresh();
+    else
+        largest_funds_->refresh();
 }
 
 void OwnershipScreen::refresh_index_ui(const QString& msg) {
@@ -259,7 +269,12 @@ void OwnershipScreen::refresh_index_ui(const QString& msg) {
     if (ready && shown_once_) {
         // The index arriving is what makes two of the scans answerable.
         if (tabs_->currentIndex() == 1 && !svc.short_rank().loaded) short_rank_->refresh();
-        if (tabs_->currentIndex() == 2 && !svc.movers().loaded) movers_->refresh();
+        // An error result counts as not loaded: the usual one is "no 13F data
+        // ingested yet", which the index arriving is exactly what fixes.
+        if (tabs_->currentIndex() == 2 && (!svc.movers().loaded || !svc.movers().error.isEmpty()))
+            movers_->refresh();
+        if (tabs_->currentIndex() == 3 && (!svc.top_firms().loaded || !svc.top_firms().error.isEmpty()))
+            largest_funds_->refresh();
     }
 }
 
@@ -279,7 +294,7 @@ void OwnershipScreen::showEvent(QShowEvent* e) {
 
 void OwnershipScreen::restore_state(const QVariantMap& state) {
     const int tab = state.value(QStringLiteral("tab"), 0).toInt();
-    if (tab >= 0 && tab < 3)
+    if (tab >= 0 && tab < tabs_->count())
         tabs_->setCurrentIndex(tab);
 }
 

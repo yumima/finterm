@@ -453,6 +453,48 @@ struct Movers {
     bool    loaded = false;
 };
 
+/// The largest 13F filers and what each did since its previous filing.
+///
+/// Ranked by each filer's newest indexed book, which can be a quarter ahead of
+/// the bulk index when the newest filings were pulled from EDGAR — so every
+/// row carries its own quarter pair. Flows are shares changed × the price the
+/// filing implies: an estimate from quarter-end snapshots, not trades.
+struct FirmMoveTop {
+    QString issuer;
+    QString ticker;
+    double  value = 0.0;   // signed dollar flow
+};
+
+struct TopFirm {
+    QString cik;
+    QString manager;
+    QDate   quarter;
+    double  book_value = 0.0;
+    int     position_count = 0;
+    // Unset for a first filing (a new or restructured filer): nothing to
+    // compare against, which is not the same as "no change".
+    std::optional<QDate>  prior_quarter;
+    std::optional<double> prior_book_value;
+    bool    has_moves = false;
+    int     new_positions = 0;
+    int     added = 0;
+    int     trimmed = 0;
+    int     held = 0;
+    int     exited = 0;
+    double  bought_value = 0.0;
+    double  sold_value = 0.0;
+    std::optional<FirmMoveTop> top_buy;
+    std::optional<FirmMoveTop> top_sell;
+};
+
+struct TopFirms {
+    QVector<TopFirm> firms;
+    QDate   newest_quarter;
+    QStringList partial_quarters;
+    QString error;
+    bool    loaded = false;
+};
+
 // ── Where ownership reaches the reader: watchlist rows, alerts, a calendar ──
 
 /// One watchlist line, from the three local stores. Absent fields mean the

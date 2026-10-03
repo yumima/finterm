@@ -1239,10 +1239,18 @@ void MainWindow::setup_dock_screens() {
                     if (!ticker.isEmpty())
                         SymbolContext::instance().set_group_symbol(
                             SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
-                    dock_router_->navigate(id);
+                    // Equity Research opens BESIDE the scan, as it does from
+                    // Portfolio: the reader is working down a list, and
+                    // replacing the list with the stock lost their place on
+                    // every click. Once ER is open alongside, split_alongside
+                    // just raises it and the next click retargets it.
+                    if (id == QLatin1String("equity_research"))
+                        dock_router_->split_alongside(id);
+                    else
+                        dock_router_->navigate(id);
                     // Equity Research listens on the EventBus rather than for
                     // group-A broadcasts when its tab is unlinked, and only
-                    // once materialised — so publish AFTER navigate().
+                    // once materialised — so publish AFTER opening it.
                     if (id == QLatin1String("equity_research") && !ticker.isEmpty())
                         EventBus::instance().publish("equity_research.load_symbol",
                                                      QVariantMap{{"symbol", ticker}});
