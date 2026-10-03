@@ -93,6 +93,10 @@ class LargestFundsPanel : public QWidget {
   public:
     explicit LargestFundsPanel(QWidget* parent = nullptr);
     void refresh();
+    /// Open a fund in the side pane by CIK — the filer search's route in. A
+    /// ranked fund also gets its row highlighted; one outside the top 50 opens
+    /// all the same, with nothing highlighted.
+    void show_fund(const QString& cik);
   signals:
     void stock_activated(const QString& symbol);
   private:
@@ -108,6 +112,9 @@ class LargestFundsPanel : public QWidget {
     FirmDetailPanel* detail_ = nullptr;
     ui::LoadingOverlay* loading_ = nullptr;   // over the ranking while it (re)loads
     QString selected_cik_;   // re-selected after a reload re-fills the table
+    // True when the open fund came from the search rather than a row: it may
+    // not be in the ranking at all, so a reload must not close it for that.
+    bool selected_from_search_ = false;
 };
 
 } // namespace fincept::screens

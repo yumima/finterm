@@ -512,6 +512,7 @@ LargestFundsPanel::LargestFundsPanel(QWidget* parent) : QWidget(parent) {
             const QString cik = it->data(Qt::UserRole).toString();
             if (!cik.isEmpty()) {
                 selected_cik_ = cik;
+                selected_from_search_ = false;
                 detail_->set_firm(cik, it->data(Qt::UserRole + 1).toString());
             }
         }
@@ -545,6 +546,25 @@ LargestFundsPanel::LargestFundsPanel(QWidget* parent) : QWidget(parent) {
         render();
     });
     render();
+}
+
+void LargestFundsPanel::show_fund(const QString& cik) {
+    if (cik.isEmpty())
+        return;
+    selected_cik_ = cik;
+    selected_from_search_ = true;
+    // A ranked fund opens at the quarter its row describes, like a click on
+    // the row would; an unranked one at its newest complete quarter.
+    const auto& t = services::OwnershipService::instance().top_firms();
+    for (int i = 0; i < t.firms.size(); ++i) {
+        if (t.firms[i].cik != cik)
+            continue;
+        table_->selectRow(i);
+        detail_->set_firm(cik, t.firms[i].quarter.toString(Qt::ISODate));
+        return;
+    }
+    table_->clearSelection();
+    detail_->set_firm(cik);
 }
 
 void LargestFundsPanel::refresh() {
@@ -661,6 +681,9 @@ void LargestFundsPanel::render() {
         if (found >= 0) {
             table_->selectRow(found);
             detail_->set_firm(selected_cik_, t.firms[found].quarter.toString(Qt::ISODate));
+        } else if (selected_from_search_) {
+            // A searched fund need not be ranked; keep its book open.
+            table_->clearSelection();
         } else {
             table_->clearSelection();
             selected_cik_.clear();

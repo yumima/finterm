@@ -13,7 +13,6 @@ class QListWidget;
 
 namespace fincept::screens {
 
-class FirmDetailPanel;
 class InsiderBuysPanel;
 class MoversPanel;
 class LargestFundsPanel;
@@ -27,10 +26,9 @@ class ShortRankPanel;
 /// a ticker and leaves with one.
 ///
 /// The per-security register is not here — it is the Ownership tab in Equity
-/// Research, where a security is already on screen. A filer's book is a
-/// drill, reached from the search box at the top right or from a holder row
-/// on the stock page, never a landing page: nobody arrives with "show me
-/// Capital World Investors" as the question.
+/// Research, where a security is already on screen. A filer's book opens in
+/// the LARGEST FUNDS side pane — from a ranked row or from the search box at
+/// the top right — so the ranking stays in view beside it.
 class OwnershipScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
   public:
@@ -53,7 +51,8 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     void build_ui();
     void refresh_index_ui(const QString& msg);
     void load_tab(int index);
-    void show_filer(const QString& cik, const QString& name, const QString& quarter = {});
+    /// Open a fund (from the filer search) in the LARGEST FUNDS side pane.
+    void show_filer(const QString& cik);
 
     QLabel*      index_lbl_ = nullptr;
     QPushButton* index_btn_ = nullptr;
@@ -69,10 +68,6 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     LargestFundsPanel* largest_funds_ = nullptr;
     QWidget*          empty_page_ = nullptr;
 
-    QWidget*         filer_page_ = nullptr;
-    QPushButton*     back_btn_ = nullptr;
-    QLabel*          filer_title_ = nullptr;
-    FirmDetailPanel* filer_ = nullptr;
 
     bool loaded_[4] = {false, false, false, false};
     bool shown_once_ = false;

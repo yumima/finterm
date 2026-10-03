@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`1a9df1327`](https://github.com/yumima/finterm/commit/1a9df1327) ownership: BRK-B, not BRK/B — 13F tickers in the form the terminal uses; titles above their columns
 - [`e7cdddb4e`](https://github.com/yumima/finterm/commit/e7cdddb4e) ownership: sort a fund's holdings by any column, and say what each column is
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

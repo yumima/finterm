@@ -1,6 +1,5 @@
 #include "screens/ownership/OwnershipScreen.h"
 
-#include "screens/ownership/FirmDetailPanel.h"
 #include "screens/ownership/OwnershipUi.h"
 #include "screens/ownership/ScanPanels.h"
 #include "services/ownership/OwnershipService.h"
@@ -108,7 +107,7 @@ void OwnershipScreen::build_ui() {
     filer_results_->hide();
     connect(filer_results_, &QListWidget::itemClicked, this, [this](QListWidgetItem* it) {
         filer_results_->hide();
-        show_filer(it->data(Qt::UserRole).toString(), it->data(Qt::UserRole + 1).toString());
+        show_filer(it->data(Qt::UserRole).toString());
     });
     filer_debounce_ = new QTimer(this);
     filer_debounce_->setSingleShot(true);
@@ -128,11 +127,11 @@ void OwnershipScreen::build_ui() {
         if (filer_results_->count() > 0) {
             auto* it = filer_results_->item(0);
             filer_results_->hide();
-            show_filer(it->data(Qt::UserRole).toString(), it->data(Qt::UserRole + 1).toString());
+            show_filer(it->data(Qt::UserRole).toString());
         }
     });
 
-    // ── Body: the three scans, or the empty state, or a filer's book ────────
+    // ── Body: the scans, or the empty state ─────────────────────────────────
     stack_ = new QStackedWidget;
     root->addWidget(stack_, 1);
 
@@ -196,39 +195,19 @@ void OwnershipScreen::build_ui() {
     ev->addStretch(2);
     empty_page_ = empty;
     stack_->addWidget(empty_page_);   // 1
-
-    filer_page_ = new QWidget;
-    auto* fp = new QVBoxLayout(filer_page_);
-    fp->setContentsMargins(0, 0, 0, 0);
-    fp->setSpacing(6);
-    auto* fh = new QHBoxLayout;
-    back_btn_ = new QPushButton(QStringLiteral("←  Back to the scans"));
-    back_btn_->setCursor(Qt::PointingHandCursor);
-    back_btn_->setStyleSheet(QString("QPushButton{color:%1;background:%2;border:1px solid %3;"
-                                     "padding:4px 12px;text-align:left;font-size:12px;}"
-                                     "QPushButton:hover{color:%4;}")
-                                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
-                                      ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
-    connect(back_btn_, &QPushButton::clicked, this, [this]() {
-        stack_->setCurrentIndex(services::OwnershipService::instance().index_ready() ? 0 : 1);
-    });
-    fh->addWidget(back_btn_);
-    filer_title_ = new QLabel;
-    filer_title_->setStyleSheet(QString("color:%1;font-size:13px;font-weight:600;").arg(ui::colors::AMBER()));
-    fh->addWidget(filer_title_, 1);
-    fp->addLayout(fh);
-    filer_ = new FirmDetailPanel;
-    connect(filer_, &FirmDetailPanel::navigate_to_symbol, this, [this](const QString& ticker) {
-        emit navigate_to_screen(QStringLiteral("equity_research"), ticker);
-    });
-    fp->addWidget(filer_, 1);
-    stack_->addWidget(filer_page_);   // 2
 }
 
-void OwnershipScreen::show_filer(const QString& cik, const QString& name, const QString& quarter) {
-    filer_title_->setText(name);
-    filer_->set_firm(cik, quarter);
-    stack_->setCurrentIndex(2);
+void OwnershipScreen::show_filer(const QString& cik) {
+    // A searched fund opens beside the ranking, exactly as a clicked row does,
+    // rather than on a page of its own that hid the list behind a back button.
+    //
+    // The book is requested BEFORE the tab switch: switching can start the
+    // ranking scan (first visit), and the searched fund must not queue behind
+    // it for the interactive lane. If the fund is ranked, its row is
+    // highlighted when the ranking lands.
+    largest_funds_->show_fund(cik);
+    stack_->setCurrentIndex(0);
+    tabs_->setCurrentIndex(tabs_->indexOf(largest_funds_));   // loads the ranking if needed
 }
 
 void OwnershipScreen::load_tab(int index) {
@@ -249,10 +228,8 @@ void OwnershipScreen::refresh_index_ui(const QString& msg) {
     auto& svc = services::OwnershipService::instance();
     const bool ready = svc.index_ready();
     // The insider scan works with no index at all, so the empty page only
-    // takes over when there is nothing else to show — and never over a
-    // filer's book the reader has open.
-    if (stack_->currentIndex() != 2)
-        stack_->setCurrentIndex(ready ? 0 : 1);
+    // takes over when there is nothing else to show.
+    stack_->setCurrentIndex(ready ? 0 : 1);
     index_btn_->setText(ready ? QStringLiteral("MAP MORE SYMBOLS") : QStringLiteral("BUILD 13F INDEX"));
     index_btn_->setToolTip(ui::tooltip_wrap(
         ready ? QStringLiteral("Resolve more CUSIPs to tickers via OpenFIGI so more securities are "
