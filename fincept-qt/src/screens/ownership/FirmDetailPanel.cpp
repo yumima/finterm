@@ -11,6 +11,7 @@
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <iterator>
 
 namespace fincept::screens {
 
@@ -30,8 +31,54 @@ QString action_colour(const QString& action) {
     return ui::colors::TEXT_SECONDARY();
 }
 
+/// Role holding a cell's numeric sort key. Display text is formatted
+/// ("1.2B", "+4.1%", "added  +3M"), and sorting that as text puts 1.2B below
+/// 300M; every numeric column sorts on this instead.
+constexpr int kSortKey = Qt::UserRole + 10;
+/// Marks a cell whose value is not there (an unpriced position's return).
+/// Such cells sort LAST in both directions: only the book's largest names are
+/// priced, so in a broad book a "worst first" sort would otherwise open on
+/// thousands of placeholders before the first real return.
+constexpr int kMissingRole = Qt::UserRole + 11;
+
+class SortItem : public QTableWidgetItem {
+  public:
+    using QTableWidgetItem::QTableWidgetItem;
+    bool operator<(const QTableWidgetItem& other) const override {
+        const bool am = data(kMissingRole).toBool(), bm = other.data(kMissingRole).toBool();
+        if (am || bm) {
+            if (am == bm)
+                return false;
+            // Ascending sorts by <, so "last" means missing compares greater;
+            // descending reverses it, so there missing must compare smaller.
+            const bool ascending = tableWidget() && tableWidget()->horizontalHeader()->sortIndicatorOrder() ==
+                                                        Qt::AscendingOrder;
+            return ascending ? bm : am;
+        }
+        const QVariant a = data(kSortKey), b = other.data(kSortKey);
+        if (a.isValid() && b.isValid())
+            return a.toDouble() < b.toDouble();
+        return text().compare(other.text(), Qt::CaseInsensitive) < 0;
+    }
+};
+
+/// Sort key for MOVE: the size of the change to the stake, as a fraction.
+/// A new position is the largest possible increase and an exit the largest
+/// decrease (−100%); "first seen" (no earlier filing to compare) and "held"
+/// sit at zero.
+double move_key(const BookPosition& p, const QString& action) {
+    if (action == QLatin1String("new"))
+        return 1e9;
+    if (action == QLatin1String("exited"))
+        return -1.0;
+    if (action == QLatin1String("added") || action == QLatin1String("trimmed") ||
+        action == QLatin1String("held"))
+        return p.pct_change.value_or(0.0);
+    return 0.0;
+}
+
 QTableWidgetItem* cell(const QString& text, const QString& colour = {}) {
-    auto* it = new QTableWidgetItem(text);
+    auto* it = new SortItem(text);
     if (!colour.isEmpty())
         it->setForeground(QColor(colour));
     return it;
@@ -73,6 +120,30 @@ FirmDetailPanel::FirmDetailPanel(QWidget* parent) : QWidget(parent) {
     positions_->horizontalHeader()->setSectionResizeMode(QHeaderView::Interactive);
     positions_->horizontalHeader()->setSectionsMovable(true);
     positions_->horizontalHeader()->setStretchLastSection(true);
+    // Click a header to sort; click again to reverse. Opens on % of book,
+    // largest first — the order the filing itself ranks positions in.
+    positions_->horizontalHeader()->setSortIndicatorShown(true);
+    positions_->horizontalHeader()->setSortIndicator(2, Qt::DescendingOrder);
+    positions_->setSortingEnabled(true);
+    const char* header_tips[] = {
+        "The security as named in the filing.",
+        "Exchange ticker, where the CUSIP maps to one. Click a row to open the stock.",
+        "Share of the fund's disclosed US-listed equity book.",
+        "Shares held at quarter end.",
+        "Market value at quarter end, as filed.",
+        "What the fund did since its previous filing: new, added, trimmed, held (within 1%), "
+        "or exited — with the change in shares. Sorts by the percentage change in the stake: "
+        "new positions first, exits last.",
+        "The stock's price change from the quarter end the filing describes to today. Part of "
+        "this window predates the filing (13Fs are due 45 days after the quarter), so it is "
+        "not a return anyone could have copied.",
+        "The stock's price change over the last three months, to today.",
+        "The stock's price change over the last six months, to today — the stock's own "
+        "performance, not the fund's trading. Only the book's largest ~120 names are priced.",
+    };
+    for (int c = 0; c < positions_->columnCount() && c < int(std::size(header_tips)); ++c)
+        if (auto* h = positions_->horizontalHeaderItem(c))
+            h->setToolTip(QString::fromUtf8(header_tips[c]));
     // A holding is a security, and the question that follows "they own this"
     // is "who else does". One click, because a holding a reader is looking at
     // is already the thing they are asking about.
@@ -199,6 +270,10 @@ void FirmDetailPanel::render() {
     // Exits are appended after the held positions: a name the filer no longer
     // owns has no weight and no place in a weight-ordered list, but "what did
     // they get out of" is half the question this panel answers.
+    // Sorting off while filling: with it on, every setItem re-sorts and rows
+    // move under the loop that is writing them. Back on below, which re-applies
+    // whatever column the reader last sorted by.
+    positions_->setSortingEnabled(false);
     positions_->setRowCount(b.positions.size() + b.exits.size());
     positions_->setUpdatesEnabled(false);
     populating_ = true;
@@ -253,12 +328,30 @@ void FirmDetailPanel::render() {
         positions_->setItem(r, 6, ret(p.ret_since_quarter_end));
         positions_->setItem(r, 7, ret(p.ret_3m));
         positions_->setItem(r, 8, ret(p.ret_6m));
+        // Numeric sort keys; issuer and ticker sort as text.
+        auto key = [&](int c, double v) {
+            if (auto* it = positions_->item(r, c)) it->setData(kSortKey, v);
+        };
+        auto opt_key = [&](int c, const std::optional<double>& v) {
+            if (auto* it = positions_->item(r, c)) {
+                it->setData(kSortKey, v.value_or(0.0));
+                it->setData(kMissingRole, !v.has_value());
+            }
+        };
+        key(2, p.weight.value_or(0.0));
+        key(3, p.shares.value_or(0.0));
+        key(4, p.value.value_or(0.0));
+        key(5, move_key(p, action));
+        opt_key(6, p.ret_since_quarter_end);
+        opt_key(7, p.ret_3m);
+        opt_key(8, p.ret_6m);
         ++r;
     };
     for (const auto& p : b.positions)
         put(p, false);
     for (const auto& p : b.exits)
         put(p, true);
+    positions_->setSortingEnabled(true);
     populating_ = false;
     positions_->setUpdatesEnabled(true);
     positions_->resizeColumnsToContents();

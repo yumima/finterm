@@ -2,15 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-10-02)
+## Today's commits (2026-10-03)
 
 Latest first.
 
-- [`f412772f1`](https://github.com/yumima/finterm/commit/f412772f1) ownership: a fund's book opens beside the Largest Funds ranking, not over it
-- [`5f9c706eb`](https://github.com/yumima/finterm/commit/5f9c706eb) markets: every remaining quote row opens its chart
-- [`4b0d2cdb4`](https://github.com/yumima/finterm/commit/4b0d2cdb4) markets: click any quote for its chart — centred, with periods, styles and overlays
-- [`94235b2d7`](https://github.com/yumima/finterm/commit/94235b2d7) ownership: the largest funds and what they did, and ER opens beside the list
-- [`2d237b08d`](https://github.com/yumima/finterm/commit/2d237b08d) ER Earnings: three answers instead of a verdict — beat odds, move size, no direction call
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
