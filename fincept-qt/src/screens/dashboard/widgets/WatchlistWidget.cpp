@@ -1,5 +1,7 @@
 #include "screens/dashboard/widgets/WatchlistWidget.h"
 
+#include "screens/markets/MarketChartDialog.h"
+
 #include "ui/charts/InlineSparkline.h"
 #include "ui/theme/Theme.h"
 
@@ -55,6 +57,15 @@ WatchlistWidget::WatchlistWidget(QWidget* parent)
     table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%", "TREND"});
     table_->set_column_widths({100, 90, 80, 70, 90});
     vl->addWidget(table_);
+    // Left click opens the row's chart. Only a real watched symbol opens one:
+    // the table can carry a "Quotes unavailable" status row in column 0.
+    table_->viewport()->setCursor(Qt::PointingHandCursor);
+    connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
+        auto* it = table_->item(row, 0);
+        const QString sym = it ? it->text().trimmed() : QString();
+        if (symbols_.contains(sym))
+            screens::MarketChartDialog::show_for(sym, QString(), this);
+    });
 
     // Coalesce: each cycle delivers a quote + a sparkline callback per symbol
     // (2N). Collapse the burst into one in-place table update.

@@ -1,4 +1,5 @@
 #include "screens/dashboard/widgets/MarketQuoteStripWidget.h"
+#include "screens/markets/MarketChartDialog.h"
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
@@ -97,6 +98,11 @@ void MarketQuoteStripWidget::build_rows() {
         grid->addWidget(r.symbol, i, 0);
         grid->addWidget(r.price, i, 1);
         grid->addWidget(r.change, i, 2);
+        // Any cell of the row opens its chart.
+        for (QLabel* l : {r.symbol, r.price, r.change}) {
+            screens::MarketChartDialog::make_clickable(l);
+            screens::MarketChartDialog::set_target(l, sym);
+        }
         rows_.insert(sym, r);
     }
     vl->addLayout(grid);

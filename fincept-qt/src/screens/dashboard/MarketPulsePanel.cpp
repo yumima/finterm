@@ -1,5 +1,7 @@
 #include "screens/dashboard/MarketPulsePanel.h"
 
+#include "screens/markets/MarketChartDialog.h"
+
 #include "services/markets/MarketDataService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -536,6 +538,8 @@ void MarketPulsePanel::make_mover_rows(QVBoxLayout* layout, QVector<MoverRow>& r
         hl->addWidget(row.vol);
 
         style_mover_row(row);
+        // The row's symbol changes every tick; update_mover_row retargets it.
+        MarketChartDialog::make_clickable(row.container);
         layout->addWidget(row.container);
         rows.append(row);
     }
@@ -558,6 +562,7 @@ void MarketPulsePanel::update_mover_row(MoverRow& row, const services::QuoteData
     const bool positive = q.change_pct >= 0;
     const QString col = positive ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
     row.sym->setText(q.symbol);
+    MarketChartDialog::set_target(row.container, q.symbol, q.name);
     row.arrow->setText(positive ? QChar(0x25B2) : QChar(0x25BC));
     row.arrow->setStyleSheet(
         QString("color: %1; font-size: 8px; background: transparent;").arg(col));
@@ -954,6 +959,9 @@ void MarketPulsePanel::rebuild_snapshot_from_cache() {
         if (!snapshot_cache_.contains(sym) || !row.val)
             return;
         const auto& q = snapshot_cache_.value(sym);
+        // Idempotent: re-installing the same filter is a no-op in Qt.
+        MarketChartDialog::make_clickable(row.container);
+        MarketChartDialog::set_target(row.container, sym, row.name_lbl ? row.name_lbl->text() : QString());
         row.val->setText(fmt_price(q));
         row.chg->setText(fmt_chg(q));
         QString chg_color = q.change_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();

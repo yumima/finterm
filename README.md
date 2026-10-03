@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`4b0d2cdb4`](https://github.com/yumima/finterm/commit/4b0d2cdb4) markets: click any quote for its chart — centred, with periods, styles and overlays
 - [`94235b2d7`](https://github.com/yumima/finterm/commit/94235b2d7) ownership: the largest funds and what they did, and ER opens beside the list
 - [`2d237b08d`](https://github.com/yumima/finterm/commit/2d237b08d) ER Earnings: three answers instead of a verdict — beat odds, move size, no direction call
 

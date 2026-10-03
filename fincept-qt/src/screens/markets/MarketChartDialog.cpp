@@ -8,9 +8,11 @@
 #include "ui/theme/Theme.h"
 #include "ui/widgets/LoadingOverlay.h"
 
+#include <QApplication>
 #include <QDateTime>
 #include <QHBoxLayout>
 #include <QKeyEvent>
+#include <QMouseEvent>
 #include <QLabel>
 #include <QPushButton>
 #include <QScreen>
@@ -100,6 +102,47 @@ bool has_research_page(const QString& sym) {
 }
 
 } // namespace
+
+namespace {
+constexpr const char* kTargetProp = "chart_symbol";
+constexpr const char* kLabelProp = "chart_label";
+
+/// One shared filter for every clickable row in the app.
+class ChartClickFilter : public QObject {
+  public:
+    using QObject::QObject;
+    bool eventFilter(QObject* obj, QEvent* e) override {
+        if (e->type() != QEvent::MouseButtonRelease)
+            return false;
+        auto* me = static_cast<QMouseEvent*>(e);
+        auto* w = qobject_cast<QWidget*>(obj);
+        if (!w || me->button() != Qt::LeftButton || !w->rect().contains(me->position().toPoint()))
+            return false;
+        const QString sym = w->property(kTargetProp).toString();
+        if (sym.isEmpty())
+            return false;
+        MarketChartDialog::show_for(sym, w->property(kLabelProp).toString(), w);
+        return true;
+    }
+};
+
+ChartClickFilter* click_filter() {
+    static auto* f = new ChartClickFilter(qApp);
+    return f;
+}
+} // namespace
+
+void MarketChartDialog::make_clickable(QWidget* w) {
+    if (!w) return;
+    w->installEventFilter(click_filter());
+    w->setCursor(Qt::PointingHandCursor);
+}
+
+void MarketChartDialog::set_target(QWidget* w, const QString& symbol, const QString& label) {
+    if (!w) return;
+    w->setProperty(kTargetProp, symbol);
+    w->setProperty(kLabelProp, label);
+}
 
 void MarketChartDialog::show_for(const QString& symbol, const QString& label, QWidget* from) {
     if (symbol.trimmed().isEmpty())

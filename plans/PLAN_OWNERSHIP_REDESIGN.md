@@ -1,6 +1,6 @@
 # Ownership — Redesign
 
-**Status:** All three phases implemented — phases 1 and 2 on 2026-09-06, phase 3 on 2026-09-07 (watchlist ownership columns, insider-buy alerts on holdings and watchlists, the Ownership Calendar dashboard widget, and the twelve-month forward-return check — see `plans/research/form4_forward_returns_2026-09.md`)
+**Status:** All three phases implemented — phases 1 and 2 on 2026-09-06, phase 3 on 2026-09-07 (watchlist ownership columns, insider-buy alerts on holdings and watchlists, the Ownership Calendar dashboard widget, and the twelve-month forward-return check — see `plans/research/form4_forward_returns_2026-09.md`). LARGEST FUNDS tab added 2026-10-02 at the user's request — see the revision note in §4.3
 **Replaces:** `src/screens/ownership/*` (7,000 lines), the OWNERSHIP screen's BY FIRM / INSIDERS tabs, and the ER › Ownership tab's tile grid
 **Screen IDs:** `ownership` (market-wide), `equity_research` › Ownership (per-stock)
 **Date:** 2026-09-05
@@ -194,6 +194,8 @@ Ticker  Holders  Δ holders  New  Closed  Net shares (focused books)  Top-10 %  
 **13F MOVERS** is what the demand scatter was trying to say, as a table: holder count and its change (breadth), new/closed, and net shares among *focused* books (the only ones expressing a view). Explicit quarter and lag in the section header.
 
 **Filer search** (top right) is the only route to a firm's book. It opens the filer drill in place. The ranked "Largest books / Concentrated" list is deleted — nobody arrives with "show me Capital World Investors" as the question.
+
+> **Revised 2026-10-02:** the user asked for exactly that question — "the top 50 largest funds in the world, their portfolio, movement". A **LARGEST FUNDS** tab is back, but not as the deleted signal-dressed ranking: it is a register (top 50 by US-listed 13F book, each filer's own two newest filings compared — new / added / trimmed / exited, book change, estimated net flow, biggest buy and sell), labelled as context, with no score. A row opens the filer drill at the quarter the row describes; PULL NEWEST FROM EDGAR runs the existing `ingest_current` for the top 100 so the ranking is not a quarter behind. Stock clicks on this screen now open Equity Research *alongside* (`split_alongside`), as Portfolio does. Script action: `top_firms` in `sec_13f_bulk.py`.
 
 ### 4.4 Filer drill (reached from a holder row or the search box)
 

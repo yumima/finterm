@@ -1,5 +1,7 @@
 #include "screens/dashboard/widgets/TopMoversWidget.h"
 
+#include "screens/markets/MarketChartDialog.h"
+
 #include "ui/charts/InlineSparkline.h"
 #include "ui/theme/Theme.h"
 
@@ -53,6 +55,15 @@ void TopMoversWidget::build_body() {
     table_->set_headers({"SYMBOL", "PRICE", "CHG%", "TREND"});
     table_->set_column_widths({100, 90, 80, 90});
     content_layout()->addWidget(table_);
+    // Left click opens the row's chart. Rows are a reused pool, so read the
+    // symbol off the row at click time; a blank pool row has none.
+    table_->viewport()->setCursor(Qt::PointingHandCursor);
+    connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
+        auto* it = table_->item(row, 0);
+        const QString sym = it ? it->text().trimmed() : QString();
+        if (!sym.isEmpty())
+            screens::MarketChartDialog::show_for(sym, QString(), this);
+    });
 
     // Build the persistent row pool once: up to kMaxRows rows, each with a
     // reusable InlineSparkline. render_table() updates these in place rather

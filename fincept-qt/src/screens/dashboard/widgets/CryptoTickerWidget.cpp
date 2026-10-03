@@ -1,4 +1,5 @@
 #include "screens/dashboard/widgets/CryptoTickerWidget.h"
+#include "screens/markets/MarketChartDialog.h"
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
@@ -102,6 +103,19 @@ void CryptoTickerWidget::build_rows() {
         grid->addWidget(r.symbol, i, 0);
         grid->addWidget(r.price, i, 1);
         grid->addWidget(r.change, i, 2);
+        // The live feed is an exchange pair (BTC/USDT); the chart's history
+        // comes from Yahoo, which quotes the coin against the dollar. Say so
+        // in the title rather than pretend the chart is the exchange's book.
+        QString base = pair.section(QLatin1Char('/'), 0, 0).toUpper();
+        if (base == QLatin1String("XBT"))   // Kraken's ticker for bitcoin
+            base = QStringLiteral("BTC");
+        if (!base.isEmpty()) {
+            const QString yahoo = base + QStringLiteral("-USD");
+            for (QLabel* l : {r.symbol, r.price, r.change}) {
+                screens::MarketChartDialog::make_clickable(l);
+                screens::MarketChartDialog::set_target(l, yahoo, QStringLiteral("%1 (chart: %2)").arg(pair, yahoo));
+            }
+        }
         rows_.insert(pair, r);
     }
     vl->addLayout(grid);

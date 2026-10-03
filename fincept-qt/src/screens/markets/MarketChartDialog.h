@@ -36,6 +36,13 @@ class MarketChartDialog : public QDialog {
     /// shown in the title ("DOW JONES"); empty falls back to the symbol.
     static void show_for(const QString& symbol, const QString& label, QWidget* from);
 
+    /// Make a label-built row clickable: a left click on `w` (or on a child
+    /// that passes its clicks up, as a plain QLabel does) opens the chart for
+    /// the symbol `w` carries at that moment. Rows that change symbol in place
+    /// just call set_target() again — nothing is captured at install time.
+    static void make_clickable(QWidget* w);
+    static void set_target(QWidget* w, const QString& symbol, const QString& label = {});
+
   protected:
     void keyPressEvent(QKeyEvent* e) override;
 

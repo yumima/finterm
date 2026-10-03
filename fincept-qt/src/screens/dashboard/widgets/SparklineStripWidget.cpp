@@ -1,4 +1,5 @@
 #include "screens/dashboard/widgets/SparklineStripWidget.h"
+#include "screens/markets/MarketChartDialog.h"
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
@@ -137,6 +138,12 @@ void SparklineStripWidget::build_rows() {
         grid->addWidget(r.symbol, i, 0);
         grid->addWidget(r.spark, i, 1);
         grid->addWidget(r.last, i, 2);
+        // The sparkline is a preview; a click opens the full chart.
+        for (QWidget* w : {static_cast<QWidget*>(r.symbol), static_cast<QWidget*>(r.spark),
+                           static_cast<QWidget*>(r.last)}) {
+            screens::MarketChartDialog::make_clickable(w);
+            screens::MarketChartDialog::set_target(w, sym);
+        }
         rows_.insert(sym, r);
     }
     vl->addLayout(grid);
