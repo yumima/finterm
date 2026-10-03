@@ -157,10 +157,7 @@ void OwnershipScreen::build_ui() {
     connect(short_rank_, &ShortRankPanel::stock_activated, this, open);
     connect(movers_, &MoversPanel::stock_activated, this, open);
     connect(largest_funds_, &LargestFundsPanel::stock_activated, this, open);
-    connect(largest_funds_, &LargestFundsPanel::firm_activated, this,
-            [this](const QString& cik, const QString& name, const QString& quarter) {
-                show_filer(cik, name, quarter);
-            });
+
     stack_->addWidget(tabs_);   // 0
 
     auto* empty = new QWidget;

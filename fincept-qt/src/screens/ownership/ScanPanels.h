@@ -76,10 +76,14 @@ class MoversPanel : public QWidget {
     QLabel* foot_ = nullptr;
 };
 
+class FirmDetailPanel;
+
 /// The largest 13F filers — the world's biggest asset managers' US-listed
 /// stock books — ranked by size, each with what it did since its previous
-/// filing. A row opens the filer's whole book; a ticker in the biggest-buy or
-/// biggest-sell column opens that stock.
+/// filing. A row shows the filer's whole book in the pane to its right, so the
+/// ranking stays in view while the reader moves from fund to fund; a ticker in
+/// the biggest-buy or biggest-sell column, or a holding in the book, opens
+/// that stock.
 class LargestFundsPanel : public QWidget {
     Q_OBJECT
   public:
@@ -87,9 +91,6 @@ class LargestFundsPanel : public QWidget {
     void refresh();
   signals:
     void stock_activated(const QString& symbol);
-    /// `quarter` (ISO) is the filing the row describes, so the book that
-    /// opens matches the row's moves even when it is an EDGAR-pulled quarter.
-    void firm_activated(const QString& cik, const QString& name, const QString& quarter);
   private:
     void render();
     QLabel* title_note_ = nullptr;
@@ -97,6 +98,11 @@ class LargestFundsPanel : public QWidget {
     QLabel* pull_status_ = nullptr;
     QTableWidget* table_ = nullptr;
     QLabel* foot_ = nullptr;
+    // The book of the fund picked in the table. The book loads at the quarter
+    // the row describes, so it matches the row's moves even for an
+    // EDGAR-pulled quarter.
+    FirmDetailPanel* detail_ = nullptr;
+    QString selected_cik_;   // re-selected after a reload re-fills the table
 };
 
 } // namespace fincept::screens

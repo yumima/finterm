@@ -1,5 +1,7 @@
 #include "screens/ownership/ScanPanels.h"
 
+#include "screens/ownership/FirmDetailPanel.h"
+
 #include "screens/ownership/OwnershipUi.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/components/TooltipText.h"
@@ -11,6 +13,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QSpinBox>
+#include <QSplitter>
 #include <QTableWidget>
 #include <QVBoxLayout>
 
@@ -506,13 +509,32 @@ LargestFundsPanel::LargestFundsPanel(QWidget* parent) : QWidget(parent) {
         }
         if (auto* it = table_->item(r, kManager)) {
             const QString cik = it->data(Qt::UserRole).toString();
-            if (!cik.isEmpty())
-                emit firm_activated(cik, it->text(), it->data(Qt::UserRole + 1).toString());
+            if (!cik.isEmpty()) {
+                selected_cik_ = cik;
+                detail_->set_firm(cik, it->data(Qt::UserRole + 1).toString());
+            }
         }
     });
-    root->addWidget(table_, 1);
+
+    // Ranking on the left, the picked fund's book on the right. A plain
+    // splitter: the reader decides how much room each side gets.
+    auto* split = new QSplitter(Qt::Horizontal);
+    split->setChildrenCollapsible(false);
+    auto* left = new QWidget;
+    auto* lv = new QVBoxLayout(left);
+    lv->setContentsMargins(0, 0, 0, 0);
+    lv->setSpacing(6);
+    lv->addWidget(table_, 1);
     foot_ = note_label();
-    root->addWidget(foot_);
+    lv->addWidget(foot_);
+    split->addWidget(left);
+    detail_ = new FirmDetailPanel;
+    connect(detail_, &FirmDetailPanel::navigate_to_symbol, this,
+            [this](const QString& ticker) { emit stock_activated(ticker); });
+    split->addWidget(detail_);
+    split->setStretchFactor(0, 3);
+    split->setStretchFactor(1, 2);
+    root->addWidget(split, 1);
 
     auto& svc = services::OwnershipService::instance();
     connect(&svc, &services::OwnershipService::top_firms_updated, this, [this]() { render(); });
@@ -569,8 +591,8 @@ void LargestFundsPanel::render() {
         auto* name = cell(f.manager, ui::colors::TEXT_PRIMARY());
         name->setData(Qt::UserRole, f.cik);
         name->setData(Qt::UserRole + 1, f.quarter.toString(Qt::ISODate));
-        name->setToolTip(ui::tooltip_wrap(QStringLiteral("CIK %1 — click for the whole book and every "
-                                                         "position's move").arg(f.cik)));
+        name->setToolTip(ui::tooltip_wrap(QStringLiteral("CIK %1 — click to show the whole book and "
+                                                         "every position's move on the right").arg(f.cik)));
         table_->setItem(i, kManager, name);
         const bool partial = t.partial_quarters.contains(f.quarter.toString(Qt::ISODate));
         auto* q = cell(quarter_label(f.quarter) + (partial ? QStringLiteral(" ·EDGAR") : QString()),
@@ -619,6 +641,24 @@ void LargestFundsPanel::render() {
     table_->setUpdatesEnabled(true);
     table_->resizeColumnsToContents();
     table_->setColumnWidth(kManager, qMin(qMax(table_->columnWidth(kManager), 180), 280));
+    // Keep the open fund's row and its book in step across a reload. After an
+    // EDGAR pull the row can describe a newer quarter; set_firm follows it
+    // there (and is a no-op when nothing changed). A fund that has left the
+    // ranking takes its highlight and its book with it, rather than leaving
+    // another fund's row highlighted beside the old book.
+    if (!selected_cik_.isEmpty()) {
+        int found = -1;
+        for (int i = 0; i < t.firms.size(); ++i)
+            if (t.firms[i].cik == selected_cik_) { found = i; break; }
+        if (found >= 0) {
+            table_->selectRow(found);
+            detail_->set_firm(selected_cik_, t.firms[found].quarter.toString(Qt::ISODate));
+        } else {
+            table_->clearSelection();
+            selected_cik_.clear();
+            detail_->set_firm(QString());
+        }
+    }
 
     foot_->setText(QStringLiteral(
         "13F covers the US-listed long stock books of managers with $100M+ under SEC filing rules — "
