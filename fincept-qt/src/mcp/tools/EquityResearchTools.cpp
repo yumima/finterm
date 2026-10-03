@@ -12,6 +12,7 @@
 //   9. get_equity_news               — recent news articles for a symbol
 //  10. compute_equity_talipp         — run a talipp indicator (generic)
 //  11. list_equity_talipp_indicators — talipp indicator catalog (sync)
+//  12. get_equity_earnings_outlook   — the ER Earnings tab's three answers
 //
 // EquityResearchService signals do NOT carry a per-call request_id; most
 // carry the symbol (or indicator) so we filter by that. Concurrent calls
@@ -23,11 +24,15 @@
 #include "core/logging/Logger.h"
 #include "mcp/AsyncDispatch.h"
 #include "mcp/ToolSchemaBuilder.h"
+#include "services/equity/EarningsSignal.h"
 #include "services/equity/EquityResearchService.h"
+#include "services/query/QueryStore.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
+
+#include <memory>
 
 namespace fincept::mcp::tools {
 
@@ -287,6 +292,68 @@ static const TalippEntry kTalipp[] = {
     {"ttm","TTM Squeeze","ohlcv","specialized"}, {"uo","Ultimate Osc","ohlcv","specialized"},
     {"vtx","Vortex","ohlcv","specialized"}, {"zigzag","ZigZag","ohlcv","specialized"},
 };
+
+
+/// The ER Earnings tab's outlook as JSON. Absent values are omitted rather
+/// than zeroed — "no options data" and "options price no move" differ.
+QJsonObject earnings_outlook_to_json(const services::equity::EarningsAnalysis& a) {
+    using namespace services::equity;
+    const EarningsOutlook o = evaluate_outlook(a);
+    auto put = [](QJsonObject& obj, const char* k, const std::optional<double>& v) {
+        if (v.has_value()) obj[QLatin1String(k)] = *v;
+    };
+    QJsonObject out{{"symbol", a.symbol}, {"has_earnings", o.valid}, {"headline", o.headline},
+                    {"direction_call", "none — not predictable from pre-print data"}};
+    if (!o.valid) return out;
+    QJsonObject next;
+    if (a.next.timestamp) {
+        next["timestamp"] = static_cast<qint64>(*a.next.timestamp);
+        next["days_to_report"] = o.days_to_report;
+        next["date_confirmed"] = !a.next.is_estimated;
+    }
+    put(next, "consensus_eps", a.next.eps_avg);
+    put(next, "eps_low", a.next.eps_low);
+    put(next, "eps_high", a.next.eps_high);
+    put(next, "consensus_revenue", a.next.rev_avg);
+    out["next_report"] = next;
+
+    QJsonObject beat;
+    put(beat, "p_beat", o.p_beat);
+    beat["pooled_beat_rate"] = o.pooled_beat_rate;
+    beat["beats"] = o.beats;
+    beat["scored_quarters"] = o.scored_quarters;
+    put(beat, "median_surprise_pct", o.typical_surprise_pct);
+    beat["estimate_drift"] = o.drift == EstimateDrift::Rising    ? "rising"
+                             : o.drift == EstimateDrift::Falling ? "falling"
+                             : o.drift == EstimateDrift::Flat    ? "flat"
+                                                                 : "unknown";
+    beat["estimate_drift_detail"] = o.drift_detail;
+    put(beat, "dispersion_pct", o.dispersion_pct);
+    out["will_they_beat"] = beat;
+
+    QJsonObject size;
+    put(size, "expected_move_pct", o.expected_move_pct);
+    put(size, "trailing_avg_move_pct", o.trailing_move_pct);
+    put(size, "half_of_prints_within_pct", o.half_within_pct);
+    put(size, "four_in_five_within_pct", o.most_within_pct);
+    put(size, "one_in_ten_beyond_pct", o.tail_beyond_pct);
+    put(size, "options_implied_move_pct", o.implied_move_pct);
+    put(size, "implied_to_expected_ratio", o.implied_ratio);
+    out["how_big_a_move"] = size;
+
+    QJsonArray scen;
+    for (const auto& sc : o.scenarios) {
+        QJsonObject j{{"outcome", sc.label}, {"eps_vs_consensus", sc.range},
+                      {"probability", sc.probability}, {"move_multiple_of_expected", sc.move_multiple},
+                      {"pooled_rise_rate", sc.up_rate}};
+        if (o.expected_move_pct) j["typical_move_pct"] = sc.typical_move_pct;
+        scen.append(j);
+    }
+    out["if_eps_lands"] = scen;
+    out["priced_in"] = QJsonArray::fromStringList(o.priced_in);
+    out["caveats"] = QJsonArray::fromStringList(o.caveats);
+    return out;
+}
 
 } // namespace
 
@@ -779,6 +846,61 @@ std::vector<ToolDef> get_equity_research_tools() {
                 });
             }
             return ToolResult::ok_data(arr);
+        };
+        tools.push_back(std::move(t));
+    }
+
+    // ── 12. get_equity_earnings_outlook ─────────────────────────────────
+    {
+        ToolDef t;
+        t.name = "get_equity_earnings_outlook";
+        t.description =
+            "Pre-earnings outlook for a symbol \xe2\x80\x94 the same numbers as the ER Earnings tab. "
+            "Answers three questions: how likely the company is to beat EPS consensus (a "
+            "probability calibrated walk-forward on 9,665 prints), how big the next-session move "
+            "is likely to be (with the ranges that forecast actually achieves, and the "
+            "options-implied move when one can be separated), and what each outcome \xe2\x80\x94 miss, "
+            "slight beat, solid beat, big beat \xe2\x80\x94 has typically meant for the price. It "
+            "deliberately makes NO directional call: nothing available before a print predicts "
+            "the direction better than a coin flip. Do not present the scenarios as a forecast "
+            "of direction, and note they are EPS-only (revenue and guidance also move stocks).";
+        t.category = "equity-research";
+        // The daemon allows the earnings fan-out 25 s; leave room above it.
+        t.default_timeout_ms = 30000;
+        t.input_schema = ToolSchemaBuilder()
+            .string("symbol", "Ticker symbol").required().length(1, 32)
+            .build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
+                              std::shared_ptr<QPromise<ToolResult>> promise) {
+            const QString sym = args["symbol"].toString().toUpper();
+            auto* svc = &services::equity::EquityResearchService::instance();
+            AsyncDispatch::callback_to_promise(
+                svc, std::move(ctx), promise,
+                [svc, sym](auto resolve) {
+                    auto* holder = new QObject(svc);
+                    auto done = std::make_shared<bool>(false);
+                    // Same cached query the tab reads, so a tool call while the
+                    // tab is open costs nothing and the two can never disagree.
+                    svc->subscribe_earnings_analysis(
+                        holder, sym,
+                        [resolve, holder, done](const services::query::QueryStore::State& s) {
+                            if (*done) return;
+                            const bool have = s.data.isValid() && !s.data.isNull();
+                            if (!have && s.error.isEmpty()) return;   // still loading
+                            *done = true;
+                            if (!have)
+                                resolve(ToolResult::fail(s.error));
+                            else
+                                resolve(ToolResult::ok_data(earnings_outlook_to_json(
+                                    s.data.value<services::equity::EarningsAnalysis>())));
+                            // Off the callback's stack: unsubscribing inside the
+                            // store's own dispatch would mutate what it iterates.
+                            QMetaObject::invokeMethod(holder, [holder]() {
+                                services::query::QueryStore::instance().unsubscribe_all(holder);
+                                holder->deleteLater();
+                            }, Qt::QueuedConnection);
+                        });
+                });
         };
         tools.push_back(std::move(t));
     }

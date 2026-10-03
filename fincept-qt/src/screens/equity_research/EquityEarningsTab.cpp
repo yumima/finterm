@@ -15,7 +15,6 @@
 #include <QHeaderView>
 #include <QScrollArea>
 #include <QHash>
-#include <QSet>
 #include <QTimeZone>
 
 #include <algorithm>
@@ -24,8 +23,8 @@
 namespace fincept::screens {
 
 using services::equity::EarningsAnalysis;
-using services::equity::EarningsVerdict;
-using services::equity::SignalDirection;
+using services::equity::EarningsOutlook;
+using services::equity::EstimateDrift;
 
 // ── File-local presentation helpers ──────────────────────────────────────────
 // Panel / card chrome deliberately mirrors EquityAnalysisTab so the two tabs
@@ -197,21 +196,6 @@ QTableWidgetItem* cell(const QString& text, const QString& color = QString(),
     return it;
 }
 
-/// One colour per predictor, used by both its button and its line so a reader
-/// can tell which is which without a legend. All chosen away from the reaction
-/// line's cyan, which they are being compared against.
-QString predictor_color(services::equity::MovePredictor p) {
-    switch (p) {
-        case services::equity::MovePredictor::Scorecard: return QStringLiteral("#a855f7");
-        case services::equity::MovePredictor::EpsModel:  return QStringLiteral("#818cf8");
-        case services::equity::MovePredictor::Adaptive:  return QStringLiteral("#f59e0b");
-        case services::equity::MovePredictor::RunupFit:  return QStringLiteral("#ec4899");
-        case services::equity::MovePredictor::MeanMove:  return QStringLiteral("#94a3b8");
-        case services::equity::MovePredictor::NoMove:    return QStringLiteral("#64748b");
-    }
-    return QStringLiteral("#a855f7");
-}
-
 QString color_for(double v) {
     if (v > 0) return ui::colors::POSITIVE();
     if (v < 0) return ui::colors::NEGATIVE();
@@ -271,10 +255,6 @@ QString opt_count(const std::optional<double>& v) {
 
 EquityEarningsTab::EquityEarningsTab(QWidget* parent) : QWidget(parent) {
     build_ui();
-    // Opens on the scorecard and the do-nothing baseline together: the first
-    // question about any estimate is whether it beats doing nothing.
-    selected_predictors_.insert(static_cast<int>(services::equity::MovePredictor::Scorecard));
-    selected_predictors_.insert(static_cast<int>(services::equity::MovePredictor::NoMove));
     set_metric(selected_metric_);   // paints the initial toggle state
 }
 
@@ -391,16 +371,19 @@ void EquityEarningsTab::build_ui() {
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(10);
 
-    vl->addWidget(build_summary_row());
+    vl->addWidget(build_next_report());
+    vl->addWidget(build_answers_row());
     vl->addWidget(build_chart_panel());
     vl->addWidget(build_history_panel());
     vl->addWidget(build_current_panel());
     vl->addWidget(build_future_panel());
 
     auto* footer = new QLabel(
-        "Consensus, estimates and revisions from Yahoo Finance · reactions computed from daily closes. "
-        "The scorecard is a rules-based summary of the panels above, not investment advice — "
-        "an earnings print can break either way regardless of the setup.");
+        "Consensus, estimates and revisions from Yahoo Finance · moves are close-to-close over the "
+        "print, from daily bars. Probabilities and ranges are calibrated walk-forward on 9,665 "
+        "prints across 236 US names (2014–2026); scenarios are EPS-only — Yahoo carries no "
+        "revenue-consensus history or guidance, which move stocks as much as the EPS line. "
+        "Not investment advice.");
     footer->setWordWrap(true);
     footer->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
                               .arg(ui::colors::TEXT_TERTIARY()));
@@ -415,422 +398,189 @@ void EquityEarningsTab::build_ui() {
     ol->addWidget(scroll);
 }
 
-QWidget* EquityEarningsTab::build_summary_row() {
+QWidget* EquityEarningsTab::build_next_report() {
+    QVBoxLayout* body = nullptr;
+    auto* panel = make_panel("NEXT REPORT", ui::colors::AMBER(), &body);
+
+    auto* row = new QHBoxLayout;
+    row->setSpacing(24);
+
+    auto* when = new QVBoxLayout;
+    when->setSpacing(2);
+    next_date_ = new QLabel(ui::formatting::placeholder());
+    next_date_->setStyleSheet(QString("color:%1; font-size:20px; font-weight:700; "
+                                      "background:transparent; border:0;")
+                                  .arg(ui::colors::TEXT_PRIMARY()));
+    when->addWidget(next_date_);
+    next_countdown_ = new QLabel;
+    next_countdown_->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700; "
+                                           "background:transparent; border:0;")
+                                       .arg(ui::colors::AMBER()));
+    when->addWidget(next_countdown_);
+    next_confirmed_ = new QLabel;
+    next_confirmed_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                                       .arg(ui::colors::TEXT_TERTIARY()));
+    when->addWidget(next_confirmed_);
+    row->addLayout(when);
+
+    row->addWidget(make_stat("CONSENSUS EPS", next_eps_, ui::colors::TEXT_PRIMARY()));
+    row->addWidget(make_stat("EPS RANGE", next_eps_range_, ui::colors::TEXT_SECONDARY(), 13));
+    row->addWidget(make_stat("CONSENSUS REVENUE", next_rev_, ui::colors::TEXT_PRIMARY()));
+    row->addWidget(make_stat("EXPECTED YoY", next_yoy_, ui::colors::TEXT_PRIMARY(), 13));
+    row->addWidget(make_stat("ANALYSTS", next_analysts_, ui::colors::TEXT_PRIMARY(), 13));
+    row->addStretch();
+    body->addLayout(row);
+
+    headline_ = new QLabel;
+    headline_->setWordWrap(true);
+    headline_->setStyleSheet(QString("color:%1; font-size:14px; background:transparent; border:0; "
+                                     "border-top:1px solid %2; padding-top:8px;")
+                                 .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
+    body->addWidget(headline_);
+    return panel;
+}
+
+QWidget* EquityEarningsTab::build_answers_row() {
     auto* row = new QWidget(nullptr);
     row->setStyleSheet("background:transparent;");
     auto* hl = new QHBoxLayout(row);
     hl->setContentsMargins(0, 0, 0, 0);
     hl->setSpacing(10);
 
-    // ── Next report ──────────────────────────────────────────────────────────
-    QVBoxLayout* next_body = nullptr;
-    auto* next_panel = make_panel("NEXT REPORT", ui::colors::AMBER(), &next_body);
-    next_date_ = new QLabel(ui::formatting::placeholder());
-    next_date_->setStyleSheet(QString("color:%1; font-size:20px; font-weight:700; "
-                                      "background:transparent; border:0;")
-                                  .arg(ui::colors::TEXT_PRIMARY()));
-    next_body->addWidget(next_date_);
+    auto big_value = [](QLabel*& out, const QString& color) {
+        out = new QLabel(ui::formatting::placeholder());
+        out->setStyleSheet(QString("color:%1; font-size:30px; font-weight:700; font-family:monospace; "
+                                   "background:transparent; border:0;")
+                               .arg(color));
+        return out;
+    };
+    auto body_text = [](QLabel*& out, const QString& color) {
+        out = new QLabel;
+        out->setWordWrap(true);
+        out->setTextFormat(Qt::RichText);
+        out->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                               .arg(color));
+        return out;
+    };
 
-    next_countdown_ = new QLabel;
-    next_countdown_->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700; "
-                                           "background:transparent; border:0;")
-                                       .arg(ui::colors::AMBER()));
-    next_body->addWidget(next_countdown_);
+    // ── 1 · Will they beat? ──────────────────────────────────────────────────
+    QVBoxLayout* beat_body = nullptr;
+    auto* beat_panel = make_panel("1 · WILL THEY BEAT?", ui::colors::POSITIVE(), &beat_body);
+    beat_body->addWidget(big_value(beat_value_, ui::colors::TEXT_PRIMARY()));
+    beat_value_->setToolTip(QStringLiteral(
+        "Chance that reported EPS comes in above consensus.\n\n"
+        "This company's own record over its last eight scored quarters, blended with the "
+        "pooled rate (82% of prints beat) as if the pool were eight more quarters. Out of "
+        "sample that beats both the pooled rate alone and the raw record — a name with "
+        "eight beats in eight is not a 100% bet, and one with a single bad quarter is not "
+        "a coin flip.\n\n"
+        "Quarters whose 'surprise' is a GAAP figure set against an adjusted consensus are "
+        "left out of the record."));
+    beat_body->addWidget(body_text(beat_sub_, ui::colors::TEXT_SECONDARY()));
 
-    next_confirmed_ = new QLabel;
-    next_confirmed_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
-                                       .arg(ui::colors::TEXT_TERTIARY()));
-    next_body->addWidget(next_confirmed_);
+    beat_strip_ = new QWidget;
+    beat_strip_->setFixedHeight(14);
+    beat_body->addWidget(beat_strip_);
+    beat_body->addWidget(body_text(beat_strip_legend_, ui::colors::TEXT_SECONDARY()));
 
-    auto* next_grid = new QGridLayout;
-    next_grid->setSpacing(12);
-    next_grid->addWidget(make_stat("CONSENSUS EPS", next_eps_, ui::colors::TEXT_PRIMARY()), 0, 0);
-    next_grid->addWidget(make_stat("EPS RANGE", next_eps_range_, ui::colors::TEXT_SECONDARY(), 13), 0, 1);
-    next_grid->addWidget(make_stat("CONSENSUS REVENUE", next_rev_, ui::colors::TEXT_PRIMARY()), 1, 0);
-    next_grid->addWidget(make_stat("EXPECTED YoY", next_yoy_, ui::colors::TEXT_PRIMARY()), 1, 1);
-    next_body->addLayout(next_grid);
-    next_body->addStretch();
-    hl->addWidget(next_panel, 1);
+    beat_body->addWidget(make_caption("ESTIMATE MOMENTUM"));
+    beat_body->addWidget(body_text(beat_drift_, ui::colors::TEXT_SECONDARY()));
+    beat_drift_->setToolTip(QStringLiteral(
+        "Which way analysts have been moving this quarter's EPS number. Rising estimates make "
+        "the bar harder to clear and usually mean the company has been talking it up; falling "
+        "ones are the classic walk-down to a beatable number.\n\n"
+        "Shown as context and deliberately NOT in the probability: Yahoo publishes the "
+        "revision trend as a snapshot with no history, so there is no record to measure what "
+        "it adds. The ledger records it with every reading, so in time it can be."));
+    beat_body->addStretch();
+    hl->addWidget(beat_panel, 1);
 
-    // ── Verdict ──────────────────────────────────────────────────────────────
-    QVBoxLayout* verdict_body = nullptr;
-    auto* verdict_panel = make_panel("PRE-EARNINGS SIGNAL", "#a855f7", &verdict_body);
+    // ── 2 · How big a move? ──────────────────────────────────────────────────
+    QVBoxLayout* size_body = nullptr;
+    auto* size_panel = make_panel("2 · HOW BIG A MOVE?", "#22d3ee", &size_body);
+    size_body->addWidget(big_value(size_value_, ui::colors::TEXT_PRIMARY()));
+    size_value_->setToolTip(QStringLiteral(
+        "Forecast size of the session after the print, either direction — the part of an "
+        "earnings reaction that IS predictable.\n\n"
+        "Half this name's average move over its last twelve prints plus its realised daily "
+        "volatility over the last 20 sessions. The history says how big this company's prints "
+        "run; the volatility says whether the stock is calm or wild going into this one. Held "
+        "out by company across 181 names it cut the error ~7% against the history alone."));
+    size_body->addWidget(body_text(size_dollars_, ui::colors::TEXT_SECONDARY()));
+    size_body->addWidget(body_text(size_ranges_, ui::colors::TEXT_PRIMARY()));
+    size_body->addWidget(make_caption("OPTIONS"));
+    size_body->addWidget(body_text(size_implied_, ui::colors::TEXT_SECONDARY()));
+    size_body->addWidget(make_caption("RECENT PRINTS"));
+    size_body->addWidget(body_text(size_history_, ui::colors::TEXT_SECONDARY()));
+    size_body->addStretch();
+    hl->addWidget(size_panel, 1);
 
-    auto* badge_row = new QHBoxLayout;
-    badge_row->setSpacing(10);
-    verdict_badge_ = new QLabel("—");
-    verdict_badge_->setAlignment(Qt::AlignCenter);
-    verdict_badge_->setMinimumWidth(96);
-    verdict_badge_->setStyleSheet(QString("color:%1; background:%2; border:0; border-radius:3px; "
-                                          "padding:6px 14px; font-size:20px; font-weight:700; letter-spacing:2px;")
-                                      .arg(ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY()));
-    badge_row->addWidget(verdict_badge_);
+    // ── 3 · Which way? ───────────────────────────────────────────────────────
+    QVBoxLayout* dir_body = nullptr;
+    auto* dir_panel = make_panel("3 · WHICH WAY?", "#a855f7", &dir_body);
+    auto* no_call = new QLabel(QStringLiteral("NO RELIABLE CALL"));
+    no_call->setStyleSheet(QString("color:%1; font-size:20px; font-weight:700; letter-spacing:1px; "
+                                   "background:transparent; border:0;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
+    no_call->setToolTip(QStringLiteral(
+        "Nothing available before a print predicts which way the stock goes — not the beat "
+        "record, not how it traded on past prints, not the run-up, not this tab's own former "
+        "BUY / HOLD / SELL scorecard, which called the direction right 50.7% of the time over "
+        "9,665 prints: slightly worse than 'always up' (50.9%). No serious earnings product makes a "
+        "directional call either.\n\n"
+        "What is known is what each outcome has meant, and that is what the table shows."));
+    dir_body->addWidget(no_call);
+    auto* dir_sub = new QLabel(QStringLiteral(
+        "What each outcome has meant for the price — the reaction depends on HOW MUCH they beat, "
+        "not whether."));
+    dir_sub->setWordWrap(true);
+    dir_sub->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
+    dir_body->addWidget(dir_sub);
 
-    auto* score_box = new QVBoxLayout;
-    score_box->setSpacing(2);
-    verdict_score_ = new QLabel(ui::formatting::placeholder());
-    verdict_score_->setStyleSheet(QString("color:%1; font-size:16px; font-weight:700; font-family:monospace; "
-                                          "background:transparent; border:0;")
-                                      .arg(ui::colors::TEXT_PRIMARY()));
-    score_box->addWidget(verdict_score_);
-    verdict_confidence_ = new QLabel;
-    verdict_confidence_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
-                                           .arg(ui::colors::TEXT_SECONDARY()));
-    score_box->addWidget(verdict_confidence_);
-    badge_row->addLayout(score_box);
-    badge_row->addStretch();
+    scenario_table_ = new QTableWidget;
+    style_table(scenario_table_, {"IF EPS IS…", "CHANCE", "TYPICAL MOVE", "ROSE ON"});
+    scenario_table_->setToolTip(QStringLiteral(
+        "CHANCE — how likely each outcome is for this company (its record, shrunk toward the "
+        "pooled mix).\n\n"
+        "TYPICAL MOVE — the pooled average next-session move for that outcome, expressed as a "
+        "share of this name's own expected move and scaled back to it. Per-company versions "
+        "don't persist from one year to the next; the pooled ones held steady across both "
+        "halves of the sample.\n\n"
+        "ROSE ON — share of such prints, pooled, after which the stock closed higher.\n\n"
+        "EPS-only: revenue and guidance surprises move stocks as much and aren't in Yahoo's "
+        "history, which is why even a big beat rises only ~60% of the time."));
+    dir_body->addWidget(scenario_table_);
+    dir_body->addWidget(body_text(scenario_note_, ui::colors::TEXT_TERTIARY()));
+    dir_body->addWidget(make_caption("ALREADY PRICED IN"));
+    dir_body->addWidget(body_text(priced_in_, ui::colors::TEXT_SECONDARY()));
 
-    verdict_axes_ = new QLabel;
-    verdict_axes_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    verdict_axes_->setToolTip(QStringLiteral(
-        "SETUP is how the business and the street's view of it read: track record, "
-        "revisions, guidance drift, breadth, expected growth.\n\n"
-        "BAR is how much of that is already in the price: the expectations gap, "
-        "positioning, and where the price sits against analyst targets.\n\n"
-        "They are the same composite split in two. A high setup against a deeply "
-        "negative bar is the classic beat-and-fall configuration — good company, "
-        "nothing left to surprise anyone with."));
-    badge_row->addWidget(verdict_axes_);
-    verdict_body->addLayout(badge_row);
-
-    verdict_headline_ = new QLabel;
-    verdict_headline_->setWordWrap(true);
-    verdict_headline_->setStyleSheet(QString("color:%1; font-size:13px; background:transparent; border:0;")
-                                         .arg(ui::colors::TEXT_PRIMARY()));
-    verdict_body->addWidget(verdict_headline_);
-
-    verdict_horizon_ = new QLabel;
-    verdict_horizon_->setWordWrap(true);
-    verdict_horizon_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
-                                        .arg(ui::colors::TEXT_TERTIARY()));
-    verdict_body->addWidget(verdict_horizon_);
-
-    // Caveats live with the verdict, not down in the breakdown: they are the
-    // reasons not to trust the badge sitting immediately above them, and that
-    // is exactly where they need to be read.
     caveats_label_ = new QLabel;
     caveats_label_->setWordWrap(true);
     caveats_label_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0; "
                                           "border-top:1px solid %2; padding-top:8px;")
                                       .arg(ui::colors::WARNING(), ui::colors::BORDER_DIM()));
-    verdict_body->addWidget(caveats_label_);
-    verdict_body->addStretch();
-    hl->addWidget(verdict_panel, 2);
-
-    // ── Setup / expected move ────────────────────────────────────────────────
-    QVBoxLayout* setup_body = nullptr;
-    auto* setup_panel = make_panel("THE SETUP", "#22d3ee", &setup_body);
-    auto* setup_grid = new QGridLayout;
-    setup_grid->setSpacing(12);
-    setup_grid->addWidget(make_stat("PREDICTED MOVE", setup_predicted_, "#22d3ee"), 0, 0);
-    setup_grid->addWidget(make_stat("EXPECTED MOVE", setup_move_, ui::colors::TEXT_PRIMARY(), 13), 0, 1);
-    setup_grid->addWidget(make_stat("EST SPREAD", setup_spread_, ui::colors::TEXT_PRIMARY(), 13), 3, 1);
-    setup_grid->addWidget(make_stat("AVG REACTION", setup_reaction_, ui::colors::TEXT_PRIMARY(), 13), 1, 0);
-    setup_grid->addWidget(make_stat("RUN-UP 5D", setup_runup_, ui::colors::TEXT_PRIMARY(), 13), 1, 1);
-    setup_grid->addWidget(make_stat("RUN-UP 20D", setup_runup20_, ui::colors::TEXT_PRIMARY(), 13), 2, 0);
-    setup_grid->addWidget(make_stat("MARKET-IMPLIED", setup_implied_, ui::colors::TEXT_PRIMARY(), 13), 2, 1);
-    setup_grid->addWidget(make_stat("BEAT RATE", setup_beat_, ui::colors::TEXT_PRIMARY(), 13), 3, 0);
-    setup_predicted_->setToolTip(QStringLiteral(
-        "The engine's own estimate for the next-session move, signed. Computed, not asked of "
-        "a model: the composite's lean scaled by how far this name typically travels on a "
-        "print, scaled again by how much of the scorecard actually had data behind it.\n\n"
-        "It has no established accuracy — that is precisely why every reading is written down "
-        "before the print and held against the outcome in SIGNAL vs OUTCOME below. Treat the "
-        "TYPICAL MOVE beside it as the range that matters far more than the point."));
-    setup_implied_->setToolTip(implied_tooltip());
-    setup_move_->setToolTip(QStringLiteral(
-        "Forecast of how big this print's session will be, regardless of direction — the one "
-        "genuinely forecastable part of an earnings reaction.\n\n"
-        "Half the name's own earnings-day average plus its realised volatility over the last "
-        "20 sessions. The earnings history alone is a dozen observations months apart and says "
-        "nothing about whether the stock has been calm or wild going into THIS print; the "
-        "volatility does. Fitted across 181 names and 1463 prints and held out by company: it "
-        "cuts the error about 7% against the earnings average alone, and correlates +0.53 with "
-        "the realised size against +0.43.\n\n"
-        "Falls back to the plain earnings-day average when no volatility is available."));
-    setup_spread_->setToolTip(QStringLiteral(
-        "How far apart analysts are on the coming quarter's EPS: (high − low) as a share of "
-        "the mean. A risk gauge, not a direction — a wide spread means a bigger surprise "
-        "whichever way it lands, which is why it never moves the score."));
-    setup_runup_->setToolTip(QStringLiteral("Price change over the last 5 sessions."));
-    setup_runup20_->setToolTip(QStringLiteral(
-        "Price change over the last 20 sessions — the slower version of the same question: "
-        "how much of the expected news is already in the price."));
-    setup_body->addLayout(setup_grid);
-    setup_body->addStretch();
-    hl->addWidget(setup_panel, 1);
+    dir_body->addWidget(caveats_label_);
+    dir_body->addStretch();
+    hl->addWidget(dir_panel, 1);
 
     return row;
 }
 
-QWidget* EquityEarningsTab::build_scorecard() {
-    QVBoxLayout* body = nullptr;
-    auto* panel = make_panel("SIGNAL BREAKDOWN", "#a855f7", &body);
-
-    score_rows_layout_ = new QVBoxLayout;
-    score_rows_layout_->setContentsMargins(0, 0, 0, 0);
-    score_rows_layout_->setSpacing(6);
-    body->addLayout(score_rows_layout_);
-    // Slack goes to the bottom rather than between the legs. Every other panel
-    // here already ends this way; this one didn't, which is why it had space to
-    // misplace in the first place.
-    body->addStretch();
-    return panel;
-}
-
-// ── The signal's estimates, drawn on the reaction chart ──────────────────────
-// Not a panel of its own. The realised move a prediction is judged against is
-// already that chart's line, so a separate chart had to draw the same series
-// twice in order to compare it with itself.
-void EquityEarningsTab::fill_predictions(const EarningsAnalysis& a, const EarningsVerdict& v) {
-    predictor_runs_ = services::equity::compare_predictors(a, v);
-
-    // A reading genuinely written down before a print replaces the scorecard's
-    // reconstruction for that quarter. Only the scorecard has such records —
-    // the others are fits over history and have no live counterpart.
-    int recorded_pairs = 0;
-    // Held in a named vector: the map below stores pointers into it.
-    const auto records = EarningsSignalRepository::instance().for_symbol(a.symbol);
-    for (auto& run : predictor_runs_) {
-        if (run.predictor != services::equity::MovePredictor::Scorecard)
-            continue;
-        // The reading to plot for a print is its LAST one taken before it —
-        // the least horizon-muted, and the one a reader would call "what the
-        // signal said going in".
-        //
-        // That has to be decided by `observed_on`, not by iteration order.
-        // for_symbol() sorts observed_on DESC only WITHIN one report_ts, and
-        // since the match widened to ±5 days two placeholder dates can land on
-        // the same print — at which point "first to arrive" merely means
-        // "highest report_ts". A reading taken 100 days out under a later
-        // placeholder would win over one taken 5 days out under an earlier
-        // one, which is the exact failure the window was widened to fix.
-        QHash<int, const EarningsSignalRecord*> best_for_point;
-        for (const auto& r : records) {
-            if (!r.predicted_move_pct) continue;
-            // Same ±5-day rule the ledger settles by. This used to demand an
-            // exact date match, so a reading whose placeholder date had since
-            // firmed up settled but never drew — the line stayed dotted and
-            // recorded_pairs_ under-reported the evidence that exists.
-            const int i = nearest_within_window(
-                run.points, r.report_ts,
-                [](const services::equity::QuarterPrediction&) { return true; });
-            if (i < 0) continue;
-            // The same hindsight screen the ledger applies. The chart marks
-            // these points "recorded before the print" in so many words, so a
-            // reading taken on the print day itself — after a before-open
-            // company had already reported — must not draw as one.
-            const QDate observed = QDate::fromString(r.observed_on, Qt::ISODate);
-            if (observed.isValid() &&
-                // EVENT-STAMP: earnings announcement — ET.
-                observed >= core::bartime::market_date_et(run.points[i].timestamp))
-                continue;
-            // ISO yyyy-MM-dd, so lexicographic order is chronological order.
-            const auto seen = best_for_point.constFind(i);
-            if (seen == best_for_point.constEnd() || r.observed_on > seen.value()->observed_on)
-                best_for_point.insert(i, &r);
-        }
-        for (auto it = best_for_point.constBegin(); it != best_for_point.constEnd(); ++it) {
-            auto& q = run.points[it.key()];
-            q.predicted_move_pct = it.value()->predicted_move_pct;
-            q.reconstructed = false;
-            ++recorded_pairs;
-        }
-    }
-    recorded_pairs_ = recorded_pairs;
-
-    // Each button carries the record its line earned, so the choice is made on
-    // evidence rather than on which name sounds cleverest.
-    for (auto& run : predictor_runs_) {
-        auto* btn = predictor_buttons_.value(run.predictor, nullptr);
-        if (!btn) continue;
-        btn->setText(run.graded > 0
-                         ? QString("%1  %2pp").arg(run.label,
-                                                   QString::number(run.mean_abs_error, 'f', 1))
-                         : run.label);
-        btn->setToolTip(run.graded > 0
-                            ? QString("%1\n\nMean absolute error %2 pp over %3 quarters, "
-                                      "walk-forward — each quarter answered using only the "
-                                      "quarters before it.%4")
-                                  .arg(run.explanation)
-                                  .arg(QString::number(run.mean_abs_error, 'f', 2))
-                                  .arg(run.graded)
-                                  .arg(run.direction_calls > 0
-                                           ? QString(" Direction right on %1 of %2 calls.")
-                                                 .arg(run.direction_hits).arg(run.direction_calls)
-                                           : QString())
-                            : run.explanation);
-    }
-    apply_selected_predictor();
-}
-
-void EquityEarningsTab::toggle_predictor(services::equity::MovePredictor p) {
-    const int key = static_cast<int>(p);
-    if (selected_predictors_.contains(key))
-        selected_predictors_.remove(key);
-    else
-        selected_predictors_.insert(key);
-    apply_selected_predictor();
-}
-
-void EquityEarningsTab::apply_selected_predictor() {
-    for (auto it = predictor_buttons_.constBegin(); it != predictor_buttons_.constEnd(); ++it)
-        it.value()->setChecked(selected_predictors_.contains(static_cast<int>(it.key())));
-    if (!reaction_chart_)
-        return;
-
-    QVector<EarningsReactionChart::PredictionSeries> series;
-    QStringList shown;
-    for (const auto& run : predictor_runs_) {
-        if (!selected_predictors_.contains(static_cast<int>(run.predictor)))
-            continue;
-        EarningsReactionChart::PredictionSeries s;
-        s.label = run.label;
-        s.color = predictor_color(run.predictor);
-        s.points = run.points;
-        // The upcoming print, on the projected column. Its timestamp comes from
-        // the history row rather than next.timestamp so it matches the column
-        // the chart actually drew.
-        if (run.next_move_pct) {
-            for (const auto& p : last_history_) {
-                if (!p.is_estimate) continue;
-                services::equity::QuarterPrediction q;
-                q.timestamp = p.timestamp;
-                q.predicted_move_pct = run.next_move_pct;
-                q.bound_pct = run.next_bound_pct;
-                q.reconstructed = false;
-                s.points.append(q);
-                break;
-            }
-        }
-        series.append(s);
-        if (run.graded > 0)
-            shown << QString("%1 %2pp").arg(run.label.toLower(),
-                                            QString::number(run.mean_abs_error, 'f', 1));
-    }
-    reaction_chart_->set_prediction_series(series);
-
-    QStringList all;
-    for (const auto& run : predictor_runs_)
-        if (run.graded > 0)
-            all << QString("%1 %2pp").arg(run.label.toLower(),
-                                          QString::number(run.mean_abs_error, 'f', 1));
-
-    // State the conclusion rather than leaving it to be inferred from a row of
-    // numbers. Across twelve large caps and fifteen quarters each, nothing
-    // here beat assuming no move — so when that is also true for the name on
-    // screen, the panel says it outright instead of drawing a confident line
-    // and letting the reader supply the optimism.
-    // Each predictor is compared against what NO MOVE scored over EXACTLY the
-    // quarters it answered (nomove_mae_same_quarters), not against NO MOVE's
-    // own all-quarters mean. Predictors that abstain until they have history
-    // answer a calmer subset, and comparing means over different quarter sets
-    // let one "beat" the baseline without being better on any shared quarter.
-    double best_mae = -1, nomove_mae = -1;
-    QString best_label;
-    for (const auto& run : predictor_runs_) {
-        if (run.graded == 0) continue;
-        if (run.predictor == services::equity::MovePredictor::NoMove)
-            continue;
-        if (best_mae < 0 || run.mean_abs_error < best_mae) {
-            best_mae = run.mean_abs_error;
-            nomove_mae = run.nomove_mae_same_quarters;
-            best_label = run.label;
-        }
-    }
-
-    QString text;
-    if (!all.isEmpty()) {
-        text = QString("Mean miss, walk-forward — every quarter answered using only the quarters "
-                       "before it, so none of these is an in-sample fit: %1.\n\n")
-                   .arg(all.join(QStringLiteral(" · ")));
-    }
-    if (best_mae >= 0 && nomove_mae >= 0) {
-        text += best_mae < nomove_mae
-                    ? QString("%1 beats assuming no move on this name, by %2 pp over the same "
-                              "quarters both answered. That is the only bar worth clearing, and "
-                              "it clears it on a few quarters — not enough to be sure of. ")
-                          .arg(best_label)
-                          .arg(QString::number(nomove_mae - best_mae, 'f', 2))
-                    : QString("Nothing here beats assuming no move — the best of them, %1, misses "
-                              "by %2 pp more. On this name the size and direction of the reaction "
-                              "are not predictable from what is available before the print, and "
-                              "the lines below are worth reading as evidence of that rather than "
-                              "as a forecast. ")
-                          .arg(best_label)
-                          .arg(QString::number(best_mae - nomove_mae, 'f', 2));
-    }
-    if (series.isEmpty()) {
-        text += QStringLiteral("No predictor selected — tick one above to draw it against the "
-                               "realised move.");
-    } else {
-        if (selected_predictors_.contains(static_cast<int>(services::equity::MovePredictor::Scorecard))) {
-            text += QStringLiteral(
-                "SCORECARD's past quarters are rebuilt from the backward legs alone, so they "
-                "predict smaller moves than a live reading will — and sit below the confidence "
-                "bar the live badge insists on before it will show a number, an exemption made "
-                "so the record can be graded at all; the line turns solid between prints whose "
-                "final pre-print estimate was genuinely recorded beforehand");
-            text += recorded_pairs_ > 0 ? QString(" (%1 so far). ").arg(recorded_pairs_)
-                                        : QStringLiteral(" (none yet). ");
-        }
-        text += series.size() == 1
-                    ? QStringLiteral("The shaded band is the room that predictor had at each "
-                                     "print; it is hidden when several lines are shown. ")
-                    : QStringLiteral("Bands are hidden while several lines are up, so the "
-                                     "comparison stays readable. ");
-        text += QStringLiteral(
-            "No honest prediction tracks the spikes: matching them would mean knowing the "
-            "surprise in advance.");
-    }
-    prediction_note_->setText(text);
-}
-
-QWidget* EquityEarningsTab::build_history_panel() {
-    auto* row = new QWidget(nullptr);
-    row->setStyleSheet("background:transparent;");
-    auto* hl = new QHBoxLayout(row);
-    hl->setContentsMargins(0, 0, 0, 0);
-    hl->setSpacing(10);
-
-    QVBoxLayout* body = nullptr;
-    auto* panel = make_panel("PAST · REPORTED QUARTERS", ui::colors::POSITIVE(), &body);
-
-    history_summary_ = new QLabel;
-    history_summary_->setWordWrap(true);
-    history_summary_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
-                                        .arg(ui::colors::TEXT_SECONDARY()));
-    body->addWidget(history_summary_);
-
-    history_table_ = new QTableWidget;
-    // Short headers: eight columns share this pane with the scorecard, and an
-    // elided "1D REACTIO…" reads worse than a terse but complete label.
-    style_table(history_table_,
-                {"REPORTED", "EPS EST", "EPS ACT", "SURPRISE", "QoQ", "YoY", "1D MOVE", "5D RUN-UP"});
-    body->addWidget(history_table_);
-    hl->addWidget(panel, 4);
-
-    // The scorecard sits beside the table rather than above the chart. The
-    // chart is the only thing here that gets better with width — twelve
-    // quarter columns plus a projected one, three series and a shaded band all
-    // share one axis — while the breakdown is six labelled rows that were
-    // stretching their gauges across a full screen for nothing.
-    hl->addWidget(build_scorecard(), 5);
-    return row;
-}
-
-/// The reaction chart, full width. See build_history_panel for why.
+/// The reaction chart, full width — the only panel here that reads better
+/// the wider it gets.
 QWidget* EquityEarningsTab::build_chart_panel() {
     QVBoxLayout* chart_body = nullptr;
-    auto* chart_panel = make_panel("PAST · PREDICTED vs ACTUAL NEXT-DAY MOVE", ui::colors::POSITIVE(), &chart_body);
+    auto* chart_panel = make_panel("PAST PRINTS · WHAT LANDED AND HOW IT TRADED", ui::colors::POSITIVE(),
+                                   &chart_body);
 
     auto* switch_row = new QHBoxLayout;
     switch_row->setSpacing(4);
     switch_row->setContentsMargins(0, 0, 0, 0);
     switch_row->addWidget(make_caption("BARS:"));
-    for (const auto m : {services::equity::ReactionMetric::QoQ,
+    for (const auto m : {services::equity::ReactionMetric::Surprise,
                          services::equity::ReactionMetric::YoY,
-                         services::equity::ReactionMetric::Surprise}) {
+                         services::equity::ReactionMetric::QoQ}) {
         auto* btn = new QPushButton;
         btn->setCheckable(true);
         btn->setCursor(Qt::PointingHandCursor);
@@ -848,53 +598,55 @@ QWidget* EquityEarningsTab::build_chart_panel() {
     switch_row->addStretch();
     chart_body->addLayout(switch_row);
 
-    // Second switch: which estimate the dotted line draws. Same shape as the
-    // BARS row above it, and for the same reason — the number that matters
-    // when choosing lives on the button.
-    auto* pred_row = new QHBoxLayout;
-    pred_row->setSpacing(4);
-    pred_row->setContentsMargins(0, 0, 0, 0);
-    pred_row->addWidget(make_caption("PREDICTED:"));
-    for (const auto pr : {services::equity::MovePredictor::Scorecard,
-                          services::equity::MovePredictor::EpsModel,
-                          services::equity::MovePredictor::Adaptive,
-                          services::equity::MovePredictor::RunupFit,
-                          services::equity::MovePredictor::MeanMove,
-                          services::equity::MovePredictor::NoMove}) {
-        auto* btn = new QPushButton;
-        btn->setCheckable(true);
-        btn->setCursor(Qt::PointingHandCursor);
-        btn->setStyleSheet(
-            QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
-                    "  font-size:12px; font-weight:700; border-radius:2px; padding:2px 8px; }"
-                    "QPushButton:checked { background:%3; color:%4; border-color:%3; }"
-                    "QPushButton:hover:!checked { color:%5; border-color:%5; }")
-                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
-                     predictor_color(pr), ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
-        connect(btn, &QPushButton::clicked, this, [this, pr]() { toggle_predictor(pr); });
-        predictor_buttons_.insert(pr, btn);
-        pred_row->addWidget(btn);
-    }
-    pred_row->addStretch();
-    chart_body->addLayout(pred_row);
-
     reaction_chart_ = new EarningsReactionChart;
     chart_body->addWidget(reaction_chart_, 1);
 
-    correlation_note_ = new QLabel;
-    correlation_note_->setWordWrap(true);
-    correlation_note_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
-                                         .arg(ui::colors::TEXT_TERTIARY()));
-    chart_body->addWidget(correlation_note_);
-
-    prediction_note_ = new QLabel;
-    prediction_note_->setWordWrap(true);
-    prediction_note_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; "
-                                            "border:0; border-top:1px solid %2; padding-top:6px;")
-                                        .arg(ui::colors::TEXT_TERTIARY(), ui::colors::BORDER_DIM()));
-    chart_body->addWidget(prediction_note_);
-
+    chart_note_ = new QLabel;
+    chart_note_->setWordWrap(true);
+    chart_note_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                                   .arg(ui::colors::TEXT_TERTIARY()));
+    chart_body->addWidget(chart_note_);
     return chart_panel;
+}
+
+QWidget* EquityEarningsTab::build_history_panel() {
+    auto* row = new QWidget(nullptr);
+    row->setStyleSheet("background:transparent;");
+    auto* hl = new QHBoxLayout(row);
+    hl->setContentsMargins(0, 0, 0, 0);
+    hl->setSpacing(10);
+
+    QVBoxLayout* body = nullptr;
+    auto* panel = make_panel("PAST · REPORTED QUARTERS", ui::colors::POSITIVE(), &body);
+    history_summary_ = new QLabel;
+    history_summary_->setWordWrap(true);
+    history_summary_->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                                        .arg(ui::colors::TEXT_SECONDARY()));
+    body->addWidget(history_summary_);
+    history_table_ = new QTableWidget;
+    style_table(history_table_,
+                {"REPORTED", "EPS EST", "EPS ACT", "SURPRISE", "OUTCOME", "YoY", "1D MOVE", "EXPECTED"});
+    body->addWidget(history_table_);
+    hl->addWidget(panel, 3);
+
+    // ── Forecast record: how the two forecasts have done on THIS name ────────
+    QVBoxLayout* rec_body = nullptr;
+    auto* rec_panel = make_panel("FORECAST RECORD · THIS NAME", "#a855f7", &rec_body);
+    auto add_block = [&](const QString& caption, QLabel*& out) {
+        rec_body->addWidget(make_caption(caption));
+        out = new QLabel;
+        out->setWordWrap(true);
+        out->setTextFormat(Qt::RichText);
+        out->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
+        rec_body->addWidget(out);
+    };
+    add_block(QStringLiteral("SIZE FORECAST"), record_size_);
+    add_block(QStringLiteral("BEAT PROBABILITY"), record_beat_);
+    add_block(QStringLiteral("RECORDED BEFORE THE PRINT"), record_ledger_);
+    rec_body->addStretch();
+    hl->addWidget(rec_panel, 2);
+    return row;
 }
 
 void EquityEarningsTab::set_metric(services::equity::ReactionMetric m) {
@@ -906,49 +658,23 @@ void EquityEarningsTab::set_metric(services::equity::ReactionMetric m) {
 }
 
 void EquityEarningsTab::fill_correlations(const EarningsAnalysis& a) {
-    const auto correlations = services::equity::correlate_reactions(a);
-
-    const services::equity::ReactionCorrelation* strongest = nullptr;
-    for (const auto& c : correlations) {
+    // The r rides in each button's tooltip: it explains past moves (these
+    // metrics only exist after the print), so it belongs beside the switch,
+    // not in a headline.
+    for (const auto& c : services::equity::correlate_reactions(a)) {
         auto* btn = metric_buttons_.value(c.metric, nullptr);
-        if (btn) {
-            // The button carries its own r, so picking a series is an informed
-            // choice rather than a guess.
-            btn->setText(c.r.has_value()
-                             ? QString("%1  r%2%3").arg(c.label,
-                                                        *c.r >= 0 ? "+" : "",
-                                                        QString::number(*c.r, 'f', 2))
-                             : c.label);
-            btn->setToolTip(c.r.has_value()
-                                ? QString("Correlation between %1 and the next-session move, "
-                                          "measured over %2 reported quarters.")
-                                      .arg(c.label.toLower())
-                                      .arg(c.n)
-                                : QString("Not enough quarters carry both %1 and a price reaction.")
-                                      .arg(c.label.toLower()));
-        }
-        if (c.r.has_value() && (!strongest || std::abs(*c.r) > std::abs(*strongest->r)))
-            strongest = &c;
+        if (!btn) continue;
+        btn->setText(c.label);
+        btn->setToolTip(c.r.has_value()
+                            ? QString("Correlation between %1 and the next-session move on this name: "
+                                      "r %2%3 over %4 quarters. Descriptive — the figure only exists "
+                                      "once the company has reported.")
+                                  .arg(c.label.toLower(), *c.r >= 0 ? "+" : "",
+                                       QString::number(*c.r, 'f', 2))
+                                  .arg(c.n)
+                            : QString("Not enough quarters carry both %1 and a price reaction.")
+                                  .arg(c.label.toLower()));
     }
-
-    if (!strongest) {
-        correlation_note_->setText(QStringLiteral(
-            "Not enough reported quarters with price history to measure a relationship."));
-        return;
-    }
-    // Say plainly how little a dozen quarters proves. The panel exists so the
-    // reader can see whether this name trades off earnings size at all — it is
-    // not a fitted predictor, and presenting r without n would imply it was.
-    const QString strength = std::abs(*strongest->r) >= 0.6   ? QStringLiteral("tracks")
-                             : std::abs(*strongest->r) >= 0.3 ? QStringLiteral("loosely tracks")
-                                                              : QStringLiteral("barely tracks");
-    correlation_note_->setText(
-        QString("Of the three, the next-session move %1 %2 (r %3%4 over %5 quarters). "
-                "At this sample size treat it as directional colour, not a predictor — and note "
-                "QoQ carries the company's seasonality, which YoY strips out.")
-            .arg(strength, strongest->label.toLower(),
-                 *strongest->r >= 0 ? "+" : "", QString::number(*strongest->r, 'f', 2))
-            .arg(strongest->n));
 }
 
 QWidget* EquityEarningsTab::build_current_panel() {
@@ -978,74 +704,71 @@ QWidget* EquityEarningsTab::build_current_panel() {
 }
 
 QWidget* EquityEarningsTab::build_future_panel() {
-    auto* row = new QWidget(nullptr);
-    row->setStyleSheet("background:transparent;");
-    auto* hl = new QHBoxLayout(row);
-    hl->setContentsMargins(0, 0, 0, 0);
-    hl->setSpacing(10);
-
+    // Yahoo's stock-vs-index growth table is not shown: its INDEX column is one
+    // market-wide constant (identical to four decimals across twenty large
+    // caps), so its "edge" was the company's own growth shifted by a constant.
     QVBoxLayout* est_body = nullptr;
     auto* est_panel = make_panel("FUTURE · ANALYST ESTIMATES", "#60a5fa", &est_body);
     estimates_table_ = new QTableWidget;
     style_table(estimates_table_,
                 {"PERIOD", "EPS", "LOW–HIGH", "ANALYSTS", "EPS YoY", "REVENUE", "REV YoY"});
     est_body->addWidget(estimates_table_);
-    hl->addWidget(est_panel, 2);
-
-    QVBoxLayout* growth_body = nullptr;
-    auto* growth_panel = make_panel("FUTURE · VS INDEX", "#60a5fa", &growth_body);
-    growth_table_ = new QTableWidget;
-    style_table(growth_table_, {"PERIOD", "STOCK", "INDEX", "EDGE"});
-    // The INDEX column reads like a sector benchmark and is not one. Saying so
-    // here is the same call the scorer makes: the engine stopped reading this
-    // column because a constant cannot rank anything, and a reader looking at
-    // "48.53%" beside a 7% grower deserves the same warning the code got.
-    growth_table_->setToolTip(QStringLiteral(
-        "Yahoo's expected earnings growth for this company against its published "
-        "index trend.\n\n"
-        "The INDEX column is one market-wide number, not this stock's sector or peer "
-        "group: it was identical to four decimals across twenty large caps when this "
-        "was last checked, and it is the same in every row of every security's table. "
-        "So EDGE is the company's own growth shifted by a constant — useful as "
-        "context for how the quarter sits against the market's, and useless for "
-        "ranking one name against another.\n\n"
-        "It is reported here and deliberately not scored. The EXPECTED GROWTH leg of "
-        "the signal reads the company's EPS and revenue only; scoring the difference "
-        "against a constant would have counted EPS growth twice under an index label."));
-    growth_body->addWidget(growth_table_);
-    hl->addWidget(growth_panel, 1);
-
-    return row;
+    return est_panel;
 }
 
 // ── Population ───────────────────────────────────────────────────────────────
 
 void EquityEarningsTab::populate(const EarningsAnalysis& a) {
     currency_ = a.currency.isEmpty() ? QStringLiteral("USD") : a.currency;
-    const EarningsVerdict verdict = services::equity::evaluate_earnings(a);
+    const EarningsOutlook outlook = services::equity::evaluate_outlook(a);
+    const auto record = services::equity::forecast_record(a);
 
-    // ── Next report ──────────────────────────────────────────────────────────
+    fill_next_report(a, outlook);
+    fill_beat(outlook);
+    fill_size(a, outlook);
+    fill_direction(outlook);
+    record_and_resolve(a, outlook);
+
+    reaction_chart_->set_history(a.history);
+    reaction_chart_->set_forecasts(record.prints, outlook.expected_move_pct);
+    fill_correlations(a);
+    if (record.size_graded > 0) {
+        chart_note_->setText(
+            QString("Shaded band: the expected move that stood before each print, rebuilt from the "
+                    "prints before it only. %1 of %2 moves landed inside it — about half is what a "
+                    "well-sized forecast should manage; far more means it runs wide, far fewer "
+                    "that this name has been surprising the market more than usual.")
+                .arg(record.size_inside)
+                .arg(record.size_graded));
+    } else {
+        chart_note_->setText(QStringLiteral(
+            "Shaded band: the expected move before each print. It needs three earlier prints, so "
+            "it is absent on the oldest quarters."));
+    }
+
+    fill_history(a, outlook, record);
+    fill_record(a, record);
+    fill_trend(a);
+    fill_revisions(a);
+    fill_estimates(a);
+}
+
+void EquityEarningsTab::fill_next_report(const EarningsAnalysis& a, const EarningsOutlook& o) {
     if (a.next.timestamp.has_value()) {
         // Render in US market time, not the viewer's: "30 Jul, after close" is
-        // a fact about the exchange session. Read locally it would drift a
-        // date for anyone west of ET and mislabel every after-close print.
+        // a fact about the exchange session.
         // EVENT-STAMP: earnings announcement — ET.
         const auto when = QDateTime::fromSecsSinceEpoch(*a.next.timestamp)
                               .toTimeZone(QTimeZone("America/New_York"));
         next_date_->setText(when.toString("ddd d MMM yyyy"));
-        const int days = services::equity::days_to_next_earnings(a);
-        // Same convention as the daemon's reaction windows
-        // (_earnings_price_reaction): 16:00+ ET is after close, and a
-        // date-only midnight stamp is TREATED as after close — labelling it
-        // "before open" here while the engine computed an after-close
-        // reaction had the two halves of the tab describing different
-        // sessions. The before-open cutoff is minute-aware: 9:30 ET is the
-        // open, so 9:45 is intraday, not before open.
+        // Same convention as the daemon's reaction windows: 16:00+ ET is after
+        // close, and a date-only midnight stamp is TREATED as after close.
         const QTime t = when.time();
         const bool date_only = t.hour() == 0 && t.minute() == 0;
         const QString slot = (t.hour() >= 16 || date_only) ? QStringLiteral("after close")
                              : t < QTime(9, 30)            ? QStringLiteral("before open")
                                                            : QStringLiteral("intraday");
+        const int days = o.days_to_report;
         next_countdown_->setText(days < 0    ? QStringLiteral("date has passed — awaiting update")
                                  : days == 0 ? QString("TODAY · %1 ET").arg(slot)
                                              : QString("IN %1 DAY%2 · %3 ET")
@@ -1067,200 +790,313 @@ void EquityEarningsTab::populate(const EarningsAnalysis& a) {
                                      ui::formatting::format_money(*a.next.eps_high, currency_))
             : ui::formatting::placeholder());
     next_rev_->setText(opt_compact(a.next.rev_avg));
-
     if (a.next.eps_growth.has_value()) {
         const double g = *a.next.eps_growth * 100.0;
-        set_stat(next_yoy_, QString("EPS %1").arg(opt_pct(g)), color_for(g));
+        set_stat(next_yoy_, QString("EPS %1").arg(opt_pct(g)), color_for(g), 13);
     } else {
-        set_stat(next_yoy_, ui::formatting::placeholder(), ui::colors::TEXT_PRIMARY());
+        set_stat(next_yoy_, ui::formatting::placeholder(), ui::colors::TEXT_PRIMARY(), 13);
+    }
+    next_analysts_->setText(opt_count(a.next.analysts));
+    headline_->setText(o.headline);
+}
+
+void EquityEarningsTab::fill_beat(const EarningsOutlook& o) {
+    if (o.p_beat) {
+        const double p = *o.p_beat;
+        set_stat(beat_value_, QString("%1%").arg(QString::number(p * 100.0, 'f', 0)),
+                 p >= 0.5 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(), 30);
+        QStringList bits;
+        bits << QString("chance of beating EPS consensus · %1% chance of a miss")
+                    .arg(QString::number((1.0 - p) * 100.0, 'f', 0));
+        bits << QString("Beat %1 of the last %2 quarters").arg(o.beats).arg(o.scored_quarters);
+        if (o.typical_surprise_pct)
+            bits.last() += QString(", by a median %1").arg(opt_pct(*o.typical_surprise_pct));
+        bits << QString("An average company: %1%")
+                    .arg(QString::number(o.pooled_beat_rate * 100.0, 'f', 0));
+        beat_sub_->setText(bits.join(QStringLiteral("<br>")));
+    } else {
+        set_stat(beat_value_, ui::formatting::placeholder(), ui::colors::TEXT_PRIMARY(), 30);
+        beat_sub_->setText(QString("Too few reported quarters to say for this company. An average "
+                                   "company beats %1% of the time.")
+                               .arg(QString::number(o.pooled_beat_rate * 100.0, 'f', 0)));
     }
 
-    // ── Verdict card ─────────────────────────────────────────────────────────
-    const QString verdict_color = verdict.direction == SignalDirection::Bullish  ? ui::colors::POSITIVE()
-                                  : verdict.direction == SignalDirection::Bearish ? ui::colors::NEGATIVE()
-                                                                                  : ui::colors::WARNING();
-    verdict_badge_->setText(verdict.label);
-    verdict_badge_->setStyleSheet(QString("color:%1; background:%2; border:0; border-radius:3px; "
-                                          "padding:6px 14px; font-size:20px; font-weight:700; letter-spacing:2px;")
-                                      .arg(ui::colors::BG_BASE(), verdict_color));
-    verdict_score_->setText(QString("SCORE %1%2 / 100")
-                                .arg(verdict.score >= 0 ? "+" : "")
-                                .arg(QString::number(verdict.score, 'f', 0)));
-    verdict_score_->setStyleSheet(QString("color:%1; font-size:16px; font-weight:700; font-family:monospace; "
-                                          "background:transparent; border:0;")
-                                      .arg(verdict_color));
-    verdict_confidence_->setText(QString("confidence %1% · %2 of %3 signals have data")
-                                     .arg(QString::number(verdict.confidence * 100.0, 'f', 0))
-                                     .arg(std::count_if(verdict.components.begin(), verdict.components.end(),
-                                                        [](const auto& c) { return c.available; }))
-                                     .arg(verdict.components.size()));
-    verdict_headline_->setText(verdict.headline);
-    verdict_horizon_->setText(verdict.horizon_note);
+    // Stacked strip: the four outcomes, worst to best, sized by probability.
+    const QString colors[] = {ui::colors::NEGATIVE(), ui::colors::WARNING(), QStringLiteral("#4ade80"),
+                              ui::colors::POSITIVE()};
+    QStringList stops, legend;
+    double acc = 0;
+    for (int k = 0; k < o.scenarios.size() && k < 4; ++k) {
+        const auto& sc = o.scenarios[k];
+        const double from = acc, to = std::min(1.0, acc + sc.probability);
+        stops << QString("stop:%1 %2, stop:%3 %2").arg(from, 0, 'f', 4).arg(colors[k]).arg(
+            std::max(from, to - 0.0005), 0, 'f', 4);
+        acc = to;
+        legend << QString("<span style='color:%1'>■</span> %2 %3%")
+                      .arg(colors[k], sc.label.toLower())
+                      .arg(QString::number(sc.probability * 100.0, 'f', 0));
+    }
+    beat_strip_->setStyleSheet(
+        stops.isEmpty() ? QString("background:%1; border-radius:2px;").arg(ui::colors::BG_BASE())
+                        : QString("background:qlineargradient(x1:0, x2:1, %1); border-radius:2px;")
+                              .arg(stops.join(", ")));
+    beat_strip_->setToolTip(QStringLiteral(
+        "How the print is likely to land against consensus EPS: miss, beat by 0–3%, by 3–10%, "
+        "or by more than 10%. The line that matters for the price is 3% — see WHICH WAY?"));
+    beat_strip_legend_->setText(legend.join(QStringLiteral(" &nbsp; ")));
 
-    // Axes: two monospace numbers, each coloured on its own sign, so a strong
-    // business against a high bar reads as the tension it is rather than as
-    // one averaged-out figure.
-    auto axis_span = [](const char* label, const std::optional<double>& v) {
-        if (!v.has_value())
-            return QString("<span style='color:%1'>%2 —</span>")
-                .arg(ui::colors::TEXT_TERTIARY(), QString::fromLatin1(label));
-        return QString("<span style='color:%1'>%2</span> "
-                       "<span style='color:%3; font-weight:700'>%4%5</span>")
-            .arg(ui::colors::TEXT_TERTIARY(), QString::fromLatin1(label), color_for(*v),
-                 *v >= 0 ? "+" : "", QString::number(*v, 'f', 0));
-    };
-    verdict_axes_->setText(QString("<div style='font-family:monospace; font-size:12px'>%1<br>%2</div>")
-                               .arg(axis_span("SETUP", verdict.setup_score),
-                                    axis_span("BAR  ", verdict.bar_score)));
+    const QString drift_word = o.drift == EstimateDrift::Rising    ? QStringLiteral("Rising")
+                               : o.drift == EstimateDrift::Falling ? QStringLiteral("Falling")
+                               : o.drift == EstimateDrift::Flat    ? QStringLiteral("Flat")
+                                                                   : QString();
+    const QString drift_color = o.drift == EstimateDrift::Rising    ? ui::colors::POSITIVE()
+                                : o.drift == EstimateDrift::Falling ? ui::colors::NEGATIVE()
+                                                                    : ui::colors::TEXT_PRIMARY();
+    QString drift = drift_word.isEmpty()
+                        ? QStringLiteral("No revision history published.")
+                        : QString("<b style='color:%1'>%2</b> — %3").arg(drift_color, drift_word, o.drift_detail);
+    if (o.dispersion_pct)
+        drift += QString("<br>Analysts span %1% of the mean%2")
+                     .arg(QString::number(*o.dispersion_pct, 'f', 0),
+                          o.dispersion_is_wide ? QStringLiteral(" — wide") : QString());
+    beat_drift_->setText(drift);
+}
 
-    // ── Setup card ───────────────────────────────────────────────────────────
-    set_stat(setup_predicted_,
-             verdict.predicted_move_pct
-                 ? QString("%1%2%").arg(*verdict.predicted_move_pct >= 0 ? "+" : "")
-                       .arg(QString::number(*verdict.predicted_move_pct, 'f', 2))
-                 : ui::formatting::placeholder(),
-             verdict.predicted_move_pct ? color_for(*verdict.predicted_move_pct) : "#22d3ee");
-    set_stat(setup_move_,
-             verdict.expected_move_pct > 0
-                 ? QString("±%1%").arg(QString::number(verdict.expected_move_pct, 'f', 1))
-                 : ui::formatting::placeholder(),
-             ui::colors::TEXT_PRIMARY(), 13);
-    // The EVENT component, never the raw straddle. A straddle prices every
-    // session to expiry, so weeks ahead of a print most of it is ordinary
-    // volatility: ORCL quoted 12.1% to its 11 Sep expiry against an event
-    // component of 3.4%. Printing 12.1% beside a single-session EXPECTED MOVE
-    // — which the tooltip invites — overstates the market's earnings estimate
-    // by 3.5x. Where the ordinary days cannot be stripped out informatively
-    // the stat stays empty and the tooltip says why: a wrong implied move is
-    // worse than none, because it is the number a reader trusts most.
-    if (a.next.implied.has_value() && a.next.implied->event_move_pct.has_value()) {
-        const auto& imp = *a.next.implied;
-        set_stat(setup_implied_,
-                 QString("±%1%").arg(QString::number(*imp.event_move_pct, 'f', 1)),
-                 ui::colors::TEXT_PRIMARY(), 13);
-        setup_implied_->setToolTip(
-            implied_tooltip() +
-            QString("\n\nThis print: the straddle expiring %1 (%2 after the report) costs "
-                    "%3% of spot; stripping the ordinary sessions between now and then "
-                    "leaves the %4% shown.")
-                .arg(expiry_text(imp.expiry),
-                     imp.days_after_print == 1 ? QStringLiteral("1 day")
-                                               : QString("%1 days").arg(imp.days_after_print),
-                     QString::number(imp.total_move_pct.value_or(0.0), 'f', 1),
-                     QString::number(*imp.event_move_pct, 'f', 1)));
+void EquityEarningsTab::fill_size(const EarningsAnalysis& a, const EarningsOutlook& o) {
+    if (!o.expected_move_pct) {
+        set_stat(size_value_, ui::formatting::placeholder(), ui::colors::TEXT_PRIMARY(), 30);
+        size_dollars_->setText(QStringLiteral("Needs at least three past prints with price history."));
+        size_ranges_->clear();
     } else {
-        set_stat(setup_implied_, ui::formatting::placeholder(), ui::colors::TEXT_PRIMARY(), 13);
-        // Three different reasons land here and they are not interchangeable
-        // to a reader deciding whether to go and look the number up elsewhere.
-        QString why = !a.next.timestamp.has_value()
-                          ? QStringLiteral(
-                                "There is no published report date to price a straddle against.")
-                          : QStringLiteral(
-                                "No listed expiry lands within ten days after the report date — "
-                                "either none is quoted that close to it, or this security has no "
-                                "options at all. Without one there is no straddle whose price is "
-                                "mostly about this print.");
-        if (a.next.implied.has_value() && a.next.implied->total_move_pct.has_value()) {
-            const auto& imp = *a.next.implied;
-            // The daemon withholds the event component at BOTH ends: when
-            // ordinary drift dominates the straddle (expiry far out) and when
-            // it removed almost nothing (a calm name whose expiry is a day or
-            // two away). Describing only the first told a reader whose expiry
-            // was imminent that it "fills in as the date approaches" — the
-            // exact opposite of the truth, since it will not. Days to expiry
-            // separates the two without needing the daemon to report which.
-            const QDate expiry = QDate::fromString(imp.expiry, Qt::ISODate);
-            const int days_out = expiry.isValid() ? QDate::currentDate().daysTo(expiry) : 99;
-            why = days_out > 7
-                      ? QString("The nearest post-report expiry (%1) is far enough out that "
-                                "the straddle — %2% of spot — is dominated by ordinary "
-                                "volatility rather than by the print, so the event component "
-                                "cannot be separated from it yet. Quoting the whole straddle "
-                                "beside a single-session EXPECTED MOVE would overstate what "
-                                "the market is pricing for this report. It fills in as the "
-                                "date approaches.")
-                            .arg(expiry_text(imp.expiry),
-                                 QString::number(*imp.total_move_pct, 'f', 1))
-                      : QString("The %1 straddle is %2% of spot, and taking out the ordinary "
-                                "sessions between now and then removes so little that the "
-                                "split carries no information — the subtraction is a residual "
-                                "between two nearly equal numbers, which is more sensitive to "
-                                "the volatility estimate than to the print. The straddle "
-                                "itself is the market's price; it is simply not separable "
-                                "into an event component here.")
-                            .arg(expiry_text(imp.expiry),
-                                 QString::number(*imp.total_move_pct, 'f', 1));
+        const double e = *o.expected_move_pct;
+        set_stat(size_value_, QString("±%1%").arg(QString::number(e, 'f', 1)), "#22d3ee", 30);
+        QString sub = QStringLiteral("expected move the session after the print, either way");
+        if (a.valuation.price.has_value() && *a.valuation.price > 0)
+            sub += QString("<br>≈ ±%1 a share on %2")
+                       .arg(ui::formatting::format_money(*a.valuation.price * e / 100.0, currency_),
+                            ui::formatting::format_money(*a.valuation.price, currency_));
+        size_dollars_->setText(sub);
+        size_ranges_->setText(
+            QString("Half of prints land within <b>±%1%</b><br>"
+                    "4 in 5 within <b>±%2%</b><br>"
+                    "1 in 10 go beyond <b>±%3%</b>")
+                .arg(QString::number(*o.half_within_pct, 'f', 1),
+                     QString::number(*o.most_within_pct, 'f', 1),
+                     QString::number(*o.tail_beyond_pct, 'f', 1)));
+    }
+
+    // Options: the event component only. A straddle prices every session to
+    // expiry, so the raw quote weeks ahead of a print overstates the market's
+    // earnings estimate several times over.
+    if (o.implied_move_pct) {
+        QString text = QString("Options price <b>±%1%</b> for the print")
+                           .arg(QString::number(*o.implied_move_pct, 'f', 1));
+        if (o.implied_ratio) {
+            const double r = *o.implied_ratio;
+            text += r >= 1.15   ? QString(" — %1× our estimate: braced for more than usual.")
+                                      .arg(QString::number(r, 'f', 1))
+                    : r <= 0.87 ? QString(" — %1× our estimate: pricing a quieter print than usual.")
+                                      .arg(QString::number(r, 'f', 1))
+                                : QStringLiteral(" — in line with our estimate.");
         }
-        setup_implied_->setToolTip(implied_tooltip() + "\n\n" + why);
+        const auto& imp = *a.next.implied;
+        size_implied_->setToolTip(
+            implied_tooltip() +
+            QString("\n\nThis print: the straddle expiring %1 costs %2% of spot; stripping the "
+                    "ordinary sessions between now and then leaves %3%.")
+                .arg(expiry_text(imp.expiry), QString::number(imp.total_move_pct.value_or(0.0), 'f', 1),
+                     QString::number(*o.implied_move_pct, 'f', 1)));
+        size_implied_->setText(text);
+    } else {
+        QString why = !a.next.timestamp.has_value()
+                          ? QStringLiteral("No report date to price a straddle against.")
+                          : QStringLiteral("Unavailable — no listed expiry within ten days after "
+                                           "the report, or no options at all.");
+        if (a.next.implied.has_value() && a.next.implied->total_move_pct.has_value())
+            why = QString("The %1 straddle (%2% of spot) can't yet be separated into an earnings "
+                          "component — too much ordinary volatility rides on it.")
+                      .arg(expiry_text(a.next.implied->expiry),
+                           QString::number(*a.next.implied->total_move_pct, 'f', 1));
+        size_implied_->setText(why);
+        size_implied_->setToolTip(implied_tooltip());
     }
-    // Beat rate is descriptive only now — the track-record leg scores the size
-    // of the surprise against its own spread, because nearly every large cap
-    // beats. Colouring it as though a high rate were bullish would contradict
-    // the leg sitting directly below it, so it stays neutral.
-    set_stat(setup_beat_,
-             verdict.scored_quarters > 0 ? QString("%1%  (%2q)")
-                                               .arg(QString::number(verdict.beat_rate * 100.0, 'f', 0))
-                                               .arg(verdict.scored_quarters)
-                                         : ui::formatting::placeholder(),
-             ui::colors::TEXT_PRIMARY(), 13);
-    set_stat(setup_reaction_,
-             verdict.reaction_quarters > 0 ? opt_pct(verdict.avg_reaction_pct)
-                                           : ui::formatting::placeholder(),
-             verdict.reaction_quarters > 0 ? color_for(verdict.avg_reaction_pct)
-                                           : ui::colors::TEXT_PRIMARY(),
-             13);
-    // The consensus spread is a magnitude, never a direction: amber when it is
-    // wide enough to matter, plain otherwise, but never red or green.
-    set_stat(setup_spread_,
-             verdict.dispersion_pct.has_value()
-                 ? QString("%1% wide").arg(QString::number(*verdict.dispersion_pct, 'f', 0))
-                 : ui::formatting::placeholder(),
-             verdict.dispersion_is_wide ? ui::colors::WARNING() : ui::colors::TEXT_PRIMARY(),
-             13);
-    set_stat(setup_runup_, opt_pct(a.runup_5d_pct),
-             a.runup_5d_pct.has_value() ? color_for(*a.runup_5d_pct) : ui::colors::TEXT_PRIMARY(), 13);
-    set_stat(setup_runup20_, opt_pct(a.runup_20d_pct),
-             a.runup_20d_pct.has_value() ? color_for(*a.runup_20d_pct) : ui::colors::TEXT_PRIMARY(), 13);
 
-    fill_scorecard(verdict);
-    record_and_resolve(a, verdict);
-    last_history_ = a.history;
-    fill_predictions(a, verdict);
-    fill_history(a, verdict);
-    fill_trend(a);
-    fill_revisions(a);
-    fill_estimates(a);
-    fill_growth(a);
+    // The last four settled moves, newest first — the column every options
+    // desk reads beside the implied move.
+    QStringList moves;
+    for (const auto& p : a.history) {
+        if (p.is_estimate || !p.reaction_pct.has_value()) continue;
+        moves << QString("<span style='color:%1'>%2</span>").arg(color_for(*p.reaction_pct),
+                                                                 opt_pct(p.reaction_pct, 1));
+        if (moves.size() == 4) break;
+    }
+    QString hist = moves.isEmpty() ? QStringLiteral("No settled prints with price history.")
+                                   : QStringLiteral("Last %1: ").arg(moves.size()) + moves.join(QStringLiteral(" · "));
+    if (o.trailing_move_pct)
+        hist += QString("<br>Average size over the last %1: ±%2%")
+                    .arg(std::min(o.reaction_quarters, 12))
+                    .arg(QString::number(*o.trailing_move_pct, 'f', 1));
+    size_history_->setText(hist);
+}
+
+void EquityEarningsTab::fill_direction(const EarningsOutlook& o) {
+    scenario_table_->setRowCount(o.scenarios.size());
+    const bool have_size = o.expected_move_pct.has_value();
+    for (int k = 0; k < o.scenarios.size(); ++k) {
+        const auto& sc = o.scenarios[k];
+        auto* name = cell(sc.label, ui::colors::TEXT_PRIMARY(), Qt::AlignLeft | Qt::AlignVCenter);
+        name->setToolTip(QString("EPS %1 consensus").arg(sc.range));
+        scenario_table_->setItem(k, 0, name);
+        scenario_table_->setItem(k, 1, cell(QString("%1%").arg(QString::number(sc.probability * 100.0, 'f', 0))));
+        scenario_table_->setItem(
+            k, 2,
+            have_size ? cell(opt_pct(sc.typical_move_pct, 1), color_for(sc.typical_move_pct))
+                      : cell(QString("%1×").arg(QString::number(sc.move_multiple, 'f', 2)),
+                             color_for(sc.move_multiple)));
+        scenario_table_->setItem(k, 3, cell(QString("%1%").arg(QString::number(sc.up_rate * 100.0, 'f', 0)),
+                                            sc.up_rate >= 0.5 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
+    }
+    fit_table_height(scenario_table_);
+    scenario_note_->setText(QStringLiteral(
+        "A beat of under 3% has traded down — the market expects the usual beat, so "
+        "clearing consensus by a hair reads as a miss. Even a big beat rises only ~60% of the "
+        "time: revenue and the guide matter as much, and aren't in this table."));
+
+    priced_in_->setText(o.priced_in.isEmpty() ? QStringLiteral("No recent price history.")
+                                              : o.priced_in.join(QStringLiteral("<br>")));
+    if (o.caveats.isEmpty()) {
+        caveats_label_->hide();
+    } else {
+        QStringList bullets;
+        for (const auto& c : o.caveats) bullets << "• " + c;
+        caveats_label_->setText(bullets.join("\n"));
+        caveats_label_->show();
+    }
+}
+
+void EquityEarningsTab::fill_record(const EarningsAnalysis& a, const services::equity::ForecastRecord& r) {
+    if (r.size_graded > 0) {
+        const bool beats_baseline = r.size_mae < r.trailing_mae;
+        record_size_->setText(
+            QString("Landed inside the expected move on <b>%1 of %2</b> prints (about half is the "
+                    "target).<br>Missed the actual size by %3 pp on average, against %4 pp for "
+                    "this name's plain average move — %5.")
+                .arg(r.size_inside)
+                .arg(r.size_graded)
+                .arg(QString::number(r.size_mae, 'f', 1), QString::number(r.trailing_mae, 'f', 1),
+                     beats_baseline ? QStringLiteral("the volatility blend has helped here")
+                                    : QStringLiteral("on this name the plain average has done as well")));
+    } else {
+        record_size_->setText(QStringLiteral("Not enough prints yet to have graded a forecast."));
+    }
+
+    if (r.beat_graded > 0) {
+        record_beat_->setText(
+            QString("Stated an average <b>%1%</b> beforehand; it beat <b>%2 of %3</b> (%4%). "
+                    "Pooled across 9,665 prints the stated chances track the realised rate to "
+                    "within a few points in every band.")
+                .arg(QString::number(r.mean_p_beat * 100.0, 'f', 0))
+                .arg(r.beat_hits)
+                .arg(r.beat_graded)
+                .arg(QString::number(100.0 * r.beat_hits / r.beat_graded, 'f', 0)));
+    } else {
+        record_beat_->setText(QStringLiteral("Not enough prints yet to have graded a probability."));
+    }
+
+    // Readings genuinely written down before a print. Everything above is a
+    // reconstruction from history; only these were the future when recorded.
+    //
+    // Grouped by the SETTLED PRINT each reading matches, within the same
+    // ±window the settler uses — not by the reading's own report_ts. Yahoo's
+    // placeholder date moves before the company confirms it, so two readings
+    // about one print can carry different report_ts values, and keying on
+    // that counted the print twice. The last reading before the print wins.
+    QHash<int, const EarningsSignalRecord*> last_before;
+    const auto rows = EarningsSignalRepository::instance().for_symbol(a.symbol);
+    for (const auto& row : rows) {
+        if (!row.resolved || row.model_version.value_or(1) < 2 || !row.actual_move_pct) continue;
+        const int i = nearest_within_window(a.history, row.report_ts,
+                                            [](const services::equity::EarningsPoint& p) {
+                                                return !p.is_estimate && p.reaction_pct.has_value();
+                                            });
+        if (i < 0) continue;
+        const auto seen = last_before.constFind(i);
+        if (seen == last_before.constEnd() || row.observed_on > seen.value()->observed_on)
+            last_before.insert(i, &row);
+    }
+    int n = 0, size_n = 0, inside = 0, implied_n = 0, implied_inside = 0, beat_n = 0, beat_hit = 0;
+    double p_sum = 0;
+    for (auto it = last_before.constBegin(); it != last_before.constEnd(); ++it) {
+        const auto* row = it.value();
+        const auto& print = a.history[it.key()];
+        ++n;
+        const double actual = std::abs(*row->actual_move_pct);
+        // Each tally is graded only over readings that stated that number: a
+        // reading taken while the name had too little history carries no
+        // expected move, and counting it as a miss would understate the record.
+        if (row->expected_move_pct) {
+            ++size_n;
+            if (actual <= *row->expected_move_pct) ++inside;
+        }
+        if (row->implied_move_pct) {
+            ++implied_n;
+            if (actual <= *row->implied_move_pct) ++implied_inside;
+        }
+        // Beat graded against the print's own row, so a GAAP-vs-adjusted
+        // artefact is excluded here exactly as it is everywhere else.
+        if (row->p_beat && services::equity::scenario_index(print) >= 0) {
+            ++beat_n;
+            p_sum += *row->p_beat;
+            if (*print.surprise_pct > 0) ++beat_hit;
+        }
+    }
+    // Waiting: unresolved readings that CAN still settle. One taken on or after
+    // its print day never will — resolve() refuses it as hindsight — so it
+    // must not sit in this count forever.
+    int pending = 0;
+    for (const auto& row : rows) {
+        if (row.resolved || row.model_version.value_or(1) < 2) continue;
+        const QDate observed = QDate::fromString(row.observed_on, Qt::ISODate);
+        // EVENT-STAMP: earnings announcement — ET.
+        if (observed.isValid() && observed < core::bartime::market_date_et(row.report_ts)) ++pending;
+    }
+    if (n == 0) {
+        record_ledger_->setText(
+            QString("Nothing settled yet. Each day the tab is open before a print, the outlook is "
+                    "written down and checked once the print lands%1.")
+                .arg(pending > 0 ? QString(" — %1 reading%2 waiting").arg(pending).arg(pending == 1 ? "" : "s")
+                                 : QString()));
+        return;
+    }
+    QStringList bits;
+    bits << QString("%1 print%2 settled").arg(n).arg(n == 1 ? "" : "s");
+    if (size_n > 0)
+        bits << QString("inside the expected move %1 of %2").arg(inside).arg(size_n);
+    if (implied_n > 0)
+        bits << QString("inside the options-implied move %1 of %2").arg(implied_inside).arg(implied_n);
+    if (beat_n > 0)
+        bits << QString("stated %1% to beat, beat %2 of %3")
+                    .arg(QString::number(p_sum / beat_n * 100.0, 'f', 0))
+                    .arg(beat_hit)
+                    .arg(beat_n);
+    record_ledger_->setText(bits.join(QStringLiteral("<br>")));
 }
 
 // ── Signal ledger ────────────────────────────────────────────────────────────
-// Writes only. Yahoo's estimates and revisions are a point-in-time snapshot
-// with no history, so what the scorecard would have said before a past print
-// cannot be reconstructed — the only way to ever check the prediction is to
-// write each reading down as it happens and settle it afterwards.
-//
-// It has no panel. A table of one pending row restates the scorecard sitting
-// directly above it and earns none of the space it costs; the comparison only
-// becomes worth showing once there are enough settled prints to say something
-// the card doesn't already. Until then this accumulates quietly.
+// Yahoo's estimates, revisions and option chains are point-in-time snapshots
+// with no history, so what stood before a past print cannot be reconstructed —
+// the only way to check those inputs is to write each reading down as it
+// happens and settle it afterwards.
 
-void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const EarningsVerdict& v) {
+void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const EarningsOutlook& o) {
     auto& ledger = EarningsSignalRepository::instance();
 
     // ── Settle anything whose print has since landed ─────────────────────────
-    // Matched on the calendar date in market time, not the raw timestamp:
-    // Yahoo routinely shifts a scheduled 16:00 placeholder to the actual
-    // announcement time once the company reports, so the seconds never agree
-    // even though it is plainly the same event.
+    // Matched on the calendar date in market time, within a window: Yahoo
+    // shifts a scheduled placeholder to the real announcement once it lands.
+    // A quarter with only `reaction_live_pct` is no match — its session is
+    // still trading, and the row waits for the close.
     const auto et_date = [](qint64 ts) { return core::bartime::market_date_et(ts); };
-    // Nearest print within kSignalMatchWindowDays wins — the same rule
-    // fill_predictions() plots by, so a reading that settles is a reading that
-    // draws.
-    //
-    // A quarter with only `reaction_live_pct` is deliberately no match: its
-    // session is still trading, and settling against a running close would
-    // freeze the outcome at whatever the tape said mid-morning. The row waits
-    // for the close, which is one refresh away.
     for (const auto& pending : ledger.unresolved(a.symbol)) {
         const int i = nearest_within_window(
             a.history, pending.report_ts, [](const services::equity::EarningsPoint& p) {
@@ -1269,23 +1105,13 @@ void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const Earn
         if (i < 0)
             continue;
         const auto& best = a.history[i];
-        // Only a reading taken strictly BEFORE the print is a prediction.
-        // The screen is the repository's, not this loop's: resolution is
-        // per-report, so a caller that skipped one row here would still have
-        // settled that row's siblings on the next pending row's turn — which
-        // is exactly how this guard used to be defeated.
+        // The repository refuses readings taken on or after the print day.
         ledger.resolve(a.symbol, pending.report_ts, best.eps_actual, best.surprise_pct,
                        *best.reaction_pct, et_date(best.timestamp).toString(Qt::ISODate));
     }
 
-    // ── Write today's reading ────────────────────────────────────────────────
-    // Only about a print that hasn't happened. A reading taken after the fact
-    // is not a prediction, and letting one in would quietly flatter every
-    // statistic computed from this table.
-    if (!a.next.timestamp.has_value())
-        return;
-    const int days = services::equity::days_to_next_earnings(a);
-    if (days < 0)
+    // ── Write today's reading — only about a print that hasn't happened ──────
+    if (!a.next.timestamp.has_value() || o.days_to_report < 0)
         return;
 
     EarningsSignalRecord rec;
@@ -1293,107 +1119,23 @@ void EquityEarningsTab::record_and_resolve(const EarningsAnalysis& a, const Earn
     rec.report_ts = *a.next.timestamp;
     rec.observed_on = core::bartime::market_today_et().toString(Qt::ISODate);
     rec.captured_at = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-    rec.days_to_report = days;
-    rec.verdict = v.label;
-    rec.score = v.score;
-    rec.confidence = v.confidence;
-    rec.setup_score = v.setup_score;
-    rec.bar_score = v.bar_score;
-    rec.expected_move_pct = v.typical_move_pct > 0 ? std::optional<double>(v.typical_move_pct)
-                                                   : std::nullopt;
+    rec.days_to_report = o.days_to_report;
+    rec.model_version = 2;
+    rec.verdict = QStringLiteral("OUTLOOK");   // no directional call: never graded as a hit
+    rec.score = 0.0;
+    rec.confidence = 0.0;
+    rec.expected_move_pct = o.expected_move_pct;
+    rec.p_beat = o.p_beat;
+    rec.implied_move_pct = o.implied_move_pct;
     rec.consensus_eps = a.next.eps_avg;
-    rec.dispersion_pct = v.dispersion_pct;
+    rec.dispersion_pct = o.dispersion_pct;
     rec.runup_5d_pct = a.runup_5d_pct;
     rec.price_at_capture = a.valuation.price;
-    rec.predicted_move_pct = v.predicted_move_pct;
     ledger.observe(rec);
 }
 
-void EquityEarningsTab::fill_scorecard(const EarningsVerdict& v) {
-    // Rows are rebuilt per symbol — the component set is fixed, but their
-    // availability and colouring are not, and a handful of widgets per symbol
-    // switch is cheaper than keeping a parallel widget cache in sync.
-    while (QLayoutItem* item = score_rows_layout_->takeAt(0)) {
-        if (auto* w = item->widget()) w->deleteLater();
-        delete item;
-    }
-
-    for (const auto& c : v.components) {
-        auto* row = new QWidget(nullptr);
-        row->setStyleSheet("background:transparent; border:0;");
-        row->setToolTip(c.explanation);
-        auto* hl = new QHBoxLayout(row);
-        hl->setContentsMargins(0, 0, 0, 0);
-        hl->setSpacing(10);
-
-        auto* name = new QLabel(c.name);
-        name->setFixedWidth(190);
-        name->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1px; "
-                                    "background:transparent; border:0;")
-                                .arg(c.available ? ui::colors::TEXT_PRIMARY() : ui::colors::TEXT_TERTIARY()));
-        hl->addWidget(name);
-
-        // Score bar: a centre-anchored ±1 gauge. Left half = negative.
-        auto* gauge = new QWidget(nullptr);
-        gauge->setFixedSize(120, 10);
-        if (c.available) {
-            const double frac = std::clamp(std::abs(c.score), 0.0, 1.0) / 2.0;  // half-width share
-            const double start = c.score >= 0 ? 0.5 : 0.5 - frac;
-            const QString fill = c.score >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
-            gauge->setStyleSheet(
-                QString("background: qlineargradient(x1:0, x2:1, stop:0 %1, stop:%2 %1, stop:%3 %4, "
-                        "stop:%5 %4, stop:%6 %1, stop:1 %1); border:1px solid %7; border-radius:2px;")
-                    .arg(ui::colors::BG_BASE())
-                    .arg(std::max(0.0, start - 0.001))
-                    .arg(start)
-                    .arg(fill)
-                    .arg(std::min(1.0, start + frac))
-                    .arg(std::min(1.0, start + frac + 0.001))
-                    .arg(ui::colors::BORDER_DIM()));
-        } else {
-            gauge->setStyleSheet(QString("background:%1; border:1px solid %2; border-radius:2px;")
-                                     .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
-        }
-        hl->addWidget(gauge);
-
-        auto* score = new QLabel(c.available ? QString("%1%2")
-                                                   .arg(c.score >= 0 ? "+" : "")
-                                                   .arg(QString::number(c.score, 'f', 2))
-                                             : ui::formatting::placeholder());
-        score->setFixedWidth(46);
-        score->setAlignment(Qt::AlignRight);
-        score->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:monospace; "
-                                     "background:transparent; border:0;")
-                                 .arg(c.available ? color_for(c.score) : ui::colors::TEXT_TERTIARY()));
-        hl->addWidget(score);
-
-        auto* weight = new QLabel(QString("×%1").arg(QString::number(c.weight, 'f', 2)));
-        weight->setFixedWidth(44);
-        weight->setStyleSheet(QString("color:%1; font-size:12px; font-family:monospace; "
-                                      "background:transparent; border:0;")
-                                  .arg(ui::colors::TEXT_TERTIARY()));
-        hl->addWidget(weight);
-
-        auto* detail = new QLabel(c.detail);
-        detail->setWordWrap(true);
-        detail->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
-                                  .arg(c.available ? ui::colors::TEXT_SECONDARY() : ui::colors::TEXT_TERTIARY()));
-        hl->addWidget(detail, 1);
-
-        score_rows_layout_->addWidget(row);
-    }
-
-    if (v.caveats.isEmpty()) {
-        caveats_label_->hide();
-    } else {
-        QStringList bullets;
-        for (const auto& c : v.caveats) bullets << "• " + c;
-        caveats_label_->setText(bullets.join("\n"));
-        caveats_label_->show();
-    }
-}
-
-void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVerdict& v) {
+void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsOutlook& o,
+                                     const services::equity::ForecastRecord& record) {
     history_table_->setRowCount(a.history.size());
     int row = 0;
     for (const auto& p : a.history) {
@@ -1446,8 +1188,16 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
                     "Shown for the record; excluded from the beat rate and the scorecard.");
             history_table_->setItem(row, 3, sur_cell);
         }
-        history_table_->setItem(row, 4, cell(opt_pct(p.eps_qoq_pct, 1),
-                                             p.eps_qoq_pct.has_value() ? color_for(*p.eps_qoq_pct) : QString()));
+        // OUTCOME: which of the four scenarios the print landed in — the same
+        // buckets WHICH WAY? reads its moves from.
+        {
+            const int k = services::equity::scenario_index(p);
+            static const char* names[] = {"miss", "slight beat", "solid beat", "big beat"};
+            static const QString colors[] = {ui::colors::NEGATIVE(), ui::colors::WARNING(),
+                                             QStringLiteral("#4ade80"), ui::colors::POSITIVE()};
+            history_table_->setItem(row, 4, k >= 0 ? cell(QString::fromLatin1(names[k]), colors[k])
+                                                   : cell(ui::formatting::placeholder()));
+        }
         history_table_->setItem(row, 5, cell(opt_pct(p.eps_yoy_pct, 1),
                                              p.eps_yoy_pct.has_value() ? color_for(*p.eps_yoy_pct) : QString()));
         // On the projected row there is no print reaction yet — the live
@@ -1480,43 +1230,63 @@ void EquityEarningsTab::fill_history(const EarningsAnalysis& a, const EarningsVe
             it->setToolTip(QStringLiteral(
                 "The session after this print is still open — this is where the stock is "
                 "trading right now, not a completed close-to-close reaction.\n\n"
-                "It is excluded from the typical move, the beat-reaction average, the "
-                "correlations and every predictor's record until that session closes, and "
-                "the signal ledger leaves this print unsettled until then."));
+                "It is excluded from the expected move, the forecast record and the "
+                "correlations until that session closes, and the ledger leaves this print "
+                "unsettled until then."));
             history_table_->setItem(row, 6, it);
         } else {
             history_table_->setItem(row, 6, cell(opt_pct(p.reaction_pct, 2),
                                                  p.reaction_pct.has_value() ? color_for(*p.reaction_pct)
                                                                             : QString()));
         }
-        history_table_->setItem(row, 7, cell(opt_pct(p.runup_pct, 2),
-                                             p.runup_pct.has_value() ? color_for(*p.runup_pct) : QString()));
+        // EXPECTED: the size forecast that stood before this print, so the
+        // 1D MOVE beside it can be read as inside or outside it.
+        {
+            std::optional<double> expected;
+            for (const auto& f : record.prints)
+                if (f.timestamp == p.timestamp) { expected = f.expected_move_pct; break; }
+            if (p.is_estimate && p.has_forward_estimate) {
+                // The projected row carries today's forecast.
+                expected = o.expected_move_pct;
+            }
+            QString color = ui::colors::TEXT_SECONDARY();
+            if (expected && p.reaction_pct)
+                color = std::abs(*p.reaction_pct) <= *expected ? ui::colors::TEXT_SECONDARY()
+                                                               : ui::colors::WARNING();
+            auto* it = cell(expected ? QString("±%1%").arg(QString::number(*expected, 'f', 1))
+                                     : ui::formatting::placeholder(),
+                            p.is_estimate ? ui::colors::AMBER() : color);
+            if (expected && p.reaction_pct && std::abs(*p.reaction_pct) > *expected)
+                it->setToolTip(QStringLiteral("The move landed outside the expected range."));
+            history_table_->setItem(row, 7, it);
+        }
         ++row;
     }
     fit_table_height(history_table_);
-    reaction_chart_->set_history(a.history);
-    fill_correlations(a);
 
-    // Built from whichever halves have data: a symbol can have surprises with
-    // no usable price history (yfinance dropped the bars), and claiming "rose
-    // on 0% of prints" off an empty reaction set would be a lie, not a zero.
+    // Built from whichever halves have data: claiming "rose on 0% of prints"
+    // off an empty reaction set would be a lie, not a zero.
+    int scored = 0, beats = 0, settled = 0, ups = 0;
+    double abs_sum = 0;
+    for (const auto& p : a.history) {
+        if (services::equity::scenario_index(p) >= 0) {
+            ++scored;
+            if (*p.surprise_pct > 0) ++beats;
+        }
+        if (!p.is_estimate && p.reaction_pct.has_value()) {
+            ++settled;
+            if (*p.reaction_pct > 0) ++ups;
+            abs_sum += std::abs(*p.reaction_pct);
+        }
+    }
     QStringList summary;
-    if (v.scored_quarters > 0) {
-        summary << QString("Beat %1 of the last %2 reported quarters · average surprise %3")
-                       .arg(static_cast<int>(std::lround(v.beat_rate * v.scored_quarters)))
-                       .arg(v.scored_quarters)
-                       .arg(opt_pct(v.avg_surprise_pct, 2));
-    }
-    if (v.reaction_quarters > 0) {
-        summary << QString("the stock rose on %1% of %2 prints, average %3, typical move ±%4%")
-                       .arg(QString::number(v.up_reaction_rate * 100.0, 'f', 0))
-                       .arg(v.reaction_quarters)
-                       .arg(opt_pct(v.avg_reaction_pct, 2))
-                       .arg(QString::number(v.typical_move_pct, 'f', 1));
-    }
-    history_summary_->setText(
-        summary.isEmpty() ? QStringLiteral("No reported quarters with a published consensus.")
-                          : summary.join(" · ") + ".");
+    if (scored > 0)
+        summary << QString("Beat %1 of %2 reported quarters").arg(beats).arg(scored);
+    if (settled > 0)
+        summary << QString("the stock rose after %1 of %2 prints, moving ±%3% on average")
+                       .arg(ups).arg(settled).arg(QString::number(abs_sum / settled, 'f', 1));
+    history_summary_->setText(summary.isEmpty() ? QStringLiteral("No reported quarters with a published consensus.")
+                                                : summary.join(" · ") + ".");
 }
 
 void EquityEarningsTab::fill_trend(const EarningsAnalysis& a) {
@@ -1587,30 +1357,6 @@ void EquityEarningsTab::fill_estimates(const EarningsAnalysis& a) {
         ++row;
     }
     fit_table_height(estimates_table_);
-}
-
-void EquityEarningsTab::fill_growth(const EarningsAnalysis& a) {
-    growth_table_->setRowCount(a.growth.size());
-    int row = 0;
-    for (const auto& g : a.growth) {
-        growth_table_->setItem(row, 0, cell(g.label, ui::colors::TEXT_SECONDARY(),
-                                            Qt::AlignLeft | Qt::AlignVCenter));
-        growth_table_->setItem(row, 1, cell(g.stock.has_value() ? opt_pct(*g.stock * 100.0)
-                                                                : ui::formatting::placeholder(),
-                                            g.stock.has_value() ? color_for(*g.stock) : QString()));
-        growth_table_->setItem(row, 2, cell(g.index.has_value() ? opt_pct(*g.index * 100.0)
-                                                                : ui::formatting::placeholder()));
-        QString edge = ui::formatting::placeholder();
-        QString edge_color;
-        if (g.stock.has_value() && g.index.has_value()) {
-            const double d = (*g.stock - *g.index) * 100.0;
-            edge = opt_pct(d);
-            edge_color = color_for(d);
-        }
-        growth_table_->setItem(row, 3, cell(edge, edge_color));
-        ++row;
-    }
-    fit_table_height(growth_table_);
 }
 
 } // namespace fincept::screens

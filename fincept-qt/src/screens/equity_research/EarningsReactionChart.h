@@ -10,19 +10,17 @@ namespace fincept::screens {
 
 /// Earnings change plotted against what the stock actually did on the print.
 ///
-/// Bars are the selected earnings metric (sequential EPS change, year-ago
-/// change, or surprise vs consensus); the line is the close-to-close move over
-/// the report. Each series has its own scale — a 700% sequential swing and a
-/// 7% price move share no natural axis — so the chart shows *co-movement*, not
-/// magnitude between series. Both are labelled with their own range.
+/// Bars are the selected earnings metric (surprise vs consensus by default,
+/// or sequential / year-ago EPS change); the line is the close-to-close move
+/// over the report. Each series has its own scale — a 700% sequential swing and
+/// a 7% price move share no natural axis — so the chart shows *co-movement*,
+/// not magnitude between series. Both are labelled with their own range.
 ///
-/// A second, dotted line carries what the pre-earnings signal predicted for
-/// each print. It shares the price axis with the reaction line — both measure
-/// the same session's move — so the gap between them is the error, read
-/// without a second chart. It lives here rather than in a panel of its own
-/// precisely because the realised move it is compared against is already this
-/// chart's line; drawing that series twice to compare it with itself was the
-/// whole problem with doing it separately.
+/// Behind the line sits the size forecast that stood before each print, as a
+/// ±band on the price axis: the expected move, rebuilt walk-forward from the
+/// quarters before it, and carried onto the upcoming column. It is the one
+/// forecast here with a measured record, and the band makes that record
+/// readable at a glance — about half the dots should land inside it.
 ///
 /// Deliberately QPainter, like every other chart in this app: QOpenGLWidget
 /// spawns duplicate xdg_toplevels under Mutter.
@@ -35,21 +33,10 @@ class EarningsReactionChart : public QWidget {
     /// oldest → newest, left to right.
     void set_history(const QVector<services::equity::EarningsPoint>& history);
     void set_metric(services::equity::ReactionMetric m);
-    /// One predictor's estimates, drawn against the realised move on the SAME
-    /// axis — both are a percentage move on the same session, so the vertical
-    /// gap between a line and the reaction line is that predictor's error and
-    /// reads directly. Dotted where an estimate was rebuilt after the fact,
-    /// solid between two recorded before their prints.
-    struct PredictionSeries {
-        QString label;
-        QString color;
-        QVector<services::equity::QuarterPrediction> points;
-    };
-
-    /// Show these predictors, all at once. Several lines is the point: the
-    /// question "is this estimate any good" is only answerable against the
-    /// others, and against the baselines in particular.
-    void set_prediction_series(const QVector<PredictionSeries>& series);
+    /// The size forecast before each past print (oldest first, as
+    /// forecast_record() returns them) and the one standing for the next.
+    void set_forecasts(const QVector<services::equity::PrintForecast>& prints,
+                       std::optional<double> next_expected_pct);
     services::equity::ReactionMetric metric() const { return metric_; }
 
   protected:
@@ -74,8 +61,10 @@ class EarningsReactionChart : public QWidget {
         // mistaken for settled history.
         bool projected = false;
         std::optional<double> live_move;
-        // The signal's estimate for this print, and whether it was rebuilt
-        // afterwards rather than recorded before.
+        // The ±size forecast that stood before this print.
+        std::optional<double> expected;
+        std::optional<double> p_beat;
+        std::optional<bool> beat;
     };
 
     QVector<Column> columns() const;
@@ -91,8 +80,9 @@ class EarningsReactionChart : public QWidget {
     static double axis_extent(const QVector<double>& values);
 
     QVector<services::equity::EarningsPoint> history_;   // oldest → newest
-    QVector<PredictionSeries> series_;
-    services::equity::ReactionMetric metric_ = services::equity::ReactionMetric::QoQ;
+    QVector<services::equity::PrintForecast> forecasts_;
+    std::optional<double> next_expected_;
+    services::equity::ReactionMetric metric_ = services::equity::ReactionMetric::Surprise;
 };
 
 } // namespace fincept::screens

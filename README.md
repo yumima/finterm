@@ -2,14 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-09-07)
+## Today's commits (2026-10-02)
 
 Latest first.
 
-- [`9a71cc2fe`](https://github.com/yumima/finterm/commit/9a71cc2fe) ownership: where the reader already is — watchlist columns, holdings alerts, a calendar, and the twelve-month check
-- [`00ebb993f`](https://github.com/yumima/finterm/commit/00ebb993f) ER: retry the info fetch once after a daemon timeout
-- [`73a6e4327`](https://github.com/yumima/finterm/commit/73a6e4327) ownership: the register the industry reads, and three scans that hand you a ticker
-- [`d6e33f939`](https://github.com/yumima/finterm/commit/d6e33f939) python worker: one daemon socket per process, not one per machine
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

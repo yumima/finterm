@@ -19,7 +19,7 @@ struct EarningsSignalRecord {
     QString captured_at;          // ISO-8601 UTC
     int     days_to_report = 0;
 
-    QString verdict;              // BUY | HOLD | SELL
+    QString verdict;              // BUY | HOLD | SELL (v1) · OUTLOOK (v2)
     double  score = 0.0;          // -100 … +100
     double  confidence = 0.0;     // 0 … 1
     std::optional<double> setup_score;
@@ -36,6 +36,12 @@ struct EarningsSignalRecord {
     /// The engine's signed point estimate for the next-session move. NULL on
     /// rows written before it existed, and on setups too thin to justify one.
     std::optional<double> predicted_move_pct;
+    /// NULL on rows written by the v1 scorecard. From 2 the row records the
+    /// outlook: `verdict` is "OUTLOOK", score/confidence are 0, and
+    /// `expected_move_pct` is the volatility-blended size the tab displays.
+    std::optional<int>    model_version;
+    std::optional<double> p_beat;            // 0 … 1, stated before the print
+    std::optional<double> implied_move_pct;  // options event move, when separable
 
     bool    resolved = false;
     std::optional<double> actual_eps;

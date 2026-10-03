@@ -7,317 +7,146 @@
 #include <QStringList>
 #include <QVector>
 
+#include <optional>
+
 namespace fincept::services::equity {
 
-/// Rules-based pre-earnings scorecard.
+/// The pre-earnings outlook: three questions, each answered only as far as
+/// the evidence goes.
 ///
-/// Turns an EarningsAnalysis into a transparent BUY / HOLD / SELL read on the
-/// *setup into the next report* — deliberately not a valuation opinion and not
-/// a price forecast. Every component is scored independently in [-1, +1],
-/// weighted, and reported alongside the number it was derived from, so the
-/// user can disagree with any single leg and see exactly how much it moved the
-/// verdict. Components with no data drop out of the weighted average and
-/// reduce `confidence` rather than silently scoring zero.
+///   WILL THEY BEAT?  A probability, and how likely each size of surprise is.
+///                    Predictable: a name's own beat record, shrunk toward the
+///                    pooled rate, beats the pooled rate alone out of sample.
+///   HOW BIG A MOVE?  A one-session size forecast, with the ranges it
+///                    actually achieves. Predictable: a name's print-day size
+///                    is persistent and recent volatility sharpens it.
+///   WHICH WAY?       Not predictable from anything available before the print,
+///                    so no call is made. What IS known is what each outcome
+///                    has meant for the price, in units of this name's own
+///                    expected move, and that is what is shown.
 ///
-/// Weights are not fixed: they rotate with the time left before the print. Six
-/// weeks out the only legs with anything to say are the slow ones — the track
-/// record, the expected growth, where the price already sits. Inside the final
-/// week those are stale and the fast legs (which way consensus is moving, who
-/// is revising, what is happening to the *next* quarter's number) carry the
-/// read. `horizon_note` states which way the rotation currently leans.
+/// This replaces a hand-weighted BUY / HOLD / SELL scorecard. Measured
+/// walk-forward over 9,665 prints on 236 US names (2014–2026), that scorecard
+/// called the direction right 50.7% of the time — below the 50.9% of "always
+/// up" — and its SELL calls averaged +0.56% on the day, the best of the three.
+/// No backward-looking leg it used carried a usable sign (every |IC| under
+/// 0.03), and the probability of a rise implied by the scenarios below does not
+/// beat a coin flip either (Brier 0.2505 vs 0.2500). The study is in
+/// plans/research/earnings_backtest_2026-10.md.
 ///
 /// The engine lives in the service layer (not the tab) so it stays free of Qt
 /// widget dependencies and can be unit-tested against fixed inputs.
 
-enum class SignalDirection { Bullish, Neutral, Bearish };
-
-/// How fast a leg's information decays.
-///
-/// Short-horizon legs (what analysts are doing to their numbers right now) are
-/// nearly silent two months out and are most of the signal in the final week.
-/// Long-horizon legs (track record, expected growth, where the price sits) say
-/// the same thing all quarter, which makes them the only thing worth reading
-/// far out and the least worth re-reading the night before. The composite
-/// rotates weight between the two as the date approaches.
-enum class SignalHorizon { Short, Long };
-
-/// Which of the two questions a leg answers.
-///
-/// Setup: is the business doing well and does the street think so.
-/// Bar:   how much of that is already in the price.
-///
-/// Keeping them apart is the point. Every Setup leg is positively correlated
-/// with every other one AND with how crowded the name is, so a scorer built
-/// only from them is a quality detector — and quality is the thing that gets
-/// priced. "Strong company, very high bar" and "ordinary company, nothing
-/// expected" can produce the same composite, and the reader needs to be able
-/// to tell them apart.
-enum class SignalAxis { Setup, Bar };
-
-/// One scored leg of the verdict.
-struct SignalComponent {
-    QString name;             // "REVISION MOMENTUM"
-    QString detail;           // "Current-qtr EPS +8.7% vs 90d ago"
-    QString explanation;      // why this leg matters, for the tooltip
-    double  score = 0.0;      // -1 … +1
-    double  weight = 0.0;     // share of the composite AFTER horizon rotation
-    double  base_weight = 0.0;// share before rotation — what the leg is worth in principle
-    SignalHorizon horizon = SignalHorizon::Long;
-    SignalAxis    axis = SignalAxis::Setup;
-    bool    available = false;
+/// One way the print can land, by EPS surprise against consensus.
+struct EarningsScenario {
+    QString label;              // "MISS", "SLIGHT BEAT", …
+    QString range;              // "below consensus", "0 – 3%", …
+    double  probability = 0.0;  // 0 … 1, this name's record shrunk to the pooled mix
+    int     name_count = 0;     // how many of the name's scored quarters landed here
+    /// Pooled mean next-session move for this outcome, in multiples of the
+    /// name's own expected move. Stable across both halves of the sample;
+    /// per-name versions are not (persistence IC −0.01), which is why the
+    /// pooled figure is used and then scaled to this name's size.
+    double  move_multiple = 0.0;
+    double  typical_move_pct = 0.0;  // move_multiple × expected move
+    double  up_rate = 0.0;           // pooled share of these prints that rose
 };
 
-struct EarningsVerdict {
-    SignalDirection direction = SignalDirection::Neutral;
-    QString label;                      // "BUY" / "HOLD" / "SELL"
-    double  score = 0.0;                // -100 … +100
-    double  confidence = 0.0;           // 0 … 1 — share of weight that had data
-    QString headline;                   // one-line plain-English summary
-    QStringList caveats;                // risk notes that don't move the score
-    QVector<SignalComponent> components;
-    /// Plain-English statement of how far out the report is and which legs the
-    /// rotation is currently favouring. Always set — a reader who can't see why
-    /// the weights moved would reasonably assume they were fixed.
-    QString horizon_note;
-    int     days_to_report = -1;        // -1 when the date is unknown
+/// Which way the street has been moving its numbers. Context for the beat
+/// question — shown, never folded into the probability, because Yahoo
+/// publishes it as a snapshot with no history to test it against.
+enum class EstimateDrift { Rising, Flat, Falling, Unknown };
 
-    // The composite, decomposed. Each is the weighted mean over the available
-    // legs of that axis, on the same ±100 scale as `score`, so they can be
-    // read side by side: setup +70 / bar −55 is a good company with most of
-    // the good news already paid for. Unset when that axis has no data.
-    std::optional<double> setup_score;
-    std::optional<double> bar_score;
+struct EarningsOutlook {
+    bool valid = false;               // false: nothing earnings-shaped to say
+    QString headline;                 // the three answers in one sentence
+    int days_to_report = -1;          // -1 when no date is published
 
-    // Descriptive stats the UI shows next to the verdict.
-    int    scored_quarters = 0;         // reported quarters with a surprise
-    double beat_rate = 0.0;             // 0 … 1
-    double avg_surprise_pct = 0.0;
-    double surprise_stdev_pct = 0.0;    // quarter-to-quarter spread of the surprise
-    std::optional<double> beat_reaction_pct;  // mean move on quarters that beat
-    // Mean reaction over the past prints this name walked into as hot as it is
-    // walking into this one, and how many those were. Set only when the
-    // current run-up is above the historical median — otherwise the subset
-    // answers a question this setup doesn't pose.
-    std::optional<double> hot_runup_reaction_pct;
-    int hot_runup_prints = 0;
-    int    reaction_quarters = 0;
-    double avg_reaction_pct = 0.0;      // signed mean 1-day move
-    double typical_move_pct = 0.0;      // mean |1-day move| — purely descriptive
-    /// Forecast of the COMING print's move size — the one genuinely
-    /// forecastable part of a reaction. Blends the name's own earnings-day
-    /// history with how volatile it has been over the twenty sessions before
-    /// the print, which the earnings history cannot contain: that holds a
-    /// dozen observations months apart and says nothing about the regime now.
-    ///
-    /// Measured out of sample on 181 names and 1463 prints, and held out by
-    /// COMPANY so the test names were never trained on: the blend cuts mean
-    /// absolute error ~7% against the trailing average alone and lifts
-    /// correlation with the realised size from +0.43 to +0.53. Falls back to
-    /// the trailing average when no volatility is available.
-    double expected_move_pct = 0.0;
-    double up_reaction_rate = 0.0;      // 0 … 1
-    /// Analyst spread on the coming quarter's EPS, (high−low) as a percentage
-    /// of the mean. A risk gauge, never a direction: a wide consensus means a
-    /// bigger surprise in whichever direction it lands, so it is reported and
-    /// caveated but deliberately kept out of the score.
-    std::optional<double> dispersion_pct;
-    /// `dispersion_pct` past the threshold the engine calls wide. Carried as a
-    /// flag so the panel and the caveat can't drift apart on where the line is.
+    // ── 1. Will they beat? ──────────────────────────────────────────────────
+    std::optional<double> p_beat;     // 0 … 1
+    double pooled_beat_rate = 0.0;    // what an unknown name would be given
+    int    beats = 0;                 // in the scored window
+    int    scored_quarters = 0;       // quarters with a usable surprise
+    std::optional<double> typical_surprise_pct;   // median of the scored window
+    QVector<EarningsScenario> scenarios;          // ordered worst → best
+    EstimateDrift drift = EstimateDrift::Unknown;
+    QString drift_detail;             // "+2.1% in 90 days · 4 up / 0 down in 30"
+    std::optional<double> dispersion_pct;   // (high−low)/|mean| on this quarter's EPS
     bool dispersion_is_wide = false;
 
-    /// The engine's own point estimate for the next-session move, in percent,
-    /// signed. Rules-based arithmetic over the legs above — no model, nothing
-    /// learned, and nothing asked of an LLM: it is the direction the composite
-    /// leans, scaled by how far this name typically travels on a print, scaled
-    /// again by how much of the picture is actually backed by data.
-    ///
-    /// Unset rather than zero when there is no basis for one — a name with no
-    /// reaction history has no typical move to scale, and a picture under the
-    /// confidence floor has no lean worth scaling. "No prediction" and
-    /// "predicting no move" are different claims.
-    ///
-    /// It carries no validated accuracy. That is the point of recording it:
-    /// until enough prints have gone by with the number written down
-    /// beforehand, nobody can say whether it is worth anything.
-    std::optional<double> predicted_move_pct;
+    // ── 2. How big a move? ──────────────────────────────────────────────────
+    std::optional<double> expected_move_pct;   // one session, either direction
+    std::optional<double> trailing_move_pct;   // plain mean |move| over past prints
+    int    reaction_quarters = 0;
+    // Ranges the forecast actually achieves, in percent. Half of past prints
+    // pooled landed inside `half_within`, four in five inside `most_within`,
+    // and one in ten beyond `tail_beyond`.
+    std::optional<double> half_within_pct;
+    std::optional<double> most_within_pct;
+    std::optional<double> tail_beyond_pct;
+    std::optional<double> implied_move_pct;    // options event move, when separable
+    /// implied ÷ expected. Above 1 the options are pricing a bigger session
+    /// than this name's history and current volatility suggest.
+    std::optional<double> implied_ratio;
+
+    // ── 3. Which way? — what is already priced in (context only) ────────────
+    QStringList priced_in;            // plain-English lines; never a call
+
+    QStringList caveats;
 };
 
-/// Score `a`. Safe on an empty/invalid analysis — returns a Neutral verdict
-/// with zero confidence and an explanatory headline.
-EarningsVerdict evaluate_earnings(const EarningsAnalysis& a);
+/// Build the outlook. Safe on an empty/invalid analysis.
+EarningsOutlook evaluate_outlook(const EarningsAnalysis& a);
 
-/// Which earnings metric the next-day move actually tracked, for THIS name.
+/// One past print, with the forecasts that stood before it — rebuilt from the
+/// quarters before it only, so nothing is informed by its own outcome.
+struct PrintForecast {
+    qint64 timestamp = 0;
+    std::optional<double> expected_move_pct;   // size forecast before the print
+    std::optional<double> actual_move_pct;     // realised close-to-close
+    std::optional<double> p_beat;              // beat probability before the print
+    std::optional<bool>   beat;                // what happened (unset when suspect)
+};
+
+/// How this name's own forecasts have fared, walk-forward.
+struct ForecastRecord {
+    QVector<PrintForecast> prints;   // oldest first, aligned with the chart
+    // Size: share of prints that landed inside the expected move (pooled
+    // expectation is about half), and mean miss against the plain trailing
+    // average — the baseline the blend has to beat to be worth having.
+    int    size_graded = 0;
+    int    size_inside = 0;
+    double size_mae = 0.0;
+    double trailing_mae = 0.0;
+    // Beat: mean stated probability against the realised rate.
+    int    beat_graded = 0;
+    int    beat_hits = 0;
+    double mean_p_beat = 0.0;
+};
+
+ForecastRecord forecast_record(const EarningsAnalysis& a);
+
+/// Which earnings metric the chart bars show.
 enum class ReactionMetric { Surprise, QoQ, YoY };
 
 /// Measured relationship between one earnings metric and the close-to-close
-/// move over the print. Reported, never scored: a dozen quarters is far too
-/// few for significance, and the honest use of the number is "does this stock
-/// tend to trade off this input at all", not "predict the next move".
+/// move over the print. Descriptive only — these metrics exist after the
+/// print, so they explain moves rather than predict them.
 struct ReactionCorrelation {
     ReactionMetric metric = ReactionMetric::Surprise;
     QString label;                 // "SURPRISE", "QoQ", "YoY"
     std::optional<double> r;       // Pearson, -1 … +1; unset when n < 3
-    int n = 0;                     // quarters with both values present
+    int n = 0;
 };
 
-/// One quarter's pre-print estimate placed beside what the print actually did.
-///
-/// `predicted_move_pct` on a past quarter is a RECONSTRUCTION, and a partial
-/// one: only the backward-looking legs (surprise record, reaction history,
-/// run-up into the print) have data that survives, because Yahoo publishes
-/// consensus and revisions as a live snapshot with no history. Revisions,
-/// guidance and the expectations gap — roughly two-thirds of the model's
-/// weight — cannot be recovered for a quarter that has already passed.
-///
-/// The reconstruction therefore runs through the SAME formula as the live
-/// prediction — the same weights and the same confidence multiplier — rather
-/// than renormalising over the legs it happens to have. That keeps a
-/// reconstructed point and a recorded one meaning the same thing, at the cost
-/// of the reconstruction predicting visibly smaller moves — the honest
-/// consequence of knowing less, not a defect to be scaled away.
-///
-/// One deliberate difference from the live path: the live verdict refuses to
-/// emit a prediction below kMinConfidence, and a three-leg reconstruction
-/// (confidence ≈ 0.28) sits below that bar every time. The gate is NOT
-/// applied here — applying it would blank the entire reconstructed series and
-/// with it the walk-forward evidence the scorecard is judged by. The chart
-/// note states this exemption to the reader.
-struct QuarterPrediction {
-    qint64 timestamp = 0;
-    std::optional<double> predicted_move_pct;  // reconstructed, backward legs only
-    std::optional<double> actual_move_pct;     // the realised close-to-close reaction
-    /// The largest magnitude this estimate could have taken: the typical move
-    /// scaled by how much of the model was available. Reported so a chart can
-    /// show the range the predictor was working in — without it, an estimate
-    /// pinned near zero looks like a broken line rather than one that had very
-    /// little room to move in the first place.
-    std::optional<double> bound_pct;
-    bool reconstructed = true;                 // false once a recorded reading replaces it
-};
-
-/// Reconstruct a pre-print estimate for every reported quarter in `a`, oldest
-/// first. Each quarter is scored using only the quarters BEFORE it, so no
-/// point is ever informed by its own outcome.
-QVector<QuarterPrediction> reconstruct_predictions(const EarningsAnalysis& a);
-
-/// Competing ways to guess the next-session move, so the scorecard's estimate
-/// can be judged against something rather than admired on its own.
-///
-/// Every one is evaluated walk-forward: quarter i is predicted using only
-/// quarters before it, refitting as the window grows. An in-sample fit on
-/// twelve points would look excellent and mean nothing.
-///
-/// The two baselines are the point of the exercise. A predictor that cannot
-/// beat "assume no move" or "assume this name's average move" is not adding
-/// information, however sophisticated its inputs — and with a dozen quarters
-/// per symbol that is the likely honest answer.
-enum class MovePredictor {
-    Scorecard,   ///< the rules-based signal, reconstructed for past quarters
-    EpsModel,    ///< two-stage: expected surprise, then surprise → move
-    Adaptive,    ///< see below — the one built for this problem specifically
-    RunupFit,    ///< plain least squares of reaction on the run-up
-    MeanMove,    ///< baseline: this name's average past reaction
-    NoMove,      ///< baseline: zero, every quarter
-};
-
-// ── The EPS model ────────────────────────────────────────────────────────────
-// The one built out of what the history actually contains. Every past quarter
-// carries the consensus that stood going INTO the print, the figure that
-// landed, and the move that followed — so the two links in the causal chain
-// can each be fitted on real pairs instead of assumed.
-//
-//   Stage A — how big a surprise to expect.
-//     A company's surprise is not noise around zero: most guide to a number
-//     they can clear, and they do it with a persistent bias. That bias is the
-//     starting point. It is then adjusted for the height of the bar, which IS
-//     knowable beforehand: the coming quarter's consensus against what the
-//     company last delivered gives the growth analysts are asking for, and
-//     regressing past surprises on that same quantity says how this name
-//     responds when the ask runs ahead of what it usually delivers.
-//
-//   Stage B — what a surprise is worth in price.
-//     Regress the realised move on the realised surprise over past quarters.
-//     The slope is this name's own sensitivity: how many percent it moves per
-//     percent of beat. Some names pay for a beat and some do not, and that is
-//     measurable rather than assumable.
-//
-//   Stage C — what is already paid for.
-//     The residual left by stage B is regressed on the run-up into the print.
-//     A stock that has already run has spent some of the beat in advance, and
-//     this is where that shows up.
-//
-// The estimate REVISION trajectory — the consensus a week, a month, three
-// months back — is deliberately absent from the fit. It exists for the coming
-// quarter only; Yahoo publishes it as a live snapshot with no history, so
-// there are no past pairs to fit it against. Fitting a coefficient on data
-// that exists for one quarter and calling it a model would be the exact
-// hindsight this whole panel is built to avoid.
-//
-// Magnitude capping and skill shrinkage are shared with Adaptive below, for
-// the reasons given there.
-
-// ── The Adaptive predictor ───────────────────────────────────────────────────
-// Designed around three properties of this particular problem rather than
-// dropped in from a library.
-//
-// 1. SIZE IS PREDICTABLE, DIRECTION MOSTLY IS NOT. How far a name travels on a
-//    print is persistent — volatility clusters, and a stock that moved 8% on
-//    its last four prints will probably move something like 8% on the next.
-//    Which WAY it travels is dominated by the surprise, which nobody has
-//    beforehand. So the model estimates magnitude first and lets it CAP the
-//    signed call: the direction can never be more confident than the size.
-//
-// 2. RECENCY BEATS DEPTH. Twelve quarters spans three years, over which a
-//    business changes. Every statistic is exponentially weighted with a
-//    four-quarter half-life, so the last year carries most of the answer.
-//
-// 3. THE SAMPLE IS TINY AND HAS OUTLIERS. One −24% print dominates an
-//    unweighted least-squares slope. Targets are winsorised against the
-//    expected magnitude before fitting, and the slope is shrunk for the sample
-//    size on top.
-//
-// The distinctive part is SKILL SHRINKAGE. Before predicting quarter i, the
-// model replays itself over the quarters before i and measures its own mean
-// error against the do-nothing baseline. If it has been beating "assume no
-// move" it keeps most of its conviction; if it has been losing to it, its
-// output collapses toward zero. A model that cannot beat the baseline should
-// stop making claims, and this one does that by construction rather than by
-// waiting for someone to notice.
-
-/// One predictor's walk-forward record on a symbol.
-struct PredictorRun {
-    MovePredictor predictor = MovePredictor::Scorecard;
-    QString label;
-    QString explanation;
-    QVector<QuarterPrediction> points;   // oldest first, aligned to the charts
-    /// Estimate for the print that hasn't happened yet, where the predictor
-    /// has enough behind it to make one.
-    std::optional<double> next_move_pct;
-    std::optional<double> next_bound_pct;
-    // Scored only over quarters the predictor actually answered AND that have
-    // a settled reaction.
-    int    graded = 0;
-    double mean_abs_error = 0.0;
-    /// What NO MOVE would have scored over EXACTLY the quarters this predictor
-    /// answered. The "beats assuming no move by X pp" comparison must use this
-    /// rather than NO MOVE's own all-quarters MAE: predictors that abstain
-    /// until they have history answer a calmer subset, and comparing means
-    /// over different quarter sets let a predictor "beat" the baseline without
-    /// being better on any quarter both answered.
-    double nomove_mae_same_quarters = 0.0;
-    int    direction_hits = 0;
-    int    direction_calls = 0;   // excludes near-zero estimates: not a call
-};
-
-/// Run every predictor over `a`, walk-forward. `live` supplies the scorecard's
-/// current reading for the upcoming print; the others derive their own.
-QVector<PredictorRun> compare_predictors(const EarningsAnalysis& a, const EarningsVerdict& live);
-
-/// Correlate all three metrics against the realised reaction.
 QVector<ReactionCorrelation> correlate_reactions(const EarningsAnalysis& a);
 
 /// The metric value on one quarter, for whichever metric is selected.
 std::optional<double> metric_value(const EarningsPoint& p, ReactionMetric m);
+
+/// Which scenario a realised surprise falls in (index into
+/// EarningsOutlook::scenarios), or -1 for none / an accounting artefact.
+int scenario_index(const EarningsPoint& p);
 
 /// Calendar days from today until the next report, counted in US market time
 /// (the exchange session is what "reports Thursday after the close" refers to,
@@ -326,8 +155,7 @@ std::optional<double> metric_value(const EarningsPoint& p, ReactionMetric m);
 /// separate by checking `a.next.timestamp` first.
 int days_to_next_earnings(const EarningsAnalysis& a);
 
-/// Same, against a caller-supplied clock. The engine's own horizon weighting
-/// goes through this so the rotation can be tested at a fixed point in time.
+/// Same, against a caller-supplied clock, so it can be tested at a fixed time.
 int days_to_next_earnings(const EarningsAnalysis& a, const QDateTime& now);
 
 } // namespace fincept::services::equity

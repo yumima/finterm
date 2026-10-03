@@ -779,6 +779,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v049_opening_balances.cpp
     src/storage/sqlite/migrations/v050_llm_assignment_dedupe.cpp
     src/storage/sqlite/migrations/v051_hearth_provider_rename.cpp
+    src/storage/sqlite/migrations/v052_earnings_outlook.cpp
 )
 
 # Python runner
