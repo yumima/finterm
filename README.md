@@ -2,12 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-10-03)
+## Today's commits (2026-10-05)
 
 Latest first.
 
-- [`1a9df1327`](https://github.com/yumima/finterm/commit/1a9df1327) ownership: BRK-B, not BRK/B — 13F tickers in the form the terminal uses; titles above their columns
-- [`e7cdddb4e`](https://github.com/yumima/finterm/commit/e7cdddb4e) ownership: sort a fund's holdings by any column, and say what each column is
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
