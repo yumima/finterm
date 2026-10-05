@@ -27,7 +27,7 @@ To change labels: edit `.github/labels.json` and merge — the sync workflow app
 
 ## Hacktoberfest
 
-- The repo-topics sync keeps `hacktoberfest-excluded` applied year-round, so spam PRs can't be counted.
+- The repo does not carry the `hacktoberfest-excluded` topic. To opt out of the event, add it once by hand: `gh repo edit --add-topic hacktoberfest-excluded`. (A workflow cannot set topics: that needs Administration: write, which `GITHUB_TOKEN` never has.)
 - Do **not** add the `hacktoberfest-accepted` label to any PR unless it is a real, substantive contribution.
 - Use the `spam` label for obvious farming attempts (single-line typo PRs, auto-formatter PRs, README-bloat PRs). Two `spam` / `invalid` labels across Hacktoberfest-participating repos disqualifies the author from the event.
 - Most of these PRs are already filtered by `pr-gate.yml` before you see them.
