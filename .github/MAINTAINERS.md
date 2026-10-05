@@ -9,13 +9,10 @@ You do **not** need to click around in GitHub Settings. These workflows keep the
 | Workflow                                        | What it does                                                                                           |
 |-------------------------------------------------|--------------------------------------------------------------------------------------------------------|
 | [`sync-labels.yml`](./workflows/sync-labels.yml)           | Creates / updates every label listed in [`.github/labels.json`](./labels.json). Runs on push to `main` when that file changes, or on manual dispatch. |
-| [`sync-repo-topics.yml`](./workflows/sync-repo-topics.yml) | Ensures `hacktoberfest-excluded` is present in repo topics. Runs weekly + on manual dispatch.          |
 | [`pr-gate.yml`](./workflows/pr-gate.yml)                   | On every PR event, flags PRs that don't close a labeled / scope-approved issue with `needs-scope-approval` and a templated comment. |
 | [`pr-stale-close.yml`](./workflows/pr-stale-close.yml)     | Closes PRs that have carried `needs-scope-approval` for 7+ days with the `invalid` label.              |
 
 To change labels: edit `.github/labels.json` and merge — the sync workflow applies the change. Extra labels that exist on the repo but aren't in the file are left alone (not deleted).
-
-To add a repo topic: edit the `REQUIRED` array in `sync-repo-topics.yml` and merge.
 
 ## Scope-approval flow
 

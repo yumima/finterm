@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`45a8f94db`](https://github.com/yumima/finterm/commit/45a8f94db) **ci:** remove the upstream topic-sync workflow that failed every week
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
