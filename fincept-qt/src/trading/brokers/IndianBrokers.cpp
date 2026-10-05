@@ -139,7 +139,7 @@ OrderPlaceResponse ZerodhaBroker::place_order(const BrokerCredentials& creds, co
         {"product", zerodha_product(order.product_type)},
         {"validity", order.validity.isEmpty() ? "DAY" : order.validity},
         {"disclosed_quantity", "0"},
-        {"tag", "fincept"}, // tracking tag visible in Zerodha order history
+        {"tag", "finterm"}, // tracking tag visible in Zerodha order history
     };
     if (order.price > 0)
         params["price"] = QString::number(order.price, 'f', 2);

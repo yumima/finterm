@@ -21,7 +21,6 @@
 #include "screens/economics/panels/EiaPanel.h"
 #include "screens/economics/panels/EurostatPanel.h"
 #include "screens/economics/panels/FederalReservePanel.h"
-#include "screens/economics/panels/FinceptMacroPanel.h"
 #include "screens/economics/panels/FiscalDataPanel.h"
 #include "screens/economics/panels/FredAnalyticsPanel.h"
 #include "screens/economics/panels/FredPanel.h"
@@ -41,6 +40,7 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <algorithm>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
@@ -86,7 +86,6 @@ static const struct {
     {"wto", "WTO", "#E91E63"},
     {"unesco", "UNESCO", "#00ACC1"},
     {"bea", "BEA", "#E65100"},
-    {"fincept", "Proprietary Macro", "#d97706"},
 };
 
 // ── Panel factory ─────────────────────────────────────────────────────────────
@@ -151,8 +150,6 @@ static EconPanelBase* make_panel(const QString& id, QWidget* parent) {
         return new UnescoPanel(parent);
     if (id == "bea")
         return new BeaPanel(parent);
-    if (id == "fincept")
-        return new FinceptMacroPanel(parent);
     return nullptr;
 }
 
@@ -314,7 +311,12 @@ QVariantMap EconomicsScreen::save_state() const {
 
 void EconomicsScreen::restore_state(const QVariantMap& state) {
     const QString id = state.value("source_id").toString();
-    if (!id.isEmpty())
+    // A layout can name a source that has since been removed (the old
+    // "Proprietary Macro" tab, id "fincept"); switching to it would deselect
+    // every badge and show no panel. Keep the default source instead.
+    const bool known = std::any_of(sources_.cbegin(), sources_.cend(),
+                                   [&](const auto& e) { return e.id == id; });
+    if (known)
         switch_to(id);
 }
 

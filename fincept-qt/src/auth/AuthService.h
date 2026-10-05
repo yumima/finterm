@@ -10,7 +10,7 @@
 namespace fincept::auth {
 
 /// In-process authentication service backed by a local SQLite database.
-/// Replaces the external stub server (tools/local_stub/server.py).
+/// Replaces the external stub server that used to run on :8765 (since deleted).
 /// All users are stored in AppPaths::data()/auth.db — nothing leaves this machine.
 ///
 /// Password storage: SHA-256 with random salt ("salt_hex:hash_hex").

@@ -25,7 +25,7 @@ void AppConfig::remove(const QString& key) {
 
 QString AppConfig::api_base_url() const {
     // Localhost-only fork: default base URL points at the bundled local stub server
-    // (tools/local_stub_server.py). No traffic ever leaves this machine.
+    // (the old localhost stub, since deleted). No traffic ever leaves this machine.
     return settings_.value("api/base_url", "http://127.0.0.1:8765").toString();
 }
 

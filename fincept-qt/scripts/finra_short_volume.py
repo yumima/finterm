@@ -37,7 +37,7 @@ try:
 except ImportError:
     requests = None
 
-UA = {"User-Agent": "FinceptTerminal research@hanlexon.com",
+UA = {"User-Agent": "finterm research@hanlexon.com",
       "Accept-Encoding": "gzip, deflate"}
 
 # Consolidated NMS file — every tape, one row per symbol per day.

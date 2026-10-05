@@ -581,34 +581,6 @@ else()
     target_compile_options(qtadvanceddocking-qt6 PRIVATE -w -Wno-error)
 endif()
 
-# ── ed25519 (orlp/ed25519) ───────────────────────────────────────────────────
-# Public-domain Ed25519 reference implementation. We only use ed25519_verify
-# in WalletService (signed-message challenge for Solana wallet connect).
-# Upstream has no CMakeLists, so we build the .c files into a small static lib.
-set(CMAKE_SKIP_INSTALL_RULES TRUE CACHE BOOL "" FORCE)
-FetchContent_Declare(
-    ed25519
-    GIT_REPOSITORY https://github.com/orlp/ed25519.git
-    GIT_TAG        b1f19fab4aebe607805620d25a5e42566ce46a0e  # master @ 2026-04-27
-    GIT_SHALLOW    TRUE
-    UPDATE_DISCONNECTED TRUE
-)
-FetchContent_MakeAvailable(ed25519)
-file(GLOB FINCEPT_ED25519_SRC "${ed25519_SOURCE_DIR}/src/*.c")
-add_library(fincept_ed25519 STATIC ${FINCEPT_ED25519_SRC})
-target_include_directories(fincept_ed25519 PUBLIC "${ed25519_SOURCE_DIR}/src")
-set_target_properties(fincept_ed25519 PROPERTIES
-    UNITY_BUILD OFF
-    POSITION_INDEPENDENT_CODE ON
-    C_STANDARD 99
-)
-if(MSVC)
-    target_compile_options(fincept_ed25519 PRIVATE /W0 /WX-)
-else()
-    target_compile_options(fincept_ed25519 PRIVATE -w -Wno-error)
-endif()
-set(CMAKE_SKIP_INSTALL_RULES FALSE CACHE BOOL "" FORCE)
-
 # ── Source files by module ────────────────────────────────────────────────────
 
 # Core
@@ -955,25 +927,6 @@ set(SERVICE_SOURCES
     src/services/agents/SlashCommandService.cpp
     src/services/file_manager/FileManagerService.cpp
 
-    # Wallet (Phase 1 — Solana wallet identity + balance display)
-    src/services/wallet/Ed25519Verifier.cpp
-    src/services/wallet/SolanaRpcClient.cpp
-    src/services/wallet/LocalWalletBridge.cpp
-    src/services/wallet/ConnectWalletDialog.cpp
-    src/services/wallet/WalletService.cpp
-    src/services/wallet/WalletTypes.cpp
-    src/services/wallet/WalletBalanceProducer.cpp
-    src/services/wallet/TokenPriceProducer.cpp
-    # Wallet (Phase 2 — transaction-signing bridge + PumpPortal swap)
-    src/services/wallet/WalletTxBridge.cpp
-    src/services/wallet/SignTransactionDialog.cpp
-    src/services/wallet/PumpFunSwapService.cpp
-    # Wallet (Phase 2 Stage 2A.5 — multi-token holdings)
-    src/services/wallet/TokenMetadataService.cpp
-    # Wallet (Phase 2 Stage 2B — activity feed)
-    src/services/wallet/WalletActivityProducer.cpp
-    # Billing (Phase 2 Stage 2C — fee discount eligibility)
-    src/services/billing/FeeDiscountService.cpp
     src/services/sectors/SectorResolver.cpp
     src/services/workflow/NodeRegistry.cpp
     src/services/workflow/WorkflowService.cpp
@@ -1378,7 +1331,6 @@ set(SCREEN_SOURCES
     src/screens/economics/panels/WtoPanel.cpp
     src/screens/economics/panels/UnescoPanel.cpp
     src/screens/economics/panels/BeaPanel.cpp
-    src/screens/economics/panels/FinceptMacroPanel.cpp
 
     # Polymarket / Prediction Markets
     src/screens/polymarket/PolymarketScreen.cpp
@@ -1500,18 +1452,6 @@ set(SCREEN_SOURCES
     src/screens/node_editor/toolbar/NodeEditorToolbar.cpp
     src/screens/node_editor/toolbar/DeployDialog.cpp
 
-    # Crypto Center
-    src/screens/crypto_center/CryptoCenterScreen.cpp
-    src/screens/crypto_center/HoldingsBar.cpp
-    src/screens/crypto_center/WalletActionConfirmDialog.cpp
-    src/screens/crypto_center/tabs/ComingSoonTab.cpp
-    src/screens/crypto_center/tabs/HomeTab.cpp
-    src/screens/crypto_center/tabs/SettingsTab.cpp
-    src/screens/crypto_center/tabs/TradeTab.cpp
-    src/screens/crypto_center/tabs/ActivityTab.cpp
-    src/screens/crypto_center/panels/SwapPanel.cpp
-    src/screens/crypto_center/panels/HoldingsTable.cpp
-    src/screens/crypto_center/panels/FeeDiscountPanel.cpp
 )
 
 # App
@@ -1653,17 +1593,6 @@ set_source_files_properties(
     src/screens/dashboard/widgets/WatchlistWidget.cpp
     src/screens/dashboard/widgets/WebScraperWidget.cpp
     src/screens/data_mapping/DataMappingScreen.cpp
-    src/screens/crypto_center/CryptoCenterScreen.cpp
-    src/screens/crypto_center/HoldingsBar.cpp
-    src/screens/crypto_center/WalletActionConfirmDialog.cpp
-    src/screens/crypto_center/tabs/ComingSoonTab.cpp
-    src/screens/crypto_center/tabs/HomeTab.cpp
-    src/screens/crypto_center/tabs/SettingsTab.cpp
-    src/screens/crypto_center/tabs/TradeTab.cpp
-    src/screens/crypto_center/tabs/ActivityTab.cpp
-    src/screens/crypto_center/panels/SwapPanel.cpp
-    src/screens/crypto_center/panels/HoldingsTable.cpp
-    src/screens/crypto_center/panels/FeeDiscountPanel.cpp
     src/screens/dbnomics/DBnomicsChartWidget.cpp
     src/screens/dbnomics/DBnomicsDataTable.cpp
     src/screens/dbnomics/DBnomicsScreen.cpp
@@ -2380,7 +2309,6 @@ target_link_libraries(FinceptTerminal PRIVATE
     qtadvanceddocking-qt6
     OpenSSL::SSL
     OpenSSL::Crypto
-    fincept_ed25519
 )
 
 # macOS: link Security.framework + CoreFoundation for SecItem API in SecureStorage
@@ -2584,19 +2512,6 @@ add_custom_command(TARGET FinceptTerminal POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ai/capabilities.json"
         "$<TARGET_FILE_DIR:FinceptTerminal>/resources/ai/capabilities.json"
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/wallet"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/wallet/connect.html"
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/wallet/connect.html"
-    COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/wallet/swap.html"
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/wallet/swap.html"
-    COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/wallet/vendor"
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/wallet/vendor"
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/wallet/vendor"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/knowledge"
         "$<TARGET_FILE_DIR:FinceptTerminal>/resources/knowledge"
@@ -2724,7 +2639,7 @@ endif()
 #   cd build && cpack -G IFW -C Release
 #
 # Requires: Qt Installer Framework (binarycreator on PATH or in Qt install)
-# Output:   FinceptTerminal-<ver>-<platform>-setup.exe/.run/.app
+# Output:   finterm-<ver>-<platform>-<arch>-setup.exe/.run/.app
 
 option(FINCEPT_BUILD_INSTALLER "Generate QtIFW installer via CPack" OFF)
 
@@ -2807,6 +2722,9 @@ if(FINCEPT_BUILD_INSTALLER)
     set(CPACK_IFW_PACKAGE_START_MENU_DIRECTORY "finterm")
     set(CPACK_IFW_PACKAGE_ICON
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.ico")
+    # Kept as-is: Qt IFW finds an existing installation by this name, so
+    # renaming it would strand earlier installs (orphaned uninstaller). It is
+    # an install-time identifier, like com.fincept.terminal.
     set(CPACK_IFW_PACKAGE_MAINTENANCE_TOOL_NAME "FinceptMaintenanceTool")
     set(CPACK_IFW_PACKAGE_WIZARD_STYLE "Modern")
     set(CPACK_IFW_PACKAGE_ALLOW_SPACE_IN_PATH ON)
@@ -2822,8 +2740,9 @@ if(FINCEPT_BUILD_INSTALLER)
     endif()
 
     # Output file naming — arch-aware so the auto-updater manifest can point
-    # at predictable, stable URLs. Scheme:
-    #   FinceptTerminal-<version>-<platform>-<arch>-setup
+    # at predictable, stable URLs. Scheme (matched by release.yml's upload
+    # globs and .github/scripts/generate_updates_manifest.py):
+    #   finterm-<version>-<platform>-<arch>-setup
     # Platform: windows | linux | macos
     # Arch:     x64 | arm64
     # The CPack IFW generator appends .exe on Windows, .app on macOS, .run on Linux.
@@ -2835,7 +2754,7 @@ if(FINCEPT_BUILD_INSTALLER)
             set(_FINCEPT_PKG_ARCH "x64")
         endif()
         set(CPACK_PACKAGE_FILE_NAME
-            "FinceptTerminal-${CMAKE_PROJECT_VERSION}-windows-${_FINCEPT_PKG_ARCH}-setup")
+            "finterm-${CMAKE_PROJECT_VERSION}-windows-${_FINCEPT_PKG_ARCH}-setup")
     elseif(APPLE)
         # On macOS CMAKE_OSX_ARCHITECTURES is the authoritative source
         # (it drives the actual binary slice). Fall back to host processor.
@@ -2854,7 +2773,7 @@ if(FINCEPT_BUILD_INSTALLER)
             set(_FINCEPT_PKG_ARCH "x64")
         endif()
         set(CPACK_PACKAGE_FILE_NAME
-            "FinceptTerminal-${CMAKE_PROJECT_VERSION}-macos-${_FINCEPT_PKG_ARCH}-setup")
+            "finterm-${CMAKE_PROJECT_VERSION}-macos-${_FINCEPT_PKG_ARCH}-setup")
     else()
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
             set(_FINCEPT_PKG_ARCH "arm64")
@@ -2862,7 +2781,7 @@ if(FINCEPT_BUILD_INSTALLER)
             set(_FINCEPT_PKG_ARCH "x64")
         endif()
         set(CPACK_PACKAGE_FILE_NAME
-            "FinceptTerminal-${CMAKE_PROJECT_VERSION}-linux-${_FINCEPT_PKG_ARCH}-setup")
+            "finterm-${CMAKE_PROJECT_VERSION}-linux-${_FINCEPT_PKG_ARCH}-setup")
     endif()
     message(STATUS "  Installer filename: ${CPACK_PACKAGE_FILE_NAME}")
 

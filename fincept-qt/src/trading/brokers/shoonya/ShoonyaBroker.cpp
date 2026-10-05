@@ -176,7 +176,7 @@ OrderPlaceResponse ShoonyaBroker::place_order(const BrokerCredentials& creds, co
     jdata["prc"] = QString::number(order.price, 'f', 2);
     jdata["trgprc"] = QString::number(order.stop_price, 'f', 2);
     jdata["ret"] = "DAY";
-    jdata["remarks"] = "fincept";
+    jdata["remarks"] = "finterm";
     jdata["ordersource"] = "API";
 
     auto& http = BrokerHttp::instance();

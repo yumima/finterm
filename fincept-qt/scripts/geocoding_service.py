@@ -15,7 +15,7 @@ from geopy.extra.rate_limiter import RateLimiter
 import time
 
 # Initialize geocoder with user agent
-geolocator = Nominatim(user_agent="fincept-terminal/3.0")
+geolocator = Nominatim(user_agent="finterm/3.0")
 # Rate limiter: 1 call per second
 geocode = RateLimiter(geolocator.geocode, min_delay_seconds=1)
 reverse = RateLimiter(geolocator.reverse, min_delay_seconds=1)

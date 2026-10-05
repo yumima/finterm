@@ -174,7 +174,7 @@ OrderPlaceResponse AliceBlueBroker::place_order(const BrokerCredentials& creds, 
     item["trailingSlAmount"] = "";
     item["apiOrderSource"] = "";
     item["algoId"] = "";
-    item["orderTag"] = "fincept";
+    item["orderTag"] = "finterm";
 
     // API expects an array of one item
     QJsonArray payload;

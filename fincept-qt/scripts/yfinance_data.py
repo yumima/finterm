@@ -1333,7 +1333,7 @@ def parse_s1_funding(url):
 
         # SEC requires the User-Agent header. Same identifier our C++ client
         # sends so SEC's rate limiter treats both as one client.
-        headers = {"User-Agent": "FinceptTerminal admin@hanlexon.com"}
+        headers = {"User-Agent": "finterm admin@hanlexon.com"}
         r = requests.get(url, headers=headers, timeout=30)
         if r.status_code != 200:
             return {"url": url, "error": f"HTTP {r.status_code}"}

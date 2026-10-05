@@ -153,7 +153,7 @@ def nearby_infrastructure(lat, lon, radius_km):
         url = "https://overpass-api.de/api/interpreter"
         data = urllib.parse.urlencode({"data": query}).encode()
         req = urllib.request.Request(url, data=data)
-        req.add_header("User-Agent", "FinceptTerminal/4.0")
+        req.add_header("User-Agent", "finterm/4.0")
 
         with urllib.request.urlopen(req, timeout=15) as resp:
             result = json.loads(resp.read().decode())

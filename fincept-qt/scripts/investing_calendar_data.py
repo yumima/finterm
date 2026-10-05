@@ -20,7 +20,7 @@ def _make_request(endpoint: str, params: Dict = None) -> Any:
     url = f"{BASE_URL}/{endpoint}" if not endpoint.startswith('http') else endpoint
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (compatible; FinceptTerminal/4.0)",
+            "User-Agent": "Mozilla/5.0 (compatible; finterm/4.0)",
             "Accept": "application/json",
             "domain-id": "www",
         }
@@ -37,7 +37,7 @@ def _make_request(endpoint: str, params: Dict = None) -> Any:
 def _te_fallback(endpoint: str, params: Dict = None) -> Any:
     url = f"https://api.tradingeconomics.com/{endpoint}"
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; FinceptTerminal/4.0)", "Accept": "application/json"}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; finterm/4.0)", "Accept": "application/json"}
         response = session.get(url, params=params, headers=headers, timeout=30)
         response.raise_for_status()
         return response.json()

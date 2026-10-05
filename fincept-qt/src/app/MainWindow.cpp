@@ -38,7 +38,6 @@
 #include "screens/dbnomics/DBnomicsScreen.h"
 #include "screens/derivatives/DerivativesScreen.h"
 #include "screens/docs/DocsScreen.h"
-#include "screens/crypto_center/CryptoCenterScreen.h"
 #include "screens/economics/EconomicsScreen.h"
 #include "screens/equity_research/EquityResearchScreen.h"
 #include "screens/futures/FuturesScreen.h"
@@ -1189,7 +1188,6 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("ai_quant_lab", []() { return new screens::AIQuantLabScreen; });
     dock_router_->register_factory("quantlib", []() { return new screens::QuantLibScreen; });
     dock_router_->register_factory("economics", []() { return new screens::EconomicsScreen; });
-    dock_router_->register_factory("crypto_center", []() { return new screens::CryptoCenterScreen; });
     dock_router_->register_factory("gov_data", []() { return new screens::GovDataScreen; });
     dock_router_->register_factory("dbnomics", []() { return new screens::DBnomicsScreen; });
     dock_router_->register_factory("akshare", []() { return new screens::AkShareScreen; });

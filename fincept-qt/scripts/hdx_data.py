@@ -14,7 +14,7 @@ from typing import Optional, Dict, List, Any
 
 # HDX CKAN API Configuration
 HDX_API_BASE = "https://data.humdata.org/api/3"
-USER_AGENT = "FinceptTerminal_GeopoliticsAnalytics/3.0"
+USER_AGENT = "finterm_GeopoliticsAnalytics/3.0"
 
 
 def make_api_request(endpoint: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:

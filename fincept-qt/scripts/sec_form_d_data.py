@@ -53,7 +53,7 @@ except ImportError:
     KNOWN_PRIVATE_CIKS = ["0001181412", "0001691342"]  # SpaceX, Stripe
 
 UA = {
-    "User-Agent": "FinceptTerminal research@hanlexon.com",
+    "User-Agent": "finterm research@hanlexon.com",
     "Accept-Encoding": "gzip, deflate",
     "Host": "efts.sec.gov",
 }

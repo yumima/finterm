@@ -51,7 +51,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 API = "https://api.finra.org/data/group/otcMarket/name/consolidatedShortInterest"
 PARTITIONS = "https://api.finra.org/partitions/group/otcMarket/name/consolidatedShortInterest"
-UA = {"User-Agent": "FinceptTerminal research@hanlexon.com",
+UA = {"User-Agent": "finterm research@hanlexon.com",
       "Accept": "application/json", "Content-Type": "application/json"}
 PAGE = 5000
 # Business days from settlement to public dissemination. FINRA's own schedule:

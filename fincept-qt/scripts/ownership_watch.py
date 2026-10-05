@@ -40,7 +40,7 @@ except ImportError:
     requests = None
 
 NASDAQ_IPO = "https://api.nasdaq.com/api/ipo/calendar?date={}"
-NASDAQ_HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) FinceptTerminal",
+NASDAQ_HEADERS = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) finterm",
                   "Accept": "application/json, text/plain, */*", "Accept-Language": "en-US,en;q=0.9"}
 LOCKUP_DAYS = 180
 FORM13F_LAG_DAYS = 45

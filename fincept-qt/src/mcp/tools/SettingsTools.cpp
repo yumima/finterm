@@ -129,7 +129,7 @@ std::vector<ToolDef> get_settings_tools() {
         t.input_schema.properties = QJsonObject{
             {"provider",
              QJsonObject{{"type", "string"},
-                         {"description", "Provider name (openai, anthropic, ollama, groq, google, fincept)"}}}};
+                         {"description", "Provider name (openai, anthropic, ollama, groq, google)"}}}};
         t.input_schema.required = {"provider"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             QString provider = args["provider"].toString();

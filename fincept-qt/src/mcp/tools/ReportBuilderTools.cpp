@@ -470,7 +470,7 @@ std::vector<ToolDef> get_report_builder_tools() {
         t.description = "Save the report to disk. If `path` is omitted, saves to the current file (errors if none).";
         t.category = "report-builder";
         t.input_schema.properties =
-            QJsonObject{{"path", QJsonObject{{"type", "string"}, {"description", "Absolute file path (.fincept)"}}}};
+            QJsonObject{{"path", QJsonObject{{"type", "string"}, {"description", "Absolute file path (.finterm; legacy .fincept also opens)"}}}};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             QString path = args.value("path").toString();
             on_llm_mutation_start();

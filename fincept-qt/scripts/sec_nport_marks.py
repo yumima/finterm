@@ -38,7 +38,7 @@ except ImportError:
 SUBMISSIONS = "https://data.sec.gov/submissions"
 ARCHIVE = "https://www.sec.gov/Archives/edgar/data"
 UA = {
-    "User-Agent": "FinceptTerminal research@hanlexon.com",
+    "User-Agent": "finterm research@hanlexon.com",
     "Accept-Encoding": "gzip, deflate",
 }
 

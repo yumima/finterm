@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`fba7a3f75`](https://github.com/yumima/finterm/commit/fba7a3f75) **docs:** the runbook no longer claims a topic the repo never had
 - [`c4f6d64a5`](https://github.com/yumima/finterm/commit/c4f6d64a5) **docs:** drop the removed topic-sync workflow from the maintainer runbook
 - [`45a8f94db`](https://github.com/yumima/finterm/commit/45a8f94db) **ci:** remove the upstream topic-sync workflow that failed every week
 
@@ -96,7 +97,7 @@ finterm/
 │   ├── resources/knowledge/        ← KNOWLEDGE tab content (markdown + JSON manifests)
 │   └── build/<preset>/             ← compiled binary lands here
 └── tools/
-    └── local_stub/server.py        ← DEPRECATED — kept for reference only, do not run
+    └── update_todays_commits.py    ← README changelog helper (used by the pre-commit hook)
 ```
 
 One process runs when you launch:

@@ -29,7 +29,7 @@ EDGAR_SUBMISSIONS = "https://data.sec.gov/submissions"
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 
 UA = {
-    "User-Agent": "FinceptTerminal research@hanlexon.com",
+    "User-Agent": "finterm research@hanlexon.com",
     "Accept-Encoding": "gzip, deflate",
 }
 

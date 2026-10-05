@@ -19,7 +19,7 @@ session.mount('https://', adapter)
 session.mount('http://', adapter)
 
 if POLITE_EMAIL:
-    session.headers.update({"User-Agent": f"FinceptTerminal/4.0 (mailto:{POLITE_EMAIL})"})
+    session.headers.update({"User-Agent": f"finterm/4.0 (mailto:{POLITE_EMAIL})"})
 
 
 def _make_request(endpoint: str, params: Dict = None) -> Any:

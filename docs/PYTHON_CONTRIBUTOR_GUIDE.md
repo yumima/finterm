@@ -17,14 +17,14 @@ Python powers finterm's analytics and data capabilities:
 Python scripts are executed by the C++ application via `python_runner.cpp` and communicate through JSON on stdout.
 
 **Related Guides:**
-- [C++ Guide](../fincept-cpp/CONTRIBUTING.md) — How C++ executes Python and renders results
+- [C++ Guide](CONTRIBUTING.md) — How C++ executes Python and renders results
 
 ---
 
 ## Project Structure
 
 ```
-fincept-cpp/scripts/                   # 100+ Python scripts
+fincept-qt/scripts/                   # 100+ Python scripts
 │
 ├── Analytics/                         # 34 analytics modules
 │   ├── equityInvestment/              # Stock valuation, DCF
@@ -174,7 +174,7 @@ def safe_fetch(symbol: str) -> Dict[str, Any]:
 ### Manual Testing
 
 ```bash
-cd fincept-cpp/scripts
+cd fincept-qt/scripts
 
 # Test a data fetcher
 python yfinance_data.py quote AAPL

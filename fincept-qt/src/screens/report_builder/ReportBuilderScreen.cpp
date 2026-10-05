@@ -1052,7 +1052,10 @@ void ReportBuilderScreen::on_new() {
 
 void ReportBuilderScreen::on_open() {
     QString path =
-        QFileDialog::getOpenFileName(this, "Open Report", "", "finterm Report (*.fincept);;JSON (*.json)");
+        // .fincept is the extension reports were saved with before the
+        // rebrand; still opened so existing reports keep working.
+        QFileDialog::getOpenFileName(this, "Open Report", "",
+                                     "finterm Report (*.finterm *.fincept);;JSON (*.json)");
     if (path.isEmpty())
         return;
     auto r = Service::instance().load_from(path);
@@ -1065,10 +1068,23 @@ void ReportBuilderScreen::on_save() {
     auto& svc = Service::instance();
     QString path = svc.current_file();
     if (path.isEmpty()) {
+        const QString report_filter = QStringLiteral("finterm Report (*.finterm)");
+        const QString json_filter = QStringLiteral("JSON (*.json)");
+        QString chosen;
         path = QFileDialog::getSaveFileName(this, "Save Report", svc.metadata().title,
-                                            "finterm Report (*.fincept);;JSON (*.json)");
+                                            report_filter + ";;" + json_filter, &chosen);
         if (path.isEmpty())
             return;
+        // Not every platform dialog appends the filter's extension, and a
+        // title such as "Q3 v1.2" already looks like it has one — so judge by
+        // the filter picked, not by whether the name contains a dot.
+        const QString lower = path.toLower();
+        if (chosen == json_filter) {
+            if (!lower.endsWith(QLatin1String(".json")))
+                path += QStringLiteral(".json");
+        } else if (!lower.endsWith(QLatin1String(".finterm")) && !lower.endsWith(QLatin1String(".fincept"))) {
+            path += QStringLiteral(".finterm");
+        }
     }
     auto r = svc.save_to(path);
     if (r.is_err()) {

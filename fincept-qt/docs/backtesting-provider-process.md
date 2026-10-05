@@ -8,7 +8,7 @@ Follow this checklist **exactly** for each provider, in order.
 3. ~~Backtesting.py~~ ✅
 4. ~~FastTrade~~ ✅
 5. ~~Zipline~~ ✅
-6. ~~Fincept~~ ✅
+6. ~~finterm~~ ✅
 
 > **Architecture note (applied after providers 1-3):**
 > Python is now the single source of truth. `default_strategies()` and `all_indicators()` return `{}`.

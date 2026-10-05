@@ -143,7 +143,7 @@ OrderPlaceResponse TradierBroker::place_order(const BrokerCredentials& creds, co
         form.addQueryItem("price", QString::number(order.price, 'f', 2));
     if (order.stop_price > 0)
         form.addQueryItem("stop", QString::number(order.stop_price, 'f', 2));
-    form.addQueryItem("tag", "fincept");
+    form.addQueryItem("tag", "finterm");
 
     QMap<QString, QString> hdrs = auth_headers(creds);
     hdrs["Content-Type"] = "application/x-www-form-urlencoded";

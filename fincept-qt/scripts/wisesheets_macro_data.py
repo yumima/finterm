@@ -19,7 +19,7 @@ session.mount('http://', adapter)
 def _make_request(endpoint: str, params: Dict = None) -> Any:
     url = f"{BASE_URL}/{endpoint}" if not endpoint.startswith('http') else endpoint
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; FinceptTerminal/4.0)"}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; finterm/4.0)"}
         response = session.get(url, params=params, headers=headers, timeout=30)
         response.raise_for_status()
         return response.json()
@@ -33,7 +33,7 @@ def _make_request(endpoint: str, params: Dict = None) -> Any:
 def _fetch_multpl_series(series_id: str, start_year: int = None, end_year: int = None) -> Any:
     url = f"https://www.multpl.com/{series_id}/table/by-year"
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; FinceptTerminal/4.0)", "Accept": "application/json"}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; finterm/4.0)", "Accept": "application/json"}
         response = session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
@@ -59,7 +59,7 @@ def get_shiller_pe(start_year: int = None, end_year: int = None) -> Any:
 def get_buffett_indicator(start_year: int = None, end_year: int = None) -> Any:
     url = "https://fred.stlouisfed.org/graph/fredgraph.csv?id=WILL5000INDFC"
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; FinceptTerminal/4.0)"}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; finterm/4.0)"}
         response = session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         lines = response.text.strip().split("\n")
@@ -83,7 +83,7 @@ def get_sp500_historical(start_year: int = None, end_year: int = None) -> Any:
 def get_interest_rates_history(start_year: int = None, end_year: int = None) -> Any:
     url = "https://fred.stlouisfed.org/graph/fredgraph.json?id=FEDFUNDS"
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; FinceptTerminal/4.0)"}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; finterm/4.0)"}
         response = session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
@@ -105,7 +105,7 @@ def get_interest_rates_history(start_year: int = None, end_year: int = None) -> 
 def get_gdp_historical(start_year: int = None, end_year: int = None) -> Any:
     url = "https://fred.stlouisfed.org/graph/fredgraph.json?id=GDP"
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; FinceptTerminal/4.0)"}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; finterm/4.0)"}
         response = session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()
@@ -127,7 +127,7 @@ def get_gdp_historical(start_year: int = None, end_year: int = None) -> Any:
 def get_inflation_historical(start_year: int = None, end_year: int = None) -> Any:
     url = "https://fred.stlouisfed.org/graph/fredgraph.json?id=CPIAUCSL"
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; FinceptTerminal/4.0)"}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; finterm/4.0)"}
         response = session.get(url, headers=headers, timeout=30)
         response.raise_for_status()
         data = response.json()

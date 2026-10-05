@@ -231,7 +231,7 @@ OrderPlaceResponse IIFLBroker::place_order(const BrokerCredentials& creds, const
     body["orderQuantity"] = QString::number(order.quantity);
     body["limitPrice"] = QString::number(order.price, 'f', 2);
     body["stopPrice"] = QString::number(order.stop_price, 'f', 2);
-    body["orderUniqueIdentifier"] = "fincept";
+    body["orderUniqueIdentifier"] = "finterm";
 
     auto& http = BrokerHttp::instance();
     auto resp = http.post_json(
@@ -268,7 +268,7 @@ ApiResponse<QJsonObject> IIFLBroker::modify_order(const BrokerCredentials& creds
     body["modifiedLimitPrice"] = mods.value("limitPrice").toString("0");
     body["modifiedStopPrice"] = mods.value("stopPrice").toString("0");
     body["modifiedTimeInForce"] = "DAY";
-    body["orderUniqueIdentifier"] = "fincept";
+    body["orderUniqueIdentifier"] = "finterm";
 
     auto& http = BrokerHttp::instance();
     auto resp = http.put_json(

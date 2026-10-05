@@ -55,7 +55,7 @@ try:
 except ImportError:
     requests = None
 
-UA = {"User-Agent": "FinceptTerminal research@hanlexon.com",
+UA = {"User-Agent": "finterm research@hanlexon.com",
       "Accept-Encoding": "gzip, deflate"}
 
 DATASET_INDEX = "https://www.sec.gov/dera/data/form-13f"

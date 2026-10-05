@@ -221,7 +221,7 @@ OrderPlaceResponse FivePaisaBroker::place_order(const BrokerCredentials& creds, 
     body["DisQty"] = 0;
     body["IsIntraday"] = is_intraday;
     body["AHPlaced"] = "N";
-    body["RemoteOrderID"] = "fincept";
+    body["RemoteOrderID"] = "finterm";
 
     QJsonObject req = make_body(kp.app_key, kp.client_id, body);
 

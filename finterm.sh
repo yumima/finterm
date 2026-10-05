@@ -125,8 +125,8 @@ SETUP
 
 START
     Strips Qt window/toolbar/dock-layout state (preserves portfolio,
-    watchlists, theme, workspaces), starts the localhost stub if it
-    isn't already up, then exec's the Qt binary in the foreground.
+    watchlists, theme, workspaces), then exec's the Qt binary in the
+    foreground. Auth runs in-process; there is no stub server.
 
     Set FINCEPT_KEEP_WINDOW=1 to skip the window-state cleanup if you
     want Qt to remember a hand-arranged layout across launches.

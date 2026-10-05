@@ -42,7 +42,7 @@ except ImportError:
     requests = None
 
 UA = {
-    "User-Agent": "FinceptTerminal research@hanlexon.com",
+    "User-Agent": "finterm research@hanlexon.com",
     "Accept-Encoding": "gzip, deflate",
 }
 
