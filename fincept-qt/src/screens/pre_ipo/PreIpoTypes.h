@@ -46,7 +46,8 @@ struct PrimaryRound {
     QDate   filed_date;
     QDate   first_sale_date;
     double  amount_sold_m   = 0;  // $M actually sold so far
-    double  amount_offered_m = 0; // $M target
+    double  amount_offered_m = 0; // $M target (0 = not stated; see offering_indefinite)
+    bool    offering_indefinite = false; // filer answered "Indefinite" for the offering amount
     QString exemption;            // "06b, 06c"
     QStringList securities_types; // "Equity", "Debt", "Option", "Warrant"
     double  minimum_investment_usd = 0;
@@ -87,9 +88,10 @@ struct SpvActivity {
     QString cik;                 // SPV's own CIK (not the target's)
     QDate   filed_date;
     double  amount_sold_m   = 0; // $M raised by the SPV so far
-    double  amount_offered_m = 0;// $M target
+    double  amount_offered_m = 0;// $M target (0 = not stated; see offering_indefinite)
+    bool    offering_indefinite = false;
     double  minimum_investment_usd = 0;
-    int     num_investors = 0;   // totalNumberAlreadyInvested
+    int     num_investors = 0;   // totalNumberAlreadyInvested (0 = not stated)
     QString edgar_url;
 };
 

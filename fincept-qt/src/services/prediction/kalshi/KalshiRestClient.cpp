@@ -1,6 +1,7 @@
 #include "services/prediction/kalshi/KalshiRestClient.h"
 
 #include "core/logging/Logger.h"
+#include "services/prediction/kalshi/KalshiPricing.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -12,6 +13,8 @@
 #include <QPointer>
 #include <QUrl>
 #include <QUrlQuery>
+
+#include <cmath>
 
 namespace fincept::services::prediction::kalshi_ns {
 
@@ -73,14 +76,19 @@ static pr::PredictionMarket parse_market(const QJsonObject& obj) {
     m.active = (status == QStringLiteral("open") || status == QStringLiteral("active"));
     m.closed = (status == QStringLiteral("closed") || status == QStringLiteral("settled"));
 
+    // Probability = book mid, else last trade, else NaN (unavailable) — never
+    // the raw best bid, and never 0 for an empty book.
+    const double yes_prob = kalshi_implied_yes_probability(str_or_num(obj.value("yes_bid_dollars")),
+                                                           str_or_num(obj.value("yes_ask_dollars")),
+                                                           str_or_num(obj.value("last_price_dollars")));
     pr::Outcome yes;
     yes.name = QStringLiteral("Yes");
     yes.asset_id = m.key.asset_ids[0];
-    yes.price = str_or_num(obj.value("yes_bid_dollars"));
+    yes.price = yes_prob;
     pr::Outcome no;
     no.name = QStringLiteral("No");
     no.asset_id = m.key.asset_ids[1];
-    no.price = str_or_num(obj.value("no_bid_dollars"));
+    no.price = std::isfinite(yes_prob) ? 1.0 - yes_prob : yes_prob;
     m.outcomes = {yes, no};
 
     m.extras.insert(QStringLiteral("status"), obj.value("status").toString());

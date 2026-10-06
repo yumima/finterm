@@ -4,6 +4,8 @@
 
 #include <QPainter>
 
+#include <cmath>
+
 namespace fincept::screens::polymarket {
 
 using namespace fincept::ui;
@@ -186,7 +188,8 @@ void PolymarketMarketCardDelegate::paint(QPainter* painter, const QStyleOptionVi
 
         for (int i = 0; i < bars_to_draw; ++i) {
             const auto& o   = outcomes[i];
-            const double pct = qBound(0.0, o.price, 1.0);
+            // NaN = no real price: empty bar + "—" (qBound would clamp NaN to 1.0).
+            const double pct = std::isfinite(o.price) ? qBound(0.0, o.price, 1.0) : 0.0;
             const int filled = static_cast<int>(bar_w * pct);
 
             QColor bar_color = (i == 0) ? pres.accent : QColor(OUTCOME_BAR_COLORS[qMin(i, 4)]);
@@ -201,7 +204,7 @@ void PolymarketMarketCardDelegate::paint(QPainter* painter, const QStyleOptionVi
             // Price label (right-aligned to bar gutter)
             painter->setFont(price_font);
             painter->setPen(is_closed ? QColor(colors::TEXT_SECONDARY()) : bar_color);
-            const QString price_str = pres.format_price(pct);
+            const QString price_str = pres.format_price(std::isfinite(o.price) ? pct : o.price);
             painter->drawText(x + bar_w + 4, y - 1, 56, bar_h + 2,
                               Qt::AlignLeft | Qt::AlignVCenter, price_str);
 

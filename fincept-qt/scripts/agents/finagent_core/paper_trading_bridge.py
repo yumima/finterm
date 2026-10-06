@@ -434,6 +434,23 @@ def get_bridge(use_host_bridge: bool = False) -> PaperTradingBridge:
     return _bridge
 
 
+_NOT_WIRED = ("paper execution not wired: this bridge only has a per-process "
+              "in-memory simulator and is not connected to the app's paper "
+              "trading database, so nothing would be persisted")
+
+
+def _not_wired(bridge: PaperTradingBridge, **extra) -> Optional[Dict[str, Any]]:
+    """Error dict when the bridge can't reach the real paper-trading store.
+
+    The local (use_host_bridge=False) mode keeps state in a dict that dies with
+    this Python process; reporting success + order/trade IDs from it would claim
+    trades that were never recorded anywhere.
+    """
+    if not bridge.use_host_bridge:
+        return {"success": False, "error": _NOT_WIRED, **extra}
+    return None
+
+
 def execute_trade(
     portfolio_id: str,
     symbol: str,
@@ -455,6 +472,9 @@ def execute_trade(
         Trade result dict
     """
     bridge = get_bridge()
+    err = _not_wired(bridge, symbol=symbol, action=action)
+    if err:
+        return err
 
     try:
         # Place and immediately fill market order
@@ -492,6 +512,9 @@ def execute_trade(
 def get_portfolio_value(portfolio_id: str) -> Dict[str, Any]:
     """Get current portfolio value for Alpha Arena"""
     bridge = get_bridge()
+    err = _not_wired(bridge)
+    if err:
+        return err
 
     try:
         portfolio = bridge.get_portfolio(portfolio_id)
@@ -521,6 +544,9 @@ def get_portfolio_value(portfolio_id: str) -> Dict[str, Any]:
 def get_positions_summary(portfolio_id: str) -> Dict[str, Any]:
     """Get positions summary for Alpha Arena"""
     bridge = get_bridge()
+    err = _not_wired(bridge)
+    if err:
+        return err
 
     try:
         positions = bridge.get_positions(portfolio_id)

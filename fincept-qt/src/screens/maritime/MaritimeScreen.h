@@ -60,6 +60,7 @@ class MaritimeScreen : public QWidget, public IStatefulScreen {
     void update_map(const QVector<services::maritime::VesselData>& vessels);
     void apply_theme();
     void set_status(const QString& text, const ui::ColorToken& color);
+    void set_status_unavailable();
 
     // Top bar widgets (needed for apply_theme)
     QWidget* top_bar_ = nullptr;

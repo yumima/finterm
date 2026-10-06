@@ -24,6 +24,31 @@ AIQuantLabService::AIQuantLabService(QObject* parent) : QObject(parent) {
 }
 
 // ── Python helper ────────────────────────────────────────────────────────────
+// Quant-lab scripts report failure in-band ({"success": false, "error": ...}
+// or a bare {"error": ...}), frequently on stdout with exit 1 and an empty
+// stderr. Returns that message, or empty when the payload is a real result.
+static QString aiq_in_band_error(const QJsonObject& o) {
+    const QJsonValue ev = o.value("error");
+    const bool has_error = !ev.isUndefined() && !ev.isNull() && !(ev.isString() && ev.toString().isEmpty()) &&
+                           !(ev.isBool() && !ev.toBool());
+    if (!has_error && o.value("success").toBool(true))
+        return {};
+    if (ev.isString())
+        return ev.toString();
+    if (o.value("message").isString())
+        return o.value("message").toString();
+    return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)).left(500);
+}
+
+static QString aiq_failure_message(const python::PythonResult& result) {
+    const auto doc = QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
+    QString msg = doc.isObject() ? aiq_in_band_error(doc.object()) : QString();
+    if (msg.isEmpty())
+        msg = result.error.trimmed();
+    if (msg.isEmpty())
+        msg = QString("Script failed (exit code %1)").arg(result.exit_code);
+    return msg;
+}
 void AIQuantLabService::run_python(const QString& script, const QStringList& args, const QString& module_id,
                                    const QString& command) {
     QPointer<AIQuantLabService> self = this;
@@ -31,8 +56,9 @@ void AIQuantLabService::run_python(const QString& script, const QStringList& arg
         if (!self)
             return;
         if (!result.success) {
-            LOG_ERROR("AIQuantLab", QString("[%1/%2] Failed: %3").arg(module_id, command, result.error));
-            emit self->error_occurred(module_id, result.error);
+            const QString msg = aiq_failure_message(result);
+            LOG_ERROR("AIQuantLab", QString("[%1/%2] Failed: %3").arg(module_id, command, msg));
+            emit self->error_occurred(module_id, msg);
             return;
         }
         auto json_str = python::extract_json(result.output);
@@ -40,6 +66,12 @@ void AIQuantLabService::run_python(const QString& script, const QStringList& arg
         if (doc.isNull()) {
             LOG_ERROR("AIQuantLab", QString("[%1/%2] Invalid JSON").arg(module_id, command));
             emit self->error_occurred(module_id, "Invalid JSON response");
+            return;
+        }
+        if (const QString msg = aiq_in_band_error(doc.object()); !msg.isEmpty()) {
+            // In-band error: report it as a failure and never cache it as a result.
+            LOG_ERROR("AIQuantLab", QString("[%1/%2] Script reported error: %3").arg(module_id, command, msg));
+            emit self->error_occurred(module_id, msg);
             return;
         }
         LOG_INFO("AIQuantLab", QString("[%1/%2] Result ready").arg(module_id, command));
@@ -66,8 +98,9 @@ void AIQuantLabService::run_python_cached(const QString& script, const QStringLi
             if (!self)
                 return;
             if (!result.success) {
-                LOG_ERROR("AIQuantLab", QString("[%1/%2] Failed: %3").arg(module_id, command, result.error));
-                emit self->error_occurred(module_id, result.error);
+                const QString msg = aiq_failure_message(result);
+                LOG_ERROR("AIQuantLab", QString("[%1/%2] Failed: %3").arg(module_id, command, msg));
+                emit self->error_occurred(module_id, msg);
                 return;
             }
             auto json_str = python::extract_json(result.output);
@@ -75,6 +108,12 @@ void AIQuantLabService::run_python_cached(const QString& script, const QStringLi
             if (doc.isNull()) {
                 LOG_ERROR("AIQuantLab", QString("[%1/%2] Invalid JSON").arg(module_id, command));
                 emit self->error_occurred(module_id, "Invalid JSON response");
+                return;
+            }
+            if (const QString msg = aiq_in_band_error(doc.object()); !msg.isEmpty()) {
+                // In-band error: report it as a failure and never cache it as a result.
+                LOG_ERROR("AIQuantLab", QString("[%1/%2] Script reported error: %3").arg(module_id, command, msg));
+                emit self->error_occurred(module_id, msg);
                 return;
             }
             fincept::CacheManager::instance().put(

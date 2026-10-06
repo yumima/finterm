@@ -44,7 +44,6 @@ Data Handling:
 - Yahoo Finance data loading via yfinance
 - OHLCV data support (pandas DataFrame)
 - Built-in Archive for Binance/Coinbase data
-- Synthetic data generation (fallback for testing)
 - Date range filtering
 - Multiple timeframe support
 
@@ -97,7 +96,6 @@ from ft_backtest import (
     run_multiple_backtests,
 )
 from ft_data import (
-    generate_synthetic_ohlcv,
     load_basic_df_from_csv,
     standardize_df,
     load_yfinance_data,
@@ -271,15 +269,6 @@ class FastTradeProvider(BacktestingProviderBase):
             )
 
             result_dict = backtest_result.to_dict()
-            using_synthetic = getattr(self, '_using_synthetic', False)
-            result_dict['using_synthetic_data'] = using_synthetic
-
-            if using_synthetic:
-                result_dict['synthetic_data_warning'] = (
-                    'WARNING: This backtest used SYNTHETIC (fake) data because real market data '
-                    'could not be loaded. Install yfinance (pip install yfinance) and ensure '
-                    'internet connectivity for real results. These results have NO financial meaning.'
-                )
 
             return {
                 'success': True,
@@ -307,7 +296,8 @@ class FastTradeProvider(BacktestingProviderBase):
         """
         Prepare OHLCV data for backtesting
 
-        Tries to load from yfinance first, falls back to synthetic data if unavailable.
+        Loads real data from yfinance; raises RuntimeError naming the symbol
+        if none is available (never substitutes synthetic data).
         """
         self._log('Preparing market data...')
 
@@ -316,7 +306,7 @@ class FastTradeProvider(BacktestingProviderBase):
         if assets and len(assets) > 0:
             symbol = assets[0].get('symbol', 'SPY')
 
-        # Try to load from yfinance
+        # Load from yfinance
         self._log(f'Attempting to load {symbol} from Yahoo Finance...')
         data = load_yfinance_data(
             symbol=symbol,
@@ -325,33 +315,13 @@ class FastTradeProvider(BacktestingProviderBase):
             interval='1d'  # Daily data by default
         )
 
-        # Fallback to synthetic data if yfinance fails
         if data.empty:
-            import sys
-            # Use deterministic seed based on symbol name (not constant 42)
-            sym_seed = sum(ord(c) for c in symbol) % (2**31)
-            print(f'[WARNING] Using SYNTHETIC data for {symbol} (seed={sym_seed}). '
-                  f'Results are NOT based on real market data. '
-                  f'Install yfinance (pip install yfinance) for real data.', file=sys.stderr)
-            self._log(f'WARNING: Yahoo Finance failed, generating SYNTHETIC data for {symbol}')
-            data = generate_synthetic_ohlcv(
-                periods=len(pd.date_range(
-                    start=start_date or '2023-01-01',
-                    end=end_date or '2024-01-01',
-                    freq='1D'
-                )),
-                start_date=start_date or '2023-01-01',
-                freq='1D',
-                initial_price=100.0,
-                volatility=0.02,
-                drift=0.0002,
-                seed=sym_seed,
-            )
-            self._using_synthetic = True
-        else:
-            self._log(f'Loaded {len(data)} periods of data from Yahoo Finance for {symbol}')
-            self._using_synthetic = False
+            raise RuntimeError(
+                f'Market data unavailable for {symbol}: Yahoo Finance returned no data '
+                f'for {start_date or "2020-01-01"} to {end_date or "today"} '
+                f'(or yfinance is not installed)')
 
+        self._log(f'Loaded {len(data)} periods of data from Yahoo Finance for {symbol}')
         return data
 
     # ========================================================================

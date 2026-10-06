@@ -1,6 +1,7 @@
 // src/screens/portfolio/views/RiskManagementView.cpp
 #include "screens/portfolio/views/RiskManagementView.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QGridLayout>
@@ -82,7 +83,7 @@ void RiskManagementView::build_ui() {
 
     stress_table_ = new QTableWidget;
     stress_table_->setColumnCount(5);
-    stress_table_->setHorizontalHeaderLabels({"SCENARIO", "DESCRIPTION", "EQUITY SHOCK", "PORTFOLIO IMPACT", "LOSS"});
+    stress_table_->setHorizontalHeaderLabels({"SCENARIO", "DESCRIPTION", "EQUITY SHOCK", "PORTFOLIO IMPACT", "P&L IMPACT"});
     stress_table_->setSelectionMode(QAbstractItemView::NoSelection);
     stress_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     stress_table_->setShowGrid(false);
@@ -327,7 +328,9 @@ void RiskManagementView::update_stress_test() {
             impact_pct = equity_impact + other_impact;
         }
 
-        double loss = total_mv * std::abs(impact_pct) / 100.0;
+        // Signed: a scenario that lifts the book (e.g. bonds in a flight to
+        // quality) is a gain, and used to be printed as a "-" loss.
+        const double pnl_impact = total_mv * impact_pct / 100.0;
 
         set_cell(0, s.name, ui::colors::TEXT_PRIMARY);
         set_cell(1, s.description, ui::colors::TEXT_SECONDARY);
@@ -335,8 +338,11 @@ void RiskManagementView::update_stress_test() {
                  s.equity_shock < 0 ? ui::colors::NEGATIVE : ui::colors::POSITIVE, Qt::AlignRight | Qt::AlignVCenter);
         set_cell(3, QString("%1%2%").arg(impact_pct < 0 ? "" : "+").arg(QString::number(impact_pct, 'f', 1)),
                  impact_pct < 0 ? ui::colors::NEGATIVE : ui::colors::POSITIVE, Qt::AlignRight | Qt::AlignVCenter);
-        set_cell(4, QString("-%1 %2").arg(currency_, QString::number(loss, 'f', 0)), ui::colors::NEGATIVE,
-                 Qt::AlignRight | Qt::AlignVCenter);
+        set_cell(4,
+                 QString("%1%2 %3")
+                     .arg(pnl_impact < 0 ? QStringLiteral("-") : QStringLiteral("+"), currency_,
+                          QString::number(std::abs(pnl_impact), 'f', 0)),
+                 pnl_impact < 0 ? ui::colors::NEGATIVE : ui::colors::POSITIVE, Qt::AlignRight | Qt::AlignVCenter);
     }
 }
 
@@ -349,7 +355,8 @@ void RiskManagementView::update_contribution() {
     // Total portfolio vol proxy
     double total_vol = 0;
     for (const auto& h : sorted)
-        total_vol += std::abs(h.day_change_percent) * h.weight / 100.0;
+        if (std::isfinite(h.day_change_percent) && h.valued()) // unknown: excluded, shown "—"
+            total_vol += std::abs(h.day_change_percent) * h.weight / 100.0;
 
     for (int r = 0; r < sorted.size(); ++r) {
         const auto& h = sorted[r];
@@ -364,6 +371,16 @@ void RiskManagementView::update_contribution() {
             contrib_table_->setItem(r, col, item);
         };
 
+        if (!std::isfinite(h.day_change_percent) || !h.valued()) {
+            set_cell(0, h.symbol, ui::colors::CYAN);
+            set_cell(1, QString("%1%").arg(QString::number(h.weight, 'f', 1)));
+            for (int col = 2; col <= 4; ++col)
+                set_cell(col, ui::formatting::placeholder(), ui::colors::TEXT_TERTIARY);
+            const char* cc = h.weight > 20 ? ui::colors::NEGATIVE : h.weight > 10 ? ui::colors::WARNING
+                                                                                   : ui::colors::POSITIVE;
+            set_cell(5, h.weight > 20 ? "HIGH" : h.weight > 10 ? "MEDIUM" : "LOW", cc);
+            continue;
+        }
         const double abs_move = std::abs(h.day_change_percent);
         const double move_contrib = abs_move * h.weight / 100.0;
         const double move_pct = total_vol > 0 ? (move_contrib / total_vol) * 100.0 : 0;

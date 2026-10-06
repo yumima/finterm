@@ -331,13 +331,14 @@ class BLSDataAPI:
                         "change_12M": float(net_changes.get("12")) if net_changes.get("12") else None,
                     })
 
-                    # Percentage changes
+                    # Percentage changes (BLS reports these already in percent,
+                    # e.g. "0.3" = 0.3%; keep them in percent to match the key)
                     pct_changes = calculations_data.get("pct_changes", {})
                     record.update({
-                        "change_percent_1M": float(pct_changes.get("1")) / 100 if pct_changes.get("1") else None,
-                        "change_percent_3M": float(pct_changes.get("3")) / 100 if pct_changes.get("3") else None,
-                        "change_percent_6M": float(pct_changes.get("6")) / 100 if pct_changes.get("6") else None,
-                        "change_percent_12M": float(pct_changes.get("12")) / 100 if pct_changes.get("12") else None,
+                        "change_percent_1M": float(pct_changes.get("1")) if pct_changes.get("1") else None,
+                        "change_percent_3M": float(pct_changes.get("3")) if pct_changes.get("3") else None,
+                        "change_percent_6M": float(pct_changes.get("6")) if pct_changes.get("6") else None,
+                        "change_percent_12M": float(pct_changes.get("12")) if pct_changes.get("12") else None,
                     })
 
                 processed_data.append(record)
@@ -430,20 +431,23 @@ class BLSDataAPI:
             return BLSError("bls_search", str(e)).to_dict()
 
     def _get_local_category_data(self, category: str) -> Optional[pd.DataFrame]:
-        """Get category series data from local cache (simplified version)"""
-        # In a real implementation, this would read from local cached files
-        # For now, return some sample data for popular categories
+        """Curated catalog of real BLS series IDs for popular categories.
+
+        These are genuine BLS identifiers (queryable via the BLS API), not
+        FRED mnemonics. Categories without a curated list return None so the
+        caller reports "not available locally" instead of inventing entries.
+        """
         if category == "cpi":
             data = [
-                {"series_id": "CPIAUCSL", "series_title": "Consumer Price Index for All Urban Consumers: All Items", "survey_name": "Consumer Price Index - All Urban Consumers"},
-                {"series_id": "CPIAUCNS", "series_title": "Consumer Price Index for All Urban Consumers: All Items (NSA)", "survey_name": "Consumer Price Index - All Urban Consumers"},
-                {"series_id": "CUSR0000SA0", "series_title": "Consumer Price Index for All Urban Consumers: All Items (Seasonally Adjusted)", "survey_name": "Consumer Price Index - All Urban Consumers"}
+                {"series_id": "CUUR0000SA0", "series_title": "All items in U.S. city average, all urban consumers, not seasonally adjusted", "survey_name": "CPI for All Urban Consumers (CPI-U)"},
+                {"series_id": "CUSR0000SA0", "series_title": "All items in U.S. city average, all urban consumers, seasonally adjusted", "survey_name": "CPI for All Urban Consumers (CPI-U)"},
+                {"series_id": "CUSR0000SA0L1E", "series_title": "All items less food and energy in U.S. city average, all urban consumers, seasonally adjusted", "survey_name": "CPI for All Urban Consumers (CPI-U)"}
             ]
         elif category == "employment":
             data = [
-                {"series_id": "UNRATE", "series_title": "Unemployment Rate", "survey_name": "Current Population Survey"},
-                {"series_id": "PAYEMS", "series_title": "All Employees: Total Nonfarm Payrolls", "survey_name": "Current Employment Statistics survey (National)"},
-                {"series_id": "LNS14000000", "series_title": "Unemployment Rate", "survey_name": "Labor Force Statistics from the Current Population Survey"}
+                {"series_id": "LNS14000000", "series_title": "Unemployment Rate (Seasonally Adjusted)", "survey_name": "Labor Force Statistics from the Current Population Survey"},
+                {"series_id": "CES0000000001", "series_title": "All employees, thousands, total nonfarm, seasonally adjusted", "survey_name": "Employment, Hours, and Earnings from the CES survey (National)"},
+                {"series_id": "LNS11300000", "series_title": "Labor Force Participation Rate (Seasonally Adjusted)", "survey_name": "Labor Force Statistics from the Current Population Survey"}
             ]
         else:
             return None

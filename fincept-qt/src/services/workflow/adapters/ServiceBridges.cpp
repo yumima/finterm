@@ -8,8 +8,14 @@
 #include "services/workflow/ConfirmationService.h"
 #include "services/workflow/NodeRegistry.h"
 #include "services/workflow/RiskManager.h"
+#include "services/markets/MarketDataService.h"
+#include "trading/AccountManager.h"
 #include "trading/ExchangeService.h"
+#include "trading/OrderMatcher.h"
+#include "trading/PaperTrading.h"
+#include "trading/UnifiedTrading.h"
 
+#include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QFile>
@@ -23,6 +29,8 @@
 #include <QSqlQuery>
 #include <QSqlRecord>
 #include <QtConcurrent/QtConcurrent>
+
+#include <optional>
 
 using fincept::python::extract_json;
 using fincept::python::PythonResult;
@@ -81,53 +89,455 @@ void wire_market_data_bridges(NodeRegistry& registry) {
 
 // ── Trading Bridge ─────────────────────────────────────────────────────
 
+namespace {
+
+using NodeCallback = std::function<void(bool, QJsonValue, QString)>;
+
+// Resolve the broker account a trading node acts on. An explicit
+// `account_id` param wins; otherwise the node's `broker` param must match
+// exactly one active account ("paper" = any account in paper mode with a
+// paper portfolio). Ambiguity or absence is an error — never guess.
+std::optional<trading::BrokerAccount> resolve_trading_account(const QJsonObject& params, QString* err) {
+    auto& am = trading::AccountManager::instance();
+    const QString account_id = params.value("account_id").toString().trimmed();
+    if (!account_id.isEmpty()) {
+        auto acct = am.get_account(account_id);
+        if (acct.account_id.isEmpty()) {
+            *err = "Account not found: " + account_id;
+            return std::nullopt;
+        }
+        return acct;
+    }
+
+    const QString broker = params.value("broker").toString("paper");
+    QVector<trading::BrokerAccount> matches;
+    for (const auto& a : am.active_accounts()) {
+        const bool ok = (broker == "paper") ? (a.trading_mode == "paper" && !a.paper_portfolio_id.isEmpty())
+                                            : (a.broker_id == broker);
+        if (ok)
+            matches.append(a);
+    }
+    if (matches.isEmpty()) {
+        *err = broker == "paper"
+                   ? QString("No paper trading account configured — add one in Equity Trading → Accounts")
+                   : QString("No active '%1' account configured — add one in Equity Trading → Accounts").arg(broker);
+        return std::nullopt;
+    }
+    if (matches.size() > 1) {
+        QStringList names;
+        for (const auto& a : matches)
+            names << QString("%1 (%2)").arg(a.display_name, a.account_id);
+        *err = QString("Multiple '%1' accounts match (%2) — set 'account_id' to choose one")
+                   .arg(broker, names.join(", "));
+        return std::nullopt;
+    }
+    return matches.first();
+}
+
+QJsonValue opt_num(const std::optional<double>& v) {
+    return v ? QJsonValue(*v) : QJsonValue(QJsonValue::Null);
+}
+
+QJsonObject pt_order_json(const trading::PtOrder& o) {
+    return QJsonObject{{"order_id", o.id},
+                       {"symbol", o.symbol},
+                       {"side", o.side},
+                       {"order_type", o.order_type},
+                       {"quantity", o.quantity},
+                       {"price", opt_num(o.price)},
+                       {"stop_price", opt_num(o.stop_price)},
+                       {"filled_qty", o.filled_qty},
+                       {"avg_price", opt_num(o.avg_price)},
+                       {"status", o.status},
+                       {"created_at", o.created_at},
+                       {"filled_at", o.filled_at ? QJsonValue(*o.filled_at) : QJsonValue(QJsonValue::Null)}};
+}
+
+std::optional<trading::PtOrder> find_pt_order(const QString& portfolio_id, const QString& order_id) {
+    for (const auto& o : trading::pt_get_orders(portfolio_id))
+        if (o.id == order_id)
+            return o;
+    return std::nullopt;
+}
+
+// Fetch a real last price for a paper market fill. Crypto pairs ("BTC/USD")
+// come from the configured exchange; everything else from MarketDataService.
+// cb(price, error) — price <= 0 means unavailable (error says why).
+void fetch_fill_price(const QString& symbol, std::function<void(double, QString)> cb) {
+    if (symbol.contains('/')) {
+        (void)QtConcurrent::run([symbol, cb]() {
+            auto& svc = trading::ExchangeService::instance();
+            if (svc.get_exchange().isEmpty()) {
+                cb(0.0, "No crypto exchange configured");
+                return;
+            }
+            const auto t = svc.fetch_ticker(symbol);
+            if (t.symbol.isEmpty() || !(t.last > 0.0))
+                cb(0.0, QString("No market price available for %1").arg(symbol));
+            else
+                cb(t.last, {});
+        });
+        return;
+    }
+    services::MarketDataService::instance().fetch_quotes(
+        {symbol}, [symbol, cb](bool ok, QVector<services::QuoteData> quotes) {
+            for (const auto& q : quotes) {
+                if (ok && q.symbol.compare(symbol, Qt::CaseInsensitive) == 0 && q.price > 0.0) {
+                    cb(q.price, {});
+                    return;
+                }
+            }
+            cb(0.0, QString("No market price available for %1").arg(symbol));
+        });
+}
+
+// Route a confirmed order through UnifiedTrading (paper engine or live broker)
+// and report the real outcome. Never fabricates an id or a status.
+void route_order(const trading::BrokerAccount& acct, const trading::UnifiedOrder& order, const QJsonObject& params,
+                 NodeCallback cb) {
+    const bool paper = acct.trading_mode == "paper";
+    QJsonObject base{{"symbol", order.symbol},
+                     {"side", trading::order_side_str(order.side)},
+                     {"order_type", trading::order_type_str(order.order_type)},
+                     {"quantity", order.quantity},
+                     {"broker", acct.broker_id},
+                     {"account_id", acct.account_id},
+                     {"mode", paper ? "paper" : "live"}};
+
+    if (!paper) {
+        const QString account_id = acct.account_id;
+        (void)QtConcurrent::run([account_id, order, base, params, cb]() {
+            // Broker network call off the GUI thread; result handled back on it
+            // (the audit log writes to the main-thread SQLite connection).
+            const auto r = trading::UnifiedTrading::instance().place_order(account_id, order);
+            QMetaObject::invokeMethod(
+                qApp,
+                [r, order, base, params, cb]() {
+                    if (!r.success || r.order_id.isEmpty()) {
+                        cb(false, {}, r.message.isEmpty() ? QString("Broker rejected the order") : r.message);
+                        return;
+                    }
+                    AuditLogger::instance().log(AuditAction::OrderPlaced, {}, {}, order.symbol,
+                                                QString("%1 %2 x%3 order_id=%4")
+                                                    .arg(base.value("side").toString(), order.symbol)
+                                                    .arg(order.quantity)
+                                                    .arg(r.order_id),
+                                                params, false);
+                    QJsonObject out = base;
+                    out["order_id"] = r.order_id;
+                    out["status"] = "accepted_by_broker";
+                    if (!r.message.isEmpty())
+                        out["broker_message"] = r.message;
+                    cb(true, out, {});
+                },
+                Qt::QueuedConnection);
+        });
+        return;
+    }
+
+    auto place_paper = [acct, base, params, cb](trading::UnifiedOrder o) {
+        auto r = trading::UnifiedTrading::instance().place_order(acct.account_id, o);
+        if (!r.success || r.order_id.isEmpty()) {
+            cb(false, {}, r.message.isEmpty() ? QString("Paper order failed") : r.message);
+            return;
+        }
+        // Report the order exactly as the paper engine recorded it.
+        auto rec = find_pt_order(acct.paper_portfolio_id, r.order_id);
+        if (!rec) {
+            cb(false, {}, QString("Paper order %1 placed but could not be read back").arg(r.order_id));
+            return;
+        }
+        if (rec->status == "pending")
+            trading::OrderMatcher::instance().add_order(*rec);
+        AuditLogger::instance().log(AuditAction::OrderPlaced, {}, {}, o.symbol,
+                                    QString("%1 %2 x%3 order_id=%4 (paper)")
+                                        .arg(base.value("side").toString(), o.symbol)
+                                        .arg(o.quantity)
+                                        .arg(r.order_id),
+                                    params, true);
+        QJsonObject out = base;
+        const QJsonObject recj = pt_order_json(*rec);
+        for (auto it = recj.begin(); it != recj.end(); ++it)
+            out[it.key()] = it.value();
+        cb(true, out, {});
+    };
+
+    if (order.order_type != trading::OrderType::Market) {
+        place_paper(order);
+        return;
+    }
+    // Paper market orders fill at a real quote fetched now — never a placeholder.
+    fetch_fill_price(order.symbol, [order, place_paper, cb](double px, const QString& err) {
+        if (!(px > 0.0)) {
+            cb(false, {}, err.isEmpty() ? QString("No market price available — cannot fill market order") : err);
+            return;
+        }
+        auto o = order;
+        o.price = px;
+        // Hop to the main thread: the paper engine's DB access lives there.
+        QMetaObject::invokeMethod(qApp, [place_paper, o]() { place_paper(o); }, Qt::QueuedConnection);
+    });
+}
+
+} // namespace
+
 void wire_trading_bridges(NodeRegistry& registry) {
-    // Place Order — with confirmation and audit
+    // Place Order — confirmation, then routed through UnifiedTrading to the
+    // paper engine or the account's live broker. Output carries the real
+    // order id / status; any failure is an error.
     auto* place_def = const_cast<NodeTypeDef*>(registry.find("trading.place_order"));
     if (place_def) {
-        place_def->execute = [](const QJsonObject& params, const QVector<QJsonValue>&,
-                                std::function<void(bool, QJsonValue, QString)> cb) {
-            QString symbol = params.value("symbol").toString();
-            QString side = params.value("side").toString("buy");
-            double qty = params.value("quantity").toDouble(1);
-            QString broker = params.value("broker").toString("paper");
-            bool paper = (broker == "paper");
+        place_def->execute = [](const QJsonObject& params, const QVector<QJsonValue>&, NodeCallback cb) {
+            const QString symbol = params.value("symbol").toString().trimmed().toUpper();
+            const QString side = params.value("side").toString("buy").toLower();
+            const QString type = params.value("order_type").toString("market").toLower();
+            const double qty = params.value("quantity").toDouble(0);
+            const double price = params.value("price").toDouble(0);
+
+            if (symbol.isEmpty()) {
+                cb(false, {}, "Place Order: 'symbol' is required");
+                return;
+            }
+            if (side != "buy" && side != "sell") {
+                cb(false, {}, "Place Order: side must be buy or sell");
+                return;
+            }
+            if (!(qty > 0)) {
+                cb(false, {}, "Place Order: quantity must be > 0");
+                return;
+            }
+
+            trading::UnifiedOrder order;
+            order.symbol = symbol;
+            order.side = side == "buy" ? trading::OrderSide::Buy : trading::OrderSide::Sell;
+            order.quantity = qty;
+            if (type == "market") {
+                order.order_type = trading::OrderType::Market;
+            } else if (type == "limit") {
+                if (!(price > 0)) {
+                    cb(false, {}, "Place Order: limit orders need a limit price > 0");
+                    return;
+                }
+                order.order_type = trading::OrderType::Limit;
+                order.price = price;
+            } else if (type == "stop") {
+                if (!(price > 0)) {
+                    cb(false, {}, "Place Order: stop orders need a stop price > 0 (set 'price')");
+                    return;
+                }
+                order.order_type = trading::OrderType::StopLoss;
+                order.stop_price = price;
+            } else {
+                // stop_limit needs both a stop and a limit price; this node only exposes one.
+                cb(false, {}, QString("Place Order: order type '%1' is not supported by this node").arg(type));
+                return;
+            }
+
+            QString err;
+            auto acct = resolve_trading_account(params, &err);
+            if (!acct) {
+                cb(false, {}, "Place Order: " + err);
+                return;
+            }
+            const bool paper = acct->trading_mode == "paper";
 
             ConfirmationRequest req;
             req.type = ConfirmationType::Trade;
             req.risk = paper ? RiskLevel::Low : RiskLevel::High;
             req.title = QString("%1 %2 x%3").arg(side.toUpper(), symbol).arg(qty);
-            req.message =
-                QString("Place %1 order for %2 shares of %3 via %4").arg(side, QString::number(qty), symbol, broker);
+            req.message = QString("Place %1 %2 order for %3 of %4 via %5 (%6)")
+                              .arg(type, side, QString::number(qty), symbol, acct->display_name,
+                                   paper ? "paper" : "LIVE");
             req.details = params;
             req.paper_trading = paper;
 
+            const trading::BrokerAccount account = *acct;
             ConfirmationService::instance().request(
-                req, [cb, params, symbol, side, qty, broker, paper](bool approved, const QString& notes) {
+                req, [cb, params, order, account](bool approved, const QString& notes) {
                     if (!approved) {
                         cb(false, {}, "Order rejected by user: " + notes);
                         return;
                     }
-
-                    // Log the order
-                    AuditLogger::instance().log(AuditAction::OrderPlaced, {}, {}, symbol,
-                                                QString("%1 %2 x%3 via %4").arg(side, symbol).arg(qty).arg(broker),
-                                                params, paper);
-
-                    QJsonObject out;
-                    out["order_id"] = "ORD-" + QString::number(QDateTime::currentMSecsSinceEpoch());
-                    out["symbol"] = symbol;
-                    out["side"] = side;
-                    out["quantity"] = qty;
-                    out["broker"] = broker;
-                    out["status"] = "submitted";
-                    cb(true, out, {});
+                    route_order(account, order, params, cb);
                 });
         };
     }
 
-    // Remaining trading nodes are wired elsewhere or via the fallback pass-through
-    // in wire_all_bridges — no "pending_integration" stubs here.
+    // Cancel Order — paper engine or live broker via UnifiedTrading.
+    if (auto* def = const_cast<NodeTypeDef*>(registry.find("trading.cancel_order"))) {
+        def->execute = [](const QJsonObject& params, const QVector<QJsonValue>& inputs, NodeCallback cb) {
+            QString order_id = params.value("order_id").toString().trimmed();
+            if (order_id.isEmpty() && !inputs.isEmpty() && inputs[0].isObject())
+                order_id = inputs[0].toObject().value("order_id").toString().trimmed();
+            if (order_id.isEmpty()) {
+                cb(false, {}, "Cancel Order: 'order_id' is required");
+                return;
+            }
+            QString err;
+            auto acct = resolve_trading_account(params, &err);
+            if (!acct) {
+                cb(false, {}, "Cancel Order: " + err);
+                return;
+            }
+            auto finish = [cb, order_id, account = *acct](const trading::UnifiedOrderResponse& r) {
+                if (!r.success) {
+                    cb(false, {}, r.message.isEmpty() ? QString("Cancel failed") : r.message);
+                    return;
+                }
+                cb(true,
+                   QJsonObject{{"order_id", order_id},
+                               {"status", "cancelled"},
+                               {"account_id", account.account_id},
+                               {"mode", account.trading_mode}},
+                   {});
+            };
+            if (acct->trading_mode == "paper") {
+                auto r = trading::UnifiedTrading::instance().cancel_order(acct->account_id, order_id);
+                if (r.success)
+                    trading::OrderMatcher::instance().remove_order(order_id);
+                finish(r);
+                return;
+            }
+            const QString account_id = acct->account_id;
+            (void)QtConcurrent::run([account_id, order_id, finish]() {
+                finish(trading::UnifiedTrading::instance().cancel_order(account_id, order_id));
+            });
+        };
+    }
+
+    // Modify Order — live brokers only (paper engine has no modify; UnifiedTrading errors).
+    if (auto* def = const_cast<NodeTypeDef*>(registry.find("trading.modify_order"))) {
+        def->execute = [](const QJsonObject& params, const QVector<QJsonValue>&, NodeCallback cb) {
+            const QString order_id = params.value("order_id").toString().trimmed();
+            const double qty = params.value("quantity").toDouble(0);
+            const double price = params.value("price").toDouble(0);
+            if (order_id.isEmpty()) {
+                cb(false, {}, "Modify Order: 'order_id' is required");
+                return;
+            }
+            QJsonObject mods;
+            if (qty > 0)
+                mods["qty"] = qty;
+            if (price > 0)
+                mods["price"] = price;
+            if (mods.isEmpty()) {
+                cb(false, {}, "Modify Order: set a new quantity and/or price");
+                return;
+            }
+            QString err;
+            auto acct = resolve_trading_account(params, &err);
+            if (!acct) {
+                cb(false, {}, "Modify Order: " + err);
+                return;
+            }
+            const QString account_id = acct->account_id;
+            (void)QtConcurrent::run([account_id, order_id, mods, cb]() {
+                auto r = trading::UnifiedTrading::instance().modify_order(account_id, order_id, mods);
+                if (!r.success) {
+                    cb(false, {}, r.message.isEmpty() ? QString("Modify failed") : r.message);
+                    return;
+                }
+                QJsonObject out{{"order_id", order_id}, {"account_id", account_id}, {"modifications", mods}};
+                if (!r.message.isEmpty())
+                    out["broker_message"] = r.message;
+                cb(true, out, {});
+            });
+        };
+    }
+
+    // Get Orders / Positions / Balance — real paper-engine reads. Live-broker
+    // reads are not wired into workflows yet and fail explicitly.
+    if (auto* def = const_cast<NodeTypeDef*>(registry.find("trading.get_orders"))) {
+        def->execute = [](const QJsonObject& params, const QVector<QJsonValue>&, NodeCallback cb) {
+            QString err;
+            auto acct = resolve_trading_account(params, &err);
+            if (!acct) {
+                cb(false, {}, "Get Orders: " + err);
+                return;
+            }
+            if (acct->trading_mode != "paper") {
+                cb(false, {}, "Get Orders: live broker orders are not implemented in workflows yet");
+                return;
+            }
+            const QString status = params.value("status").toString("all");
+            QVector<trading::PtOrder> orders;
+            if (status == "open") {
+                orders = trading::pt_get_orders(acct->paper_portfolio_id, "pending");
+                orders += trading::pt_get_orders(acct->paper_portfolio_id, "partial");
+            } else {
+                orders = trading::pt_get_orders(acct->paper_portfolio_id, status == "all" ? QString() : status);
+            }
+            QJsonArray arr;
+            for (const auto& o : orders)
+                arr.append(pt_order_json(o));
+            cb(true,
+               QJsonObject{{"account_id", acct->account_id}, {"mode", "paper"}, {"count", arr.size()}, {"orders", arr}},
+               {});
+        };
+    }
+
+    if (auto* def = const_cast<NodeTypeDef*>(registry.find("trading.get_positions"))) {
+        def->execute = [](const QJsonObject& params, const QVector<QJsonValue>&, NodeCallback cb) {
+            QString err;
+            auto acct = resolve_trading_account(params, &err);
+            if (!acct) {
+                cb(false, {}, "Get Positions: " + err);
+                return;
+            }
+            if (acct->trading_mode != "paper") {
+                cb(false, {}, "Get Positions: live broker positions are not implemented in workflows yet");
+                return;
+            }
+            QJsonArray arr;
+            for (const auto& p : trading::pt_get_positions(acct->paper_portfolio_id)) {
+                const bool priced = p.current_price > 0.0;
+                arr.append(QJsonObject{{"symbol", p.symbol},
+                                       {"side", p.side},
+                                       {"quantity", p.quantity},
+                                       {"entry_price", p.entry_price},
+                                       {"current_price", priced ? QJsonValue(p.current_price) : QJsonValue()},
+                                       {"unrealized_pnl", priced ? QJsonValue(p.unrealized_pnl) : QJsonValue()},
+                                       {"realized_pnl", p.realized_pnl},
+                                       {"leverage", p.leverage},
+                                       {"opened_at", p.opened_at}});
+            }
+            cb(true,
+               QJsonObject{
+                   {"account_id", acct->account_id}, {"mode", "paper"}, {"count", arr.size()}, {"positions", arr}},
+               {});
+        };
+    }
+
+    if (auto* def = const_cast<NodeTypeDef*>(registry.find("trading.get_balance"))) {
+        def->execute = [](const QJsonObject& params, const QVector<QJsonValue>&, NodeCallback cb) {
+            QString err;
+            auto acct = resolve_trading_account(params, &err);
+            if (!acct) {
+                cb(false, {}, "Get Balance: " + err);
+                return;
+            }
+            if (acct->trading_mode != "paper") {
+                cb(false, {}, "Get Balance: live broker balance is not implemented in workflows yet");
+                return;
+            }
+            try {
+                const auto pf = trading::pt_get_portfolio(acct->paper_portfolio_id);
+                cb(true,
+                   QJsonObject{{"account_id", acct->account_id},
+                               {"mode", "paper"},
+                               {"balance", pf.balance},
+                               {"initial_balance", pf.initial_balance},
+                               {"currency", pf.currency}},
+                   {});
+            } catch (const std::exception& e) {
+                cb(false, {}, QString("Get Balance: %1").arg(e.what()));
+            }
+        };
+    }
+
+    // get_holdings, close_position, bracket_order, trailing_stop, scale_in have
+    // no real execution path yet — they fall to the "not implemented" error
+    // fallback in wire_all_bridges (never a fake success).
 
     LOG_INFO("ServiceBridges", "Trading bridges wired");
 }
@@ -168,7 +578,8 @@ static void wire_utility_bridges(NodeRegistry& registry) {
                     }
                     QJsonObject out;
                     out["url"] = url;
-                    out["status_code"] = 200;
+                    // HttpClient doesn't expose the status code (and passes non-2xx
+                    // JSON bodies through as ok), so no status_code is reported.
                     out["data"] = result.value().isObject() ? QJsonValue(result.value().object())
                                                             : QJsonValue(result.value().array());
                     cb(true, out, {});
@@ -181,7 +592,8 @@ static void wire_utility_bridges(NodeRegistry& registry) {
                     }
                     QJsonObject out;
                     out["url"] = url;
-                    out["status_code"] = 200;
+                    // HttpClient doesn't expose the status code (and passes non-2xx
+                    // JSON bodies through as ok), so no status_code is reported.
                     out["data"] = result.value().isObject() ? QJsonValue(result.value().object())
                                                             : QJsonValue(result.value().array());
                     cb(true, out, {});
@@ -344,8 +756,14 @@ static void wire_utility_bridges(NodeRegistry& registry) {
                             QStringList vals;
                             for (const QString& h : headers) {
                                 QJsonValue v = row.toObject().value(h);
-                                QString s = v.isString() ? "\"" + v.toString().replace("\"", "\"\"") + "\""
-                                                         : QString::number(v.toDouble());
+                                // Missing/null cells stay empty — never written as a fake 0.
+                                QString s;
+                                if (v.isString())
+                                    s = "\"" + v.toString().replace("\"", "\"\"") + "\"";
+                                else if (v.isDouble())
+                                    s = QString::number(v.toDouble(), 'g', 15);
+                                else if (v.isBool())
+                                    s = v.toBool() ? "true" : "false";
                                 vals << s;
                             }
                             csv += vals.join(",") + "\n";
@@ -394,10 +812,8 @@ static void wire_utility_bridges(NodeRegistry& registry) {
                 out["base64"] = QString::fromLatin1(data.toBase64());
                 cb(true, out, {});
             } else {
-                QJsonObject out;
-                out["path"] = path;
-                out["operation"] = op;
-                cb(true, out, {});
+                // Only 'read' is implemented — never report a write that didn't happen.
+                cb(false, {}, QString("File binary: operation '%1' is not implemented").arg(op));
             }
         };
     }
@@ -713,17 +1129,19 @@ void wire_all_bridges(NodeRegistry& registry) {
         if (!def.execute) {
             auto* mutable_def = const_cast<NodeTypeDef*>(registry.find(def.type_id));
             if (mutable_def) {
-                mutable_def->execute = [type_id = def.type_id](const QJsonObject&, const QVector<QJsonValue>& inputs,
+                // No real implementation exists for this node. Fail loudly rather
+                // than pass inputs through as a fake success (a "cancelled" order
+                // or "generated" PDF that never happened).
+                mutable_def->execute = [type_id = def.type_id](const QJsonObject&, const QVector<QJsonValue>&,
                                                                std::function<void(bool, QJsonValue, QString)> cb) {
-                    auto data = inputs.isEmpty() ? QJsonValue(QJsonObject{{"node", type_id}}) : inputs[0];
-                    cb(true, data, {});
+                    cb(false, {}, QString("Node '%1' is not implemented").arg(type_id));
                 };
                 wired_count++;
             }
         }
     }
 
-    LOG_INFO("ServiceBridges", QString("All bridges wired (%1 pass-through fallbacks)").arg(wired_count));
+    LOG_INFO("ServiceBridges", QString("All bridges wired (%1 not-implemented fallbacks)").arg(wired_count));
 }
 
 } // namespace fincept::workflow

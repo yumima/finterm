@@ -32,16 +32,66 @@ void analytics_run_python_json(const QString& script, const QStringList& args,
             cb(false, {}, "Invalid JSON: " + res.output.left(200));
             return;
         }
-        // Check for Python-level error: {"success": false, "error": "..."}
+        // Check for Python-level error: {"success": false, ...} or a bare
+        // {"error": ...} (string, object, or true + "message"). Either is a failure.
         if (doc.isObject()) {
             auto obj = doc.object();
-            if (obj.contains("success") && !obj.value("success").toBool(true)) {
-                cb(false, {}, obj.value("error").toString("Python script returned failure"));
+            const QJsonValue e = obj.value("error");
+            const bool has_error = !(e.isUndefined() || e.isNull() || (e.isBool() && !e.toBool()) ||
+                                     (e.isString() && e.toString().isEmpty()));
+            const bool explicit_fail = obj.contains("success") && !obj.value("success").toBool(true);
+            if (explicit_fail || (has_error && !obj.value("success").toBool(false))) {
+                QString msg;
+                if (e.isString())
+                    msg = e.toString();
+                else if (e.isObject())
+                    msg = e.toObject().value("error").toString(e.toObject().value("message").toString());
+                if (msg.isEmpty())
+                    msg = obj.value("message").toString();
+                cb(false, {}, msg.isEmpty() ? QString("Python script returned failure") : msg);
                 return;
             }
         }
         cb(true, doc.isObject() ? QJsonValue(doc.object()) : QJsonValue(doc.array()), {});
     });
+}
+
+// Nodes whose analysis has no backing implementation. compute_technicals.py
+// ignores --indicator and always returns the standard technicals set, so
+// routing these through it produced output unrelated to the node's label.
+void analysis_not_supported(const QString& what, const std::function<void(bool, QJsonValue, QString)>& cb) {
+    cb(false, {}, QString("%1 is not supported yet — no backing implementation is wired").arg(what));
+}
+
+// Inverse standard normal CDF (Acklam's rational approximation, |err| < 1.2e-9).
+double inv_norm_cdf(double p) {
+    static const double a[] = {-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+                               1.383577518672690e+02,  -3.066479806614716e+01, 2.506628277459239e+00};
+    static const double b[] = {-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
+                               6.680131188771972e+01,  -1.328068155288572e+01};
+    static const double c[] = {-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
+                               -2.549732539343734e+00, 4.374664141464968e+00,  2.938163982698783e+00};
+    static const double d[] = {7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
+                               3.754408661907416e+00};
+    const double plow = 0.02425, phigh = 1 - plow;
+    if (p < plow) {
+        const double q = std::sqrt(-2 * std::log(p));
+        return (((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+               ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+    }
+    if (p > phigh) {
+        const double q = std::sqrt(-2 * std::log(1 - p));
+        return -(((((c[0] * q + c[1]) * q + c[2]) * q + c[3]) * q + c[4]) * q + c[5]) /
+               ((((d[0] * q + d[1]) * q + d[2]) * q + d[3]) * q + 1);
+    }
+    const double q = p - 0.5, r = q * q;
+    return (((((a[0] * r + a[1]) * r + a[2]) * r + a[3]) * r + a[4]) * r + a[5]) * q /
+           (((((b[0] * r + b[1]) * r + b[2]) * r + b[3]) * r + b[4]) * r + 1);
+}
+
+// A ratio that is undefined (zero denominator) is reported as null, not 0.
+QJsonValue ratio_or_null(double num, double den) {
+    return den > 0 ? QJsonValue(num / den) : QJsonValue(QJsonValue::Null);
 }
 
 } // anonymous namespace
@@ -113,19 +163,8 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 {"commission", "Commission %", "number", 0.001, {}, ""},
             },
         .execute =
-            [](const QJsonObject& params, const QVector<QJsonValue>& inputs,
-               std::function<void(bool, QJsonValue, QString)> cb) {
-                QJsonObject args_obj;
-                args_obj["start_date"] = params.value("start_date").toString("2023-01-01");
-                args_obj["end_date"] = params.value("end_date").toString("2024-01-01");
-                args_obj["initial_capital"] = params.value("initial_capital").toDouble(100000);
-                args_obj["commission"] = params.value("commission").toDouble(0.001);
-                if (!inputs.isEmpty())
-                    args_obj["strategy"] = inputs[0];
-
-                QString json_args = QString::fromUtf8(QJsonDocument(args_obj).toJson(QJsonDocument::Compact));
-                analytics_run_python_json("compute_technicals.py",
-                                          {"--data", json_args, "--indicator", "BACKTEST", "--period", "0"}, cb);
+            [](const QJsonObject&, const QVector<QJsonValue>&, std::function<void(bool, QJsonValue, QString)> cb) {
+                analysis_not_supported("Backtest Engine", cb);
             },
     });
 
@@ -233,9 +272,10 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 double mean_return = sum / n;
                 double std_dev = std::sqrt(sum_sq / n - mean_return * mean_return);
                 double rfr = params.value("risk_free_rate").toDouble(0.05) / 252.0;
-                double sharpe = std_dev > 0 ? (mean_return - rfr) / std_dev * std::sqrt(252.0) : 0;
+                // Undefined ratios (zero volatility / no down days) are null, not 0.
+                const QJsonValue sharpe = ratio_or_null((mean_return - rfr) * std::sqrt(252.0), std_dev);
                 double downside_dev = neg_count > 0 ? std::sqrt(neg_sum_sq / neg_count) : 0;
-                double sortino = downside_dev > 0 ? (mean_return - rfr) / downside_dev * std::sqrt(252.0) : 0;
+                const QJsonValue sortino = ratio_or_null((mean_return - rfr) * std::sqrt(252.0), downside_dev);
                 double total_return = (prices.back() - prices.front()) / prices.front();
                 double annualized = std::pow(1.0 + total_return, 252.0 / n) - 1.0;
 
@@ -268,17 +308,8 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 {"period", "Period", "string", "1y", {}, "Lookback period"},
             },
         .execute =
-            [](const QJsonObject& params, const QVector<QJsonValue>& inputs,
-               std::function<void(bool, QJsonValue, QString)> cb) {
-                QJsonObject args_obj;
-                args_obj["method"] = params.value("method").toString("pearson");
-                args_obj["period"] = params.value("period").toString("1y");
-                if (!inputs.isEmpty())
-                    args_obj["data"] = inputs[0];
-
-                QString json_args = QString::fromUtf8(QJsonDocument(args_obj).toJson(QJsonDocument::Compact));
-                analytics_run_python_json("compute_technicals.py",
-                                          {"--data", json_args, "--indicator", "CORRELATION", "--period", "0"}, cb);
+            [](const QJsonObject&, const QVector<QJsonValue>&, std::function<void(bool, QJsonValue, QString)> cb) {
+                analysis_not_supported("Correlation Matrix", cb);
             },
     });
 
@@ -286,7 +317,7 @@ void register_analytics_nodes(NodeRegistry& registry) {
         .type_id = "analytics.risk_analysis",
         .display_name = "Risk Analysis",
         .category = "Analytics",
-        .description = "VaR, CVaR, stress testing, Monte Carlo simulation",
+        .description = "Historical or parametric (Gaussian) VaR and CVaR",
         .icon_text = "A",
         .accent_color = "#7c3aed",
         .version = 1,
@@ -298,7 +329,7 @@ void register_analytics_nodes(NodeRegistry& registry) {
                  "Method",
                  "select",
                  "historical_var",
-                 {"historical_var", "parametric_var", "monte_carlo", "stress_test"},
+                 {"historical_var", "parametric_var"},
                  ""},
                 {"confidence", "Confidence Level", "number", 0.95, {}, ""},
                 {"horizon", "Horizon (days)", "number", 1, {}, ""},
@@ -306,17 +337,53 @@ void register_analytics_nodes(NodeRegistry& registry) {
         .execute =
             [](const QJsonObject& params, const QVector<QJsonValue>& inputs,
                std::function<void(bool, QJsonValue, QString)> cb) {
-                // Extract returns from input and compute VaR/CVaR inline
+                const QString method = params.value("method").toString("historical_var");
+                if (method != "historical_var" && method != "parametric_var") {
+                    cb(false, {}, QString("Risk Analysis: method '%1' is not implemented").arg(method));
+                    return;
+                }
+                const double confidence = params.value("confidence").toDouble(0.95);
+                if (!(confidence > 0.5 && confidence < 1.0)) {
+                    cb(false, {}, "Risk Analysis: confidence must be between 0.5 and 1");
+                    return;
+                }
+                const int horizon = static_cast<int>(params.value("horizon").toDouble(1));
+                if (horizon < 1) {
+                    cb(false, {}, "Risk Analysis: horizon must be >= 1 day");
+                    return;
+                }
+
+                // Input: rows with a `return` field, or price rows (Close/close/price),
+                // or a bare numeric array. Rows missing the field are skipped —
+                // never counted as a 0 return.
                 QVector<double> returns;
+                QVector<double> prices;
                 if (!inputs.isEmpty() && inputs[0].isArray()) {
                     for (const QJsonValue& v : inputs[0].toArray()) {
                         if (v.isObject()) {
-                            double p = v.toObject().value("return").toDouble(v.toObject().value("Close").toDouble(0));
-                            returns.append(p);
+                            const QJsonObject o = v.toObject();
+                            if (o.value("return").isDouble()) {
+                                returns.append(o.value("return").toDouble());
+                            } else {
+                                const QJsonValue pv = o.contains("Close")   ? o.value("Close")
+                                                      : o.contains("close") ? o.value("close")
+                                                                            : o.value("price");
+                                if (pv.isDouble() && pv.toDouble() > 0)
+                                    prices.append(pv.toDouble());
+                            }
                         } else if (v.isDouble()) {
                             returns.append(v.toDouble());
                         }
                     }
+                }
+                // A bare numeric array of values > 1 in magnitude is a price series.
+                if (prices.isEmpty() && !returns.isEmpty() && std::abs(returns[0]) > 1.0) {
+                    prices = returns;
+                    returns.clear();
+                }
+                if (returns.isEmpty() && prices.size() > 1) {
+                    for (int i = 1; i < prices.size(); ++i)
+                        returns.append((prices[i] - prices[i - 1]) / prices[i - 1]);
                 }
 
                 if (returns.size() < 10) {
@@ -324,42 +391,47 @@ void register_analytics_nodes(NodeRegistry& registry) {
                     return;
                 }
 
-                // Convert prices to returns if values are large (prices, not returns)
-                if (std::abs(returns[0]) > 1.0) {
-                    QVector<double> price_returns;
-                    for (int i = 1; i < returns.size(); ++i)
-                        price_returns.append((returns[i] - returns[i - 1]) / returns[i - 1]);
-                    returns = price_returns;
-                }
-
-                // Sort returns for percentile-based VaR
-                std::sort(returns.begin(), returns.end());
-                double confidence = params.value("confidence").toDouble(0.95);
-                int var_idx = static_cast<int>((1.0 - confidence) * returns.size());
-                double var_value = -returns[var_idx];
-
-                // CVaR: average of returns below VaR threshold
-                double cvar_sum = 0;
-                for (int i = 0; i <= var_idx; ++i)
-                    cvar_sum += returns[i];
-                double cvar = var_idx > 0 ? -(cvar_sum / (var_idx + 1)) : var_value;
-
-                // Volatility
                 double sum = 0, sum_sq = 0;
                 for (double r : returns) {
                     sum += r;
                     sum_sq += r * r;
                 }
-                double mean = sum / returns.size();
-                double vol = std::sqrt(sum_sq / returns.size() - mean * mean) * std::sqrt(252.0);
+                const int n = returns.size();
+                const double mean = sum / n;
+                const double sd = std::sqrt(std::max(0.0, sum_sq / n - mean * mean));
+                const double ann_vol = sd * std::sqrt(252.0);
+                const double h_scale = std::sqrt(static_cast<double>(horizon));
+
+                double var_1d = 0, cvar_1d = 0;
+                if (method == "historical_var") {
+                    QVector<double> sorted = returns;
+                    std::sort(sorted.begin(), sorted.end());
+                    const int var_idx = std::min(n - 1, static_cast<int>((1.0 - confidence) * n));
+                    var_1d = -sorted[var_idx];
+                    double tail = 0;
+                    for (int i = 0; i <= var_idx; ++i)
+                        tail += sorted[i];
+                    cvar_1d = -(tail / (var_idx + 1));
+                } else {
+                    // Parametric (Gaussian) VaR/CVaR from the sample mean and sd.
+                    const double z = inv_norm_cdf(1.0 - confidence); // negative
+                    const double pdf = std::exp(-0.5 * z * z) / std::sqrt(2.0 * M_PI);
+                    var_1d = -(mean + z * sd);
+                    cvar_1d = -(mean - sd * pdf / (1.0 - confidence));
+                }
 
                 QJsonObject out;
-                out["method"] = params.value("method").toString("historical_var");
+                out["method"] = method;
                 out["confidence"] = confidence;
-                out["var"] = var_value;
-                out["cvar"] = cvar;
-                out["annualized_volatility"] = vol;
-                out["data_points"] = returns.size();
+                out["horizon_days"] = horizon;
+                // Multi-day figures use square-root-of-time scaling of the 1-day estimate.
+                out["horizon_scaling"] = horizon > 1 ? QJsonValue("sqrt_time") : QJsonValue("none");
+                out["var_1d"] = var_1d;
+                out["cvar_1d"] = cvar_1d;
+                out["var"] = var_1d * h_scale;
+                out["cvar"] = cvar_1d * h_scale;
+                out["annualized_volatility"] = ann_vol;
+                out["data_points"] = n;
                 cb(true, out, {});
             },
     });
@@ -435,20 +507,23 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 double std_dev = std::sqrt(sum_sq / n - mean * mean);
                 double downside_dev = neg_count > 0 ? std::sqrt(neg_sum_sq / neg_count) : 0;
                 double ann_return = mean * 252.0;
-                double ann_rfr = params.value("risk_free_rate").toDouble(0.05);
 
                 QString ratio_type = params.value("ratio").toString("sharpe");
 
                 QJsonObject out;
                 out["ratio_type"] = ratio_type;
-                if (ratio_type == "sharpe")
-                    out["value"] = std_dev > 0 ? (mean - rfr) / std_dev * std::sqrt(252.0) : 0.0;
-                else if (ratio_type == "sortino")
-                    out["value"] = downside_dev > 0 ? (mean - rfr) / downside_dev * std::sqrt(252.0) : 0.0;
-                else if (ratio_type == "calmar")
-                    out["value"] = max_dd > 0 ? ann_return / max_dd : 0.0;
-                else if (ratio_type == "information")
-                    out["value"] = std_dev > 0 ? (ann_return - ann_rfr) / (std_dev * std::sqrt(252.0)) : 0.0;
+                // Undefined ratios (zero denominator) are null, not 0.
+                if (ratio_type == "sharpe") {
+                    out["value"] = ratio_or_null((mean - rfr) * std::sqrt(252.0), std_dev);
+                } else if (ratio_type == "sortino") {
+                    out["value"] = ratio_or_null((mean - rfr) * std::sqrt(252.0), downside_dev);
+                } else if (ratio_type == "calmar") {
+                    out["value"] = ratio_or_null(ann_return, max_dd);
+                } else {
+                    // Information ratio needs benchmark returns, which this node doesn't fetch.
+                    cb(false, {}, QString("Ratio '%1' is not supported yet (needs benchmark returns)").arg(ratio_type));
+                    return;
+                }
 
                 out["annualized_return"] = ann_return;
                 out["annualized_volatility"] = std_dev * std::sqrt(252.0);
@@ -497,6 +572,15 @@ void register_analytics_nodes(NodeRegistry& registry) {
 
                 int fast = static_cast<int>(params.value("fast_period").toDouble(50));
                 int slow = static_cast<int>(params.value("slow_period").toDouble(200));
+                const QString ma_type = params.value("ma_type").toString("SMA");
+                if (ma_type != "SMA") {
+                    cb(false, {}, QString("MA Crossover: %1 is not implemented (only SMA)").arg(ma_type));
+                    return;
+                }
+                if (fast < 1 || slow < 1) {
+                    cb(false, {}, "MA Crossover: periods must be >= 1");
+                    return;
+                }
 
                 if (prices.size() < slow + 1) {
                     cb(false, {},
@@ -534,6 +618,7 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 out["slow_ma"] = slow_now;
                 out["fast_period"] = fast;
                 out["slow_period"] = slow;
+                out["ma_type"] = "SMA";
                 out["current_price"] = prices.last();
                 out["data_points"] = prices.size();
                 cb(true, out, {});
@@ -555,7 +640,7 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 {"window", "Window", "string", "all", {}, "'all' or number of days"},
             },
         .execute =
-            [](const QJsonObject&, const QVector<QJsonValue>& inputs,
+            [](const QJsonObject& params, const QVector<QJsonValue>& inputs,
                std::function<void(bool, QJsonValue, QString)> cb) {
                 QVector<double> prices;
                 if (!inputs.isEmpty() && inputs[0].isArray()) {
@@ -569,6 +654,19 @@ void register_analytics_nodes(NodeRegistry& registry) {
                             prices.append(v.toDouble());
                         }
                     }
+                }
+
+                // Window: 'all' or the most recent N points.
+                const QString window = params.value("window").toString("all").trimmed();
+                if (!window.isEmpty() && window.compare("all", Qt::CaseInsensitive) != 0) {
+                    bool ok = false;
+                    const int w = window.toInt(&ok);
+                    if (!ok || w < 2) {
+                        cb(false, {}, "Max Drawdown: window must be 'all' or a number >= 2");
+                        return;
+                    }
+                    if (prices.size() > w)
+                        prices = prices.mid(prices.size() - w);
                 }
 
                 if (prices.size() < 2) {
@@ -669,11 +767,28 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 var /= returns.size();
                 double std_dev = std::sqrt(var);
 
+                // Confidence levels → two-sided intervals of the simulated final price.
+                QVector<double> levels;
+                for (const QString& tok :
+                     params.value("confidence").toString("0.95,0.99").split(',', Qt::SkipEmptyParts)) {
+                    bool ok = false;
+                    const double c = tok.trimmed().toDouble(&ok);
+                    if (!ok || !(c > 0.0 && c < 1.0)) {
+                        cb(false, {}, QString("Monte Carlo: invalid confidence level '%1' (use 0-1)").arg(tok.trimmed()));
+                        return;
+                    }
+                    levels.append(c);
+                }
+
                 int n_sims = static_cast<int>(params.value("simulations").toDouble(1000));
                 int horizon = static_cast<int>(params.value("horizon_days").toDouble(252));
                 // Cap simulations for performance
                 if (n_sims > 10000)
                     n_sims = 10000;
+                if (n_sims < 1 || horizon < 1) {
+                    cb(false, {}, "Monte Carlo: simulations and horizon must be >= 1");
+                    return;
+                }
 
                 double start_price = prices.last();
                 QVector<double> final_prices;
@@ -712,6 +827,17 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 out["p25"] = final_prices[static_cast<int>(0.25 * n_sims)];
                 out["p75"] = final_prices[static_cast<int>(0.75 * n_sims)];
                 out["p95"] = final_prices[static_cast<int>(0.95 * n_sims)];
+                QJsonArray intervals;
+                auto quantile = [&](double q) {
+                    const int idx = std::clamp(static_cast<int>(q * n_sims), 0, n_sims - 1);
+                    return final_prices[idx];
+                };
+                for (double c : levels) {
+                    intervals.append(QJsonObject{{"confidence", c},
+                                                 {"lower", quantile((1.0 - c) / 2.0)},
+                                                 {"upper", quantile((1.0 + c) / 2.0)}});
+                }
+                out["confidence_intervals"] = intervals; // two-sided, on final price
                 out["min"] = final_prices.first();
                 out["max"] = final_prices.last();
                 out["prob_profit"] = [&]() {
@@ -743,17 +869,8 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 {"period", "Period", "string", "3y", {}, ""},
             },
         .execute =
-            [](const QJsonObject& params, const QVector<QJsonValue>& inputs,
-               std::function<void(bool, QJsonValue, QString)> cb) {
-                QJsonObject args_obj;
-                args_obj["model"] = params.value("model").toString("ff3");
-                args_obj["period"] = params.value("period").toString("3y");
-                if (!inputs.isEmpty())
-                    args_obj["data"] = inputs[0];
-
-                QString json_args = QString::fromUtf8(QJsonDocument(args_obj).toJson(QJsonDocument::Compact));
-                analytics_run_python_json("compute_technicals.py",
-                                          {"--data", json_args, "--indicator", "FACTOR_MODEL", "--period", "0"}, cb);
+            [](const QJsonObject&, const QVector<QJsonValue>&, std::function<void(bool, QJsonValue, QString)> cb) {
+                analysis_not_supported("Factor Model", cb);
             },
     });
 
@@ -779,24 +896,8 @@ void register_analytics_nodes(NodeRegistry& registry) {
                 {"z_threshold", "Z-Score Threshold", "number", 2.0, {}, ""},
             },
         .execute =
-            [](const QJsonObject& params, const QVector<QJsonValue>&,
-               std::function<void(bool, QJsonValue, QString)> cb) {
-                QString symbol_a = params.value("symbol_a").toString("KO");
-                QString symbol_b = params.value("symbol_b").toString("PEP");
-                int lookback = static_cast<int>(params.value("lookback").toDouble(60));
-                double z_thresh = params.value("z_threshold").toDouble(2.0);
-
-                // Fetch historical data for both symbols, compute spread
-                QJsonObject args_obj;
-                args_obj["symbol_a"] = symbol_a;
-                args_obj["symbol_b"] = symbol_b;
-                args_obj["lookback"] = lookback;
-                args_obj["z_threshold"] = z_thresh;
-
-                QString json_args = QString::fromUtf8(QJsonDocument(args_obj).toJson(QJsonDocument::Compact));
-                analytics_run_python_json(
-                    "compute_technicals.py",
-                    {"--data", json_args, "--indicator", "PAIRS", "--period", QString::number(lookback)}, cb);
+            [](const QJsonObject&, const QVector<QJsonValue>&, std::function<void(bool, QJsonValue, QString)> cb) {
+                analysis_not_supported("Pairs Trading", cb);
             },
     });
 
@@ -804,7 +905,8 @@ void register_analytics_nodes(NodeRegistry& registry) {
         .type_id = "analytics.regime_detection",
         .display_name = "Regime Detection",
         .category = "Analytics",
-        .description = "Detect market regime (bull/bear/sideways) using HMM",
+        .description = "Classify market regime (bull/bear/sideways/high-vol) with a rolling-volatility + moving-average "
+                       "heuristic",
         .icon_text = "A",
         .accent_color = "#7c3aed",
         .version = 1,
@@ -812,13 +914,12 @@ void register_analytics_nodes(NodeRegistry& registry) {
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::Main}},
         .parameters =
             {
-                {"n_regimes", "Number of Regimes", "number", 3, {}, ""},
-                {"method", "Method", "select", "hmm", {"hmm", "rolling_vol", "trend_following"}, ""},
+                {"method", "Method", "select", "vol_sma_heuristic", {"vol_sma_heuristic"}, ""},
             },
         .execute =
-            [](const QJsonObject& params, const QVector<QJsonValue>& inputs,
+            [](const QJsonObject&, const QVector<QJsonValue>& inputs,
                std::function<void(bool, QJsonValue, QString)> cb) {
-                // Simple rolling volatility-based regime detection
+                // Rolling-volatility + SMA heuristic (not an HMM)
                 QVector<double> prices;
                 if (!inputs.isEmpty() && inputs[0].isArray()) {
                     for (const QJsonValue& v : inputs[0].toArray()) {
@@ -877,7 +978,8 @@ void register_analytics_nodes(NodeRegistry& registry) {
 
                 QJsonObject out;
                 out["regime"] = regime;
-                out["method"] = params.value("method").toString("rolling_vol");
+                // The method actually used — not an HMM, whatever the saved param says.
+                out["method"] = "vol_sma_heuristic";
                 out["annualized_volatility"] = ann_vol;
                 out["short_ma"] = sma_s;
                 out["long_ma"] = sma_l;

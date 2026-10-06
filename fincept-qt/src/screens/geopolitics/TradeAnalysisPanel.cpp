@@ -347,7 +347,7 @@ void TradeAnalysisPanel::build_ui() {
         p["integration_type"] = bloc_combo->currentData().toString();
         p["trade_creation"] = tc_spin->value();
         p["trade_diversion"] = td_spin->value();
-        GeopoliticsService::instance().analyze_trade_benefits(p); // reuses benefits endpoint with trading_blocs type
+        GeopoliticsService::instance().analyze_trading_blocs(p);
     });
     p2l->addWidget(run2);
     tabs_->addTab(p2, "Trading Blocs");
@@ -408,8 +408,11 @@ void TradeAnalysisPanel::build_ui() {
         QJsonObject p;
         p["liberalization_type"] = lib_combo->currentData().toString();
         p["tariff_reduction"] = tariff_cut_spin->value();
+        // The restrictions model quantifies tariff effects only from
+        // `tariff_rate`; without it every tariff number came back empty.
+        p["tariff_rate"] = tariff_cut_spin->value();
         p["gdp_size"] = gdp_spin->value();
-        GeopoliticsService::instance().analyze_trade_restrictions(p); // reuses restrictions endpoint
+        GeopoliticsService::instance().analyze_trade_restrictions(p);
     });
     p3l->addWidget(run3);
     tabs_->addTab(p3, "Barrier Removal");
@@ -510,12 +513,12 @@ void TradeAnalysisPanel::display_result(const QJsonObject& payload) {
 }
 
 void TradeAnalysisPanel::on_trade_result(const QString& context, const QJsonObject& payload) {
-    if (context == "trade_benefits" || context == "trade_restrictions")
+    if (context == "trade_benefits" || context == "trade_restrictions" || context == "trade_blocs")
         display_result(payload);
 }
 
 void TradeAnalysisPanel::on_error(const QString& context, const QString& message) {
-    if (context != "trade_benefits" && context != "trade_restrictions")
+    if (context != "trade_benefits" && context != "trade_restrictions" && context != "trade_blocs")
         return;
     status_label_->setText("Error");
     while (results_layout_->count() > 0) {

@@ -256,7 +256,8 @@ QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
     // Row 3: state + offering type
     auto* row3 = new QHBoxLayout;
     row3->setSpacing(4);
-    auto* type_lbl = new QLabel(f.offering_type + " · " + f.state);
+    auto* type_lbl = new QLabel((f.offering_type.isEmpty() ? QStringLiteral("—") : f.offering_type) + " · "
+                                + (f.state.isEmpty() ? QStringLiteral("—") : f.state));
     type_lbl->setStyleSheet(
         QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
     row3->addWidget(type_lbl);

@@ -17,6 +17,8 @@
 
 #include <QVector>
 
+#include <limits>
+
 namespace fincept::services::options::analytics {
 
 /// Knobs the caller can tune. All defaults are picker-friendly.
@@ -34,12 +36,15 @@ struct PayoffComputeOptions {
     /// curve.
     int days_to_target = 0;
 
-    /// Risk-free rate (decimal). Default mirrors fno.risk_free_rate.
-    double risk_free_rate = 0.067;
+    /// Risk-free rate (decimal). Callers pass the configured rate
+    /// (OptionChainService::risk_free_rate()); NaN = unknown → target curve
+    /// and POP come back NaN.
+    double risk_free_rate = std::numeric_limits<double>::quiet_NaN();
 
-    /// IV used to price legs whose `iv_at_entry == 0` (Greeks worker hadn't
-    /// solved them by the time they were captured). Decimal.
-    double fallback_iv = 0.20;
+    /// Real market IV (e.g. the chain's ATM IV) used to price legs whose
+    /// `iv_at_entry == 0`. Decimal. 0 = none available: such legs get a NaN
+    /// target P/L and POP is NaN — no invented default vol.
+    double fallback_iv = 0.0;
 
     /// Current spot — ignored when spot_min/spot_max are explicit, used for
     /// auto-bounds otherwise. Drives breakeven crosshair positioning.
@@ -80,7 +85,7 @@ QVector<double> compute_breakevens(const QVector<PayoffPoint>& curve);
 MaxPnL compute_max_pnl(const Strategy& s);
 
 /// Probability of profit under a GBM model with current spot, time t,
-/// risk-free r, and volatility sigma. Integrates the lognormal density
+/// risk-free r, and volatility sigma. NaN when any input is missing. Integrates the lognormal density
 /// over the profitable regions between (and outside) breakevens.
 double compute_pop(const Strategy& s, double current_spot, double t, double r, double sigma);
 

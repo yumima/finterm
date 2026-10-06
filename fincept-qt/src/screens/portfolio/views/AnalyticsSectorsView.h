@@ -3,6 +3,7 @@
 #include "screens/portfolio/PortfolioTypes.h"
 
 #include <QColor>
+#include <QHash>
 #include <QWidget>
 
 class QChartView;
@@ -20,8 +21,9 @@ namespace fincept::screens {
 ///   - OVERVIEW: KPI strip, donut + sector table, 4 performer cards, HHI +
 ///               top-3 concentration badges. Everything the user needs to
 ///               reason about sector exposure on one page.
-///   - CORRELATION: symbol×symbol matrix using a day-change proxy until
-///                  OHLC history is wired (note displayed inline).
+///   - CORRELATION: symbol×symbol Pearson matrix of date-aligned daily
+///                  returns from PortfolioService::fetch_correlation; a pair
+///                  it could not compute renders "—".
 class AnalyticsSectorsView : public QWidget {
     Q_OBJECT
   public:
@@ -93,6 +95,10 @@ class AnalyticsSectorsView : public QWidget {
     // Data
     portfolio::PortfolioSummary summary_;
     QString currency_;
+    // Real correlation matrix ("A|B" → r, NaN = not computable) and whether
+    // the service has answered at all (vs. still fetching).
+    QHash<QString, double> corr_matrix_;
+    bool corr_ready_ = false;
 };
 
 } // namespace fincept::screens

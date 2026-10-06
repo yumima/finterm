@@ -103,7 +103,9 @@ void BuilderAnalyticsRibbon::update_from(const Strategy& s, const StrategyAnalyt
     }
     lbl_breakevens_->setObjectName("fnoBldrValue");
 
-    lbl_pop_->setText(QString::number(a.pop * 100.0, 'f', 1) + "%");
+    // NaN = no real IV / horizon to price it — show the placeholder, not 0%.
+    lbl_pop_->setText(std::isfinite(a.pop) ? QString::number(a.pop * 100.0, 'f', 1) + "%"
+                                           : QStringLiteral("—"));
     lbl_pop_->setObjectName("fnoBldrValue");
 
     if (a.combined.valid) {

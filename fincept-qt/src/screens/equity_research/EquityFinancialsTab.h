@@ -61,6 +61,8 @@ class EquityFinancialsTab : public QWidget {
     static QLabel* make_metric_card(QWidget* parent, const QString& label, const QString& value, const QString& color,
                                     const QString& subtitle = {});
     static void set_metric(QLabel* lbl, const QString& val);
+    /// Line-item value, or NaN when the filing does not report it (NaN
+    /// propagates through ratios and renders as the placeholder).
     static double get_val(const QJsonObject& o, const QStringList& keys);
     /// get_val() but able to say "the filing does not report this" —
     /// std::nullopt for absent, 0.0 for a reported zero.

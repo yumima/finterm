@@ -45,7 +45,8 @@ QJsonArray observations_to_json(const QVector<services::DbnObservation>& obs) {
     for (const auto& o : obs) {
         arr.append(QJsonObject{
             {"period", o.period},
-            {"value", o.value},
+            // NA observations carry no number — emit null, never a placeholder 0.0.
+            {"value", o.valid ? QJsonValue(o.value) : QJsonValue(QJsonValue::Null)},
             {"valid", o.valid},
         });
     }

@@ -7,6 +7,15 @@
 
 namespace fincept::mcp::tools {
 
+namespace {
+// TickerData/Candle store ccxt nulls as 0. A price of 0 is never real (and a
+// 24h volume of exactly 0 is indistinguishable from null), so report those as
+// JSON null ("unavailable") instead of a fabricated 0.
+QJsonValue positive_or_null(double v) {
+    return v > 0.0 ? QJsonValue(v) : QJsonValue(QJsonValue::Null);
+}
+} // namespace
+
 std::vector<ToolDef> get_crypto_trading_tools() {
     std::vector<ToolDef> tools;
 
@@ -30,19 +39,36 @@ std::vector<ToolDef> get_crypto_trading_tools() {
 
             try {
                 auto ticker = svc.fetch_ticker(symbol);
-                return ToolResult::ok_data(QJsonObject{{"symbol", ticker.symbol},
-                                                       {"last", ticker.last},
-                                                       {"bid", ticker.bid},
-                                                       {"ask", ticker.ask},
-                                                       {"high", ticker.high},
-                                                       {"low", ticker.low},
-                                                       {"open", ticker.open},
-                                                       {"close", ticker.close},
-                                                       {"change", ticker.change},
-                                                       {"change_pct", ticker.percentage},
-                                                       {"volume", ticker.base_volume},
-                                                       {"quote_volume", ticker.quote_volume},
-                                                       {"timestamp", static_cast<double>(ticker.timestamp)}});
+                // Empty symbol is ExchangeSession's failure sentinel (exchange error).
+                if (ticker.symbol.isEmpty())
+                    return ToolResult::fail(QString("Exchange returned no ticker for %1 (%2)")
+                                                .arg(symbol, svc.get_exchange()));
+                if (!(ticker.last > 0.0))
+                    return ToolResult::fail(QString("No last price available for %1").arg(symbol));
+                // change/percentage: ccxt null parses as 0. A genuine 0 change is
+                // only reportable when it is corroborated by open == last.
+                const bool flat_confirmed = ticker.open > 0.0 && ticker.last == ticker.open;
+                const QJsonValue change = (ticker.change != 0.0 || flat_confirmed)
+                                              ? QJsonValue(ticker.change)
+                                              : QJsonValue(QJsonValue::Null);
+                const QJsonValue change_pct = (ticker.percentage != 0.0 || flat_confirmed)
+                                                  ? QJsonValue(ticker.percentage)
+                                                  : QJsonValue(QJsonValue::Null);
+                return ToolResult::ok_data(QJsonObject{
+                    {"symbol", ticker.symbol},
+                    {"last", ticker.last},
+                    {"bid", positive_or_null(ticker.bid)},
+                    {"ask", positive_or_null(ticker.ask)},
+                    {"high", positive_or_null(ticker.high)},
+                    {"low", positive_or_null(ticker.low)},
+                    {"open", positive_or_null(ticker.open)},
+                    {"close", positive_or_null(ticker.close)},
+                    {"change", change},
+                    {"change_pct", change_pct},
+                    {"volume", positive_or_null(ticker.base_volume)},
+                    {"quote_volume", positive_or_null(ticker.quote_volume)},
+                    {"timestamp", ticker.timestamp > 0 ? QJsonValue(static_cast<double>(ticker.timestamp))
+                                                       : QJsonValue(QJsonValue::Null)}});
             } catch (const std::exception& e) {
                 return ToolResult::fail(e.what());
             }
@@ -72,19 +98,26 @@ std::vector<ToolDef> get_crypto_trading_tools() {
 
             try {
                 auto ob = svc.fetch_orderbook(symbol, limit);
+                // Empty symbol is ExchangeSession's failure sentinel (exchange error).
+                if (ob.symbol.isEmpty())
+                    return ToolResult::fail(QString("Exchange returned no order book for %1 (%2)")
+                                                .arg(symbol, svc.get_exchange()));
                 QJsonArray bids, asks;
                 for (const auto& level : ob.bids)
                     bids.append(QJsonObject{{"price", level.first}, {"amount", level.second}});
                 for (const auto& level : ob.asks)
                     asks.append(QJsonObject{{"price", level.first}, {"amount", level.second}});
 
-                return ToolResult::ok_data(QJsonObject{{"symbol", ob.symbol},
-                                                       {"best_bid", ob.best_bid},
-                                                       {"best_ask", ob.best_ask},
-                                                       {"spread", ob.spread},
-                                                       {"spread_pct", ob.spread_pct},
-                                                       {"bids", bids},
-                                                       {"asks", asks}});
+                // Spread is only meaningful when both sides exist; otherwise null.
+                const bool two_sided = ob.best_bid > 0.0 && ob.best_ask > 0.0;
+                return ToolResult::ok_data(QJsonObject{
+                    {"symbol", ob.symbol},
+                    {"best_bid", positive_or_null(ob.best_bid)},
+                    {"best_ask", positive_or_null(ob.best_ask)},
+                    {"spread", two_sided ? QJsonValue(ob.spread) : QJsonValue(QJsonValue::Null)},
+                    {"spread_pct", two_sided ? QJsonValue(ob.spread_pct) : QJsonValue(QJsonValue::Null)},
+                    {"bids", bids},
+                    {"asks", asks}});
             } catch (const std::exception& e) {
                 return ToolResult::fail(e.what());
             }
@@ -116,13 +149,17 @@ std::vector<ToolDef> get_crypto_trading_tools() {
 
             try {
                 auto candles = svc.fetch_ohlcv(symbol, timeframe, limit);
+                // Empty result means the exchange call failed (or returned nothing).
+                if (candles.isEmpty())
+                    return ToolResult::fail(QString("Exchange returned no candles for %1 %2 (%3)")
+                                                .arg(symbol, timeframe, svc.get_exchange()));
                 QJsonArray result;
                 for (const auto& c : candles) {
                     result.append(QJsonObject{{"timestamp", static_cast<double>(c.timestamp)},
-                                              {"open", c.open},
-                                              {"high", c.high},
-                                              {"low", c.low},
-                                              {"close", c.close},
+                                              {"open", positive_or_null(c.open)},
+                                              {"high", positive_or_null(c.high)},
+                                              {"low", positive_or_null(c.low)},
+                                              {"close", positive_or_null(c.close)},
                                               {"volume", c.volume}});
                 }
                 return ToolResult::ok_data(result);
@@ -151,9 +188,10 @@ std::vector<ToolDef> get_crypto_trading_tools() {
 
                 return ToolResult::ok_data(QJsonObject{{"current_exchange", current.isEmpty() ? "none" : current},
                                                        {"available_exchanges", id_arr}});
+            } catch (const std::exception& e) {
+                return ToolResult::fail(QString("Failed to list exchanges: %1").arg(e.what()));
             } catch (...) {
-                return ToolResult::ok_data(QJsonObject{{"current_exchange", current.isEmpty() ? "none" : current},
-                                                       {"available_exchanges", QJsonArray{}}});
+                return ToolResult::fail("Failed to list exchanges");
             }
         };
         tools.push_back(std::move(t));

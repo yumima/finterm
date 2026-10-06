@@ -3,7 +3,6 @@
 // Equity derivatives, fixed income, FX, credit, commodities, risk, macro
 
 #include "SurfaceCapabilities.h"
-#include "SurfaceDemoData.h"
 #include "services/economics/EconomicsService.h"
 
 #include <QSet>
@@ -44,8 +43,8 @@ class SurfaceAnalyticsScreen : public QWidget,
     int state_version() const override { return 1; }
 
     // IGroupLinked — subscribe-only. Equity group changes are forwarded to
-    // the SurfaceControlPanel which becomes the new symbol of record; demo data
-    // and chart re-render via on_control_symbol_changed.
+    // the SurfaceControlPanel which becomes the new symbol of record; surfaces
+    // reset and the chart re-renders via on_control_symbol_changed.
     void set_group(fincept::SymbolGroup g) override { link_group_ = g; }
     fincept::SymbolGroup group() const override { return link_group_; }
     void on_group_symbol_changed(const fincept::SymbolRef& ref) override;
@@ -83,7 +82,9 @@ class SurfaceAnalyticsScreen : public QWidget,
     QWidget* build_category_bar();
     QWidget* build_surface_bar();
     void refresh_surface_bar();
-    void load_demo_data();
+    /// Empty the symbol-dependent surfaces (and drop their provenance). Called
+    /// on open and on symbol change; nothing is generated in their place.
+    void clear_symbol_surfaces();
     /// Build Correlation, PCA, VaR, Drawdown and Beta from the daily bars a
     /// fetch returned. Everything it fills is marked fetched_, so the badge
     /// and the lineage report real provenance for them.
@@ -104,18 +105,16 @@ class SurfaceAnalyticsScreen : public QWidget,
     /// number anyone can use.
     QString beta_benchmark_;
     /// Chart types whose drawn surface came from a real fetch. Everything not
-    /// in here is analytically generated — load_demo_data() fills EVERY
-    /// surface, including the ones whose tier names a Databento dataset, so
-    /// "which tier is this chart" was never an answer to "where did these
-    /// numbers come from".
+    /// in here (and not imported) is EMPTY — the tier only says where a
+    /// surface could come from, never that numbers are on screen.
     QSet<ChartType> fetched_;
     /// Surfaces loaded from a file the user chose, and where each came from.
     /// Kept apart from fetched_: an import is real data, but it did not come
     /// out of the tier's Databento dataset, and saying it did is the same
     /// false provenance claim as calling generated data COMPUTED.
     QHash<ChartType, QString> imported_from_;
-    /// True when the surface currently on screen was generated, not fetched
-    /// and not imported.
+    /// True when nothing has been fetched or imported for the active surface,
+    /// i.e. the chart is empty.
     bool active_is_synthetic() const {
         return !fetched_.contains(active_chart_) && !imported_from_.contains(active_chart_);
     }

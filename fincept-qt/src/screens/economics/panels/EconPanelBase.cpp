@@ -343,6 +343,8 @@ void EconPanelBase::display(const QJsonArray& rows, const QString& title) {
             QString text;
             if (jv.isDouble())
                 text = QString::number(jv.toDouble(), 'g', 8);
+            else if (jv.isNull())
+                text = QStringLiteral("—"); // explicit null from the source = unavailable
             else
                 text = jv.toString();
             auto* item = new QTableWidgetItem(text);
@@ -405,8 +407,11 @@ void EconPanelBase::update_stats(const QJsonArray& rows) {
     }
 
     double latest = vals.last();
-    double prev = vals.size() > 1 ? vals[vals.size() - 2] : latest;
-    double change = (prev != 0.0) ? ((latest - prev) / qAbs(prev)) * 100.0 : 0.0;
+    // No prior observation (or a zero base) means the change is undefined —
+    // show "—", not a fabricated 0.00%.
+    const bool has_change = vals.size() > 1 && vals[vals.size() - 2] != 0.0;
+    const double prev = has_change ? vals[vals.size() - 2] : latest;
+    const double change = has_change ? ((latest - prev) / qAbs(prev)) * 100.0 : 0.0;
     double mn = *std::min_element(vals.begin(), vals.end());
     double mx = *std::max_element(vals.begin(), vals.end());
     double sum = 0.0;
@@ -419,8 +424,9 @@ void EconPanelBase::update_stats(const QJsonArray& rows) {
     if (stat_latest_)
         stat_latest_->setText(fmt(latest));
     if (stat_change_) {
-        stat_change_->setText((change >= 0 ? "+" : "") + QString::number(change, 'f', 2) + "%");
-        stat_change_->setObjectName(change >= 0 ? "econStatPos" : "econStatNeg");
+        stat_change_->setText(has_change ? (change >= 0 ? "+" : "") + QString::number(change, 'f', 2) + "%"
+                                         : QStringLiteral("—"));
+        stat_change_->setObjectName(!has_change ? "econStatVal" : change >= 0 ? "econStatPos" : "econStatNeg");
         stat_change_->style()->unpolish(stat_change_);
         stat_change_->style()->polish(stat_change_);
     }

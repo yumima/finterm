@@ -22,6 +22,8 @@ struct QuoteData {
     QString symbol;
     QString name;
     double price = 0;
+    // change / change_pct / volume are NaN (kUnknownNum) when the feed had no
+    // previous close / volume — render placeholder(), never a flat 0.00%.
     double change = 0;
     double change_pct = 0;
     double high = 0;

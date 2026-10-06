@@ -21,6 +21,9 @@
 #include <QTimer>
 #include <QUrl>
 
+#include <algorithm>
+#include <cmath>
+
 namespace fincept::screens {
 
 namespace {
@@ -788,9 +791,9 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     if (article.threat.level != services::ThreatLevel::INFO) {
         QString threat_text = services::threat_level_string(article.threat.level);
         QString threat_color = services::threat_level_color(article.threat.level);
-        impact_label_->setText(QString("Threat: %1 (%2, %3% conf)")
-                                   .arg(threat_text, article.threat.category)
-                                   .arg(static_cast<int>(article.threat.confidence * 100)));
+        // Keyword-heuristic classification — no confidence figure is shown
+        // because none is actually estimated.
+        impact_label_->setText(QString("Threat: %1 (%2)").arg(threat_text, article.threat.category));
         impact_label_->setStyleSheet(QString("color: %1; background: transparent;").arg(threat_color));
     } else {
         impact_label_->setText(QString("Impact: %1").arg(services::impact_string(article.impact)));
@@ -892,11 +895,17 @@ void NewsDetailPanel::show_analysis(const services::NewsAnalysis& analysis) {
 
     ai_summary_->setText(analysis.summary.isEmpty() ? "No AI summary available." : analysis.summary);
 
-    double score = std::clamp(analysis.sentiment.score, -1.0, 1.0);
-    QString sent_color =
-        score > 0.1 ? ui::colors::POSITIVE : (score < -0.1 ? ui::colors::NEGATIVE : ui::colors::WARNING);
-    ai_sentiment_->setText(QString("Sentiment: %1%2").arg(score >= 0 ? "+" : "").arg(score, 0, 'f', 2));
-    ai_sentiment_->setStyleSheet(QString("color: %1;").arg(sent_color));
+    if (std::isfinite(analysis.sentiment.score)) {
+        double score = std::clamp(analysis.sentiment.score, -1.0, 1.0);
+        QString sent_color =
+            score > 0.1 ? ui::colors::POSITIVE : (score < -0.1 ? ui::colors::NEGATIVE : ui::colors::WARNING);
+        ai_sentiment_->setText(QString("Sentiment: %1%2").arg(score >= 0 ? "+" : "").arg(score, 0, 'f', 2));
+        ai_sentiment_->setStyleSheet(QString("color: %1;").arg(sent_color));
+    } else {
+        // Model returned no sentiment score — don't invent a neutral 0.00.
+        ai_sentiment_->setText(QStringLiteral("Sentiment: \u2014"));
+        ai_sentiment_->setStyleSheet(QString());
+    }
 
     ai_urgency_->setText(QString("Urgency: %1").arg(analysis.market_impact.urgency));
 

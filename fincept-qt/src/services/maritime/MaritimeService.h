@@ -24,6 +24,11 @@ class MaritimeService : public QObject
     void refresh(const QStringList& topics) override;
     int max_requests_per_sec() const override;
 
+    /// False when no vessel-position API is configured (current state: the
+    /// upstream endpoint was retired). Callers must show "unavailable".
+    static bool is_available();
+    static const char* unavailable_message();
+
     /// Search vessels in a geographic bounding box
     void search_vessels_by_area(const AreaSearchParams& params);
 

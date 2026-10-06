@@ -4,6 +4,8 @@
 
 #include <QApplication>
 
+#include <cmath>
+
 namespace fincept::ui {
 
 static bool s_rtl = false;
@@ -20,6 +22,9 @@ void set_rtl(bool rtl) {
 }
 
 QString change_color(double value) {
+    // Unknown change (NaN — no previous close) is neither a gain nor a loss.
+    if (!std::isfinite(value))
+        return QString(ThemeManager::instance().tokens().text_secondary);
     return value >= 0 ? QString(ThemeManager::instance().tokens().positive)
                       : QString(ThemeManager::instance().tokens().negative);
 }

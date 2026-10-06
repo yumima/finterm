@@ -644,7 +644,6 @@ class NASDAQDataAPI:
                     "ipo_date": self._parse_date(ipo.get("pricedDate")),
                     "share_price": self._parse_float(ipo.get("proposedSharePrice")),
                     "exchange": ipo.get("proposedExchange"),
-                    "offer_amount": self._parse_float(ipo.get("dollarValueOfSharesOffered")),
                     "share_count": self._parse_int(ipo.get("sharesOffered")),
                     "expected_price_date": self._parse_date(ipo.get("expectedPriceDate")),
                     "filed_date": self._parse_date(ipo.get("filedDate")),
@@ -652,6 +651,16 @@ class NASDAQDataAPI:
                     "deal_status": ipo.get("dealStatus"),
                     "deal_id": ipo.get("dealID")
                 }
+                # dollarValueOfSharesOffered means different things by status.
+                # priced/upcoming: shares x price (a real deal size). filed/
+                # withdrawn: the S-1 fee-table "maximum aggregate offering
+                # price" -- a registration-fee placeholder (often a nominal
+                # round number), NOT a deal size. Never expose it as one.
+                dv = self._parse_float(ipo.get("dollarValueOfSharesOffered"))
+                if status in ("priced", "upcoming"):
+                    formatted_ipo["offer_amount"] = dv
+                else:
+                    formatted_ipo["s1_fee_table_max_offering_usd"] = dv
                 formatted_results.append(formatted_ipo)
 
             return {

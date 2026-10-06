@@ -325,8 +325,12 @@ class CrossSectionalRegressionAnalyzer:
         """Predict P/E ratio using cross-sectional regression on fundamentals"""
 
         # Prepare regression variables
-        X = fundamentals_data[['growth_rate', 'payout_ratio', 'beta', 'roe']].fillna(0)
-        y = fundamentals_data['pe_ratio'].fillna(0)
+        # Drop comps with any missing fundamental rather than fitting on
+        # zero-filled values (a 0 beta/ROE is not "unknown").
+        cols = ['growth_rate', 'payout_ratio', 'beta', 'roe']
+        complete = fundamentals_data[cols + ['pe_ratio']].dropna()
+        X = complete[cols]
+        y = complete['pe_ratio']
 
         # Remove outliers (P/E > 50 or < 0)
         mask = (y > 0) & (y < 50)

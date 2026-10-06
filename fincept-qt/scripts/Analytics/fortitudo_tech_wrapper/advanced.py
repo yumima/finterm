@@ -349,29 +349,56 @@ def create_volatility_surface_from_options(
     dividend_yield: float = 0.0
 ) -> np.ndarray:
     """
-    Create volatility surface from option prices (helper function)
-
-    This is a placeholder for implied volatility calculation.
-    In practice, you'd use numerical methods to invert Black-Scholes.
+    Create an implied volatility surface from observed European call prices
+    by inverting Black-Scholes (Merton, continuous dividend yield) with
+    Brent's method.
 
     Args:
         spot_price: Current stock price
         strikes: Array of strike prices
-        maturities: Array of times to maturity
-        market_prices: Matrix of observed option prices
+        maturities: Array of times to maturity (years)
+        market_prices: Matrix of observed call prices, shape (n_maturities, n_strikes)
         risk_free_rate: Risk-free rate
         dividend_yield: Dividend yield
 
     Returns:
-        Implied volatility surface matrix
+        Implied volatility surface matrix, shape (n_maturities, n_strikes).
+        Cells whose price admits no implied volatility (missing, non-positive,
+        or outside no-arbitrage bounds) are NaN -- never filled in.
     """
-    # This is a simplified example
-    # Real implementation would use Newton-Raphson or similar
-    n_maturities = len(maturities)
-    n_strikes = len(strikes)
+    from scipy.optimize import brentq
+    from scipy.stats import norm
 
-    # Placeholder: return random volatilities for demonstration
-    vol_surface = np.random.uniform(0.15, 0.40, (n_maturities, n_strikes))
+    strikes = np.asarray(strikes, dtype=float)
+    maturities = np.asarray(maturities, dtype=float)
+    prices = np.asarray(market_prices, dtype=float)
+    if prices.shape != (len(maturities), len(strikes)):
+        raise ValueError(f"market_prices shape {prices.shape} does not match "
+                         f"(n_maturities, n_strikes) = ({len(maturities)}, {len(strikes)})")
+
+    def _bs_call(sigma, K, T):
+        sqrt_t = np.sqrt(T)
+        d1 = (np.log(spot_price / K) + (risk_free_rate - dividend_yield + 0.5 * sigma ** 2) * T) / (sigma * sqrt_t)
+        d2 = d1 - sigma * sqrt_t
+        return (spot_price * np.exp(-dividend_yield * T) * norm.cdf(d1)
+                - K * np.exp(-risk_free_rate * T) * norm.cdf(d2))
+
+    vol_surface = np.full(prices.shape, np.nan)
+    for i, T in enumerate(maturities):
+        if not np.isfinite(T) or T <= 0:
+            continue
+        for j, K in enumerate(strikes):
+            price = prices[i, j]
+            if not np.isfinite(price) or price <= 0 or K <= 0:
+                continue
+            lower = max(spot_price * np.exp(-dividend_yield * T) - K * np.exp(-risk_free_rate * T), 0.0)
+            upper = spot_price * np.exp(-dividend_yield * T)
+            if not (lower < price < upper):
+                continue
+            try:
+                vol_surface[i, j] = brentq(lambda s: _bs_call(s, K, T) - price, 1e-6, 10.0, maxiter=200)
+            except ValueError:
+                continue  # no root in bracket -> leave NaN
 
     return vol_surface
 

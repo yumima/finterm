@@ -101,9 +101,8 @@ QColor tier_color(SurfaceTier t) {
         case SurfaceTier::EQUITIES:
             return QColor(217, 164, 6);
         case SurfaceTier::DEMO:
-            // Amber, not the same grey as every other secondary label: the
-            // numbers on screen are not market data.
-            return QColor(217, 164, 6);
+            // No Databento feed — muted grey.
+            return QColor(140, 140, 140);
     }
     return QColor(140, 140, 140);
 }
@@ -510,17 +509,19 @@ void SurfaceControlPanel::apply_tier_badge() {
         return;
     const auto& cap = capability_for(active_type_);
     // What is DRAWN decides the badge. The tier only says where this surface
-    // could be fetched from, and a generated surface under a COMPUTED badge is
-    // a claim about provenance that is not true.
+    // could be fetched from; with nothing loaded the chart is empty and the
+    // badge says so rather than naming a dataset.
     const bool imported = provenance_ == SurfaceProvenance::Imported;
-    const bool synthetic = !imported && (provenance_ == SurfaceProvenance::Synthetic ||
-                                         cap.tier == SurfaceTier::DEMO);
-    const QColor bg = imported  ? QColor(ui::colors::CYAN())
-                    : synthetic ? tier_color(SurfaceTier::DEMO)
-                                : tier_color(cap.tier);
-    tier_badge_->setText(imported  ? QStringLiteral("IMPORTED FILE")
-                       : synthetic ? QString::fromUtf8(tier_name(SurfaceTier::DEMO))
-                                   : QString::fromUtf8(tier_name(cap.tier)));
+    const bool empty = !imported && provenance_ == SurfaceProvenance::None;
+    const QColor bg = imported ? QColor(ui::colors::CYAN())
+                    : empty    ? QColor(140, 140, 140)
+                    : cap.tier == SurfaceTier::DEMO ? tier_color(SurfaceTier::LIVE)
+                                                    : tier_color(cap.tier);
+    tier_badge_->setText(imported ? QStringLiteral("IMPORTED FILE")
+                       : empty    ? QStringLiteral("NO DATA")
+                       // Only FRED fills a DEMO-tier surface (the rates curves).
+                       : cap.tier == SurfaceTier::DEMO ? QStringLiteral("FRED")
+                                                       : QString::fromUtf8(tier_name(cap.tier)));
     tier_badge_->setStyleSheet(
         QString("background:%1; color:#000; font-size:12px; font-weight:bold; "
                 "padding:2px 6px; border-radius:2px; max-width:140px;")
@@ -530,14 +531,12 @@ void SurfaceControlPanel::apply_tier_badge() {
             ? QStringLiteral("These numbers came from a file you imported, not from %1.")
                   .arg(QString(cap.dataset).isEmpty() ? QStringLiteral("a market data source")
                                                       : QString::fromUtf8(cap.dataset))
-        : synthetic
-            ? QStringLiteral("This surface is generated analytically, not fetched from a\n"
-                             "market data source. The shape is realistic; the numbers are\n"
-                             "not real quotes.%1")
-                  .arg(cap.tier == SurfaceTier::DEMO
-                           ? QString()
-                           : QStringLiteral("\n\nPress FETCH to replace it with %1 data.")
-                                 .arg(QString::fromUtf8(cap.dataset)))
+        : empty
+            ? (cap.tier == SurfaceTier::DEMO
+                   ? QStringLiteral("Nothing loaded. This surface has no Databento source;\n"
+                                    "nothing is drawn rather than a modelled shape.")
+                   : QStringLiteral("Nothing loaded. Press FETCH to load real data from %1.")
+                         .arg(QString::fromUtf8(cap.dataset)))
             : QString());
 }
 
@@ -573,7 +572,7 @@ void SurfaceControlPanel::set_capability(ChartType type) {
     // surface from them, so the picture does not change.
     fetch_btn_->setToolTip(
         !can_fetch
-            ? QStringLiteral("This surface is generated analytically — there is nothing to fetch.")
+            ? QStringLiteral("No Databento source for this surface — there is nothing to fetch.")
         : cap.tier == SurfaceTier::EQUITIES
             ? QStringLiteral("Fetches daily bars from %1. Correlation, PCA, VaR, drawdown and "
                              "beta\nare computed from them; the bars themselves stay in the "

@@ -3,6 +3,8 @@
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
+#include <QtNumeric>
+
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
 
@@ -197,17 +199,20 @@ void StockQuoteWidget::populate(const services::QuoteData& q) {
     has_data_ = true;
     price_label_->setText(QString("$%1").arg(q.price, 0, 'f', 2));
 
+    const bool known = std::isfinite(q.change_pct) && std::isfinite(q.change);
     bool positive = q.change_pct >= 0;
-    QString color = positive ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
+    QString color = ui::change_color(known ? q.change_pct : qQNaN());
 
-    arrow_label_->setText(positive ? QString(QChar(0x25B2)) : QString(QChar(0x25BC)));
+    arrow_label_->setText(!known ? QString() : positive ? QString(QChar(0x25B2)) : QString(QChar(0x25BC)));
     arrow_label_->setStyleSheet(QString("color: %1; background: transparent;").arg(color));
 
-    change_label_->setText(QString("%1%2 (%3%4%)")
-                               .arg(positive ? "+" : "")
-                               .arg(q.change, 0, 'f', 2)
-                               .arg(positive ? "+" : "")
-                               .arg(q.change_pct, 0, 'f', 2));
+    // No previous close → change unknown: show the placeholder, not "+0.00 (+0.00%)".
+    change_label_->setText(!known ? ui::formatting::placeholder()
+                                  : QString("%1%2 (%3%4%)")
+                                        .arg(positive ? "+" : "")
+                                        .arg(q.change, 0, 'f', 2)
+                                        .arg(positive ? "+" : "")
+                                        .arg(q.change_pct, 0, 'f', 2));
     change_label_->setStyleSheet(
         QString("color: %1; font-weight: bold; background: transparent;").arg(color));
 
@@ -215,7 +220,9 @@ void StockQuoteWidget::populate(const services::QuoteData& q) {
         QString("color: %1; font-size: 28px; font-weight: bold; background: transparent;").arg(color));
 
     auto fmt = [](double v) { return v > 0 ? QString("$%1").arg(v, 0, 'f', 2) : QString("--"); };
-    open_val_->setText(fmt(q.high)); // yfinance batch returns high but not open separately — use high
+    // QuoteData carries no open price; showing the high under "Open" was a
+    // fabricated value. Leave it unavailable.
+    open_val_->setText(ui::formatting::placeholder());
     high_val_->setText(fmt(q.high));
     low_val_->setText(fmt(q.low));
     prev_val_->setText(fmt(q.price - q.change));

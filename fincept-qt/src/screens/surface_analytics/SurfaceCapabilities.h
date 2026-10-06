@@ -17,7 +17,7 @@ enum class SurfaceTier {
     LIVE,     // Direct Databento fetch
     COMPUTED, // Python-derived from a Databento input
     EQUITIES, // Equities OHLCV-driven
-    DEMO,     // No Databento source — synthetic data
+    DEMO,     // No Databento source (FRED-backed rates, or gated: no feed)
 };
 
 inline const char* tier_name(SurfaceTier t) {
@@ -29,10 +29,9 @@ inline const char* tier_name(SurfaceTier t) {
         case SurfaceTier::EQUITIES:
             return "EQUITIES";
         case SurfaceTier::DEMO:
-            // Not a tier name — a warning. These surfaces are generated
-            // analytically, and "DEMO" in a muted chip read as a product
-            // tier beside a realistic-looking vol smile.
-            return "SYNTHETIC DATA";
+            // No Databento source. Nothing is generated for these: the rates
+            // surfaces load from FRED, the rest stay empty (see required_feed).
+            return "NO FEED";
     }
     return "UNKNOWN";
 }
@@ -75,7 +74,8 @@ inline const char* required_feed(ChartType t) {
 
 /// Where the numbers currently drawn actually came from. Distinct from the
 /// tier, which only says where a surface COULD be fetched from.
-enum class SurfaceProvenance { Fetched, Synthetic, Imported };
+/// None = nothing loaded; the surface is empty (nothing is ever generated).
+enum class SurfaceProvenance { Fetched, None, Imported };
 
 // View modes a surface can be rendered in. The capability declares which apply.
 enum class ViewMode { Surface3D, Table, Line };
@@ -119,49 +119,49 @@ inline constexpr std::array<SurfaceCapability, 35> SURFACE_CAPABILITIES = {{
      "IV skew across delta buckets and tenors",
      true, true, true, true, false, true, true, false},
     {ChartType::LocalVolSurface, SurfaceTier::COMPUTED, "OPRA.PILLAR", "definition+cbbo-1s", "parent",
-     "Dupire local vol from BS implied vol surface",
+     "Not available: Dupire local vol needs a fitted arbitrage-free IV surface (fetch returns an error)",
      true, true, true, true, false, true, true, false},
     // ── Fixed Income (DEMO) ─────────────────────────────────────────────────
     {ChartType::YieldCurve, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, true},
     {ChartType::SwaptionVol, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     {ChartType::CapFloorVol, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     {ChartType::BondSpread, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     {ChartType::OISBasis, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     {ChartType::RealYield, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     {ChartType::ForwardRate, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     // ── FX (DEMO) ───────────────────────────────────────────────────────────
     {ChartType::FXVol, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     {ChartType::FXForwardPoints, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, true},
     {ChartType::CrossCurrencyBasis, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     // ── Credit (DEMO) ───────────────────────────────────────────────────────
     {ChartType::CDSSpread, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     {ChartType::CreditTransition, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     {ChartType::RecoveryRate, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, false},
     // ── Commodities ─────────────────────────────────────────────────────────
     {ChartType::CommodityForward, SurfaceTier::LIVE, "GLBX.MDP3", "definition+ohlcv-1d", "parent",
@@ -206,10 +206,10 @@ inline constexpr std::array<SurfaceCapability, 35> SURFACE_CAPABILITIES = {{
      true, true, true, true, false, true, true, false},
     // ── Macro (DEMO) ────────────────────────────────────────────────────────
     {ChartType::InflationExpectations, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, true},
     {ChartType::MonetaryPolicyPath, SurfaceTier::DEMO, "", "", "",
-     "No Databento source — synthetic data",
+     "No Databento source",
      false, false, false, false, false, true, true, true},
 }};
 

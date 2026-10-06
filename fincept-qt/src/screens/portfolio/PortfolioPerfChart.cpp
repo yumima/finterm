@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioReturns.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QPointer>
@@ -735,13 +736,15 @@ void PortfolioPerfChart::set_symbol_intraday(const QString& symbol,
 }
 
 void PortfolioPerfChart::set_portfolio_intraday(const QVector<qint64>& timestamps_ms,
-                                                const QVector<double>& navs) {
+                                                const QVector<double>& navs,
+                                                const QString& unavailable_reason) {
     if (current_period_ != QStringLiteral("1D")) return;
     if (!focus_symbol_.isEmpty()) return; // stale aggregate while symbol focused
     intraday_for_symbol_ = QString();
     intraday_ts_ms_      = timestamps_ms;
     intraday_values_     = navs;
     intraday_resolved_   = true;
+    intraday_unavailable_reason_ = unavailable_reason;
     update_chart();
 }
 
@@ -793,47 +796,13 @@ void PortfolioPerfChart::set_live_group_visible(bool visible) {
 }
 
 void PortfolioPerfChart::seed_intraday_from_summary() {
+    // Deliberately empty series: the chart shows "Loading 1D…" until real
+    // bars land. This used to draw a straight 2-point line from the previous
+    // close (current − day change) to the current value across the session —
+    // an interpolated intraday path that never happened.
     intraday_ts_ms_.clear();
     intraday_values_.clear();
-
-    double prev_val = 0;
-    double cur_val  = 0;
-    if (focus_symbol_.isEmpty()) {
-        // Aggregate path: previous NAV = current MV minus today's $ change.
-        if (summary_.total_market_value <= 0) return;
-        cur_val  = summary_.total_market_value;
-        prev_val = cur_val - summary_.total_day_change;
-    } else {
-        const portfolio::HoldingWithQuote* held = nullptr;
-        for (const auto& h : summary_.holdings) {
-            if (h.symbol == focus_symbol_) { held = &h; break; }
-        }
-        if (!held || held->current_price <= 0) return;
-        cur_val  = held->current_price;
-        prev_val = cur_val - held->day_change;
-    }
-    if (prev_val <= 0) return;
-
-    // Anchor the seed to today's NYSE session (09:30 ET → now, capped at
-    // 16:00 ET). The previous "now − 6.5h rolling window" approach was
-    // exchange-agnostic in principle but in practice pushed the chart's
-    // x-axis start into pre-market wall-clock time (e.g. 04:15 PT at
-    // mid-session) since US bars themselves are NYSE-anchored. If we're
-    // called before today's open (rare — pre-market refresh), fall back to
-    // yesterday's session so prev_val→cur_val still spans a real interval.
-    const QTimeZone et("America/New_York");
-    const QDateTime now_et = QDateTime::currentDateTime().toTimeZone(et);
-    QDateTime open_et(now_et.date(), QTime(9, 30), et);
-    QDateTime close_et(now_et.date(), QTime(16, 0), et);
-    if (now_et < open_et) {
-        open_et  = open_et.addDays(-1);
-        close_et = close_et.addDays(-1);
-    }
-    const qint64 now_ms          = QDateTime::currentMSecsSinceEpoch();
-    const qint64 session_open_ms = open_et.toMSecsSinceEpoch();
-    const qint64 session_end_ms  = std::min(close_et.toMSecsSinceEpoch(), now_ms);
-    intraday_ts_ms_  = {session_open_ms, session_end_ms};
-    intraday_values_ = {prev_val, cur_val};
+    intraday_unavailable_reason_.clear();
 }
 
 bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
@@ -859,9 +828,11 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
         // illiquid symbol). The latter would otherwise show "Loading…"
         // indefinitely, which is what the review flagged.
         if (intraday_resolved_) {
+            const QString why = (is_aggregate && !intraday_unavailable_reason_.isEmpty())
+                                    ? intraday_unavailable_reason_
+                                    : QStringLiteral("market closed or no bars");
             period_change_label_->setText(
-                QString("%1 unavailable for %2 (market closed or no bars)")
-                    .arg(current_period_, label));
+                QString("%1 unavailable for %2 (%3)").arg(current_period_, label, why));
         } else {
             period_change_label_->setText(
                 QString("Loading %1 %2…").arg(current_period_, label));
@@ -1024,8 +995,13 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
 
     if (focus_dates_.isEmpty() || focus_closes_.isEmpty() ||
         focus_dates_.size() != focus_closes_.size()) {
-        // Loading placeholder; caller's tail still populates held-based labels.
-        period_change_label_->setText(QStringLiteral("Loading %1…").arg(focus_symbol_));
+        // Loading placeholder — or, once the fetch has answered empty, an
+        // explicit unavailable state (it used to say "Loading…" forever).
+        // Caller's tail still populates held-based labels.
+        period_change_label_->setText(
+            focus_data_loaded_
+                ? QStringLiteral("%1  No price history for %2").arg(current_period_, focus_symbol_)
+                : QStringLiteral("Loading %1…").arg(focus_symbol_));
         chart_view_->set_series_data({}, currency_);
         return false;
     }
@@ -1159,19 +1135,28 @@ void PortfolioPerfChart::update_chart_focus() {
     }
 
     if (held && held->cost_basis > 0) {
+        // No price → TOTAL and MV are unknown ("—"), not 0 / -100%.
         const double total_pct = held->unrealized_pnl_percent;
-        const char* tot_color = total_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+        const bool known = held->price_known && std::isfinite(total_pct);
+        const char* tot_color = !known          ? ui::colors::TEXT_SECONDARY
+                                : total_pct >= 0 ? ui::colors::POSITIVE
+                                                 : ui::colors::NEGATIVE;
         total_return_label_->setText(
-            QString("TOTAL  %1%2%").arg(total_pct >= 0 ? "+" : "")
-                                   .arg(QString::number(total_pct, 'f', 2)));
+            known ? QString("TOTAL  %1%2%").arg(total_pct >= 0 ? "+" : "")
+                                           .arg(QString::number(total_pct, 'f', 2))
+                  : QStringLiteral("TOTAL  ") + ui::formatting::placeholder());
         total_return_label_->setStyleSheet(
             QString("color:%1; font-size:14px; font-weight:700;").arg(tot_color));
 
         nav_label_->setText(
-            QString("MV %1 %2").arg(currency_).arg(QString::number(held->market_value, 'f', 2)));
+            held->valued()
+                ? QString("MV %1 %2").arg(currency_).arg(QString::number(held->market_value, 'f', 2))
+                : QStringLiteral("MV ") + ui::formatting::placeholder());
         if (cost_basis_label_)
             cost_basis_label_->setText(
-                QString("COST %1 %2").arg(currency_).arg(QString::number(held->cost_basis, 'f', 2)));
+                held->fx_known
+                    ? QString("COST %1 %2").arg(currency_).arg(QString::number(held->cost_basis, 'f', 2))
+                    : QStringLiteral("COST ") + ui::formatting::placeholder());
     } else if (have_data && last_price > 0) {
         // Not a held position but chart drew — stand-in price.
         total_return_label_->setText(QString("PRICE %1 %2")
@@ -1295,6 +1280,30 @@ void PortfolioPerfChart::update_chart() {
     nav_ts_ms.reserve(filtered.size() + 1);
     nav_dates.reserve(filtered.size() + 1);
 
+    // TOTAL / NAV / COST info labels — real summary figures, shown whether or
+    // not there is enough history to draw. "≈" when the summary itself is an
+    // estimate (unpriced/stale holdings, incomplete FX).
+    const auto fill_total_labels = [&]() {
+        const QString approx = (summary_.fx_incomplete || summary_.valuation_partial())
+                                   ? QStringLiteral("\u2248") : QString();
+        const double total_pnl_pct = summary_.total_unrealized_pnl_percent;
+        const char* total_color = total_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+        total_return_label_->setText(QString("TOTAL  %1%2%3%")
+                                         .arg(approx, total_pnl_pct >= 0 ? "+" : "")
+                                         .arg(QString::number(total_pnl_pct, 'f', 2)));
+        total_return_label_->setStyleSheet(
+            QString("color:%1; font-size:14px; font-weight:700;").arg(total_color));
+
+        nav_label_->setText(QString("NAV %1 %2%3").arg(currency_, approx).arg(QString::number(live_nav, 'f', 2)));
+        if (cost_basis_label_) {
+            if (cost_basis > 0)
+                cost_basis_label_->setText(
+                    QString("COST %1 %2%3").arg(currency_, approx).arg(QString::number(cost_basis, 'f', 2)));
+            else
+                cost_basis_label_->clear();
+        }
+    };
+
     double period_baseline = 0;
     bool baseline_unavailable = false;
 
@@ -1308,11 +1317,17 @@ void PortfolioPerfChart::update_chart() {
             nav_dates.append(d);
             date_to_seq[d] = i;
         }
-        // Pin a final point at "now" so the line meets the live NAV.
-        const qint64 now_ms = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
-        nav_pts.append(QPointF(static_cast<double>(filtered.size()), live_nav));
-        nav_ts_ms.append(now_ms);
-        nav_dates.append(QDate::currentDate());
+        // Pin a final point at "now" so the line meets the live NAV — unless
+        // the live NAV leaves out unpriced holdings, in which case it is not
+        // comparable to the snapshot series and would draw a fake drop.
+        if (!summary_.book_incomplete()) {
+            const qint64 now_ms = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
+            nav_pts.append(QPointF(static_cast<double>(filtered.size()), live_nav));
+            nav_ts_ms.append(now_ms);
+            nav_dates.append(QDate::currentDate());
+        } else {
+            baseline_unavailable = true; // period return would use a partial NAV
+        }
 
         const QDate first_date = QDate::fromString(
             filtered.first().snapshot_date.left(10), Qt::ISODate);
@@ -1323,13 +1338,19 @@ void PortfolioPerfChart::update_chart() {
                 baseline_unavailable = true;
         }
     } else {
-        period_baseline = cost_basis > 0 ? cost_basis : live_nav;
-        const qint64 yest = QDateTime::currentDateTimeUtc().addDays(-1).toMSecsSinceEpoch();
-        const qint64 now_ms = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
-        nav_pts   = {QPointF(0.0, period_baseline), QPointF(1.0, live_nav)};
-        nav_ts_ms = {yest, now_ms};
-        nav_dates = {QDate::currentDate().addDays(-1), QDate::currentDate()};
-        baseline_unavailable = true;
+        // Fewer than two NAV observations in the window: there is no history
+        // to draw. A fabricated "yesterday = cost basis" point used to be
+        // plotted here, painting the entire unrealized P&L as one day's move.
+        chart_view_->set_series_data({}, currency_);
+        period_change_label_->setText(QString("%1  %2 insufficient NAV history").arg(current_period_, ui::formatting::placeholder()));
+        period_change_label_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
+        period_change_label_->setToolTip(
+            tr("Fewer than two daily NAV snapshots fall in this period.\n"
+               "The history grows one point per day; a backfill from the\n"
+               "transaction log fills it when price history is available."));
+        fill_total_labels();
+        return;
     }
 
     // ── Period return is time-weighted ───────────────────────────────────────
@@ -1342,6 +1363,10 @@ void PortfolioPerfChart::update_chart() {
     // baseline_unavailable branch below already dashes those cases out.
     const auto period_ret = portfolio::compute_period_return(
         filtered, live_nav, QDate::currentDate().toString(Qt::ISODate), transactions_, fx_);
+    // A flow with no known FX rate leaves the period return unknown — dash it
+    // rather than fall back to the naive ratio (which would count the flow).
+    if (period_ret.fx_unknown)
+        baseline_unavailable = true;
     const double period_pnl = period_ret.valid ? period_ret.gain_value : live_nav - period_baseline;
     const double period_pnl_pct =
         period_ret.valid ? period_ret.twr_pct
@@ -1517,7 +1542,9 @@ void PortfolioPerfChart::update_chart() {
             QString("color:%1; font-size:12px; font-weight:600;")
                 .arg(ui::colors::TEXT_SECONDARY()));
         period_change_label_->setToolTip(
-            QStringLiteral("Not enough snapshot history yet — backfill in progress."));
+            period_ret.fx_unknown
+                ? QStringLiteral("Period return unavailable: a trade in this period has no known FX rate.")
+                : QStringLiteral("Not enough snapshot history yet — backfill in progress."));
     } else {
         const char* pnl_color = period_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
         // A degraded window (zero/dust-valued segments were skipped) is an
@@ -1548,21 +1575,7 @@ void PortfolioPerfChart::update_chart() {
                   .arg(QString::number(period_pnl, 'f', 2)));
     }
 
-    const double total_pnl_pct = summary_.total_unrealized_pnl_percent;
-    const char* total_color = total_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-    total_return_label_->setText(
-        QString("TOTAL  %1%2%").arg(total_pnl_pct >= 0 ? "+" : "").arg(QString::number(total_pnl_pct, 'f', 2)));
-    total_return_label_->setStyleSheet(
-        QString("color:%1; font-size:14px; font-weight:700;").arg(total_color));
-
-    nav_label_->setText(QString("NAV %1 %2").arg(currency_).arg(QString::number(live_nav, 'f', 2)));
-    if (cost_basis_label_) {
-        if (cost_basis > 0)
-            cost_basis_label_->setText(
-                QString("COST %1 %2").arg(currency_).arg(QString::number(cost_basis, 'f', 2)));
-        else
-            cost_basis_label_->clear();
-    }
+    fill_total_labels();
 }
 
 void PortfolioPerfChart::refresh_theme() {

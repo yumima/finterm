@@ -374,45 +374,110 @@ def op_datetime_utils(data):
     return result
 
 
+def _required_float(data, key):
+    """A required numeric input — never substituted with a default."""
+    v = data.get(key)
+    if v is None or v == "":
+        raise ValueError(f"missing required input '{key}'")
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        raise ValueError(f"input '{key}' is not a number: {v!r}")
+    if not np.isfinite(f):
+        raise ValueError(f"input '{key}' is not finite")
+    return f
+
+
+def _returns_series(data, key="returns"):
+    """Returns as a list or a comma/whitespace-separated string (the Quant Lab
+    panel sends a string). Requires at least 2 real observations."""
+    raw = data.get(key)
+    if isinstance(raw, str):
+        parts = [p for p in raw.replace("\n", ",").replace(" ", ",").split(",") if p.strip()]
+        try:
+            vals = [float(p) for p in parts]
+        except ValueError:
+            raise ValueError(f"'{key}' must be numbers separated by commas")
+    elif isinstance(raw, (list, tuple)):
+        vals = [float(v) for v in raw if v is not None]
+    else:
+        vals = []
+    vals = [v for v in vals if np.isfinite(v)]
+    if len(vals) < 2:
+        raise ValueError(f"'{key}' needs at least 2 numeric observations")
+    dates = data.get("dates")
+    if dates and len(dates) != len(vals):
+        dates = None
+    return _series_from_list(vals, dates, key)
+
+
 def op_greeks(data):
-    """Calculate Greeks for a derivative instrument."""
+    """Calculate Greeks for a derivative instrument (Black-Scholes)."""
     from gs_quant_wrapper.risk_analytics import RiskAnalytics, RiskConfig
 
     risk = RiskAnalytics(RiskConfig())
 
-    spot = data.get("spot", 100)
-    strike = data.get("strike", 100)
-    expiry = data.get("expiry", 0.25)
-    rate = data.get("rate", 0.05)
-    vol = data.get("vol", 0.2)
-    option_type = data.get("option_type", "call")
+    # All pricing inputs are required — no invented spot/strike/vol/rate.
+    try:
+        spot = _required_float(data, "spot")
+        strike = _required_float(data, "strike")
+        expiry = _required_float(data, "expiry")
+        rate = _required_float(data, "rate")
+        vol = _required_float(data, "vol")
+    except ValueError as e:
+        return {"success": False, "error": str(e)}
+    if spot <= 0 or strike <= 0 or expiry <= 0 or vol <= 0:
+        return {"success": False, "error": "spot, strike, expiry and vol must be > 0"}
+    option_type = str(data.get("option_type") or "").strip().lower()
+    if option_type not in ("call", "put"):
+        return {"success": False, "error": "option_type must be 'call' or 'put'"}
 
-    greeks = risk.calculate_all_greeks(spot, strike, expiry, rate, vol, option_type)
-    return greeks.__dict__ if hasattr(greeks, "__dict__") else greeks
+    # Signature: (option_type, spot, strike, time_to_expiry, volatility, risk_free_rate, ...)
+    greeks = risk.calculate_all_greeks(
+        option_type, spot, strike, expiry, vol,
+        risk_free_rate=rate, include_higher_order=True,
+    )
+    # Only emit the Greeks calculate_all_greeks actually computes; the
+    # dataclass's other fields (phi, veta, ultima) stay at a 0.0 default.
+    computed = ("delta", "gamma", "vega", "theta", "rho",
+                "vanna", "volga", "charm", "speed", "zomma", "color")
+    return {k: float(getattr(greeks, k)) for k in computed}
 
 
 def op_var_analysis(data):
     """Value at Risk analysis: parametric, historical, Monte Carlo, CVaR."""
     from gs_quant_wrapper.risk_analytics import RiskAnalytics, RiskConfig
 
-    returns_list = data.get("returns", [])
-    confidence = data.get("confidence", 0.95)
-    position_value = data.get("position_value", 1000000)
-    dates = data.get("dates")
+    try:
+        ret = _returns_series(data, "returns")
+        position_value = _required_float(data, "position_value")
+        confidence = _required_float(data, "confidence")
+    except ValueError as e:
+        return {"success": False, "error": str(e)}
+    if not (0 < confidence < 1):
+        return {"success": False, "error": "confidence must be between 0 and 1"}
 
-    ret = _series_from_list(returns_list, dates, "returns")
     risk = RiskAnalytics(RiskConfig())
 
-    parametric = risk.calculate_parametric_var(ret, confidence)
-    historical = risk.calculate_historical_var(ret, confidence)
-    mc = risk.calculate_monte_carlo_var(ret, confidence)
-    cvar = risk.calculate_cvar(ret, confidence)
+    # Signatures take portfolio_value first; Monte Carlo takes mean/std.
+    parametric = risk.calculate_parametric_var(position_value, ret, confidence)
+    historical = risk.calculate_historical_var(position_value, ret, confidence)
+    mc = risk.calculate_monte_carlo_var(position_value, float(ret.mean()), float(ret.std()), confidence)
+    cvar = risk.calculate_cvar(position_value, ret, confidence)
+
+    def _num_or_str(val):
+        if isinstance(val, (float, int, np.floating, np.integer)) and not isinstance(val, bool):
+            f = float(val)
+            return f if np.isfinite(f) else None
+        if isinstance(val, dict):
+            return {k: _num_or_str(v) for k, v in val.items()}
+        return str(val)
 
     def _var_to_dict(v):
         if isinstance(v, dict):
-            return {k: float(val) if isinstance(val, (float, int, np.floating, np.integer)) else str(val) for k, val in v.items()}
+            return {k: _num_or_str(val) for k, val in v.items()}
         if hasattr(v, "__dict__"):
-            return {k: float(val) if isinstance(val, (float, int, np.floating, np.integer)) else str(val) for k, val in v.__dict__.items()}
+            return {k: _num_or_str(val) for k, val in v.__dict__.items()}
         return {"value": float(v)}
 
     result = {
@@ -422,39 +487,48 @@ def op_var_analysis(data):
         "cvar": _var_to_dict(cvar),
         "position_value": position_value,
         "confidence": confidence,
+        "observations": int(len(ret)),
     }
     return result
 
 
 def op_stress_test(data):
-    """Stress testing with standard market scenarios."""
+    """Hypothetical shock scenarios applied to positions by asset class.
+
+    run_all_standard_scenarios(portfolio_value, positions) needs a
+    {asset_class_name: value} map ('equity', 'bond', 'fx', 'credit',
+    'commodity', 'vol'); a return series cannot be stress-tested by it.
+    Without real positions we return an error rather than guess an allocation.
+    """
     from gs_quant_wrapper.risk_analytics import RiskAnalytics, RiskConfig
 
-    returns_list = data.get("returns", [])
-    position_value = data.get("position_value", 1000000)
-    dates = data.get("dates")
+    positions = data.get("positions")
+    if not isinstance(positions, dict) or not positions:
+        return {"success": False,
+                "error": "stress_test needs 'positions': {asset_class: value} "
+                         "(keys containing equity/bond/fx/credit/commodity/vol); "
+                         "a returns series alone cannot be shocked by asset class"}
+    try:
+        positions = {str(k): float(v) for k, v in positions.items()}
+    except (TypeError, ValueError):
+        return {"success": False, "error": "positions values must be numbers"}
+    pv = data.get("position_value")
+    try:
+        portfolio_value = float(pv) if pv not in (None, "") else float(sum(positions.values()))
+    except (TypeError, ValueError):
+        return {"success": False, "error": "position_value must be a number"}
+    if not portfolio_value:
+        return {"success": False, "error": "portfolio value must be non-zero"}
 
-    ret = _series_from_list(returns_list, dates, "returns")
     risk_analytics = RiskAnalytics(RiskConfig())
+    scenarios = risk_analytics.run_all_standard_scenarios(portfolio_value, positions)
 
-    scenarios = risk_analytics.run_all_standard_scenarios(ret, position_value)
-
-    # Serialize scenario results
+    # list of {scenario_id, scenario_name, pnl, ...} → keyed by scenario_id
     serializable = {}
-    for name, scenario in scenarios.items():
-        if isinstance(scenario, dict):
-            s = {}
-            for k, v in scenario.items():
-                if isinstance(v, (float, int, np.floating, np.integer)):
-                    s[k] = float(v)
-                elif isinstance(v, pd.Series):
-                    s[k] = float(v.iloc[-1]) if len(v) > 0 else 0
-                else:
-                    s[k] = str(v)
-            serializable[name] = s
-        else:
-            serializable[name] = str(scenario)
-
+    for scenario in scenarios:
+        sid = scenario.get("scenario_id") or scenario.get("scenario_name")
+        serializable[sid] = {k: (float(v) if isinstance(v, (float, int, np.floating, np.integer)) else v)
+                             for k, v in scenario.items()}
     return serializable
 
 

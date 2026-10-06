@@ -697,12 +697,12 @@ void register_utility_nodes(NodeRegistry& registry) {
                 {"threshold", "Threshold", "number", 2.0, {}, "Event threshold"},
             },
         .execute =
-            [](const QJsonObject& params, const QVector<QJsonValue>&,
-               std::function<void(bool, QJsonValue, QString)> cb) {
-                QJsonObject out;
-                out["event_type"] = params.value("event_type").toString();
-                out["triggered"] = true;
-                cb(true, out, {});
+            [](const QJsonObject&, const QVector<QJsonValue>&, std::function<void(bool, QJsonValue, QString)> cb) {
+                // No real market-event feed is wired; firing unconditionally would
+                // run downstream nodes on an event that never happened.
+                cb(false, {},
+                   "Trigger 'trigger.market_event' is not implemented — no real event source is wired, so it "
+                   "never fires");
             },
     });
 
@@ -723,10 +723,9 @@ void register_utility_nodes(NodeRegistry& registry) {
                 {"key", "Key Field", "string", "", {}, ""},
             },
         .execute =
-            [](const QJsonObject&, const QVector<QJsonValue>& inputs,
-               std::function<void(bool, QJsonValue, QString)> cb) {
-                auto data = inputs.isEmpty() ? QJsonValue{} : inputs[0];
-                cb(true, data, {});
+            [](const QJsonObject&, const QVector<QJsonValue>&, std::function<void(bool, QJsonValue, QString)> cb) {
+                // Never pass data through unchanged while claiming it was reshaped.
+                cb(false, {}, "Node 'transform.reshape' is not implemented");
             },
     });
 

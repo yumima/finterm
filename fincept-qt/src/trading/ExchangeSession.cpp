@@ -407,10 +407,8 @@ void ExchangeSession::handle_ws_line(const QString& line) {
             auto& cached = price_cache_[td.symbol];
             cached.symbol = td.symbol;
             cached.last = td.price;
-            if (cached.bid <= 0.0)
-                cached.bid = td.price;
-            if (cached.ask <= 0.0)
-                cached.ask = td.price;
+            // bid/ask are left as-is (0 = unknown) — a trade print is not a
+            // quote, so never seed bid/ask from it.
             fast_ticker = cached;
             emit_ticker = true;
         }
@@ -521,8 +519,11 @@ MarketInfo ExchangeSession::parse_market(const QJsonObject& j) {
 
 TickerData ExchangeSession::fetch_ticker(const QString& symbol) {
     const auto j = daemon_call("fetch_ticker", {{"symbol", symbol}});
-    if (j.contains("error"))
+    if (j.contains("error")) {
+        // Empty TickerData (symbol empty) is the failure sentinel callers check.
+        LOG_WARN(kSessionTag, QString("fetch_ticker %1 failed: %2").arg(symbol, j.value("error").toString()));
         return {};
+    }
     return parse_ticker(j);
 }
 
@@ -542,16 +543,22 @@ QVector<TickerData> ExchangeSession::fetch_tickers(const QStringList& symbols) {
 
 OrderBookData ExchangeSession::fetch_orderbook(const QString& symbol, int limit) {
     const auto j = daemon_call("fetch_orderbook", {{"symbol", symbol}, {"limit", limit}});
-    if (j.contains("error"))
+    if (j.contains("error")) {
+        // Empty OrderBookData (symbol empty) is the failure sentinel callers check.
+        LOG_WARN(kSessionTag, QString("fetch_orderbook %1 failed: %2").arg(symbol, j.value("error").toString()));
         return {};
+    }
     return parse_orderbook(j);
 }
 
 QVector<Candle> ExchangeSession::fetch_ohlcv(const QString& symbol, const QString& timeframe, int limit) {
     const auto j = daemon_call("fetch_ohlcv", {{"symbol", symbol}, {"timeframe", timeframe}, {"limit", limit}});
     QVector<Candle> result;
-    if (j.contains("error") || !j.contains("candles"))
+    if (j.contains("error") || !j.contains("candles")) {
+        LOG_WARN(kSessionTag, QString("fetch_ohlcv %1 %2 failed: %3")
+                                  .arg(symbol, timeframe, j.value("error").toString("no candles in response")));
         return result;
+    }
     const auto arr = j.value("candles").toArray();
     for (const auto& item : arr)
         result.append(parse_candle(item.toObject()));

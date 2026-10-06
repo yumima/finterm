@@ -169,7 +169,7 @@ QWidget* GeopoliticsScreen::build_top_bar() {
     div2->setStyleSheet(QString("background:%1;").arg(ui::colors::BORDER_DIM()));
     hl->addWidget(div2);
 
-    event_count_label_ = new QLabel("0 EVENTS", bar);
+    event_count_label_ = new QLabel(QString::fromUtf8("\u2014 EVENTS"), bar);
     event_count_label_->setFixedHeight(22);
     {
         QColor neg(ui::colors::NEGATIVE());
@@ -338,7 +338,10 @@ QWidget* GeopoliticsScreen::build_status_bar() {
 
     auto* lbl1 = new QLabel("SOURCE:", bar);
     lbl1->setStyleSheet(s);
-    auto* val1 = new QLabel("NEWS-EVENTS API + HDX", bar);
+    auto* val1 = new QLabel(GeopoliticsService::conflict_monitor_available()
+                                ? "NEWS-EVENTS API + HDX"
+                                : "HDX (news-events API unavailable)",
+                            bar);
     val1->setStyleSheet(sv);
     hl->addWidget(lbl1);
     hl->addWidget(val1);
@@ -355,9 +358,10 @@ QWidget* GeopoliticsScreen::build_status_bar() {
 
     hl->addStretch();
 
-    status_label_ = new QLabel("READY", bar);
+    // No green READY before anything has loaded.
+    status_label_ = new QLabel(QString::fromUtf8("\u2014"), bar);
     status_label_->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;")
-                                     .arg(ui::colors::POSITIVE())
+                                     .arg(ui::colors::TEXT_SECONDARY())
                                      .arg(ui::fonts::TINY)
                                      .arg(ui::fonts::DATA_FAMILY));
     hl->addWidget(status_label_);
@@ -444,6 +448,23 @@ void GeopoliticsScreen::on_events_loaded(QVector<services::geo::NewsEvent> event
 }
 
 void GeopoliticsScreen::on_error(const QString& context, const QString& message) {
+    // Conflict-monitor fetches fail fast with "unavailable" when no endpoint
+    // is configured — say so instead of a generic ERROR (and never READY).
+    const bool monitor_ctx = context == "events" || context == "countries" || context == "categories" ||
+                             context == "cities";
+    if (monitor_ctx && !GeopoliticsService::conflict_monitor_available()) {
+        if (context == "events") {
+            event_count_label_->setText(QString::fromUtf8("\u2014 EVENTS"));
+            monitor_panel_->set_events({});
+        }
+        status_label_->setText(QString::fromUtf8("UNAVAILABLE \u2014 ") + message.toLower());
+        status_label_->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;")
+                                         .arg(ui::colors::WARNING())
+                                         .arg(ui::fonts::TINY)
+                                         .arg(ui::fonts::DATA_FAMILY));
+        LOG_INFO("Geopolitics", QString("[%1] unavailable: %2").arg(context, message));
+        return;
+    }
     status_label_->setText("ERROR");
     status_label_->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;")
                                      .arg(ui::colors::NEGATIVE())

@@ -2,8 +2,12 @@
 
 #include "ui/theme/Theme.h"
 
+#include <cmath>
+
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
+
+#include <algorithm>
 
 namespace fincept::screens::widgets {
 
@@ -15,6 +19,15 @@ inline const QStringList kSentimentSymbols = {
 }
 
 MarketSentimentWidget::MarketSentimentWidget(QWidget* parent) : BaseWidget("MARKET SENTIMENT", parent) {
+    // Disclose the universe: this is a fixed watch basket, not the market.
+    const int basket_n = static_cast<int>(
+        std::count_if(kSentimentSymbols.cbegin(), kSentimentSymbols.cend(),
+                      [](const QString& s) { return !s.startsWith('^'); }));
+    set_title(QString("SENTIMENT (%1-STOCK BASKET)").arg(basket_n));
+    drag_handle()->setToolTip(QString("Sentiment computed from a fixed %1-stock watch basket plus VIX — "
+                                      "not market-wide breadth.\nBasket: %2")
+                                  .arg(basket_n)
+                                  .arg(kSentimentSymbols.join(", ")));
     auto* vl = content_layout();
     vl->setContentsMargins(8, 8, 8, 8);
     vl->setSpacing(8);
@@ -239,6 +252,8 @@ void MarketSentimentWidget::populate(const QVector<services::QuoteData>& quotes)
             vix_price = q.price;
             continue;
         }
+        if (!std::isfinite(q.change_pct))
+            continue;  // unknown change — don't count it as neutral
         if (q.change_pct > 0.5)
             ++bullish;
         else if (q.change_pct < -0.5)

@@ -171,7 +171,23 @@ PtOrder pt_place_order(const QString& portfolio_id, const QString& symbol, const
 }
 
 void pt_cancel_order(const QString& order_id) {
-    repo().cancel_order(order_id);
+    // Serialize with fills so an order can't be filled and cancelled at once.
+    QMutexLocker fill_lock(&s_fill_mutex);
+
+    // Only an open (pending / partially filled) order can be cancelled. Unknown
+    // IDs and already-terminal orders are errors — never report a cancel that
+    // didn't happen.
+    auto existing = repo().get_order(order_id);
+    if (existing.is_err())
+        throw std::runtime_error(QString("Order not found: %1").arg(order_id).toStdString());
+    const QString status = existing.value().status;
+    if (status != "pending" && status != "partial")
+        throw std::runtime_error(
+            QString("Order %1 is %2 — nothing to cancel").arg(order_id, status).toStdString());
+
+    auto r = repo().cancel_order(order_id);
+    if (r.is_err())
+        throw std::runtime_error(r.error());
 }
 
 QVector<PtOrder> pt_get_orders(const QString& portfolio_id, const QString& status) {

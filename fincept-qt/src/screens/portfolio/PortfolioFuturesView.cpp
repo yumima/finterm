@@ -299,7 +299,7 @@ void PortfolioFuturesView::populate_futures() {
         add(2, fmt_qty(h.quantity));
         add(3, fmt_num(h.avg_buy_price, 4));
         add(4, fmt_num(last, 4));
-        add(5, fmt_signed(chg_pct, 2) + "%", color_for_change(chg_pct));
+        add(5, std::isfinite(chg_pct) ? fmt_signed(chg_pct, 2) + "%" : ui::formatting::placeholder(), color_for_change(chg_pct));
         // Unified K/M/B/T at one decimal via the shared layer (was M@2dp, K@1dp,
         // and lacked a B tier). 0 renders as "0"; only NaN/inf/negative → "—".
         add(6, ui::formatting::format_compact_volume(volume));

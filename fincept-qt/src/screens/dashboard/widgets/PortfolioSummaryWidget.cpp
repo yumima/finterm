@@ -5,6 +5,7 @@
 #include "core/logging/Logger.h"
 #include "python/PythonWorker.h"
 #include "services/portfolio/PortfolioService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -352,9 +353,16 @@ void PortfolioSummaryWidget::on_summary_loaded(const portfolio::PortfolioSummary
 
     QVector<Holding> holdings;
     holdings.reserve(summary.holdings.size());
+    fx_excluded_.clear();
     for (const auto& h : summary.holdings) {
         if (h.symbol.isEmpty() || h.quantity <= 0)
             continue;
+        // No known conversion → nothing honest to sum (the rate is NaN, not
+        // an assumed 1.0). Leave it out and name it under the totals.
+        if (!h.fx_known || !std::isfinite(h.fx_rate) || h.fx_rate <= 0) {
+            fx_excluded_.append(h.symbol);
+            continue;
+        }
         holdings.append(Holding{h.symbol, h.quantity, h.avg_buy_price, h.fx_rate});
     }
 
@@ -599,17 +607,34 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
     }
 
     bool alt = false;
+    // Holdings with no live price are left out of value AND cost (a missing
+    // price summed as 0 against its cost read as a -100% loss).
+    QStringList no_price;
+    // A quoted holding whose day change is unknown (NaN — no previous close)
+    // makes the day P&L total unknown; it must not be summed as 0.
+    bool day_unknown = false;
     for (const auto& h : holdings) {
         const services::QuoteData* q = qmap.value(h.symbol, nullptr);
         double price = q ? q->price : 0;
         double value = price * h.shares * h.fx_rate;
         double cost = h.avg_cost * h.shares * h.fx_rate;
         double pnl = value - cost;
-        double day_chg = q ? (q->change * h.shares * h.fx_rate) : 0;
+        double day_chg = 0;
+        const bool priced = std::isfinite(price) && price > 0;
+        if (q && priced) {
+            if (std::isfinite(q->change))
+                day_chg = q->change * h.shares * h.fx_rate;
+            else
+                day_unknown = true;
+        }
 
-        total_value += value;
-        total_cost += cost;
-        day_pnl += day_chg;
+        if (priced) {
+            total_value += value;
+            total_cost += cost;
+            day_pnl += day_chg;
+        } else {
+            no_price.append(h.symbol);
+        }
 
         // Row
         auto* row = new QWidget(this);
@@ -657,7 +682,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         // Per-row DAY CHG% — quote already gives us the daily percent change.
         QString chg_pct_str;
         QString chg_pct_color;
-        if (q) {
+        if (q && std::isfinite(q->change_pct)) {
             chg_pct_str = QString("%1%2%").arg(q->change_pct >= 0 ? "+" : "")
                                           .arg(q->change_pct, 0, 'f', 2);
             chg_pct_color = q->change_pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
@@ -705,13 +730,43 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
     }
     list_layout_->addStretch();
 
-    // Update summary labels
-    total_value_lbl_->setText(QString("$%1").arg(total_value, 0, 'f', 0));
-    num_holdings_lbl_->setText(QString::number(holdings.size()));
+    // Update summary labels. Totals cover only the holdings that could be
+    // valued; any left out make them partial ("≈", named in the tooltip),
+    // and with nothing valued at all they are unknown ("—").
+    QStringList excluded_notes;
+    if (!fx_excluded_.isEmpty())
+        excluded_notes << QString("No FX rate: %1").arg(fx_excluded_.join(", "));
+    if (!no_price.isEmpty())
+        excluded_notes << QString("No price: %1").arg(no_price.join(", "));
+    const int valued_count = static_cast<int>(holdings.size()) - static_cast<int>(no_price.size());
+    const QString approx = excluded_notes.isEmpty() ? QString() : QStringLiteral("\u2248");
+    const QString partial_tip = excluded_notes.isEmpty()
+        ? QString()
+        : QString("PARTIAL — excluded from the totals:\n%1").arg(excluded_notes.join("\n"));
+    if (valued_count <= 0 && !(holdings.isEmpty() && fx_excluded_.isEmpty())) {
+        // Nothing could be valued: every total is unknown.
+        const QString dash = ui::formatting::placeholder();
+        const QString muted = QString("color: %1; font-weight: bold; background: transparent;")
+                                  .arg(ui::colors::TEXT_SECONDARY());
+        total_value_lbl_->setText(dash);
+        total_value_lbl_->setToolTip(partial_tip);
+        num_holdings_lbl_->setText(QString::number(holdings.size() + fx_excluded_.size()));
+        for (auto* l : {day_pnl_lbl_, day_chg_pct_lbl_, total_pnl_lbl_, total_chg_pct_lbl_}) {
+            l->setText(dash);
+            l->setStyleSheet(muted);
+            l->setToolTip(partial_tip);
+        }
+        return;
+    }
+    total_value_lbl_->setText(QString("%1$%2").arg(approx).arg(total_value, 0, 'f', 0));
+    total_value_lbl_->setToolTip(partial_tip);
+    total_pnl_lbl_->setToolTip(partial_tip);
+    day_pnl_lbl_->setToolTip(partial_tip);
+    num_holdings_lbl_->setText(QString::number(holdings.size() + fx_excluded_.size()));
 
     const double total_pnl = total_value - total_cost;
     const double day_basis = total_value - day_pnl;
-    const bool   have_day  = day_basis > 0;
+    const bool   have_day  = !day_unknown && day_basis > 0;
     const bool   have_tot  = total_cost > 0;
     const double day_pct   = have_day ? (day_pnl  / day_basis) * 100.0 : 0.0;
     const double total_pct = have_tot ? (total_pnl / total_cost) * 100.0 : 0.0;
@@ -731,8 +786,13 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         QString("color: %1; font-weight: bold; background: transparent;")
             .arg(ui::colors::TEXT_SECONDARY());
 
-    day_pnl_lbl_->setText(signed_dollars(day_pnl));
-    day_pnl_lbl_->setStyleSheet(pl_style(day_pnl));
+    if (day_unknown) {
+        day_pnl_lbl_->setText("--");
+        day_pnl_lbl_->setStyleSheet(muted_style);
+    } else {
+        day_pnl_lbl_->setText(approx + signed_dollars(day_pnl));
+        day_pnl_lbl_->setStyleSheet(pl_style(day_pnl));
+    }
     if (have_day) {
         day_chg_pct_lbl_->setText(signed_pct(day_pct));
         day_chg_pct_lbl_->setStyleSheet(pl_style(day_pct));
@@ -741,7 +801,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         day_chg_pct_lbl_->setStyleSheet(muted_style);
     }
 
-    total_pnl_lbl_->setText(signed_dollars(total_pnl));
+    total_pnl_lbl_->setText(approx + signed_dollars(total_pnl));
     total_pnl_lbl_->setStyleSheet(pl_style(total_pnl));
     if (have_tot) {
         total_chg_pct_lbl_->setText(signed_pct(total_pct));

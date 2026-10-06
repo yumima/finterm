@@ -9,6 +9,7 @@
 #include <QJsonObject>
 #include <QSaveFile>
 #include <QStandardPaths>
+#include <QtNumeric>
 #include <QtConcurrent/QtConcurrentRun>
 
 namespace fincept::screens::futures {
@@ -158,12 +159,12 @@ void FuturesQuoteCache::load_from_disk() {
         q.name          = o.value("name").toString();
         q.asset_class   = o.value("asset_class").toString();
         q.last          = o.value("last").toDouble();
-        q.change        = o.value("change").toDouble();
-        q.change_pct    = o.value("change_pct").toDouble();
-        q.volume        = o.value("volume").toDouble();
-        q.open_interest = o.value("open_interest").toDouble();
-        q.high          = o.value("high").toDouble();
-        q.low           = o.value("low").toDouble();
+        q.change        = o.value("change").toDouble(qQNaN());
+        q.change_pct    = o.value("change_pct").toDouble(qQNaN());
+        q.volume        = o.value("volume").toDouble(qQNaN());
+        q.open_interest = o.value("open_interest").toDouble(qQNaN());
+        q.high          = o.value("high").toDouble(qQNaN());
+        q.low           = o.value("low").toDouble(qQNaN());
         if (!q.symbol.isEmpty()) rows_.insert(q.symbol, q);
     }
 }

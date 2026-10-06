@@ -53,11 +53,10 @@ class BtProvider(BacktestingProviderBase):
 
     @property
     def version(self) -> str:
-        try:
-            import bt
-            return getattr(bt, '__version__', '1.1.2')
-        except ImportError:
-            return '1.1.2-fallback'
+        from bt_strategies import _bt
+        if _bt is None:
+            return 'numpy-fallback'
+        return getattr(_bt, '__version__', None) or 'unknown'
 
     @property
     def capabilities(self) -> Dict[str, Any]:
@@ -78,10 +77,10 @@ class BtProvider(BacktestingProviderBase):
         return {'success': True, 'message': 'BT provider initialized'}
 
     def test_connection(self) -> Dict[str, Any]:
-        try:
-            import bt
+        from bt_strategies import _bt
+        if _bt is not None:
             return {'success': True, 'message': f'bt {self.version} available'}
-        except ImportError:
+        else:
             return {
                 'success': True,
                 'message': 'bt not installed, using numpy fallback',
@@ -141,7 +140,9 @@ class BtProvider(BacktestingProviderBase):
                          start_date, end_date, initial_capital, commission):
         """Try to run backtest using actual bt library."""
         try:
-            import bt
+            from bt_strategies import _bt as bt
+            if bt is None:
+                raise ImportError('bt library not installed')
             import pandas as pd
             from bt_data import fetch_data
             from bt_strategies import get_strategy
@@ -164,9 +165,15 @@ class BtProvider(BacktestingProviderBase):
             stats = result.stats
             perf = result[strategy_type]
 
-            # Build equity curve
-            equity_series = perf.prices * initial_capital
+            # Build equity curve. bt's perf.prices is an index rebased to 100,
+            # so rebase to initial capital rather than multiplying.
+            equity_series = perf.prices / float(perf.prices.iloc[0]) * initial_capital
             returns_series = perf.prices.pct_change().fillna(0)
+            # bt prepends a synthetic start row (the day before the first
+            # bar) holding initial capital; report only real trading dates.
+            real_dates = equity_series.index >= data.index[0]
+            equity_series = equity_series[real_dates]
+            returns_series = returns_series[real_dates]
 
             # Drawdown
             rolling_max = equity_series.cummax()
@@ -183,7 +190,7 @@ class BtProvider(BacktestingProviderBase):
                 })
 
             # Extract performance metrics from stats DataFrame
-            def _safe_stat(col, row, default=0.0):
+            def _safe_stat(col, row, default=None):
                 try:
                     val = stats.loc[row, col]
                     if pd.isna(val) or (isinstance(val, float) and (math.isinf(val) or math.isnan(val))):
@@ -201,15 +208,25 @@ class BtProvider(BacktestingProviderBase):
             vol = _safe_stat(col, 'daily_vol')
             calmar = _safe_stat(col, 'calmar')
 
-            # Compute win rate from returns
+            # Day-level return statistics (labelled as days, not trades)
             daily_rets = returns_series.dropna()
             daily_rets = daily_rets[daily_rets != 0]
-            total_trading_days = len(daily_rets)
             winning_days = int((daily_rets > 0).sum())
             losing_days = int((daily_rets < 0).sum())
-            win_rate = winning_days / total_trading_days if total_trading_days > 0 else 0
 
-            final_equity = float(equity_series.iloc[-1]) if len(equity_series) > 0 else initial_capital
+            # Real transaction count and fees from the bt strategy tree.
+            # Round-trip win/loss statistics are not exposed by bt, so those
+            # trade metrics are reported as null rather than approximated.
+            try:
+                total_transactions = int(len(result.get_transactions(strategy_type)))
+            except Exception:
+                total_transactions = None
+            try:
+                total_fees = float(test.strategy.fees.sum())
+            except Exception:
+                total_fees = None
+
+            final_equity = float(equity_series.iloc[-1])
 
             performance = {
                 'totalReturn': total_return,
@@ -217,20 +234,20 @@ class BtProvider(BacktestingProviderBase):
                 'sharpeRatio': sharpe,
                 'sortinoRatio': sortino,
                 'maxDrawdown': max_dd,
-                'winRate': win_rate,
-                'lossRate': 1 - win_rate,
-                'profitFactor': abs(float(daily_rets[daily_rets > 0].sum()) / float(daily_rets[daily_rets < 0].sum())) if losing_days > 0 else 0,
+                'winRate': None,
+                'lossRate': None,
+                'profitFactor': None,
                 'volatility': vol,
                 'calmarRatio': calmar,
-                'totalTrades': total_trading_days,
-                'winningTrades': winning_days,
-                'losingTrades': losing_days,
-                'averageWin': float(daily_rets[daily_rets > 0].mean()) if winning_days > 0 else 0,
-                'averageLoss': float(daily_rets[daily_rets < 0].mean()) if losing_days > 0 else 0,
-                'largestWin': float(daily_rets.max()) if len(daily_rets) > 0 else 0,
-                'largestLoss': float(daily_rets.min()) if len(daily_rets) > 0 else 0,
-                'averageTradeReturn': float(daily_rets.mean()) if len(daily_rets) > 0 else 0,
-                'expectancy': float(daily_rets.mean()) if len(daily_rets) > 0 else 0,
+                'totalTrades': total_transactions,
+                'winningTrades': None,
+                'losingTrades': None,
+                'averageWin': None,
+                'averageLoss': None,
+                'largestWin': None,
+                'largestLoss': None,
+                'averageTradeReturn': None,
+                'expectancy': None,
             }
 
             statistics = {
@@ -238,20 +255,17 @@ class BtProvider(BacktestingProviderBase):
                 'endDate': end_date,
                 'initialCapital': initial_capital,
                 'finalCapital': final_equity,
-                'totalFees': 0,
-                'totalSlippage': 0,
-                'totalTrades': total_trading_days,
+                'totalFees': total_fees,
+                'totalSlippage': None,
+                'totalTrades': total_transactions,
                 'winningDays': winning_days,
                 'losingDays': losing_days,
-                'averageDailyReturn': float(daily_rets.mean()) if len(daily_rets) > 0 else 0,
-                'bestDay': float(daily_rets.max()) if len(daily_rets) > 0 else 0,
-                'worstDay': float(daily_rets.min()) if len(daily_rets) > 0 else 0,
-                'consecutiveWins': 0,
-                'consecutiveLosses': 0,
+                'averageDailyReturn': float(daily_rets.mean()) if len(daily_rets) > 0 else None,
+                'bestDay': float(daily_rets.max()) if len(daily_rets) > 0 else None,
+                'worstDay': float(daily_rets.min()) if len(daily_rets) > 0 else None,
+                'consecutiveWins': None,
+                'consecutiveLosses': None,
             }
-
-            from bt_data import was_last_fetch_synthetic
-            using_synthetic = was_last_fetch_synthetic()
 
             result_data = {
                 'id': self._generate_id(),
@@ -261,16 +275,7 @@ class BtProvider(BacktestingProviderBase):
                 'equity': equity_points,
                 'statistics': statistics,
                 'logs': [f'bt backtest completed: {strategy_type}'],
-                'using_synthetic_data': using_synthetic,
             }
-
-            if using_synthetic:
-                result_data['synthetic_data_warning'] = (
-                    'WARNING: This backtest used SYNTHETIC (fake) data because real market data '
-                    'could not be loaded. Install yfinance (pip install yfinance) and ensure '
-                    'internet connectivity for real results. These results have NO financial meaning.'
-                )
-                result_data['logs'].append('*** SYNTHETIC DATA WARNING: Results are based on fake data ***')
 
             return {
                 'success': True,
@@ -311,17 +316,23 @@ class BtProvider(BacktestingProviderBase):
             daily_returns = daily_returns.reshape(-1, 1)
 
         portfolio_returns = np.zeros(n - 1)
+        fee_fraction = np.zeros(n - 1)
+        prev_weights = np.zeros(num_assets)
+        rebalances = 0
         for i in range(n - 1):
             sig = signals[i] if i < len(signals) else signals[-1]
             if sig.ndim == 0:
                 sig = np.array([sig])
             active = sig > 0
             n_active = active.sum()
-            if n_active > 0:
-                weights = active.astype(float) / n_active
-                portfolio_returns[i] = np.nansum(weights * daily_returns[i]) - commission * abs(float(np.nansum(np.diff(sig.reshape(-1)) if i > 0 else 0)))
-            else:
-                portfolio_returns[i] = 0.0
+            weights = active.astype(float) / n_active if n_active > 0 else np.zeros(num_assets)
+            # Commission charged on turnover vs. the previous bar's weights
+            turnover = float(np.abs(weights - prev_weights).sum())
+            if turnover > 0:
+                rebalances += 1
+            fee_fraction[i] = commission * turnover
+            portfolio_returns[i] = float(np.nansum(weights * daily_returns[i])) - fee_fraction[i]
+            prev_weights = weights
 
         # Build equity curve
         equity = np.zeros(n)
@@ -336,23 +347,23 @@ class BtProvider(BacktestingProviderBase):
         annual_return = (1 + total_return) ** (1 / years) - 1 if years > 0 else 0
 
         ret_std = np.std(portfolio_returns)
-        sharpe = (np.mean(portfolio_returns) * np.sqrt(trading_days)) / ret_std if ret_std > 0 else 0
+        sharpe = (np.mean(portfolio_returns) * np.sqrt(trading_days)) / ret_std if ret_std > 0 else None
 
         neg_returns = portfolio_returns[portfolio_returns < 0]
-        downside_std = np.std(neg_returns) if len(neg_returns) > 0 else 1e-8
-        sortino = (np.mean(portfolio_returns) * np.sqrt(trading_days)) / downside_std
+        downside_std = np.std(neg_returns) if len(neg_returns) > 1 else 0.0
+        sortino = (np.mean(portfolio_returns) * np.sqrt(trading_days)) / downside_std if downside_std > 0 else None
 
         rolling_max = np.maximum.accumulate(equity)
         drawdown = (equity - rolling_max) / np.where(rolling_max > 0, rolling_max, 1)
         max_dd = float(np.min(drawdown))
 
-        calmar = annual_return / abs(max_dd) if abs(max_dd) > 1e-10 else 0
+        calmar = annual_return / abs(max_dd) if abs(max_dd) > 1e-10 else None
+
+        # Fees actually deducted: fee fraction applied to equity at each bar
+        total_fees = float(np.sum(fee_fraction * equity[:-1]))
 
         winning = portfolio_returns[portfolio_returns > 0]
         losing = portfolio_returns[portfolio_returns < 0]
-        win_rate = len(winning) / len(portfolio_returns) if len(portfolio_returns) > 0 else 0
-
-        profit_factor = abs(winning.sum() / losing.sum()) if len(losing) > 0 and losing.sum() != 0 else 0
 
         # Build equity points
         dates = data.index
@@ -366,26 +377,31 @@ class BtProvider(BacktestingProviderBase):
                 'drawdown': float(drawdown[i]),
             })
 
+        def _opt(v):
+            return float(v) if v is not None else None
+
+        # This simulation has no round-trip trade ledger, so trade-level
+        # statistics are null. Day-level stats are labelled as days.
         performance = {
             'totalReturn': float(total_return),
             'annualizedReturn': float(annual_return),
-            'sharpeRatio': float(sharpe),
-            'sortinoRatio': float(sortino),
+            'sharpeRatio': _opt(sharpe),
+            'sortinoRatio': _opt(sortino),
             'maxDrawdown': float(max_dd),
-            'winRate': float(win_rate),
-            'lossRate': float(1 - win_rate),
-            'profitFactor': float(profit_factor),
+            'winRate': None,
+            'lossRate': None,
+            'profitFactor': None,
             'volatility': float(ret_std * np.sqrt(trading_days)),
-            'calmarRatio': float(calmar),
-            'totalTrades': int(len(portfolio_returns)),
-            'winningTrades': int(len(winning)),
-            'losingTrades': int(len(losing)),
-            'averageWin': float(winning.mean()) if len(winning) > 0 else 0,
-            'averageLoss': float(losing.mean()) if len(losing) > 0 else 0,
-            'largestWin': float(winning.max()) if len(winning) > 0 else 0,
-            'largestLoss': float(losing.min()) if len(losing) > 0 else 0,
-            'averageTradeReturn': float(portfolio_returns.mean()) if len(portfolio_returns) > 0 else 0,
-            'expectancy': float(portfolio_returns.mean()) if len(portfolio_returns) > 0 else 0,
+            'calmarRatio': _opt(calmar),
+            'totalTrades': None,
+            'winningTrades': None,
+            'losingTrades': None,
+            'averageWin': None,
+            'averageLoss': None,
+            'largestWin': None,
+            'largestLoss': None,
+            'averageTradeReturn': None,
+            'expectancy': None,
         }
 
         statistics = {
@@ -393,20 +409,18 @@ class BtProvider(BacktestingProviderBase):
             'endDate': end_date,
             'initialCapital': initial_capital,
             'finalCapital': float(equity[-1]),
-            'totalFees': 0,
-            'totalSlippage': 0,
-            'totalTrades': int(len(portfolio_returns)),
+            'totalFees': total_fees,
+            'totalSlippage': None,
+            'totalTrades': None,
+            'rebalanceDays': int(rebalances),
             'winningDays': int(len(winning)),
             'losingDays': int(len(losing)),
-            'averageDailyReturn': float(portfolio_returns.mean()),
-            'bestDay': float(portfolio_returns.max()) if len(portfolio_returns) > 0 else 0,
-            'worstDay': float(portfolio_returns.min()) if len(portfolio_returns) > 0 else 0,
-            'consecutiveWins': 0,
-            'consecutiveLosses': 0,
+            'averageDailyReturn': float(portfolio_returns.mean()) if len(portfolio_returns) > 0 else None,
+            'bestDay': float(portfolio_returns.max()) if len(portfolio_returns) > 0 else None,
+            'worstDay': float(portfolio_returns.min()) if len(portfolio_returns) > 0 else None,
+            'consecutiveWins': None,
+            'consecutiveLosses': None,
         }
-
-        from bt_data import was_last_fetch_synthetic
-        using_synthetic = was_last_fetch_synthetic()
 
         result_data = {
             'id': self._generate_id(),
@@ -416,16 +430,7 @@ class BtProvider(BacktestingProviderBase):
             'equity': equity_points,
             'statistics': statistics,
             'logs': [f'numpy fallback simulation: {strategy_type}'],
-            'using_synthetic_data': using_synthetic,
         }
-
-        if using_synthetic:
-            result_data['synthetic_data_warning'] = (
-                'WARNING: This backtest used SYNTHETIC (fake) data because real market data '
-                'could not be loaded. Install yfinance (pip install yfinance) and ensure '
-                'internet connectivity for real results. These results have NO financial meaning.'
-            )
-            result_data['logs'].append('*** SYNTHETIC DATA WARNING: Results are based on fake data ***')
 
         return {
             'success': True,
@@ -891,8 +896,8 @@ class BtProvider(BacktestingProviderBase):
                 prob = float(params.get('prob', 0.05))
                 sig_arr = np.where(np.random.random(n) < prob, 1, 0)
             else:
-                sig_arr = np.zeros(n)
-                sig_arr[np.random.random(n) < 0.05] = 1
+                return {'success': False,
+                        'error': f'Unknown signal generator: {generator} (supported: RAND, RPROB)'}
 
             signals[sym] = [{'date': d, 'signal': int(s)} for d, s in zip(dates, sig_arr)]
 

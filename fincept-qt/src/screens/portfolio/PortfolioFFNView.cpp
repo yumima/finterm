@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "services/portfolio/PortfolioAnalyticsService.h"
 #include "services/portfolio/PortfolioService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QAreaSeries>
@@ -12,6 +13,7 @@
 #include <QDateTimeAxis>
 #include <QHBoxLayout>
 #include <QHeaderView>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QLineSeries>
 #include <QStackedWidget>
@@ -20,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 using fincept::services::AnalyticsResult;
 using fincept::services::PortfolioAnalyticsService;
@@ -43,11 +46,25 @@ static QColor series_color(int index) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+// The script emits null for a figure it could not compute; read that as NaN
+// (unknown), never as 0, and render NaN as the shared "—".
+static double num(const QJsonValue& v) {
+    return v.isDouble() ? v.toDouble() : std::numeric_limits<double>::quiet_NaN();
+}
 static QString pct_str(double v, int dp = 2) {
+    if (!std::isfinite(v))
+        return ui::formatting::placeholder();
     return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v * 100.0, 'f', dp));
 }
 static QString fmt(double v, int dp = 2) {
+    if (!std::isfinite(v))
+        return ui::formatting::placeholder();
     return QString::number(v, 'f', dp);
+}
+static const char* sign_color(double v) {
+    if (!std::isfinite(v))
+        return ui::colors::TEXT_SECONDARY;
+    return v >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
 }
 
 static QTableWidgetItem* make_item(const QString& text, Qt::Alignment align, const QColor& color) {
@@ -369,8 +386,18 @@ void PortfolioFFNView::set_data(const portfolio::PortfolioSummary& summary, cons
 void PortfolioFFNView::update_overview() {
     bool has_ffn = !ffn_data_.isEmpty();
 
-    double total_ann_ret = 0, total_ann_vol = 0, total_sharpe = 0, total_max_dd = 0;
-    double total_best_day = 0, total_worst_day = 0;
+    // Portfolio-level figures come from the script's own portfolio series
+    // (optimization.stats.current). A weight-average of per-symbol volatility
+    // or Sharpe is not the portfolio's — it ignores correlation — and used to
+    // be shown under these labels.
+    const QJsonObject cur_stats =
+        ffn_data_["optimization"].toObject()["stats"].toObject()["current"].toObject();
+    const double total_ann_ret = num(cur_stats["cagr"]);
+    const double total_ann_vol = num(cur_stats["volatility"]);
+    const double total_sharpe = num(cur_stats["sharpe"]);
+    const double total_max_dd = num(cur_stats["max_drawdown"]);
+    double total_best_day = std::numeric_limits<double>::quiet_NaN();
+    double total_worst_day = std::numeric_limits<double>::quiet_NaN();
     int pos_days = 0, neg_days = 0;
     QString best_sym, worst_sym;
     double best_ret = -1e9, worst_ret = 1e9;
@@ -380,16 +407,17 @@ void PortfolioFFNView::update_overview() {
             if (!ffn_data_.contains(h.symbol))
                 continue;
             auto s = ffn_data_[h.symbol].toObject();
-            double w = h.weight / 100.0;
-            total_ann_ret += s["annualized_return"].toDouble() * w;
-            total_ann_vol += s["annualized_volatility"].toDouble() * w;
-            total_sharpe += s["sharpe_ratio"].toDouble() * w;
-            total_max_dd += s["max_drawdown"].toDouble() * w;
-            total_best_day = std::max(total_best_day, s["best_day"].toDouble());
-            total_worst_day = std::min(total_worst_day, s["worst_day"].toDouble());
+            const double bd = num(s["best_day"]);
+            const double wd = num(s["worst_day"]);
+            if (std::isfinite(bd))
+                total_best_day = std::isfinite(total_best_day) ? std::max(total_best_day, bd) : bd;
+            if (std::isfinite(wd))
+                total_worst_day = std::isfinite(total_worst_day) ? std::min(total_worst_day, wd) : wd;
             pos_days += s["positive_days"].toInt();
             neg_days += s["negative_days"].toInt();
-            double sym_ret = s["total_return"].toDouble();
+            double sym_ret = num(s["total_return"]);
+            if (!std::isfinite(sym_ret))
+                continue;
             if (sym_ret > best_ret) {
                 best_ret = sym_ret;
                 best_sym = h.symbol;
@@ -414,10 +442,9 @@ void PortfolioFFNView::update_overview() {
 
     if (has_ffn) {
         rows = {
-            {"Annualized Return", pct_str(total_ann_ret), "--",
-             total_ann_ret >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE},
+            {"Annualized Return", pct_str(total_ann_ret), "--", sign_color(total_ann_ret)},
             {"Annualized Volatility", pct_str(total_ann_vol), "--", ui::colors::CYAN},
-            {"Sharpe Ratio", fmt(total_sharpe), "--", total_sharpe >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE},
+            {"Sharpe Ratio", fmt(total_sharpe), "--", sign_color(total_sharpe)},
             {"Max Drawdown", pct_str(total_max_dd), "--", ui::colors::NEGATIVE},
             {"Best Day (any)", pct_str(total_best_day), "--", ui::colors::POSITIVE},
             {"Worst Day (any)", pct_str(total_worst_day), "--", ui::colors::NEGATIVE},
@@ -435,23 +462,14 @@ void PortfolioFFNView::update_overview() {
             {"Cost Basis", currency_ + " " + fmt(summary_.total_cost_basis), "--", ui::colors::TEXT_SECONDARY},
         };
     } else {
-        // Pre-run: show live data and prompt user
-        double vol = 0;
-        int vn = 0;
-        for (const auto& h : summary_.holdings)
-            if (std::abs(h.day_change_percent) > 0.001) {
-                vol += std::abs(h.day_change_percent);
-                ++vn;
-            }
-        double daily_vol = vn > 0 ? vol / vn : 0.0;
-        double ann_vol = daily_vol * std::sqrt(252.0);
-        double sharpe = ann_vol > 0.01 ? (pnl_pct - 4.0) / ann_vol : 0.0;
-
+        // Pre-run: show live data and prompt user. No volatility/Sharpe here:
+        // the old "(est.)" rows annualised the spread of today's day changes
+        // ACROSS holdings against a hardcoded 4% — not a volatility at all.
         rows = {
             {"Total Return (unrealized)", pct_str(pnl_pct / 100.0), "--",
              pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE},
-            {"Annualized Volatility (est.)", pct_str(ann_vol / 100.0), "--", ui::colors::CYAN},
-            {"Sharpe Ratio (est.)", fmt(sharpe), "--", sharpe >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE},
+            {"Annualized Volatility", ui::formatting::placeholder(), "--", ui::colors::TEXT_SECONDARY},
+            {"Sharpe Ratio", ui::formatting::placeholder(), "--", ui::colors::TEXT_SECONDARY},
             {"Win Rate", fmt(win_rate) + "%", "--", ui::colors::CYAN},
             {"Positions", QString::number(summary_.total_positions), "--", ui::colors::CYAN},
             {"Total Value", currency_ + " " + fmt(summary_.total_market_value), "--", ui::colors::WARNING},
@@ -488,11 +506,11 @@ void PortfolioFFNView::update_benchmark() {
     QVector<BRow> rows;
 
     if (!cur_stats.isEmpty()) {
-        double total_ret = cur_stats["total_return"].toDouble();
-        double cagr = cur_stats["cagr"].toDouble();
-        double vol = cur_stats["volatility"].toDouble();
-        double sharpe = cur_stats["sharpe"].toDouble();
-        double max_dd = cur_stats["max_drawdown"].toDouble();
+        double total_ret = num(cur_stats["total_return"]);
+        double cagr = num(cur_stats["cagr"]);
+        double vol = num(cur_stats["volatility"]);
+        double sharpe = num(cur_stats["sharpe"]);
+        double max_dd = num(cur_stats["max_drawdown"]);
 
         rows = {
             {"Total Return", pct_str(total_ret)}, {"CAGR", pct_str(cagr)},           {"Volatility", pct_str(vol)},
@@ -534,7 +552,13 @@ void PortfolioFFNView::update_optimization() {
     auto stats_obj = opt_obj["stats"].toObject();
 
     // Collect symbols from the current weights object
-    QStringList syms = current_obj.keys();
+    // Union of every weight set's symbols — "current"/"erc"/"inv_vol" are
+    // omitted when unavailable; "equal" is always present.
+    QStringList syms;
+    for (const QJsonObject* obj : {&equal_obj, &current_obj, &erc_obj, &inv_obj})
+        for (const auto& k : obj->keys())
+            if (!syms.contains(k))
+                syms.append(k);
     syms.sort();
 
     // ── Weights table ─────────────────────────────────────────────────────────
@@ -543,21 +567,25 @@ void PortfolioFFNView::update_optimization() {
         const QString& sym = syms[r];
         opt_weights_table_->setRowHeight(r, 28);
 
-        auto pct = [](double v) { return fmt(v * 100.0, 1) + "%"; };
+        // Missing weight set (e.g. ERC did not converge) → "—", not 0%.
+        auto pct = [](const QJsonValue& v) {
+            const double d = num(v);
+            return std::isfinite(d) ? fmt(d * 100.0, 1) + "%" : ui::formatting::placeholder();
+        };
 
         opt_weights_table_->setItem(r, 0,
                                     make_item(sym, Qt::AlignLeft | Qt::AlignVCenter, QColor(ui::colors::AMBER())));
         opt_weights_table_->setItem(
             r, 1,
-            make_item(pct(current_obj[sym].toDouble()), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::CYAN())));
+            make_item(pct(current_obj[sym]), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::CYAN())));
         opt_weights_table_->setItem(r, 2,
-                                    make_item(pct(erc_obj[sym].toDouble()), Qt::AlignRight | Qt::AlignVCenter,
+                                    make_item(pct(erc_obj[sym]), Qt::AlignRight | Qt::AlignVCenter,
                                               QColor(ui::colors::TEXT_PRIMARY())));
         opt_weights_table_->setItem(r, 3,
-                                    make_item(pct(inv_obj[sym].toDouble()), Qt::AlignRight | Qt::AlignVCenter,
+                                    make_item(pct(inv_obj[sym]), Qt::AlignRight | Qt::AlignVCenter,
                                               QColor(ui::colors::TEXT_PRIMARY())));
         opt_weights_table_->setItem(r, 4,
-                                    make_item(pct(equal_obj[sym].toDouble()), Qt::AlignRight | Qt::AlignVCenter,
+                                    make_item(pct(equal_obj[sym]), Qt::AlignRight | Qt::AlignVCenter,
                                               QColor(ui::colors::TEXT_PRIMARY())));
     }
 
@@ -572,20 +600,19 @@ void PortfolioFFNView::update_optimization() {
         auto s = stats_obj[key].toObject();
         opt_stats_table_->setRowHeight(r, 28);
 
-        double tr = s["total_return"].toDouble();
-        double vol = s["volatility"].toDouble();
-        double sh = s["sharpe"].toDouble();
-        double dd = s["max_drawdown"].toDouble();
+        // A strategy whose stats failed carries {"error": …} → every cell "—".
+        double tr = num(s["total_return"]);
+        double vol = num(s["volatility"]);
+        double sh = num(s["sharpe"]);
+        double dd = num(s["max_drawdown"]);
 
         opt_stats_table_->setItem(r, 0, make_item(name, Qt::AlignLeft | Qt::AlignVCenter, QColor(ui::colors::AMBER())));
         opt_stats_table_->setItem(r, 1,
-                                  make_item(pct_str(tr), Qt::AlignRight | Qt::AlignVCenter,
-                                            QColor(tr >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE())));
+                                  make_item(pct_str(tr), Qt::AlignRight | Qt::AlignVCenter, QColor(sign_color(tr))));
         opt_stats_table_->setItem(
             r, 2, make_item(pct_str(vol), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::CYAN())));
         opt_stats_table_->setItem(r, 3,
-                                  make_item(fmt(sh), Qt::AlignRight | Qt::AlignVCenter,
-                                            QColor(sh >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE())));
+                                  make_item(fmt(sh), Qt::AlignRight | Qt::AlignVCenter, QColor(sign_color(sh))));
         opt_stats_table_->setItem(
             r, 4, make_item(pct_str(dd), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::NEGATIVE())));
     }
@@ -857,27 +884,43 @@ void PortfolioFFNView::run_ffn() {
 
     QStringList symbols;
     QJsonObject weights_obj;
+    // Unvalued holdings (no price / no FX rate) carry no weight; leave them
+    // out and name them in the status line.
+    QStringList excluded;
     for (const auto& h : summary_.holdings) {
+        if (!h.valued()) {
+            excluded.append(h.symbol);
+            continue;
+        }
         symbols.append(h.symbol);
         weights_obj[h.symbol] = h.weight / 100.0;
+    }
+    if (symbols.isEmpty()) {
+        run_btn_->setEnabled(true);
+        status_label_->setText(QString("FFN unavailable — no valued holdings (excluded: %1)")
+                                   .arg(excluded.join(", ")));
+        status_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
+        return;
     }
 
     QPointer<PortfolioFFNView> self = this;
     PortfolioAnalyticsService::instance().run_ffn(
         symbols, weights_obj, services::PortfolioService::instance().risk_free_rate(),
-        [self](const AnalyticsResult& r) {
+        [self, excluded](const AnalyticsResult& r) {
         if (!self)
             return;
         QMetaObject::invokeMethod(
             self,
-            [self, r]() {
+            [self, r, excluded]() {
                 if (!self)
                     return;
 
                 self->run_btn_->setEnabled(true);
 
                 if (!r.success) {
-                    self->status_label_->setText("FFN failed — check Python/yfinance");
+                    self->status_label_->setText(
+                        r.error.isEmpty() ? QStringLiteral("FFN failed — check Python/yfinance")
+                                          : QStringLiteral("FFN failed — ") + r.error.left(120));
                     self->status_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
                     LOG_ERROR("FFNView", "FFN script failed: " + r.error.left(300));
                     return;
@@ -887,15 +930,32 @@ void PortfolioFFNView::run_ffn() {
 
                 // Count only per-symbol keys (exclude the section keys)
                 static const QStringList k_section_keys = {"rebased", "drawdown_series", "rolling_corr", "optimization",
-                                                           "error"};
+                                                           "error", "dropped_symbols"};
                 int sym_count = 0;
                 for (const auto& k : self->ffn_data_.keys())
                     if (!k_section_keys.contains(k))
                         ++sym_count;
 
-                self->status_label_->setText(
-                    QString("FFN complete — %1 symbol%2").arg(sym_count).arg(sym_count != 1 ? "s" : ""));
-                self->status_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
+                // Symbols with no price data are not in the analysis — say so
+                // rather than reporting a complete run.
+                QStringList dropped;
+                for (const auto& v : self->ffn_data_["dropped_symbols"].toArray())
+                    dropped.append(v.toString());
+                for (const auto& x : excluded)
+                    dropped.append(x + QStringLiteral(" (no price/FX)"));
+                if (dropped.isEmpty()) {
+                    self->status_label_->setText(
+                        QString("FFN complete — %1 symbol%2").arg(sym_count).arg(sym_count != 1 ? "s" : ""));
+                    self->status_label_->setStyleSheet(
+                        QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
+                } else {
+                    self->status_label_->setText(QString("FFN partial — %1 symbol%2; no data for %3")
+                                                     .arg(sym_count)
+                                                     .arg(sym_count != 1 ? "s" : "")
+                                                     .arg(dropped.join(", ")));
+                    self->status_label_->setStyleSheet(
+                        QString("color:%1; font-size:12px;").arg(ui::colors::WARNING()));
+                }
 
                 LOG_INFO("FFNView", QString("FFN analysis complete for %1 symbol(s)").arg(sym_count));
 

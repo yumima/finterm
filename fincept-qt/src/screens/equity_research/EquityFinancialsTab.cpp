@@ -27,6 +27,10 @@
 #include <QVBoxLayout>
 #include <QValueAxis>
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
 namespace fincept::screens {
 
 // ── Static helpers ────────────────────────────────────────────────────────────
@@ -41,6 +45,14 @@ static const QString kBlue = "#3b82f6";
 static const QString kPurple = "#a855f7";
 static const QString kOrange = "#f97316";
 static const QString kYellow = "#eab308";
+
+// "Not reported / not computable". Propagates through arithmetic and renders
+// as the shared placeholder via format_compact / format_percent / fmt_ratio.
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
+// Bars can't be skipped inside a QBarSet; an absent value draws no bar
+// (height 0) instead of feeding NaN into the axis range.
+inline double bar_or_empty(double v) { return std::isfinite(v) ? v : 0.0; }
 
 QFrame* section_frame(const QString& title, const QString& color) {
     auto* f = new QFrame;
@@ -604,7 +616,7 @@ QWidget* EquityFinancialsTab::build_cashflow_view() {
 
     // ── Cash Flow Trend Chart ─────────────────────────────────────────────────
     {
-        auto* sec = section_frame("CASH FLOW TREND (BILLIONS $)", kGreen);
+        auto* sec = section_frame("CASH FLOW TREND (BILLIONS)", kGreen);
         cf_chart_ = make_chart_view(200);
         static_cast<QVBoxLayout*>(sec->layout())->addWidget(cf_chart_);
         vl->addWidget(sec);
@@ -675,8 +687,10 @@ void EquityFinancialsTab::apply_financials_state(const services::query::QuerySto
 
 // ── Populate helpers ──────────────────────────────────────────────────────────
 
+// Absent line items come back as NaN — never 0.0 — so every derived ratio
+// that depends on them renders the placeholder instead of "0" / "0.00%".
 double EquityFinancialsTab::get_val(const QJsonObject& o, const QStringList& keys) {
-    return find_val(o, keys).value_or(0.0);
+    return find_val(o, keys).value_or(kNaN);
 }
 
 // Presence-aware lookup. get_val() collapses "the filing does not report
@@ -712,20 +726,22 @@ void EquityFinancialsTab::populate_income_view(const services::equity::Financial
     double prev_net = get_val(prev, {"Net Income", "Net Income Common Stockholders"});
     double ebitda = get_val(latest, {"EBITDA", "Normalized EBITDA"});
 
-    // Margins
-    double gross_margin = revenue > 0 ? gross / revenue : 0.0;
-    double op_margin = revenue > 0 ? op_income / revenue : 0.0;
-    double net_margin = revenue > 0 ? net_income / revenue : 0.0;
-    double ebitda_margin = revenue > 0 ? ebitda / revenue : 0.0;
+    // Margins — NaN (rendered "—") when revenue or the numerator is absent.
+    double gross_margin = revenue > 0 ? gross / revenue : kNaN;
+    double op_margin = revenue > 0 ? op_income / revenue : kNaN;
+    double net_margin = revenue > 0 ? net_income / revenue : kNaN;
+    double ebitda_margin = revenue > 0 ? ebitda / revenue : kNaN;
 
     // Growth labels
-    double rev_growth = prev_rev > 0 ? (revenue - prev_rev) / prev_rev : 0.0;
-    double net_growth = prev_net > 0 ? (net_income - prev_net) / prev_net : 0.0;
+    double rev_growth = prev_rev > 0 ? (revenue - prev_rev) / prev_rev : kNaN;
+    double net_growth = prev_net > 0 ? (net_income - prev_net) / prev_net : kNaN;
 
     auto set = [](QLabel* l, const QString& t) {
         if (l)
             l->setText(t);
     };
+    auto margin_sub = [](double m) { return std::isfinite(m) ? fmt_pct(m) + " margin" : QString(); };
+    auto times = [](double v) { return std::isfinite(v) ? fmt_ratio(v) + "x" : ui::formatting::placeholder(); };
 
     set(inc_revenue_val_, fmt_large(revenue));
     // Prefer the TTM sub-line: mid-year, the fiscal-year figure can be nine
@@ -734,18 +750,18 @@ void EquityFinancialsTab::populate_income_view(const services::equity::Financial
     set(inc_revenue_sub_,
         d.ttm_revenue > 0.0
             ? QStringLiteral("TTM ") + fmt_large(d.ttm_revenue)
-            : (rev_growth != 0.0 ? fmt_pct(rev_growth) + " YoY" : QString()));
+            : (std::isfinite(rev_growth) ? fmt_pct(rev_growth) + " YoY" : QString()));
     set(inc_gross_val_, fmt_large(gross));
-    set(inc_gross_sub_, fmt_pct(gross_margin) + " margin");
+    set(inc_gross_sub_, margin_sub(gross_margin));
     set(inc_opincome_val_, fmt_large(op_income));
-    set(inc_opincome_sub_, fmt_pct(op_margin) + " margin");
+    set(inc_opincome_sub_, margin_sub(op_margin));
     set(inc_netincome_val_, fmt_large(net_income));
     set(inc_netincome_sub_,
         d.ttm_net_income != 0.0
             ? QStringLiteral("TTM ") + fmt_large(d.ttm_net_income)
-            : (net_growth != 0.0 ? fmt_pct(net_growth) + " YoY" : QString()));
+            : (std::isfinite(net_growth) ? fmt_pct(net_growth) + " YoY" : QString()));
     set(inc_ebitda_val_, fmt_large(ebitda));
-    set(inc_ebitda_sub_, fmt_pct(ebitda_margin) + " margin");
+    set(inc_ebitda_sub_, margin_sub(ebitda_margin));
     set(inc_gross_margin_, fmt_pct(gross_margin));
     set(inc_op_margin_, fmt_pct(op_margin));
     set(inc_net_margin_, fmt_pct(net_margin));
@@ -756,14 +772,16 @@ void EquityFinancialsTab::populate_income_view(const services::equity::Financial
         const auto& bal = d.balance_sheet[0].second;
         double total_assets = get_val(bal, {"Total Assets"});
         double total_equity = get_val(bal, {"Stockholders Equity", "Total Equity", "Total Stockholder Equity"});
-        double asset_turnover = total_assets > 0 ? revenue / total_assets : 0.0;
-        double eq_mult = total_equity > 0 ? total_assets / total_equity : 0.0;
-        double roe = total_equity > 0 ? net_income / total_equity : 0.0;
-        double roa = total_assets > 0 ? net_income / total_assets : 0.0;
+        double asset_turnover = total_assets > 0 ? revenue / total_assets : kNaN;
+        // Negative (or absent) equity: ROE and the equity multiplier have no
+        // meaningful value — net/negative-equity flips the sign — so "—".
+        double eq_mult = total_equity > 0 ? total_assets / total_equity : kNaN;
+        double roe = total_equity > 0 ? net_income / total_equity : kNaN;
+        double roa = total_assets > 0 ? net_income / total_assets : kNaN;
 
         set(dupont_net_margin_, fmt_pct(net_margin));
-        set(dupont_asset_turn_, QString::number(asset_turnover, 'f', 2) + "x");
-        set(dupont_eq_mult_, QString::number(eq_mult, 'f', 2) + "x");
+        set(dupont_asset_turn_, times(asset_turnover));
+        set(dupont_eq_mult_, times(eq_mult));
         set(dupont_roe_result_, fmt_pct(roe));
 
         // Invested capital for ROIC
@@ -781,16 +799,17 @@ void EquityFinancialsTab::populate_income_view(const services::equity::Financial
         //     company paid no tax on operations, so 0%, not a synthetic
         //     statutory rate;
         //   • the field is absent, or pretax income is not positive (a
-        //     loss-maker's ratio is meaningless) → fall back to 21%.
+        //     loss-maker's ratio is meaningless) → no rate can be derived,
+        //     so ROIC renders "—" rather than assuming a statutory 21%.
         const auto pretax = find_val(latest, {"Pretax Income", "Income Before Tax",
                                               "Earnings Before Tax"});
         const auto tax_exp = find_val(latest, {"Tax Provision", "Income Tax Expense"});
-        double tax_rate = 0.21; // US federal statutory, the honest default
+        double tax_rate = kNaN;
         if (tax_exp && pretax && *pretax > 0.0)
             tax_rate = std::clamp(*tax_exp / *pretax, 0.0, 0.60);
-        double roic = inv_cap > 0 ? (op_income * (1.0 - tax_rate)) / inv_cap : 0.0;
+        double roic = inv_cap > 0 ? (op_income * (1.0 - tax_rate)) / inv_cap : kNaN;
         double cur_liab = get_val(bal, {"Current Liabilities", "Total Current Liabilities"});
-        double roce = (total_assets - cur_liab) > 0 ? op_income / (total_assets - cur_liab) : 0.0;
+        double roce = (total_assets - cur_liab) > 0 ? op_income / (total_assets - cur_liab) : kNaN;
 
         set(ret_roe_val_, fmt_pct(roe));
         set(ret_roa_val_, fmt_pct(roa));
@@ -812,9 +831,9 @@ void EquityFinancialsTab::populate_balance_view(const services::equity::Financia
     double cur_assets = get_val(b, {"Current Assets", "Total Current Assets"});
     double cur_liab = get_val(b, {"Current Liabilities", "Total Current Liabilities"});
     double inventory = get_val(b, {"Inventory"});
-    double ebitda = 0.0;
-    double interest = 0.0;
-    double ebit = 0.0;
+    double ebitda = kNaN;
+    double interest = kNaN;
+    double ebit = kNaN;
     if (!d.income_statement.isEmpty()) {
         const auto& inc = d.income_statement[0].second;
         ebitda = get_val(inc, {"EBITDA", "Normalized EBITDA"});
@@ -835,11 +854,11 @@ void EquityFinancialsTab::populate_balance_view(const services::equity::Financia
     set(bal_debt_val_, fmt_large(total_debt));
     set(bal_cash_val_, fmt_large(cash));
 
-    double cur_ratio = cur_liab > 0 ? cur_assets / cur_liab : 0.0;
-    double quick_ratio = cur_liab > 0 ? (cur_assets - inventory) / cur_liab : 0.0;
+    double cur_ratio = cur_liab > 0 ? cur_assets / cur_liab : kNaN;
+    double quick_ratio = cur_liab > 0 ? (cur_assets - inventory) / cur_liab : kNaN;
     double work_cap = cur_assets - cur_liab;
-    double d_e = total_equity > 0 ? total_debt / total_equity : 0.0;
-    double d_a = total_assets > 0 ? total_debt / total_assets : 0.0;
+    double d_e = total_equity > 0 ? total_debt / total_equity : kNaN;
+    double d_a = total_assets > 0 ? total_debt / total_assets : kNaN;
     // "Interest Coverage" conventionally means EBIT / interest. Using
     // EBITDA overstates it by the whole D&A charge — most for exactly the
     // capital-intensive, heavily indebted names where the ratio matters.
@@ -848,12 +867,12 @@ void EquityFinancialsTab::populate_balance_view(const services::equity::Financia
     // one) report neither EBIT nor Operating Income, and dropping to "N/A"
     // there loses a figure they previously had. Fall back to EBITDA and say
     // which basis is on screen.
-    double int_cov = 0.0;
+    double int_cov = kNaN;
     bool int_cov_is_ebitda = false;
     if (interest > 0) {
-        if (ebit != 0.0) {
+        if (std::isfinite(ebit) && ebit != 0.0) {
             int_cov = ebit / interest;
-        } else if (ebitda != 0.0) {
+        } else if (std::isfinite(ebitda) && ebitda != 0.0) {
             int_cov = ebitda / interest;
             int_cov_is_ebitda = true;
         }
@@ -881,6 +900,7 @@ void EquityFinancialsTab::populate_cashflow_view(const services::equity::Financi
     double capex = get_val(cf, {"Capital Expenditure", "Capital Expenditures"});
     if (capex > 0)
         capex = -capex;         // capex is usually negative
+    // Absent capex leaves FCF NaN ("—") — never silently FCF = OCF.
     double fcf = op_cf + capex; // capex is negative so this subtracts
     double dividends = get_val(cf, {"Cash Dividends Paid", "Payment Of Dividends"});
     if (dividends > 0)
@@ -890,11 +910,11 @@ void EquityFinancialsTab::populate_cashflow_view(const services::equity::Financi
     if (buybacks > 0)
         buybacks = -buybacks;
 
-    double revenue = 0.0;
+    double revenue = kNaN;
     if (!d.income_statement.isEmpty())
         revenue = get_val(d.income_statement[0].second, {"Total Revenue", "Revenue"});
-    double fcf_margin = revenue > 0 ? fcf / revenue : 0.0;
-    double capex_rev = revenue > 0 ? qAbs(capex) / revenue : 0.0;
+    double fcf_margin = revenue > 0 ? fcf / revenue : kNaN;
+    double capex_rev = revenue > 0 ? std::abs(capex) / revenue : kNaN;
 
     auto set = [](QLabel* l, const QString& t) {
         if (l)
@@ -905,10 +925,10 @@ void EquityFinancialsTab::populate_cashflow_view(const services::equity::Financi
     set(cf_investing_val_, fmt_large(inv_cf));
     set(cf_financing_val_, fmt_large(fin_cf));
     set(cf_fcf_val_, fmt_large(fcf));
-    set(cf_fcf_sub_, fcf_margin != 0.0 ? fmt_pct(fcf_margin) + " margin" : "");
-    set(cf_capex_val_, fmt_large(qAbs(capex)));
-    set(cf_dividends_val_, fmt_large(qAbs(dividends)));
-    set(cf_buybacks_val_, fmt_large(qAbs(buybacks)));
+    set(cf_fcf_sub_, std::isfinite(fcf_margin) ? fmt_pct(fcf_margin) + " margin" : "");
+    set(cf_capex_val_, fmt_large(std::abs(capex)));
+    set(cf_dividends_val_, fmt_large(std::abs(dividends)));
+    set(cf_buybacks_val_, fmt_large(std::abs(buybacks)));
     set(cf_fcf_margin_, fmt_pct(fcf_margin));
     set(cf_capex_rev_, fmt_pct(capex_rev));
 }
@@ -963,8 +983,8 @@ void EquityFinancialsTab::rebuild_revenue_chart(const services::equity::Financia
     auto* gross_set = new QBarSet("Gross Profit");
     gross_set->setColor(QColor(kCyan));
     for (int i = 0; i < cats.size(); ++i) {
-        *rev_set << revenue_v[i];
-        *gross_set << gross_v[i];
+        *rev_set << bar_or_empty(revenue_v[i]);
+        *gross_set << bar_or_empty(gross_v[i]);
     }
 
     auto* bar_series = new QBarSeries;
@@ -976,7 +996,8 @@ void EquityFinancialsTab::rebuild_revenue_chart(const services::equity::Financia
     net_series->setColor(QColor(kGreen));
     net_series->setPen(QPen(QColor(kGreen), 2));
     for (int i = 0; i < cats.size(); ++i)
-        net_series->append(i, net_v[i]);
+        if (std::isfinite(net_v[i])) // absent period → gap, not a 0 point
+            net_series->append(i, net_v[i]);
 
     auto* chart = new QChart;
     style_chart(chart);
@@ -985,7 +1006,7 @@ void EquityFinancialsTab::rebuild_revenue_chart(const services::equity::Financia
     chart->legend()->show();
 
     auto* axX = make_x_axis(cats);
-    auto* axY = make_y_axis("$%.0fB");
+    auto* axY = make_y_axis("%.0fB");
     chart->addAxis(axX, Qt::AlignBottom);
     chart->addAxis(axY, Qt::AlignLeft);
     bar_series->attachAxis(axX);
@@ -1016,7 +1037,7 @@ void EquityFinancialsTab::rebuild_margin_chart(const services::equity::Financial
         // pre-revenue biotech, or any year where the field is absent, drew
         // margins in the billions of percent. A period with no revenue has
         // no margin; skip it rather than invent one.
-        if (rev <= 0.0)
+        if (!(rev > 0.0)) // also skips absent (NaN) revenue
             continue;
         cats << d.income_statement[i].first.left(4);
         gross_v << get_val(stmt, {"Gross Profit"}) / rev * 100.0;
@@ -1037,7 +1058,8 @@ void EquityFinancialsTab::rebuild_margin_chart(const services::equity::Financial
         s->setColor(QColor(color));
         s->setPen(QPen(QColor(color), 2));
         for (int i = 0; i < cats.size(); ++i)
-            s->append(i, vals[i]);
+            if (std::isfinite(vals[i])) // unreported line item → gap
+                s->append(i, vals[i]);
         return s;
     };
 
@@ -1082,9 +1104,9 @@ void EquityFinancialsTab::rebuild_balance_chart(const services::equity::Financia
     for (int i = n - 1; i >= 0; --i) {
         cats << d.balance_sheet[i].first.left(4);
         const auto& b = d.balance_sheet[i].second;
-        *assets_set << get_val(b, {"Total Assets"}) / 1e9;
-        *liab_set << get_val(b, {"Total Liabilities Net Minority Interest", "Total Liabilities"}) / 1e9;
-        *equity_set << get_val(b, {"Stockholders Equity", "Total Equity"}) / 1e9;
+        *assets_set << bar_or_empty(get_val(b, {"Total Assets"}) / 1e9);
+        *liab_set << bar_or_empty(get_val(b, {"Total Liabilities Net Minority Interest", "Total Liabilities"}) / 1e9);
+        *equity_set << bar_or_empty(get_val(b, {"Stockholders Equity", "Total Equity"}) / 1e9);
     }
 
     auto* series = new QBarSeries;
@@ -1098,7 +1120,7 @@ void EquityFinancialsTab::rebuild_balance_chart(const services::equity::Financia
     chart->legend()->show();
 
     auto* axX = make_x_axis(cats);
-    auto* axY = make_y_axis("$%.0fB");
+    auto* axY = make_y_axis("%.0fB");
     chart->addAxis(axX, Qt::AlignBottom);
     chart->addAxis(axY, Qt::AlignLeft);
     series->attachAxis(axX);
@@ -1135,10 +1157,12 @@ void EquityFinancialsTab::rebuild_cashflow_chart(const services::equity::Financi
         double capex = get_val(cf, {"Capital Expenditure", "Capital Expenditures"});
         if (capex > 0)
             capex = -capex;
-        *op_set << op / 1e9;
-        *inv_set << inv / 1e9;
-        *fin_set << fin / 1e9;
-        fcf_series->append(cats.size() - 1, (op + capex) / 1e9);
+        *op_set << bar_or_empty(op / 1e9);
+        *inv_set << bar_or_empty(inv / 1e9);
+        *fin_set << bar_or_empty(fin / 1e9);
+        const double fcf = op + capex; // NaN when OCF or capex unreported
+        if (std::isfinite(fcf))
+            fcf_series->append(cats.size() - 1, fcf / 1e9);
     }
 
     auto* bar_series = new QBarSeries;
@@ -1153,7 +1177,7 @@ void EquityFinancialsTab::rebuild_cashflow_chart(const services::equity::Financi
     chart->legend()->show();
 
     auto* axX = make_x_axis(cats);
-    auto* axY = make_y_axis("$%.0fB");
+    auto* axY = make_y_axis("%.0fB");
     chart->addAxis(axX, Qt::AlignBottom);
     chart->addAxis(axY, Qt::AlignLeft);
     bar_series->attachAxis(axX);
@@ -1214,8 +1238,12 @@ void EquityFinancialsTab::rebuild_return_chart(const services::equity::Financial
         double net = get_val(matched[i].second, {"Net Income", "Net Income Common Stockholders"});
         double assets = get_val(bal, {"Total Assets"});
         double equity = get_val(bal, {"Stockholders Equity", "Total Equity"});
-        roe_series->append(cats.size() - 1, equity > 0 ? (net / equity) * 100.0 : 0.0);
-        roa_series->append(cats.size() - 1, assets > 0 ? (net / assets) * 100.0 : 0.0);
+        // Skip points that can't be computed (absent items, non-positive
+        // equity/assets) instead of plotting a fabricated 0%.
+        if (std::isfinite(net) && equity > 0)
+            roe_series->append(cats.size() - 1, (net / equity) * 100.0);
+        if (std::isfinite(net) && assets > 0)
+            roa_series->append(cats.size() - 1, (net / assets) * 100.0);
     }
 
     auto* chart = new QChart;
@@ -1299,6 +1327,8 @@ QString EquityFinancialsTab::fmt_pct(double v) {
 }
 
 QString EquityFinancialsTab::fmt_ratio(double v) {
+    if (!std::isfinite(v))
+        return ui::formatting::placeholder();
     return QString::number(v, 'f', 2);
 }
 

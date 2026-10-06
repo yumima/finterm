@@ -8,7 +8,9 @@
 
 namespace fincept::screens {
 
-/// Economics view showing macro factor exposure and portfolio correlation to economic indicators.
+/// Economics view: per-holding contribution to value and P&L. The factor-
+/// sensitivity section states that no factor model data exists (it used to
+/// show numbers from an uncited constant sector-beta table).
 class EconomicsView : public QWidget {
     Q_OBJECT
   public:
@@ -19,13 +21,9 @@ class EconomicsView : public QWidget {
   private:
     void build_ui();
     void update_indicators();
-    void update_sensitivity();
 
     // Macro indicators table
     QTableWidget* indicators_table_ = nullptr;
-
-    // Sensitivity matrix
-    QTableWidget* sensitivity_table_ = nullptr;
 
     portfolio::PortfolioSummary summary_;
     QString currency_;

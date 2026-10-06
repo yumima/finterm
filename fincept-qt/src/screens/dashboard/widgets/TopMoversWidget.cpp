@@ -3,6 +3,7 @@
 #include "screens/markets/MarketChartDialog.h"
 
 #include "ui/charts/InlineSparkline.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include "datahub/DataHub.h"
@@ -219,7 +220,7 @@ void TopMoversWidget::render_table() {
         if (auto* c = table_->item(i, 1))
             c->setText(QString("$%1").arg(q.price, 0, 'f', 2));
         if (auto* c = table_->item(i, 2))
-            c->setText(QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2));
+            c->setText(ui::formatting::format_percent(q.change_pct, 2, true));
         table_->set_cell_color(i, 2, ui::change_color(q.change_pct));
 
         if (i < spark_widgets_.size()) {

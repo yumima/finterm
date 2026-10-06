@@ -11,28 +11,32 @@ namespace fincept::screens {
 
 using namespace fincept::services::geo;
 
+// Static reference taxonomy only (which crises/organizations relate to which
+// conflicts). Severity ratings and dataset counts used to be hardcoded here
+// with no source; they are intentionally left empty (severity "", count 0)
+// and are not rendered. The live HDX panel shows real dataset counts.
 static QVector<RelationshipNode> build_nodes() {
     QVector<RelationshipNode> nodes;
 
     // Primary conflicts
-    nodes.append({"ukraine", "Ukraine", "conflict", "critical", 89, {"displacement", "humanitarian", "food_security"}});
-    nodes.append({"gaza", "Gaza", "conflict", "critical", 67, {"displacement", "humanitarian", "health"}});
-    nodes.append({"sudan", "Sudan", "conflict", "critical", 45, {"displacement", "food_security", "humanitarian"}});
-    nodes.append({"yemen", "Yemen", "conflict", "high", 56, {"food_security", "humanitarian", "health"}});
-    nodes.append({"syria", "Syria", "conflict", "high", 78, {"displacement", "humanitarian"}});
-    nodes.append({"myanmar", "Myanmar", "conflict", "high", 29, {"displacement", "humanitarian"}});
+    nodes.append({"ukraine", "Ukraine", "conflict", "", 0, {"displacement", "humanitarian", "food_security"}});
+    nodes.append({"gaza", "Gaza", "conflict", "", 0, {"displacement", "humanitarian", "health"}});
+    nodes.append({"sudan", "Sudan", "conflict", "", 0, {"displacement", "food_security", "humanitarian"}});
+    nodes.append({"yemen", "Yemen", "conflict", "", 0, {"food_security", "humanitarian", "health"}});
+    nodes.append({"syria", "Syria", "conflict", "", 0, {"displacement", "humanitarian"}});
+    nodes.append({"myanmar", "Myanmar", "conflict", "", 0, {"displacement", "humanitarian"}});
 
     // Crisis types
-    nodes.append({"displacement", "Displacement", "crisis", "high", 234, {"unhcr"}});
-    nodes.append({"food_security", "Food Security", "crisis", "high", 189, {"wfp", "fao"}});
-    nodes.append({"humanitarian", "Humanitarian", "crisis", "critical", 312, {"unhcr", "wfp", "who"}});
-    nodes.append({"health", "Health Crisis", "crisis", "medium", 145, {"who"}});
+    nodes.append({"displacement", "Displacement", "crisis", "", 0, {"unhcr"}});
+    nodes.append({"food_security", "Food Security", "crisis", "", 0, {"wfp", "fao"}});
+    nodes.append({"humanitarian", "Humanitarian", "crisis", "", 0, {"unhcr", "wfp", "who"}});
+    nodes.append({"health", "Health Crisis", "crisis", "", 0, {"who"}});
 
     // Organizations
-    nodes.append({"unhcr", "UNHCR", "organization", "", 234, {"displacement", "humanitarian"}});
-    nodes.append({"wfp", "WFP", "organization", "", 189, {"food_security", "humanitarian"}});
-    nodes.append({"who", "WHO", "organization", "", 156, {"health", "humanitarian"}});
-    nodes.append({"fao", "FAO", "organization", "", 123, {"food_security"}});
+    nodes.append({"unhcr", "UNHCR", "organization", "", 0, {"displacement", "humanitarian"}});
+    nodes.append({"wfp", "WFP", "organization", "", 0, {"food_security", "humanitarian"}});
+    nodes.append({"who", "WHO", "organization", "", 0, {"health", "humanitarian"}});
+    nodes.append({"fao", "FAO", "organization", "", 0, {"food_security"}});
 
     return nodes;
 }
@@ -85,8 +89,13 @@ void RelationshipPanel::build_ui() {
     }
 
     auto* stats = new QLabel(
-        QString("NODES: %1  |  CONFLICTS: %2  |  ORGANIZATIONS: %3").arg(nodes.size()).arg(conflicts).arg(orgs),
+        QString("REFERENCE MAP  |  NODES: %1  |  CONFLICTS: %2  |  ORGANIZATIONS: %3")
+            .arg(nodes.size())
+            .arg(conflicts)
+            .arg(orgs),
         header);
+    stats->setToolTip("Static reference taxonomy — no live severity or dataset counts. "
+                      "Use the HDX tab for live humanitarian datasets.");
     stats->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; padding:2px 8px;"
                                  "background:rgba(255,255,255,0.04); border:1px solid %4;")
                              .arg(ui::colors::TEXT_SECONDARY())
@@ -161,7 +170,10 @@ void RelationshipPanel::build_ui() {
 }
 
 QWidget* RelationshipPanel::build_node_card(const RelationshipNode& node, QWidget* parent) {
-    auto color = severity_color(node.severity.isEmpty() ? "organization" : node.severity);
+    // Colour by node type — there is no sourced severity to colour by.
+    auto color = node.type == "conflict" ? QColor(ui::colors::NEGATIVE())
+                 : node.type == "crisis" ? QColor(ui::colors::WARNING())
+                                         : severity_color(node.severity.isEmpty() ? "organization" : node.severity);
     const QString col_hex = color.name();
     const QString col_rgb = QString("%1,%2,%3").arg(color.red()).arg(color.green()).arg(color.blue());
 
@@ -192,7 +204,7 @@ QWidget* RelationshipPanel::build_node_card(const RelationshipNode& node, QWidge
                             .arg(ui::fonts::DATA_FAMILY));
     name_hl->addWidget(name, 1);
 
-    const QString badge_text = node.severity.isEmpty() ? node.type.toUpper() : node.severity.toUpper();
+    const QString badge_text = node.type.toUpper();
     auto* badge = new QLabel(badge_text, name_row);
     badge->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;"
                                  "padding:2px 6px; background:rgba(%4,0.12); border:1px solid rgba(%4,0.3);"
@@ -212,27 +224,8 @@ QWidget* RelationshipPanel::build_node_card(const RelationshipNode& node, QWidge
                                 .arg(ui::fonts::DATA_FAMILY));
     vl->addWidget(type_lbl);
 
-    // Dataset count row
-    auto* ds_row = new QWidget(card);
-    auto* ds_hl = new QHBoxLayout(ds_row);
-    ds_hl->setContentsMargins(0, 0, 0, 0);
-    ds_hl->setSpacing(4);
-
-    auto* ds_num = new QLabel(QString::number(node.dataset_count), ds_row);
-    ds_num->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700; font-family:%3;")
-                              .arg(ui::colors::TEXT_PRIMARY())
-                              .arg(ui::fonts::SMALL)
-                              .arg(ui::fonts::DATA_FAMILY));
-    ds_hl->addWidget(ds_num);
-
-    auto* ds_lbl = new QLabel("datasets", ds_row);
-    ds_lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                              .arg(ui::colors::TEXT_SECONDARY())
-                              .arg(ui::fonts::SMALL)
-                              .arg(ui::fonts::DATA_FAMILY));
-    ds_hl->addWidget(ds_lbl);
-    ds_hl->addStretch();
-    vl->addWidget(ds_row);
+    // Dataset counts are not shown: they were hardcoded, not fetched. See the
+    // HDX DATA tab for live dataset counts.
 
     // Connection pills (max 3)
     if (!node.connections.isEmpty()) {

@@ -5,11 +5,14 @@
 #include "datahub/DataHubMetaTypes.h"
 #include "datahub/TopicPolicy.h"
 #include "network/websocket/WebSocketClient.h"
+#include "services/prediction/kalshi/KalshiPricing.h"
 
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+
+#include <cmath>
 
 namespace fincept::services::prediction::kalshi_ns {
 
@@ -164,10 +167,16 @@ void KalshiWsClient::on_message(const QString& msg) {
 
     if (type == QStringLiteral("ticker")) {
         if (ticker.isEmpty()) return;
-        const double yes_price = kalshi_fp_to_double(payload.value("yes_bid_dollars"));
-        if (yes_price > 0) publish_price(ticker + QStringLiteral(":yes"), yes_price);
-        const double no_price = kalshi_fp_to_double(payload.value("no_bid_dollars"));
-        if (no_price > 0) publish_price(ticker + QStringLiteral(":no"), no_price);
+        // Book mid, else last trade; NaN (no real price) publishes nothing so
+        // the last known value stands rather than a best-bid proxy.
+        const double yes_price = kalshi_implied_yes_probability(
+            kalshi_fp_to_double(payload.value("yes_bid_dollars")),
+            kalshi_fp_to_double(payload.value("yes_ask_dollars")),
+            kalshi_fp_to_double(payload.value("price_dollars")));
+        if (std::isfinite(yes_price)) {
+            publish_price(ticker + QStringLiteral(":yes"), yes_price);
+            publish_price(ticker + QStringLiteral(":no"), 1.0 - yes_price);
+        }
         return;
     }
 

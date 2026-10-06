@@ -40,6 +40,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 
 namespace fincept::screens {
@@ -1032,9 +1033,13 @@ void PortfolioScreen::hub_resubscribe_holdings() {
             if (!v.canConvert<services::QuoteData>())
                 return;
             const auto q = v.value<services::QuoteData>();
+            if (!(q.price > 0))
+                return; // no usable print — keep whatever the holding has
             for (auto& h : current_summary_.holdings) {
                 if (h.symbol != sym)
                     continue;
+                h.price_known = true;
+                h.price_stale = false;
                 h.current_price = q.price;
                 h.day_change = q.change;
                 h.day_change_percent = q.change_pct;
@@ -1049,10 +1054,19 @@ void PortfolioScreen::hub_resubscribe_holdings() {
                 // currency. cost_basis is already converted, so dropping the
                 // rate here would compare a raw CAD market value against a
                 // converted cost and invent P&L on an unchanged price.
-                h.market_value = h.quantity * h.current_price * h.fx_rate;
-                h.unrealized_pnl = h.market_value - h.cost_basis;
-                h.unrealized_pnl_percent = (h.cost_basis > 0)
-                    ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
+                if (h.fx_known) {
+                    h.market_value = h.quantity * h.current_price * h.fx_rate;
+                    h.unrealized_pnl = h.market_value - h.cost_basis;
+                    h.unrealized_pnl_percent = (h.cost_basis > 0)
+                        ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
+                } else {
+                    // No conversion: portfolio-currency figures stay unknown,
+                    // P&L % is currency-free (see HoldingWithQuote::fx_known).
+                    h.market_value = 0;
+                    h.unrealized_pnl = std::numeric_limits<double>::quiet_NaN();
+                    h.unrealized_pnl_percent = h.avg_buy_price > 0
+                        ? (h.current_price / h.avg_buy_price - 1.0) * 100.0 : 0;
+                }
                 // Live price moved — re-derive the drop from the peak (and let
                 // a new high raise the peak).
                 portfolio::refresh_drawdown(h);
@@ -1082,12 +1096,33 @@ void PortfolioScreen::rebuild_summary_aggregates_and_refresh() {
     double total_mv = 0;
     double total_cost = 0;
     double total_day = 0;
+    double day_base = 0; // value of the holdings whose day change is known
     int gainers = 0;
     int losers = 0;
+    // Same rules as PortfolioService's build: unpriced holdings stay out of
+    // every total, unknown day changes stay out of the day total, and the
+    // lists drive the ribbon's partial/approximate marker.
+    current_summary_.unpriced_symbols.clear();
+    current_summary_.stale_symbols.clear();
+    current_summary_.day_change_unknown_symbols.clear();
+    current_summary_.fx_unknown_symbols.clear();
     for (const auto& h : current_summary_.holdings) {
+        if (!h.valued()) {
+            (h.price_known ? current_summary_.fx_unknown_symbols : current_summary_.unpriced_symbols)
+                .append(h.symbol);
+            current_summary_.day_change_unknown_symbols.append(h.symbol);
+            continue;
+        }
+        if (h.price_stale)
+            current_summary_.stale_symbols.append(h.symbol);
         total_mv += h.market_value;
         total_cost += h.cost_basis;
-        total_day += h.day_change * h.quantity * h.fx_rate;
+        if (portfolio::has_value(h.day_change)) {
+            total_day += h.day_change * h.quantity * h.fx_rate;
+            day_base += h.market_value;
+        } else {
+            current_summary_.day_change_unknown_symbols.append(h.symbol);
+        }
         if (h.unrealized_pnl >= 0) ++gainers; else ++losers;
     }
     for (auto& h : current_summary_.holdings)
@@ -1099,8 +1134,8 @@ void PortfolioScreen::rebuild_summary_aggregates_and_refresh() {
     current_summary_.total_unrealized_pnl_percent = (total_cost > 0)
         ? ((total_mv - total_cost) / total_cost) * 100.0 : 0;
     current_summary_.total_day_change = total_day;
-    current_summary_.total_day_change_percent = (total_mv - total_day > 0)
-        ? (total_day / (total_mv - total_day)) * 100.0 : 0;
+    current_summary_.total_day_change_percent = (day_base - total_day > 0)
+        ? (total_day / (day_base - total_day)) * 100.0 : 0;
     current_summary_.gainers = gainers;
     current_summary_.losers = losers;
     current_summary_.last_updated = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
@@ -1181,10 +1216,10 @@ QWidget* PortfolioScreen::build_main_view() {
     connect(&services::PortfolioService::instance(),
             &services::PortfolioService::portfolio_intraday_loaded, perf_chart_,
             [this](const QString& portfolio_id, const QVector<qint64>& ts,
-                   const QVector<double>& navs) {
+                   const QVector<double>& navs, const QString& unavailable_reason) {
                 // Discard stale fetches if the user switched portfolios mid-flight.
                 if (portfolio_id == selected_id_)
-                    perf_chart_->set_portfolio_intraday(ts, navs);
+                    perf_chart_->set_portfolio_intraday(ts, navs, unavailable_reason);
             });
     sector_panel_ = new PortfolioSectorPanel;
     connect(sector_panel_, &PortfolioSectorPanel::sector_selected, this, [this](const QString& sector) {
@@ -1341,6 +1376,15 @@ QWidget* PortfolioScreen::build_main_view() {
         auto* h = find_holding(symbol);
         if (!h)
             return;
+        if (!h->price_known || !(h->current_price > 0)) {
+            // Closing records a SELL at the current price; with no price there
+            // is nothing honest to record (avg cost would fake a 0 realized P&L).
+            QMessageBox::warning(this, tr("No current price"),
+                                 tr("%1 has no current price, so it cannot be closed at market.\n"
+                                    "Record a SELL transaction with the actual fill price instead.")
+                                     .arg(symbol));
+            return;
+        }
         ConfirmDeleteDialog dlg(QString("%1 (%2 shares)").arg(symbol).arg(h->quantity, 0, 'f', 2), this);
         if (dlg.exec() == QDialog::Accepted) {
             services::PortfolioService::instance().sell_asset(selected_id_, symbol, h->quantity, h->current_price);

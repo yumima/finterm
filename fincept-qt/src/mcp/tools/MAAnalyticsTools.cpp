@@ -22,6 +22,7 @@ static ToolResult run_ma_sync(const QString& context, std::function<void()> trig
     QJsonObject result_data;
     QString error_msg;
     bool got_result = false;
+    bool got_error = false;
 
     auto& svc = fincept::services::ma::MAAnalyticsService::instance();
 
@@ -44,6 +45,7 @@ static ToolResult run_ma_sync(const QString& context, std::function<void()> trig
                              if (ctx != context)
                                  return;
                              error_msg = msg;
+                             got_error = true;
                              got_result = true;
                              gate->deleteLater();
                              signal_done();
@@ -53,8 +55,9 @@ static ToolResult run_ma_sync(const QString& context, std::function<void()> trig
 
     if (!got_result)
         return ToolResult::fail("M&A result missing: " + context);
-    if (!error_msg.isEmpty())
-        return ToolResult::fail(error_msg);
+    // An error signal is a failure even when its message is empty.
+    if (got_error || !error_msg.isEmpty())
+        return ToolResult::fail(error_msg.isEmpty() ? "M&A analytics failed: " + context : error_msg);
 
     return ToolResult::ok_data(result_data);
 }

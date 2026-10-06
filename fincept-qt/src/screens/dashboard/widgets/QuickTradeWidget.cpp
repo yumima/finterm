@@ -1,5 +1,6 @@
 #include "screens/dashboard/widgets/QuickTradeWidget.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -247,7 +248,8 @@ void QuickTradeWidget::apply_quote(const services::QuoteData& q) {
     price_label_->setText(QString("$%1").arg(q.price, 0, 'f', 2));
 
     double chg = q.change_pct;
-    QString chg_str = QString("%1%2%").arg(chg >= 0 ? "▲ +" : "▼ ").arg(chg, 0, 'f', 2);
+    QString chg_str = std::isfinite(chg) ? QString("%1%2%").arg(chg >= 0 ? "▲ +" : "▼ ").arg(chg, 0, 'f', 2)
+                                         : ui::formatting::placeholder();
     QString chg_col = chg > 0   ? ui::colors::POSITIVE()
                       : chg < 0 ? ui::colors::NEGATIVE()
                                 : ui::colors::TEXT_SECONDARY();

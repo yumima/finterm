@@ -775,23 +775,23 @@ void NodeEditorScreen::on_show_templates() {
         set_param(n1, "symbol", "AAPL");
         set_param(n1, "condition", "above");
         set_param(n1, "price", 200.0);
-        auto n2 = make_node("market.get_quote", "Latest Quote", 400, 200);
-        set_param(n2, "symbol", "AAPL");
-        auto n3 = make_node("safety.risk_check", "Risk Check", 700, 200);
-        auto n4 = make_node("trading.place_order", "Buy AAPL", 1000, 100);
-        set_param(n4, "symbol", "AAPL");
-        set_param(n4, "side", "buy");
-        set_param(n4, "quantity", 10);
-        set_param(n4, "broker", "paper");
-        auto n5 = make_node("notify.telegram", "Alert: Blocked", 1000, 350);
-        auto n6 = make_node("output.results_display", "Order Result", 1300, 100);
-        auto n7 = make_node("output.results_display", "Risk Alert", 1300, 350);
+        // The alert fetches a real quote and only fires when AAPL > $200; the
+        // order is then gated on real exchange-local trading hours. (A
+        // risk_check here would always fail closed: nothing upstream supplies
+        // portfolio_value / volatility.)
+        auto n2 = make_node("safety.trading_hours", "Market Open?", 400, 200);
+        set_param(n2, "exchange", "NYSE");
+        auto n3 = make_node("trading.place_order", "Buy AAPL", 700, 100);
+        set_param(n3, "symbol", "AAPL");
+        set_param(n3, "side", "buy");
+        set_param(n3, "quantity", 10);
+        set_param(n3, "broker", "paper");
+        auto n4 = make_node("output.results_display", "Order Result", 1000, 100);
+        auto n5 = make_node("output.results_display", "Market Closed", 700, 350);
         make_edge(n1.id, "output_main", n2.id, "input_0");
-        make_edge(n2.id, "output_main", n3.id, "input_0");
-        make_edge(n3.id, "output_pass", n4.id, "input_0");
-        make_edge(n3.id, "output_fail", n5.id, "input_0");
-        make_edge(n4.id, "output_main", n6.id, "input_0");
-        make_edge(n5.id, "output_main", n7.id, "input_0");
+        make_edge(n2.id, "output_open", n3.id, "input_0");
+        make_edge(n2.id, "output_closed", n5.id, "input_0");
+        make_edge(n3.id, "output_main", n4.id, "input_0");
         toolbar_->set_workflow_name("Price Alert Auto-Trade");
     } else if (idx == 6) {
         // ── 7. Mean Reversion Strategy ─────────────────────────────

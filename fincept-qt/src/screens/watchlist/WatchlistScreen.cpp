@@ -613,14 +613,14 @@ void WatchlistScreen::populate_table(const QVector<services::QuoteData>& quotes)
         if (it != quote_map.end()) {
             const auto& q = it.value();
             table_->add_row({q.symbol, q.name.isEmpty() ? s.name : q.name, QString("$%1").arg(q.price, 0, 'f', 2),
-                             QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2),
-                             QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2),
+                             std::isfinite(q.change) ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2) : ui::formatting::placeholder(),
+                             ui::formatting::format_percent(q.change_pct, 2, true),
                              QString("$%1").arg(q.high, 0, 'f', 2), QString("$%1").arg(q.low, 0, 'f', 2),
                              ui::formatting::format_compact_volume(q.volume)});
 
             int row = table_->rowCount() - 1;
             // Green = good, Red = bad
-            QString chg_color = q.change_pct >= 0 ? colors::POSITIVE : colors::NEGATIVE;
+            QString chg_color = ui::change_color(q.change_pct);  // neutral when unknown (NaN)
             table_->set_cell_color(row, 3, chg_color);
             table_->set_cell_color(row, 4, chg_color);
         } else {
@@ -760,8 +760,9 @@ void WatchlistScreen::on_export_csv() {
         writer.write_row({q.symbol,
                           q.name.isEmpty() ? s.name : q.name,
                           QString::number(q.price, 'f', 2),
-                          QString::number(q.change, 'f', 2),
-                          QString::number(q.change_pct, 'f', 2),
+                          // Unknown change (NaN) exports as an empty cell, not "nan".
+                          std::isfinite(q.change) ? QString::number(q.change, 'f', 2) : QString(),
+                          std::isfinite(q.change_pct) ? QString::number(q.change_pct, 'f', 2) : QString(),
                           QString::number(q.high, 'f', 2),
                           QString::number(q.low, 'f', 2),
                           ui::formatting::format_compact_volume(q.volume)});

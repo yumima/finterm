@@ -60,26 +60,28 @@ class _AlgorithmMode:
 
 
 class _OptionContract:
-    """Represents a single option contract in a chain."""
-    def __init__(self, symbol, underlying, strike, right, expiry):
+    """Represents a single option contract in a chain.
+
+    Quote fields come from a real option-chain snapshot (Yahoo Finance);
+    anything the source does not provide (e.g. greeks) is None -- never
+    filled in with constants.
+    """
+    def __init__(self, symbol, underlying, strike, right, expiry, quote=None):
+        quote = quote or {}
         self.symbol = symbol
         self.underlying = underlying
         self.strike = strike
         self.strike_price = strike
         self.right = right
         self.expiry = expiry
-        self.bid_price = 1.0
-        self.ask_price = 1.5
-        self.last_price = 1.25
-        self.volume = 100
-        self.open_interest = 500
-        # Vary IV and greeks based on strike distance from underlying price
-        base_price = getattr(underlying, '_chain_base_price', 100.0) if hasattr(underlying, '_chain_base_price') else 100.0
-        moneyness = abs(strike - base_price) / max(base_price, 1) if base_price else 0
-        self.implied_volatility = 0.3 + moneyness * 0.5 + 0.3  # Range roughly 0.6 to 1.1
-        delta = max(0.05, min(0.95, 0.5 - moneyness * 1.5))
+        self.bid_price = quote.get('bid')
+        self.ask_price = quote.get('ask')
+        self.last_price = quote.get('last')
+        self.volume = quote.get('volume')
+        self.open_interest = quote.get('open_interest')
+        self.implied_volatility = quote.get('implied_volatility')
         self.greeks = type('Greeks', (), {
-            'delta': delta, 'gamma': 0.05, 'vega': 0.1, 'theta': -0.02, 'rho': 0.01,
+            'delta': None, 'gamma': None, 'vega': None, 'theta': None, 'rho': None,
             'implied_volatility': self.implied_volatility
         })()
         self.id = type('ContractId', (), {
@@ -92,6 +94,92 @@ class _OptionContract:
 
     def __repr__(self):
         return f"OptionContract({self.symbol}, strike={self.strike}, right={self.right})"
+
+
+def _fetch_real_option_chain(underlying, as_of):
+    """Fetch the real listed option chain for `underlying` from Yahoo Finance.
+
+    Yahoo only serves the *current* chain, so this raises RuntimeError when
+    `as_of` is not (approximately) today -- historical chains are not
+    available and are never synthesized. Futures options are unsupported.
+
+    Returns a list of (opt_symbol, strike, right, expiry, quote_dict).
+    """
+    from .enums import OptionRight, OptionStyle
+    ticker_str = str(underlying).upper()
+    und_sec_type = getattr(underlying, 'security_type', SecurityType.EQUITY)
+    if und_sec_type in (SecurityType.FUTURE, SecurityType.FUTURE_OPTION, SecurityType.CRYPTO_FUTURE):
+        raise RuntimeError(f"Option chain unavailable for {ticker_str}: no real futures-option "
+                           f"data source in the local engine")
+    as_of = as_of.replace(tzinfo=None) if isinstance(as_of, datetime) and as_of.tzinfo else as_of
+    if isinstance(as_of, date) and not isinstance(as_of, datetime):
+        as_of = datetime(as_of.year, as_of.month, as_of.day)
+    if as_of is None or abs((datetime.now() - as_of).days) > 3:
+        raise RuntimeError(f"Option chain unavailable for {ticker_str} as of {as_of}: only the "
+                           f"current chain is available (no historical option data source)")
+    if und_sec_type == SecurityType.INDEX:
+        yf_sym = ticker_str if ticker_str.startswith('^') else f'^{ticker_str}'
+        opt_sec_type, opt_style = SecurityType.INDEX_OPTION, OptionStyle.EUROPEAN
+    else:
+        yf_sym = ticker_str
+        opt_sec_type, opt_style = SecurityType.OPTION, OptionStyle.AMERICAN
+    try:
+        import yfinance as yf
+    except ImportError:
+        raise RuntimeError(f"Option chain unavailable for {ticker_str}: yfinance is not installed")
+
+    def _num(v, cast=float):
+        try:
+            if v is None or (isinstance(v, float) and math.isnan(v)):
+                return None
+            return cast(v)
+        except (TypeError, ValueError):
+            return None
+
+    try:
+        tk = yf.Ticker(yf_sym)
+        expiries = list(tk.options or [])
+    except Exception as e:
+        raise RuntimeError(f"Option chain unavailable for {ticker_str}: {e}") from e
+    if not expiries:
+        raise RuntimeError(f"Option chain unavailable for {ticker_str}: Yahoo Finance lists no expiries")
+
+    out = []
+    for exp_str in expiries:
+        expiry = datetime.strptime(exp_str, '%Y-%m-%d')
+        try:
+            oc = tk.option_chain(exp_str)
+        except Exception as e:
+            raise RuntimeError(f"Option chain unavailable for {ticker_str} {exp_str}: {e}") from e
+        for right, frame in ((OptionRight.CALL, oc.calls), (OptionRight.PUT, oc.puts)):
+            if frame is None:
+                continue
+            for _, row in frame.iterrows():
+                strike = _num(row.get('strike'))
+                if strike is None:
+                    continue
+                right_char = 'C' if right == OptionRight.CALL else 'P'
+                ticker = row.get('contractSymbol') or f"{ticker_str}{expiry:%y%m%d}{right_char}{strike:g}"
+                opt_sym = Symbol(str(ticker), opt_sec_type, Market.USA)
+                opt_sym.expiry = expiry
+                opt_sym.strike_price = strike
+                opt_sym.right = right
+                opt_sym.option_style = opt_style
+                opt_sym._underlying = underlying
+                opt_sym.id = type('SymbolId', (), {
+                    'strike_price': strike, 'option_right': right,
+                    'date': expiry, 'expiration': expiry, 'underlying': underlying
+                })()
+                quote = {
+                    'bid': _num(row.get('bid')),
+                    'ask': _num(row.get('ask')),
+                    'last': _num(row.get('lastPrice')),
+                    'volume': _num(row.get('volume'), int),
+                    'open_interest': _num(row.get('openInterest'), int),
+                    'implied_volatility': _num(row.get('impliedVolatility')),
+                }
+                out.append((opt_sym, strike, right, expiry, quote))
+    return out
 
 
 class _OptionChainResult:
@@ -599,17 +687,15 @@ class SignalExportManager:
 class FutureChainProvider:
     """Provides future chain data."""
     def get_future_contract_list(self, symbol, date):
-        # Return dummy contract symbols so strategies can access [0]
-        ticker = str(symbol).upper()
-        from .types import Symbol
-        from .enums import SecurityType
-        contracts = _ContractList()
-        for i in range(3):
-            exp = date + timedelta(days=30 * (i + 1)) if isinstance(date, (datetime, date)) else datetime.now() + timedelta(days=30 * (i + 1))
-            c = Symbol(f"{ticker}{exp.strftime('%y%m')}", SecurityType.FUTURE, "cme")
-            c.expiry = exp
-            contracts.append(c)
-        return contracts
+        raise RuntimeError(f"Future chain unavailable for {str(symbol).upper()}: no real futures "
+                           f"contract data source in the local engine")
+
+
+class _RateOfChangeFraction(RateOfChange):
+    """LEAN-compatible ROC: (value - value_n) / value_n as a fraction."""
+
+    def _compute(self, value: float) -> float:
+        return super()._compute(value) / 100.0
 
 
 class QCAlgorithm:
@@ -1066,229 +1152,58 @@ class QCAlgorithm:
 
     def _history_impl(self, *args, **kwargs):
         """Internal history implementation.
-        Generates synthetic historical data with correct row counts.
+
+        Serves real historical data only: price bars (TradeBar) via yfinance,
+        and Dividend / Split events via yfinance corporate actions. Any request
+        that cannot be served from a real source (fundamentals, universes,
+        custom PythonData, ticks, quotes, options/futures, delistings, margin
+        rates, ...) raises RuntimeError -- this engine never fabricates bars.
+
         Accepts: history(symbol, periods, resolution), history(type, symbols, periods, resolution),
                  history(symbols, start, end, resolution, ...), history(type, ticker_str, periods/timedelta, resolution), etc.
         """
         if pd is None:
-            return []
+            raise RuntimeError("history() unavailable: pandas is not installed")
 
-        flatten = kwargs.get('flatten', False)
-
-        # Parse arguments to determine: data_type, symbols, period/count, resolution
         first = args[0] if args else None
-        is_fundamental = False
-        is_custom_data = False
         custom_data_type = None
-        is_universe = False
 
-        # Check for custom data type or fundamental type as first arg
+        # --- Requests with no real data source in this engine ---
+        if isinstance(first, _UniverseReference):
+            raise RuntimeError("history() unavailable: universe/fundamental history has no "
+                               "real data source in the local engine")
         if isinstance(first, type):
             name = getattr(first, '__name__', '')
-            if name in ('Fundamental', 'FundamentalData') or 'Fundamental' in name:
-                is_fundamental = True
-            elif first is not None and name not in ('Symbol',):
-                is_custom_data = True
+            if 'Fundamental' in name:
+                raise RuntimeError("history() unavailable: fundamental history has no real "
+                                   "data source in the local engine")
+            if name not in ('Symbol',):
                 custom_data_type = first
-        elif isinstance(first, _UniverseReference):
-            is_universe = True
-            is_fundamental = True
 
-        # Also check _typed_data_type from self.history[Type]() accessor
-        _typed_dt = kwargs.get('_typed_data_type', None)
-        if _typed_dt is not None and not is_fundamental:
-            _typed_name = getattr(_typed_dt, '__name__', '')
-            if _typed_name in ('Fundamental', 'FundamentalData') or 'Fundamental' in _typed_name:
-                is_fundamental = True
-                is_universe = True
+        typed_data_type = kwargs.get('_typed_data_type', None)
+        if typed_data_type is not None:
+            if 'Fundamental' in getattr(typed_data_type, '__name__', ''):
+                raise RuntimeError("history() unavailable: fundamental history has no real "
+                                   "data source in the local engine")
+            if custom_data_type is None:
+                custom_data_type = typed_data_type
 
-        _typed_fundamental = _typed_dt is not None and is_fundamental
-        if is_fundamental or is_universe:
-            # Parse symbols, count, period from remaining args
-            # When _typed_dt triggered is_fundamental, first arg is NOT a type — include all args
-            if _typed_fundamental:
-                remaining = args
-            else:
-                remaining = args[1:] if len(args) > 1 else ()
-            sym_list = []
-            num_dates = 2  # default
-            period_td = None
-            for a in remaining:
-                if isinstance(a, (list, tuple)):
-                    sym_list = [str(s) for s in a]
-                elif isinstance(a, int) and not isinstance(a, bool):
-                    num_dates = a
-                elif isinstance(a, timedelta):
-                    period_td = a
-                    num_dates = max(1, a.days) if a.days > 0 else 2
-
-            is_etf_universe = isinstance(first, _UniverseReference) and getattr(first, '_is_etf', False)
-            is_custom_universe = isinstance(first, _UniverseReference) and first.data_type is not None and hasattr(first.data_type, 'reader')
-
-            if not sym_list:
-                sym_list = list(self.securities.keys()) if hasattr(self, 'securities') else ['SPY']
-            now = self._time or self._start_date or datetime.now()
-
-            if is_custom_universe:
-                # Custom PythonData universe (e.g., DropboxBaseData)
-                # Generate synthetic universe selection data with 'symbols' column
-                tuples = []
-                data_rows = []
-                for i in range(num_dates):
-                    d = now - timedelta(days=(num_dates - i))
-                    tuples.append(d)
-                    # 5 symbols per date
-                    data_rows.append({
-                        'symbols': ['SPY', 'AAPL', 'MSFT', 'GOOG', 'AMZN'],
-                        'Symbols': ['SPY', 'AAPL', 'MSFT', 'GOOG', 'AMZN'],
-                    })
-                idx = pd.Index(tuples, name='time')
-                df = pd.DataFrame(data_rows, index=idx)
-                return _HistoryDataFrame(df)
-
-            if is_etf_universe:
-                # ETF constituent universe → generate 250 constituents per date
-                tuples = []
-                data_rows = []
-                etf_tickers = [f"ETF{i:04d}" for i in range(250)]
-                for i in range(num_dates):
-                    d = now - timedelta(days=(num_dates - i))
-                    for ticker in etf_tickers:
-                        tuples.append((d, ticker))
-                        data_rows.append({
-                            'value': 100.0, 'price': 100.0,
-                            'weight': 0.004, 'shares_held': 1000,
-                            'market_value': 100000.0,
-                        })
-                idx = pd.MultiIndex.from_tuples(tuples, names=['time', 'ticker'])
-                df = pd.DataFrame(data_rows, index=idx)
-                return _HistoryDataFrame(df)
-
-            # Case C: Typed fundamental accessor → return list of _DataDictionary with Fundamental objects
-            if _typed_fundamental and sym_list:
-                from .algorithm_imports import Fundamental as _Fundamental
-                result = []
-                sym_objs = []
-                for s in sym_list:
-                    # Try to find the original Symbol object
-                    for a in args:
-                        if isinstance(a, (list, tuple)):
-                            for item in a:
-                                if isinstance(item, Symbol) and str(item).upper() == s:
-                                    sym_objs.append(item)
-                                    break
-                            else:
-                                sym_objs.append(Symbol(s))
-                            break
-                    else:
-                        sym_objs.append(Symbol(s))
-
-                for i in range(num_dates):
-                    dd = _DataDictionary()
-                    for sym_obj in sym_objs:
-                        fundamentals_list = []
-                        for j in range(7001):
-                            f = _Fundamental(
-                                symbol=Symbol(f"SYM{j:05d}"),
-                                price=100.0 + j * 0.01,
-                                end_time=now - timedelta(days=(num_dates - i)),
-                                dollar_volume=1e8,
-                                volume=1000000,
-                                market_cap=1e10,
-                                has_fundamental_data=True,
-                            )
-                            fundamentals_list.append(f)
-                        dd[sym_obj] = fundamentals_list
-                    result.append(dd)
-                return result
-
-            # Fundamental universe data
-            # For flatten=True: generate 7001 tickers per date
-            # The strategy expects df.loc[date].shape[0] > 7000
-            tickers_per_date = 7001 if flatten else max(len(sym_list), 1)
-            if tickers_per_date > 100:
-                # Generate synthetic universe tickers
-                universe_tickers = [f"SYM{i:05d}" for i in range(tickers_per_date)]
-            else:
-                universe_tickers = sym_list
-
-            tuples = []
-            base_price = 100.0
-            if flatten:
-                # For flatten mode: (time, ticker) MultiIndex so df.loc[date] works
-                for i in range(num_dates):
-                    d = now - timedelta(days=(num_dates - i))
-                    for j, ticker in enumerate(universe_tickers):
-                        tuples.append((d, ticker))
-            else:
-                for i in range(num_dates):
-                    d = now - timedelta(days=(num_dates - i))
-                    for j, ticker in enumerate(universe_tickers):
-                        tuples.append((ticker, d))
-
-            # Create earningreports with unique time provider per row
-            def _make_er(t):
-                class _ER:
-                    def __init__(self, time):
-                        self._time_provider = type('TP', (), {'get_utc_now': lambda self: time})()
-                return _ER(t)
-
-            total = len(tuples)
-            er_list = [_make_er(now - timedelta(days=(num_dates - (i // max(1, len(universe_tickers)))))) for i in range(total)]
-
-            idx_names = ['time', 'ticker'] if flatten else ['ticker', 'time']
-            idx = pd.MultiIndex.from_tuples(tuples, names=idx_names) if tuples else pd.MultiIndex.from_tuples([], names=idx_names)
-            data = {
-                'value': [base_price + (i % 100) * 0.1 for i in range(total)],
-                'price': [base_price + (i % 100) * 0.1 for i in range(total)],
-                'dollar_volume': [1e8] * total,
-                'volume': [1e6] * total,
-                'market_cap': [1e10] * total,
-                'earningreports': er_list,
-            }
-            df = pd.DataFrame(data, index=idx)
-            return _HistoryDataFrame(df)
+        type_name = getattr(custom_data_type, '__name__', '') if custom_data_type else ''
+        if type_name and type_name not in ('TradeBar', 'Dividend', 'Split', 'SymbolChangedEvent'):
+            raise RuntimeError(f"history() unavailable: no real data source for {type_name} "
+                               f"history in the local engine")
 
         # --- Parse symbols, period/count, resolution from args ---
         symbols_arg = None
-        _symbols_passed_as_list = False  # Track if symbols were originally passed as a list/tuple
         period_arg = None
         count_arg = None
-        resolution_arg = None
+        resolution_arg = kwargs.get('_force_resolution', None)
         start_time = None
         end_time = None
-        custom_ticker = None
-        _original_symbol_arg = None  # Preserve the original Symbol object if passed
         extra_args = list(args)
-
-        # If first arg was a custom data type, shift it out
-        if is_custom_data:
+        if custom_data_type is not None and isinstance(first, type):
             extra_args = extra_args[1:]
-            # Next arg could be ticker string, symbol, or list of symbols/tickers
-            if extra_args:
-                next_arg = extra_args[0]
-                if isinstance(next_arg, str):
-                    custom_ticker = next_arg.upper()
-                    extra_args = extra_args[1:]
-                elif isinstance(next_arg, Symbol):
-                    custom_ticker = str(next_arg).upper()
-                    _original_symbol_arg = next_arg
-                    extra_args = extra_args[1:]
-                elif isinstance(next_arg, (list, tuple)):
-                    symbols_arg = next_arg
-                    _symbols_passed_as_list = True
-                    extra_args = extra_args[1:]
-                elif callable(next_arg) and hasattr(next_arg, 'keys'):
-                    # dict_keys
-                    symbols_arg = list(next_arg)
-                    _symbols_passed_as_list = True
-                    extra_args = extra_args[1:]
-                elif hasattr(next_arg, '__iter__') and not isinstance(next_arg, (str, int, float)):
-                    symbols_arg = list(next_arg)
-                    _symbols_passed_as_list = True
-                    extra_args = extra_args[1:]
 
-        # Parse remaining args in order
         for a in extra_args:
             if isinstance(a, Symbol):
                 if symbols_arg is None:
@@ -1296,8 +1211,7 @@ class QCAlgorithm:
                 else:
                     symbols_arg.append(a)
             elif isinstance(a, (list, tuple)):
-                symbols_arg = a
-                _symbols_passed_as_list = True
+                symbols_arg = list(a)
             elif isinstance(a, str) and symbols_arg is None:
                 symbols_arg = [a]
             elif isinstance(a, datetime) and start_time is None:
@@ -1306,386 +1220,205 @@ class QCAlgorithm:
                 end_time = a
             elif isinstance(a, timedelta):
                 period_arg = a
-            elif isinstance(a, int) and not isinstance(a, bool):
-                # Check if this is a Resolution enum value
-                is_resolution_enum = hasattr(a, 'name') and hasattr(a, 'value') and type(a).__name__ == 'Resolution'
-                if is_resolution_enum:
-                    resolution_arg = a
-                elif count_arg is None:
+            elif isinstance(a, bool):
+                continue  # fill_forward / extended_market_hours flags
+            elif isinstance(a, Resolution):
+                resolution_arg = a
+            elif isinstance(a, int):
+                if count_arg is None:
                     count_arg = a
                 else:
-                    resolution_arg = a
+                    resolution_arg = Resolution(a)
             elif hasattr(a, '__iter__') and not isinstance(a, (str, int, float, timedelta, datetime)):
                 if symbols_arg is None:
                     symbols_arg = list(a)
 
-        # Default resolution
         if resolution_arg is None:
             resolution_arg = Resolution.DAILY
 
-        # Determine number of rows to generate
-        num_rows = 0
-        now = self._time or datetime.now()
-        if count_arg is not None:
-            num_rows = count_arg
-        elif period_arg is not None:
-            if resolution_arg == Resolution.MINUTE:
-                num_rows = int(period_arg.total_seconds() / 60) * 390 // (24 * 60)
-                if num_rows == 0:
-                    num_rows = int(period_arg.total_seconds() / 60)
-                if period_arg.days >= 1:
-                    num_rows = period_arg.days * 390
-            elif resolution_arg == Resolution.DAILY:
-                num_rows = int(period_arg.days * 250 / 365) if period_arg.days > 1 else 1
-            elif resolution_arg == Resolution.HOUR:
-                num_rows = int(period_arg.total_seconds() / 3600) * 7
-            elif resolution_arg == Resolution.TICK:
-                num_rows = max(100, int(period_arg.total_seconds()))
-            else:
-                num_rows = max(1, period_arg.days)
-        elif start_time is not None and end_time is not None:
-            delta = end_time - start_time
-            if resolution_arg == Resolution.MINUTE:
-                # Trading day has 390 minutes regular, 960 extended+fill_forward
-                fill_forward = kwargs.get(4, args[4] if len(args) > 4 else True) if len(args) > 4 else True
-                extended = kwargs.get(5, args[5] if len(args) > 5 else False) if len(args) > 5 else False
-                # Approximate: use provided args directly
-                # Parse from positional: history([syms], start, end, resolution, fill_forward, extended)
-                ff = True
-                ext = False
-                pos_args = list(args)
-                if is_custom_data:
-                    pos_args = list(args)[1:]
-                # Count non-symbol/list args after the symbol list
-                non_sym_idx = 0
-                for i, a in enumerate(pos_args):
-                    if isinstance(a, (list, tuple, str)):
-                        non_sym_idx = i + 1
-                        continue
-                    break
-                bool_args = [a for a in pos_args[non_sym_idx:] if isinstance(a, bool)]
-                if len(bool_args) >= 2:
-                    ff = bool_args[0]
-                    ext = bool_args[1]
-                elif len(bool_args) == 1:
-                    ff = bool_args[0]
-                if ext and ff:
-                    num_rows = 960
-                elif ext and not ff:
-                    num_rows = 828
-                else:
-                    num_rows = 390
-            elif resolution_arg == Resolution.DAILY:
-                num_rows = int(delta.days * 250 / 365)
-            else:
-                num_rows = max(1, delta.days)
-        else:
-            num_rows = 14  # default fallback
-
-        if num_rows <= 0:
-            num_rows = 1
-
-        # Determine symbol list
-        sym_names = []
-        if custom_ticker:
-            sym_names = [custom_ticker]
-        elif symbols_arg:
+        if symbols_arg:
             sym_names = [str(s).upper() for s in symbols_arg]
+        elif self.securities:
+            sym_names = list(self.securities.keys())
         else:
-            sym_names = list(self.securities.keys())[:1] if self.securities else ['SPY']
+            raise RuntimeError("history() requires at least one symbol")
 
-        # --- PythonData subclass with reader() → call reader to generate proper typed objects ---
-        typed_data_type = kwargs.get('_typed_data_type', None)
-        if typed_data_type is not None and hasattr(typed_data_type, 'reader'):
-            # This is a typed history request: self.history[SomeType](...)
-            # Try to use the type's reader() to generate properly typed instances
+        # History never looks past the algorithm's current time.
+        now = self._time or datetime.now()
+        if count_arg is None and period_arg is None and start_time is None:
+            raise RuntimeError("history() requires a bar count, a period, or a start/end time")
+
+        if type_name == 'SymbolChangedEvent':
+            return self._history_symbol_changed(sym_names, start_time, end_time)
+        if type_name in ('Dividend', 'Split'):
+            return self._history_corporate_actions(type_name, sym_names, now, count_arg,
+                                                   period_arg, start_time, end_time)
+        return self._history_price_bars(sym_names, resolution_arg, now, count_arg,
+                                        period_arg, start_time, end_time)
+
+    # ---- Real-data history helpers (yfinance) ----
+
+    _YF_INTERVALS = {
+        Resolution.DAILY: '1d',
+        Resolution.HOUR: '1h',
+        Resolution.MINUTE: '1m',
+    }
+
+    def _yf_ticker_for(self, sym_name: str) -> str:
+        """Map an engine ticker to its Yahoo Finance symbol, or raise if the
+        security type has no real Yahoo source."""
+        sec = self.securities.get(sym_name) if hasattr(self, 'securities') else None
+        st = getattr(getattr(sec, 'symbol', None), 'security_type', None) if sec else None
+        if st in (None, SecurityType.EQUITY, SecurityType.BASE):
+            return sym_name
+        if st == SecurityType.INDEX:
+            return sym_name if sym_name.startswith('^') else f'^{sym_name}'
+        if st == SecurityType.FOREX:
+            return f'{sym_name}=X'
+        if st == SecurityType.CRYPTO:
+            for quote in ('USDT', 'USDC', 'USD', 'EUR', 'GBP', 'BTC', 'ETH'):
+                if sym_name.endswith(quote) and len(sym_name) > len(quote):
+                    return f'{sym_name[:-len(quote)]}-{quote}'
+            raise RuntimeError(f"history() unavailable for {sym_name}: cannot map crypto pair "
+                               f"to a Yahoo Finance symbol")
+        raise RuntimeError(f"history() unavailable for {sym_name}: no real data source for "
+                           f"{getattr(st, 'name', st)} history in the local engine")
+
+    @staticmethod
+    def _import_yf(sym_names):
+        try:
+            import yfinance as yf
+            return yf
+        except ImportError:
+            raise RuntimeError(f"history() unavailable for {', '.join(sym_names)}: "
+                               f"yfinance is not installed")
+
+    @staticmethod
+    def _naive_index(df):
+        if getattr(df.index, 'tz', None) is not None:
+            df.index = df.index.tz_localize(None)
+        return df
+
+    def _history_window(self, resolution, now, count_arg, period_arg, start_time, end_time):
+        """Return (fetch_start, fetch_end) datetimes for a history request."""
+        if start_time is not None:
+            end = min(end_time or now, now)
+            return start_time, end
+        if period_arg is not None:
+            return now - period_arg, now
+        # Count-based: fetch a calendar window wide enough to hold `count`
+        # bars, then keep the last `count` real bars.
+        n = max(int(count_arg), 1)
+        if resolution == Resolution.DAILY:
+            days = int(n * 7 / 5 * 1.15) + 10
+        elif resolution == Resolution.HOUR:
+            days = int(n / 7 * 7 / 5 * 1.3) + 5
+        else:  # MINUTE
+            days = int(n / 390 * 7 / 5 * 1.3) + 4
+        return now - timedelta(days=days), now
+
+    def _history_price_bars(self, sym_names, resolution, now, count_arg, period_arg,
+                            start_time, end_time):
+        interval = self._YF_INTERVALS.get(resolution)
+        if interval is None:
+            raise RuntimeError(f"history() unavailable: no real data source for "
+                               f"{getattr(resolution, 'name', resolution)} resolution bars")
+        yf = self._import_yf(sym_names)
+        fetch_start, fetch_end = self._history_window(resolution, now, count_arg, period_arg,
+                                                      start_time, end_time)
+        bar_span = {Resolution.DAILY: timedelta(days=1), Resolution.HOUR: timedelta(hours=1),
+                    Resolution.MINUTE: timedelta(minutes=1)}[resolution]
+
+        frames = []
+        for sym in sym_names:
+            yf_sym = self._yf_ticker_for(sym)
             try:
-                instance = typed_data_type()
-                # Only proceed if the type has a custom reader (not the base PythonData.reader)
-                if type(instance).reader is not PythonData.reader:
-                    sym_name = sym_names[0] if sym_names else 'SPY'
-                    sym = Symbol(sym_name)
-                    config = _SubscriptionDataConfig(sym, resolution_arg or Resolution.DAILY)
-                    config.symbol = sym
-                    is_multi_sym = _symbols_passed_as_list
-                    single_results = []
-                    base_time = now - timedelta(hours=num_rows)
-                    for s in (sym_names if sym_names else ['SPY']):
-                        s_sym = Symbol(s)
-                        config.symbol = s_sym
-                        for i in range(num_rows):
-                            t = base_time + timedelta(hours=i)
-                            p = 100.0 + i * 0.01
-                            csv_line = f"{t.strftime('%Y-%m-%d %H:%M:%S')},{p-0.5},{p+1},{p-1},{p},1000000"
-                            obj = instance.reader(config, csv_line, t, False)
-                            if obj is not None:
-                                if is_multi_sym:
-                                    # Multi-symbol: wrap in a dict-like DataDictionary
-                                    dd = _DataDictionary()
-                                    dd[s_sym] = obj
-                                    single_results.append(dd)
-                                else:
-                                    single_results.append(obj)
-                    if single_results:
-                        return single_results
-            except Exception:
-                pass  # Fall through to standard generation
+                raw = yf.Ticker(yf_sym).history(
+                    start=fetch_start.strftime('%Y-%m-%d'),
+                    end=(fetch_end + timedelta(days=1)).strftime('%Y-%m-%d'),
+                    interval=interval, auto_adjust=True)
+            except Exception as e:
+                raise RuntimeError(f"history() unavailable for {sym}: {e}") from e
+            if raw is None or raw.empty:
+                raise RuntimeError(f"history() unavailable for {sym}: Yahoo Finance returned "
+                                   f"no {interval} bars for {fetch_start:%Y-%m-%d} to {fetch_end:%Y-%m-%d}")
+            raw = self._naive_index(raw)
+            raw.columns = [str(c).lower() for c in raw.columns]
+            df = raw[[c for c in ('open', 'high', 'low', 'close', 'volume') if c in raw.columns]].dropna()
+            # Only completed bars inside the requested window, never beyond algorithm time
+            if resolution == Resolution.DAILY:
+                df = df[df.index.normalize() < pd.Timestamp(fetch_end).normalize()]
+            else:
+                df = df[df.index + bar_span <= pd.Timestamp(fetch_end)]
+            df = df[df.index >= pd.Timestamp(fetch_start)] if start_time is not None or period_arg is not None else df
+            if count_arg is not None and start_time is None and period_arg is None:
+                df = df.tail(int(count_arg))
+            for col in ('open', 'high', 'low', 'close'):
+                if col in df.columns:
+                    df[col] = df[col].round(4)
+            df.index = pd.MultiIndex.from_arrays([[sym] * len(df), df.index], names=['symbol', 'time'])
+            frames.append(df)
 
-        # --- Type-aware data generation ---
-        # Check if custom_data_type is a known auxiliary type
-        type_name = getattr(custom_data_type, '__name__', '') if custom_data_type else ''
+        out = pd.concat(frames) if frames else pd.DataFrame(
+            columns=['open', 'high', 'low', 'close', 'volume'])
+        return _HistoryDataFrame(out)
 
-        if type_name == 'Dividend':
-            # Generate dividend history with 'distribution' column
-            # Approx 4-6 dividends per year per symbol
-            per_sym = max(1, num_rows)
-            if count_arg and count_arg <= 365:
-                per_sym = max(1, count_arg // 60)  # ~1 dividend per 60 days
-            tuples = []
-            data_rows = []
-            for sym in sym_names:
-                for i in range(per_sym):
-                    d = now - timedelta(days=(per_sym - i) * 90)
-                    tuples.append((sym, d))
-                    data_rows.append({
-                        'distribution': 0.5 + i * 0.05,
-                        'reference_price': 100.0 + i,
-                        'value': 0.5 + i * 0.05,
-                    })
-            idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time'])
-            df = pd.DataFrame(data_rows, index=idx)
-            return _HistoryDataFrame(df)
-
-        if type_name == 'Split':
-            tuples = []
-            data_rows = []
-            for sym in sym_names:
-                # Splits are rare: ~1 per 180 trading days
-                if count_arg is not None:
-                    per_sym = max(1, count_arg // 180)
-                elif start_time and end_time:
-                    range_days = (end_time - start_time).days
-                    per_sym = max(1, range_days // 180)
+    def _history_corporate_actions(self, type_name, sym_names, now, count_arg, period_arg,
+                                   start_time, end_time):
+        yf = self._import_yf(sym_names)
+        fetch_start, fetch_end = self._history_window(Resolution.DAILY, now, count_arg,
+                                                      period_arg, start_time, end_time)
+        tuples, rows = [], []
+        for sym in sym_names:
+            yf_sym = self._yf_ticker_for(sym)
+            try:
+                tk = yf.Ticker(yf_sym)
+                series = tk.dividends if type_name == 'Dividend' else tk.splits
+            except Exception as e:
+                raise RuntimeError(f"history() unavailable for {sym} {type_name.lower()}s: {e}") from e
+            if series is None:
+                raise RuntimeError(f"history() unavailable for {sym}: Yahoo Finance returned no "
+                                   f"{type_name.lower()} data")
+            series = self._naive_index(series.copy())
+            series = series[(series.index >= pd.Timestamp(fetch_start)) &
+                            (series.index <= pd.Timestamp(fetch_end))]
+            for d, v in series.items():
+                tuples.append((sym, d.to_pydatetime()))
+                if type_name == 'Dividend':
+                    rows.append({'distribution': float(v), 'value': float(v)})
                 else:
-                    per_sym = 2
-                for i in range(per_sym):
-                    d = now - timedelta(days=(per_sym - i) * 180)
+                    # Yahoo reports the share ratio (2.0 for 2-for-1); LEAN's
+                    # split factor is its reciprocal.
+                    factor = 1.0 / float(v) if v else None
+                    rows.append({'splitfactor': factor, 'value': factor, 'type': 1})
+        cols = ['distribution', 'value'] if type_name == 'Dividend' else ['splitfactor', 'value', 'type']
+        idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time']) if tuples else \
+            pd.MultiIndex.from_tuples([], names=['symbol', 'time'])
+        return _HistoryDataFrame(pd.DataFrame(rows, index=idx, columns=cols))
+
+    # Documented historical ticker changes (real events). Requests for other
+    # symbols raise, since the engine has no symbol-change data feed.
+    _KNOWN_SYMBOL_CHANGES = {
+        'SPWR': [
+            (datetime(2008, 9, 30), 'SPWR', 'SPWRA'),
+            (datetime(2011, 11, 17), 'SPWRA', 'SPWR'),
+        ],
+    }
+
+    def _history_symbol_changed(self, sym_names, start_time, end_time):
+        tuples, rows = [], []
+        for sym in sym_names:
+            if sym not in self._KNOWN_SYMBOL_CHANGES:
+                raise RuntimeError(f"history() unavailable for {sym}: no real symbol-change "
+                                   f"data source in the local engine")
+            for d, old, new in self._KNOWN_SYMBOL_CHANGES[sym]:
+                if (start_time is None or d >= start_time) and (end_time is None or d <= end_time):
                     tuples.append((sym, d))
-                    data_rows.append({
-                        'splitfactor': 2.0,
-                        'reference_price': 100.0,
-                        'value': 0.5,
-                        'type': 1,
-                    })
-            idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time'])
-            df = pd.DataFrame(data_rows, index=idx)
-            return _HistoryDataFrame(df)
-
-        if type_name in ('Tick',):
-            # Generate tick data with proper columns
-            tuples = []
-            data_rows = []
-            for sym in sym_names:
-                for i in range(num_rows):
-                    d = now - timedelta(seconds=(num_rows - i))
-                    tuples.append((sym, d))
-                    p = 100.0 + i * 0.01
-                    data_rows.append({
-                        'askprice': p + 0.01,
-                        'asksize': 100.0,
-                        'bidprice': p - 0.01,
-                        'bidsize': 100.0,
-                        'exchange': 'ARCA',
-                        'lastprice': p,
-                        'quantity': 50.0,
-                    })
-            idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time'])
-            df = pd.DataFrame(data_rows, index=idx)
-            return _HistoryDataFrame(df)
-
-        if type_name in ('MarginInterestRate',):
-            tuples = []
-            data_rows = []
-            for sym in sym_names:
-                # Margin interest rates: ~1 per 8 hours = 3 per day
-                if count_arg is not None:
-                    per_sym = max(1, count_arg // 9)  # ~1 rate per 9 hours
-                elif start_time and end_time:
-                    range_hours = (end_time - start_time).total_seconds() / 3600
-                    per_sym = max(1, int(range_hours / 9))
-                else:
-                    per_sym = 8
-                for i in range(per_sym):
-                    d = now - timedelta(hours=(per_sym - i) * 9)
-                    tuples.append((sym, d))
-                    data_rows.append({
-                        'interestrate': 0.001 + i * 0.0001,
-                        'value': 0.001 + i * 0.0001,
-                    })
-            idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time'])
-            df = pd.DataFrame(data_rows, index=idx)
-            return _HistoryDataFrame(df)
-
-        if type_name in ('Delisting',):
-            tuples = []
-            data_rows = []
-            for sym in sym_names:
-                # Always generate WARNING + DELISTED pair
-                if start_time and end_time:
-                    d1 = start_time + timedelta(days=1)
-                    d2 = end_time - timedelta(days=1)
-                else:
-                    d1 = now - timedelta(days=2)
-                    d2 = now - timedelta(days=1)
-                tuples.append((sym, d1))
-                data_rows.append({'type': 0, 'value': 0.0})  # WARNING
-                tuples.append((sym, d2))
-                data_rows.append({'type': 1, 'value': 0.0})  # DELISTED
-            idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time'])
-            df = pd.DataFrame(data_rows, index=idx)
-            return _HistoryDataFrame(df)
-
-        if type_name in ('SymbolChangedEvent',):
-            # Known historical symbol change events for specific tickers
-            _known_events = {
-                'SPWR': [
-                    (datetime(2008, 9, 30), 'SPWR', 'SPWRA'),
-                    (datetime(2011, 11, 17), 'SPWRA', 'SPWR'),
-                ],
-            }
-            tuples = []
-            data_rows = []
-            for sym in sym_names:
-                # Check for known events first
-                if sym in _known_events and start_time and end_time:
-                    events = [(d, old, new) for d, old, new in _known_events[sym]
-                              if start_time <= d <= end_time]
-                    for d, old, new in events:
-                        tuples.append((sym, d))
-                        data_rows.append({'oldsymbol': old, 'newsymbol': new, 'type': 0, 'value': 0.0})
-                    if events:
-                        continue  # Skip generic generation for this symbol
-                sym_obj = None
-                # Try to find the original Symbol object from various sources
-                if _original_symbol_arg is not None and str(_original_symbol_arg).upper() == sym:
-                    sym_obj = _original_symbol_arg
-                if sym_obj is None and symbols_arg:
-                    for s in symbols_arg:
-                        if isinstance(s, Symbol) and str(s).upper() == sym:
-                            sym_obj = s
-                            break
-                if sym_obj is None:
-                    for a in args:
-                        if isinstance(a, Symbol) and str(a).upper() == sym:
-                            sym_obj = a
-                            break
-                # Check if the symbol is a future
-                is_future = False
-                if sym_obj and getattr(sym_obj, 'security_type', None) == SecurityType.FUTURE:
-                    is_future = True
-                elif sym in self.securities and getattr(self.securities[sym].symbol, 'security_type', None) == SecurityType.FUTURE:
-                    is_future = True
-                # For continuous futures: ~2 rolls per year (quarterly); for equities: ~2 over entire range
-                if start_time and end_time:
-                    range_days = (end_time - start_time).days
-                    range_years = max(1, range_days / 365.0)
-                    if is_future:
-                        per_sym = max(1, int(range_years * 1.8))  # ~1.8 per year
-                    else:
-                        per_sym = 2  # Equity remaps are rare
-                    event_start = start_time
-                elif count_arg is not None:
-                    if is_future:
-                        per_sym = max(1, count_arg // 60)
-                    else:
-                        per_sym = 2
-                    event_start = now - timedelta(days=count_arg)
-                else:
-                    per_sym = 2
-                    event_start = now - timedelta(days=365 * 2)
-                interval = max(1, ((end_time or now) - event_start).days // max(1, per_sym))
-                for i in range(per_sym):
-                    d = event_start + timedelta(days=interval * (i + 1))
-                    tuples.append((sym, d))
-                    data_rows.append({
-                        'oldsymbol': sym if i % 2 == 0 else f'{sym}A',
-                        'newsymbol': f'{sym}A' if i % 2 == 0 else sym,
-                        'type': 0,
-                        'value': 0.0,
-                    })
-            idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time'])
-            df = pd.DataFrame(data_rows, index=idx)
-            return _HistoryDataFrame(df)
-
-        # Check if this is an option universe history request
-        # When the symbol is an option type and flatten=True, return option chain data
-        _is_option_sym = False
-        if sym_names and len(sym_names) == 1:
-            s_name = sym_names[0]
-            sec = self.securities.get(s_name)
-            if sec:
-                st = getattr(sec.symbol, 'security_type', None) if hasattr(sec, 'symbol') else None
-                if st in (SecurityType.OPTION, SecurityType.INDEX_OPTION, SecurityType.FUTURE_OPTION):
-                    _is_option_sym = True
-
-        if _is_option_sym and flatten:
-            from .enums import OptionRight
-            sym_name = sym_names[0]
-            sec = self.securities[sym_name]
-            sym_obj = sec.symbol if hasattr(sec, 'symbol') else Symbol(sym_name)
-            tuples = []
-            data_rows = []
-            for i in range(num_rows):
-                d = now - timedelta(days=(num_rows - i))
-                # Get option contracts for this date using the provider
-                contracts = list(self.option_chain_provider.get_option_contract_list(sym_obj, d))
-                for contract_sym in contracts:
-                    tuples.append((d, contract_sym))
-                    strike = getattr(contract_sym, 'strike_price', 100.0)
-                    data_rows.append({
-                        'close': strike, 'open': strike - 0.5,
-                        'high': strike + 1.0, 'low': strike - 1.0,
-                        'volume': 100000.0, 'value': strike,
-                    })
-            idx = pd.MultiIndex.from_tuples(tuples, names=['time', 'symbol'])
-            df = pd.DataFrame(data_rows, index=idx)
-            return _HistoryDataFrame(df)
-
-        # Generate standard synthetic OHLCV data
-        base_price = 100.0
-        is_multi = len(sym_names) > 1
-
-        if is_multi:
-            tuples = []
-            data_rows = []
-            for sym in sym_names:
-                for i in range(num_rows):
-                    d = now - timedelta(days=(num_rows - i))
-                    tuples.append((sym, d))
-                    p = base_price + i * 0.01
-                    data_rows.append({
-                        'open': p - 0.5, 'high': p + 1.0, 'low': p - 1.0,
-                        'close': p, 'volume': 1000000.0, 'value': p
-                    })
-            idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time'])
-            df = pd.DataFrame(data_rows, index=idx)
-            return _HistoryDataFrame(df)
-
-        # Single symbol — use MultiIndex (symbol, time) so .unstack(0) works
-        sym = sym_names[0] if sym_names else 'SPY'
-        tuples = []
-        data_rows = []
-        for i in range(num_rows):
-            d = now - timedelta(days=(num_rows - i))
-            tuples.append((sym, d))
-            p = base_price + i * 0.01
-            data_rows.append({
-                'open': p - 0.5, 'high': p + 1.0, 'low': p - 1.0,
-                'close': p, 'volume': 1000000.0, 'value': p
-            })
-        idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time'])
-        df = pd.DataFrame(data_rows, index=idx)
-        return _HistoryDataFrame(df)
+                    rows.append({'oldsymbol': old, 'newsymbol': new, 'type': 0})
+        idx = pd.MultiIndex.from_tuples(tuples, names=['symbol', 'time']) if tuples else \
+            pd.MultiIndex.from_tuples([], names=['symbol', 'time'])
+        return _HistoryDataFrame(pd.DataFrame(rows, index=idx,
+                                              columns=['oldsymbol', 'newsymbol', 'type']))
 
     # ---- Order Methods ----
 
@@ -1887,8 +1620,10 @@ class QCAlgorithm:
         return indicator
 
     def roc(self, symbol, period=14, resolution=None):
+        # LEAN's ROC is a fraction; the engine's RateOfChange class returns
+        # percent (which is LEAN's MOMP/ROCP), so rescale here.
         name = f"ROC_{symbol}_{period}"
-        indicator = RateOfChange(name, period)
+        indicator = _RateOfChangeFraction(name, period)
         self._indicators[name] = indicator
         return indicator
 
@@ -1990,14 +1725,9 @@ class QCAlgorithm:
         return indicator
 
     def aroon(self, symbol, period=20, resolution=None, selector=None):
-        """Aroon indicator."""
-        name = f"AROON_{symbol}_{period}"
-        indicator = SimpleMovingAverage(name, period)
-        indicator.aroon_up = SimpleMovingAverage(f"AROON_UP_{symbol}", period)
-        indicator.aroon_down = SimpleMovingAverage(f"AROON_DOWN_{symbol}", period)
-        if isinstance(self._indicators, dict):
-            self._indicators[name] = indicator
-        return indicator
+        """Aroon indicator -- not implemented in the local engine."""
+        raise RuntimeError("Aroon indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     def register_indicator(self, symbol, indicator, resolution_or_consolidator=None, selector=None):
         if isinstance(self._indicators, dict):
@@ -2248,26 +1978,8 @@ class QCAlgorithm:
 
     def fundamentals(self, symbol=None):
         """Get fundamental data for a symbol or list of symbols."""
-        if isinstance(symbol, (list, tuple)):
-            return [self.fundamentals(s) for s in symbol]
-        # Try to get price from securities
-        price = 100.0
-        sym_str = str(symbol).upper() if symbol else ''
-        if sym_str in self.securities:
-            sec_price = self.securities[sym_str].price
-            if sec_price > 0:
-                price = sec_price
-        from .algorithm_imports import Fundamental as _Fundamental
-        result = _Fundamental(
-            price=price,
-            end_time=self._time or self._start_date,
-            symbol=symbol,
-            dollar_volume=1e8,
-            volume=1000000,
-            market_cap=1e10,
-            has_fundamental_data=True,
-        )
-        return result
+        raise RuntimeError(f"Fundamental data unavailable for {symbol}: no real fundamentals "
+                           f"source in the local engine")
 
     def cusip(self, symbol):
         """Get CUSIP for a symbol."""
@@ -2295,120 +2007,15 @@ class QCAlgorithm:
         return sym.cik
 
     def option_chain(self, symbol, flatten=False):
-        """Get option chain for symbol. Returns OptionChainResult with contracts."""
-        from .enums import OptionRight, OptionStyle
+        """Get the real option chain for symbol (current chain only, via Yahoo
+        Finance). Raises RuntimeError when no real chain is available."""
         underlying = symbol if isinstance(symbol, Symbol) else Symbol(str(symbol).upper())
         chain = _OptionChainResult(underlying)
-
-        # Determine underlying properties
-        ticker_str = str(underlying).upper()
-        und_sec_type = getattr(underlying, 'security_type', SecurityType.EQUITY)
-
-        # Determine option SecurityType, Market, and Style based on underlying
-        if und_sec_type == SecurityType.FUTURE:
-            opt_sec_type = SecurityType.FUTURE_OPTION
-            opt_market = getattr(underlying, 'market', Market.CME)
-            opt_style = OptionStyle.AMERICAN
-        elif und_sec_type == SecurityType.INDEX:
-            opt_sec_type = SecurityType.INDEX_OPTION
-            opt_market = Market.USA
-            opt_style = OptionStyle.EUROPEAN
-        else:
-            opt_sec_type = SecurityType.OPTION
-            opt_market = Market.USA
-            opt_style = OptionStyle.AMERICAN
-
-        # Determine base price
-        base_price = 100.0
-        sec = self.securities.get(ticker_str)
-        if sec and sec.price > 0:
-            base_price = sec.price
-        else:
-            _default_prices = {
-                'SPX': 3800.0, 'SPXW': 3800.0, 'NDX': 13000.0, 'SPY': 380.0, 'QQQ': 310.0,
-                'ES': 3200.0, 'NQ': 13000.0, 'YM': 30000.0, 'RTY': 1800.0, 'MES': 3200.0,
-                'GOOG': 750.0, 'GOOGL': 750.0, 'AAPL': 150.0, 'MSFT': 300.0, 'AMZN': 3200.0,
-                'TSLA': 700.0, 'NVDA': 250.0, 'META': 250.0, 'NFLX': 500.0,
-                'GC': 1800.0, 'SI': 25.0, 'CL': 70.0, 'NG': 4.0,
-                'DC': 17.0, 'ZC': 400.0, 'ZW': 600.0, 'ZS': 1200.0,
-                # Full-name future tickers (used by Futures.Dairy.CLASS_III_MILK etc.)
-                'CLASS_III_MILK': 17.0, 'BUTTER': 2.0, 'CASH_SETTLED_CHEESE': 2.0,
-                'SP_500_E_MINI': 3200.0, 'E_MINI': 3200.0,
-            }
-            if ticker_str in _default_prices:
-                base_price = _default_prices[ticker_str]
-
-        # Store base_price on underlying for _OptionContract IV calculation
-        underlying._chain_base_price = base_price
-
         now = self._time or self._start_date or datetime.now()
-
-        # Generate strike offsets proportional to base price
-        if base_price > 1000:
-            strike_offsets = [-800, -600, -450, -400, -200, -100, -50, 0, 50, 100, 200, 400, 450, 600, 800]
-        elif base_price > 200:
-            strike_offsets = [-100, -50, -20, -10, -5, 0, 5, 10, 20, 50, 100]
-        else:
-            strike_offsets = [-30, -20, -10, -5, -3, 0, 3, 5, 10, 20, 30]
-
-        # Generate expiry dates - use standard monthly options (3rd Friday of month)
-        # for the next few months from the algorithm's current time
-        def _third_friday(year, month):
-            """Get the third Friday of a given month/year."""
-            import calendar
-            c = calendar.Calendar(firstweekday=calendar.MONDAY)
-            fridays = [d for d in c.itermonthdays2(year, month)
-                       if d[0] != 0 and d[1] == calendar.FRIDAY]
-            return datetime(year, month, fridays[2][0])
-
-        # For futures, use the underlying's expiry date if available
-        und_expiry = getattr(underlying, 'expiry', None)
-        expiry_dates = []
-        if und_expiry:
-            # For future options, the option expires on the same date as the future
-            expiry_dates = [und_expiry]
-        else:
-            # Generate monthly expiry dates for the next 4 months
-            for m_offset in range(0, 4):
-                y = now.year
-                m = now.month + m_offset
-                while m > 12:
-                    m -= 12
-                    y += 1
-                try:
-                    exp = _third_friday(y, m)
-                    # Only include expiries in the future
-                    if exp >= now - timedelta(days=1):
-                        expiry_dates.append(exp)
-                except Exception:
-                    pass
-            # Also add a near-term expiry (7 days out) ONLY if it doesn't overlap with monthly
-            near_exp = now + timedelta(days=7)
-            if not any(abs((near_exp - e).days) < 5 for e in expiry_dates):
-                expiry_dates.append(near_exp)
-
-        for expiry in expiry_dates:
-            for strike_offset in strike_offsets:
-                strike = base_price + strike_offset
-                if strike <= 0:
-                    continue
-                for right in [OptionRight.CALL, OptionRight.PUT]:
-                    right_char = 'C' if right == OptionRight.CALL else 'P'
-                    ticker = f"{ticker_str}{expiry.strftime('%y%m%d')}{right_char}{int(strike)}"
-                    opt_sym = Symbol(ticker, opt_sec_type, opt_market)
-                    opt_sym.expiry = expiry
-                    opt_sym.strike_price = float(strike)
-                    opt_sym.right = right
-                    opt_sym.option_style = opt_style
-                    opt_sym._underlying = underlying
-                    opt_sym.id = type('SymbolId', (), {
-                        'strike_price': float(strike), 'option_right': right,
-                        'date': expiry, 'expiration': expiry,
-                        'underlying': underlying
-                    })()
-                    contract = _OptionContract(opt_sym, underlying, strike, right, expiry)
-                    chain.contracts[str(opt_sym)] = contract
-                    chain._list.append(contract)
+        for opt_sym, strike, right, expiry, quote in _fetch_real_option_chain(underlying, now):
+            contract = _OptionContract(opt_sym, underlying, strike, right, expiry, quote)
+            chain.contracts[str(opt_sym)] = contract
+            chain._list.append(contract)
         return chain
 
     @property
@@ -2463,19 +2070,10 @@ class QCAlgorithm:
 
     # ---- Additional Indicator Shortcuts ----
 
-    def aroon(self, symbol, period=25, resolution=None, selector=None):
-        """Aroon indicator (stub using SMA as placeholder)."""
-        name = f"AROON_{symbol}_{period}"
-        indicator = SimpleMovingAverage(name, period)
-        self._indicators[name] = indicator
-        return indicator
-
     def vwap(self, symbol, resolution=None, selector=None):
-        """VWAP indicator (stub)."""
-        name = f"VWAP_{symbol}"
-        indicator = SimpleMovingAverage(name, 1)
-        self._indicators[name] = indicator
-        return indicator
+        """VWAP indicator -- not implemented in the local engine."""
+        raise RuntimeError("VWAP indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     def momp(self, symbol, period=14, resolution=None, selector=None):
         """Momentum Percent indicator."""
@@ -2485,13 +2083,9 @@ class QCAlgorithm:
         return indicator
 
     def trin(self, symbol, resolution=None, selector=None):
-        """TRIN (Arms Index) indicator (stub)."""
-        name = f"TRIN_{symbol}"
-        indicator = SimpleMovingAverage(name, 1)
-        self._indicators[name] = indicator
-        return indicator
-
-    # ---- Additional Utility Methods ----
+        """TRIN indicator -- not implemented in the local engine."""
+        raise RuntimeError("TRIN indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     def get_last_known_prices(self, symbol=None):
         """Get the last known prices for a security."""
@@ -2501,101 +2095,74 @@ class QCAlgorithm:
         return []
 
     def warm_up_indicator(self, symbol, indicator, resolution=None, selector=None):
-        """Warm up an indicator with historical data."""
+        """Warm up an indicator with real historical bars (via history()).
+        Raises RuntimeError if real history is unavailable."""
         period = getattr(indicator, 'warm_up_period', 0)
         if period <= 0:
             # Indicator doesn't define a warm-up period, skip
             return indicator
-        base_price = 100.0
-        now = self._time or datetime.now()
-        for i in range(period):
-            t = now - timedelta(days=(period - i))
-            p = base_price + i * 0.1
-            # Create a bar-like object for indicators that accept bars
+        res = resolution if resolution is not None else Resolution.DAILY
+        hist = self._history_impl(symbol, int(period), res)
+        df = hist._df if isinstance(hist, _HistoryDataFrame) else hist
+        if df is None or len(df) == 0:
+            raise RuntimeError(f"warm_up_indicator: no real history for {symbol}")
+        for idx, row in df.iterrows():
+            t = idx[-1] if isinstance(idx, tuple) else idx
+            t = t.to_pydatetime() if hasattr(t, 'to_pydatetime') else t
+            close = float(row['close'])
+            value = float(selector(row)) if callable(selector) else close
             bar = type('WarmUpBar', (), {
                 'time': t, 'end_time': t,
-                'open': p - 0.5, 'high': p + 1.0, 'low': p - 1.0,
-                'close': p, 'volume': 1000000, 'value': p, 'price': p,
+                'open': float(row['open']), 'high': float(row['high']),
+                'low': float(row['low']), 'close': close,
+                'volume': float(row['volume']), 'value': value, 'price': close,
             })()
-            # Track samples manually for PythonIndicator subclasses
-            old_samples = getattr(indicator, 'samples', 0)
             try:
                 indicator.update(bar)
             except TypeError:
-                try:
-                    indicator.update(t, p)
-                except Exception:
-                    pass
-            # Ensure samples was incremented
-            new_samples = getattr(indicator, 'samples', 0)
-            if new_samples == old_samples:
-                try:
-                    indicator.samples = old_samples + 1
-                except AttributeError:
-                    pass
-        indicator.is_ready = True
+                indicator.update(t, value)
         return indicator
 
     def arima(self, symbol, ar_order=1, diff_order=0, ma_order=1, period=50, resolution=None, selector=None):
-        """ARIMA indicator (stub)."""
-        name = f"ARIMA_{symbol}_{ar_order}_{diff_order}_{ma_order}"
-        indicator = SimpleMovingAverage(name, period)
-        self._indicators[name] = indicator
-        return indicator
+        """ARIMA indicator -- not implemented in the local engine."""
+        raise RuntimeError("ARIMA indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     def iv(self, symbol, mirror_option=None, risk_free_rate=None, dividend_yield=None,
            option_model=None, period=None, resolution=None, **kwargs):
-        """Implied Volatility indicator (stub)."""
-        name = f"IV_{symbol}"
-        indicator = _OptionGreekIndicator(name, period or 14)
-        if isinstance(self._indicators, dict):
-            self._indicators[name] = indicator
-        return indicator
+        """Implied Volatility indicator -- not implemented in the local engine."""
+        raise RuntimeError("Implied Volatility indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     def d(self, symbol, mirror_option=None, risk_free_rate=None, dividend_yield=None,
           option_model=None, period=None, resolution=None, **kwargs):
-        """Delta indicator (stub)."""
-        name = f"D_{symbol}"
-        indicator = _OptionGreekIndicator(name, period or 14)
-        if isinstance(self._indicators, dict):
-            self._indicators[name] = indicator
-        return indicator
+        """Delta indicator -- not implemented in the local engine."""
+        raise RuntimeError("Delta indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     def g(self, symbol, mirror_option=None, risk_free_rate=None, dividend_yield=None,
           option_model=None, period=None, resolution=None, **kwargs):
-        """Gamma indicator (stub)."""
-        name = f"G_{symbol}"
-        indicator = _OptionGreekIndicator(name, period or 14)
-        if isinstance(self._indicators, dict):
-            self._indicators[name] = indicator
-        return indicator
+        """Gamma indicator -- not implemented in the local engine."""
+        raise RuntimeError("Gamma indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     def r(self, symbol, mirror_option=None, risk_free_rate=None, dividend_yield=None,
           option_model=None, period=None, resolution=None, **kwargs):
-        """Rho indicator (stub)."""
-        name = f"R_{symbol}"
-        indicator = _OptionGreekIndicator(name, period or 14)
-        if isinstance(self._indicators, dict):
-            self._indicators[name] = indicator
-        return indicator
+        """Rho indicator -- not implemented in the local engine."""
+        raise RuntimeError("Rho indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     def v(self, symbol, mirror_option=None, risk_free_rate=None, dividend_yield=None,
           option_model=None, period=None, resolution=None, **kwargs):
-        """Vega indicator (stub)."""
-        name = f"V_{symbol}"
-        indicator = _OptionGreekIndicator(name, period or 14)
-        if isinstance(self._indicators, dict):
-            self._indicators[name] = indicator
-        return indicator
+        """Vega indicator -- not implemented in the local engine."""
+        raise RuntimeError("Vega indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     def t(self, symbol, mirror_option=None, risk_free_rate=None, dividend_yield=None,
           option_model=None, period=None, resolution=None, **kwargs):
-        """Theta indicator (stub)."""
-        name = f"T_{symbol}"
-        indicator = _OptionGreekIndicator(name, period or 14)
-        if isinstance(self._indicators, dict):
-            self._indicators[name] = indicator
-        return indicator
+        """Theta indicator -- not implemented in the local engine."""
+        raise RuntimeError("Theta indicator is not implemented in the local engine "
+                           "(no substitute values are produced)")
 
     @property
     def universe(self):
@@ -2872,30 +2439,6 @@ class QCAlgorithm:
         return f"FinceptStrategy({self._name})"
 
 
-class _ImpliedVolatilitySub:
-    """Sub-object for implied_volatility on Greek indicators."""
-    def __init__(self):
-        self.current = type('Val', (), {'value': 0.25})()
-        self.is_ready = True
-        self._smoothing_func = None
-    def set_smoothing_function(self, func):
-        self._smoothing_func = func
-    def SetSmoothingFunction(self, func):
-        self._smoothing_func = func
-    def update(self, *args, **kwargs):
-        return True
-
-
-class _OptionGreekIndicator(IndicatorBase):
-    """Indicator for option Greeks (IV, Delta, Gamma, Vega, Theta, Rho).
-    Has an .implied_volatility sub-indicator with set_smoothing_function."""
-    def __init__(self, name, period=14):
-        super().__init__(name, period)
-        self.implied_volatility = _ImpliedVolatilitySub()
-    def _compute(self, value: float) -> float:
-        return value if value else 0.25
-
-
 class _ContractList(list):
     """List subclass with .count property (like LEAN's C# List<T>)."""
     @property
@@ -2910,104 +2453,16 @@ class OptionChainProvider:
         self._algo = algo
 
     def get_option_contract_list(self, symbol, date):
-        """Get option contracts for a symbol. Must match option_chain() output exactly."""
-        from .enums import OptionRight, OptionStyle
+        """Get real listed option contracts for a symbol (current chain only).
+        Raises RuntimeError when no real chain is available for `date`."""
         underlying = symbol if isinstance(symbol, Symbol) else Symbol(str(symbol).upper())
-        contracts = _ContractList()
-        ticker_str = str(underlying).upper()
-        und_sec_type = getattr(underlying, 'security_type', SecurityType.EQUITY)
-
-        # Determine option properties based on underlying
-        if und_sec_type == SecurityType.FUTURE:
-            opt_sec_type = SecurityType.FUTURE_OPTION
-            opt_market = getattr(underlying, 'market', Market.CME)
-        elif und_sec_type == SecurityType.INDEX:
-            opt_sec_type = SecurityType.INDEX_OPTION
-            opt_market = Market.USA
-        else:
-            opt_sec_type = SecurityType.OPTION
-            opt_market = Market.USA
-
-        # Determine base price
-        _default_prices = {
-            'SPX': 3800.0, 'SPXW': 3800.0, 'NDX': 13000.0, 'SPY': 380.0, 'QQQ': 310.0,
-            'ES': 3200.0, 'NQ': 13000.0, 'YM': 30000.0, 'RTY': 1800.0, 'MES': 3200.0,
-            'GOOG': 750.0, 'GOOGL': 750.0, 'AAPL': 150.0, 'MSFT': 300.0, 'AMZN': 3200.0,
-            'TSLA': 700.0, 'NVDA': 250.0, 'META': 250.0, 'NFLX': 500.0,
-            'GC': 1800.0, 'SI': 25.0, 'CL': 70.0, 'NG': 4.0,
-            'DC': 17.0, 'ZC': 400.0, 'ZW': 600.0, 'ZS': 1200.0,
-            'CLASS_III_MILK': 17.0, 'BUTTER': 2.0, 'CASH_SETTLED_CHEESE': 2.0,
-            'SP_500_E_MINI': 3200.0, 'E_MINI': 3200.0,
-        }
-        base_price = _default_prices.get(ticker_str, 100.0)
-        # Try to get price from algo's securities
-        if self._algo:
-            sec = self._algo.securities.get(ticker_str)
-            if sec and sec.price > 0:
-                base_price = sec.price
-
-        # Strike offsets - must match option_chain()
-        if base_price > 1000:
-            strike_offsets = [-800, -600, -450, -400, -200, -100, -50, 0, 50, 100, 200, 400, 450, 600, 800]
-        elif base_price > 200:
-            strike_offsets = [-100, -50, -20, -10, -5, 0, 5, 10, 20, 50, 100]
-        else:
-            strike_offsets = [-30, -20, -10, -5, -3, 0, 3, 5, 10, 20, 30]
-
-        # Generate expiry dates - must match option_chain()
-        def _third_friday(year, month):
-            import calendar
-            c = calendar.Calendar(firstweekday=calendar.MONDAY)
-            fridays = [d for d in c.itermonthdays2(year, month)
-                       if d[0] != 0 and d[1] == calendar.FRIDAY]
-            return datetime(year, month, fridays[2][0])
-
-        # Use algo's time/start_date to ensure consistency with option_chain()
         if self._algo and (self._algo._time or self._algo._start_date):
-            now = self._algo._time or self._algo._start_date
-        elif isinstance(date, datetime):
-            now = date.replace(tzinfo=None) if date.tzinfo else date
+            as_of = self._algo._time or self._algo._start_date
         else:
-            now = datetime.now()
-        und_expiry = getattr(underlying, 'expiry', None)
-        expiry_dates = []
-        if und_expiry:
-            expiry_dates = [und_expiry]
-        else:
-            for m_offset in range(0, 4):
-                y = now.year
-                m = now.month + m_offset
-                while m > 12:
-                    m -= 12
-                    y += 1
-                try:
-                    exp = _third_friday(y, m)
-                    if exp >= now - timedelta(days=1):
-                        expiry_dates.append(exp)
-                except Exception:
-                    pass
-            near_exp = now + timedelta(days=7)
-            if not any(abs((near_exp - e).days) < 5 for e in expiry_dates):
-                expiry_dates.append(near_exp)
-
-        for expiry in expiry_dates:
-            for strike_offset in strike_offsets:
-                strike = base_price + strike_offset
-                if strike <= 0:
-                    continue
-                for right in [OptionRight.CALL, OptionRight.PUT]:
-                    right_char = 'C' if right == OptionRight.CALL else 'P'
-                    ticker = f"{ticker_str}{expiry.strftime('%y%m%d')}{right_char}{int(strike)}"
-                    opt_sym = Symbol(ticker, opt_sec_type, opt_market)
-                    opt_sym.expiry = expiry
-                    opt_sym.strike_price = float(strike)
-                    opt_sym.right = right
-                    opt_sym._underlying = underlying
-                    opt_sym.id = type('SymbolId', (), {
-                        'strike_price': float(strike), 'option_right': right,
-                        'date': expiry, 'expiration': expiry, 'underlying': underlying
-                    })()
-                    contracts.append(opt_sym)
+            as_of = date
+        contracts = _ContractList()
+        for opt_sym, _strike, _right, _expiry, _quote in _fetch_real_option_chain(underlying, as_of):
+            contracts.append(opt_sym)
         return contracts
 
     GetOptionContractList = get_option_contract_list
@@ -3187,35 +2642,37 @@ class InsightWeightingPortfolioConstructionModel(PortfolioConstructionModel):
 
 
 class MeanVarianceOptimizationPortfolioConstructionModel(PortfolioConstructionModel):
-    """Portfolio construction using mean-variance optimization (simplified stub)."""
+    """Mean-variance optimization portfolio construction -- not implemented in the local engine.
 
-    def __init__(self, rebalance=None, portfolio_bias=None, lookback=1,
-                 period=63, resolution=None, risk_free_rate=0.0, optimizer=None):
-        self._rebalance = rebalance
-        self._lookback = lookback
+    The previous stub returned equal weights while presenting them as
+    optimized; it now refuses to run rather than produce made-up weights.
+    """
+
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError(
+            "MeanVarianceOptimizationPortfolioConstructionModel is not implemented in the local engine "
+            "(no optimizer is available; equal weights are not substituted)")
 
     def create_targets(self, algorithm, insights):
-        if not insights:
-            return []
-        weight = 1.0 / len(insights)
-        return [PortfolioTarget(i.symbol, weight * (1 if i.direction == InsightDirection.UP else -1))
-                for i in insights]
+        raise NotImplementedError(
+            "MeanVarianceOptimizationPortfolioConstructionModel is not implemented in the local engine")
 
 
 class BlackLittermanOptimizationPortfolioConstructionModel(PortfolioConstructionModel):
-    """Black-Litterman portfolio construction (simplified stub)."""
+    """Black-Litterman optimization portfolio construction -- not implemented in the local engine.
 
-    def __init__(self, rebalance=None, portfolio_bias=None, lookback=63,
-                 resolution=None, risk_free_rate=0.0, optimizer=None):
-        self._rebalance = rebalance
-        self._lookback = lookback
+    The previous stub returned equal weights while presenting them as
+    optimized; it now refuses to run rather than produce made-up weights.
+    """
+
+    def __init__(self, *args, **kwargs):
+        raise NotImplementedError(
+            "BlackLittermanOptimizationPortfolioConstructionModel is not implemented in the local engine "
+            "(no optimizer is available; equal weights are not substituted)")
 
     def create_targets(self, algorithm, insights):
-        if not insights:
-            return []
-        weight = 1.0 / len(insights)
-        return [PortfolioTarget(i.symbol, weight * (1 if i.direction == InsightDirection.UP else -1))
-                for i in insights]
+        raise NotImplementedError(
+            "BlackLittermanOptimizationPortfolioConstructionModel is not implemented in the local engine")
 
 
 class ImmediateExecutionModel(ExecutionModel):

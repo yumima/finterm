@@ -8,6 +8,7 @@
 #include "screens/fno/OrderConfirmDialog.h"
 #include "screens/fno/PayoffChartWidget.h"
 #include "screens/fno/TemplatePickerPanel.h"
+#include "services/options/OptionChainService.h"
 #include "services/options/StrategyAnalytics.h"
 #include "services/options/StrategyTemplates.h"
 #include "storage/repositories/StrategiesRepository.h"
@@ -38,6 +39,36 @@ using fincept::services::options::StrategyAnalytics;
 using fincept::services::options::StrategyInstantiationOptions;
 using fincept::services::options::analytics::PayoffComputeOptions;
 using namespace fincept::ui;
+
+namespace {
+
+/// ATM implied vol from the live chain (decimal): mean of the ATM row's
+/// solved CE/PE IVs. 0 when the chain carries no solved ATM IV — callers then
+/// leave target-curve/POP unavailable rather than inventing a vol.
+double chain_atm_iv(const OptionChain& chain) {
+    for (const auto& row : chain.rows) {
+        if (!row.is_atm && !(chain.atm_strike > 0 && row.strike == chain.atm_strike))
+            continue;
+        double sum = 0;
+        int n = 0;
+        if (row.ce_iv > 0) { sum += row.ce_iv; ++n; }
+        if (row.pe_iv > 0) { sum += row.pe_iv; ++n; }
+        return n > 0 ? sum / n : 0.0;
+    }
+    return 0.0;
+}
+
+/// Pricing inputs drawn from real sources: chain spot + ATM IV, and the
+/// service's configured risk-free rate (same one the Greeks worker uses).
+PayoffComputeOptions make_compute_options(const OptionChain& chain) {
+    PayoffComputeOptions opts;
+    opts.current_spot = chain.spot;
+    opts.fallback_iv = chain_atm_iv(chain);
+    opts.risk_free_rate = fincept::services::options::OptionChainService::instance().risk_free_rate();
+    return opts;
+}
+
+}  // namespace
 
 BuilderSubTab::BuilderSubTab(QWidget* parent) : QWidget(parent) {
     setObjectName("fnoBuilderTab");
@@ -245,8 +276,7 @@ void BuilderSubTab::refresh_analytics() {
     }
     Strategy s = current_strategy();
 
-    PayoffComputeOptions opts;
-    opts.current_spot = last_chain_.spot;
+    PayoffComputeOptions opts = make_compute_options(last_chain_);
     opts.days_to_target = days_to_target_spin_ ? days_to_target_spin_->value() : 0;
 
     auto curve = fincept::services::options::analytics::compute_payoff(s, opts);
@@ -295,8 +325,7 @@ void BuilderSubTab::on_trade_clicked() {
     Strategy s = current_strategy();
 
     // Recompute analytics for accurate dialog values.
-    fincept::services::options::analytics::PayoffComputeOptions opts;
-    opts.current_spot = last_chain_.spot;
+    const PayoffComputeOptions opts = make_compute_options(last_chain_);
     auto a = fincept::services::options::analytics::compute_all(s, last_chain_, opts);
 
     OrderConfirmDialog dlg(s, last_chain_, a.premium_paid, a.max_profit, a.max_loss, this);

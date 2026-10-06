@@ -343,8 +343,8 @@ void CftcPanel::show_sentiment(const QJsonObject& s) {
     sent_market_lbl_->setText(s["market_name"].toString(market_combo_->currentText()));
     sent_date_lbl_->setText("Report: " + s["latest_report"].toString("—"));
 
-    const double oi = s["open_interest"].toDouble();
-    sent_oi_lbl_->setText(oi > 0 ? QString::number(static_cast<qint64>(oi)) : "—");
+    const QJsonValue oi = s["open_interest"];
+    sent_oi_lbl_->setText(oi.isDouble() ? QString::number(static_cast<qint64>(oi.toDouble())) : "—");
 
     const QString oi_trend = s["overall_sentiment"].toObject()["oi_trend"].toString();
     sent_oi_trend_->setText(oi_trend.isEmpty() ? "—" : oi_trend.toUpper());
@@ -364,14 +364,21 @@ void CftcPanel::show_sentiment(const QJsonObject& s) {
     sent_noncomm_bias_->style()->unpolish(sent_noncomm_bias_);
     sent_noncomm_bias_->style()->polish(sent_noncomm_bias_);
 
+    // Net is null when the report type doesn't split commercial / non-
+    // commercial positions — show "—", never a fabricated "+0".
+    auto net_text = [](const QJsonValue& v) -> QString {
+        if (!v.isDouble())
+            return QStringLiteral("Net: —");
+        const double n = v.toDouble();
+        return QString("Net: %1%2").arg(n >= 0 ? "+" : "").arg(static_cast<qint64>(n));
+    };
     const QJsonObject comm = s["commercial_positions"].toObject();
-    const double comm_net = comm["net"].toDouble();
-    sent_comm_net_->setText(QString("Net: %1%2").arg(comm_net >= 0 ? "+" : "").arg(static_cast<qint64>(comm_net), 'd'));
+    const QJsonValue comm_net = comm["net"];
+    sent_comm_net_->setText(net_text(comm_net));
 
     const QJsonObject noncomm = s["non_commercial_positions"].toObject();
-    const double noncomm_net = noncomm["net"].toDouble();
-    sent_noncomm_net_->setText(
-        QString("Net: %1%2").arg(noncomm_net >= 0 ? "+" : "").arg(static_cast<qint64>(noncomm_net), 'd'));
+    const QJsonValue noncomm_net = noncomm["net"];
+    sent_noncomm_net_->setText(net_text(noncomm_net));
 
     // Switch to sentiment widget — we show it in place of empty state
     // by temporarily inserting it into the layout if not already there

@@ -5,6 +5,7 @@
 #include "core/logging/Logger.h"
 #include "python/PythonWorker.h"
 #include "screens/dashboard/widgets/ExtendedHoursMath.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QAction>
@@ -348,6 +349,10 @@ QColor PortfolioHeatmap::block_color(const portfolio::HoldingWithQuote& h) const
             break;
         }
     }
+    // Unknown figure (no price / no day change) — same neutral gray as a
+    // missing after-hours quote, never a 0-value green.
+    if (std::isnan(val))
+        return QColor(45, 45, 48);
 
     if (mode_ == portfolio::HeatmapMode::Weight) {
         // Amber: darker base, brighter at higher weights
@@ -481,16 +486,12 @@ void PortfolioHeatmap::update_block_appearance(QPushButton* block, const portfol
     // "—" when the daemon hasn't returned a quote for that symbol.
     QString chg_str;
     switch (mode_) {
-        case portfolio::HeatmapMode::DayChange: {
-            const double v = h.day_change_percent;
-            chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
+        case portfolio::HeatmapMode::DayChange:
+            chg_str = ui::formatting::format_percent(h.day_change_percent, 1, true);
             break;
-        }
-        case portfolio::HeatmapMode::Pnl: {
-            const double v = h.unrealized_pnl_percent;
-            chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
+        case portfolio::HeatmapMode::Pnl:
+            chg_str = ui::formatting::format_percent(h.unrealized_pnl_percent, 1, true);
             break;
-        }
         case portfolio::HeatmapMode::Weight:
             chg_str = QString("%1%").arg(QString::number(h.weight, 'f', 1));
             break;
@@ -601,22 +602,31 @@ void PortfolioHeatmap::update_detail() {
     portfolio_panel_->setVisible(false);
     detail_panel_->setVisible(true);
     const auto& h = *found;
-    auto fmt = [](double v, int dp = 2) { return QString::number(v, 'f', dp); };
-    auto color = [](double v) -> const char* { return v >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE; };
+    // NaN = unknown (no price / no day change) → "—" in a neutral colour.
+    auto fmt = [](double v, int dp = 2) {
+        return std::isfinite(v) ? QString::number(v, 'f', dp) : ui::formatting::placeholder();
+    };
+    auto sgn = [](double v) { return v >= 0 ? "+" : ""; };
+    auto color = [](double v) -> const char* {
+        if (std::isnan(v))
+            return ui::colors::TEXT_SECONDARY;
+        return v >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+    };
 
     detail_symbol_->setText(h.symbol);
-    detail_price_->setText(fmt(h.current_price));
-    detail_change_->setText(QString("%1%2%").arg(h.day_change_percent >= 0 ? "+" : "").arg(fmt(h.day_change_percent)));
+    detail_price_->setText((h.price_stale ? QStringLiteral("≈") : QString()) + fmt(h.current_price));
+    detail_change_->setText(ui::formatting::format_percent(h.day_change_percent, 2, true));
     detail_change_->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:600;").arg(color(h.day_change_percent)));
     detail_qty_->setText(fmt(h.quantity, h.quantity == std::floor(h.quantity) ? 0 : 2));
     detail_cost_->setText(fmt(h.avg_buy_price));
-    detail_mv_->setText(fmt(h.market_value));
+    detail_mv_->setText(h.valued() ? fmt(h.market_value) : ui::formatting::placeholder());
     detail_mv_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::WARNING()));
-    detail_pnl_->setText(QString("%1%2").arg(h.unrealized_pnl >= 0 ? "+" : "").arg(fmt(h.unrealized_pnl)));
+    detail_pnl_->setText(std::isfinite(h.unrealized_pnl)
+                             ? QString("%1%2").arg(sgn(h.unrealized_pnl)).arg(fmt(h.unrealized_pnl))
+                             : ui::formatting::placeholder());
     detail_pnl_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(color(h.unrealized_pnl)));
-    detail_pnl_pct_->setText(
-        QString("%1%2%").arg(h.unrealized_pnl_percent >= 0 ? "+" : "").arg(fmt(h.unrealized_pnl_percent)));
+    detail_pnl_pct_->setText(ui::formatting::format_percent(h.unrealized_pnl_percent, 2, true));
     detail_pnl_pct_->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:600;").arg(color(h.unrealized_pnl_percent)));
     detail_weight_->setText(QString("%1%").arg(fmt(h.weight, 1)));
@@ -726,7 +736,15 @@ void PortfolioHeatmap::clear_metrics() {
 }
 
 void PortfolioHeatmap::update_risk_gauge() {
-    double rs = metrics_.risk_score.value_or(0);
+    // No score is not a score of 0 (which painted as a reassuring green).
+    if (!metrics_.risk_score.has_value()) {
+        risk_bar_->setStyleSheet(QStringLiteral("background: transparent;"));
+        risk_value_->setText(ui::formatting::placeholder());
+        risk_value_->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
+        return;
+    }
+    double rs = *metrics_.risk_score;
     const char* rs_color = rs < 30 ? ui::colors::POSITIVE : rs < 60 ? ui::colors::WARNING : ui::colors::NEGATIVE;
 
     // Use a colored inner bar proportional to score
@@ -748,10 +766,20 @@ void PortfolioHeatmap::update_top_movers() {
         return;
     }
 
-    auto best = std::max_element(holdings_.begin(), holdings_.end(), [](const auto& a, const auto& b) {
+    // Only holdings whose day change is actually known can be movers.
+    QVector<portfolio::HoldingWithQuote> known;
+    for (const auto& h : holdings_)
+        if (std::isfinite(h.day_change_percent))
+            known.append(h);
+    if (known.isEmpty()) {
+        top_gainer_->setText(ui::formatting::placeholder());
+        top_loser_->setText(ui::formatting::placeholder());
+        return;
+    }
+    auto best = std::max_element(known.begin(), known.end(), [](const auto& a, const auto& b) {
         return a.day_change_percent < b.day_change_percent;
     });
-    auto worst = std::min_element(holdings_.begin(), holdings_.end(), [](const auto& a, const auto& b) {
+    auto worst = std::min_element(known.begin(), known.end(), [](const auto& a, const auto& b) {
         return a.day_change_percent < b.day_change_percent;
     });
 

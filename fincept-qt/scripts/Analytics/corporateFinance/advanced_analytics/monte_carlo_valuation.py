@@ -2,6 +2,19 @@
 from typing import Dict, Any, List, Optional, Callable
 import numpy as np
 
+def _irr(cash_flows: List[float]) -> Optional[float]:
+    """IRR via polynomial roots (np.irr was removed in numpy 1.20, so the
+    old call always raised and every simulation was silently dropped).
+    Returns None when no real rate exists."""
+    # NPV = sum cf_t * x^t with x = 1/(1+r); np.roots wants highest degree first.
+    roots = np.roots(list(reversed(cash_flows)))
+    rates = [1.0 / x.real - 1.0 for x in roots
+             if abs(x.imag) < 1e-10 and x.real > 0]
+    if not rates:
+        return None
+    return min(rates, key=abs)
+
+
 class MonteCarloValuation:
     """Monte Carlo simulation for deal valuation under uncertainty"""
 
@@ -158,15 +171,12 @@ class MonteCarloValuation:
             npv = sum(cf / ((1 + discount_rate) ** i) for i, cf in enumerate(cash_flows))
             npvs.append(npv)
 
-            try:
-                irr = np.irr(cash_flows)
-                if not np.isnan(irr) and -1 < irr < 2:
-                    irrs.append(irr)
-            except:
-                pass
+            irr = _irr(cash_flows)
+            if irr is not None and -1 < irr < 2:
+                irrs.append(irr)
 
         npvs = np.array(npvs)
-        irrs = np.array(irrs) if irrs else np.array([0])
+        irrs = np.array(irrs)
 
         probability_positive_npv = float(np.sum(npvs > 0) / self.num_simulations * 100)
 

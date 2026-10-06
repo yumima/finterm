@@ -1,6 +1,8 @@
 // src/services/portfolio/PortfolioFx.cpp
 #include "services/portfolio/PortfolioFx.h"
 
+#include <limits>
+
 namespace fincept::portfolio {
 
 QPair<QString, double> fx_price_factor(const QString& currency) {
@@ -46,7 +48,10 @@ double FxRates::rate_for(const QString& symbol, const QString& date) const {
         if (earliest > 0.0)
             return earliest;
     }
-    return current > 0.0 ? current : 1.0;
+    if (current > 0.0)
+        return current;
+    // Nothing known. Strict (real portfolios): unknown, never an assumed 1:1.
+    return strict_ ? std::numeric_limits<double>::quiet_NaN() : 1.0;
 }
 
 } // namespace fincept::portfolio

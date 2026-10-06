@@ -133,7 +133,8 @@ NewsArticle NewsArticleRepository::map_row(QSqlQuery& q) {
     a.lang = q.value(13).toString();
     a.threat.level = threat_level_from(q.value(14).toString());
     a.threat.category = q.value(15).toString();
-    a.threat.confidence = q.value(16).toDouble();
+    // Column 16 (threat_conf) is legacy: the keyword classifier never had a
+    // calibrated confidence, so it is no longer read or written (bound NULL).
     a.source_flag = static_cast<SourceFlag>(q.value(17).toInt());
 
     // tickers: stored as JSON array string
@@ -200,7 +201,7 @@ Result<void> NewsArticleRepository::upsert_batch(const QVector<NewsArticle>& art
                    << priority_str(a.priority) << sentiment_str(a.sentiment)
                    << impact_str(a.impact) << tickers_json << a.tier << a.lang
                    << threat_level_str(a.threat.level) << a.threat.category
-                   << a.threat.confidence << static_cast<int>(a.source_flag);
+                   << QVariant() /* threat_conf: not computed */ << static_cast<int>(a.source_flag);
         }
 
         const QString sql = kSqlPrefix + placeholders.join(QStringLiteral(","));
@@ -237,14 +238,16 @@ Result<QVector<NewsArticle>> NewsArticleRepository::load_recent(int64_t since_ts
         return query_list("SELECT id, headline, summary, source, region, category, link, sort_ts, "
                           "       priority, sentiment, impact, tickers, tier, lang, "
                           "       threat_level, threat_cat, threat_conf, source_flag "
-                          "FROM news_articles WHERE sort_ts >= ? ORDER BY sort_ts DESC LIMIT ?",
-                          {static_cast<qint64>(since_ts), limit}, map_row);
+                          "FROM news_articles WHERE sort_ts >= ? OR (COALESCE(sort_ts, 0) = 0 AND fetched_at >= ?) "
+                          "ORDER BY sort_ts DESC LIMIT ?",
+                          {static_cast<qint64>(since_ts), static_cast<qint64>(since_ts), limit}, map_row);
     }
     return query_list("SELECT id, headline, summary, source, region, category, link, sort_ts, "
                       "       priority, sentiment, impact, tickers, tier, lang, "
                       "       threat_level, threat_cat, threat_conf, source_flag "
-                      "FROM news_articles WHERE sort_ts >= ? AND category = ? ORDER BY sort_ts DESC LIMIT ?",
-                      {static_cast<qint64>(since_ts), category, limit}, map_row);
+                      "FROM news_articles WHERE (sort_ts >= ? OR (COALESCE(sort_ts, 0) = 0 AND fetched_at >= ?)) "
+                      "AND category = ? ORDER BY sort_ts DESC LIMIT ?",
+                      {static_cast<qint64>(since_ts), static_cast<qint64>(since_ts), category, limit}, map_row);
 }
 
 // ── count ────────────────────────────────────────────────────────────────────
@@ -260,7 +263,11 @@ int NewsArticleRepository::count() const {
 // ── prune_older_than ─────────────────────────────────────────────────────────
 
 Result<void> NewsArticleRepository::prune_older_than(int64_t cutoff_ts) {
-    return exec_write("DELETE FROM news_articles WHERE sort_ts < ?", {static_cast<qint64>(cutoff_ts)});
+    // Undated items (sort_ts 0) age out by when they were first fetched, not
+    // by a publish time they don't have.
+    return exec_write("DELETE FROM news_articles WHERE (COALESCE(sort_ts, 0) > 0 AND sort_ts < ?) "
+                      "OR (COALESCE(sort_ts, 0) = 0 AND fetched_at < ?)",
+                      {static_cast<qint64>(cutoff_ts), static_cast<qint64>(cutoff_ts)});
 }
 
 // ── ensure_seen_column ───────────────────────────────────────────────────────

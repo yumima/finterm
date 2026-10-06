@@ -187,17 +187,47 @@ class CFTCDataWrapper:
         except:
             return date_str
 
-    def _safe_int(self, value) -> int:
-        """Safely convert value to integer"""
+    def _safe_int(self, value) -> Optional[int]:
+        """Convert value to integer; missing/unparseable -> None (never 0)"""
         if value is None:
-            return 0
+            return None
         try:
             if isinstance(value, str):
                 # Remove commas and convert
-                return int(value.replace(',', ''))
+                return int(float(value.replace(',', '')))
             return int(value)
         except (ValueError, TypeError):
-            return 0
+            return None
+
+    # Socrata field names differ by report type / vintage; try each in order.
+    _POS_KEYS = {
+        "oi": ("open_interest_all",),
+        "comm_long": ("comm_positions_long_all", "comm_long_all"),
+        "comm_short": ("comm_positions_short_all", "comm_short_all"),
+        "noncomm_long": ("noncomm_positions_long_all", "noncomm_long_all"),
+        "noncomm_short": ("noncomm_positions_short_all", "noncomm_short_all"),
+        "nonrept_long": ("nonrept_positions_long_all", "nonreportable_long_all"),
+        "nonrept_short": ("nonrept_positions_short_all", "nonreportable_short_all"),
+    }
+
+    def _pos(self, record: Optional[Dict[str, Any]], name: str) -> Optional[int]:
+        """Position field as int, or None when the report doesn't carry it
+        (e.g. commercial/non-commercial splits only exist in legacy reports)."""
+        if not record:
+            return None
+        for key in self._POS_KEYS[name]:
+            v = self._safe_int(record.get(key))
+            if v is not None:
+                return v
+        return None
+
+    @staticmethod
+    def _sub(a: Optional[int], b: Optional[int]) -> Optional[int]:
+        return a - b if a is not None and b is not None else None
+
+    @staticmethod
+    def _pct(part: Optional[int], whole: Optional[int]) -> Optional[float]:
+        return part / whole * 100 if part is not None and whole else None
 
     def _build_search_query(self, identifier: str) -> str:
         """Build search query for CFTC identifier.
@@ -426,53 +456,64 @@ class CFTCDataWrapper:
             latest_data = cot_data[0]
             previous_data = cot_data[1] if len(cot_data) > 1 else None
 
-            # Calculate sentiment metrics
+            # Calculate sentiment metrics. Fields the report type doesn't
+            # carry stay None (rendered "—"), never 0 / a default bias.
+            P = lambda name, rec=latest_data: self._pos(rec, name)
+            oi = P("oi")
             sentiment_analysis = {
                 "latest_report": latest_data.get("report_date_as_yyyy_mm_dd"),
                 "market_name": latest_data.get("market_and_exchange_names", ""),
-                "open_interest": latest_data.get("open_interest_all", 0),
-                "change_in_oi": 0,
+                "open_interest": oi,
+                "change_in_oi": None,
                 "commercial_positions": {
-                    "long": latest_data.get("comm_long_all", 0),
-                    "short": latest_data.get("comm_short_all", 0),
-                    "net": latest_data.get("comm_long_all", 0) - latest_data.get("comm_short_all", 0)
+                    "long": P("comm_long"),
+                    "short": P("comm_short"),
+                    "net": self._sub(P("comm_long"), P("comm_short"))
                 },
                 "non_commercial_positions": {
-                    "long": latest_data.get("noncomm_long_all", 0),
-                    "short": latest_data.get("noncomm_short_all", 0),
-                    "net": latest_data.get("noncomm_long_all", 0) - latest_data.get("noncomm_short_all", 0)
+                    "long": P("noncomm_long"),
+                    "short": P("noncomm_short"),
+                    "net": self._sub(P("noncomm_long"), P("noncomm_short"))
                 },
                 "non_reportable_positions": {
-                    "long": latest_data.get("nonreportable_long_all", 0),
-                    "short": latest_data.get("nonreportable_short_all", 0)
+                    "long": P("nonrept_long"),
+                    "short": P("nonrept_short")
                 }
             }
 
             # Calculate week-over-week changes if previous data exists
             if previous_data:
-                sentiment_analysis["change_in_oi"] = latest_data.get("open_interest_all", 0) - previous_data.get("open_interest_all", 0)
-                sentiment_analysis["commercial_positions"]["long_change"] = latest_data.get("comm_long_all", 0) - previous_data.get("comm_long_all", 0)
-                sentiment_analysis["commercial_positions"]["short_change"] = latest_data.get("comm_short_all", 0) - previous_data.get("comm_short_all", 0)
-                sentiment_analysis["non_commercial_positions"]["long_change"] = latest_data.get("noncomm_long_all", 0) - previous_data.get("noncomm_long_all", 0)
-                sentiment_analysis["non_commercial_positions"]["short_change"] = latest_data.get("noncomm_short_all", 0) - previous_data.get("noncomm_short_all", 0)
+                Q = lambda name: self._pos(previous_data, name)
+                sentiment_analysis["change_in_oi"] = self._sub(oi, Q("oi"))
+                sentiment_analysis["commercial_positions"]["long_change"] = self._sub(P("comm_long"), Q("comm_long"))
+                sentiment_analysis["commercial_positions"]["short_change"] = self._sub(P("comm_short"), Q("comm_short"))
+                sentiment_analysis["non_commercial_positions"]["long_change"] = self._sub(P("noncomm_long"), Q("noncomm_long"))
+                sentiment_analysis["non_commercial_positions"]["short_change"] = self._sub(P("noncomm_short"), Q("noncomm_short"))
 
             # Calculate sentiment scores
-            total_oi = sentiment_analysis["open_interest"]
-            if total_oi > 0:
-                sentiment_analysis["commercial_long_pct"] = (sentiment_analysis["commercial_positions"]["long"] / total_oi) * 100
-                sentiment_analysis["non_commercial_long_pct"] = (sentiment_analysis["non_commercial_positions"]["long"] / total_oi) * 100
-                sentiment_analysis["non_reportable_long_pct"] = (sentiment_analysis["non_reportable_positions"]["long"] / total_oi) * 100
+            sentiment_analysis["commercial_long_pct"] = self._pct(P("comm_long"), oi)
+            sentiment_analysis["non_commercial_long_pct"] = self._pct(P("noncomm_long"), oi)
+            sentiment_analysis["non_reportable_long_pct"] = self._pct(P("nonrept_long"), oi)
 
-            # Determine overall sentiment
+            # Determine overall sentiment (None where inputs are unavailable)
             net_commercial = sentiment_analysis["commercial_positions"]["net"]
             net_non_commercial = sentiment_analysis["non_commercial_positions"]["net"]
-            oi_change_pct = (sentiment_analysis["change_in_oi"] / total_oi * 100) if total_oi > 0 else 0
+            oi_change_pct = self._pct(sentiment_analysis["change_in_oi"], oi)
+
+            def bias(net):
+                if net is None:
+                    return None
+                return "bullish" if net > 0 else "bearish" if net < 0 else "neutral"
 
             sentiment_analysis["overall_sentiment"] = {
-                "commercial_bias": "bullish" if net_commercial > 0 else "bearish",
-                "non_commercial_bias": "bullish" if net_non_commercial > 0 else "bearish",
-                "oi_trend": "increasing" if oi_change_pct > 0 else "decreasing",
-                "activity_level": "high" if abs(oi_change_pct) > 5 else "moderate" if abs(oi_change_pct) > 1 else "low"
+                "commercial_bias": bias(net_commercial),
+                "non_commercial_bias": bias(net_non_commercial),
+                "oi_trend": (None if oi_change_pct is None else
+                             "increasing" if oi_change_pct > 0 else
+                             "decreasing" if oi_change_pct < 0 else "flat"),
+                "activity_level": (None if oi_change_pct is None else
+                                   "high" if abs(oi_change_pct) > 5 else
+                                   "moderate" if abs(oi_change_pct) > 1 else "low")
             }
 
             return {
@@ -508,38 +549,26 @@ class CFTCDataWrapper:
             # Get most recent data
             latest = cot_data[0]
 
-            # Build position summary
+            # Build position summary (None where the report lacks a field)
+            P = lambda name: self._pos(latest, name)
+            oi = P("oi")
+
+            def side(long_key, short_key, with_net=True):
+                lo, sh = P(long_key), P(short_key)
+                out = {"long": lo, "short": sh}
+                if with_net:
+                    out["net"] = self._sub(lo, sh)
+                out["pct_of_oi"] = {"long": self._pct(lo, oi), "short": self._pct(sh, oi)}
+                return out
+
             summary = {
                 "report_date": latest.get("report_date_as_yyyy_mm_dd"),
                 "market_name": latest.get("market_and_exchange_names", ""),
-                "open_interest": latest.get("open_interest_all", 0),
+                "open_interest": oi,
                 "positions": {
-                    "commercial": {
-                        "long": latest.get("comm_long_all", 0),
-                        "short": latest.get("comm_short_all", 0),
-                        "net": latest.get("comm_long_all", 0) - latest.get("comm_short_all", 0),
-                        "pct_of_oi": {
-                            "long": (latest.get("comm_long_all", 0) / latest.get("open_interest_all", 1)) * 100,
-                            "short": (latest.get("comm_short_all", 0) / latest.get("open_interest_all", 1)) * 100
-                        }
-                    },
-                    "non_commercial": {
-                        "long": latest.get("noncomm_long_all", 0),
-                        "short": latest.get("noncomm_short_all", 0),
-                        "net": latest.get("noncomm_long_all", 0) - latest.get("noncomm_short_all", 0),
-                        "pct_of_oi": {
-                            "long": (latest.get("noncomm_long_all", 0) / latest.get("open_interest_all", 1)) * 100,
-                            "short": (latest.get("noncomm_short_all", 0) / latest.get("open_interest_all", 1)) * 100
-                        }
-                    },
-                    "non_reportable": {
-                        "long": latest.get("nonreportable_long_all", 0),
-                        "short": latest.get("nonreportable_short_all", 0),
-                        "pct_of_oi": {
-                            "long": (latest.get("nonreportable_long_all", 0) / latest.get("open_interest_all", 1)) * 100,
-                            "short": (latest.get("nonreportable_short_all", 0) / latest.get("open_interest_all", 1)) * 100
-                        }
-                    }
+                    "commercial": side("comm_long", "comm_short"),
+                    "non_commercial": side("noncomm_long", "noncomm_short"),
+                    "non_reportable": side("nonrept_long", "nonrept_short", with_net=False)
                 }
             }
 
@@ -621,30 +650,32 @@ class CFTCDataWrapper:
                 # Handle different field names across report types
                 # Legacy reports use: noncomm_positions_long_all, comm_positions_long_all
                 # Disaggregated reports may use different naming
-                open_interest = self._safe_int(record.get("open_interest_all", 0))
+                # Missing fields stay None (not 0) so the trend never plots
+                # fabricated zero positions.
+                open_interest = self._pos(record, "oi")
 
                 # Commercial positions
-                comm_long = self._safe_int(record.get("comm_positions_long_all") or record.get("comm_long_all", 0))
-                comm_short = self._safe_int(record.get("comm_positions_short_all") or record.get("comm_short_all", 0))
+                comm_long = self._pos(record, "comm_long")
+                comm_short = self._pos(record, "comm_short")
 
                 # Non-commercial positions
-                noncomm_long = self._safe_int(record.get("noncomm_positions_long_all") or record.get("noncomm_long_all", 0))
-                noncomm_short = self._safe_int(record.get("noncomm_positions_short_all") or record.get("noncomm_short_all", 0))
+                noncomm_long = self._pos(record, "noncomm_long")
+                noncomm_short = self._pos(record, "noncomm_short")
 
                 trend_point = {
                     "date": record.get("report_date_as_yyyy_mm_dd"),
                     "open_interest": open_interest,
                     "commercial_long": comm_long,
                     "commercial_short": comm_short,
-                    "commercial_net": comm_long - comm_short,
+                    "commercial_net": self._sub(comm_long, comm_short),
                     "non_commercial_long": noncomm_long,
                     "non_commercial_short": noncomm_short,
-                    "non_commercial_net": noncomm_long - noncomm_short
+                    "non_commercial_net": self._sub(noncomm_long, noncomm_short)
                 }
                 trend_data.append(trend_point)
 
             # Sort by date
-            trend_data.sort(key=lambda x: x["date"])
+            trend_data.sort(key=lambda x: x["date"] or "")
 
             return {
                 "success": True,

@@ -1,10 +1,19 @@
 """
 FFN (Financial Functions) Analysis — Deep analytics per symbol.
-Input:  JSON via stdin: {"symbols": ["AAPL","MSFT"], "weights": {"AAPL": 0.6, "MSFT": 0.4}}
+Input:  JSON as the first argv argument (PythonRunner's convention; "@/path"
+        names a spill file holding the JSON), stdin as fallback:
+        {"symbols": ["AAPL","MSFT"], "weights": {"AAPL": 0.6, "MSFT": 0.4},
+         "risk_free": 0.042}   # annual decimal; null = unknown
 Output: JSON to stdout with per-symbol stats, rebased series, drawdown series,
         rolling correlations, and portfolio optimisation weights.
+
+A figure that cannot be computed is null, never 0.0 — the app renders it as a
+dash. A weighting scheme that fails (e.g. ERC does not converge) is absent,
+not silently replaced by equal weights under the ERC label.
 """
 import sys
+
+from script_args import read_input
 import json
 import numpy as np
 
@@ -19,13 +28,13 @@ def convert_numpy(obj):
     elif isinstance(obj, (np.floating,)):
         v = float(obj)
         if np.isnan(v) or np.isinf(v):
-            return 0.0
+            return None  # unknown, not zero
         return v
     elif isinstance(obj, np.ndarray):
         return [convert_numpy(x) for x in obj]
     elif isinstance(obj, float):
         if np.isnan(obj) or np.isinf(obj):
-            return 0.0
+            return None  # unknown, not zero
     return obj
 
 
@@ -50,7 +59,7 @@ def portfolio_stats(close_df, weights_arr, symbols):
     n = len(port_returns)
     cagr = float((1 + total_ret) ** (252.0 / max(n, 1)) - 1)
     vol = float(port_returns.std() * np.sqrt(252))
-    sharpe = float((cagr - _RF) / vol) if vol > 0 else 0.0
+    sharpe = float((cagr - _RF) / vol) if (_RF is not None and vol > 0) else None
     cum = (1 + port_returns).cumprod()
     peak = cum.expanding().max()
     dd = (cum - peak) / peak
@@ -65,8 +74,9 @@ def portfolio_stats(close_df, weights_arr, symbols):
 
 
 # Annual risk-free rate (decimal). Set from the caller's "risk_free" param —
-# the app passes its live 10-year yield; 4% is only the offline fallback.
-_RF = 0.04
+# the app passes its live 10-year yield. None = unknown: Sharpe is then null
+# rather than computed against an invented hurdle.
+_RF = None
 
 
 def compute_ffn(symbols, weights, period="1y"):
@@ -127,7 +137,7 @@ def compute_ffn(symbols, weights, period="1y"):
             "annualized_return":     ann_ret,
             "annualized_volatility": ann_vol,
             "max_drawdown":          max_dd,
-            "sharpe_ratio":          float((ann_ret - _RF) / ann_vol) if ann_vol > 0 else 0.0,
+            "sharpe_ratio":          float((ann_ret - _RF) / ann_vol) if (_RF is not None and ann_vol > 0) else None,
             "current_price":         float(prices.iloc[-1]),
             "start_price":           float(prices.iloc[0]),
             "best_day":              float(returns.max()),
@@ -142,10 +152,13 @@ def compute_ffn(symbols, weights, period="1y"):
             "kurtosis":              float(returns.kurtosis()),
         }
 
-    # Only keep symbols we actually computed
+    # Only keep symbols we actually computed; report the rest so the caller
+    # can say the analysis is partial instead of implying full coverage.
     valid_syms = [s for s in symbols if s in result]
+    result["dropped_symbols"] = [s for s in symbols if s not in result]
     if not valid_syms:
-        return result
+        return {"error": "No symbol returned enough price data",
+                "dropped_symbols": result["dropped_symbols"]}
 
     valid_close = close[valid_syms].dropna(how="all")
     LIMIT = 252
@@ -259,13 +272,17 @@ def compute_ffn(symbols, weights, period="1y"):
                 # Equal weights
                 equal_w = {s: round(1.0 / n, 6) for s in valid_syms}
 
-                # Current weights (passed in from C++)
-                cur_w_arr = np.array([weights.get(s, 1.0 / n) for s in valid_syms])
-                cur_w_arr = cur_w_arr / cur_w_arr.sum()
-                current_w = {s: round(float(cur_w_arr[i]), 6) for i, s in enumerate(valid_syms)}
+                # Current weights (passed in from C++), renormalised over the
+                # symbols that returned data. None when no weight survived.
+                cur_w_arr = np.array([weights.get(s, 0.0) for s in valid_syms])
+                current_w = None
+                if cur_w_arr.sum() > 0:
+                    cur_w_arr = cur_w_arr / cur_w_arr.sum()
+                    current_w = {s: round(float(cur_w_arr[i]), 6) for i, s in enumerate(valid_syms)}
 
-                # ERC weights via ffn
-                erc_w = equal_w.copy()
+                # ERC weights via ffn. On failure there are NO ERC weights —
+                # equal weights must not be shown under the ERC label.
+                erc_w = None
                 try:
                     import ffn
                     erc_arr = ffn.calc_erc_weights(
@@ -279,8 +296,9 @@ def compute_ffn(symbols, weights, period="1y"):
                 except Exception:
                     pass
 
-                # Inverse-vol weights via ffn
-                inv_vol_w = equal_w.copy()
+                # Inverse-vol weights via ffn (manual fallback is the same
+                # formula, not a substitute scheme)
+                inv_vol_w = None
                 try:
                     import ffn
                     iv_arr = ffn.calc_inv_vol_weights(ret_df)
@@ -301,22 +319,21 @@ def compute_ffn(symbols, weights, period="1y"):
                 stats = {}
                 for name, wd in [("erc", erc_w), ("inv_vol", inv_vol_w),
                                   ("equal", equal_w), ("current", current_w)]:
+                    if wd is None:
+                        stats[name] = {"error": "weights unavailable"}
+                        continue
                     try:
                         stats[name] = portfolio_stats(valid_close[valid_syms].dropna(),
                                                        w_arr(wd), valid_syms)
-                    except Exception:
-                        stats[name] = {
-                            "total_return": 0.0, "cagr": 0.0,
-                            "volatility": 0.0, "sharpe": 0.0, "max_drawdown": 0.0,
-                        }
+                    except Exception as exc:
+                        # An error, not a row of zeros that reads as a flat
+                        # strategy with no risk.
+                        stats[name] = {"error": f"portfolio stats failed: {exc}"}
 
-                opt_out = {
-                    "erc":     erc_w,
-                    "inv_vol": inv_vol_w,
-                    "equal":   equal_w,
-                    "current": current_w,
-                    "stats":   stats,
-                }
+                opt_out = {"stats": stats, "equal": equal_w}
+                for name, wd in [("erc", erc_w), ("inv_vol", inv_vol_w), ("current", current_w)]:
+                    if wd is not None:
+                        opt_out[name] = wd
     except Exception:
         pass
 
@@ -326,38 +343,40 @@ def compute_ffn(symbols, weights, period="1y"):
 
 
 def main():
-    stdin_data = sys.stdin.read()
-    if not stdin_data.strip():
+    raw = read_input()
+    if not raw.strip():
         print(json.dumps({"error": "No input data"}))
         return
 
     try:
-        params = json.loads(stdin_data)
+        params = json.loads(raw)
     except Exception as exc:
         print(json.dumps({"error": f"JSON parse error: {exc}"}))
         return
 
     global _RF
-    _RF = float(params.get("risk_free", 0.04))
+    rf = params.get("risk_free")
+    _RF = float(rf) if rf is not None else None
     symbols = params.get("symbols", [])
     if not symbols:
         print(json.dumps({"error": "No symbols provided"}))
         return
 
-    # weights dict: symbol -> fraction (0-1); fall back to equal weight
-    raw_weights = params.get("weights", {})
-    n = len(symbols)
-    weights = {}
-    for s in symbols:
-        weights[s] = float(raw_weights.get(s, 1.0 / n))
+    # weights dict: symbol -> fraction (0-1). A symbol without a weight has
+    # weight 0 — the user's real allocation, not an invented equal share.
+    raw_weights = params.get("weights", {}) or {}
+    weights = {s: float(raw_weights.get(s, 0.0) or 0.0) for s in symbols}
     total_w = sum(weights.values())
-    if total_w > 0:
-        weights = {s: v / total_w for s, v in weights.items()}
-    else:
-        weights = {s: 1.0 / n for s in symbols}
+    if total_w <= 0:
+        print(json.dumps({"error": "No weights provided"}))
+        return
+    weights = {s: v / total_w for s, v in weights.items()}
 
-    result = compute_ffn(symbols, weights)
-    print(json.dumps(convert_numpy(result)))
+    try:
+        result = compute_ffn(symbols, weights)
+    except Exception as exc:
+        result = {"error": f"FFN analysis failed: {exc}"}
+    print(json.dumps(convert_numpy(result), allow_nan=False))
 
 
 if __name__ == "__main__":

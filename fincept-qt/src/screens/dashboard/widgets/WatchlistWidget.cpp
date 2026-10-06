@@ -3,6 +3,7 @@
 #include "screens/markets/MarketChartDialog.h"
 
 #include "ui/charts/InlineSparkline.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -228,9 +229,9 @@ void WatchlistWidget::render_from_cache() {
         if (auto* c = table_->item(row, 1))
             c->setText(QString("$%1").arg(q.price, 0, 'f', 2));
         if (auto* c = table_->item(row, 2))
-            c->setText(QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2));
+            c->setText(std::isfinite(q.change) ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2) : ui::formatting::placeholder());
         if (auto* c = table_->item(row, 3))
-            c->setText(QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2));
+            c->setText(ui::formatting::format_percent(q.change_pct, 2, true));
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
         table_->set_cell_color(row, 3, ui::change_color(q.change_pct));
 
@@ -247,8 +248,8 @@ void WatchlistWidget::populate(const QVector<services::QuoteData>& quotes) {
 
     for (const auto& q : quotes) {
         table_->add_row({q.symbol, QString("$%1").arg(q.price, 0, 'f', 2),
-                         QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2),
-                         QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2),
+                         std::isfinite(q.change) ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2) : ui::formatting::placeholder(),
+                         ui::formatting::format_percent(q.change_pct, 2, true),
                          QString{}});
         int row = table_->rowCount() - 1;
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));

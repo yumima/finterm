@@ -484,9 +484,11 @@ def _quote_via_fast_info(symbol):
         return None
 
     prev_close_raw = _first_real("regular_market_previous_close", "previous_close")
-    prev_close = prev_close_raw if prev_close_raw is not None else current
-    change = current - prev_close
-    pct = (change / prev_close * 100.0) if prev_close else 0.0
+    # No real previous close → change/change_percent are unknown (None), never
+    # a fabricated flat 0.00 / 0.00% computed against the current price.
+    prev_close = prev_close_raw
+    change = (current - prev_close) if prev_close is not None else None
+    pct = (change / prev_close * 100.0) if prev_close else None
 
     def _f(name):
         v = getattr(fi, name, None)
@@ -506,13 +508,13 @@ def _quote_via_fast_info(symbol):
     return {
         "symbol":          symbol,
         "price":           _round_price(current, symbol),
-        "change":          _round_price(change, symbol),
-        "change_percent":  round(pct, 2),
+        "change":          _round_price(change, symbol) if change is not None else None,
+        "change_percent":  round(pct, 2) if pct is not None else None,
         "volume":          _i("last_volume"),
         "high":            _f("day_high"),
         "low":             _f("day_low"),
         "open":            _f("open"),
-        "previous_close":  _round_price(prev_close, symbol),
+        "previous_close":  _round_price(prev_close, symbol) if prev_close is not None else None,
         "timestamp":       int(datetime.now().timestamp()),
         "exchange":        getattr(fi, "exchange", "") or "",
     }
@@ -532,20 +534,27 @@ def _quote_via_full_info(symbol):
             return {"error": "No data available", "symbol": symbol}
 
         current_price = hist['Close'].iloc[-1]
-        previous_close = info.get('previousClose', current_price)
-        change = current_price - previous_close
-        change_percent = (change / previous_close) * 100 if previous_close else 0
+        previous_close = info.get('previousClose')
+        try:
+            previous_close = float(previous_close) if previous_close is not None else None
+        except (TypeError, ValueError):
+            previous_close = None
+        if previous_close is not None and (not math.isfinite(previous_close) or previous_close == 0):
+            previous_close = None
+        # Missing previous close → change unknown (None), not 0 vs current.
+        change = (current_price - previous_close) if previous_close is not None else None
+        change_percent = (change / previous_close) * 100 if previous_close else None
 
         quote_data = {
             "symbol": symbol,
             "price": _round_price(current_price),
-            "change": _round_price(change),
-            "change_percent": round(float(change_percent), 2),
-            "volume": int(hist['Volume'].iloc[-1]) if not hist['Volume'].empty else None,
+            "change": _round_price(change) if change is not None else None,
+            "change_percent": round(float(change_percent), 2) if change_percent is not None else None,
+            "volume": int(hist['Volume'].iloc[-1]) if not hist['Volume'].empty and not pd.isna(hist['Volume'].iloc[-1]) else None,
             "high": _round_price(hist['High'].iloc[-1]) if not hist['High'].empty else None,
             "low": _round_price(hist['Low'].iloc[-1]) if not hist['Low'].empty else None,
             "open": _round_price(hist['Open'].iloc[-1]) if not hist['Open'].empty else None,
-            "previous_close": _round_price(previous_close),
+            "previous_close": _round_price(previous_close) if previous_close is not None else None,
             "timestamp": int(datetime.now().timestamp()),
             "exchange": info.get('exchange', '')
         }
@@ -1586,10 +1595,12 @@ def get_batch_quotes(symbols):
                 # ER header uses (regular-market previous close), so one
                 # symbol shows one change% wherever it appears.
                 # With period="5d" we always have >= 2 rows for normally-traded instruments.
-                raw_prev = hist['Close'].iloc[-2] if len(hist) >= 2 else raw_price
-                previous_close = float(raw_prev) if not pd.isna(raw_prev) else current_price
-                change = current_price - previous_close
-                change_percent = (change / previous_close) * 100 if previous_close else 0
+                # No prior bar (or NaN) → previous close unknown; change and
+                # change_percent are None rather than a fabricated 0 / 0.00%.
+                raw_prev = hist['Close'].iloc[-2] if len(hist) >= 2 else None
+                previous_close = float(raw_prev) if raw_prev is not None and not pd.isna(raw_prev) else None
+                change = (current_price - previous_close) if previous_close is not None else None
+                change_percent = (change / previous_close) * 100 if previous_close else None
 
                 # Bid/ask intentionally omitted from the batch hot path.
                 # yfinance's fast_info hits a separate Yahoo endpoint per
@@ -1603,13 +1614,13 @@ def get_batch_quotes(symbols):
                 results.append({
                     "symbol": symbol,
                     "price": _round_price(current_price, symbol),
-                    "change": _round_price(change, symbol),
-                    "change_percent": round(change_percent, 2),
-                    "volume": int(hist['Volume'].iloc[-1]) if not pd.isna(hist['Volume'].iloc[-1]) else 0,
+                    "change": _round_price(change, symbol) if change is not None else None,
+                    "change_percent": round(change_percent, 2) if change_percent is not None else None,
+                    "volume": int(hist['Volume'].iloc[-1]) if not pd.isna(hist['Volume'].iloc[-1]) else None,
                     "high": _round_price(hist['High'].iloc[-1]) if not pd.isna(hist['High'].iloc[-1]) else None,
                     "low": _round_price(hist['Low'].iloc[-1]) if not pd.isna(hist['Low'].iloc[-1]) else None,
                     "open": _round_price(hist['Open'].iloc[-1]) if not pd.isna(hist['Open'].iloc[-1]) else None,
-                    "previous_close": _round_price(previous_close, symbol),
+                    "previous_close": _round_price(previous_close, symbol) if previous_close is not None else None,
                     "timestamp": int(datetime.now().timestamp()),
                     "exchange": ""
                 })

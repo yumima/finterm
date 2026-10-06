@@ -22,7 +22,8 @@ inline void publish_to_hub(const QString& topic, const QVariant& value) {
 }  // namespace
 
 // Maritime intelligence endpoint was served by the external stub (now removed).
-// All fetch methods return empty results immediately.
+// Every fetch method reports "unavailable" via error_occurred instead of
+// emitting an empty-but-successful result.
 static constexpr const char* kMarineBase = "";
 static constexpr int kVesselTtlSec = 60;      // position data: 1 min
 static constexpr int kHistoryTtlSec = 5 * 60; // history: 5 min
@@ -34,6 +35,14 @@ MaritimeService& MaritimeService::instance() {
 }
 
 MaritimeService::MaritimeService(QObject* parent) : QObject(parent) {}
+
+bool MaritimeService::is_available() {
+    return *kMarineBase != '\0';
+}
+
+const char* MaritimeService::unavailable_message() {
+    return "No vessel data source configured";
+}
 
 // ── Parse vessel from JSON ───────────────────────────────────────────────────
 VesselData MaritimeService::parse_vessel(const QJsonObject& obj) const {
@@ -85,8 +94,12 @@ void MaritimeService::search_vessels_by_area(const AreaSearchParams& params) {
 
 // ── Single vessel position ───────────────────────────────────────────────────
 void MaritimeService::get_vessel_position(const QString& imo) {
-    if (imo.trimmed().isEmpty() || !*kMarineBase) {
-        emit error_occurred("vessel_position", "Maritime intelligence unavailable in this build");
+    if (!is_available()) {
+        emit error_occurred("vessel_position", unavailable_message());
+        return;
+    }
+    if (imo.trimmed().isEmpty()) {
+        emit error_occurred("vessel_position", "IMO number is required");
         return;
     }
 
@@ -128,8 +141,8 @@ void MaritimeService::get_vessel_position(const QString& imo) {
 
 // ── Multi vessel positions ───────────────────────────────────────────────────
 void MaritimeService::get_multi_vessel_positions(const QStringList& imos) {
-    if (!*kMarineBase) {
-        emit vessels_loaded({}, 0);
+    if (!is_available()) {
+        emit error_occurred("multi_vessel", unavailable_message());
         return;
     }
     QStringList sorted = imos;
@@ -181,8 +194,8 @@ void MaritimeService::get_multi_vessel_positions(const QStringList& imos) {
 
 // ── Vessel history ───────────────────────────────────────────────────────────
 void MaritimeService::get_vessel_history(const QString& imo) {
-    if (!*kMarineBase) {
-        emit vessel_history_loaded({});
+    if (!is_available()) {
+        emit error_occurred("vessel_history", unavailable_message());
         return;
     }
     const QString cache_key = "maritime:history:" + imo.trimmed();
@@ -231,6 +244,10 @@ void MaritimeService::get_vessel_history(const QString& imo) {
 
 // ── Health check ─────────────────────────────────────────────────────────────
 void MaritimeService::check_health() {
+    if (!is_available()) {
+        emit error_occurred("health", unavailable_message());
+        return;
+    }
     QPointer<MaritimeService> self = this;
     HttpClient::instance().get(QString(kMarineBase) + "/health", [self](Result<QJsonDocument> result) {
         if (!self)

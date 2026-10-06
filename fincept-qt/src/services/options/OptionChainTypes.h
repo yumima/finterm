@@ -116,7 +116,7 @@ struct Strategy {
 // One point on the payoff curve at a given underlying spot price.
 struct PayoffPoint {
     double spot = 0;
-    double pnl_target = 0;           // P/L on chosen target date (pre-expiry, BSM)
+    double pnl_target = 0;           // P/L on chosen target date (pre-expiry, BSM); NaN when a leg has no IV / unknown expiry
     double pnl_expiry = 0;           // P/L at expiry (intrinsic only, piecewise linear)
 };
 
@@ -137,7 +137,7 @@ struct StrategyAnalytics {
     double max_profit = 0;            // bounded value (use std::numeric_limits<double>::infinity for unlimited)
     double max_loss = 0;              // negative or zero
     QVector<double> breakevens;       // sorted asc
-    double pop = 0;                   // probability of profit (BSM-derived)
+    double pop = 0;                   // probability of profit (BSM-derived); NaN when IV/horizon unavailable
     double premium_paid = 0;          // net debit (positive = paid, negative = received)
     double margin_required = 0;       // from IBroker::get_basket_margins
     bool   margin_estimated = false;  // true when margin came from heuristic, not broker

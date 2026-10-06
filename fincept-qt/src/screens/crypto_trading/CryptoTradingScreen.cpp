@@ -15,6 +15,7 @@
 #include "trading/ExchangeService.h"
 #include "trading/OrderMatcher.h"
 #include "trading/PaperTrading.h"
+#include "ui/notifications/ToastService.h"
 #include "ui/theme/StyleSheets.h"
 #include "ui/theme/Theme.h"
 
@@ -781,10 +782,20 @@ void CryptoTradingScreen::on_order_submitted(const QString& side, const QString&
         if (trading_mode_ == TradingMode::Paper) {
             auto ticker = ExchangeService::instance().get_cached_price(selected_symbol_);
             std::optional<double> price_opt;
-            if (order_type == "market")
-                price_opt = ticker.last > 0 ? ticker.last : 1000.0;
-            else if (price > 0)
+            if (order_type == "market") {
+                // Market orders fill at the real cached quote only — never a
+                // placeholder. Reject when no live price is available.
+                if (!(ticker.last > 0)) {
+                    LOG_WARN(TAG, "Paper market order rejected: no market price available for " + selected_symbol_);
+                    fincept::ui::ToastService::instance().post(
+                        fincept::ui::ToastService::Severity::Warning,
+                        "No market price available — cannot fill market order", "crypto_trading");
+                    return;
+                }
+                price_opt = ticker.last;
+            } else if (price > 0) {
                 price_opt = price;
+            }
 
             std::optional<double> stop_opt;
             if (stop_price > 0)
@@ -792,8 +803,7 @@ void CryptoTradingScreen::on_order_submitted(const QString& side, const QString&
 
             auto order = pt_place_order(portfolio_id_, selected_symbol_, side, order_type, qty, price_opt, stop_opt);
             if (order_type == "market") {
-                double fill = ticker.last > 0 ? ticker.last : price_opt.value_or(1000.0);
-                pt_fill_order(order.id, fill);
+                pt_fill_order(order.id, ticker.last);
             } else {
                 OrderMatcher::instance().add_order(order);
                 if (sl > 0 || tp > 0)

@@ -290,9 +290,9 @@ class RiskAnalyzer:
                                          risk_free_rate: float = 0.02) -> RiskMetrics:
         """Calculate comprehensive risk metrics"""
 
-        if historical_returns is None:
-            # Generate sample returns for demonstration
-            historical_returns = np.random.normal(0.001, 0.02, 252)  # Daily returns for 1 year
+        if historical_returns is None or len(historical_returns) < 2:
+            raise ValueError("Portfolio risk metrics require historical_returns "
+                             "(at least 2 observations); none were provided")
 
         portfolio_value = sum(pos.current_value for pos in portfolio.positions)
 

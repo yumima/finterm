@@ -1329,7 +1329,25 @@ void BacktestingScreen::clear_results() {
     raw_json_edit_->clear();
 }
 
-void BacktestingScreen::display_result(const QJsonObject& payload) {
+void BacktestingScreen::display_result(const QJsonObject& envelope) {
+    // A provider failure ({"success": false, "error": ...}) must render as an
+    // error, never as (empty) summary cards. BacktestingService already routes
+    // these to on_error; this guards any other caller.
+    const QJsonValue success = envelope.value("success");
+    if (success.isBool() && !success.toBool()) {
+        QString msg = envelope.value("error").toString();
+        if (msg.isEmpty())
+            msg = envelope.value("message").toString("Provider reported failure without an error message");
+        set_status_state("ERROR", ui::colors::NEGATIVE, "rgba(220,38,38,0.08)");
+        display_error(msg);
+        return;
+    }
+
+    // Providers wrap results as {"success": true, "data": {...}} — unwrap so
+    // performance/trades are found. Raw JSON tab still shows the full envelope.
+    const QJsonObject payload =
+        envelope.value("data").isObject() ? envelope.value("data").toObject() : envelope;
+
     clear_results();
 
     auto accent = providers_[active_provider_].color.name();
@@ -1474,7 +1492,7 @@ void BacktestingScreen::display_result(const QJsonObject& payload) {
     }
 
     // ── RAW JSON tab ──
-    raw_json_edit_->setPlainText(QJsonDocument(payload).toJson(QJsonDocument::Indented));
+    raw_json_edit_->setPlainText(QJsonDocument(envelope).toJson(QJsonDocument::Indented));
 
     // Switch to summary tab
     result_tabs_->setCurrentIndex(0);

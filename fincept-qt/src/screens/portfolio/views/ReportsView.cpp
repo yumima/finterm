@@ -2,6 +2,7 @@
 #include "screens/portfolio/views/ReportsView.h"
 
 #include "storage/repositories/PortfolioRepository.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QGridLayout>
@@ -166,7 +167,10 @@ void ReportsView::update_summary() {
         grid->addWidget(card, r, c);
     };
 
-    auto fmt = [](double v, int dp = 2) { return QString::number(v, 'f', dp); };
+    // NaN = unknown (holding with no price) → "—", never "nan".
+    auto fmt = [](double v, int dp = 2) {
+        return std::isfinite(v) ? QString::number(v, 'f', dp) : ui::formatting::placeholder();
+    };
 
     add_card(0, 0, "PORTFOLIO", summary_.portfolio.name.toUpper(), ui::colors::AMBER);
     add_card(0, 1, "TOTAL VALUE", QString("%1 %2").arg(currency_, fmt(summary_.total_market_value)),
@@ -230,6 +234,11 @@ void ReportsView::update_summary() {
         set(1, fmt(h.quantity, h.quantity == std::floor(h.quantity) ? 0 : 2));
         set(2, fmt(h.avg_buy_price));
         set(3, fmt(h.current_price));
+        if (!h.valued()) {
+            set(4, ui::formatting::placeholder(), ui::colors::TEXT_TERTIARY);
+            set(5, QString("%1%").arg(fmt(h.weight, 1)));
+            continue;
+        }
         const char* pc = h.unrealized_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
         set(4,
             QString("%1%2 (%3%4%)")
@@ -297,6 +306,15 @@ void ReportsView::update_attribution() {
             attr_table_->setItem(r, col, item);
         };
 
+        if (!h.valued()) {
+            // No price / FX → no return, contribution or verdict to state.
+            set(0, h.symbol, ui::colors::CYAN);
+            set(1, QString("%1%").arg(QString::number(h.weight, 'f', 1)));
+            for (int col = 2; col <= 4; ++col)
+                set(col, ui::formatting::placeholder(), ui::colors::TEXT_TERTIARY);
+            set(5, QStringLiteral("NO PRICE"), ui::colors::TEXT_TERTIARY);
+            continue;
+        }
         double contribution = (total_pnl != 0) ? (h.unrealized_pnl / std::abs(total_pnl)) * 100.0 : 0;
 
         const char* ret_color = h.unrealized_pnl_percent >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;

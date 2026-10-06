@@ -112,8 +112,10 @@ void EquityTradingScreen::restore_state(const QJsonObject& state) {
         if (!accounts.isEmpty())
             focused_account_id_ = accounts.first().account_id;
     }
-    if (state.contains("symbol"))
+    if (state.contains("symbol")) {
         selected_symbol_ = state["symbol"].toString();
+        current_price_ = 0.0; // last LTP belonged to the previous symbol
+    }
     if (state.contains("exchange"))
         selected_exchange_ = state["exchange"].toString();
     if (state.contains("watchlist_symbols")) {
@@ -692,6 +694,7 @@ void EquityTradingScreen::on_account_changed(const QString& account_id) {
         // Update defaults if switching broker types
         watchlist_symbols_ = QStringList(prof.default_watchlist.begin(), prof.default_watchlist.end());
         selected_symbol_ = prof.default_symbol;
+        current_price_ = 0.0; // last LTP belonged to the previous symbol
         selected_exchange_ = prof.default_exchange;
 
         order_entry_->configure_for_broker(prof);
@@ -768,6 +771,7 @@ void EquityTradingScreen::on_symbol_selected(const QString& symbol) {
 
 void EquityTradingScreen::switch_symbol(const QString& symbol) {
     selected_symbol_ = symbol;
+    current_price_ = 0.0; // last LTP belonged to the previous symbol
     symbol_input_->setText(symbol);
     ticker_bar_->set_symbol(symbol);
     order_entry_->set_symbol(symbol);
@@ -915,16 +919,17 @@ void EquityTradingScreen::on_order_submitted(const UnifiedOrder& order) {
         if (order.order_type == OrderType::Limit || order.order_type == OrderType::StopLossLimit) {
             price_opt = order.price;
         } else if (order.order_type == OrderType::Market) {
-            const double ref = current_price_ > 0 ? current_price_ : (order.price > 0 ? order.price : 0.0);
-            if (ref > 0)
-                price_opt = ref;
+            // Market orders fill only at the live quote — never at a stale
+            // typed limit price.
+            if (current_price_ > 0 && order.symbol == selected_symbol_)
+                price_opt = current_price_;
         }
         std::optional<double> stop_opt;
         if (order.stop_price > 0)
             stop_opt = order.stop_price;
 
         if (order.order_type == OrderType::Market && !price_opt) {
-            order_entry_->show_order_status("Price not available yet — wait for quotes to load", false);
+            order_entry_->show_order_status("No market price available — cannot fill market order", false);
             return;
         }
 
@@ -932,11 +937,7 @@ void EquityTradingScreen::on_order_submitted(const UnifiedOrder& order) {
             auto pt_order = pt_place_order(portfolio_id, order.symbol, side, type, order.quantity, price_opt, stop_opt);
 
             if (order.order_type == OrderType::Market) {
-                double fill_price = current_price_ > 0 ? current_price_ : (order.price > 0 ? order.price : 0.0);
-                if (fill_price <= 0) {
-                    order_entry_->show_order_status("No price available for fill", false);
-                    return;
-                }
+                const double fill_price = *price_opt; // live quote checked above
                 pt_fill_order(pt_order.id, fill_price);
                 order_entry_->show_order_status(
                     QString("Paper order filled: %1 @ %2").arg(order.symbol).arg(fill_price, 0, 'f', 2), true);

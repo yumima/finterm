@@ -4,6 +4,7 @@
 #include "core/events/EventBus.h"
 #include "screens/portfolio/PortfolioSparkline.h"
 #include "services/markets/MarketDataService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -300,6 +301,11 @@ void PortfolioBlotter::populate_table() {
                 vb = b.market_value;
                 break;
         }
+        // Unknown (NaN) values would break the strict weak ordering
+        // stable_sort requires; keep them together at the end.
+        const bool na = std::isnan(va), nb = std::isnan(vb);
+        if (na || nb)
+            return !na && nb;
         return asc ? va < vb : va > vb;
     };
     std::stable_sort(sorted_.begin(), sorted_.end(), cmp);
@@ -327,26 +333,40 @@ void PortfolioBlotter::populate_table() {
         // QTY
         set_cell(1, format_value(h.quantity, h.quantity == std::floor(h.quantity) ? 0 : 2));
 
-        // LAST (price)
-        set_cell(2, format_value(h.current_price));
+        // Unknown figures (no price at all, or no day change for today) render
+        // as a muted "—" with no sign — see HoldingWithQuote::price_known.
+        const auto signed_cell = [&](int col, double v, const QString& suffix) {
+            if (!std::isfinite(v)) {
+                set_cell(col, ui::formatting::placeholder(), ui::colors::TEXT_TERTIARY);
+                return;
+            }
+            set_cell(col, QString("%1%2%3").arg(v >= 0 ? "+" : "").arg(format_value(v)).arg(suffix),
+                     v >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+        };
+
+        // LAST (price) — "≈" when it is a last-known print, not a fresh quote.
+        set_cell(2, (h.price_stale ? QStringLiteral("≈") : QString()) + format_value(h.current_price),
+                 h.price_known ? nullptr : ui::colors::TEXT_TERTIARY());
 
         // AVG COST
         set_cell(3, format_value(h.avg_buy_price));
 
         // MKT VAL
-        set_cell(4, format_value(h.market_value), ui::colors::WARNING);
+        if (h.valued())
+            set_cell(4, format_value(h.market_value), ui::colors::WARNING);
+        else
+            set_cell(4, ui::formatting::placeholder(), ui::colors::TEXT_TERTIARY);
 
         // COST BASIS
         set_cell(5, format_value(h.cost_basis));
 
         // P&L
-        const char* pnl_color = h.unrealized_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-        set_cell(6, QString("%1%2").arg(h.unrealized_pnl >= 0 ? "+" : "").arg(format_value(h.unrealized_pnl)),
-                 pnl_color);
+        signed_cell(6, h.unrealized_pnl, QString());
 
         // L% — drop from the peak high since entry. Dash until the peak-high
-        // fetch lands (0% would read as "at the high", which we don't know).
-        if (h.peak_price > 0) {
+        // fetch lands (0% would read as "at the high", which we don't know),
+        // and when there is no current price to measure the drop from.
+        if (h.peak_price > 0 && h.price_known) {
             const double drop = -h.drawdown_from_peak_percent; // magnitude, >= 0
             const char* stop_color = drop >= kStopDangerPct  ? ui::colors::NEGATIVE
                                      : drop >= kStopWarnPct  ? ui::colors::WARNING
@@ -357,15 +377,10 @@ void PortfolioBlotter::populate_table() {
         }
 
         // P% — P&L against cost basis
-        set_cell(
-            8,
-            QString("%1%2%").arg(h.unrealized_pnl_percent >= 0 ? "+" : "").arg(format_value(h.unrealized_pnl_percent)),
-            pnl_color);
+        signed_cell(8, h.unrealized_pnl_percent, QStringLiteral("%"));
 
         // CHG%
-        const char* chg_color = h.day_change_percent >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-        set_cell(9, QString("%1%2%").arg(h.day_change_percent >= 0 ? "+" : "").arg(format_value(h.day_change_percent)),
-                 chg_color);
+        signed_cell(9, h.day_change_percent, QStringLiteral("%"));
 
         // TREND — show loaded data, a pending shimmer, or a failure dash
         auto* sparkline = new PortfolioSparkline(0, 0);
@@ -374,7 +389,7 @@ void PortfolioBlotter::populate_table() {
         if (state == SparklineState::Loaded && sparkline_cache_.contains(h.symbol)) {
             const auto& prices = sparkline_cache_[h.symbol];
             sparkline->set_data(prices);
-            bool up = prices.size() >= 2 ? prices.last() >= prices.first() : h.day_change >= 0;
+            bool up = prices.size() >= 2 ? prices.last() >= prices.first() : !(h.day_change < 0);
             sparkline->set_color(QColor(up ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
         } else if (state == SparklineState::Failed) {
             // Show flat dash line in muted color to indicate unavailable data
@@ -407,6 +422,9 @@ void PortfolioBlotter::populate_table() {
 }
 
 QString PortfolioBlotter::format_value(double v, int dp) const {
+    // NaN = unknown (no price / no day change) — the shared "—", never "nan".
+    if (!std::isfinite(v))
+        return ui::formatting::placeholder();
     return QString::number(v, 'f', dp);
 }
 

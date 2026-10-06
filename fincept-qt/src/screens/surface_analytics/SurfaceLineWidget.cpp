@@ -149,13 +149,21 @@ void SurfaceLineWidget::paintEvent(QPaintEvent* /*event*/) {
     for (const auto& s : series_) {
         if (s.x_values.empty() || s.y_values.size() != s.x_values.size())
             continue;
+        // A NaN point is missing data: break the line there instead of
+        // drawing through (or to) a made-up value.
         QPainterPath path;
+        bool pen_down = false;
         for (size_t i = 0; i < s.x_values.size(); ++i) {
+            if (!std::isfinite(s.x_values[i]) || !std::isfinite(s.y_values[i])) {
+                pen_down = false;
+                continue;
+            }
             QPointF pt = data_to_pixel(s.x_values[i], s.y_values[i], plot);
-            if (i == 0)
+            if (!pen_down)
                 path.moveTo(pt);
             else
                 path.lineTo(pt);
+            pen_down = true;
         }
         p.setPen(QPen(s.color, 2));
         p.drawPath(path);
@@ -163,6 +171,8 @@ void SurfaceLineWidget::paintEvent(QPaintEvent* /*event*/) {
         // Markers at each point
         p.setBrush(s.color);
         for (size_t i = 0; i < s.x_values.size(); ++i) {
+            if (!std::isfinite(s.x_values[i]) || !std::isfinite(s.y_values[i]))
+                continue;
             QPointF pt = data_to_pixel(s.x_values[i], s.y_values[i], plot);
             p.drawEllipse(pt, 2.5, 2.5);
         }

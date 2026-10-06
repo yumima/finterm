@@ -84,16 +84,14 @@ static QString btn_inactive() {
 
 // ── Constructor ──────────────────────────────────────────────────────────────
 SurfaceAnalyticsScreen::SurfaceAnalyticsScreen(QWidget* parent) : QWidget(parent) {
-    srand((unsigned)time(nullptr));
     setup_ui();
-    // NOTE: the surfaces below are SYNTHETIC until a real source is wired —
-    // load_demo_data() generates them analytically with rand() noise. The
-    // control panel disables FETCH for the DEMO tier and shows an amber
-    // "SYNTHETIC DATA" badge (see tier_name/tier_color).
-    // Default to the seeded equity underlyings on first open so demo data fills.
+    // Every surface starts EMPTY. Nothing is drawn until real data arrives —
+    // FETCH (Databento), the FRED rates load, or a CSV the user imports. The
+    // analytic generators that used to fill the screen on open are gone: an
+    // invented vol smile in a finance terminal invites a decision.
     if (!control_panel_->state().basket.isEmpty())
         control_panel_->set_capability(active_chart_);
-    load_demo_data();
+    clear_symbol_surfaces();
     update_chart();
     update_metrics();
     update_inspector_lineage();
@@ -370,73 +368,36 @@ void SurfaceAnalyticsScreen::refresh_surface_bar() {
 }
 
 // ── Data loading ─────────────────────────────────────────────────────────────
-void SurfaceAnalyticsScreen::load_demo_data() {
-    // Every surface REGENERATED below loses its provenance — it has just been
-    // overwritten, and leaving the mark would keep the badge claiming OPRA
-    // over a generated curve.
+void SurfaceAnalyticsScreen::clear_symbol_surfaces() {
+    // The symbol-dependent surfaces belong to the previous underlying — keeping
+    // them would draw another ticker's numbers under the new one. They are
+    // emptied (not regenerated) and lose their provenance mark.
     //
-    // The rates surfaces are not regenerated and are not symbol-dependent: the
-    // Treasury curve does not change because the user typed another ticker.
-    // The bar-derived risk surfaces are not regenerated either. Clearing their
-    // marks would re-badge real data SYNTHETIC and report its lineage as
-    // "generated, not fetched" — the same false claim, pointed the other way.
-    static const QSet<ChartType> kSurvivesRegeneration = {
+    // The rates surfaces are not symbol-dependent (the Treasury curve does not
+    // change because the user typed another ticker), and the bar-derived risk
+    // surfaces are keyed on the basket, not the underlying — both survive.
+    static const QSet<ChartType> kSurvivesSymbolChange = {
         ChartType::YieldCurve, ChartType::RealYield, ChartType::InflationExpectations,
         ChartType::ForwardRate, ChartType::Correlation, ChartType::PCA,
         ChartType::VaR, ChartType::Drawdown, ChartType::BetaSurface,
     };
     for (auto it = fetched_.begin(); it != fetched_.end();)
-        it = kSurvivesRegeneration.contains(*it) ? std::next(it) : fetched_.erase(it);
+        it = kSurvivesSymbolChange.contains(*it) ? std::next(it) : fetched_.erase(it);
     imported_from_.clear();
-    QString qsym = current_symbol_or_default();
-    std::string sym = qsym.toStdString();
-    // A generated surface needs a scale to be drawn around. With no live quote
-    // this is a drawing constant, not a price — which is why everything below
-    // is badged SYNTHETIC DATA and its lineage says "generated, not fetched".
-    constexpr float kNominalSpot = 100.0f;
-    float spot = spot_for(qsym);
-    if (spot <= 0.0f)
-        spot = kNominalSpot;
 
-    // Build a basket vector<string> from the control-panel state for risk surfaces.
-    std::vector<std::string> basket;
-    if (control_panel_) {
-        for (const QString& s : control_panel_->state().basket)
-            basket.push_back(s.toStdString());
-    }
-    if (basket.empty()) {
-        for (auto* s : defaults::RISK_BASKET)
-            basket.emplace_back(s);
-    }
-
-    vol_data_ = generate_vol_surface(sym.c_str(), spot);
-    delta_data_ = generate_delta_surface(sym.c_str(), spot);
-    gamma_data_ = generate_gamma_surface(sym.c_str(), spot);
-    vega_data_ = generate_vega_surface(sym.c_str(), spot);
-    theta_data_ = generate_theta_surface(sym.c_str(), spot);
-    skew_data_ = generate_skew_surface(sym.c_str());
-    local_vol_data_ = generate_local_vol(sym.c_str(), spot);
-
-    // Swaption / cap-floor vol, the OIS basis and the rating x maturity bond
-    // spread grid are gated for the same reason. The curve, real yields,
-    // breakevens and the implied forwards derived from the curve are filled
-    // from FRED by load_rates_from_fred().
-
-    // FX vol / forward points / cross-currency basis, CDS, rating transitions
-    // and recovery rates are gated — see required_feed(). They stay empty, and
-    // the chart says which feed it would take rather than drawing a model.
-
-    cmdty_fwd_data_ = generate_commodity_forward();
-    cmdty_vol_data_ = generate_commodity_vol();
-    crack_data_ = generate_crack_spread();
-    contango_data_ = generate_contango();
-
-    // Stress-test P&L and factor exposure are gated: both need definitions the
-    // app does not have. VaR, correlation, PCA, drawdown and beta are computed
-    // from real bars by compute_equity_surfaces().
-    liquidity_data_ = generate_liquidity(sym.c_str(), spot);
-    impl_div_data_ = generate_implied_dividend(sym.c_str(), spot);
-
+    vol_data_ = {};
+    delta_data_ = {};
+    gamma_data_ = {};
+    vega_data_ = {};
+    theta_data_ = {};
+    skew_data_ = {};
+    local_vol_data_ = {};
+    cmdty_fwd_data_ = {};
+    cmdty_vol_data_ = {};
+    crack_data_ = {};
+    contango_data_ = {};
+    liquidity_data_ = {};
+    impl_div_data_ = {};
 }
 
 // ── Chart routing ─────────────────────────────────────────────────────────────
@@ -445,12 +406,16 @@ void SurfaceAnalyticsScreen::update_chart() {
     // the dispatch below so it applies whichever view mode is active.
     if (surface_3d_) {
         const char* feed = required_feed(active_chart_);
+        const auto& ecap = capability_for(active_chart_);
         surface_3d_->set_empty_text(
             feed ? QStringLiteral("NO DATA — this surface needs %1.\n\n"
                                   "Nothing is drawn rather than a modelled shape:\n"
                                   "an invented surface is worse than an empty one.")
                        .arg(QString::fromUtf8(feed))
-                 : QString());
+            : ecap.tier != SurfaceTier::DEMO
+                ? QStringLiteral("NO DATA LOADED\n\nPress FETCH to load real data from %1.")
+                      .arg(QString::fromUtf8(ecap.dataset))
+                : QString());
     }
 
     auto minmax = [](const std::vector<std::vector<float>>& z, float& mn, float& mx) {
@@ -515,6 +480,12 @@ void SurfaceAnalyticsScreen::update_chart() {
 
     if (mode == ViewMode::Table) {
         view_stack_->setCurrentIndex(1);
+        // Nothing loaded: empty the table instead of leaving the previous
+        // surface's numbers on screen under this chart's name.
+        if (const auto* z = active_z_grid(); !z || z->empty()) {
+            surface_table_->show_generic_matrix({}, {}, {}, 0.0f, 0.0f, false);
+            return;
+        }
 
         switch (active_chart_) {
             case ChartType::Volatility:
@@ -1011,7 +982,7 @@ void SurfaceAnalyticsScreen::update_inspector_lineage() {
     const bool is_import = imported != imported_from_.constEnd();
     if (control_panel_)
         control_panel_->set_provenance(is_import ? SurfaceProvenance::Imported
-                                       : synthetic ? SurfaceProvenance::Synthetic
+                                       : synthetic ? SurfaceProvenance::None
                                                    : SurfaceProvenance::Fetched);
     if (is_import) {
         // The file IS the source. No dataset, no schema, and no cost query —
@@ -1034,8 +1005,8 @@ void SurfaceAnalyticsScreen::update_inspector_lineage() {
         return;
     }
     if (synthetic) {
-        data_inspector_->set_lineage(QStringLiteral("— generated, not fetched —"),
-                                     QStringLiteral("analytic model"),
+        data_inspector_->set_lineage(QStringLiteral("— no data loaded —"),
+                                     QStringLiteral("—"),
                                      QStringLiteral("—"),
                                      sym, QString(), count, 0.0);
         return;
@@ -1318,7 +1289,8 @@ void SurfaceAnalyticsScreen::on_import_csv() {
 }
 
 void SurfaceAnalyticsScreen::on_refresh() {
-    load_demo_data();
+    // Redraw what is loaded. It used to regenerate the analytic surfaces;
+    // new numbers come from FETCH, never from a refresh that invents them.
     update_chart();
     update_metrics();
     update_inspector_lineage();
@@ -1329,8 +1301,9 @@ void SurfaceAnalyticsScreen::on_controls_changed() {
 }
 
 void SurfaceAnalyticsScreen::on_control_symbol_changed(const QString& /*sym*/) {
-    // Rebuild demo surfaces with the new underlying so the chart isn't stale.
-    load_demo_data();
+    // Drop the previous underlying's surfaces so the chart isn't stale; the
+    // new symbol draws nothing until FETCH returns real data.
+    clear_symbol_surfaces();
     update_chart();
     update_metrics();
     update_inspector_lineage();
@@ -1381,7 +1354,7 @@ void SurfaceAnalyticsScreen::on_fetch_requested() {
 
     // These fetches PRICE against spot — the provider needs a real one, and
     // shipping the unknown 0 through would return quotes with no IV, leave
-    // every grid empty, and report "loaded" over the unchanged synthetic
+    // every grid empty, and report "loaded" over an unchanged empty
     // chart. Refusing with a reason is the honest failure; substituting a
     // round number was the dishonest one this stopped doing.
     switch (active_chart_) {
@@ -1422,9 +1395,8 @@ void SurfaceAnalyticsScreen::dispatch_csv(const QString& path) {
     if (rows.empty())
         return;
     // The user's own file is real data. Without marking it, the provenance
-    // rules would badge it SYNTHETIC DATA and report its lineage as
-    // "generated, not fetched" — the same false claim as before, pointed the
-    // other way.
+    // rules would badge it NO DATA and report its lineage as
+    // "no data loaded" — a false claim about data that is on screen.
     const auto mark_imported = [this, &path]() {
         imported_from_.insert(active_chart_, QFileInfo(path).fileName());
         fetched_.remove(active_chart_);   // a file replaces whatever was fetched
@@ -2205,10 +2177,10 @@ void SurfaceAnalyticsScreen::restore_state(const QVariantMap& state) {
         cs.iv_method = state.value("iv_method", cs.iv_method).toString();
         cs.basket = state.value("basket", cs.basket).toStringList();
         control_panel_->apply_state(cs);
-        load_demo_data();
+        clear_symbol_surfaces();
         update_chart();
         update_metrics();
-        update_inspector_lineage();   // load_demo_data() cleared fetched_
+        update_inspector_lineage();   // clear_symbol_surfaces() cleared fetched_
     }
 }
 
@@ -2217,7 +2189,7 @@ void SurfaceAnalyticsScreen::restore_state(const QVariantMap& state) {
 void SurfaceAnalyticsScreen::on_group_symbol_changed(const fincept::SymbolRef& ref) {
     if (!ref.is_valid() || !control_panel_)
         return;
-    // Push the linked symbol into the control panel; demo data + chart rebuild
+    // Push the linked symbol into the control panel; surface reset + chart rebuild
     // happen via on_control_symbol_changed.
     SurfaceControlsState cs = control_panel_->state();
     if (cs.symbol.compare(ref.symbol, Qt::CaseInsensitive) == 0)

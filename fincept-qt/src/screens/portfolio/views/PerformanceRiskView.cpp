@@ -174,6 +174,7 @@ void PerformanceRiskView::update_chart() {
         delete axis;
     }
 
+    chart->setTitle(QString());
     if (summary_.holdings.isEmpty())
         return;
 
@@ -199,20 +200,29 @@ void PerformanceRiskView::update_chart() {
     std::sort(filtered.begin(), filtered.end(),
               [](const auto& a, const auto& b) { return a.snapshot_date < b.snapshot_date; });
 
+    // Fewer than two NAV observations: nothing real to draw. A 30-day curve
+    // interpolated from cost to current value (with a sin() wiggle added)
+    // used to be drawn here as if it were history.
+    if (filtered.size() < 2) {
+        chart->setTitleBrush(QColor(ui::colors::TEXT_SECONDARY()));
+        chart->setTitle(tr("Insufficient NAV history for %1 — needs at least two daily snapshots")
+                            .arg(current_period_));
+        return;
+    }
+
     auto* line = new QLineSeries;
     auto* upper = new QLineSeries;
     auto* lower = new QLineSeries;
 
-    double first_val = summary_.total_cost_basis;
-    double last_val = summary_.total_market_value;
+    double first_val = filtered.first().total_value;
+    double last_val = filtered.last().total_value;
     double min_val = last_val, max_val = last_val;
 
-    if (filtered.size() >= 2) {
-        first_val = filtered.first().total_value;
+    {
         for (const auto& s : filtered) {
             QDateTime dt = QDateTime::fromString(s.snapshot_date.left(10), Qt::ISODate);
             if (!dt.isValid())
-                dt = QDateTime::currentDateTime();
+                continue; // undated row: no honest x position for it
             qint64 ms = dt.toMSecsSinceEpoch();
             line->append(ms, s.total_value);
             upper->append(ms, s.total_value);
@@ -220,26 +230,16 @@ void PerformanceRiskView::update_chart() {
             min_val = std::min(min_val, s.total_value);
             max_val = std::max(max_val, s.total_value);
         }
-        qint64 now_ms = QDateTime::currentDateTime().toMSecsSinceEpoch();
-        line->append(now_ms, last_val);
-        upper->append(now_ms, last_val);
-        lower->append(now_ms, first_val);
-        min_val = std::min(min_val, last_val);
-        max_val = std::max(max_val, last_val);
-    } else {
-        // Fallback: interpolate cost → current
-        int pts = 30;
-        QDateTime now = QDateTime::currentDateTime();
-        for (int i = 0; i < pts; ++i) {
-            double t = static_cast<double>(i) / (pts - 1);
-            double val = first_val + (last_val - first_val) * t;
-            val *= (1.0 + 0.005 * std::sin(i * 0.7));
-            qint64 ms = now.addDays(-(pts - 1 - i)).toMSecsSinceEpoch();
-            line->append(ms, val);
-            upper->append(ms, val);
-            lower->append(ms, first_val);
-            min_val = std::min(min_val, val);
-            max_val = std::max(max_val, val);
+        // Live NAV pin — only when it values the whole book (an unpriced
+        // holding would make it a partial sum and draw a fake drop).
+        if (!summary_.book_incomplete()) {
+            last_val = summary_.total_market_value;
+            qint64 now_ms = QDateTime::currentDateTime().toMSecsSinceEpoch();
+            line->append(now_ms, last_val);
+            upper->append(now_ms, last_val);
+            lower->append(now_ms, first_val);
+            min_val = std::min(min_val, last_val);
+            max_val = std::max(max_val, last_val);
         }
     }
 
@@ -321,6 +321,18 @@ void PerformanceRiskView::update_metrics() {
              : m.sharpe && *m.sharpe >= 0.0 ? ui::colors::WARNING
                                             : ui::colors::NEGATIVE);
     set_card(sortino_card_, m.sortino, m.sortino ? fmt(*m.sortino) : QString(), ui::colors::CYAN);
+    // Name the risk-free hurdle behind both ratios; "*" when it is a stale
+    // carried-over value (today's fetch failed).
+    for (auto* card : {&sharpe_card_, &sortino_card_}) {
+        const bool have = (card == &sharpe_card_) ? m.sharpe.has_value() : m.sortino.has_value();
+        if (have) {
+            if (portfolio::rf_is_stale(m))
+                card->value->setText(card->value->text() + QStringLiteral("*"));
+            card->value->setToolTip(portfolio::rf_label(m));
+        } else if (!m.rf_rate && m.return_days >= 2) {
+            card->value->setToolTip(portfolio::rf_label(m));
+        }
+    }
     set_card(beta_card_, m.beta, m.beta ? fmt(*m.beta) : QString(),
              m.beta && std::abs(*m.beta - 1.0) < 0.2   ? ui::colors::POSITIVE
              : m.beta && std::abs(*m.beta - 1.0) < 0.5 ? ui::colors::WARNING

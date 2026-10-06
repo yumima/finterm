@@ -10,14 +10,25 @@ Output: JSON to stdout
 """
 
 import json
+import math
 import sys
 
 
-def _safe_float(val, default=0.0):
+def _safe_float(val, default=None):
+    """Missing / unparseable / non-finite -> None (rendered as "—"), never a
+    made-up 0.0. A real reported 0 stays 0."""
     try:
-        return float(val) if val is not None else default
+        f = float(val) if val is not None else None
     except (TypeError, ValueError):
         return default
+    if f is None or not math.isfinite(f):
+        return default
+    return f
+
+
+def _scaled(val, factor):
+    """Multiply a possibly-None value; None stays None."""
+    return val * factor if val is not None else None
 
 
 def _safe_int(val, default=0):
@@ -69,10 +80,11 @@ def fetch_company_data(ticker: str) -> dict:
             "industry": info.get("industry", ""),
             "website": info.get("website", ""),
             "description": info.get("longBusinessSummary", "")[:300],
-            "employees": _safe_int(info.get("fullTimeEmployees")),
+            "employees": _safe_int(info.get("fullTimeEmployees"), None),
             "country": info.get("country", ""),
             "exchange": info.get("exchange", ""),
-            "currency": info.get("currency", "USD"),
+            # No invented default currency: blank when Yahoo doesn't report it.
+            "currency": info.get("currency", "") or "",
             "market_cap": _safe_float(info.get("marketCap")),
             "current_price": _safe_float(info.get("currentPrice", info.get("regularMarketPrice"))),
             "previous_close": _safe_float(info.get("previousClose")),
@@ -104,7 +116,7 @@ def fetch_company_data(ticker: str) -> dict:
             # since early 2025; this app's contract is a fraction, and every
             # display site multiplies by 100. Same conversion as
             # yfinance_data._dividend_yield_fraction.
-            "dividend_yield": _safe_float(info.get("dividendYield")) / 100.0,
+            "dividend_yield": _scaled(_safe_float(info.get("dividendYield")), 0.01),
             "payout_ratio": _safe_float(info.get("payoutRatio")),
             "trailing_eps": _safe_float(info.get("trailingEps")),
             "forward_eps": _safe_float(info.get("forwardEps")),
@@ -145,7 +157,7 @@ def fetch_company_data(ticker: str) -> dict:
 
         # ── Short Interest ────────────────────────────────────────────────
         shares_short = _safe_float(info.get("sharesShort"))
-        if shares_short > 0:
+        if shares_short is not None and shares_short > 0:
             quality += 5
             result["short_interest"] = {
                 "shares_short": shares_short,
@@ -171,7 +183,7 @@ def fetch_company_data(ticker: str) -> dict:
             "ebitda": _safe_float(info.get("ebitdaMargins")),
             "net": _safe_float(info.get("profitMargins")),
             # Percentage from Yahoo -> ratio, as in yfinance_data._pct_to_ratio.
-            "debt_to_equity": _safe_float(info.get("debtToEquity")) / 100.0,
+            "debt_to_equity": _scaled(_safe_float(info.get("debtToEquity")), 0.01),
             "current_ratio": _safe_float(info.get("currentRatio")),
             "quick_ratio": _safe_float(info.get("quickRatio")),
         }
@@ -267,15 +279,15 @@ def fetch_company_data(ticker: str) -> dict:
             if inst is not None and not inst.empty:
                 quality += 10
                 for _, row in inst.head(20).iterrows():
-                    pct = _safe_float(row.get("% Out", row.get("pctHeld", 0)))
-                    if pct < 1:
+                    pct = _safe_float(row.get("% Out", row.get("pctHeld")))
+                    if pct is not None and pct < 1:
                         pct *= 100
                     holder = {
                         "name": _safe_str(row.get("Holder")),
                         "shares": _safe_float(row.get("Shares")),
                         "value": _safe_float(row.get("Value")),
                         "percentage": pct,
-                        "change_percent": 0.0,
+                        "change_percent": None,  # not reported by this feed
                         "fund_family": "",
                         "type": "institutional",
                     }
@@ -290,15 +302,15 @@ def fetch_company_data(ticker: str) -> dict:
             if mf is not None and not mf.empty:
                 quality += 5
                 for _, row in mf.head(10).iterrows():
-                    pct = _safe_float(row.get("pctHeld", 0))
-                    if pct < 1:
+                    pct = _safe_float(row.get("pctHeld"))
+                    if pct is not None and pct < 1:
                         pct *= 100
                     holder = {
                         "name": _safe_str(row.get("Holder")),
                         "shares": _safe_float(row.get("Shares")),
                         "value": _safe_float(row.get("Value")),
                         "percentage": pct,
-                        "change_percent": _safe_float(row.get("pctChange", 0)) * 100,
+                        "change_percent": _scaled(_safe_float(row.get("pctChange")), 100),
                         "fund_family": "",
                         "type": "mutualfund",
                     }
@@ -316,8 +328,8 @@ def fetch_company_data(ticker: str) -> dict:
                     insider = {
                         "name": _safe_str(row.get("Name", row.get("Insider"))),
                         "title": _safe_str(row.get("Position", row.get("Relation"))),
-                        "shares": _safe_float(row.get("Shares", row.get("sharesOwned", 0))),
-                        "percentage": 0.0,
+                        "shares": _safe_float(row.get("Shares", row.get("sharesOwned"))),
+                        "percentage": None,  # not reported by this feed
                         "last_transaction": "",
                     }
                     if insider["name"]:
@@ -340,65 +352,12 @@ def fetch_company_data(ticker: str) -> dict:
             pass
 
         # ── Peer Companies ────────────────────────────────────────────────
-        INDUSTRY_PEERS = {
-            "Technology":        ["AAPL", "MSFT", "GOOGL", "META", "AMZN", "NVDA", "CRM", "ORCL", "ADBE"],
-            "Software":          ["MSFT", "CRM", "ORCL", "ADBE", "NOW", "INTU", "SNOW", "PLTR"],
-            "Semiconductors":    ["NVDA", "AMD", "INTC", "AVGO", "QCOM", "TXN", "MU", "AMAT"],
-            "Electric Vehicles": ["TSLA", "RIVN", "LCID", "NIO", "XPEV", "LI"],
-            "Auto Manufacturers":["TSLA", "F", "GM", "TM", "HMC", "STLA"],
-            "Banks":             ["JPM", "BAC", "WFC", "C", "GS", "MS", "USB"],
-            "Pharmaceuticals":   ["JNJ", "PFE", "MRK", "ABBV", "LLY", "BMY", "AMGN"],
-            "Oil & Gas":         ["XOM", "CVX", "COP", "EOG", "SLB", "PSX"],
-            "Retail":            ["WMT", "COST", "TGT", "HD", "LOW", "AMZN"],
-            "Payments":          ["V", "MA", "PYPL", "SQ", "FIS", "FISV"],
-            "Cloud Computing":   ["AMZN", "MSFT", "GOOGL", "CRM", "SNOW", "NOW"],
-            "Telecom":           ["T", "VZ", "TMUS", "CMCSA"],
-            "Healthcare":        ["UNH", "CVS", "HCA", "MCK", "ABC"],
-            "Insurance":         ["BRK-B", "MET", "PRU", "AFL", "AIG"],
-            "Real Estate":       ["AMT", "PLD", "CCI", "EQIX", "SPG"],
-            "Consumer":          ["PG", "KO", "PEP", "UL", "CL", "MCD", "SBUX"],
-            "Airlines":          ["DAL", "UAL", "AAL", "LUV", "ALK"],
-            "Defense":           ["LMT", "RTX", "NOC", "GD", "BA"],
-            "Energy":            ["NEE", "DUK", "SO", "AEP", "D"],
-        }
-
-        industry = result["company"].get("industry", "")
-        sector   = result["company"].get("sector", "")
-        peer_tickers = []
-
-        for key, peers_list in INDUSTRY_PEERS.items():
-            if key.lower() in industry.lower() or key.lower() in sector.lower():
-                peer_tickers = [p for p in peers_list if p != ticker.upper()][:8]
-                break
-
-        if not peer_tickers:
-            peer_tickers = [p for p in ["AAPL", "MSFT", "GOOGL", "AMZN", "META"] if p != ticker.upper()][:5]
-
-        for pt in peer_tickers:
-            try:
-                pi = yf.Ticker(pt).info or {}
-                peer = {
-                    "ticker": pt,
-                    "name": pi.get("longName", pi.get("shortName", pt)),
-                    "market_cap": _safe_float(pi.get("marketCap")),
-                    "pe_ratio": _safe_float(pi.get("trailingPE")),
-                    "forward_pe": _safe_float(pi.get("forwardPE")),
-                    "roe": _safe_float(pi.get("returnOnEquity")),
-                    "revenue_growth": _safe_float(pi.get("revenueGrowth")),
-                    "profit_margins": _safe_float(pi.get("profitMargins")),
-                    "gross_margins": _safe_float(pi.get("grossMargins")),
-                    "current_price": _safe_float(pi.get("currentPrice", pi.get("regularMarketPrice"))),
-                    "sector": pi.get("sector", ""),
-                    "beta": _safe_float(pi.get("beta")),
-                    "ev_to_ebitda": _safe_float(pi.get("enterpriseToEbitda")),
-                    "price_to_book": _safe_float(pi.get("priceToBook")),
-                    "week52_change": _safe_float(pi.get("52WeekChange")),
-                    "recommendation": pi.get("recommendationKey", ""),
-                }
-                result["peers"].append(peer)
-                quality += 3
-            except Exception:
-                pass
+        # Yahoo exposes no peers/comparables API, and no other peer source is
+        # wired in. Peers are left EMPTY rather than invented from a hardcoded
+        # industry->ticker table (which was stale and, for unmatched
+        # industries, fell back to an unrelated megacap list).
+        result["peers"] = []
+        result["peers_source"] = None
 
         result["data_quality"] = min(quality, 100)
 

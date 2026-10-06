@@ -33,6 +33,13 @@ constexpr const char* kFuturesFile   = "futures.json";
 constexpr const char* kDatasetsFile  = "datasets.json";
 constexpr const char* kSchemasFile   = "schemas.json";
 
+// A surface cell the provider could not compute arrives as JSON null. It
+// becomes NaN (a gap the renderers skip), never 0 — a 0 would read as a real
+// vol / spread / rate.
+float z_cell(const QJsonValue& v) {
+    return v.isDouble() ? (float)v.toDouble() : std::numeric_limits<float>::quiet_NaN();
+}
+
 } // namespace
 
 using namespace fincept::python;
@@ -412,7 +419,7 @@ void DatabentoService::fetch_local_vol(const QString& symbol, float spot) {
                        for (const auto& row : j["z"].toArray()) {
                            std::vector<float> r;
                            for (const auto& v : row.toArray())
-                               r.push_back((float)v.toDouble());
+                               r.push_back(z_cell(v));
                            res.z.push_back(r);
                        }
                        self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -443,7 +450,7 @@ void DatabentoService::fetch_implied_dividend(const QString& symbol, float spot)
                        for (const auto& row : j["z"].toArray()) {
                            std::vector<float> r;
                            for (const auto& v : row.toArray())
-                               r.push_back((float)v.toDouble());
+                               r.push_back(z_cell(v));
                            res.z.push_back(r);
                        }
                        self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -474,7 +481,7 @@ void DatabentoService::fetch_liquidity(const QString& symbol, float spot) {
                        for (const auto& row : j["z"].toArray()) {
                            std::vector<float> r;
                            for (const auto& v : row.toArray())
-                               r.push_back((float)v.toDouble());
+                               r.push_back(z_cell(v));
                            res.z.push_back(r);
                        }
                        self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -504,7 +511,7 @@ void DatabentoService::fetch_commodity_vol(const QString& root_symbol) {
             for (const auto& row : j["z"].toArray()) {
                 std::vector<float> r;
                 for (const auto& v : row.toArray())
-                    r.push_back((float)v.toDouble());
+                    r.push_back(z_cell(v));
                 res.z.push_back(r);
             }
             self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -534,7 +541,7 @@ void DatabentoService::fetch_crack_spread() {
             for (const auto& row : j["z"].toArray()) {
                 std::vector<float> r;
                 for (const auto& v : row.toArray())
-                    r.push_back((float)v.toDouble());
+                    r.push_back(z_cell(v));
                 res.z.push_back(r);
             }
             self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -564,7 +571,7 @@ void DatabentoService::fetch_stress_test(const QStringList& symbols) {
             for (const auto& row : j["z"].toArray()) {
                 std::vector<float> r;
                 for (const auto& v : row.toArray())
-                    r.push_back((float)v.toDouble());
+                    r.push_back(z_cell(v));
                 res.z.push_back(r);
             }
             self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -594,7 +601,7 @@ void DatabentoService::fetch_yield_curve() {
             for (const auto& row : j["z"].toArray()) {
                 std::vector<float> r;
                 for (const auto& v : row.toArray())
-                    r.push_back((float)v.toDouble());
+                    r.push_back(z_cell(v));
                 res.z.push_back(r);
             }
             self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -624,7 +631,7 @@ void DatabentoService::fetch_forward_rate() {
             for (const auto& row : j["z"].toArray()) {
                 std::vector<float> r;
                 for (const auto& v : row.toArray())
-                    r.push_back((float)v.toDouble());
+                    r.push_back(z_cell(v));
                 res.z.push_back(r);
             }
             self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -654,7 +661,7 @@ void DatabentoService::fetch_rate_path() {
             for (const auto& row : j["z"].toArray()) {
                 std::vector<float> r;
                 for (const auto& v : row.toArray())
-                    r.push_back((float)v.toDouble());
+                    r.push_back(z_cell(v));
                 res.z.push_back(r);
             }
             self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -684,7 +691,7 @@ void DatabentoService::fetch_fx_forward_points() {
             for (const auto& row : j["z"].toArray()) {
                 std::vector<float> r;
                 for (const auto& v : row.toArray())
-                    r.push_back((float)v.toDouble());
+                    r.push_back(z_cell(v));
                 res.z.push_back(r);
             }
             self->last_fetch_time_ = QDateTime::currentDateTime();
@@ -714,7 +721,10 @@ surface::VolatilitySurfaceData DatabentoService::parse_vol_surface(const QJsonOb
     for (const auto& v : opts) {
         QJsonObject o = v.toObject();
         float strike = (float)o["strike"].toDouble();
-        int dte = o["expiry_days"].toInt(o["dte"].toInt(30));
+        const QJsonValue dte_v = o.contains("expiry_days") ? o.value("expiry_days") : o.value("dte");
+        if (!dte_v.isDouble())
+            continue; // no real expiry — never assume 30 days
+        int dte = dte_v.toInt();
         float iv = (float)o["iv"].toDouble(o["implied_volatility"].toDouble());
         if (strike <= 0 || iv <= 0)
             continue;
@@ -733,7 +743,7 @@ surface::VolatilitySurfaceData DatabentoService::parse_vol_surface(const QJsonOb
         std::vector<float> row;
         for (float s : data.strikes) {
             auto it = iv_map.find({dte, s});
-            row.push_back(it != iv_map.end() ? it->second : 0.0f);
+            row.push_back(it != iv_map.end() ? it->second : std::numeric_limits<float>::quiet_NaN());
         }
         data.z.push_back(row);
     }
@@ -759,7 +769,12 @@ surface::GreeksSurfaceData DatabentoService::parse_greek_surface(const QJsonObje
     for (const auto& v : opts) {
         QJsonObject o = v.toObject();
         float strike = (float)o["strike"].toDouble();
-        int dte = o["expiry_days"].toInt(o["dte"].toInt(30));
+        const QJsonValue dte_v = o.contains("expiry_days") ? o.value("expiry_days") : o.value("dte");
+        if (!dte_v.isDouble())
+            continue; // no real expiry — never assume 30 days
+        int dte = dte_v.toInt();
+        if (!o[greek_key].isDouble())
+            continue; // greek not computed for this contract: leave a gap
         float val = (float)o[greek_key].toDouble();
         if (strike <= 0)
             continue;
@@ -778,7 +793,7 @@ surface::GreeksSurfaceData DatabentoService::parse_greek_surface(const QJsonObje
         std::vector<float> row;
         for (float s : data.strikes) {
             auto it = val_map.find({dte, s});
-            row.push_back(it != val_map.end() ? it->second : 0.0f);
+            row.push_back(it != val_map.end() ? it->second : std::numeric_limits<float>::quiet_NaN());
         }
         data.z.push_back(row);
     }
@@ -815,7 +830,7 @@ surface::SkewSurfaceData DatabentoService::parse_skew(const QJsonObject& j, cons
         std::vector<float> row;
         for (float d : data.deltas) {
             auto it = skew_map.find({dte, (int)d});
-            row.push_back(it != skew_map.end() ? it->second : 0.0f);
+            row.push_back(it != skew_map.end() ? it->second : std::numeric_limits<float>::quiet_NaN());
         }
         data.z.push_back(row);
     }
@@ -842,10 +857,12 @@ surface::CommodityForwardData DatabentoService::parse_commodity_forward(const QJ
         QJsonArray curve = term[sym].toArray();
         std::vector<float> row;
         for (int i = 0; i < (int)data.contract_months.size(); i++) {
-            if (i < curve.size())
-                row.push_back((float)curve[i].toObject()["price"].toDouble(curve[i].toDouble()));
-            else
-                row.push_back(0.0f);
+            QJsonValue pv;
+            if (i < curve.size()) {
+                const QJsonValue cell = curve.at(i);
+                pv = cell.isObject() ? cell.toObject().value("price") : cell;
+            }
+            row.push_back(z_cell(pv)); // missing month = gap, not $0
         }
         data.z.push_back(row);
     }
@@ -976,6 +993,10 @@ void DatabentoService::get_cost(const DbCostQuery& q, std::function<void(DbCostR
         if (!ok || j["error"].toBool(false)) {
             res.success = false;
             res.error = ok ? j["message"].toString("Unknown error") : j["error"].toString();
+        } else if (!j["cost_usd"].isDouble()) {
+            // No quoted cost is not a $0 cost.
+            res.success = false;
+            res.error = QStringLiteral("Databento returned no cost estimate");
         } else {
             res.success = true;
             res.record_count = (qint64)j["record_count"].toDouble(0);

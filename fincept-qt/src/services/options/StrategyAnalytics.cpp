@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <optional>
 
 namespace fincept::services::options::analytics {
 
@@ -15,17 +16,18 @@ using fincept::trading::InstrumentType;
 
 namespace {
 
+constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
 /// Days-to-expiry for a leg, actual/365, floored at 0 — an expiry-day leg has
-/// no time value left and its target curve IS the payoff. (This comment used
-/// to claim a floor of 1 "so expiry-day strategies don't collapse into
-/// intrinsic"; the code has always floored at 0, and the curve has always
-/// collapsed. The code is the defensible behaviour; the comment was not.)
-int days_to_expiry(const QString& expiry) {
+/// no time value left and its target curve IS the payoff. An unparseable
+/// expiry yields nullopt: the time to expiry is unknown, and inventing one
+/// (this used to return 1 day) would price a fabricated horizon.
+std::optional<int> days_to_expiry(const QString& expiry) {
     QDate exp = QDate::fromString(expiry, "dd-MMM-yy");
     if (!exp.isValid())
         exp = QDate::fromString(expiry, "yyyy-MM-dd");
     if (!exp.isValid())
-        return 1;
+        return std::nullopt;
     const int d = QDate::currentDate().daysTo(exp);
     return d < 0 ? 0 : d;
 }
@@ -55,7 +57,10 @@ double leg_pnl_expiry(const StrategyLeg& leg, double S) {
     return signed_units * (intrinsic - leg.entry_price);
 }
 
-/// Per-leg P/L at a given spot, target date — BSM-priced.
+/// Per-leg P/L at a given spot, target date — BSM-priced. NaN when the leg
+/// still has time value but no IV is known (neither its own nor the caller's
+/// real fallback) — the target curve is then unavailable, not priced at an
+/// invented vol.
 double leg_pnl_target(const StrategyLeg& leg, double S, int days_remaining,
                       double r, double sigma_fallback) {
     const double signed_units = double(leg.lots) * double(leg.lot_size);
@@ -63,6 +68,8 @@ double leg_pnl_target(const StrategyLeg& leg, double S, int days_remaining,
         return leg_pnl_expiry(leg, S);
     const double t = days_remaining / 365.0;
     const double sigma = (leg.iv_at_entry > 0) ? leg.iv_at_entry : sigma_fallback;
+    if (!(sigma > 0) || !std::isfinite(r))
+        return kNaN;
     double price = 0;
     if (leg.type == InstrumentType::CE)
         price = pricing::bs_call(S, leg.strike, t, r, sigma);
@@ -118,9 +125,11 @@ QVector<PayoffPoint> compute_payoff(const Strategy& s, const PayoffComputeOption
     // strategies we use the leg-specific expiry inside leg_pnl_target.
     int dte_strategy = 0;
     for (const auto& leg : s.legs) {
-        const int d = days_to_expiry(leg.expiry);
-        if (dte_strategy == 0 || (d > 0 && d < dte_strategy))
-            dte_strategy = d;
+        const auto d = days_to_expiry(leg.expiry);
+        if (!d)
+            continue;  // unknown expiry — that leg's target P/L is NaN below
+        if (dte_strategy == 0 || (*d > 0 && *d < dte_strategy))
+            dte_strategy = *d;
     }
     const int days_target_capped = std::clamp(opts.days_to_target, 0, dte_strategy);
 
@@ -135,8 +144,12 @@ QVector<PayoffPoint> compute_payoff(const Strategy& s, const PayoffComputeOption
             if (!leg.is_active)
                 continue;
             p.pnl_expiry += leg_pnl_expiry(leg, S);
-            const int leg_dte = days_to_expiry(leg.expiry);
-            const int leg_remaining = std::max(0, leg_dte - days_target_capped);
+            const auto leg_dte = days_to_expiry(leg.expiry);
+            if (!leg_dte) {
+                p.pnl_target = kNaN;  // horizon unknown — target curve unavailable
+                continue;
+            }
+            const int leg_remaining = std::max(0, *leg_dte - days_target_capped);
             p.pnl_target += leg_pnl_target(leg, S, leg_remaining, opts.risk_free_rate, opts.fallback_iv);
         }
         out.append(p);
@@ -225,8 +238,9 @@ MaxPnL compute_max_pnl(const Strategy& s) {
 }
 
 double compute_pop(const Strategy& s, double current_spot, double t, double r, double sigma) {
-    if (s.legs.isEmpty() || current_spot <= 0 || t <= 0 || sigma <= 0)
-        return 0.0;
+    // Missing inputs → NaN (rendered "—"), never a computed-looking 0%.
+    if (s.legs.isEmpty() || !(current_spot > 0) || !(t > 0) || !(sigma > 0) || !std::isfinite(r))
+        return kNaN;
 
     // Build a finely sampled curve over a wide range (±5σ on the GBM
     // price distribution) so every relevant profit/loss region is covered.
@@ -244,7 +258,7 @@ double compute_pop(const Strategy& s, double current_spot, double t, double r, d
     opts.fallback_iv = sigma;
     QVector<PayoffPoint> curve = compute_payoff(s, opts);
     if (curve.size() < 2)
-        return 0.0;
+        return kNaN;
 
     auto ln_cdf = [&](double x) {
         if (x <= 0)
@@ -264,8 +278,10 @@ double compute_pop(const Strategy& s, double current_spot, double t, double r, d
 }
 
 OptionGreeks combined_greeks(const Strategy& s, const OptionChain& chain) {
+    // valid only when EVERY active leg contributed live Greeks — a partial sum
+    // would silently understate the position's exposure.
     OptionGreeks combined;
-    combined.valid = true;
+    combined.valid = false;
     if (s.legs.isEmpty() || chain.rows.isEmpty())
         return combined;
 
@@ -290,9 +306,12 @@ OptionGreeks combined_greeks(const Strategy& s, const OptionChain& chain) {
         }
     }
 
+    int active = 0;
+    int matched = 0;
     for (const auto& leg : s.legs) {
         if (!leg.is_active)
             continue;
+        ++active;
         const OptionGreeks* g = nullptr;
         if (leg.instrument_token != 0) {
             auto it = by_token.constFind(leg.instrument_token);
@@ -307,7 +326,8 @@ OptionGreeks combined_greeks(const Strategy& s, const OptionChain& chain) {
                 g = &it.value();
         }
         if (!g)
-            continue;  // Greeks genuinely not available for this leg — skip
+            continue;  // Greeks not available for this leg — combined becomes invalid
+        ++matched;
         const double signed_units = double(leg.lots) * double(leg.lot_size);
         combined.delta += signed_units * g->delta;
         combined.gamma += signed_units * g->gamma;
@@ -315,6 +335,7 @@ OptionGreeks combined_greeks(const Strategy& s, const OptionChain& chain) {
         combined.vega += signed_units * g->vega;
         combined.rho += signed_units * g->rho;
     }
+    combined.valid = active > 0 && matched == active;
     return combined;
 }
 
@@ -342,13 +363,14 @@ StrategyAnalytics compute_all(const Strategy& s, const OptionChain& chain,
     // showed "POP 0%" for a perfectly ordinary calendar spread.
     int dte = 0;
     for (const auto& leg : s.legs) {
-        const int d = days_to_expiry(leg.expiry);
-        if (d <= 0)
-            continue; // already expired — it cannot define the horizon
-        if (dte == 0 || d < dte)
-            dte = d;
+        const auto d = days_to_expiry(leg.expiry);
+        if (!d || *d <= 0)
+            continue; // unknown or already expired — it cannot define the horizon
+        if (dte == 0 || *d < dte)
+            dte = *d;
     }
-    const double sigma_for_pop = (o.fallback_iv > 0) ? o.fallback_iv : 0.20;
+    // No real IV supplied → POP is unavailable (NaN), not priced at a made-up vol.
+    const double sigma_for_pop = (o.fallback_iv > 0) ? o.fallback_iv : kNaN;
 
     out.combined = combined_greeks(s, chain);
     out.max_profit = pnl.max_profit;

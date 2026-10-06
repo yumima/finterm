@@ -37,7 +37,10 @@ def get_fear_greed_index(limit: int = 10, date_format: str = "us") -> Any:
     if isinstance(data, dict) and "data" in data:
         result = data["data"]
         for item in result:
-            val = int(item.get("value", 0))
+            if item.get("value") in (None, ""):
+                item["sentiment"] = None  # no reading -> no label (not "Extreme Fear")
+                continue
+            val = int(item["value"])
             if val <= 24:
                 item["sentiment"] = "Extreme Fear"
             elif val <= 44:
@@ -58,10 +61,10 @@ def get_crypto_fear_greed(limit: int = 30) -> Any:
     if isinstance(data, dict) and "data" in data:
         items = data["data"]
         values = [int(i.get("value", 0)) for i in items if i.get("value")]
-        avg = sum(values) / len(values) if values else 0
+        avg = sum(values) / len(values) if values else None
         return {
             "current": items[0] if items else {},
-            "30_day_average": round(avg, 1),
+            "30_day_average": round(avg, 1) if avg is not None else None,
             "history": items,
             "metadata": data.get("metadata", {})
         }

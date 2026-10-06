@@ -4,6 +4,7 @@
 
 #include "core/logging/Logger.h"
 #include "services/gov_data/GovDataService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QDate>
@@ -13,6 +14,8 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QVBoxLayout>
+
+namespace fmt = fincept::ui::formatting;
 
 namespace fincept::screens {
 
@@ -451,7 +454,7 @@ void GovDataTreasuryPanel::populate_auctions(const QJsonObject& json) {
         }
 
         double offering = r["offeringAmount"].toDouble(0);
-        QString os = offering > 0 ? "$" + QString::number(static_cast<qlonglong>(offering / 1e9), 'f', 1) + "B" : "—";
+        QString os = offering > 0 ? "$" + QString::number(offering / 1e9, 'f', 1) + "B" : "—";
         auctions_table_->setItem(i, 7, new QTableWidgetItem(os));
     }
     LOG_INFO("GovTreasury", QString("Loaded %1 auction records").arg(records.size()));
@@ -460,15 +463,24 @@ void GovDataTreasuryPanel::populate_auctions(const QJsonObject& json) {
 void GovDataTreasuryPanel::populate_summary(const QJsonObject& json) {
     total_securities_label_->setText(QString::number(json["total_securities"].toInt()));
 
+    // The script omits yield/price stats when no security carried a rate/price;
+    // a missing key is "unavailable", never 0.000%.
+    auto num_or_dash = [](const QJsonObject& o, const char* key, int dp, const QString& suffix) -> QString {
+        const QJsonValue v = o.value(QLatin1String(key));
+        if (!v.isDouble())
+            return fmt::placeholder();
+        return QString::number(v.toDouble(), 'f', dp) + suffix;
+    };
+
     auto yield = json["yield_summary"].toObject();
-    min_rate_label_->setText(QString::number(yield["min_rate"].toDouble(), 'f', 3) + "%");
-    max_rate_label_->setText(QString::number(yield["max_rate"].toDouble(), 'f', 3) + "%");
-    avg_rate_label_->setText(QString::number(yield["avg_rate"].toDouble(), 'f', 3) + "%");
+    min_rate_label_->setText(num_or_dash(yield, "min_rate", 3, "%"));
+    max_rate_label_->setText(num_or_dash(yield, "max_rate", 3, "%"));
+    avg_rate_label_->setText(num_or_dash(yield, "avg_rate", 3, "%"));
 
     auto price = json["price_summary"].toObject();
-    min_price_label_->setText(QString::number(price["min_price"].toDouble(), 'f', 2));
-    max_price_label_->setText(QString::number(price["max_price"].toDouble(), 'f', 2));
-    avg_price_label_->setText(QString::number(price["avg_price"].toDouble(), 'f', 2));
+    min_price_label_->setText(num_or_dash(price, "min_price", 2, QString()));
+    max_price_label_->setText(num_or_dash(price, "max_price", 2, QString()));
+    avg_price_label_->setText(num_or_dash(price, "avg_price", 2, QString()));
 
     auto types = json["security_types"].toObject();
     type_breakdown_table_->setRowCount(0);

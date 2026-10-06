@@ -169,18 +169,47 @@ std::vector<ToolDef> get_watchlist_tools() {
             QString watchlist_id = args["watchlist_id"].toString();
             auto& repo = WatchlistRepository::instance();
 
+            QStringList targets;
             if (watchlist_id.isEmpty()) {
                 auto lists = repo.list_all();
-                if (lists.is_ok()) {
-                    for (const auto& wl : lists.value())
-                        repo.remove_stock(wl.id, symbol);
-                }
+                if (lists.is_err())
+                    return ToolResult::fail("Failed to list watchlists: " + QString::fromStdString(lists.error()));
+                for (const auto& wl : lists.value())
+                    targets.append(wl.id);
             } else {
-                repo.remove_stock(watchlist_id, symbol);
+                targets.append(watchlist_id);
             }
 
+            // Report what actually happened: only lists that held the symbol
+            // count, and a failed DELETE is a failure — not a blanket "Removed".
+            QJsonArray removed_from;
+            for (const auto& id : targets) {
+                auto stocks = repo.get_stocks(id);
+                if (stocks.is_err())
+                    return ToolResult::fail("Failed to read watchlist " + id + ": " +
+                                            QString::fromStdString(stocks.error()));
+                bool present = false;
+                for (const auto& st : stocks.value())
+                    if (st.symbol.compare(symbol, Qt::CaseInsensitive) == 0) {
+                        present = true;
+                        break;
+                    }
+                if (!present)
+                    continue;
+                auto r = repo.remove_stock(id, symbol);
+                if (r.is_err())
+                    return ToolResult::fail("Failed to remove " + symbol + " from watchlist " + id + ": " +
+                                            QString::fromStdString(r.error()));
+                removed_from.append(id);
+            }
+            if (removed_from.isEmpty())
+                return ToolResult::fail(symbol + " is not in " +
+                                        (watchlist_id.isEmpty() ? QStringLiteral("any watchlist")
+                                                                : QStringLiteral("watchlist ") + watchlist_id));
+
             EventBus::instance().publish("watchlist.updated", QVariantMap{{"action", "remove"}, {"symbol", symbol}});
-            return ToolResult::ok("Removed " + symbol + " from watchlist");
+            return ToolResult::ok("Removed " + symbol + " from watchlist",
+                                  QJsonObject{{"symbol", symbol}, {"removed_from", removed_from}});
         };
         tools.push_back(std::move(t));
     }

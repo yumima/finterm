@@ -238,15 +238,16 @@ def fetch_nport_xml(fund_cik, adsh):
         units = (inv.findtext("units", default="") or "").strip().upper()
         if units and units != "NS":
             continue
+        # A holding without a reported balance or fair value has no mark:
+        # skip it rather than emit a $0 per-share mark.
         try:
-            shares = float(inv.findtext("balance", default="0") or 0)
+            shares = float(inv.findtext("balance") or "")
+            fair_value = float(inv.findtext("valUSD") or "")
         except (TypeError, ValueError):
-            shares = 0.0
-        try:
-            fair_value = float(inv.findtext("valUSD", default="0") or 0)
-        except (TypeError, ValueError):
-            fair_value = 0.0
-        pps = (fair_value / shares) if shares > 0 else 0.0
+            continue
+        if shares <= 0:
+            continue
+        pps = fair_value / shares
         cid, canonical, alias_cik = _match_private_id(issuer)
         if cid:
             marks.append({

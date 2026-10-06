@@ -254,7 +254,9 @@ void DashboardScreen::rebuild_ticker_from_cache() {
         if (!ticker_cache_.contains(sym))
             continue;
         const auto& q = ticker_cache_.value(sym);
-        entries.append({q.symbol, q.price, q.change});
+        // TickerBar renders `change` with a "%" suffix — pass the percent
+        // change, not the absolute price change.
+        entries.append({q.symbol, q.price, q.change_pct});
     }
     if (!entries.isEmpty())
         ticker_bar_->set_data(entries);

@@ -6,9 +6,41 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
+#include <QTimeZone>
+
 #include <cmath>
+#include <optional>
 
 namespace fincept::workflow {
+
+namespace {
+
+// A numeric input field, or nullopt when absent / non-numeric / non-finite.
+// Safety checks fail CLOSED on a missing field — never default it to 0.
+std::optional<double> num_field(const QJsonObject& obj, const char* key) {
+    const QJsonValue v = obj.value(QLatin1String(key));
+    if (!v.isDouble())
+        return std::nullopt;
+    const double d = v.toDouble();
+    if (!std::isfinite(d))
+        return std::nullopt;
+    return d;
+}
+
+// Route a check to its fail branch because required inputs are missing.
+void fail_closed_missing(QJsonObject obj, const char* passed_key, const char* failures_key,
+                         const QStringList& missing, const std::function<void(bool, QJsonValue, QString)>& cb) {
+    obj[QLatin1String(passed_key)] = false;
+    obj["_branch"] = "false";
+    QJsonArray fa;
+    for (const QString& m : missing)
+        fa.append(QString("missing input: %1").arg(m));
+    obj[QLatin1String(failures_key)] = fa;
+    obj["missing_inputs"] = QJsonArray::fromStringList(missing);
+    cb(true, obj, {});
+}
+
+} // namespace
 
 void register_safety_nodes(NodeRegistry& registry) {
 
@@ -43,25 +75,45 @@ void register_safety_nodes(NodeRegistry& registry) {
                 double max_pos_pct = params.value("max_position_pct").toDouble(5.0);
                 double max_vol = params.value("max_volatility").toDouble(0.5);
 
-                double quantity = trade.value("quantity").toDouble(0);
-                double price = trade.value("price").toDouble(0);
-                double portfolio_value = trade.value("portfolio_value").toDouble(0);
-                double volatility = trade.value("volatility").toDouble(0);
+                const auto quantity = num_field(trade, "quantity");
+                const auto price = num_field(trade, "price");
+                const auto portfolio_value = num_field(trade, "portfolio_value");
+                // Volatility as a 0-1 fraction: `volatility`, or analytics.risk_analysis's
+                // `annualized_volatility` (fraction), or `annualized_vol` (percent).
+                std::optional<double> volatility = num_field(trade, "volatility");
+                if (!volatility)
+                    volatility = num_field(trade, "annualized_volatility");
+                if (!volatility) {
+                    if (auto pct = num_field(trade, "annualized_vol"))
+                        volatility = *pct / 100.0;
+                }
+
+                QStringList missing;
+                if (!quantity || *quantity <= 0)
+                    missing << "quantity";
+                if (!price || *price <= 0)
+                    missing << "price";
+                if (!portfolio_value || *portfolio_value <= 0)
+                    missing << "portfolio_value";
+                if (!volatility || *volatility < 0)
+                    missing << "volatility";
+                if (!missing.isEmpty()) {
+                    fail_closed_missing(trade, "risk_check_passed", "risk_failures", missing, cb);
+                    return;
+                }
 
                 QStringList failures;
 
-                if (portfolio_value > 0 && price > 0) {
-                    double position_value = quantity * price;
-                    double position_pct = (position_value / portfolio_value) * 100.0;
-                    if (position_pct > max_pos_pct)
-                        failures << QString("Position size %1% exceeds max %2%")
-                                        .arg(position_pct, 0, 'f', 2)
-                                        .arg(max_pos_pct, 0, 'f', 2);
-                }
+                const double position_value = *quantity * *price;
+                const double position_pct = (position_value / *portfolio_value) * 100.0;
+                if (position_pct > max_pos_pct)
+                    failures << QString("Position size %1% exceeds max %2%")
+                                    .arg(position_pct, 0, 'f', 2)
+                                    .arg(max_pos_pct, 0, 'f', 2);
 
-                if (volatility > 0 && volatility > max_vol)
+                if (*volatility > max_vol)
                     failures
-                        << QString("Volatility %1 exceeds max %2").arg(volatility, 0, 'f', 3).arg(max_vol, 0, 'f', 3);
+                        << QString("Volatility %1 exceeds max %2").arg(*volatility, 0, 'f', 3).arg(max_vol, 0, 'f', 3);
 
                 QJsonObject out = trade;
                 bool passed = failures.isEmpty();
@@ -106,8 +158,19 @@ void register_safety_nodes(NodeRegistry& registry) {
 
                 double daily_limit = params.value("daily_limit").toDouble(1000);
                 double weekly_limit = params.value("weekly_limit").toDouble(5000);
-                double daily_pnl = obj.value("daily_pnl").toDouble(0);
-                double weekly_pnl = obj.value("weekly_pnl").toDouble(0);
+                const auto daily = num_field(obj, "daily_pnl");
+                const auto weekly = num_field(obj, "weekly_pnl");
+                QStringList missing;
+                if (!daily)
+                    missing << "daily_pnl";
+                if (!weekly)
+                    missing << "weekly_pnl";
+                if (!missing.isEmpty()) {
+                    fail_closed_missing(obj, "loss_limit_passed", "loss_failures", missing, cb);
+                    return;
+                }
+                const double daily_pnl = *daily;
+                const double weekly_pnl = *weekly;
 
                 QStringList failures;
                 if (-daily_pnl > daily_limit)
@@ -161,14 +224,25 @@ void register_safety_nodes(NodeRegistry& registry) {
 
                 double max_shares = params.value("max_shares").toDouble(1000);
                 double max_value = params.value("max_value").toDouble(50000);
-                double quantity = obj.value("quantity").toDouble(0);
-                double price = obj.value("price").toDouble(0);
-                double trade_val = quantity * price;
+                const auto qty_in = num_field(obj, "quantity");
+                const auto price_in = num_field(obj, "price");
+                QStringList missing;
+                if (!qty_in || *qty_in <= 0)
+                    missing << "quantity";
+                if (!price_in || *price_in <= 0)
+                    missing << "price";
+                if (!missing.isEmpty()) {
+                    fail_closed_missing(obj, "size_limit_passed", "size_failures", missing, cb);
+                    return;
+                }
+                const double quantity = *qty_in;
+                const double price = *price_in;
+                const double trade_val = quantity * price;
 
                 QStringList failures;
                 if (quantity > max_shares)
                     failures << QString("Quantity %1 exceeds max %2").arg(quantity).arg(max_shares);
-                if (price > 0 && trade_val > max_value)
+                if (trade_val > max_value)
                     failures << QString("Trade value $%1 exceeds max $%2")
                                     .arg(trade_val, 0, 'f', 2)
                                     .arg(max_value, 0, 'f', 2);
@@ -187,7 +261,8 @@ void register_safety_nodes(NodeRegistry& registry) {
     });
 
     // ── Trading Hours Check ───────────────────────────────────────
-    // Uses QDateTime in UTC to check exchange trading hours.
+    // Checks weekday session hours in the exchange's local time zone
+    // (holiday calendars are not consulted; output says so).
     registry.register_type({
         .type_id = "safety.trading_hours",
         .display_name = "Trading Hours Check",
@@ -216,40 +291,47 @@ void register_safety_nodes(NodeRegistry& registry) {
                 QString exchange = params.value("exchange").toString("NYSE");
                 bool allow_premarket = params.value("allow_premarket").toBool(false);
 
-                QDateTime utc_now = QDateTime::currentDateTimeUtc();
-                int day_of_week = utc_now.date().dayOfWeek(); // 1=Mon, 7=Sun
-                int hour_utc = utc_now.time().hour();
-                int min_utc = utc_now.time().minute();
-                int time_utc = hour_utc * 100 + min_utc;
-
-                // Weekend check (universal)
-                bool is_weekend = (day_of_week == 6 || day_of_week == 7);
-
-                // Session hours in UTC
-                // NYSE/NASDAQ: 14:30-21:00 UTC (pre-market 09:00-14:30)
-                // LSE: 08:00-16:30 UTC
-                // TSE (Tokyo): 00:00-06:00 UTC (09:00-15:00 JST)
-                // NSE/BSE (India): 03:45-10:00 UTC (09:15-15:30 IST)
+                // Evaluate in the exchange's own time zone so DST shifts are
+                // honoured (fixed UTC windows were an hour off half the year).
+                // Session times are exchange-local HHMM.
                 struct Session {
+                    const char* tz;
                     int open;
                     int close;
                     int pre_open;
                 };
-                Session session{1430, 2100, 900};
+                Session session{"America/New_York", 930, 1600, 400};
                 if (exchange == "LSE")
-                    session = {800, 1630, 700};
+                    session = {"Europe/London", 800, 1630, 700};
                 else if (exchange == "TSE")
-                    session = {0, 600, 2300};
+                    session = {"Asia/Tokyo", 900, 1530, 800};
                 else if (exchange == "NSE" || exchange == "BSE")
-                    session = {345, 1000, 300};
+                    session = {"Asia/Kolkata", 915, 1530, 900};
 
-                bool in_regular = !is_weekend && time_utc >= session.open && time_utc < session.close;
-                bool in_premarket = !is_weekend && time_utc >= session.pre_open && time_utc < session.open;
+                const QDateTime utc_now = QDateTime::currentDateTimeUtc();
+                const QTimeZone tz(QByteArray(session.tz));
+                if (!tz.isValid()) {
+                    cb(false, {}, QString("Trading Hours: time zone %1 unavailable on this system").arg(session.tz));
+                    return;
+                }
+                const QDateTime local_now = utc_now.toTimeZone(tz);
+                const int day_of_week = local_now.date().dayOfWeek(); // 1=Mon, 7=Sun
+                const int time_local = local_now.time().hour() * 100 + local_now.time().minute();
+                const bool is_weekend = (day_of_week == 6 || day_of_week == 7);
+
+                bool in_regular = !is_weekend && time_local >= session.open && time_local < session.close;
+                // Tokyo has a lunch break 11:30-12:30.
+                if (exchange == "TSE" && time_local >= 1130 && time_local < 1230)
+                    in_regular = false;
+                bool in_premarket = !is_weekend && time_local >= session.pre_open && time_local < session.open;
                 bool is_open = in_regular || (allow_premarket && in_premarket);
 
                 obj["market_open"] = is_open;
                 obj["exchange"] = exchange;
                 obj["utc_time"] = utc_now.toString("HH:mm");
+                obj["exchange_local_time"] = local_now.toString("yyyy-MM-dd HH:mm");
+                // Exchange holiday calendars are not consulted — weekday hours only.
+                obj["holidays_checked"] = false;
                 obj["session_type"] = in_regular ? "regular" : (in_premarket ? "pre_market" : "closed");
                 // Route: output_open = true branch, output_closed = false branch
                 obj["_branch"] = is_open ? "true" : "false";
@@ -286,13 +368,24 @@ void register_safety_nodes(NodeRegistry& registry) {
 
                 double max_dd = params.value("max_drawdown_pct").toDouble(10.0);
 
-                // Accept either drawdown_pct directly or peak/current values
-                double drawdown_pct = obj.value("drawdown_pct").toDouble(-1);
-                if (drawdown_pct < 0) {
-                    double peak = obj.value("peak_value").toDouble(0);
-                    double current = obj.value("current_value").toDouble(0);
-                    drawdown_pct = (peak > 0) ? ((peak - current) / peak * 100.0) : 0;
+                // Accept either drawdown_pct directly or peak/current values.
+                // Neither present → fail closed (never assume a 0% drawdown).
+                std::optional<double> dd = num_field(obj, "drawdown_pct");
+                if (dd && *dd < 0)
+                    dd = std::abs(*dd); // some sources report drawdown as a negative %
+                if (!dd) {
+                    const auto peak = num_field(obj, "peak_value");
+                    const auto current = num_field(obj, "current_value");
+                    if (peak && current && *peak > 0)
+                        dd = (*peak - *current) / *peak * 100.0;
                 }
+                if (!dd) {
+                    obj["max_drawdown_pct"] = max_dd;
+                    fail_closed_missing(obj, "drawdown_check_passed", "drawdown_failures",
+                                        {"drawdown_pct (or peak_value + current_value)"}, cb);
+                    return;
+                }
+                const double drawdown_pct = *dd;
 
                 bool passed = drawdown_pct <= max_dd;
                 obj["drawdown_pct"] = drawdown_pct;
@@ -331,7 +424,12 @@ void register_safety_nodes(NodeRegistry& registry) {
                 QJsonObject obj = data.isObject() ? data.toObject() : QJsonObject{};
 
                 double max_corr = params.value("max_correlation").toDouble(0.8);
-                double corr = std::abs(obj.value("correlation").toDouble(0));
+                const auto corr_in = num_field(obj, "correlation");
+                if (!corr_in) {
+                    fail_closed_missing(obj, "correlation_check_passed", "correlation_failures", {"correlation"}, cb);
+                    return;
+                }
+                const double corr = std::abs(*corr_in);
 
                 bool passed = corr <= max_corr;
                 obj["correlation_check_passed"] = passed;
@@ -377,18 +475,35 @@ void register_safety_nodes(NodeRegistry& registry) {
                 QString reason;
 
                 if (method == "vix_level") {
-                    double vix = obj.value("vix").toDouble(0);
-                    exceeded = vix > vix_threshold;
-                    reason = QString("VIX %1 > threshold %2").arg(vix).arg(vix_threshold);
+                    const auto vix = num_field(obj, "vix");
+                    if (!vix) {
+                        fail_closed_missing(obj, "volatility_check_passed", "volatility_failures", {"vix"}, cb);
+                        return;
+                    }
+                    exceeded = *vix > vix_threshold;
+                    reason = QString("VIX %1 > threshold %2").arg(*vix).arg(vix_threshold);
                 } else {
-                    // realized or implied: expect annualized_vol as 0-100 percentage
-                    double vol_pct = obj.value("annualized_vol").toDouble(0);
-                    exceeded = vol_pct > max_vol;
-                    reason = QString("Ann. vol %1% > max %2%").arg(vol_pct, 0, 'f', 1).arg(max_vol, 0, 'f', 1);
+                    // realized or implied, compared as a 0-100 percentage. Accept
+                    // `annualized_vol` (percent) or analytics.risk_analysis's
+                    // `annualized_volatility` (0-1 fraction → ×100).
+                    std::optional<double> vol_pct = num_field(obj, "annualized_vol");
+                    if (!vol_pct) {
+                        if (auto frac = num_field(obj, "annualized_volatility"))
+                            vol_pct = *frac * 100.0;
+                    }
+                    if (!vol_pct) {
+                        fail_closed_missing(obj, "volatility_check_passed", "volatility_failures",
+                                            {"annualized_vol (%) or annualized_volatility (fraction)"}, cb);
+                        return;
+                    }
+                    exceeded = *vol_pct > max_vol;
+                    reason = QString("Ann. vol %1% > max %2%").arg(*vol_pct, 0, 'f', 1).arg(max_vol, 0, 'f', 1);
                 }
 
                 obj["volatility_check_passed"] = !exceeded;
                 obj["_branch"] = exceeded ? "false" : "true";
+                if (exceeded)
+                    obj["volatility_failures"] = QJsonArray{reason};
                 cb(true, obj, {});
             },
     });

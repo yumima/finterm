@@ -1,5 +1,6 @@
 #include "screens/dashboard/widgets/SectorHeatmapWidget.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -143,8 +144,10 @@ void SectorHeatmapWidget::populate(const QVector<services::QuoteData>& quotes) {
         auto* cell = new QFrame;
         cell->setMinimumSize(80, 40);
 
-        int intensity = static_cast<int>(std::min(std::abs(q.change_pct) * 60.0, 200.0));
-        QColor tint(q.change_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE());
+        // Unknown change (NaN, no previous close) → neutral, untinted cell.
+        const bool known = std::isfinite(q.change_pct);
+        int intensity = known ? static_cast<int>(std::min(std::abs(q.change_pct) * 60.0, 200.0)) : 0;
+        QColor tint(!known ? ui::colors::TEXT_TERTIARY() : q.change_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE());
         tint.setAlpha(40 + intensity);
         QString bg_color = tint.name(QColor::HexArgb);
 
@@ -161,9 +164,9 @@ void SectorHeatmapWidget::populate(const QVector<services::QuoteData>& quotes) {
         name->setAlignment(Qt::AlignCenter);
         cl->addWidget(name);
 
-        auto* chg = new QLabel(QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2));
+        auto* chg = new QLabel(ui::formatting::format_percent(q.change_pct, 2, true));
         chg->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                               .arg(q.change_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
+                               .arg(ui::change_color(q.change_pct)));
         chg->setAlignment(Qt::AlignCenter);
         cl->addWidget(chg);
 

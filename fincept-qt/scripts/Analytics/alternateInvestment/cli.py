@@ -40,6 +40,19 @@ from structured_products import StructuredProductAnalyzer
 from variable_annuities import VariableAnnuityAnalyzer
 
 
+def _req(data: Dict[str, Any], *keys: str) -> Decimal:
+    """Return the first present input among `keys` as Decimal, or raise.
+
+    No silent defaults: an analysis run on an invented value would present
+    made-up numbers as if they were the user's. Missing input is an error.
+    """
+    for key in keys:
+        v = data.get(key)
+        if v is not None and v != '':
+            return Decimal(str(v))
+    raise ValueError(f"Missing required input: {keys[0]}")
+
+
 def decimal_default(obj):
     """JSON serializer for Decimal objects"""
     if isinstance(obj, Decimal):
@@ -285,7 +298,9 @@ def main():
 
         elif args.command == 'asset-location':
             data = json.loads(args.data)
-            result = analyze_asset_location(data, args.method, Decimal(str(args.tax_bracket)))
+            # The screen sends tax_bracket inside --data; honour it over the CLI flag.
+            bracket = data.get('tax_bracket', args.tax_bracket)
+            result = analyze_asset_location(data, args.method, Decimal(str(bracket)))
 
         elif args.command == 'covered-calls':
             data = json.loads(args.data)
@@ -332,10 +347,13 @@ def analyze_digital_assets(data: Dict[str, Any], method: str = 'fundamental') ->
         )
 
         # Set digital asset specific params
-        for key in ['asset_type', 'blockchain', 'market_cap', 'circulating_supply',
-                    'total_supply', 'trading_volume_24h', 'staking_yield', 'protocol_revenue']:
+        for key in ['asset_type', 'blockchain']:
             if key in data:
                 setattr(params, key, data[key])
+        for key in ['market_cap', 'circulating_supply', 'total_supply', 'trading_volume_24h',
+                    'staking_yield', 'protocol_revenue']:
+            if key in data:
+                setattr(params, key, Decimal(str(data[key])))
 
         analyzer = DigitalAssetAnalyzer(params)
 
@@ -420,18 +438,24 @@ def analyze_natural_resources(data: Dict[str, Any], method: str = 'basis') -> Di
             currency=data.get('currency', 'USD')
         )
 
-        for key in ['commodity_sector', 'spot_price', 'futures_prices',
-                    'storage_cost', 'convenience_yield', 'contract_size']:
+        for key in ['commodity_sector', 'futures_prices', 'contract_size']:
             if key in data:
                 setattr(params, key, data[key])
+        for key in ['storage_cost', 'convenience_yield']:
+            if key in data:
+                setattr(params, key, Decimal(str(data[key])))
+        params.spot_price = _req(data, 'spot_price')
 
         analyzer = CommodityAnalyzer(params)
 
         if method == 'basis':
-            metrics = analyzer.calculate_futures_basis(
-                Decimal(str(data.get('futures_price', 100))),
-                data.get('expiry_months', 3)
-            )
+            # Screen form sends three_month_futures; generic callers may send
+            # futures_price + expiry_months.
+            if data.get('futures_price') not in (None, ''):
+                fut, months = _req(data, 'futures_price'), int(data.get('expiry_months') or 3)
+            else:
+                fut, months = _req(data, 'three_month_futures'), 3
+            metrics = analyzer.calculate_futures_basis(fut, months)
         elif method == 'contango':
             metrics = analyzer.analyze_contango_backwardation()
         elif method == 'futures':
@@ -440,8 +464,8 @@ def analyze_natural_resources(data: Dict[str, Any], method: str = 'basis') -> Di
             )
         else:
             metrics = analyzer.calculate_futures_basis(
-                Decimal(str(data.get('futures_price', 100))),
-                data.get('expiry_months', 3)
+                _req(data, 'futures_price', 'three_month_futures'),
+                int(data.get('expiry_months') or 3)
             )
 
         return {
@@ -478,10 +502,9 @@ def analyze_private_capital(data: Dict[str, Any], method: str = 'metrics') -> Di
 
         # Update NAV if provided
         if 'current_nav' in data:
-            analyzer.update_nav(
-                Decimal(str(data['current_nav'])),
-                data.get('nav_date', '2024-12-31')
-            )
+            if not data.get('nav_date'):
+                raise ValueError("Missing required input: nav_date (required with current_nav)")
+            analyzer.update_nav(Decimal(str(data['current_nav'])), data['nav_date'])
 
         if method == 'metrics':
             metrics = analyzer.calculate_key_metrics()
@@ -512,6 +535,8 @@ def analyze_real_estate(data: Dict[str, Any], method: str = 'noi') -> Dict[str, 
             currency=data.get('currency', 'USD')
         )
 
+        if 'gross_rental_income' not in data and 'gross_income' in data:
+            data['gross_rental_income'] = data['gross_income']
         for key in ['property_type', 'acquisition_price', 'current_market_value',
                     'gross_rental_income', 'operating_expenses', 'vacancy_rate', 'cap_rate']:
             if key in data:
@@ -671,14 +696,16 @@ def analyze_tips(data: Dict[str, Any], method: str = 'real_yield') -> Dict[str, 
             currency=data.get('currency', 'USD')
         )
 
-        for key in ['acquisition_price', 'coupon_rate', 'maturity_years', 'current_market_value']:
-            if key in data:
-                setattr(params, key, Decimal(str(data[key])))
+        # Analyzer reads principal from acquisition_price; the form sends face_value.
+        params.acquisition_price = _req(data, 'face_value', 'acquisition_price')
+        params.current_market_value = _req(data, 'current_market_value', 'current_price')
+        params.coupon_rate = _req(data, 'coupon_rate')
+        params.maturity_years = _req(data, 'maturity_years')
 
         analyzer = TIPSAnalyzer(params)
 
         if method == 'real_yield':
-            metrics = analyzer.calculate_real_yield(Decimal(str(data.get('current_price', 1000))))
+            metrics = analyzer.calculate_real_yield(params.current_market_value)
         elif method == 'inflation_scenarios':
             scenarios = [Decimal(str(s)) for s in data.get('inflation_scenarios', [0.02, 0.03, 0.04])]
             metrics = analyzer.calculate_inflation_protection_value(scenarios)
@@ -705,9 +732,9 @@ def analyze_ibonds(data: Dict[str, Any], method: str = 'composite_rate') -> Dict
         )
 
         # Set I Bond specific parameters
-        params.acquisition_price = Decimal(str(data.get('face_value', 10000)))
-        params.fixed_rate = Decimal(str(data.get('fixed_rate', 0.0)))
-        params.inflation_rate = Decimal(str(data.get('inflation_rate', 0.03)))
+        params.acquisition_price = _req(data, 'purchase_price', 'face_value')
+        params.fixed_rate = _req(data, 'fixed_rate')
+        params.inflation_rate = _req(data, 'inflation_rate')
         params.years_held = data.get('years_held', 0)
         params.purchase_date = data.get('purchase_date', datetime.now().isoformat())
 
@@ -746,17 +773,20 @@ def analyze_high_yield(data: Dict[str, Any], method: str = 'credit_analysis') ->
             currency=data.get('currency', 'USD')
         )
 
-        for key in ['face_value', 'coupon_rate', 'maturity_years', 'current_market_value', 'credit_rating']:
-            if key in data:
-                value = data[key]
-                setattr(params, key, Decimal(str(value)) if isinstance(value, (int, float)) else value)
+        # Analyzer reads face value from acquisition_price and price from
+        # current_market_value. Accept the legacy par_value/price aliases.
+        params.acquisition_price = _req(data, 'face_value', 'par_value')
+        params.current_market_value = _req(data, 'current_market_value', 'price')
+        params.coupon_rate = _req(data, 'coupon_rate')
+        params.maturity_years = _req(data, 'maturity_years')
+        if data.get('credit_rating'):
+            params.credit_rating = data['credit_rating']
 
         analyzer = HighYieldBondAnalyzer(params)
 
         if method == 'credit_analysis':
-            metrics = analyzer.calculate_yield_spread(
-                Decimal(str(data.get('treasury_yield', 0.04)))
-            )
+            # Benchmark Treasury yield must come from the caller; no baked-in rate.
+            metrics = analyzer.calculate_yield_spread(_req(data, 'treasury_yield'))
         elif method == 'default_prob':
             metrics = analyzer.estimate_default_probability()
         elif method == 'equity_behavior':
@@ -779,7 +809,11 @@ def analyze_preferred_stocks(data: Dict[str, Any], method: str = 'yield_analysis
             currency=data.get('currency', 'USD')
         )
 
-        for key in ['par_value', 'dividend_rate', 'current_price', 'call_price', 'years_to_call']:
+        # Analyzer reads par from acquisition_price and price from current_market_value.
+        params.acquisition_price = _req(data, 'par_value', 'acquisition_price')
+        params.current_market_value = _req(data, 'current_price', 'current_market_value')
+        params.dividend_rate = _req(data, 'dividend_rate')
+        for key in ['call_price', 'years_to_call']:
             if key in data:
                 setattr(params, key, Decimal(str(data[key])))
 
@@ -844,15 +878,19 @@ def analyze_convertible_bonds(data: Dict[str, Any], method: str = 'conversion_pr
             currency=data.get('currency', 'USD')
         )
 
-        for key in ['face_value', 'coupon_rate', 'maturity_years', 'current_market_value',
-                    'conversion_ratio', 'stock_price', 'credit_spread']:
-            if key in data:
-                setattr(params, key, Decimal(str(data[key])))
+        params.face_value = _req(data, 'face_value', 'par_value')
+        params.current_market_value = _req(data, 'current_market_value', 'current_price')
+        params.coupon_rate = _req(data, 'coupon_rate')
+        params.maturity_years = _req(data, 'maturity_years')
+        params.conversion_ratio = _req(data, 'conversion_ratio')
+        params.stock_price = _req(data, 'stock_price')
+        if 'credit_spread' in data:
+            params.credit_spread = Decimal(str(data['credit_spread']))
 
         analyzer = ConvertibleBondAnalyzer(params)
 
         if method == 'conversion_premium':
-            metrics = analyzer.calculate_conversion_premium(Decimal(str(data.get('stock_price', 50))))
+            metrics = analyzer.calculate_conversion_premium(params.stock_price)
         elif method == 'bond_floor':
             metrics = analyzer.calculate_bond_floor(Decimal(str(data.get('market_yield', 0.06))))
         elif method == 'upside_participation':
@@ -875,6 +913,10 @@ def analyze_annuities(data: Dict[str, Any], method: str = 'payouts') -> Dict[str
             currency=data.get('currency', 'USD')
         )
 
+        if 'acquisition_price' not in data and 'premium' in data:
+            data['acquisition_price'] = data['premium']
+        if 'annuity_rate' not in data and 'annual_payout_rate' in data:
+            data['annuity_rate'] = data['annual_payout_rate']
         for key in ['acquisition_price', 'annuity_rate', 'payout_years', 'surrender_charge_years',
                     'surrender_charge_rate', 'insurer_rating']:
             if key in data:
@@ -1275,7 +1317,7 @@ def analyze_sri(data: Dict[str, Any], method: str = 'performance') -> Dict[str, 
         analyzer = SRIFundAnalyzer(params)
 
         if method == 'performance':
-            metrics = analyzer.performance_comparison()
+            metrics = analyzer.performance_comparison(int(data.get('time_period_years', 10)))
         elif method == 'screening':
             metrics = analyzer.screening_impact_analysis()
         elif method == 'expenses':
@@ -1301,7 +1343,10 @@ def analyze_leveraged_funds(data: Dict[str, Any], method: str = 'decay') -> Dict
             currency=data.get('currency', 'USD')
         )
 
-        for key in ['leverage_multiple', 'daily_volatility', 'expense_ratio']:
+        # Analyzer reads leverage_ratio; accept the older leverage_multiple key too.
+        if 'leverage_ratio' not in data and 'leverage_multiple' in data:
+            data['leverage_ratio'] = data['leverage_multiple']
+        for key in ['leverage_ratio', 'daily_volatility', 'expense_ratio']:
             if key in data:
                 setattr(params, key, Decimal(str(data[key])))
 
@@ -1330,9 +1375,12 @@ def analyze_structured_products(data: Dict[str, Any], method: str = 'complexity'
             currency=data.get('currency', 'USD')
         )
 
-        for key in ['principal', 'participation_rate', 'cap_rate', 'maturity_years']:
+        for key in ['principal', 'participation_rate', 'cap_rate']:
             if key in data:
                 setattr(params, key, Decimal(str(data[key])))
+        # Analyzer reads term_years; the form sends maturity_years.
+        if 'maturity_years' in data or 'term_years' in data:
+            params.term_years = int(data.get('term_years', data.get('maturity_years')))
 
         analyzer = StructuredProductAnalyzer(params)
 
@@ -1359,9 +1407,14 @@ def analyze_variable_annuities(data: Dict[str, Any], method: str = 'fees') -> Di
             currency=data.get('currency', 'USD')
         )
 
-        for key in ['premium', 'me_fee', 'investment_fee', 'admin_fee', 'surrender_period']:
+        # Map form keys onto the attribute names VariableAnnuityAnalyzer reads.
+        key_map = {'premium': 'premium', 'me_fee': 'mortality_expense_fee',
+                   'investment_fee': 'investment_mgmt_fee', 'admin_fee': 'admin_fee'}
+        for key, attr in key_map.items():
             if key in data:
-                setattr(params, key, Decimal(str(data[key])) if isinstance(data[key], (int, float)) else data[key])
+                setattr(params, attr, Decimal(str(data[key])))
+        if 'surrender_period' in data:
+            params.surrender_years = int(data['surrender_period'])
 
         analyzer = VariableAnnuityAnalyzer(params)
 

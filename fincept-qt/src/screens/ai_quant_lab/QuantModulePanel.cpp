@@ -6,6 +6,7 @@
 #include "services/file_manager/FileManagerService.h"
 #include "storage/repositories/LlmProfileRepository.h"
 #include "ui/theme/Theme.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QAreaSeries>
@@ -35,10 +36,63 @@
 #include <QUrl>
 
 #include <cmath>
+#include <limits>
 
 namespace fincept::screens {
 
 using namespace fincept::services::quant;
+
+// ── Result-field readers ───────────────────────────────────────────────────────
+// A numeric field the backend omitted, sent as null, or sent as a non-number is
+// MISSING — it must render as the placeholder, never as 0. jnum() yields NaN
+// for those so downstream formatting/colouring can tell.
+static double jnum(const QJsonValue& v) {
+    double d = std::numeric_limits<double>::quiet_NaN();
+    if (v.isDouble()) {
+        d = v.toDouble();
+    } else if (v.isString()) {
+        bool ok = false;
+        const double p = v.toString().trimmed().toDouble(&ok);
+        if (ok) d = p;
+    }
+    return std::isfinite(d) ? d : std::numeric_limits<double>::quiet_NaN();
+}
+
+/// Fixed-point text for a possibly-missing value; NaN -> placeholder ("—").
+static QString num_txt(double v, int dp, const QString& suffix = {}) {
+    return std::isfinite(v) ? QString::number(v, 'f', dp) + suffix : ui::formatting::placeholder();
+}
+
+static QString jnum_txt(const QJsonValue& v, int dp, const QString& suffix = {}) {
+    return num_txt(jnum(v), dp, suffix);
+}
+
+/// Integer count field; missing -> placeholder.
+static QString jint_txt(const QJsonValue& v) {
+    const double d = jnum(v);
+    return std::isfinite(d) ? QString::number(qint64(d)) : ui::formatting::placeholder();
+}
+
+/// Parse a user-typed comma-separated number list into `out`. Blank tokens are
+/// skipped. Returns a null QString on success, else the first token that is not
+/// a number — callers must reject the run rather than send it as 0.
+static QString append_csv_numbers(const QString& text, QJsonArray& out) {
+    for (const auto& tok : text.split(',')) {
+        const QString t = tok.trimmed();
+        if (t.isEmpty()) continue;
+        bool ok = false;
+        const double d = t.toDouble(&ok);
+        if (!ok || !std::isfinite(d)) return t;
+        out.append(d);
+    }
+    return {};
+}
+
+/// String field; missing/empty -> placeholder.
+static QString jstr_txt(const QJsonValue& v) {
+    const QString s = v.toString();
+    return s.isEmpty() ? ui::formatting::placeholder() : s;
+}
 
 // ── Shared style helpers (live tokens — called at widget-creation time) ───────
 // These replace 60+ copy-pasted inline style blocks across all panel builders.
@@ -1988,30 +2042,38 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
         bool    neutral  = false;
     };
 
-    double total_ret  = metrics["total_return_pct"].toDouble();
-    double ann_ret    = metrics["annualised_return"].toDouble();
-    double ann_vol    = metrics["annualised_vol"].toDouble();
-    double sharpe     = metrics["sharpe_ratio"].toDouble();
-    double max_dd     = metrics["max_drawdown_pct"].toDouble();
-    double calmar     = metrics["calmar_ratio"].toDouble();
-    double win_rate   = metrics["win_rate_pct"].toDouble();
-    double final_val  = metrics["final_value"].toDouble();
-    double init_cap   = metrics["initial_capital"].toDouble();
-    int    t_days     = metrics["trading_days"].toInt();
+    // Missing metrics are NaN (rendered "—", coloured neutral), never 0.
+    double total_ret  = jnum(metrics["total_return_pct"]);
+    double ann_ret    = jnum(metrics["annualised_return"]);
+    double ann_vol    = jnum(metrics["annualised_vol"]);
+    double sharpe     = jnum(metrics["sharpe_ratio"]);
+    double max_dd     = jnum(metrics["max_drawdown_pct"]);
+    double calmar     = jnum(metrics["calmar_ratio"]);
+    double win_rate   = jnum(metrics["win_rate_pct"]);
+    double final_val  = jnum(metrics["final_value"]);
+    double init_cap   = jnum(metrics["initial_capital"]);
+    const QString t_days = jint_txt(metrics["trading_days"]);
 
-    auto fmt_pct = [](double v) { return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 2); };
+    auto fmt_pct = [](double v) {
+        if (!std::isfinite(v)) return ui::formatting::placeholder();
+        return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 2);
+    };
     auto fmt_usd = [](double v) -> QString {
+        if (!std::isfinite(v)) return ui::formatting::placeholder();
         if (v >= 1e6) return QString("$%1M").arg(v / 1e6, 0, 'f', 2);
         return QString("$%1K").arg(v / 1e3, 0, 'f', 0);
     };
 
+    const auto known = [](double v) { return std::isfinite(v); };
     QList<KpiCard> kpis = {
-        {"TOTAL RETURN",   fmt_pct(total_ret),  fmt_usd(final_val) + " final",  total_ret >= 0, false},
-        {"ANN. RETURN",    fmt_pct(ann_ret),     QString("Vol: %1%").arg(ann_vol, 0, 'f', 1), ann_ret >= 0, false},
-        {"SHARPE RATIO",   QString::number(sharpe, 'f', 3),
-                           sharpe >= 1 ? "Excellent" : sharpe >= 0.5 ? "Good" : "Weak", sharpe >= 0.5, false},
-        {"MAX DRAWDOWN",   fmt_pct(max_dd),      QString("Calmar: %1").arg(calmar, 0, 'f', 3), false, false},
-        {"WIN RATE",       QString("%1%").arg(win_rate, 0, 'f', 1), QString("%1 days").arg(t_days), win_rate >= 50, false},
+        {"TOTAL RETURN",   fmt_pct(total_ret),  fmt_usd(final_val) + " final",  total_ret >= 0, !known(total_ret)},
+        {"ANN. RETURN",    fmt_pct(ann_ret),     QString("Vol: %1").arg(num_txt(ann_vol, 1, "%")), ann_ret >= 0, !known(ann_ret)},
+        {"SHARPE RATIO",   num_txt(sharpe, 3),
+                           !known(sharpe) ? ui::formatting::placeholder()
+                           : sharpe >= 1 ? "Excellent" : sharpe >= 0.5 ? "Good" : "Weak",
+                           sharpe >= 0.5, !known(sharpe)},
+        {"MAX DRAWDOWN",   fmt_pct(max_dd),      QString("Calmar: %1").arg(num_txt(calmar, 3)), false, !known(max_dd)},
+        {"WIN RATE",       num_txt(win_rate, 1, "%"), QString("%1 days").arg(t_days), win_rate >= 50, !known(win_rate)},
         {"CAPITAL",        fmt_usd(init_cap),    "Initial capital",  true, true},
     };
 
@@ -2086,14 +2148,21 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
             auto pt = pt_val.toObject();
             QDateTime dt = QDateTime::fromString(pt["date"].toString(), "yyyy-MM-dd");
             qint64 ms = dt.toMSecsSinceEpoch();
-            double pv = pt["portfolio"].toDouble();
-            double bv = pt["benchmark"].toDouble();
-            port_series->append(ms, pv);
-            bm_series->append(ms, bv);
-            port_upper->append(ms, pv);
-            port_base->append(ms, init_cap);
-            min_val = std::min({min_val, pv, bv});
-            max_val = std::max({max_val, pv, bv});
+            // Skip points the backend did not value rather than plotting them at 0.
+            const double pv = jnum(pt["portfolio"]);
+            const double bv = jnum(pt["benchmark"]);
+            if (std::isfinite(pv)) {
+                port_series->append(ms, pv);
+                port_upper->append(ms, pv);
+                port_base->append(ms, std::isfinite(init_cap) ? init_cap : pv);
+                min_val = std::min(min_val, pv);
+                max_val = std::max(max_val, pv);
+            }
+            if (std::isfinite(bv)) {
+                bm_series->append(ms, bv);
+                min_val = std::min(min_val, bv);
+                max_val = std::max(max_val, bv);
+            }
         }
 
         // Area series for portfolio fill
@@ -2192,9 +2261,9 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
     }());
 
     add_cost_item("Commission",
-                  QString("%1 bps").arg(costs["commission_bps"].toDouble(), 0, 'f', 2));
+                  QString("%1 bps").arg(jnum_txt(costs["commission_bps"], 2)));
     add_cost_item("Expected Slippage",
-                  QString("%1 bps").arg(costs["expected_slippage_bps"].toDouble(), 0, 'f', 2));
+                  QString("%1 bps").arg(jnum_txt(costs["expected_slippage_bps"], 2)));
     cost_h->addStretch();
     results_layout_->addWidget(cost_w);
 
@@ -2279,14 +2348,14 @@ void QuantModulePanel::display_cfa_result(const QString& command, const QJsonObj
 
     const QJsonObject result = payload.value("result").toObject();
     const QString method = result.value("method").toString();
-    const double calc_time = result.value("calculation_time").toDouble();
+    const double calc_time = jnum(result.value("calculation_time"));
     const QString analysis_type = payload.value("analysis_type").toString(command);
 
     // ── Header ──────────────────────────────────────────────────────────────
     auto* header = new QLabel(QString("%1  •  %2  •  %3 ms")
                                   .arg(analysis_type.toUpper())
                                   .arg(method)
-                                  .arg(QString::number(calc_time * 1000.0, 'f', 1)));
+                                  .arg(num_txt(calc_time * 1000.0, 1)));
     header->setStyleSheet(QString("color:%1; font-weight:700; font-family:%2; letter-spacing:1px;")
                               .arg(module_.color.name())
                               .arg(ui::fonts::DATA_FAMILY));
@@ -2294,10 +2363,11 @@ void QuantModulePanel::display_cfa_result(const QString& command, const QJsonObj
 
     // ── validate_data has its own report shape ──────────────────────────────
     if (command == "validate_data") {
-        const double score = result.value("quality_score").toDouble();
-        auto* score_lbl = new QLabel(QString("Quality Score: %1 / 100").arg(score, 0, 'f', 1));
+        const double score = jnum(result.value("quality_score"));
+        auto* score_lbl = new QLabel(QString("Quality Score: %1 / 100").arg(num_txt(score, 1)));
         score_lbl->setStyleSheet(QString("color:%1; font-size:16px; font-weight:700;")
-                                     .arg(score >= 80 ? ui::colors::POSITIVE()
+                                     .arg(!std::isfinite(score) ? ui::colors::TEXT_PRIMARY()
+                                          : score >= 80 ? ui::colors::POSITIVE()
                                           : score >= 50 ? ui::colors::WARNING()
                                                         : ui::colors::NEGATIVE()));
         results_layout_->addWidget(score_lbl);
@@ -2377,7 +2447,7 @@ void QuantModulePanel::display_cfa_result(const QString& command, const QJsonObj
             QStringList parts;
             parts.reserve(arr.size());
             for (const auto& v : arr)
-                parts << QString::number(v.toDouble(), 'f', 4);
+                parts << jnum_txt(v, 4);
             auto* fcst = new QLabel(QString("Forecast (%1 steps): %2").arg(arr.size()).arg(parts.join(", ")));
             fcst->setWordWrap(true);
             fcst->setStyleSheet(QString("color:%1; padding:6px 0;").arg(ui::colors::TEXT_PRIMARY()));
@@ -2586,10 +2656,10 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 status_item->setForeground(QColor("" + QString(ui::colors::NEGATIVE()) + ""));
             rd_task_table_->setItem(row, 2, status_item);
             rd_task_table_->setItem(
-                row, 3, new QTableWidgetItem(QString::number(obj["progress"].toDouble() * 100, 'f', 0) + "%"));
+                row, 3, new QTableWidgetItem(num_txt(jnum(obj["progress"]) * 100, 0, "%")));
             auto ic = obj["best_ic"];
             rd_task_table_->setItem(row, 4,
-                                    new QTableWidgetItem(ic.isNull() ? "-" : QString::number(ic.toDouble(), 'f', 4)));
+                                    new QTableWidgetItem(jnum_txt(ic, 4)));
             rd_task_table_->setItem(row, 5, new QTableWidgetItem(obj["elapsed_time"].toString("-")));
         }
         status_label_->setText(QString("%1 task(s)").arg(tasks.size()));
@@ -2603,18 +2673,18 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             return;
         }
         auto task_id = payload["task_id"].toString();
-        auto progress = payload["progress"].toDouble() * 100;
+        const double progress = jnum(payload["progress"]) * 100;
         auto step = payload["current_step"].toString();
         auto ic = payload["best_ic"];
-        status_label_->setText(QString("Task %1 — %2% — %3").arg(task_id).arg(progress, 0, 'f', 0).arg(step));
+        status_label_->setText(QString("Task %1 — %2 — %3").arg(task_id).arg(num_txt(progress, 0, "%")).arg(step));
         if (rd_agent_output_) {
             rd_agent_output_->setPlainText(
                 QString(
-                    "Task ID:    %1\nStatus:     %2\nProgress:   %3%\nStep:       %4\nBest IC:    %5\nElapsed:    %6")
+                    "Task ID:    %1\nStatus:     %2\nProgress:   %3\nStep:       %4\nBest IC:    %5\nElapsed:    %6")
                     .arg(task_id, payload["status"].toString())
-                    .arg(progress, 0, 'f', 0)
+                    .arg(num_txt(progress, 0, "%"))
                     .arg(step)
-                    .arg(ic.isNull() ? "N/A" : QString::number(ic.toDouble(), 'f', 4))
+                    .arg(jnum_txt(ic, 4))
                     .arg(payload["elapsed_time"].toString("-")));
         }
         return;
@@ -2630,15 +2700,15 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         auto best_ic = payload["best_ic"];
         QString out = QString("Discovered Factors: %1  |  Best IC: %2\n\n")
                           .arg(factors.size())
-                          .arg(best_ic.isNull() ? "N/A" : QString::number(best_ic.toDouble(), 'f', 4));
+                          .arg(jnum_txt(best_ic, 4));
         int idx = 1;
         for (const auto& f : factors) {
             auto obj = f.toObject();
             out += QString("[%1] %2\n  IC: %3  Sharpe: %4\n  %5\n\n")
                        .arg(idx++)
-                       .arg(obj["name"].toString("Factor"))
-                       .arg(obj["ic"].isNull() ? "N/A" : QString::number(obj["ic"].toDouble(), 'f', 4))
-                       .arg(obj["sharpe"].isNull() ? "N/A" : QString::number(obj["sharpe"].toDouble(), 'f', 3))
+                       .arg(jstr_txt(obj["name"]))
+                       .arg(jnum_txt(obj["ic"], 4))
+                       .arg(jnum_txt(obj["sharpe"], 3))
                        .arg(obj["description"].toString());
         }
         rd_agent_output_->setPlainText(out);
@@ -2660,8 +2730,8 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             out += QString("[%1] %2\n  Sharpe: %3  IC: %4\n")
                        .arg(idx++)
                        .arg(obj["model_id"].toString("Model"))
-                       .arg(obj["sharpe"].isNull() ? "N/A" : QString::number(obj["sharpe"].toDouble(), 'f', 3))
-                       .arg(obj["ic"].isNull() ? "N/A" : QString::number(obj["ic"].toDouble(), 'f', 4));
+                       .arg(jnum_txt(obj["sharpe"], 3))
+                       .arg(jnum_txt(obj["ic"], 4));
         }
         rd_agent_output_->setPlainText(out);
         return;
@@ -2846,7 +2916,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             auto metrics = payload["metrics"].toObject();
             QString out = QString("Model Trained: %1\n").arg(model_id);
             for (auto it = metrics.begin(); it != metrics.end(); ++it)
-                out += QString("  %1: %2\n").arg(it.key()).arg(it.value().toDouble(), 0, 'f', 4);
+                out += QString("  %1: %2\n").arg(it.key()).arg(jnum_txt(it.value(), 4));
             auto* lbl = new QLabel(out, this);
             lbl->setWordWrap(true);
             lbl->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
@@ -2894,8 +2964,8 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 auto obj = f.toObject();
                 out += QString("• %1  IC: %2  Sharpe: %3\n")
                            .arg(obj["name"].toString("-"))
-                           .arg(obj["ic"].isNull() ? "N/A" : QString::number(obj["ic"].toDouble(), 'f', 4))
-                           .arg(obj["sharpe"].isNull() ? "N/A" : QString::number(obj["sharpe"].toDouble(), 'f', 3));
+                           .arg(jnum_txt(obj["ic"], 4))
+                           .arg(jnum_txt(obj["sharpe"], 3));
             }
             auto* lbl = new QLabel(out, this);
             lbl->setWordWrap(true);
@@ -2909,10 +2979,15 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             QString out = "Feature Importance\n\n";
             QVector<QPair<QString, double>> sorted;
             for (auto it = features.begin(); it != features.end(); ++it)
-                sorted.append({it.key(), it.value().toDouble()});
-            std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+                sorted.append({it.key(), jnum(it.value())});
+            // NaN (importance not reported) sorts last; never ranked as 0.
+            std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
+                const bool fa = std::isfinite(a.second), fb = std::isfinite(b.second);
+                if (fa != fb) return fa;
+                return fa && a.second > b.second;
+            });
             for (const auto& p : sorted)
-                out += QString("• %-20s %1\n").arg(p.second, 0, 'f', 4).arg(p.first, -20);
+                out += QString("• %-20s %1\n").arg(num_txt(p.second, 4)).arg(p.first, -20);
             auto* lbl = new QLabel(out, this);
             lbl->setWordWrap(true);
             lbl->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
@@ -2941,7 +3016,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 auto obj = m.toObject();
                 out += QString("• %1  [%2]\n  Trained: %3 samples  |  Updated: %4\n")
                            .arg(obj["model_id"].toString(), obj["type"].toString())
-                           .arg(obj["samples_trained"].toInt())
+                           .arg(jint_txt(obj["samples_trained"]))
                            .arg(obj["last_updated"].isNull() ? "never" : obj["last_updated"].toString());
             }
             auto* lbl = new QLabel(out, this);
@@ -2960,44 +3035,48 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             return;
         }
         if (command == "train") {
-            auto mae = payload["current_mae"].toDouble();
-            auto samples = payload["samples_trained"].toInt();
-            auto drift = payload["drift_detected"].toBool();
+            const double mae = jnum(payload["current_mae"]);
+            const QString samples = jint_txt(payload["samples_trained"]);
+            const QJsonValue drift_v = payload["drift_detected"];
+            const bool drift = drift_v.toBool();
             auto pred = payload["prediction"];
             QString out = QString("Trained — Samples: %1  |  MAE: %2\nDrift: %3")
                               .arg(samples)
-                              .arg(mae, 0, 'f', 6)
-                              .arg(drift ? "DETECTED" : "none");
-            if (!pred.isNull())
+                              .arg(num_txt(mae, 6))
+                              .arg(!drift_v.isBool() ? ui::formatting::placeholder()
+                                   : drift ? QStringLiteral("DETECTED") : QStringLiteral("none"));
+            if (!pred.isNull() && !pred.isUndefined())
                 out += QString("\nPrediction: %1  →  Actual: %2  |  Error: %3")
-                           .arg(pred.toDouble(), 0, 'f', 6)
-                           .arg(payload["actual"].toDouble(), 0, 'f', 6)
-                           .arg(payload["error"].toDouble(), 0, 'f', 6);
+                           .arg(jnum_txt(pred, 6))
+                           .arg(jnum_txt(payload["actual"], 6))
+                           .arg(jnum_txt(payload["error"], 6));
             auto* lbl = new QLabel(out, this);
             lbl->setWordWrap(true);
             lbl->setStyleSheet(QString("color:%1;").arg(drift ? ui::colors::NEGATIVE() : ui::colors::TEXT_PRIMARY()));
             results_layout_->addWidget(lbl);
-            status_label_->setText(drift ? "⚠ Drift detected" : QString("MAE: %1").arg(mae, 0, 'f', 4));
+            status_label_->setText(drift ? "⚠ Drift detected" : QString("MAE: %1").arg(num_txt(mae, 4)));
             return;
         }
         if (command == "predict") {
             auto pred = payload["prediction"];
             auto* lbl = new QLabel(
-                QString("Prediction: %1").arg(pred.isNull() ? "N/A" : QString::number(pred.toDouble(), 'f', 6)), this);
+                QString("Prediction: %1").arg(jnum_txt(pred, 6)), this);
             lbl->setStyleSheet(QString("color:%1; font-weight:700;").arg(module_.color.name()));
             results_layout_->addWidget(lbl);
             status_label_->setText("Prediction ready");
             return;
         }
         if (command == "performance") {
-            auto mae = payload["current_mae"].toDouble();
-            auto samples = payload["samples_trained"].toInt();
-            auto drift = payload["drift_detected"].toBool();
+            const double mae = jnum(payload["current_mae"]);
+            const QString samples = jint_txt(payload["samples_trained"]);
+            const QJsonValue drift_v = payload["drift_detected"];
+            const bool drift = drift_v.toBool();
             auto* lbl = new QLabel(QString("Model: %1  [%2]\nSamples: %3  |  MAE: %4\nDrift: %5\nLast updated: %6")
                                        .arg(payload["model_id"].toString(), payload["model_type"].toString())
                                        .arg(samples)
-                                       .arg(mae, 0, 'f', 6)
-                                       .arg(drift ? "DETECTED" : "none")
+                                       .arg(num_txt(mae, 6))
+                                       .arg(!drift_v.isBool() ? ui::formatting::placeholder()
+                                            : drift ? QStringLiteral("DETECTED") : QStringLiteral("none"))
                                        .arg(payload["last_updated"].isNull() ? "never" : payload["last_updated"].toString()),
                                    this);
             lbl->setWordWrap(true);
@@ -3035,7 +3114,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         }
         if (command == "run_selection") {
             auto best = payload["best_model"].toString();
-            auto trained = payload["trained_count"].toInt();
+            const QString trained = jint_txt(payload["trained_count"]);
             auto ranking = payload["ranking"].toArray();
             QString out = QString("Best Model: %1  |  Trained: %2\n\nRanking:\n").arg(best).arg(trained);
             int rank = 1;
@@ -3045,8 +3124,8 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 out += QString("  %1. %2  R²: %3  RMSE: %4\n")
                            .arg(rank++)
                            .arg(obj["model_id"].toString())
-                           .arg(metrics["r2_score"].toDouble(), 0, 'f', 4)
-                           .arg(metrics["rmse"].toDouble(), 0, 'f', 4);
+                           .arg(jnum_txt(metrics["r2_score"], 4))
+                           .arg(jnum_txt(metrics["rmse"], 4));
             }
             auto* lbl = new QLabel(out, this);
             lbl->setWordWrap(true);
@@ -3068,15 +3147,15 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         }
         if (command == "tune_hyperparameters") {
             auto best_params = payload["best_params"].toObject();
-            auto best_score = payload["best_score"].toDouble();
-            QString out = QString("Best score: %1\nBest params:\n").arg(best_score, 0, 'f', 4);
+            const double best_score = jnum(payload["best_score"]);
+            QString out = QString("Best score: %1\nBest params:\n").arg(num_txt(best_score, 4));
             for (auto it = best_params.begin(); it != best_params.end(); ++it)
                 out += QString("  %1: %2\n").arg(it.key()).arg(it.value().toVariant().toString());
             auto* lbl = new QLabel(out, this);
             lbl->setWordWrap(true);
             lbl->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
             results_layout_->addWidget(lbl);
-            status_label_->setText(QString("Best score: %1").arg(best_score, 0, 'f', 4));
+            status_label_->setText(QString("Best score: %1").arg(num_txt(best_score, 4)));
             return;
         }
         if (command == "get_results") {
@@ -3087,8 +3166,8 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 auto metrics = obj["metrics"].toObject();
                 out += QString("• %1\n  R²: %2  RMSE: %3\n")
                            .arg(it.key())
-                           .arg(metrics["r2_score"].toDouble(), 0, 'f', 4)
-                           .arg(metrics["rmse"].toDouble(), 0, 'f', 4);
+                           .arg(jnum_txt(metrics["r2_score"], 4))
+                           .arg(jnum_txt(metrics["rmse"], 4));
             }
             auto* lbl = new QLabel(out, this);
             lbl->setWordWrap(true);
@@ -3129,14 +3208,19 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             const QString price_col = is_bid ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE());
             for (int i = 0; i < n; ++i) {
                 const auto row = levels[i].toArray();
-                const double price = row.size() > 0 ? row[0].toDouble() : 0.0;
-                const double size  = row.size() > 1 ? row[1].toDouble() : 0.0;
+                // A level missing its price or size shows "—"; once a size is
+                // missing the running total is unknown from there down (NaN).
+                const double price = row.size() > 0 ? jnum(row[0]) : std::nan("");
+                const double size  = row.size() > 1 ? jnum(row[1]) : std::nan("");
                 cumulative += size;
-                auto* pi = new QTableWidgetItem(QString::number(price, 'f', 4));
+                const auto g_txt = [](double v, int prec) {
+                    return std::isfinite(v) ? QString::number(v, 'g', prec) : ui::formatting::placeholder();
+                };
+                auto* pi = new QTableWidgetItem(num_txt(price, 4));
                 pi->setForeground(QColor(price_col));
-                auto* si = new QTableWidgetItem(QString::number(size, 'g', 5));
+                auto* si = new QTableWidgetItem(g_txt(size, 5));
                 si->setForeground(QColor(QString(ui::colors::TEXT_PRIMARY())));
-                auto* ci = new QTableWidgetItem(QString::number(cumulative, 'g', 6));
+                auto* ci = new QTableWidgetItem(g_txt(cumulative, 6));
                 ci->setForeground(QColor(QString(ui::colors::TEXT_SECONDARY())));
                 tbl->setItem(i, 0, pi);
                 tbl->setItem(i, 1, si);
@@ -3149,29 +3233,29 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         if (command == "fetch_orderbook") {
             const auto bids      = payload["bids"].toArray();
             const auto asks      = payload["asks"].toArray();
-            const double mid     = payload["mid_price"].toDouble();
-            const double spread_bps = payload["spread_bps"].toDouble();
-            const double obi     = payload["obi"].toDouble();
+            const double mid     = jnum(payload["mid_price"]);
+            const double spread_bps = jnum(payload["spread_bps"]);
+            const double obi     = jnum(payload["obi"]);
             const QString pres   = payload["pressure"].toString();
-            const double wmid    = payload["weighted_mid"].toDouble();
-            const double lat     = payload["latency_ms"].toDouble();
+            const double wmid    = jnum(payload["weighted_mid"]);
+            const double lat     = jnum(payload["latency_ms"]);
 
             // Update latency badge
             if (auto* lbl = this->findChild<QLabel*>("hftLatency"))
-                lbl->setText(QString("LATENCY  %1 ms").arg(lat, 0, 'f', 1));
+                lbl->setText(QString("LATENCY  %1 ms").arg(num_txt(lat, 1)));
 
             // Metric cards
-            set_card("hft_mid_val",      QString::number(mid, 'f', 4));
-            set_card("hft_spread_val",   QString::number(spread_bps, 'f', 3) + " bps");
+            set_card("hft_mid_val",      num_txt(mid, 4));
+            set_card("hft_spread_val",   num_txt(spread_bps, 3, " bps"));
             const QString obi_color = obi > 0.1 ? QString(ui::colors::POSITIVE())
                                     : obi < -0.1 ? QString(ui::colors::NEGATIVE())
                                     : QString(ui::colors::TEXT_PRIMARY());
-            set_card("hft_obi_val",      QString::number(obi, 'f', 4), obi_color);
+            set_card("hft_obi_val",      num_txt(obi, 4), obi_color);
             const QString pres_color = pres == "BUY" ? QString(ui::colors::POSITIVE())
                                      : pres == "SELL" ? QString(ui::colors::NEGATIVE())
                                      : QString(ui::colors::TEXT_PRIMARY());
-            set_card("hft_pressure_val", pres, pres_color);
-            set_card("hft_wmid_val",     QString::number(wmid, 'f', 4));
+            set_card("hft_pressure_val", jstr_txt(pres), pres_color);
+            set_card("hft_wmid_val",     num_txt(wmid, 4));
 
             fill_book_table("hft_bid_table", bids, true);
             fill_book_table("hft_ask_table", asks, false);
@@ -3179,9 +3263,9 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             status_label_->setText(
                 QString("%1  mid: %2  spread: %3 bps  OBI: %4")
                     .arg(payload["symbol"].toString())
-                    .arg(mid, 0, 'f', 4)
-                    .arg(spread_bps, 0, 'f', 3)
-                    .arg(obi, 0, 'f', 4));
+                    .arg(num_txt(mid, 4))
+                    .arg(num_txt(spread_bps, 3))
+                    .arg(num_txt(obi, 4)));
             return;
         }
 
@@ -3191,75 +3275,83 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             // Also update book metrics if present
             if (payload.contains("book_metrics")) {
                 const auto bm = payload["book_metrics"].toObject();
-                set_card("hft_mid_val",    QString::number(bm["mid_price"].toDouble(), 'f', 4));
-                set_card("hft_spread_val", QString::number(bm["spread_bps"].toDouble(), 'f', 3) + " bps");
+                set_card("hft_mid_val",    jnum_txt(bm["mid_price"], 4));
+                set_card("hft_spread_val", jnum_txt(bm["spread_bps"], 3, " bps"));
             }
-            set_card("hft_mm_bid",     QString::number(mm["bid_price"].toDouble(), 'f', 4),
+            set_card("hft_mm_bid",     jnum_txt(mm["bid_price"], 4),
                      QString(ui::colors::POSITIVE()));
-            set_card("hft_mm_ask",     QString::number(mm["ask_price"].toDouble(), 'f', 4),
+            set_card("hft_mm_ask",     jnum_txt(mm["ask_price"], 4),
                      QString(ui::colors::NEGATIVE()));
-            set_card("hft_mm_qspread", QString::number(mm["quoted_spread_bps"].toDouble(), 'f', 3) + " bps");
-            set_card("hft_mm_edge",    QString::number(mm["edge_per_side_bps"].toDouble(), 'f', 3) + " bps");
+            set_card("hft_mm_qspread", jnum_txt(mm["quoted_spread_bps"], 3, " bps"));
+            set_card("hft_mm_edge",    jnum_txt(mm["edge_per_side_bps"], 3, " bps"));
             const QString rec   = mm["recommendation"].toString();
             const QString r_col = rec == "WIDEN" ? QString(ui::colors::WARNING())
                                 : rec == "TIGHTEN" ? QString(ui::colors::POSITIVE())
                                 : QString(ui::colors::TEXT_PRIMARY());
-            set_card("hft_mm_rec", rec, r_col);
+            set_card("hft_mm_rec", jstr_txt(rec), r_col);
             status_label_->setText(
                 QString("Bid: %1  Ask: %2  Edge: %3 bps/side")
-                    .arg(mm["bid_price"].toDouble(), 0, 'f', 4)
-                    .arg(mm["ask_price"].toDouble(), 0, 'f', 4)
-                    .arg(mm["edge_per_side_bps"].toDouble(), 0, 'f', 3));
+                    .arg(jnum_txt(mm["bid_price"], 4))
+                    .arg(jnum_txt(mm["ask_price"], 4))
+                    .arg(jnum_txt(mm["edge_per_side_bps"], 3)));
             return;
         }
 
         // ── toxic_flow ────────────────────────────────────────────────────
         if (command == "toxic_flow") {
             const auto tf = payload["toxic_flow"].toObject();
-            const bool   is_toxic = tf["is_toxic"].toBool();
-            const double score    = tf["toxicity_score"].toDouble();
+            const QJsonValue is_toxic_v = tf["is_toxic"];
+            const double score    = jnum(tf["toxicity_score"]);
             const QString cls     = tf["classification"].toString();
             const QString action  = tf["action"].toString();
 
-            const QString score_col = score > 60 ? QString(ui::colors::NEGATIVE())
+            const QString score_col = !std::isfinite(score) ? QString(ui::colors::TEXT_PRIMARY())
+                                    : score > 60 ? QString(ui::colors::NEGATIVE())
                                     : score > 30 ? QString(ui::colors::WARNING())
                                     : QString(ui::colors::POSITIVE());
-            set_card("hft_tox_pin",    QString::number(score, 'f', 1), score_col);
-            set_card("hft_tox_vol",    QString::number(tf["vol_imbalance"].toDouble(), 'f', 4));
-            set_card("hft_tox_impact", QString::number(tf["price_impact_bps"].toDouble(), 'f', 2) + " bps");
-            const QString cls_col = cls == "HIGH_RISK" ? QString(ui::colors::NEGATIVE())
+            set_card("hft_tox_pin",    num_txt(score, 1), score_col);
+            set_card("hft_tox_vol",    jnum_txt(tf["vol_imbalance"], 4));
+            set_card("hft_tox_impact", jnum_txt(tf["price_impact_bps"], 2, " bps"));
+            const QString cls_col = cls.isEmpty()      ? QString(ui::colors::TEXT_PRIMARY())
+                                  : cls == "HIGH_RISK" ? QString(ui::colors::NEGATIVE())
                                   : cls == "ELEVATED"  ? QString(ui::colors::WARNING())
                                   : QString(ui::colors::POSITIVE());
-            set_card("hft_tox_class",  cls, cls_col);
-            const QString act_col = action == "WIDEN_SPREADS" || action == "STEP_BACK"
+            set_card("hft_tox_class",  jstr_txt(cls), cls_col);
+            const QString act_col = action.isEmpty() ? QString(ui::colors::TEXT_PRIMARY())
+                                  : action == "WIDEN_SPREADS" || action == "STEP_BACK"
                                         ? QString(ui::colors::WARNING())
                                         : QString(ui::colors::POSITIVE());
-            set_card("hft_tox_action", QString(action).replace('_', ' '), act_col);
-            status_label_->setText(
-                is_toxic ? QString("TOXIC FLOW DETECTED — score: %1 — %2").arg(score, 0, 'f', 1).arg(cls)
-                         : QString("Flow clean — score: %1 — %2").arg(score, 0, 'f', 1).arg(cls));
+            set_card("hft_tox_action", jstr_txt(QString(action).replace('_', ' ')), act_col);
+            // No verdict from the backend -> say so; don't default to "clean".
+            const QString verdict = !is_toxic_v.isBool() ? QStringLiteral("Toxicity verdict unavailable")
+                                  : is_toxic_v.toBool()  ? QStringLiteral("TOXIC FLOW DETECTED")
+                                                         : QStringLiteral("Flow clean");
+            status_label_->setText(QString("%1 — score: %2 — %3")
+                                       .arg(verdict, num_txt(score, 1), jstr_txt(cls)));
             return;
         }
 
         // ── slippage ──────────────────────────────────────────────────────
         if (command == "slippage") {
             const auto sl = payload;  // flat: average_price, slippage_bps, fills, etc at top level
-            const double avg_p   = sl["average_price"].toDouble();
-            const double sl_bps  = sl["slippage_bps"].toDouble();
-            const double cost    = sl["total_cost"].toDouble();
-            const int    n_fills = sl["fill_count"].toInt();
-            const bool   viable  = sl["viable"].toBool();
+            const double avg_p   = jnum(sl["average_price"]);
+            const double sl_bps  = jnum(sl["slippage_bps"]);
+            const double cost    = jnum(sl["total_cost"]);
+            const QJsonValue viable_v = sl["viable"];
+            const bool   viable  = viable_v.toBool();
 
-            set_card("hft_slip_avgp",  QString::number(avg_p, 'f', 4));
-            const QString bps_col = sl_bps < 5  ? QString(ui::colors::POSITIVE())
+            set_card("hft_slip_avgp",  num_txt(avg_p, 4));
+            const QString bps_col = !std::isfinite(sl_bps) ? QString(ui::colors::TEXT_PRIMARY())
+                                  : sl_bps < 5  ? QString(ui::colors::POSITIVE())
                                   : sl_bps < 20 ? QString(ui::colors::WARNING())
                                   : QString(ui::colors::NEGATIVE());
-            set_card("hft_slip_bps",   QString::number(sl_bps, 'f', 4) + " bps", bps_col);
-            set_card("hft_slip_cost",  QString::number(cost, 'f', 4));
-            set_card("hft_slip_fills", QString::number(n_fills));
+            set_card("hft_slip_bps",   num_txt(sl_bps, 4, " bps"), bps_col);
+            set_card("hft_slip_cost",  num_txt(cost, 4));
+            set_card("hft_slip_fills", jint_txt(sl["fill_count"]));
             set_card("hft_slip_viable",
-                     viable ? "VIABLE" : "HIGH SLIP",
-                     viable ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE()));
+                     !viable_v.isBool() ? ui::formatting::placeholder() : viable ? "VIABLE" : "HIGH SLIP",
+                     !viable_v.isBool() ? QString(ui::colors::TEXT_PRIMARY())
+                     : viable ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE()));
 
             // Populate fills table
             if (auto* tbl = this->findChild<QTableWidget*>("hft_slip_table")) {
@@ -3267,17 +3359,20 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 tbl->setRowCount(fills.size());
                 for (int i = 0; i < fills.size(); ++i) {
                     const auto f = fills[i].toObject();
-                    tbl->setItem(i, 0, new QTableWidgetItem(QString::number(f["price"].toDouble(), 'f', 4)));
-                    tbl->setItem(i, 1, new QTableWidgetItem(QString::number(f["quantity"].toDouble(), 'g', 6)));
-                    tbl->setItem(i, 2, new QTableWidgetItem(QString::number(f["cost"].toDouble(), 'f', 4)));
+                    tbl->setItem(i, 0, new QTableWidgetItem(jnum_txt(f["price"], 4)));
+                    const double qty = jnum(f["quantity"]);
+                    tbl->setItem(i, 1, new QTableWidgetItem(std::isfinite(qty) ? QString::number(qty, 'g', 6)
+                                                                                 : ui::formatting::placeholder()));
+                    tbl->setItem(i, 2, new QTableWidgetItem(jnum_txt(f["cost"], 4)));
                     tbl->setRowHeight(i, 20);
                 }
             }
             status_label_->setText(
                 QString("Avg fill: %1  |  Slippage: %2 bps  |  %3")
-                    .arg(avg_p, 0, 'f', 4)
-                    .arg(sl_bps, 0, 'f', 4)
-                    .arg(viable ? "VIABLE" : "HIGH SLIPPAGE"));
+                    .arg(num_txt(avg_p, 4))
+                    .arg(num_txt(sl_bps, 4))
+                    .arg(!viable_v.isBool() ? QStringLiteral("viability unavailable")
+                         : viable ? QStringLiteral("VIABLE") : QStringLiteral("HIGH SLIPPAGE")));
             return;
         }
 
@@ -3292,54 +3387,58 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             }
             if (payload.contains("book_metrics")) {
                 const auto bm = payload["book_metrics"].toObject();
-                set_card("hft_mid_val",    QString::number(bm["mid_price"].toDouble(), 'f', 4));
-                set_card("hft_spread_val", QString::number(bm["spread_bps"].toDouble(), 'f', 3) + " bps");
-                const double obi = bm["obi"].toDouble();
+                set_card("hft_mid_val",    jnum_txt(bm["mid_price"], 4));
+                set_card("hft_spread_val", jnum_txt(bm["spread_bps"], 3, " bps"));
+                const double obi = jnum(bm["obi"]);
                 const QString obi_col = obi > 0.1 ? QString(ui::colors::POSITIVE())
                                       : obi < -0.1 ? QString(ui::colors::NEGATIVE())
                                       : QString(ui::colors::TEXT_PRIMARY());
-                set_card("hft_obi_val",      QString::number(obi, 'f', 4), obi_col);
+                set_card("hft_obi_val",      num_txt(obi, 4), obi_col);
                 const QString pres = bm["pressure"].toString();
                 const QString p_col = pres == "BUY" ? QString(ui::colors::POSITIVE())
                                     : pres == "SELL" ? QString(ui::colors::NEGATIVE())
                                     : QString(ui::colors::TEXT_PRIMARY());
-                set_card("hft_pressure_val", pres, p_col);
-                set_card("hft_wmid_val",     QString::number(bm["weighted_mid"].toDouble(), 'f', 4));
+                set_card("hft_pressure_val", jstr_txt(pres), p_col);
+                set_card("hft_wmid_val",     jnum_txt(bm["weighted_mid"], 4));
             }
             if (payload.contains("market_making")) {
                 const auto mm = payload["market_making"].toObject();
-                set_card("hft_mm_bid", QString::number(mm["bid_price"].toDouble(), 'f', 4),
+                set_card("hft_mm_bid", jnum_txt(mm["bid_price"], 4),
                          QString(ui::colors::POSITIVE()));
-                set_card("hft_mm_ask", QString::number(mm["ask_price"].toDouble(), 'f', 4),
+                set_card("hft_mm_ask", jnum_txt(mm["ask_price"], 4),
                          QString(ui::colors::NEGATIVE()));
-                set_card("hft_mm_qspread", QString::number(mm["quoted_spread_bps"].toDouble(), 'f', 3) + " bps");
-                set_card("hft_mm_edge",    QString::number(mm["edge_per_side_bps"].toDouble(), 'f', 3) + " bps");
-                set_card("hft_mm_rec",     mm["recommendation"].toString());
+                set_card("hft_mm_qspread", jnum_txt(mm["quoted_spread_bps"], 3, " bps"));
+                set_card("hft_mm_edge",    jnum_txt(mm["edge_per_side_bps"], 3, " bps"));
+                set_card("hft_mm_rec",     jstr_txt(mm["recommendation"]));
             }
             if (payload.contains("toxic_flow")) {
                 const auto tf    = payload["toxic_flow"].toObject();
-                const double sc  = tf["toxicity_score"].toDouble();
-                const QString col = sc > 60 ? QString(ui::colors::NEGATIVE())
+                const double sc  = jnum(tf["toxicity_score"]);
+                const QString col = !std::isfinite(sc) ? QString(ui::colors::TEXT_PRIMARY())
+                                  : sc > 60 ? QString(ui::colors::NEGATIVE())
                                   : sc > 30 ? QString(ui::colors::WARNING())
                                   : QString(ui::colors::POSITIVE());
-                set_card("hft_tox_pin",    QString::number(sc, 'f', 1), col);
-                set_card("hft_tox_vol",    QString::number(tf["vol_imbalance"].toDouble(), 'f', 4));
-                set_card("hft_tox_impact", QString::number(tf["price_impact_bps"].toDouble(), 'f', 2) + " bps");
-                set_card("hft_tox_class",  tf["classification"].toString());
-                set_card("hft_tox_action", QString(tf["action"].toString()).replace('_', ' '));
+                set_card("hft_tox_pin",    num_txt(sc, 1), col);
+                set_card("hft_tox_vol",    jnum_txt(tf["vol_imbalance"], 4));
+                set_card("hft_tox_impact", jnum_txt(tf["price_impact_bps"], 2, " bps"));
+                set_card("hft_tox_class",  jstr_txt(tf["classification"]));
+                set_card("hft_tox_action", jstr_txt(QString(tf["action"].toString()).replace('_', ' ')));
             }
             if (payload.contains("slippage")) {
                 const auto sl = payload["slippage"].toObject();
-                set_card("hft_slip_avgp",  QString::number(sl["average_price"].toDouble(), 'f', 4));
-                set_card("hft_slip_bps",   QString::number(sl["slippage_bps"].toDouble(), 'f', 4) + " bps");
-                set_card("hft_slip_cost",  QString::number(sl["total_cost"].toDouble(), 'f', 4));
-                set_card("hft_slip_fills", QString::number(sl["fill_count"].toInt()));
-                const bool v = sl["viable"].toBool();
-                set_card("hft_slip_viable", v ? "VIABLE" : "HIGH SLIP",
-                         v ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE()));
+                set_card("hft_slip_avgp",  jnum_txt(sl["average_price"], 4));
+                set_card("hft_slip_bps",   jnum_txt(sl["slippage_bps"], 4, " bps"));
+                set_card("hft_slip_cost",  jnum_txt(sl["total_cost"], 4));
+                set_card("hft_slip_fills", jint_txt(sl["fill_count"]));
+                const QJsonValue vv = sl["viable"];
+                const bool v = vv.toBool();
+                set_card("hft_slip_viable",
+                         !vv.isBool() ? ui::formatting::placeholder() : v ? "VIABLE" : "HIGH SLIP",
+                         !vv.isBool() ? QString(ui::colors::TEXT_PRIMARY())
+                         : v ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE()));
             }
             if (auto* lat_lbl = this->findChild<QLabel*>("hftLatency"))
-                lat_lbl->setText(QString("LATENCY  %1 ms").arg(payload["latency_ms"].toDouble(), 0, 'f', 1));
+                lat_lbl->setText(QString("LATENCY  %1 ms").arg(jnum_txt(payload["latency_ms"], 1)));
 
             status_label_->setText(
                 QString("Full analysis complete — %1 @ %2")
@@ -3384,11 +3483,11 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 if (pb) { pb->setValue(total); pb->setFormat("Complete"); }
                 if (log) log->append(QString("\nDone — %1 windows in %2s  |  Experiment: %3")
                                          .arg(total)
-                                         .arg(payload["elapsed_sec"].toDouble(), 0, 'f', 1)
+                                         .arg(jnum_txt(payload["elapsed_sec"], 1))
                                          .arg(payload["exp_name"].toString()));
                 status_label_->setText(QString("Retrain complete — %1 windows in %2s")
                                            .arg(total)
-                                           .arg(payload["elapsed_sec"].toDouble(), 0, 'f', 1));
+                                           .arg(jnum_txt(payload["elapsed_sec"], 1)));
             } else if (event == "error") {
                 if (pb) { pb->setFormat("Failed"); }
                 if (log) log->append(QString("\nError: %1").arg(payload["error"].toString()));
@@ -3800,8 +3899,10 @@ QWidget* QuantModulePanel::build_portfolio_opt_panel() {
                 params["cov_matrix"] = cov_doc.array();
             if (needs_returns) {
                 QJsonArray ret_arr;
-                for (auto& r : text_inputs_[method_id + "_returns"]->text().split(','))
-                    ret_arr.append(r.trimmed().toDouble());
+                if (const QString bad = append_csv_numbers(text_inputs_[method_id + "_returns"]->text(), ret_arr); !bad.isNull()) {
+                    display_error(QString("Not a number: \"%1\"").arg(bad));
+                    return;
+                }
                 params["expected_returns"] = ret_arr;
             }
             params["risk_free_rate"] = double_inputs_[method_id + "_rf"]->value() / 100.0;
@@ -3852,12 +3953,18 @@ QWidget* QuantModulePanel::build_portfolio_opt_panel() {
         status_label_->setText("Running BL...");
         QJsonObject params;
         QJsonArray caps, views, confs, assets;
-        for (auto& v : text_inputs_["bl_caps"]->text().split(','))
-            caps.append(v.trimmed().toDouble());
-        for (auto& v : text_inputs_["bl_views"]->text().split(','))
-            views.append(v.trimmed().toDouble());
-        for (auto& v : text_inputs_["bl_conf"]->text().split(','))
-            confs.append(v.trimmed().toDouble());
+        if (const QString bad = append_csv_numbers(text_inputs_["bl_caps"]->text(), caps); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
+        if (const QString bad = append_csv_numbers(text_inputs_["bl_views"]->text(), views); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
+        if (const QString bad = append_csv_numbers(text_inputs_["bl_conf"]->text(), confs); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
         for (auto& v : text_inputs_["bl_assets"]->text().split(','))
             assets.append(v.trimmed());
         params["market_caps"] = caps;
@@ -3916,10 +4023,14 @@ QWidget* QuantModulePanel::build_factor_evaluation_panel() {
         status_label_->setText("Calculating...");
         QJsonObject params;
         QJsonArray preds, rets;
-        for (auto& v : text_inputs_["ev_predictions"]->text().split(','))
-            preds.append(v.trimmed().toDouble());
-        for (auto& v : text_inputs_["ev_returns"]->text().split(','))
-            rets.append(v.trimmed().toDouble());
+        if (const QString bad = append_csv_numbers(text_inputs_["ev_predictions"]->text(), preds); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
+        if (const QString bad = append_csv_numbers(text_inputs_["ev_returns"]->text(), rets); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
         params["predictions"] = preds;
         params["returns"] = rets;
         params["method"] = combo_inputs_["ev_ic_method"]->currentText();
@@ -3954,10 +4065,14 @@ QWidget* QuantModulePanel::build_factor_evaluation_panel() {
         status_label_->setText("Generating...");
         QJsonObject params;
         QJsonArray preds, rets;
-        for (auto& v : text_inputs_["ev_rep_preds"]->text().split(','))
-            preds.append(v.trimmed().toDouble());
-        for (auto& v : text_inputs_["ev_rep_returns"]->text().split(','))
-            rets.append(v.trimmed().toDouble());
+        if (const QString bad = append_csv_numbers(text_inputs_["ev_rep_preds"]->text(), preds); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
+        if (const QString bad = append_csv_numbers(text_inputs_["ev_rep_returns"]->text(), rets); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
         params["factor_name"] = text_inputs_["ev_factor_name"]->text();
         params["predictions"] = preds;
         params["returns"] = rets;
@@ -3990,15 +4105,19 @@ QWidget* QuantModulePanel::build_factor_evaluation_panel() {
         status_label_->setText("Calculating...");
         QJsonObject params;
         QJsonArray rets;
-        for (auto& v : text_inputs_["ev_risk_returns"]->text().split(','))
-            rets.append(v.trimmed().toDouble());
+        if (const QString bad = append_csv_numbers(text_inputs_["ev_risk_returns"]->text(), rets); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
         params["returns"] = rets;
         params["confidence_level"] = double_inputs_["ev_risk_conf"]->value();
         auto bench_text = text_inputs_["ev_risk_bench"]->text().trimmed();
         if (!bench_text.isEmpty()) {
             QJsonArray bench;
-            for (auto& v : bench_text.split(','))
-                bench.append(v.trimmed().toDouble());
+            if (const QString bad = append_csv_numbers(bench_text, bench); !bad.isNull()) {
+                display_error(QString("Not a number: \"%1\"").arg(bad));
+                return;
+            }
             params["benchmark_returns"] = bench;
         }
         AIQuantLabService::instance().evaluation_risk_metrics(params);
@@ -4052,8 +4171,10 @@ QWidget* QuantModulePanel::build_strategy_builder_panel() {
         status_label_->setText("Creating...");
         QJsonObject params;
         QJsonArray signal;
-        for (auto& v : text_inputs_["st_tk_signal"]->text().split(','))
-            signal.append(v.trimmed().toDouble());
+        if (const QString bad = append_csv_numbers(text_inputs_["st_tk_signal"]->text(), signal); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
         params["signal"] = signal;
         params["topk"] = int_inputs_["st_topk"]->value();
         params["n_drop"] = int_inputs_["st_ndrop"]->value();
@@ -4119,15 +4240,19 @@ QWidget* QuantModulePanel::build_strategy_builder_panel() {
         status_label_->setText("Calculating...");
         QJsonObject params;
         QJsonArray rets;
-        for (auto& v : text_inputs_["st_pm_returns"]->text().split(','))
-            rets.append(v.trimmed().toDouble());
+        if (const QString bad = append_csv_numbers(text_inputs_["st_pm_returns"]->text(), rets); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
         params["returns"] = rets;
         params["risk_free_rate"] = double_inputs_["st_pm_rf"]->value() / 100.0;
         auto bench_text = text_inputs_["st_pm_bench"]->text().trimmed();
         if (!bench_text.isEmpty()) {
             QJsonArray bench;
-            for (auto& v : bench_text.split(','))
-                bench.append(v.trimmed().toDouble());
+            if (const QString bad = append_csv_numbers(bench_text, bench); !bad.isNull()) {
+                display_error(QString("Not a number: \"%1\"").arg(bad));
+                return;
+            }
             params["benchmark_returns"] = bench;
         }
         AIQuantLabService::instance().strategy_portfolio_metrics(params);
@@ -4276,10 +4401,14 @@ QWidget* QuantModulePanel::build_quant_reporting_panel() {
         status_label_->setText("Analyzing...");
         QJsonObject params;
         QJsonArray preds, rets;
-        for (auto& v : text_inputs_["rp_ic_preds"]->text().split(','))
-            preds.append(v.trimmed().toDouble());
-        for (auto& v : text_inputs_["rp_ic_rets"]->text().split(','))
-            rets.append(v.trimmed().toDouble());
+        if (const QString bad = append_csv_numbers(text_inputs_["rp_ic_preds"]->text(), preds); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
+        if (const QString bad = append_csv_numbers(text_inputs_["rp_ic_rets"]->text(), rets); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
         params["predictions"] = preds;
         params["returns"] = rets;
         params["method"] = combo_inputs_["rp_ic_method"]->currentText();
@@ -4314,10 +4443,14 @@ QWidget* QuantModulePanel::build_quant_reporting_panel() {
         status_label_->setText("Generating...");
         QJsonObject params;
         QJsonArray preds, rets;
-        for (auto& v : text_inputs_["rp_mp_preds"]->text().split(','))
-            preds.append(v.trimmed().toDouble());
-        for (auto& v : text_inputs_["rp_mp_rets"]->text().split(','))
-            rets.append(v.trimmed().toDouble());
+        if (const QString bad = append_csv_numbers(text_inputs_["rp_mp_preds"]->text(), preds); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
+        if (const QString bad = append_csv_numbers(text_inputs_["rp_mp_rets"]->text(), rets); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
         params["predictions"] = preds;
         params["returns"] = rets;
         params["model_name"] =
@@ -4353,14 +4486,18 @@ QWidget* QuantModulePanel::build_quant_reporting_panel() {
         status_label_->setText("Generating...");
         QJsonObject params;
         QJsonArray rets;
-        for (auto& v : text_inputs_["rp_cr_rets"]->text().split(','))
-            rets.append(v.trimmed().toDouble());
+        if (const QString bad = append_csv_numbers(text_inputs_["rp_cr_rets"]->text(), rets); !bad.isNull()) {
+            display_error(QString("Not a number: \"%1\"").arg(bad));
+            return;
+        }
         params["returns"] = rets;
         auto bench_text = text_inputs_["rp_cr_bench"]->text().trimmed();
         if (!bench_text.isEmpty()) {
             QJsonArray bench;
-            for (auto& v : bench_text.split(','))
-                bench.append(v.trimmed().toDouble());
+            if (const QString bad = append_csv_numbers(bench_text, bench); !bad.isNull()) {
+                display_error(QString("Not a number: \"%1\"").arg(bad));
+                return;
+            }
             params["benchmark_returns"] = bench;
         }
         auto title = text_inputs_["rp_cr_title"]->text().trimmed();
@@ -4853,7 +4990,13 @@ QWidget* QuantModulePanel::build_online_learning_panel() {
         auto doc = QJsonDocument::fromJson(text_inputs_["ol_features"]->text().toUtf8());
         if (!doc.isNull())
             params["features"] = doc.object();
-        params["target"] = text_inputs_["ol_target"]->text().trimmed().toDouble();
+        bool target_ok = false;
+        const double target = text_inputs_["ol_target"]->text().trimmed().toDouble(&target_ok);
+        if (!target_ok || !std::isfinite(target)) {
+            display_error("Target value is required and must be a number");
+            return;
+        }
+        params["target"] = target;
         AIQuantLabService::instance().online_train(params);
     });
     ttvl->addWidget(ol_train);

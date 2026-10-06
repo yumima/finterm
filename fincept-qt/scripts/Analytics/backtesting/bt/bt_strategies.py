@@ -17,6 +17,7 @@ Strategies unique to bt:
 
 import sys
 import numpy as np
+import pandas as pd
 from typing import Dict, Any, Callable, Tuple, List, Optional
 
 
@@ -322,12 +323,50 @@ def _vwap_calc(high, low, close, volume):
 # bt algo helpers — try to import bt, fall back gracefully
 # ============================================================================
 
-_BT_AVAILABLE = False
-try:
-    import bt as _bt
-    _BT_AVAILABLE = True
-except ImportError:
-    _bt = None
+def _import_bt_library():
+    """Import the pip-installed `bt` library.
+
+    The providers put Analytics/backtesting on sys.path (for `base.*`), which
+    makes this directory -- the local `bt` package -- shadow the library, so a
+    plain `import bt` yields the local package (no `.algos`). Import with any
+    path entry that resolves to Analytics/backtesting removed, then restore
+    sys.path. Returns the module, or None if the library is not installed.
+    """
+    import importlib
+    from pathlib import Path as _Path
+    local_pkg = _Path(__file__).resolve().parent
+    shadow_root = local_pkg.parent
+
+    def _is_local(mod):
+        f = getattr(mod, '__file__', None)
+        return f is not None and _Path(f).resolve().parent == local_pkg
+
+    cached = sys.modules.get('bt')
+    if cached is not None and not _is_local(cached):
+        return cached
+    if cached is not None:
+        del sys.modules['bt']
+
+    saved_path = list(sys.path)
+    try:
+        sys.path[:] = [p for p in sys.path
+                       if _Path(p or '.').resolve() != shadow_root]
+        mod = importlib.import_module('bt')
+        if _is_local(mod) or not hasattr(mod, 'algos'):
+            sys.modules.pop('bt', None)
+            return None
+        return mod
+    except ImportError:
+        sys.modules.pop('bt', None)
+        return None
+    finally:
+        sys.path[:] = saved_path
+        if cached is not None and 'bt' not in sys.modules:
+            sys.modules['bt'] = cached
+
+
+_bt = _import_bt_library()
+_BT_AVAILABLE = _bt is not None
 
 
 def _make_bt_strategy(name, algos, data):

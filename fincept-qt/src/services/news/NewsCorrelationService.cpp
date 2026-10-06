@@ -69,46 +69,6 @@ void NewsCorrelationService::detect_signals(const QVector<NewsArticle>& articles
         });
 }
 
-void NewsCorrelationService::compute_instability(const QString& country_code, const QVector<CorrelationSignal>& sigs,
-                                                 InstabilityCallback cb) {
-    QJsonArray sig_arr;
-    for (const auto& s : sigs) {
-        QJsonObject obj;
-        obj["type"] = s.type;
-        obj["category"] = s.category;
-        obj["severity"] = s.severity;
-        obj["value"] = s.value;
-        sig_arr.append(obj);
-    }
-    auto sig_json = QString::fromUtf8(QJsonDocument(sig_arr).toJson(QJsonDocument::Compact));
-
-    python::PythonRunner::instance().run("news_correlation.py", {"compute_instability", country_code, sig_json},
-                                         [cb](python::PythonResult result) {
-                                             if (!result.success) {
-                                                 cb(false, {});
-                                                 return;
-                                             }
-                                             auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-                                             auto obj = doc.object();
-                                             if (!obj["success"].toBool()) {
-                                                 cb(false, {});
-                                                 return;
-                                             }
-
-                                             InstabilityScore score;
-                                             score.country = obj["country"].toString();
-                                             score.cii_score = obj["cii_score"].toInt();
-                                             score.level = obj["level"].toString();
-                                             score.baseline = obj["baseline"].toInt();
-
-                                             auto contribs = obj["signal_contributions"].toObject();
-                                             for (auto it = contribs.begin(); it != contribs.end(); ++it)
-                                                 score.signal_contributions[it.key()] = it.value().toDouble();
-
-                                             cb(true, score);
-                                         });
-}
-
 void NewsCorrelationService::detect_focal_points(const QJsonArray& geolocated_articles, FocalCallback cb) {
     auto json_str = QString::fromUtf8(QJsonDocument(geolocated_articles).toJson(QJsonDocument::Compact));
 
@@ -143,36 +103,6 @@ void NewsCorrelationService::detect_focal_points(const QJsonArray& geolocated_ar
                                              }
                                              cb(true, points);
                                          });
-}
-
-void NewsCorrelationService::fetch_predictions(PredictionCallback cb) {
-    python::PythonRunner::instance().run(
-        "polymarket.py", {"get_markets", "20"}, [this, cb](python::PythonResult result) {
-            if (!result.success) {
-                LOG_WARN("NewsCorrelation", "Prediction fetch failed: " + result.error);
-                cb(false, {});
-                return;
-            }
-
-            auto doc = QJsonDocument::fromJson(result.output.toUtf8());
-            auto obj = doc.object();
-
-            QVector<PredictionMarket> markets;
-            auto arr = obj.contains("markets") ? obj["markets"].toArray() : obj["data"].toArray();
-            for (const auto& v : arr) {
-                auto m = v.toObject();
-                PredictionMarket pm;
-                pm.id = m["id"].toString();
-                pm.question = m["question"].toString();
-                pm.yes_price = m["yes_price"].toDouble(m["probability"].toDouble(0.5));
-                pm.no_price = 1.0 - pm.yes_price;
-                pm.volume = m["volume"].toDouble(m["totalLiquidity"].toDouble());
-                markets.append(pm);
-            }
-
-            predictions_cache_ = markets;
-            cb(true, markets);
-        });
 }
 
 void NewsCorrelationService::update_baseline(const QMap<QString, int>& current_counts, BaselineCallback cb) {

@@ -3,9 +3,11 @@
 #include "ai_chat/LlmService.h"
 #include "screens/knowledge/ContentLoader.h"
 #include "screens/knowledge/KnowledgeTypes.h"
+#include "storage/repositories/PortfolioRepository.h"
 #include "ui/theme/Theme.h"
 
 #include <QFrame>
+#include <QHash>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
@@ -48,6 +50,40 @@ QString input_ss() {
                    "QLineEdit:disabled { color: %6; }")
         .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO,
              ui::colors::AMBER(), ui::colors::TEXT_SECONDARY());
+}
+
+// The user's real holdings (summed quantity per symbol across all
+// portfolios, plus sector when known) for the "apply" quick action. Empty
+// when there are no portfolios/holdings — the caller then tells the model
+// so rather than substituting a made-up portfolio.
+QString real_holdings_summary() {
+    auto& repo = PortfolioRepository::instance();
+    auto portfolios = repo.list_portfolios();
+    if (!portfolios.is_ok())
+        return {};
+    QHash<QString, double> qty;
+    QHash<QString, QString> sector;
+    for (const auto& p : portfolios.value()) {
+        auto assets = repo.get_assets(p.id);
+        if (!assets.is_ok())
+            continue;
+        for (const auto& a : assets.value()) {
+            const QString sym = a.symbol.toUpper();
+            qty[sym] += a.quantity;
+            if (!a.sector.isEmpty())
+                sector[sym] = a.sector;
+        }
+    }
+    QStringList lines;
+    for (auto it = qty.constBegin(); it != qty.constEnd(); ++it) {
+        const QString sec = sector.value(it.key());
+        lines << QString("- %1: %2 shares%3")
+                     .arg(it.key())
+                     .arg(it.value(), 0, 'g', 10)
+                     .arg(sec.isEmpty() ? QString() : QString(" (%1)").arg(sec));
+    }
+    lines.sort();
+    return lines.join('\n');
 }
 
 } // namespace
@@ -164,19 +200,31 @@ QString AITutorPanel::build_system_prompt() const {
 void AITutorPanel::quick_action(const QString& label) {
     QString prompt;
     if (label == "example") {
-        prompt = QString("Walk me through one concrete worked example of %1 using a well-known publicly traded "
-                         "company. Show the formula, plug in plausible numbers, and explain what the result "
-                         "would mean to an investor.")
+        prompt = QString("Walk me through one concrete worked example of %1. Show the formula and explain what "
+                         "the result would mean to an investor. Do not present invented figures as a real "
+                         "company's data: either use simple round numbers explicitly labelled as hypothetical, "
+                         "or, if you name a real company, say that its actual figures must be checked in finterm "
+                         "rather than quoting numbers you cannot verify.")
                      .arg(entry_title_);
     } else if (label == "quiz") {
         prompt = QString("Quiz me on %1. Ask 3 multiple-choice questions ranging easy → hard, then wait for my "
                          "answers. Reveal the correct answers and explanations only after I respond.")
                      .arg(entry_title_);
     } else if (label == "apply") {
-        prompt = QString("Suppose I hold a typical retirement portfolio (60%% US equities, 30%% bonds, 10%% "
-                         "international). How does %1 apply to my situation, what specific things should I "
-                         "look for in finterm to evaluate it, and what action — if any — would it suggest?")
-                     .arg(entry_title_);
+        const QString holdings = real_holdings_summary();
+        if (holdings.isEmpty()) {
+            prompt = QString("I have no holdings recorded in finterm yet, so you don't know my portfolio — do not "
+                             "assume one. Explain how %1 would apply to an investor in general, what specific things "
+                             "I should look for in finterm to evaluate it, and ask me about my holdings so you can "
+                             "make it specific.")
+                         .arg(entry_title_);
+        } else {
+            prompt = QString("These are my actual holdings in finterm (summed share quantities across my "
+                             "portfolios; no prices or weights included — do not invent them):\n%1\n\n"
+                             "How does %2 apply to my situation, what specific things should I look for in finterm "
+                             "to evaluate it, and what action — if any — would it suggest?")
+                         .arg(holdings, entry_title_);
+        }
     }
     if (!prompt.isEmpty())
         send_user_message(prompt);

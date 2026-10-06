@@ -15,7 +15,7 @@ namespace fincept::screens {
 
 /// Intelligence drawer — slides in from the left over the feed panel.
 /// Contains all advanced intelligence sections: monitors, top stories,
-/// categories, entities, signals, instability, predictions, bookmarks.
+/// categories, entities, signals, bookmarks.
 /// Toggled via the INTEL button in the command bar.
 class NewsSidePanel : public QWidget {
     Q_OBJECT
@@ -29,8 +29,6 @@ class NewsSidePanel : public QWidget {
     void update_entities(const services::NerResult& ner);
     void update_locations(const QVector<services::ArticleGeo>& geo);
     void update_signals(const QVector<services::CorrelationSignal>& sigs);
-    void update_instability(const QString& country, const services::InstabilityScore& score);
-    void update_predictions(const QVector<services::PredictionMarket>& predictions);
     void update_saved(const QVector<services::NewsArticle>& saved);
 
     /// DIGEST — the INTEL strip's whole-feed AI read renders here, in the
@@ -100,14 +98,6 @@ class NewsSidePanel : public QWidget {
     // Correlation signals
     QVBoxLayout* signals_layout_ = nullptr;
     QWidget* signals_section_ = nullptr;
-
-    // Country Instability
-    QVBoxLayout* cii_layout_ = nullptr;
-    QWidget* cii_section_ = nullptr;
-
-    // Prediction markets
-    QVBoxLayout* predictions_layout_ = nullptr;
-    QWidget* predictions_section_ = nullptr;
 
     // Saved / bookmarked articles
     QVBoxLayout* saved_layout_ = nullptr;

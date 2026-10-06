@@ -152,11 +152,17 @@ void PayoffChartWidget::set_payoff(const QVector<PayoffPoint>& curve, double cur
     double y_max = -std::numeric_limits<double>::infinity();
     for (const auto& p : curve) {
         expiry_series_->append(p.spot, p.pnl_expiry);
-        target_series_->append(p.spot, p.pnl_target);
         profit_curve_->append(p.spot, std::max(0.0, p.pnl_expiry));
         loss_curve_->append(p.spot, std::min(0.0, p.pnl_expiry));
-        y_min = std::min({y_min, p.pnl_expiry, p.pnl_target});
-        y_max = std::max({y_max, p.pnl_expiry, p.pnl_target});
+        y_min = std::min(y_min, p.pnl_expiry);
+        y_max = std::max(y_max, p.pnl_expiry);
+        // NaN target = a leg has no IV / unknown expiry: leave the target
+        // curve out rather than plotting an invented price.
+        if (std::isfinite(p.pnl_target)) {
+            target_series_->append(p.spot, p.pnl_target);
+            y_min = std::min(y_min, p.pnl_target);
+            y_max = std::max(y_max, p.pnl_target);
+        }
     }
     const double x_min = curve.first().spot;
     const double x_max = curve.last().spot;
@@ -260,7 +266,8 @@ void PayoffChartWidget::update_crosshair(const QPoint& widget_pos) {
     QString text = QString("Spot: %1\nExpiry P/L: %2\nTarget P/L: %3")
                        .arg(p.spot, 0, 'f', 2)
                        .arg(p.pnl_expiry, 0, 'f', 2)
-                       .arg(p.pnl_target, 0, 'f', 2);
+                       .arg(std::isfinite(p.pnl_target) ? QString::number(p.pnl_target, 'f', 2)
+                                                        : QStringLiteral("—"));
     tooltip_->setText(text);
     tooltip_->adjustSize();
 

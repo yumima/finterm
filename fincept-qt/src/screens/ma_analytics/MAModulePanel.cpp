@@ -3,6 +3,7 @@
 
 #include "core/logging/Logger.h"
 #include "services/ma_analytics/MAAnalyticsService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -16,6 +17,8 @@
 #include <QLineEdit>
 #include <QScrollArea>
 #include <QTableWidget>
+
+#include <initializer_list>
 
 namespace fincept::screens {
 
@@ -777,7 +780,9 @@ QWidget* MAModulePanel::build_merger_panel() {
         target["revenue"] = double_inputs_["tgt_revenue"]->value();
         target["net_income"] = double_inputs_["tgt_net_income"]->value();
         params["target"] = target;
-        params["ownership_split"] = double_inputs_["contrib_ownership"]->value() / 100.0;
+        // contribution_analysis.py's ownership_split is the TARGET's share of
+        // the combined entity; this input is the acquirer's.
+        params["ownership_split"] = 1.0 - double_inputs_["contrib_ownership"]->value() / 100.0;
         MAAnalyticsService::instance().analyze_contribution(params);
     });
     contrib_vl->addWidget(contrib_run);
@@ -1291,30 +1296,50 @@ QWidget* MAModulePanel::build_fairness_panel() {
     sub_tabs_ = new QTabWidget(w);
     apply_tab_stylesheet();
 
+    // Deal-specific prices/valuations have no meaningful default: start blank
+    // ("—" at the 0 floor) and refuse to run until the user enters real values,
+    // so an opinion is never generated from illustrative numbers.
+    auto make_required_price_spin = [this](QWidget* parent) {
+        auto* spin = make_double_spin(0, 1e6, 0, 2, "", parent);
+        spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+        return spin;
+    };
+    auto missing_inputs = [this](std::initializer_list<const char*> keys) {
+        for (const char* k : keys) {
+            if (double_inputs_[QString::fromLatin1(k)]->value() <= 0.0)
+                return true;
+        }
+        return false;
+    };
+
     // ── Fairness Analysis ──
     auto* fa = new QWidget(this);
     auto* fa_vl = new QVBoxLayout(fa);
     fa_vl->setContentsMargins(12, 12, 12, 12);
     fa_vl->setSpacing(8);
 
-    auto* offer = make_double_spin(0, 1e6, 50, 2, "", fa);
+    auto* offer = make_required_price_spin(fa);
     double_inputs_["fo_offer_price"] = offer;
     fa_vl->addWidget(build_input_row("Offer Price ($)", offer, fa));
 
-    auto* dcf_val = make_double_spin(0, 1e6, 48, 2, "", fa);
+    auto* dcf_val = make_required_price_spin(fa);
     double_inputs_["fo_dcf_val"] = dcf_val;
     fa_vl->addWidget(build_input_row("DCF Valuation ($)", dcf_val, fa));
 
-    auto* comps_val = make_double_spin(0, 1e6, 45, 2, "", fa);
+    auto* comps_val = make_required_price_spin(fa);
     double_inputs_["fo_comps_val"] = comps_val;
     fa_vl->addWidget(build_input_row("Comps Valuation ($)", comps_val, fa));
 
-    auto* prec_val = make_double_spin(0, 1e6, 52, 2, "", fa);
+    auto* prec_val = make_required_price_spin(fa);
     double_inputs_["fo_prec_val"] = prec_val;
     fa_vl->addWidget(build_input_row("Precedent Valuation ($)", prec_val, fa));
 
     auto* fa_run = make_run_button("GENERATE FAIRNESS OPINION", fa);
-    connect(fa_run, &QPushButton::clicked, this, [this]() {
+    connect(fa_run, &QPushButton::clicked, this, [this, missing_inputs]() {
+        if (missing_inputs({"fo_offer_price", "fo_dcf_val", "fo_comps_val", "fo_prec_val"})) {
+            status_label_->setText("Enter the offer price and all three valuations first");
+            return;
+        }
         status_label_->setText("Generating Fairness Opinion...");
         QJsonObject params;
         params["offer_price"] = double_inputs_["fo_offer_price"]->value();
@@ -1342,24 +1367,28 @@ QWidget* MAModulePanel::build_fairness_panel() {
     pa_vl->setContentsMargins(12, 12, 12, 12);
     pa_vl->setSpacing(8);
 
-    auto* pa_offer = make_double_spin(0, 1e6, 50, 2, "", pa);
+    auto* pa_offer = make_required_price_spin(pa);
     double_inputs_["pa_offer"] = pa_offer;
     pa_vl->addWidget(build_input_row("Offer Price ($)", pa_offer, pa));
 
-    auto* pa_1d = make_double_spin(0, 1e6, 42, 2, "", pa);
+    auto* pa_1d = make_required_price_spin(pa);
     double_inputs_["pa_price_1d"] = pa_1d;
     pa_vl->addWidget(build_input_row("1-Day Prior Price ($)", pa_1d, pa));
 
-    auto* pa_4w = make_double_spin(0, 1e6, 38, 2, "", pa);
+    auto* pa_4w = make_required_price_spin(pa);
     double_inputs_["pa_price_4w"] = pa_4w;
     pa_vl->addWidget(build_input_row("4-Week Avg Price ($)", pa_4w, pa));
 
-    auto* pa_52w = make_double_spin(0, 1e6, 35, 2, "", pa);
+    auto* pa_52w = make_required_price_spin(pa);
     double_inputs_["pa_price_52w"] = pa_52w;
     pa_vl->addWidget(build_input_row("52-Week High ($)", pa_52w, pa));
 
     auto* pa_run = make_run_button("ANALYZE PREMIUM", pa);
-    connect(pa_run, &QPushButton::clicked, this, [this]() {
+    connect(pa_run, &QPushButton::clicked, this, [this, missing_inputs]() {
+        if (missing_inputs({"pa_offer", "pa_price_1d", "pa_price_4w", "pa_price_52w"})) {
+            status_label_->setText("Enter the offer price and all three reference prices first");
+            return;
+        }
         status_label_->setText("Analyzing Premium...");
         QJsonObject params;
         params["offer_price"] = double_inputs_["pa_offer"]->value();

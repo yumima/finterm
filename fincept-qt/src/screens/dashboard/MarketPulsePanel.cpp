@@ -14,6 +14,7 @@
 #include <QDateTime>
 #include <QFrame>
 #include <QPalette>
+#include <QPointer>
 #include <QShowEvent>
 
 #include <algorithm>
@@ -22,10 +23,12 @@ namespace fincept::screens {
 
 // ── Symbols used by this panel ───────────────────────────────────────────────
 
-// Broad basket: used for fear/greed score + NYSE/NASDAQ/S&P breadth proxy
+// Fixed watch basket of ~50 large US stocks (+ ^VIX): used for the mood
+// gauge and the basket breadth row. This is NOT exchange-wide breadth — the
+// UI labels it as a basket with its stock count, never as NYSE/NASDAQ/S&P.
 static const QStringList kBreadthSymbols = {
     "^VIX",
-    // S&P large caps (proxy for S&P 500 breadth)
+    // Large caps
     "AAPL",
     "MSFT",
     "GOOGL",
@@ -46,7 +49,7 @@ static const QStringList kBreadthSymbols = {
     "HD",
     "CVX",
     "MRK",
-    // NASDAQ-heavy tech
+    // Tech
     "NFLX",
     "AMD",
     "INTC",
@@ -57,7 +60,7 @@ static const QStringList kBreadthSymbols = {
     "CRM",
     "AVGO",
     "TXN",
-    // NYSE diversified (financials, energy, consumer, industrials)
+    // Financials, energy, consumer, industrials
     "GS",
     "BAC",
     "WFC",
@@ -80,8 +83,19 @@ static const QStringList kBreadthSymbols = {
     "FDX",
 };
 
-// Movers: used for gainers/losers rows
-static const QStringList kMoverSymbols = services::MarketDataService::mover_symbols();
+// Number of stocks in the breadth basket (excludes ^VIX).
+static int breadth_basket_size() {
+    int n = 0;
+    for (const auto& s : kBreadthSymbols)
+        if (!s.startsWith('^'))
+            ++n;
+    return n;
+}
+
+// Gainers/losers come from the real market-wide yfinance screener
+// (day_gainers / day_losers) via MarketDataService::fetch_top_movers — the
+// same source TopMoversWidget uses. Count 10 shares that widget's cache key.
+static constexpr int kTopMoversFetchCount = 10;
 
 // Global snapshot symbols
 static const QStringList kSnapshotSymbols = services::MarketDataService::global_snapshot_symbols();
@@ -141,6 +155,11 @@ MarketPulsePanel::MarketPulsePanel(QWidget* parent) : QWidget(parent) {
     movers_coalesce_->setSingleShot(true);
     movers_coalesce_->setInterval(16);
     connect(movers_coalesce_, &QTimer::timeout, this, &MarketPulsePanel::rebuild_movers_from_cache);
+    // Screener-driven movers are not on the DataHub quote stream; poll them
+    // while visible. fetch_top_movers() caches for 60s, so this is cheap.
+    movers_timer_ = new QTimer(this);
+    movers_timer_->setInterval(60000);
+    connect(movers_timer_, &QTimer::timeout, this, &MarketPulsePanel::fetch_movers);
     snapshot_coalesce_ = new QTimer(this);
     snapshot_coalesce_->setSingleShot(true);
     snapshot_coalesce_->setInterval(16);
@@ -251,9 +270,7 @@ void MarketPulsePanel::refresh_theme() {
             row.red->setStyleSheet(QString("background: %1; border-radius: 0;").arg(ui::colors::NEGATIVE()));
     };
 
-    style_breadth(nyse_row_);
-    style_breadth(nasdaq_row_);
-    style_breadth(sp500_row_);
+    style_breadth(basket_row_);
 
     // ── Global Snapshot rows ──
     // Each stat row has a fixed val_color that maps to a specific token.
@@ -319,12 +336,15 @@ void MarketPulsePanel::showEvent(QShowEvent* e) {
         hub_subscribe_all();
     refresh_market_hours();
     hours_timer_->start();
+    fetch_movers();
+    movers_timer_->start();
 }
 
 void MarketPulsePanel::hideEvent(QHideEvent* e) {
     QWidget::hideEvent(e);
     hub_unsubscribe_all();
     hours_timer_->stop();
+    movers_timer_->stop();
 }
 
 // ── Header ───────────────────────────────────────────────────────────────────
@@ -370,7 +390,7 @@ QWidget* MarketPulsePanel::build_section_header(const QString& title, const QStr
     // Store pointers into the corresponding SectionHeader member
     // so refresh_theme() can re-apply styles later.
     SectionHeader* sh = nullptr;
-    if (title == "MARKET BREADTH")
+    if (title == "BASKET BREADTH")
         sh = &sh_breadth_;
     else if (title == "TOP GAINERS")
         sh = &sh_gainers_;
@@ -408,7 +428,11 @@ QWidget* MarketPulsePanel::build_fear_greed_section() {
     // well be a useful reading — but it is not the published index whose
     // name it used to carry, and a user comparing the two would find they
     // disagree with no explanation.
-    fg_header_label_ = new QLabel("MARKET MOOD (BREADTH + VIX)");
+    fg_header_label_ = new QLabel(QString("MOOD (%1-STOCK BASKET + VIX)").arg(breadth_basket_size()));
+    fg_header_label_->setToolTip(
+        QString("finterm's own gauge: advancing vs declining share of a fixed %1-stock watch basket, "
+                "adjusted by VIX bands. Not CNN's Fear & Greed Index and not market-wide breadth.")
+            .arg(breadth_basket_size()));
     hrl->addWidget(fg_header_label_);
     hrl->addStretch();
 
@@ -451,7 +475,7 @@ QWidget* MarketPulsePanel::build_breadth_section() {
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
 
-    vl->addWidget(build_section_header("MARKET BREADTH", QChar(0x2593), ui::colors::CYAN()));
+    vl->addWidget(build_section_header("BASKET BREADTH", QChar(0x2593), ui::colors::CYAN()));
 
     auto* bars = new QWidget(this);
     auto* bl = new QVBoxLayout(bars);
@@ -503,9 +527,13 @@ QWidget* MarketPulsePanel::build_breadth_section() {
         bl->addWidget(rw);
     };
 
-    make_row("NYSE", nyse_row_);
-    make_row("NASDAQ", nasdaq_row_);
-    make_row("S&P 500", sp500_row_);
+    // One honest row: advancers/decliners within the fixed watch basket.
+    // There is no real exchange-wide advance/decline source wired in, so no
+    // NYSE/NASDAQ/S&P labels.
+    make_row(QString("WATCH BASKET (%1 STOCKS)").arg(breadth_basket_size()), basket_row_);
+    if (basket_row_.name)
+        basket_row_.name->setToolTip("Advancing (>+0.3%) / declining (<-0.3%) count within a fixed basket of large "
+                                     "US stocks. Not exchange-wide breadth.");
 
     vl->addWidget(bars);
     return w;
@@ -524,14 +552,16 @@ void MarketPulsePanel::make_mover_rows(QVBoxLayout* layout, QVector<MoverRow>& r
         hl->setContentsMargins(12, 5, 12, 5);
         hl->setSpacing(4);
 
-        row.sym = new QLabel("...");
+        // Neutral placeholder until real screener data arrives — never a
+        // green "+0.00%" that reads like a real quote.
+        row.sym = new QLabel(ui::formatting::placeholder());
         hl->addWidget(row.sym);
         hl->addStretch();
 
-        row.arrow = new QLabel(QChar(0x25B2));
+        row.arrow = new QLabel(QString());
         hl->addWidget(row.arrow);
 
-        row.chg = new QLabel("+0.00%");
+        row.chg = new QLabel(ui::formatting::placeholder());
         hl->addWidget(row.chg);
 
         row.vol = new QLabel("");
@@ -546,7 +576,7 @@ void MarketPulsePanel::make_mover_rows(QVBoxLayout* layout, QVector<MoverRow>& r
 }
 
 // Re-apply token-based styling (colors depend on the current sign, so this is
-// also called from update_mover_row()). The placeholder rows use POSITIVE.
+// also called from update_mover_row()). Placeholder rows stay neutral.
 void MarketPulsePanel::style_mover_row(MoverRow& row) {
     if (!row.container)
         return;
@@ -555,6 +585,10 @@ void MarketPulsePanel::style_mover_row(MoverRow& row) {
                                .arg(ui::colors::TEXT_PRIMARY()));
     row.vol->setStyleSheet(
         QString("color: %1; font-size: 8px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    // Neutral colour for the placeholder state; update_mover_row() re-colours
+    // by sign once real data is shown.
+    row.chg->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
 }
 
 // Update a row's text + sign-driven colors in place.
@@ -566,7 +600,7 @@ void MarketPulsePanel::update_mover_row(MoverRow& row, const services::QuoteData
     row.arrow->setText(positive ? QChar(0x25B2) : QChar(0x25BC));
     row.arrow->setStyleSheet(
         QString("color: %1; font-size: 8px; background: transparent;").arg(col));
-    row.chg->setText(QString("%1%2%").arg(positive ? "+" : "").arg(q.change_pct, 0, 'f', 2));
+    row.chg->setText(ui::formatting::format_percent(q.change_pct, 2, true));
     row.chg->setStyleSheet(
         QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(col));
     const QString volume = ui::formatting::format_compact_volume(q.volume);
@@ -797,18 +831,9 @@ void MarketPulsePanel::rebuild_breadth_from_cache() {
     if (breadth_cache_.isEmpty())
         return;
 
-    // Classify basket into 3 groups mirroring real exchange composition.
-    int sp500_adv = 0, sp500_dec = 0;
-    int nasdaq_adv = 0, nasdaq_dec = 0;
-    int nyse_adv = 0, nyse_dec = 0;
+    // Advancers/decliners within the fixed watch basket (not exchange-wide).
     double vix = -1;
     int bullish = 0, bearish = 0, neutral_count = 0;
-
-    const QStringList sp500_set = {"AAPL",  "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-                                   "BRK-B", "JPM",  "UNH",   "V",    "XOM",  "LLY",  "JNJ",
-                                   "WMT",   "MA",   "PG",    "HD",   "CVX",  "MRK"};
-    const QStringList nasdaq_set = {"NFLX", "AMD",  "INTC", "QCOM", "ADBE",
-                                    "CSCO", "ORCL", "CRM",  "AVGO", "TXN"};
 
     for (const auto& sym : kBreadthSymbols) {
         if (!breadth_cache_.contains(sym))
@@ -818,23 +843,11 @@ void MarketPulsePanel::rebuild_breadth_from_cache() {
             vix = q.price;
             continue;
         }
-        bool in_sp = sp500_set.contains(q.symbol);
-        bool in_nq = nasdaq_set.contains(q.symbol);
+        if (!std::isfinite(q.change_pct))
+            continue;  // unknown change — not an advancer, decliner or "neutral"
         if (q.change_pct > 0.3) {
-            if (in_sp)
-                ++sp500_adv;
-            else if (in_nq)
-                ++nasdaq_adv;
-            else
-                ++nyse_adv;
             ++bullish;
         } else if (q.change_pct < -0.3) {
-            if (in_sp)
-                ++sp500_dec;
-            else if (in_nq)
-                ++nasdaq_dec;
-            else
-                ++nyse_dec;
             ++bearish;
         } else {
             ++neutral_count;
@@ -856,9 +869,7 @@ void MarketPulsePanel::rebuild_breadth_from_cache() {
             layout->setStretch(1, 100 - adv_pct);
         }
     };
-    update_row(nyse_row_, nyse_adv, nyse_dec);
-    update_row(nasdaq_row_, nasdaq_adv, nasdaq_dec);
-    update_row(sp500_row_, sp500_adv, sp500_dec);
+    update_row(basket_row_, bullish, bearish);
 
     // ── Fear & Greed score ──
     int total_stocks = bullish + bearish + neutral_count;
@@ -906,44 +917,56 @@ void MarketPulsePanel::rebuild_breadth_from_cache() {
     }
 }
 
+void MarketPulsePanel::fetch_movers() {
+    QPointer<MarketPulsePanel> self = this;
+    services::MarketDataService::instance().fetch_top_movers(
+        kTopMoversFetchCount, [self](bool ok, services::MarketDataService::TopMovers tm) {
+            if (!self)
+                return;
+            if (!ok) {
+                // Keep movers already on screen; otherwise say so honestly.
+                if (!self->movers_loaded_) {
+                    for (auto* rows : {&self->gainer_rows_, &self->loser_rows_}) {
+                        for (int i = 0; i < rows->size(); ++i) {
+                            auto& row = (*rows)[i];
+                            if (!row.sym)
+                                continue;
+                            row.sym->setText(i == 0 ? QStringLiteral("UNAVAILABLE") : ui::formatting::placeholder());
+                            MarketChartDialog::set_target(row.container, QString(), QString());
+                        }
+                    }
+                }
+                return;
+            }
+            self->movers_data_ = std::move(tm);
+            self->movers_loaded_ = true;
+            self->movers_coalesce_->start();
+        });
+}
+
 void MarketPulsePanel::rebuild_movers_from_cache() {
-    if (movers_cache_.isEmpty() || gainer_rows_.isEmpty() || loser_rows_.isEmpty())
+    if (!movers_loaded_ || gainer_rows_.isEmpty() || loser_rows_.isEmpty())
         return;
 
-    QVector<services::QuoteData> quotes;
-    quotes.reserve(movers_cache_.size());
-    for (const auto& sym : kMoverSymbols) {
-        if (movers_cache_.contains(sym))
-            quotes.append(movers_cache_.value(sym));
-    }
-    std::sort(quotes.begin(), quotes.end(),
-              [](const auto& a, const auto& b) { return a.change_pct > b.change_pct; });
-
-    // Update the persistent gainer rows in place (top 3 with change_pct > 0).
-    // Slots beyond the available movers are hidden so the rendered row set
-    // matches the prior build-once-per-tick behavior exactly.
-    int gainers_added = 0;
-    for (const auto& q : quotes) {
-        if (q.change_pct <= 0 || gainers_added >= gainer_rows_.size())
-            break;
-        update_mover_row(gainer_rows_[gainers_added], q);
-        ++gainers_added;
-    }
-    for (int i = gainers_added; i < gainer_rows_.size(); ++i)
-        if (gainer_rows_[i].container)
-            gainer_rows_[i].container->hide();
-
-    // Losers: bottom of the sorted list, change_pct < 0.
-    int losers_added = 0;
-    for (int i = quotes.size() - 1; i >= 0 && losers_added < loser_rows_.size(); --i) {
-        if (quotes[i].change_pct >= 0)
-            continue;
-        update_mover_row(loser_rows_[losers_added], quotes[i]);
-        ++losers_added;
-    }
-    for (int i = losers_added; i < loser_rows_.size(); ++i)
-        if (loser_rows_[i].container)
-            loser_rows_[i].container->hide();
+    // Real market-wide screener results (yfinance day_gainers / day_losers),
+    // already ranked by the source. Show the top N with the correct sign;
+    // unused slots are hidden.
+    auto fill = [this](QVector<MoverRow>& rows, const QVector<services::QuoteData>& src, bool want_positive) {
+        int added = 0;
+        for (const auto& q : src) {
+            if (added >= rows.size())
+                break;
+            if (!std::isfinite(q.change_pct) || (want_positive ? q.change_pct <= 0 : q.change_pct >= 0))
+                continue;
+            update_mover_row(rows[added], q);
+            ++added;
+        }
+        for (int i = added; i < rows.size(); ++i)
+            if (rows[i].container)
+                rows[i].container->hide();
+    };
+    fill(gainer_rows_, movers_data_.gainers, true);
+    fill(loser_rows_, movers_data_.losers, false);
 }
 
 void MarketPulsePanel::rebuild_snapshot_from_cache() {
@@ -953,7 +976,7 @@ void MarketPulsePanel::rebuild_snapshot_from_cache() {
         return QString("%1").arg(q.price, 0, 'f', 2);
     };
     auto fmt_chg = [](const services::QuoteData& q) -> QString {
-        return QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2);
+        return ui::formatting::format_percent(q.change_pct, 2, true);
     };
     auto update_stat = [&](const QString& sym, StatRow& row) {
         if (!snapshot_cache_.contains(sym) || !row.val)
@@ -964,7 +987,7 @@ void MarketPulsePanel::rebuild_snapshot_from_cache() {
         MarketChartDialog::set_target(row.container, sym, row.name_lbl ? row.name_lbl->text() : QString());
         row.val->setText(fmt_price(q));
         row.chg->setText(fmt_chg(q));
-        QString chg_color = q.change_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
+        QString chg_color = ui::change_color(q.change_pct);
         row.chg->setStyleSheet(
             QString("color: %1; font-size: 8px; font-weight: bold; background: transparent;").arg(chg_color));
     };
@@ -979,12 +1002,10 @@ void MarketPulsePanel::rebuild_snapshot_from_cache() {
 void MarketPulsePanel::hub_subscribe_all() {
     auto& hub = datahub::DataHub::instance();
 
-    // Union of all three symbol sets — but dispatch per-set so each cache
+    // Union of the breadth + snapshot symbol sets — but dispatch per-set so each cache
     // only holds its own universe (keeps rebuild_* loops cheap).
     QSet<QString> all_syms;
     for (const auto& s : kBreadthSymbols)
-        all_syms.insert(s);
-    for (const auto& s : kMoverSymbols)
         all_syms.insert(s);
     for (const auto& s : kSnapshotSymbols)
         all_syms.insert(s);
@@ -992,20 +1013,15 @@ void MarketPulsePanel::hub_subscribe_all() {
     for (const QString& sym : all_syms) {
         const QString topic = QStringLiteral("market:quote:") + sym;
         const bool in_breadth = kBreadthSymbols.contains(sym);
-        const bool in_movers = kMoverSymbols.contains(sym);
         const bool in_snapshot = kSnapshotSymbols.contains(sym);
 
-        hub.subscribe(this, topic, [this, sym, in_breadth, in_movers, in_snapshot](const QVariant& v) {
+        hub.subscribe(this, topic, [this, sym, in_breadth, in_snapshot](const QVariant& v) {
             if (!v.canConvert<services::QuoteData>())
                 return;
             const auto q = v.value<services::QuoteData>();
             if (in_breadth) {
                 breadth_cache_.insert(sym, q);
                 breadth_coalesce_->start();
-            }
-            if (in_movers) {
-                movers_cache_.insert(sym, q);
-                movers_coalesce_->start();
             }
             if (in_snapshot) {
                 snapshot_cache_.insert(sym, q);
@@ -1039,9 +1055,9 @@ void MarketPulsePanel::refresh_data() {
         }
     };
     push(kBreadthSymbols);
-    push(kMoverSymbols);
     push(kSnapshotSymbols);
     hub.request(topics, /*force=*/true);  // user-triggered refresh
+    fetch_movers();
 }
 
 } // namespace fincept::screens

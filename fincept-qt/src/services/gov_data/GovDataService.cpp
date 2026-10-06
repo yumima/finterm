@@ -140,8 +140,25 @@ void GovDataService::execute(const QString& script, const QString& command, cons
             return;
         }
 
-        result.success = true;
         result.data = doc.object();
+
+        // Provider scripts report failure in-band ({"success": false, "error": ...}
+        // or a bare {"error": ...}). Surface that as a failure and never cache it —
+        // otherwise an error payload was served as "data" for the full cache TTL.
+        {
+            const QJsonValue ev = result.data.value("error");
+            const bool has_error = !ev.isUndefined() && !ev.isNull() &&
+                                   !(ev.isString() && ev.toString().isEmpty()) && !(ev.isBool() && !ev.toBool());
+            if (result.data.value("success").toBool(true) == false || has_error) {
+                result.success = false;
+                result.error = ev.isString() ? ev.toString()
+                                             : QString::fromUtf8(QJsonDocument(result.data).toJson(QJsonDocument::Compact)).left(500);
+                LOG_ERROR("GovDataService", QString("Script reported error: %1").arg(result.error));
+                emit self->result_ready(request_id, result);
+                return;
+            }
+        }
+        result.success = true;
 
         // Cache the result
         fincept::CacheManager::instance().put(

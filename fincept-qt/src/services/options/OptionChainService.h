@@ -35,6 +35,10 @@ namespace fincept::services::options {
 class OptionChainService : public QObject, public fincept::datahub::Producer {
     Q_OBJECT
   public:
+    /// Risk-free rate from settings (`fno.risk_free_rate`). NaN when unset or
+    /// invalid — there is no built-in default. Cached after first read.
+    double risk_free_rate();
+
     static OptionChainService& instance();
 
     /// Idempotent — registers as Producer for the option:* topic families and
@@ -106,10 +110,6 @@ class OptionChainService : public QObject, public fincept::datahub::Producer {
     /// Average ATM CE/PE IV after Greeks land. Publishes
     /// `option:atm_iv:<broker>:<underlying>` (decimal IV).
     void publish_atm_iv(const fincept::services::options::OptionChain& chain);
-
-    /// Risk-free rate from settings (`fno.risk_free_rate`), default 0.067
-    /// (RBI 91-day T-bill ballpark). Cached after first read.
-    double risk_free_rate();
 
     /// Time to expiry in years, actual/365. Floors at one calendar day so
     /// expiry-day options don't blow up the BSM model.

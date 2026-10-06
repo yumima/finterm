@@ -31,8 +31,6 @@ Archive (Data Downloading):
 - Archive CLI: download_asset, get_assets
 - Update: update_archive, update_single_archive, update_kline
 
-Synthetic Data:
-- generate_synthetic_ohlcv(): Generate random OHLCV data for testing
 """
 
 import pandas as pd
@@ -740,60 +738,6 @@ def load_yfinance_data(
 
         return pd.DataFrame()
     except Exception as e:
-        print(f"yfinance error for {symbol}: {e}")
+        import sys
+        print(f"yfinance error for {symbol}: {e}", file=sys.stderr)
         return pd.DataFrame()
-
-
-# ============================================================================
-# Synthetic Data Generation
-# ============================================================================
-
-def generate_synthetic_ohlcv(
-    periods: int = 1000,
-    start_date: str = '2023-01-01',
-    freq: str = '1H',
-    initial_price: float = 100.0,
-    volatility: float = 0.02,
-    drift: float = 0.0002,
-    seed: Optional[int] = 42
-) -> pd.DataFrame:
-    """
-    Generate synthetic OHLCV data for testing.
-
-    Uses geometric Brownian motion to simulate realistic price movements.
-
-    Args:
-        periods: Number of bars to generate
-        start_date: Start date string
-        freq: Frequency ('1Min', '5Min', '1H', '1D', etc.)
-        initial_price: Starting price
-        volatility: Price volatility (std of returns)
-        drift: Mean return per period
-        seed: Random seed for reproducibility
-
-    Returns:
-        DataFrame with date index and open, high, low, close, volume columns
-    """
-    if seed is not None:
-        np.random.seed(seed)
-
-    # Normalize deprecated uppercase freq aliases
-    freq_norm = freq.replace('H', 'h').replace('Min', 'min').replace('D', 'D')
-    dates = pd.date_range(start=start_date, periods=periods, freq=freq_norm)
-    returns = np.random.normal(drift, volatility, periods)
-    price = initial_price * np.exp(np.cumsum(returns))
-
-    df = pd.DataFrame({
-        'open': price * (1 + np.random.uniform(-0.005, 0.005, periods)),
-        'high': price * (1 + np.random.uniform(0, 0.015, periods)),
-        'low': price * (1 - np.random.uniform(0, 0.015, periods)),
-        'close': price,
-        'volume': np.random.uniform(500000, 5000000, periods),
-    }, index=dates)
-
-    # Ensure high >= max(open, close) and low <= min(open, close)
-    df['high'] = df[['open', 'high', 'close']].max(axis=1)
-    df['low'] = df[['open', 'low', 'close']].min(axis=1)
-    df.index.name = 'date'
-
-    return df

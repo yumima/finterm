@@ -11,6 +11,8 @@
 #include <QUrl>
 #include <QUrlQuery>
 
+#include <limits>
+
 namespace fincept::services::polymarket {
 
 // ── API base URLs ────────────────────────────────────────────────────────────
@@ -67,8 +69,11 @@ Market Market::from_json(const QJsonObject& obj) {
     for (int i = 0; i < outcomes_arr.size(); ++i) {
         Outcome o;
         o.name = outcomes_arr[i].toString();
-        // outcomePrices are JSON strings ("0.535") — use num_or_str.
-        o.price = (i < prices_arr.size()) ? num_or_str(prices_arr[i]) : 0.0;
+        // outcomePrices are JSON strings ("0.535") — use num_or_str. A missing
+        // price is NaN (renders "—"), never a fabricated 0%.
+        const bool has_price = i < prices_arr.size() && !prices_arr[i].isNull() &&
+                               !(prices_arr[i].isString() && prices_arr[i].toString().trimmed().isEmpty());
+        o.price = has_price ? num_or_str(prices_arr[i]) : std::numeric_limits<double>::quiet_NaN();
         m.outcomes.append(o);
     }
 

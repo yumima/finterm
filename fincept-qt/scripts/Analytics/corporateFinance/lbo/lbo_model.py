@@ -132,7 +132,7 @@ class LBOModel:
             'exit_scenarios': exit_scenarios,
             'returns_analysis': returns_analysis,
             'returns': {
-                'irr': base_returns.get('irr', 0) / 100,
+                'irr': base_returns['irr'] / 100 if base_returns.get('irr') is not None else None,
                 'moic': base_returns.get('moic', 0),
                 'entry_equity': initial_equity,
                 'exit_equity': base_returns.get('exit_equity_value', 0),
@@ -338,9 +338,9 @@ def main():
                     sensitivity_matrix.append({
                         'revenue_growth': rev_growth,
                         'exit_multiple': exit_mult,
-                        'irr': ret.get('annualized_return', ret.get('irr', 0)),
-                        'moic': ret.get('moic', 0),
-                        'equity_value': ret.get('exit_equity_value', 0)
+                        'irr': ret.get('annualized_return', ret.get('irr')),
+                        'moic': ret.get('moic'),
+                        'equity_value': ret.get('exit_equity_value')
                     })
 
             # Build 2D matrices for frontend heatmap: rows=revenue_growth, cols=exit_multiple
@@ -352,7 +352,7 @@ def main():
                 moic_row = []
                 for _em in exit_multiple_scenarios:
                     entry = sensitivity_matrix[idx]
-                    irr_row.append(entry['irr'] / 100)  # frontend multiplies by 100
+                    irr_row.append(entry['irr'] / 100 if entry['irr'] is not None else None)  # frontend multiplies by 100
                     moic_row.append(entry['moic'])
                     idx += 1
                 irr_matrix.append(irr_row)

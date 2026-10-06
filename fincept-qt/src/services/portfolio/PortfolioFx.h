@@ -48,9 +48,10 @@ QPair<QString, double> fx_pair_for(const QString& instrument_currency, const QSt
 /// showing up as fabricated performance. It is second-order next to the
 /// unit error that preceded it, and it is still wrong.
 ///
-/// Falls back gracefully: a symbol with no series uses its current rate, and
-/// a symbol with neither converts 1:1 (the caller should already have
-/// flagged that as an incomplete conversion).
+/// Falls back gracefully: a symbol with no series uses its current rate. A
+/// symbol with neither is UNKNOWN in strict mode (rate_for returns NaN — the
+/// mode every real portfolio uses, see PortfolioService::fx_rates_for); a
+/// default, non-strict FxRates is the single-currency identity (1:1).
 class FxRates {
   public:
     FxRates() = default;
@@ -78,9 +79,15 @@ class FxRates {
     /// valued at today's quote, so carrying the stale close forward would
     /// convert a same-day trade at yesterday's rate and re-create the exact
     /// mismatch this class exists to remove.
+    /// Returns NaN in strict mode when nothing is known for `symbol`.
     double rate_for(const QString& symbol, const QString& date) const;
 
+    /// Strict: an unknown symbol has no rate (NaN) instead of an assumed 1:1.
+    /// Callers must then treat the affected flow / return as uncomputable.
+    void set_strict(bool strict) { strict_ = strict; }
+
   private:
+    bool strict_ = false;
     QHash<QString, double> current_;
     QHash<QString, QMap<QString, double>> series_;
 };

@@ -48,6 +48,10 @@ struct PeriodReturn {
     // first snapshot was zero-valued with a same-day purchase. Consumers
     // should treat a degraded window as approximate.
     bool degraded = false;
+    // True when a flow inside the window could not be converted (unknown FX
+    // rate). valid is then false and NO return may be shown — not even a
+    // naive NAV ratio, which would count the flow itself as performance.
+    bool fx_unknown = false;
 };
 
 /// Compute the period TWR over `snapshots` (any order; sorted internally by

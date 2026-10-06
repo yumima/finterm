@@ -65,38 +65,59 @@ class TradingCompsAnalyzer:
             financials = stock.financials
             balance_sheet = stock.balance_sheet
 
-            market_cap = info.get('marketCap', 0)
-            shares_outstanding = info.get('sharesOutstanding', 0)
-            stock_price = info.get('currentPrice', info.get('regularMarketPrice', 0))
-            total_debt = info.get('totalDebt', 0)
-            cash = info.get('totalCash', 0)
-            enterprise_value = market_cap + total_debt - cash
+            # Missing fields stay None (rendered "—"); ratios are only formed
+            # from real inputs. No 0 defaults, and no EBIT := EBITDA swap.
+            def num(key):
+                v = info.get(key)
+                return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
-            revenue_ltm = info.get('totalRevenue', 0)
-            ebitda_ltm = info.get('ebitda', 0)
-            # yfinance: 'ebit' is often None, derive from operatingMargins
-            ebit_ltm = info.get('ebit', 0) or 0
-            if ebit_ltm == 0 and revenue_ltm and info.get('operatingMargins'):
-                ebit_ltm = revenue_ltm * info['operatingMargins']
-            if ebit_ltm == 0:
-                ebit_ltm = ebitda_ltm
+            def div(a, b):
+                return a / b if a is not None and b else None
+
+            market_cap = num('marketCap')
+            shares_outstanding = num('sharesOutstanding')
+            stock_price = num('currentPrice')
+            if stock_price is None:
+                stock_price = num('regularMarketPrice')
+            total_debt = num('totalDebt')
+            cash = num('totalCash')
+            enterprise_value = (market_cap + total_debt - cash
+                                if None not in (market_cap, total_debt, cash) else num('enterpriseValue'))
+
+            revenue_ltm = num('totalRevenue')
+            ebitda_ltm = num('ebitda')
+            # yfinance: 'ebit' is often None; operating income (revenue x
+            # operating margin) is the standard EBIT proxy from real data.
+            ebit_ltm = num('ebit')
+            if ebit_ltm is None and revenue_ltm and num('operatingMargins') is not None:
+                ebit_ltm = revenue_ltm * num('operatingMargins')
             # yfinance: 'netIncome' is often None, use 'netIncomeToCommon' or profitMargins
-            net_income_ltm = info.get('netIncome', 0) or info.get('netIncomeToCommon', 0) or 0
-            if net_income_ltm == 0 and revenue_ltm and info.get('profitMargins'):
-                net_income_ltm = revenue_ltm * info['profitMargins']
+            net_income_ltm = num('netIncome')
+            if net_income_ltm is None:
+                net_income_ltm = num('netIncomeToCommon')
+            if net_income_ltm is None and revenue_ltm and num('profitMargins') is not None:
+                net_income_ltm = revenue_ltm * num('profitMargins')
 
-            revenue_growth = info.get('revenueGrowth', 0) * 100 if info.get('revenueGrowth') else 0
-            ebitda_margin = (ebitda_ltm / revenue_ltm * 100) if revenue_ltm else 0
-            net_margin = (net_income_ltm / revenue_ltm * 100) if revenue_ltm and net_income_ltm else 0
-            roe = info.get('returnOnEquity', 0) * 100 if info.get('returnOnEquity') else 0
-            roa = info.get('returnOnAssets', 0) * 100 if info.get('returnOnAssets') else 0
+            def pct(key):
+                v = num(key)
+                return v * 100 if v is not None else None
 
-            ev_revenue = enterprise_value / revenue_ltm if revenue_ltm else 0
-            ev_ebitda = enterprise_value / ebitda_ltm if ebitda_ltm else 0
-            ev_ebit = enterprise_value / ebit_ltm if ebit_ltm else 0
-            price_earnings = info.get('trailingPE', 0)
-            price_book = info.get('priceToBook', 0)
-            price_sales = info.get('priceToSalesTrailing12Months', 0)
+            def ratio_pct(a, b):
+                r = div(a, b)
+                return r * 100 if r is not None else None
+
+            revenue_growth = pct('revenueGrowth')
+            ebitda_margin = ratio_pct(ebitda_ltm, revenue_ltm)
+            net_margin = ratio_pct(net_income_ltm, revenue_ltm)
+            roe = pct('returnOnEquity')
+            roa = pct('returnOnAssets')
+
+            ev_revenue = div(enterprise_value, revenue_ltm)
+            ev_ebitda = div(enterprise_value, ebitda_ltm)
+            ev_ebit = div(enterprise_value, ebit_ltm)
+            price_earnings = num('trailingPE')
+            price_book = num('priceToBook')
+            price_sales = num('priceToSalesTrailing12Months')
 
             return TradingComp(
                 ticker=ticker,
@@ -136,7 +157,7 @@ class TradingCompsAnalyzer:
         comps = []
         for ticker in tickers:
             comp = self.fetch_comp_data(ticker)
-            if comp and comp.market_cap > 0:
+            if comp and comp.market_cap and comp.market_cap > 0:
                 comps.append(comp)
 
         return comps
@@ -145,17 +166,20 @@ class TradingCompsAnalyzer:
         """Calculate trading multiples statistics"""
 
         def calc_stats(values: List[float], name: str) -> Dict[str, float]:
-            clean_vals = [v for v in values if v > 0 and not np.isnan(v) and not np.isinf(v)]
+            clean_vals = [v for v in values
+                          if v is not None and v > 0 and not np.isnan(v) and not np.isinf(v)]
             if not clean_vals:
-                return {f'{name}_mean': 0, f'{name}_median': 0, f'{name}_min': 0,
-                       f'{name}_max': 0, f'{name}_std': 0, f'{name}_count': 0}
+                # No usable comps for this multiple: unavailable, not 0x.
+                return {f'{name}_mean': None, f'{name}_median': None, f'{name}_min': None,
+                       f'{name}_max': None, f'{name}_std': None, f'{name}_count': 0,
+                       f'{name}_q1': None, f'{name}_q3': None}
 
             return {
                 f'{name}_mean': mean(clean_vals),
                 f'{name}_median': median(clean_vals),
                 f'{name}_min': min(clean_vals),
                 f'{name}_max': max(clean_vals),
-                f'{name}_std': stdev(clean_vals) if len(clean_vals) > 1 else 0,
+                f'{name}_std': stdev(clean_vals) if len(clean_vals) > 1 else None,
                 f'{name}_count': len(clean_vals),
                 f'{name}_q1': np.percentile(clean_vals, 25),
                 f'{name}_q3': np.percentile(clean_vals, 75)
@@ -183,31 +207,34 @@ class TradingCompsAnalyzer:
         stats = self.calculate_statistics(comps)
         valuations = {}
 
+        def apply(metric, multiple):
+            return metric * multiple if multiple is not None else None
+
         if target_financials.get('revenue'):
             revenue = target_financials['revenue']
-            valuations['ev_revenue_median'] = revenue * stats['ev_revenue']['ev_revenue_median']
-            valuations['ev_revenue_mean'] = revenue * stats['ev_revenue']['ev_revenue_mean']
-            valuations['ev_revenue_q1'] = revenue * stats['ev_revenue']['ev_revenue_q1']
-            valuations['ev_revenue_q3'] = revenue * stats['ev_revenue']['ev_revenue_q3']
+            valuations['ev_revenue_median'] = apply(revenue, stats['ev_revenue']['ev_revenue_median'])
+            valuations['ev_revenue_mean'] = apply(revenue, stats['ev_revenue']['ev_revenue_mean'])
+            valuations['ev_revenue_q1'] = apply(revenue, stats['ev_revenue']['ev_revenue_q1'])
+            valuations['ev_revenue_q3'] = apply(revenue, stats['ev_revenue']['ev_revenue_q3'])
 
         if target_financials.get('ebitda'):
             ebitda = target_financials['ebitda']
-            valuations['ev_ebitda_median'] = ebitda * stats['ev_ebitda']['ev_ebitda_median']
-            valuations['ev_ebitda_mean'] = ebitda * stats['ev_ebitda']['ev_ebitda_mean']
-            valuations['ev_ebitda_q1'] = ebitda * stats['ev_ebitda']['ev_ebitda_q1']
-            valuations['ev_ebitda_q3'] = ebitda * stats['ev_ebitda']['ev_ebitda_q3']
+            valuations['ev_ebitda_median'] = apply(ebitda, stats['ev_ebitda']['ev_ebitda_median'])
+            valuations['ev_ebitda_mean'] = apply(ebitda, stats['ev_ebitda']['ev_ebitda_mean'])
+            valuations['ev_ebitda_q1'] = apply(ebitda, stats['ev_ebitda']['ev_ebitda_q1'])
+            valuations['ev_ebitda_q3'] = apply(ebitda, stats['ev_ebitda']['ev_ebitda_q3'])
 
         if target_financials.get('ebit'):
             ebit = target_financials['ebit']
-            valuations['ev_ebit_median'] = ebit * stats['ev_ebit']['ev_ebit_median']
-            valuations['ev_ebit_mean'] = ebit * stats['ev_ebit']['ev_ebit_mean']
+            valuations['ev_ebit_median'] = apply(ebit, stats['ev_ebit']['ev_ebit_median'])
+            valuations['ev_ebit_mean'] = apply(ebit, stats['ev_ebit']['ev_ebit_mean'])
 
         if target_financials.get('net_income'):
             net_income = target_financials['net_income']
-            valuations['pe_median'] = net_income * stats['price_earnings']['pe_median']
-            valuations['pe_mean'] = net_income * stats['price_earnings']['pe_mean']
+            valuations['pe_median'] = apply(net_income, stats['price_earnings']['pe_median'])
+            valuations['pe_mean'] = apply(net_income, stats['price_earnings']['pe_mean'])
 
-        valuation_values = [v for v in valuations.values() if v > 0]
+        valuation_values = [v for v in valuations.values() if v is not None and v > 0]
         if valuation_values:
             valuations['blended_median'] = median(valuation_values)
             valuations['blended_mean'] = mean(valuation_values)
@@ -221,13 +248,17 @@ class TradingCompsAnalyzer:
     def build_comp_table(self, comps: List[TradingComp], target_metrics: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """Build formatted trading comp table"""
 
+        def median_or_none(values, scale):
+            vals = [v / scale for v in values if v is not None]
+            return median(vals) if vals else None
+
         table_data = []
         for comp in comps:
             row = {
                 'Ticker': comp.ticker,
                 'Company': comp.company_name,
-                'Market Cap ($M)': comp.market_cap / 1_000_000,
-                'EV ($M)': comp.enterprise_value / 1_000_000,
+                'Market Cap ($M)': comp.market_cap / 1_000_000 if comp.market_cap is not None else None,
+                'EV ($M)': comp.enterprise_value / 1_000_000 if comp.enterprise_value is not None else None,
                 'EV/Revenue': comp.ev_revenue,
                 'EV/EBITDA': comp.ev_ebitda,
                 'EV/EBIT': comp.ev_ebit,
@@ -246,8 +277,8 @@ class TradingCompsAnalyzer:
         summary_row = {
             'Ticker': 'MEDIAN',
             'Company': '',
-            'Market Cap ($M)': median([c.market_cap / 1_000_000 for c in comps]),
-            'EV ($M)': median([c.enterprise_value / 1_000_000 for c in comps]),
+            'Market Cap ($M)': median_or_none([c.market_cap for c in comps], 1_000_000),
+            'EV ($M)': median_or_none([c.enterprise_value for c in comps], 1_000_000),
             'EV/Revenue': stats['ev_revenue']['ev_revenue_median'],
             'EV/EBITDA': stats['ev_ebitda']['ev_ebitda_median'],
             'EV/EBIT': stats['ev_ebit']['ev_ebit_median'],
@@ -353,7 +384,7 @@ def main():
             comps = []
             for ticker in comp_tickers:
                 comp = analyzer.fetch_comp_data(ticker)
-                if comp and comp.market_cap > 0:
+                if comp and comp.market_cap and comp.market_cap > 0:
                     comps.append(comp)
 
             if not comps:

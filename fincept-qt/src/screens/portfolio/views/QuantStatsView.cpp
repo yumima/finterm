@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "services/portfolio/PortfolioAnalyticsService.h"
 #include "services/portfolio/PortfolioService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QBarSeries>
@@ -27,6 +28,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 using fincept::services::AnalyticsResult;
 using fincept::services::PortfolioAnalyticsService;
@@ -35,11 +37,22 @@ namespace fincept::screens {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+// The script emits null for a statistic it could not compute (no variance,
+// no losing days, unknown risk-free rate); read that as NaN — unknown, never
+// 0 — and render it as the shared "—".
+static double qnum(const QJsonValue& v) {
+    return v.isDouble() ? v.toDouble() : std::numeric_limits<double>::quiet_NaN();
+}
+
 static QString pct_str(double v, int dp = 2) {
+    if (!std::isfinite(v))
+        return ui::formatting::placeholder();
     return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', dp));
 }
 
 static QString ratio_str(double v, int dp = 2) {
+    if (!std::isfinite(v))
+        return ui::formatting::placeholder();
     return QString::number(v, 'f', dp);
 }
 
@@ -308,12 +321,12 @@ void QuantStatsView::update_metrics() {
     auto qs_pct = [&](const QString& group, const QString& key) -> double {
         if (!have_qs)
             return 0.0;
-        return qs_data_[group].toObject()[key].toDouble() * 100.0;
+        return qnum(qs_data_[group].toObject()[key]) * 100.0;
     };
     auto qs_val = [&](const QString& group, const QString& key) -> double {
         if (!have_qs)
             return 0.0;
-        return qs_data_[group].toObject()[key].toDouble();
+        return qnum(qs_data_[group].toObject()[key]);
     };
     auto qs_int = [&](const QString& group, const QString& key) -> int {
         if (!have_qs)
@@ -497,13 +510,13 @@ void QuantStatsView::update_returns() {
 
     // Win/loss summary cards — 2-column grid
     const QJsonObject dist = qs_data_["distribution"].toObject();
-    double win_rate = dist["win_rate"].toDouble() * 100.0;
+    double win_rate = qnum(dist["win_rate"]) * 100.0;
     int win_days = dist["win_days"].toInt();
     int loss_days = dist["loss_days"].toInt();
-    double avg_win = dist["avg_win"].toDouble() * 100.0;
-    double avg_loss = dist["avg_loss"].toDouble() * 100.0;
-    double skew = dist["skewness"].toDouble();
-    double kurt = dist["kurtosis"].toDouble();
+    double avg_win = qnum(dist["avg_win"]) * 100.0;
+    double avg_loss = qnum(dist["avg_loss"]) * 100.0;
+    double skew = qnum(dist["skewness"]);
+    double kurt = qnum(dist["kurtosis"]);
 
     struct Card {
         QString label;
@@ -560,9 +573,9 @@ void QuantStatsView::update_returns() {
     style_table(dist_table);
 
     const QJsonObject perf = qs_data_["performance"].toObject();
-    double best_day = perf["best_day"].toDouble() * 100.0;
-    double worst_day = perf["worst_day"].toDouble() * 100.0;
-    double avg_daily = perf["avg_daily_return"].toDouble() * 100.0;
+    double best_day = qnum(perf["best_day"]) * 100.0;
+    double worst_day = qnum(perf["worst_day"]) * 100.0;
+    double avg_daily = qnum(perf["avg_daily_return"]) * 100.0;
 
     struct TableRow {
         QString name;
@@ -573,8 +586,8 @@ void QuantStatsView::update_returns() {
         {"Best Day", pct_str(best_day), true},
         {"Worst Day", pct_str(worst_day), worst_day >= 0},
         {"Avg Daily Return", pct_str(avg_daily, 4), avg_daily >= 0},
-        {"Profit Factor", ratio_str(qs_data_["ratios"].toObject()["profit_factor"].toDouble()),
-         qs_data_["ratios"].toObject()["profit_factor"].toDouble() >= 1.0},
+        {"Profit Factor", ratio_str(qnum(qs_data_["ratios"].toObject()["profit_factor"])),
+         qnum(qs_data_["ratios"].toObject()["profit_factor"]) >= 1.0},
     };
     dist_table->setRowCount(trows.size());
     for (int i = 0; i < trows.size(); ++i) {
@@ -617,7 +630,7 @@ void QuantStatsView::update_drawdown() {
 
     // Prominent Max Drawdown display
     const QJsonObject risk = qs_data_["risk"].toObject();
-    double max_dd = risk["max_drawdown"].toDouble() * 100.0;
+    double max_dd = qnum(risk["max_drawdown"]) * 100.0;
 
     auto* hero_w = new QWidget(this);
     hero_w->setStyleSheet(
@@ -649,10 +662,10 @@ void QuantStatsView::update_drawdown() {
         QString val;
         bool positive;
     };
-    double var95 = risk["var_95_daily"].toDouble() * 100.0;
-    double cvar95 = risk["cvar_95_daily"].toDouble() * 100.0;
-    double ann_vol = risk["annualized_volatility"].toDouble() * 100.0;
-    double down_dev = risk["downside_deviation"].toDouble() * 100.0;
+    double var95 = qnum(risk["var_95_daily"]) * 100.0;
+    double cvar95 = qnum(risk["cvar_95_daily"]) * 100.0;
+    double ann_vol = qnum(risk["annualized_volatility"]) * 100.0;
+    double down_dev = qnum(risk["downside_deviation"]) * 100.0;
 
     QVector<DdRow> drows = {
         {"Max Drawdown", pct_str(max_dd), max_dd >= 0},
@@ -708,10 +721,10 @@ void QuantStatsView::update_rolling() {
     style_table(ratios_table);
 
     const QJsonObject ratios = qs_data_["ratios"].toObject();
-    double sharpe = ratios["sharpe_ratio"].toDouble();
-    double sortino = ratios["sortino_ratio"].toDouble();
-    double calmar = ratios["calmar_ratio"].toDouble();
-    double pf = ratios["profit_factor"].toDouble();
+    double sharpe = qnum(ratios["sharpe_ratio"]);
+    double sortino = qnum(ratios["sortino_ratio"]);
+    double calmar = qnum(ratios["calmar_ratio"]);
+    double pf = qnum(ratios["profit_factor"]);
 
     struct RatioRow {
         QString name;
@@ -745,9 +758,9 @@ void QuantStatsView::update_rolling() {
     const QJsonObject dist = qs_data_["distribution"].toObject();
     int win_days = dist["win_days"].toInt();
     int loss_days = dist["loss_days"].toInt();
-    double win_rate = dist["win_rate"].toDouble() * 100.0;
-    double avg_win = dist["avg_win"].toDouble() * 100.0;
-    double avg_loss = dist["avg_loss"].toDouble() * 100.0;
+    double win_rate = qnum(dist["win_rate"]) * 100.0;
+    double avg_win = qnum(dist["avg_win"]) * 100.0;
+    double avg_loss = qnum(dist["avg_loss"]) * 100.0;
 
     auto* wl_table = new QTableWidget;
     wl_table->setColumnCount(2);
@@ -806,11 +819,11 @@ void QuantStatsView::update_monte_carlo_chart() {
     sb_lay->setContentsMargins(16, 4, 16, 4);
     sb_lay->setSpacing(24);
 
-    double median_ret = mc_data_["median_return"].toDouble();
-    double pct5 = mc_data_["percentile_5"].toDouble();
-    double pct95 = mc_data_["percentile_95"].toDouble();
-    double prob_loss = mc_data_["prob_loss"].toDouble();
-    double exp_max_dd = mc_data_["expected_max_dd"].toDouble();
+    double median_ret = qnum(mc_data_["median_return"]);
+    double pct5 = qnum(mc_data_["percentile_5"]);
+    double pct95 = qnum(mc_data_["percentile_95"]);
+    double prob_loss = qnum(mc_data_["prob_loss"]);
+    double exp_max_dd = qnum(mc_data_["expected_max_dd"]);
 
     struct StatItem {
         QString label;
@@ -818,8 +831,12 @@ void QuantStatsView::update_monte_carlo_chart() {
         const char* color;
     };
     QVector<StatItem> stats = {
-        {"MEDIAN RETURN", pct_str(median_ret), median_ret >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()},
-        {"5TH PERCENTILE", pct_str(pct5), pct5 >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()},
+        // null from the script → NaN → "—" in a neutral colour
+        {"MEDIAN RETURN", pct_str(median_ret),
+         std::isnan(median_ret) ? ui::colors::TEXT_SECONDARY()
+                                : median_ret >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()},
+        {"5TH PERCENTILE", pct_str(pct5),
+         std::isnan(pct5) ? ui::colors::TEXT_SECONDARY() : pct5 >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()},
         {"95TH PERCENTILE", pct_str(pct95), ui::colors::POSITIVE()},
         {"PROB OF LOSS", pct_str(prob_loss), ui::colors::WARNING()},
         {"EXP MAX DRAWDOWN", pct_str(exp_max_dd), ui::colors::NEGATIVE()},
@@ -862,7 +879,13 @@ void QuantStatsView::update_monte_carlo_chart() {
             QVector<double> vals;
             vals.reserve(n_paths);
             for (int p = 0; p < n_paths; ++p) {
-                vals.append(paths_arr[p].toArray()[t].toDouble());
+                const double v = qnum(paths_arr[p].toArray()[t]);
+                if (std::isfinite(v)) // null point: not plotted, not counted as 0
+                    vals.append(v);
+            }
+            if (vals.isEmpty()) {
+                median_path[t] = std::numeric_limits<double>::quiet_NaN();
+                continue;
             }
             std::sort(vals.begin(), vals.end());
             median_path[t] = vals[vals.size() / 2];
@@ -881,7 +904,9 @@ void QuantStatsView::update_monte_carlo_chart() {
         series->setPen(path_pen);
         const int pts = path_data.size();
         for (int t = 0; t < pts; ++t) {
-            series->append(static_cast<qreal>(t + 1), path_data[t].toDouble());
+            const double v = qnum(path_data[t]);
+            if (std::isfinite(v))
+                series->append(static_cast<qreal>(t + 1), v);
         }
         chart->addSeries(series);
     }
@@ -893,7 +918,8 @@ void QuantStatsView::update_monte_carlo_chart() {
         med_pen.setWidth(2);
         median_series->setPen(med_pen);
         for (int t = 0; t < n_steps; ++t) {
-            median_series->append(static_cast<qreal>(t + 1), median_path[t]);
+            if (std::isfinite(median_path[t]))
+                median_series->append(static_cast<qreal>(t + 1), median_path[t]);
         }
         chart->addSeries(median_series);
     }
@@ -984,21 +1010,36 @@ void QuantStatsView::run_quantstats() {
 
     QStringList symbols;
     QJsonObject weights_by_symbol;
+    // Unvalued holdings (no price / no FX rate) carry no weight; leave them
+    // out and name them in the status line.
+    QStringList excluded;
     for (const auto& h : summary_.holdings) {
+        if (!h.valued()) {
+            excluded.append(h.symbol);
+            continue;
+        }
         symbols.append(h.symbol);
         weights_by_symbol[h.symbol] = h.weight / 100.0;
+    }
+    if (symbols.isEmpty()) {
+        qs_running_ = false;
+        qs_run_btn_->setEnabled(true);
+        qs_status_->setText(QString("QuantStats unavailable — no valued holdings (excluded: %1)")
+                                .arg(excluded.join(", ")));
+        qs_status_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
+        return;
     }
 
     QPointer<QuantStatsView> self = this;
     PortfolioAnalyticsService::instance().run_quantstats(
         symbols, weights_by_symbol,
         services::PortfolioService::instance().risk_free_rate(),
-        [self](const AnalyticsResult& r) {
+        [self, excluded](const AnalyticsResult& r) {
             if (!self)
                 return;
             QMetaObject::invokeMethod(
                 self,
-                [self, r]() {
+                [self, r, excluded]() {
                     if (!self)
                         return;
                     self->qs_running_ = false;
@@ -1012,9 +1053,36 @@ void QuantStatsView::run_quantstats() {
                     }
 
                     self->qs_data_ = r.data;
-                    self->qs_status_->setText("Complete");
-                    self->qs_status_->setStyleSheet(
-                        QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
+                    // Symbols with no price data were left out (weights
+                    // renormalised over the rest) — a partial answer must say so.
+                    QStringList dropped;
+                    for (const auto& v : r.data.value("dropped_symbols").toArray())
+                        dropped.append(v.toString());
+                    QStringList notes;
+                    if (!dropped.isEmpty())
+                        notes << QString("missing %1").arg(dropped.join(", "));
+                    if (!excluded.isEmpty())
+                        notes << QString("excluded (no price/FX): %1").arg(excluded.join(", "));
+                    if (r.data.value("risk_free_used").isNull()) {
+                        notes << QStringLiteral("no risk-free rate — Sharpe/Sortino unavailable");
+                    } else {
+                        // Name a carried-over (stale) hurdle and its date.
+                        const QDateTime asof = services::PortfolioService::instance().risk_free_rate_as_of();
+                        if (!asof.isValid() || asof.secsTo(QDateTime::currentDateTimeUtc()) > 86400)
+                            notes << QString("Sharpe/Sortino use stale risk-free %1% as of %2")
+                                         .arg(r.data.value("risk_free_used").toDouble() * 100.0, 0, 'f', 2)
+                                         .arg(asof.isValid() ? asof.toLocalTime().toString("yyyy-MM-dd")
+                                                             : QStringLiteral("unknown date"));
+                    }
+                    if (notes.isEmpty()) {
+                        self->qs_status_->setText("Complete");
+                        self->qs_status_->setStyleSheet(
+                            QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
+                    } else {
+                        self->qs_status_->setText(QString("Partial: %1").arg(notes.join("; ")));
+                        self->qs_status_->setStyleSheet(
+                            QString("color:%1; font-size:12px;").arg(ui::colors::WARNING()));
+                    }
                     self->update_metrics();
                     self->update_returns();
                     self->update_drawdown();
@@ -1036,19 +1104,34 @@ void QuantStatsView::run_monte_carlo() {
 
     QStringList symbols;
     QList<double> weights;
+    // Holdings with no portfolio-currency value (no price / no FX rate) have
+    // no weight to simulate with; leave them out and name them in the status.
+    QStringList excluded;
     for (const auto& h : summary_.holdings) {
+        if (!h.valued()) {
+            excluded.append(h.symbol);
+            continue;
+        }
         symbols.append(h.symbol);
         weights.append(h.weight / 100.0);
+    }
+    if (symbols.isEmpty()) {
+        mc_running_ = false;
+        mc_run_btn_->setEnabled(true);
+        mc_status_->setText(QString("Monte Carlo unavailable — no valued holdings (excluded: %1)")
+                                .arg(excluded.join(", ")));
+        mc_status_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
+        return;
     }
 
     QPointer<QuantStatsView> self = this;
     PortfolioAnalyticsService::instance().run_monte_carlo(
-        symbols, weights, /*num_simulations=*/1000, [self](const AnalyticsResult& r) {
+        symbols, weights, /*num_simulations=*/1000, [self, excluded](const AnalyticsResult& r) {
             if (!self)
                 return;
             QMetaObject::invokeMethod(
                 self,
-                [self, r]() {
+                [self, r, excluded]() {
                     if (!self)
                         return;
                     self->mc_running_ = false;
@@ -1062,11 +1145,18 @@ void QuantStatsView::run_monte_carlo() {
                     }
 
                     self->mc_data_ = r.data;
-                    self->mc_status_->setText(
-                        QString("Complete — %1 paths simulated")
-                            .arg(r.data["num_paths_shown"].toInt() > 0 ? "1000" : "0"));
-                    self->mc_status_->setStyleSheet(
-                        QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
+                    const QString done = QString("%1 paths simulated")
+                                             .arg(r.data["num_paths_shown"].toInt() > 0 ? "1000" : "0");
+                    if (excluded.isEmpty()) {
+                        self->mc_status_->setText(QString("Complete — %1").arg(done));
+                        self->mc_status_->setStyleSheet(
+                            QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
+                    } else {
+                        self->mc_status_->setText(QString("Partial: %1; excluded (no price/FX): %2")
+                                                      .arg(done, excluded.join(", ")));
+                        self->mc_status_->setStyleSheet(
+                            QString("color:%1; font-size:12px;").arg(ui::colors::WARNING()));
+                    }
                     self->update_monte_carlo_chart();
                 },
                 Qt::QueuedConnection);

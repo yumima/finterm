@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "services/portfolio/PortfolioAnalyticsService.h"
 #include "storage/cache/CacheManager.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 using fincept::services::AnalyticsResult;
@@ -560,7 +561,8 @@ void PortfolioOptimizationView::update_allocation() {
 
         set(0, h.symbol, ui::colors::CYAN);
         set(1, QString("%1%").arg(h.weight, 0, 'f', 1), ui::colors::AMBER);
-        set(2, QString("%1 %2").arg(currency_, QString::number(h.market_value, 'f', 2)));
+        set(2, h.valued() ? QString("%1 %2").arg(currency_, QString::number(h.market_value, 'f', 2))
+                             : ui::formatting::placeholder()); // no price → no market value
         set(3, QString("%1%2%").arg(diff >= 0.0 ? "+" : "").arg(diff, 0, 'f', 1),
             diff >= 0.0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
     }

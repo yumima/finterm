@@ -57,12 +57,10 @@ class SurfaceControlPanel : public QWidget {
     ///
     /// The tier describes what a surface COULD be fetched from; it is not a
     /// statement about the numbers currently drawn. Every surface starts out
-    /// generated analytically, so a COMPUTED chart showed a rand()-noised vol
-    /// smile under a badge reading COMPUTED until something was fetched — and
-    /// a CSV the user imported is real data that still did not come from the
-    /// tier's dataset.
+    /// empty (badge NO DATA) until something is fetched — and a CSV the user
+    /// imported is real data that still did not come from the tier's dataset.
     void set_provenance(SurfaceProvenance p);
-    /// Paint the badge from the tier AND showing_synthetic_ together.
+    /// Paint the badge from the tier AND provenance_ together.
     void apply_tier_badge();
 
     // Push min/max/mean/median/std/skew/kurt of the active surface's z matrix.
@@ -130,7 +128,7 @@ class SurfaceControlPanel : public QWidget {
     QLabel* tier_badge_ = nullptr;
     /// Where the drawn surface came from. Held so set_capability() (which runs
     /// on every chart switch) re-applies the badge.
-    SurfaceProvenance provenance_ = SurfaceProvenance::Synthetic;
+    SurfaceProvenance provenance_ = SurfaceProvenance::None;
     // Symbol search autocomplete (Databento)
     QCompleter* symbol_completer_ = nullptr;
     QStringListModel* symbol_completer_model_ = nullptr;

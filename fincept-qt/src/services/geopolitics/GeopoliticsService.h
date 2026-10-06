@@ -28,6 +28,9 @@ class GeopoliticsService : public QObject
     int max_requests_per_sec() const override;
 
     // ── Conflict Monitor (HTTP API) ─────────────────────────────────────────
+    /// False when no conflict-monitor endpoint is configured (current state).
+    static bool conflict_monitor_available();
+    static QString conflict_monitor_unavailable_message();
     void fetch_events(const QString& country = {}, const QString& city = {}, const QString& category = {},
                       int limit = 100);
     void fetch_unique_countries();
@@ -44,6 +47,9 @@ class GeopoliticsService : public QObject
     // ── Trade Analysis (Python) ─────────────────────────────────────────────
     void analyze_trade_benefits(const QJsonObject& params);
     void analyze_trade_restrictions(const QJsonObject& params);
+    /// trade_geopolitics.py `trading_blocs` — integration_type, trade_creation,
+    /// trade_diversion. Emits trade_result_ready("trade_blocs", ...).
+    void analyze_trading_blocs(const QJsonObject& params);
 
     // ── Geolocation (Python) ────────────────────────────────────────────────
     void extract_geolocations(const QStringList& headlines);

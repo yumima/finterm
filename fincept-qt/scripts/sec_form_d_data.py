@@ -229,20 +229,22 @@ def build_spv_activity(filings, parse_xml_max=24):
             "spv_name": raw,
             "cik": _cik_padded(cik),
             "filed_date": f.get("filed_date", ""),
-            "amount_sold_m": 0.0,
-            "amount_offered_m": 0.0,
-            "minimum_investment_usd": 0.0,
-            "num_investors": 0,
+            "amount_sold_m": None,
+            "amount_offered_m": None,
+            "offering_indefinite": False,
+            "minimum_investment_usd": None,
+            "num_investors": None,
             "edgar_url": "",
         }
         if parsed < parse_xml_max:
             x = fetch_form_d_xml(cik, f["adsh"])
             parsed += 1
             if x:
-                rec["amount_sold_m"] = (x.get("total_sold_usd", 0) or 0) / 1_000_000.0
-                rec["amount_offered_m"] = (x.get("total_offering_usd", 0) or 0) / 1_000_000.0
-                rec["minimum_investment_usd"] = x.get("minimum_investment_usd", 0)
-                rec["num_investors"] = x.get("already_invested_count", 0)
+                rec["amount_sold_m"] = _usd_to_m(x.get("total_sold_usd"))
+                rec["amount_offered_m"] = _usd_to_m(x.get("total_offering_usd"))
+                rec["offering_indefinite"] = bool(x.get("offering_indefinite"))
+                rec["minimum_investment_usd"] = x.get("minimum_investment_usd")
+                rec["num_investors"] = x.get("already_invested_count")
                 rec["edgar_url"] = x.get("edgar_url", "")
         out.append(rec)
     out.sort(key=lambda r: r.get("filed_date", ""), reverse=True)
@@ -401,6 +403,32 @@ def _strip_ns(tree):
         el.tag = _NS_RE.sub("", el.tag)
 
 
+def _form_d_number(node, path, as_int=False):
+    """A numeric Form D field: (value, indefinite).
+
+    Missing / blank / unparseable -> (None, False): the filing did not state
+    it, which is not the same as stating zero. "Indefinite" (an open-ended
+    offering, common on pooled funds and rolling raises) -> (None, True).
+    """
+    if node is None:
+        return None, False
+    raw = (node.findtext(path, default="") or "").strip()
+    if not raw:
+        return None, False
+    if raw.lower() == "indefinite":
+        return None, True
+    try:
+        v = float(raw.replace(",", ""))
+    except (TypeError, ValueError):
+        return None, False
+    return (int(v) if as_int else v), False
+
+
+def _usd_to_m(v):
+    """USD -> $M, keeping None (not stated) as None."""
+    return None if v is None else v / 1_000_000.0
+
+
 def fetch_form_d_xml(cik, adsh):
     """Fetch and parse a single Form D filing's primary_doc.xml."""
     cik_u = _cik_unpadded(cik)
@@ -435,13 +463,14 @@ def fetch_form_d_xml(cik, adsh):
     offering = root.find(".//offeringData")
     industry_group = ""
     federal_exemptions = []
-    total_offering = 0.0
-    total_sold = 0.0
-    minimum_inv = 0.0
+    total_offering = None
+    offering_indefinite = False
+    total_sold = None
+    minimum_inv = None
     securities_type = []
-    nonaccr = 0
-    invested_count = 0
-    sales_commissions = 0.0
+    has_non_accr = None
+    invested_count = None
+    sales_commissions = None
     use_of_proceeds = ""
     first_sale = ""
     if offering is not None:
@@ -449,28 +478,18 @@ def fetch_form_d_xml(cik, adsh):
         if ig is not None and ig.text:
             industry_group = ig.text.strip()
         federal_exemptions = _texts(".//federalExemptionsExclusions/item")
-        try:
-            total_offering = float(offering.findtext(".//totalOfferingAmount", default="0") or 0)
-        except (TypeError, ValueError):
-            total_offering = 0.0
-        try:
-            total_sold = float(offering.findtext(".//totalAmountSold", default="0") or 0)
-        except (TypeError, ValueError):
-            total_sold = 0.0
-        try:
-            minimum_inv = float(offering.findtext(".//minimumInvestmentAccepted", default="0") or 0)
-        except (TypeError, ValueError):
-            minimum_inv = 0.0
-        try:
-            invested_count = int(offering.findtext(".//totalNumberAlreadyInvested", default="0") or 0)
-        except (TypeError, ValueError):
-            invested_count = 0
+        # Not stated -> None, never 0. "Indefinite" on the offering amount is
+        # the issuer's own answer (open-ended raise) and is surfaced as a flag.
+        total_offering, offering_indefinite = _form_d_number(offering, ".//totalOfferingAmount")
+        total_sold, _ = _form_d_number(offering, ".//totalAmountSold")
+        minimum_inv, _ = _form_d_number(offering, ".//minimumInvestmentAccepted")
+        invested_count, _ = _form_d_number(offering, ".//totalNumberAlreadyInvested", as_int=True)
         # hasNonAccreditedInvestors is a boolean string ("true"/"false"), not
         # a count. The previous code tried to int() it which silently failed
         # and stored 0.
         has_non_accr_raw = (offering.findtext(".//hasNonAccreditedInvestors", default="") or "").strip().lower()
-        has_non_accr = has_non_accr_raw == "true"
-        nonaccr = 0  # Form D doesn't disclose the *count* of non-accredited, only the flag
+        has_non_accr = (True if has_non_accr_raw == "true"
+                        else False if has_non_accr_raw == "false" else None)
         # Form D securities-type tags are camelCase booleans like
         # <isEquityType>true</isEquityType>, <isDebtType>false</isDebtType>.
         # Map to human-readable labels (the previous code shipped the raw tag
@@ -492,10 +511,7 @@ def fetch_form_d_xml(cik, adsh):
                 for el in sec_types
                 if el.text and el.text.strip().lower() == "true"
             ]
-        try:
-            sales_commissions = float(offering.findtext(".//salesCommissions/dollarAmount", default="0") or 0)
-        except (TypeError, ValueError):
-            sales_commissions = 0.0
+        sales_commissions, _ = _form_d_number(offering, ".//salesCommissions/dollarAmount")
         use_of_proceeds = (
             offering.findtext(".//useOfProceeds/clarificationOfResponse", default="") or ""
         ).strip()
@@ -548,11 +564,13 @@ def fetch_form_d_xml(cik, adsh):
         "year_of_incorporation": yoi,
         "industry_group": industry_group,
         "federal_exemptions": federal_exemptions,
-        "total_offering_usd": total_offering,
+        "total_offering_usd": total_offering,      # None = not stated / indefinite
+        "offering_indefinite": offering_indefinite,
         "total_sold_usd": total_sold,
         "minimum_investment_usd": minimum_inv,
         "has_non_accredited_investors": has_non_accr,
-        "non_accredited_count": nonaccr,         # always 0 — Form D doesn't disclose
+        # Form D discloses only the yes/no flag, never the count of
+        # non-accredited investors — so there is no count field.
         "already_invested_count": invested_count,
         "securities_types": securities_type,
         "sales_commissions_usd": sales_commissions,
@@ -702,24 +720,27 @@ def build_form_d_companies(days_back=180, max_filings=120, parse_xml_max=80,
                 "state": (parsed_xml or {}).get("state", ""),
                 "year_of_incorporation": (parsed_xml or {}).get("year_of_incorporation", ""),
                 "rounds": [],
-                "cumulative_raised_m": 0.0,
+                # None until a parsed filing states an amount sold.
+                "cumulative_raised_m": None,
             }
         c = companies[cid]
         if parsed_xml:
             for fld in ("industry_group", "city", "state", "year_of_incorporation"):
                 if not c[fld] and parsed_xml.get(fld):
                     c[fld] = parsed_xml[fld]
-            amount_m = (parsed_xml.get("total_sold_usd", 0) or 0) / 1_000_000.0
-            c["cumulative_raised_m"] += amount_m
+            amount_m = _usd_to_m(parsed_xml.get("total_sold_usd"))
+            if amount_m is not None:
+                c["cumulative_raised_m"] = (c["cumulative_raised_m"] or 0.0) + amount_m
             round_entry = {
                 "adsh": f["adsh"],
                 "filed_date": f.get("filed_date", ""),
                 "first_sale_date": parsed_xml.get("first_sale_date", ""),
                 "amount_m": amount_m,
-                "offering_m": (parsed_xml.get("total_offering_usd", 0) or 0) / 1_000_000.0,
+                "offering_m": _usd_to_m(parsed_xml.get("total_offering_usd")),
+                "offering_indefinite": bool(parsed_xml.get("offering_indefinite")),
                 "exemption": ", ".join(parsed_xml.get("federal_exemptions", []) or []),
                 "securities_types": parsed_xml.get("securities_types", []),
-                "minimum_investment_usd": parsed_xml.get("minimum_investment_usd", 0),
+                "minimum_investment_usd": parsed_xml.get("minimum_investment_usd"),
                 "related_persons": parsed_xml.get("related_persons", []),
                 "edgar_url": parsed_xml.get("edgar_url", ""),
             }
@@ -730,7 +751,7 @@ def build_form_d_companies(days_back=180, max_filings=120, parse_xml_max=80,
                 "filed_date": f.get("filed_date", ""),
                 "amount_raised": amount_m,
                 "exemption": round_entry["exemption"],
-                "offering_type": ", ".join(parsed_xml.get("securities_types", []) or []) or "Equity",
+                "offering_type": ", ".join(parsed_xml.get("securities_types", []) or []),
                 "state": parsed_xml.get("state", ""),
                 "edgar_url": parsed_xml.get("edgar_url", ""),
             })
@@ -739,9 +760,9 @@ def build_form_d_companies(days_back=180, max_filings=120, parse_xml_max=80,
                 "company_name": c["name"],
                 "cik": cik_pad,
                 "filed_date": f.get("filed_date", ""),
-                "amount_raised": 0,
+                "amount_raised": None,   # filing not parsed — amount unknown
                 "exemption": "",
-                "offering_type": "Equity",
+                "offering_type": "",
                 "state": "",
                 "edgar_url": "",
             })
@@ -749,7 +770,7 @@ def build_form_d_companies(days_back=180, max_filings=120, parse_xml_max=80,
     # Sort rounds within each company by filed_date desc; sort companies by cumulative raised desc.
     for c in companies.values():
         c["rounds"].sort(key=lambda r: r.get("filed_date", ""), reverse=True)
-    company_list = sorted(companies.values(), key=lambda c: c.get("cumulative_raised_m", 0), reverse=True)
+    company_list = sorted(companies.values(), key=lambda c: c.get("cumulative_raised_m") or 0, reverse=True)
     return company_list, recent_flat
 
 
@@ -1104,12 +1125,13 @@ def company_dossier(name="", cik="", aliases=None, max_rounds=12, spv_parse_max=
             "form": f.get("form", "D"),
             "first_sale_date": x.get("first_sale_date", ""),
             "previous_accession": x.get("previous_accession", ""),
-            "amount_offered_usd": x.get("total_offering_usd", 0.0),
-            "amount_sold_usd": x.get("total_sold_usd", 0.0),
-            "minimum_investment_usd": x.get("minimum_investment_usd", 0.0),
+            "amount_offered_usd": x.get("total_offering_usd"),
+            "offering_indefinite": bool(x.get("offering_indefinite")),
+            "amount_sold_usd": x.get("total_sold_usd"),
+            "minimum_investment_usd": x.get("minimum_investment_usd"),
             "exemption": ", ".join(x.get("federal_exemptions", []) or []),
             "securities_types": x.get("securities_types", []),
-            "investors": x.get("already_invested_count", 0),
+            "investors": x.get("already_invested_count"),
             "use_of_proceeds": x.get("use_of_proceeds", ""),
             "related_persons": x.get("related_persons", []),
             "edgar_url": x.get("edgar_url", ""),
@@ -1176,7 +1198,10 @@ def company_dossier(name="", cik="", aliases=None, max_rounds=12, spv_parse_max=
         r["offering_key"] = key
     for r in rounds:
         r.setdefault("superseded", False)
-    cumulative_usd = sum(g["amount_sold_usd"] for g in groups.values())
+    # Offerings whose amount sold was not stated are left out of the sum (not
+    # counted as $0); if none stated one there is no cumulative at all.
+    _stated = [g["amount_sold_usd"] for g in groups.values() if g["amount_sold_usd"] is not None]
+    cumulative_usd = sum(_stated) if _stated else None
 
     # Secondary interest: SPVs that named this company in their own Form D.
     spv = []
@@ -1214,15 +1239,17 @@ def company_dossier(name="", cik="", aliases=None, max_rounds=12, spv_parse_max=
                     sponsor = label
                     break
             rec = {"spv_name": disp, "cik": spv_cik, "sponsor": sponsor,
-                   "filed_date": h.get("filed_date", ""), "amount_sold_m": 0.0,
-                   "amount_offered_m": 0.0, "num_investors": 0, "edgar_url": ""}
+                   "filed_date": h.get("filed_date", ""), "amount_sold_m": None,
+                   "amount_offered_m": None, "offering_indefinite": False,
+                   "num_investors": None, "edgar_url": ""}
             if parsed < spv_parse_max:
                 x = fetch_form_d_xml(spv_cik, h["adsh"])
                 parsed += 1
                 if x:
-                    rec["amount_sold_m"] = (x.get("total_sold_usd", 0.0) or 0.0) / 1e6
-                    rec["amount_offered_m"] = (x.get("total_offering_usd", 0.0) or 0.0) / 1e6
-                    rec["num_investors"] = x.get("already_invested_count", 0)
+                    rec["amount_sold_m"] = _usd_to_m(x.get("total_sold_usd"))
+                    rec["amount_offered_m"] = _usd_to_m(x.get("total_offering_usd"))
+                    rec["offering_indefinite"] = bool(x.get("offering_indefinite"))
+                    rec["num_investors"] = x.get("already_invested_count")
                     rec["edgar_url"] = x.get("edgar_url", "")
             spv.append(rec)
 
@@ -1290,7 +1317,7 @@ def handle_action(action, payload):
             if x:
                 rounds.append({
                     "filed_date": f.get("filed_date", ""),
-                    "amount_m": (x.get("total_sold_usd", 0) or 0) / 1_000_000.0,
+                    "amount_m": _usd_to_m(x.get("total_sold_usd")),
                     "exemption": ", ".join(x.get("federal_exemptions", []) or []),
                     "related_persons": x.get("related_persons", []),
                     "edgar_url": x.get("edgar_url", ""),

@@ -39,10 +39,12 @@ def get_markets(limit=10):
         for m in raw:
             if m.get("outcomeType") != "BINARY":
                 continue
-            prob = float(m.get("probability", 0))
+            if m.get("probability") is None:
+                continue  # no real probability -> omit rather than show 0%
+            prob = float(m["probability"])
             yes_price = str(round(prob, 4))
             no_price = str(round(1 - prob, 4))
-            volume = str(round(float(m.get("volume", 0)), 0))
+            volume = str(round(float(m["volume"]), 0)) if m.get("volume") is not None else None
             markets.append({
                 "id": m.get("id", ""),
                 "question": m.get("question", ""),

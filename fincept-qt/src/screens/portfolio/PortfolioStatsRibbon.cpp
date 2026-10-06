@@ -257,17 +257,30 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
     // approximate figure that says so beats an exact-looking wrong one.
     // Every figure below is a sum over converted holdings, so they all carry
     // the approximation when one holding could not be converted.
-    const QString approx = s.fx_incomplete ? QStringLiteral("≈") : QString();
-    total_value_.value->setText(compose(approx + fmt(s.total_market_value), s.portfolio.currency));
-    total_value_.container->setToolTip(
+    // The same marker covers holdings priced from a stale last-known print and
+    // holdings with no price at all (left out of the totals entirely).
+    const QString approx = (s.fx_incomplete || s.valuation_partial()) ? QStringLiteral("≈") : QString();
+    QString value_tip =
         s.fx_incomplete
             ? tr("Current market value of all holdings, converted into %1.\nAPPROXIMATE: at least one "
-                 "holding's trading currency or FX rate is not yet\navailable and entered at face value. "
-                 "This usually resolves within seconds\nonce currency discovery completes.")
+                 "trading currency or FX rate is not yet available;\nthose figures are left out of the "
+                 "totals. This usually resolves within seconds\nonce currency discovery completes.")
                   .arg(s.portfolio.currency)
             : tr("Current market value of all holdings, converted into %1.\nSum of (quantity × price × FX "
                  "rate) for every position.")
-                  .arg(s.portfolio.currency));
+                  .arg(s.portfolio.currency);
+    if (!s.unpriced_symbols.isEmpty())
+        value_tip += tr("\n\nPARTIAL: no price available for %1 — excluded from value, cost and P&L.")
+                         .arg(s.unpriced_symbols.join(", "));
+    if (!s.fx_unknown_symbols.isEmpty())
+        value_tip += tr("\n\nPARTIAL: no FX rate into %1 for %2 — excluded from value, cost and P&L.")
+                         .arg(s.portfolio.currency, s.fx_unknown_symbols.join(", "));
+    if (!s.stale_symbols.isEmpty())
+        value_tip += tr("\n\nESTIMATE: no fresh quote for %1 — valued at the last known price "
+                        "(up to 7 days old).")
+                         .arg(s.stale_symbols.join(", "));
+    total_value_.value->setText(compose(approx + fmt(s.total_market_value), s.portfolio.currency));
+    total_value_.container->setToolTip(value_tip);
     apply_hero_styles(total_value_, ui::colors::WARNING);
 
     // P&L — value = absolute P&L, sub = percent
@@ -276,9 +289,20 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
         QString("%1%2%").arg(s.total_unrealized_pnl_percent >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl_percent))));
     apply_hero_styles(pnl_, color_tok(s.total_unrealized_pnl));
 
-    // Day change
+    // Day change — also partial when some holding's day move is unknown
+    // (no price, or only a last-known print from an earlier session).
+    const QString day_approx =
+        (!approx.isEmpty() || !s.day_change_unknown_symbols.isEmpty()) ? QStringLiteral("≈") : QString();
+    {
+        QString tip = tr("Total portfolio value change today.\n"
+                         "Weighted sum of each holding's intraday change.");
+        if (!s.day_change_unknown_symbols.isEmpty())
+            tip += tr("\n\nPARTIAL: today's change is unknown for %1 — excluded from the day total.")
+                       .arg(s.day_change_unknown_symbols.join(", "));
+        day_change_.container->setToolTip(tip);
+    }
     day_change_.value->setText(compose(
-        QString("%1%2%3").arg(approx, s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change)),
+        QString("%1%2%3").arg(day_approx, s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change)),
         QString("%1%2%").arg(s.total_day_change_percent >= 0 ? "+" : "").arg(fmt(s.total_day_change_percent))));
     apply_hero_styles(day_change_, color_tok(s.total_day_change));
 
@@ -292,11 +316,14 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
     cost_basis_.value->setText(approx + fmt(s.total_cost_basis));
     apply_chip_styles(cost_basis_, ui::colors::CYAN);
 
+    // Realized / dividends come from the transaction log, not from prices —
+    // only an incomplete FX conversion makes them approximate.
+    const QString fx_approx = s.fx_incomplete ? QStringLiteral("≈") : QString();
     realized_.value->setText(
-        QString("%1%2%3").arg(approx, s.total_realized_pnl >= 0 ? "+" : "").arg(fmt(s.total_realized_pnl)));
+        QString("%1%2%3").arg(fx_approx, s.total_realized_pnl >= 0 ? "+" : "").arg(fmt(s.total_realized_pnl)));
     apply_chip_styles(realized_, color_tok(s.total_realized_pnl));
 
-    dividends_.value->setText(approx + fmt(s.total_dividend_income));
+    dividends_.value->setText(fx_approx + fmt(s.total_dividend_income));
     apply_chip_styles(dividends_, ui::colors::CYAN);
 }
 
@@ -310,7 +337,15 @@ void PortfolioStatsRibbon::set_metrics(const portfolio::ComputedMetrics& m) {
                                       : "--");
     apply_chip_styles(concentration_, ui::colors::AMBER);
 
-    sharpe_.value->setText(fmt_opt(m.sharpe));
+    // A carried-over (stale) risk-free rate is marked with "*" and named,
+    // with its as-of date, in the tooltip.
+    sharpe_.value->setText(fmt_opt(m.sharpe) +
+                           (m.sharpe && portfolio::rf_is_stale(m) ? QStringLiteral("*") : QString()));
+    sharpe_.container->setToolTip(
+        tr("Sharpe Ratio: risk-adjusted return over a risk-free rate.\n"
+           "Formula: (mean daily return − risk-free rate) / std dev × √252.\n"
+           "Above 1.0 = good, above 2.0 = very good, below 0 = worse than risk-free.\n\n") +
+        portfolio::rf_label(m));
     apply_chip_styles(sharpe_, ui::colors::CYAN);
 
     beta_.value->setText(fmt_opt(m.beta));

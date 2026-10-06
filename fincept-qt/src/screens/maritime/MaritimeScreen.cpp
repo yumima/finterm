@@ -88,7 +88,9 @@ static QString detail_text_ss() {
 
 // ── Constructor ──────────────────────────────────────────────────────────────
 MaritimeScreen::MaritimeScreen(QWidget* parent) : QWidget(parent) {
-    routes_ = default_trade_routes();
+    // routes_ starts empty: there is no trade-corridor data source. The old
+    // hardcoded corridor list (invented $ values / statuses / vessel counts)
+    // has been removed.
     build_ui();
     connect_service();
 
@@ -108,6 +110,7 @@ void MaritimeScreen::showEvent(QShowEvent* e) {
     if (first_show_) {
         first_show_ = false;
         populate_routes_table();
+        update_map({}); // reference port locations only
         on_load_vessels();
     }
     LOG_INFO("Maritime", "Screen shown");
@@ -149,7 +152,7 @@ void MaritimeScreen::apply_theme() {
     if (threat_badge_)
         threat_badge_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;"
                                              "padding:3px 10px; background:%3; border:1px solid %4; border-radius:2px;")
-                                         .arg(ui::colors::POSITIVE())
+                                         .arg(ui::colors::TEXT_SECONDARY())
                                          .arg(ui::fonts::DATA_FAMILY)
                                          .arg(ui::colors::BG_SURFACE())
                                          .arg(ui::colors::BORDER_MED()));
@@ -180,8 +183,12 @@ void MaritimeScreen::apply_theme() {
         status_bar_->setStyleSheet(QString("background:%1; border-top:1px solid %2;")
                                        .arg(C(ui::colors::BG_SURFACE), C(ui::colors::BORDER_DIM)));
 
-    if (status_label_)
-        set_status("READY", ui::colors::POSITIVE);
+    if (status_label_) {
+        if (MaritimeService::is_available())
+            set_status("READY", ui::colors::POSITIVE);
+        else
+            set_status_unavailable();
+    }
 
     if (route_detail_)
         route_detail_->setStyleSheet(
@@ -250,10 +257,12 @@ QWidget* MaritimeScreen::build_top_bar() {
 
     hl->addStretch(1);
 
-    threat_badge_ = new QLabel("THREAT: LOW", bar);
+    // No threat-assessment source exists; never claim a level.
+    threat_badge_ = new QLabel(QString("THREAT: %1").arg(QString::fromUtf8("\u2014")), bar);
+    threat_badge_->setToolTip("Threat level unavailable — no threat-assessment data source");
     hl->addWidget(threat_badge_);
 
-    vessel_count_label_ = new QLabel("0 VESSELS", bar);
+    vessel_count_label_ = new QLabel(QString("%1 VESSELS").arg(QString::fromUtf8("\u2014")), bar);
     hl->addWidget(vessel_count_label_);
 
     return bar;
@@ -268,7 +277,12 @@ QWidget* MaritimeScreen::build_left_panel() {
     vl->setContentsMargins(12, 12, 12, 12);
     vl->setSpacing(8);
 
-    auto* load_btn = new QPushButton("LOAD VESSELS (MUMBAI AREA)", panel);
+    // The service queries a fixed list of container-ship IMOs, not an area.
+    auto* load_btn = new QPushButton("LOAD VESSELS", panel);
+    if (!MaritimeService::is_available()) {
+        load_btn->setEnabled(false);
+        load_btn->setToolTip(QString("Unavailable — %1").arg(MaritimeService::unavailable_message()));
+    }
     load_btn->setCursor(Qt::PointingHandCursor);
     load_btn->setStyleSheet(btn_primary_ss());
     connect(load_btn, &QPushButton::clicked, this, &MaritimeScreen::on_load_vessels);
@@ -304,27 +318,29 @@ QWidget* MaritimeScreen::build_left_panel() {
         return box;
     };
 
-    auto* sv = make_stat("TOTAL VESSELS", "0", ui::colors::INFO);
+    // All tiles start as "—": nothing here is known until a real source reports it.
+    const QString dash = QString::fromUtf8("\u2014");
+    auto* sv = make_stat("TOTAL VESSELS", dash, ui::colors::INFO);
     stat_vessels_ = sv->findChild<QLabel*>("TOTAL VESSELS");
     grid->addWidget(sv, 0, 0);
 
-    auto* sd = make_stat("DISPLAYED", "0", ui::colors::POSITIVE);
+    auto* sd = make_stat("DISPLAYED", dash, ui::colors::POSITIVE);
     stat_displayed_ = sd->findChild<QLabel*>("DISPLAYED");
     grid->addWidget(sd, 0, 1);
 
-    auto* sr = make_stat("ROUTES", "10", ui::colors::INFO);
+    auto* sr = make_stat("ROUTES", dash, ui::colors::INFO);
     stat_routes_ = sr->findChild<QLabel*>("ROUTES");
     grid->addWidget(sr, 1, 0);
 
-    auto* stv = make_stat("TRADE VOL", "$847.3B", ui::colors::POSITIVE);
+    auto* stv = make_stat("TRADE VOL", dash, ui::colors::POSITIVE);
     stat_volume_ = stv->findChild<QLabel*>("TRADE VOL");
     grid->addWidget(stv, 1, 1);
 
-    auto* sp = make_stat("PORTS", "6", ui::colors::WARNING);
+    auto* sp = make_stat("PORTS", dash, ui::colors::WARNING);
     stat_ports_ = sp->findChild<QLabel*>("PORTS");
     grid->addWidget(sp, 2, 0);
 
-    grid->addWidget(make_stat("SATELLITES", "13", ui::colors::AMBER), 2, 1);
+    grid->addWidget(make_stat("SATELLITES", dash, ui::colors::AMBER), 2, 1);
     vl->addLayout(grid);
 
     vl->addSpacing(8);
@@ -573,12 +589,12 @@ QWidget* MaritimeScreen::build_right_panel() {
         QString text;
         const ui::ColorToken& color;
     };
+    // Honest feed status: none of these feeds is connected in this build.
     QVector<QPair<QString, QString>> statuses = {
-        {"AIS Transponders", ui::colors::INFO()},
-        {"Satellite Imagery", ui::colors::POSITIVE()},
-        {"Trade Routes: 10 corridors", ui::colors::INFO()},
-        {"Orbital Tracking: 13 SATs", ui::colors::AMBER()},
-        {"Major Ports: 6 monitored", ui::colors::WARNING()},
+        {"AIS Transponders: unavailable", ui::colors::TEXT_TERTIARY()},
+        {"Satellite Imagery: unavailable", ui::colors::TEXT_TERTIARY()},
+        {"Trade Routes: no data source", ui::colors::TEXT_TERTIARY()},
+        {QString("Reference Ports: %1 (map locations only)").arg(preset_ports().size()), ui::colors::TEXT_TERTIARY()},
     };
     for (const auto& [text, color] : statuses) {
         auto* lbl = new QLabel(QString::fromUtf8("\u25CF ") + text, content);
@@ -642,7 +658,7 @@ QWidget* MaritimeScreen::build_status_bar() {
 
     hl->addStretch();
 
-    status_label_ = new QLabel("READY", bar);
+    status_label_ = new QLabel(bar);
     hl->addWidget(status_label_);
 
     return bar;
@@ -656,7 +672,7 @@ void MaritimeScreen::populate_routes_table() {
         auto* name_item = new QTableWidgetItem(r.name);
         name_item->setForeground(QBrush(QColor(ui::colors::INFO.get())));
         routes_table_->setItem(i, 0, name_item);
-        routes_table_->setItem(i, 1, new QTableWidgetItem(r.value));
+        routes_table_->setItem(i, 1, new QTableWidgetItem(r.value.isEmpty() ? QString::fromUtf8("\u2014") : r.value));
         auto* status_item = new QTableWidgetItem(r.status.toUpper());
         status_item->setForeground(route_status_color(r.status));
         routes_table_->setItem(i, 2, status_item);
@@ -665,7 +681,17 @@ void MaritimeScreen::populate_routes_table() {
 }
 
 // ── Actions ──────────────────────────────────────────────────────────────────
+void MaritimeScreen::set_status_unavailable() {
+    set_status(QString("UNAVAILABLE %1 %2")
+                   .arg(QString::fromUtf8("\u2014"), QString(MaritimeService::unavailable_message()).toLower()),
+               ui::colors::WARNING);
+}
+
 void MaritimeScreen::on_load_vessels() {
+    if (!MaritimeService::is_available()) {
+        set_status_unavailable();
+        return;
+    }
     set_status("LOADING...", ui::colors::WARNING);
     AreaSearchParams params;
     MaritimeService::instance().search_vessels_by_area(params);
@@ -739,8 +765,12 @@ void MaritimeScreen::on_vessel_found(VesselData vessel) {
 void MaritimeScreen::on_error(const QString& context, const QString& message) {
     if (context == "vessel_position") {
         search_result_card_->setVisible(false);
-        search_result_label_->setText("Error: " + message);
+        search_result_label_->setText((MaritimeService::is_available() ? "Error: " : "Unavailable: ") + message);
         search_result_label_->setVisible(true);
+    }
+    if (!MaritimeService::is_available()) {
+        set_status_unavailable();
+        return;
     }
     set_status("ERROR", ui::colors::NEGATIVE);
     LOG_ERROR("Maritime", QString("[%1] %2").arg(context, message));
@@ -754,7 +784,7 @@ void MaritimeScreen::on_route_selected(int row) {
     const auto& r = routes_[row];
     route_detail_->setVisible(true);
     rd_name_->setText(r.name);
-    rd_value_->setText("Trade Value: " + r.value);
+    rd_value_->setText("Trade Value: " + (r.value.isEmpty() ? QString::fromUtf8("\u2014") : r.value));
     rd_status_->setText("Status: " + r.status.toUpper());
     rd_status_->setStyleSheet(QString("color:%1; font-size:12px; font-family:%2;")
                                   .arg(route_status_color(r.status).name())

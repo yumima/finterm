@@ -8,6 +8,7 @@
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
 
+#include <limits>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QUrl>
@@ -254,7 +255,7 @@ void DBnomicsService::fetch_observations(const QString& provider_code, const QSt
             DbnObservation o;
             o.period = periods[i].toString();
             if (values[i].isNull() || values[i].toString() == "NA") {
-                o.value = 0.0;
+                o.value = std::numeric_limits<double>::quiet_NaN();  // NA — no number, not 0
                 o.valid = false;
             } else {
                 o.value = values[i].toDouble();

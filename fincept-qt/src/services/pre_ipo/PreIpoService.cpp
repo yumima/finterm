@@ -515,6 +515,7 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
         pr.first_sale_date = to_date(r.value(QStringLiteral("first_sale_date")).toString());
         pr.amount_sold_m = r.value(QStringLiteral("amount_sold_usd")).toDouble() / 1e6;
         pr.amount_offered_m = r.value(QStringLiteral("amount_offered_usd")).toDouble() / 1e6;
+        pr.offering_indefinite = r.value(QStringLiteral("offering_indefinite")).toBool();
         pr.minimum_investment_usd =
             r.value(QStringLiteral("minimum_investment_usd")).toDouble();
         pr.exemption = r.value(QStringLiteral("exemption")).toString();
@@ -543,6 +544,7 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
         a.filed_date       = to_date(sv.value(QStringLiteral("filed_date")).toString());
         a.amount_sold_m    = sv.value(QStringLiteral("amount_sold_m")).toDouble();
         a.amount_offered_m = sv.value(QStringLiteral("amount_offered_m")).toDouble();
+        a.offering_indefinite = sv.value(QStringLiteral("offering_indefinite")).toBool();
         a.num_investors    = sv.value(QStringLiteral("num_investors")).toInt();
         a.edgar_url        = sv.value(QStringLiteral("edgar_url")).toString();
         if (!a.spv_name.isEmpty())
@@ -1034,6 +1036,7 @@ void PreIpoService::parse_spv_response(const QJsonObject& root) {
         s.filed_date       = QDate::fromString(o[QStringLiteral("filed_date")].toString(), Qt::ISODate);
         s.amount_sold_m    = o[QStringLiteral("amount_sold_m")].toDouble();
         s.amount_offered_m = o[QStringLiteral("amount_offered_m")].toDouble();
+        s.offering_indefinite = o[QStringLiteral("offering_indefinite")].toBool();
         s.minimum_investment_usd = o[QStringLiteral("minimum_investment_usd")].toDouble();
         s.num_investors    = o[QStringLiteral("num_investors")].toInt();
         s.edgar_url        = o[QStringLiteral("edgar_url")].toString();
@@ -1261,6 +1264,7 @@ void PreIpoService::parse_form_d_response(const QJsonObject& root) {
             r.first_sale_date = QDate::fromString(ro[QStringLiteral("first_sale_date")].toString(), Qt::ISODate);
             r.amount_sold_m  = ro[QStringLiteral("amount_m")].toDouble();
             r.amount_offered_m = ro[QStringLiteral("offering_m")].toDouble();
+            r.offering_indefinite = ro[QStringLiteral("offering_indefinite")].toBool();
             r.exemption      = ro[QStringLiteral("exemption")].toString();
             for (const auto& t : ro[QStringLiteral("securities_types")].toArray())
                 r.securities_types << t.toString();

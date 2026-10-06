@@ -285,14 +285,27 @@ void dispatch_quant_async(const QString& module_id, const QString& command,
                                       return;
                                   if (ctx.on_progress)
                                       ctx.on_progress(1.0, QStringLiteral("done"));
-                                  resolve(ToolResult::ok_data(data));
+                                  // Some service paths emit result_ready with an in-band
+                                  // {"success": false / "error": ...} payload — that is a failure.
+                                  const QJsonValue ev = data.value("error");
+                                  const bool has_error = ev.isString() ? !ev.toString().isEmpty()
+                                                                       : (!ev.isUndefined() && !ev.isNull() &&
+                                                                          !(ev.isBool() && !ev.toBool()));
+                                  if (has_error || data.value("success").toBool(true) == false)
+                                      resolve(ToolResult::fail(ev.isString() && !ev.toString().isEmpty()
+                                                                   ? ev.toString()
+                                                                   : QStringLiteral("%1:%2 reported failure")
+                                                                         .arg(module_id, command)));
+                                  else
+                                      resolve(ToolResult::ok_data(data));
                                   holder->deleteLater();
                               });
             QObject::connect(svc, &services::quant::AIQuantLabService::error_occurred, holder,
                               [module_id, resolve, holder](QString mid, QString msg) {
                                   if (mid != module_id)
                                       return;
-                                  resolve(ToolResult::fail(msg));
+                                  resolve(ToolResult::fail(
+                                      msg.isEmpty() ? QStringLiteral("%1 failed").arg(module_id) : msg));
                                   holder->deleteLater();
                               });
             svc->run_module(module_id, command, params);

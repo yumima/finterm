@@ -924,16 +924,11 @@ void IpoWatchView::fetch_month(const QString& yyyymm) {
                 x.date_raw   = e["filedDate"].toString();
                 x.date       = parse_date(x.date_raw);
                 x.filed_date = x.date;
-                // dollarValueOfSharesOffered comes pre-formatted like
-                // "$230,000,000" — strip commas/$ and store dollars.
-                const QString dollar_raw = e["dollarValueOfSharesOffered"].toString();
-                QString d_clean = dollar_raw; d_clean.remove(',').remove('$').remove(' ');
-                bool ok_d = false;
-                const double dv = d_clean.toDouble(&ok_d);
-                if (ok_d) {
-                    x.deal_size_dollars = dv;
-                    x.deal_size         = format_money(dv);
-                }
+                // Deliberately NOT reading dollarValueOfSharesOffered here: for
+                // filed rows it is the S-1 fee-table "maximum aggregate offering
+                // price" — a registration-fee placeholder (often a nominal round
+                // number), never a deal size. deal_size stays empty → "—"
+                // until the deal is priced/upcoming with real price × shares.
                 x.status     = "filed";
                 if (!x.company.isEmpty()) self->entries_.append(std::move(x));
             }
@@ -1300,6 +1295,9 @@ bool IpoWatchView::entry_passes_filters(const Entry& e, bool apply_status) const
     }
     if (exch_filter_ != "all" && !e.exchange.contains(exch_filter_, Qt::CaseInsensitive)) return false;
     if (size_filter_ != "all") {
+        // No known deal size (e.g. S-1 filed, not yet priced) → can't be
+        // placed in any size bucket; don't let a 0 masquerade as "<100".
+        if (e.deal_size_dollars <= 0) return false;
         const double m = e.deal_size_dollars / 1e6;
         if      (size_filter_ == "<100"    && !(m < 100))            return false;
         else if (size_filter_ == "100-500" && !(m >= 100 && m < 500)) return false;
@@ -1569,8 +1567,12 @@ void IpoWatchView::render_calendar() {
         table_->setItem(i, 5, st);
         table_->setItem(i, 6, new QTableWidgetItem(e.price_range.isEmpty() ? "—" : e.price_range));
         table_->setItem(i, 7, new QTableWidgetItem(e.shares_raw.isEmpty() ? "—" : e.shares_raw));
-        table_->setItem(i, 8, new NumSortItem(
-            e.deal_size.isEmpty() ? "—" : e.deal_size, e.deal_size_dollars));
+        {
+            auto* ds = new NumSortItem(e.deal_size.isEmpty() ? "—" : e.deal_size, e.deal_size_dollars);
+            if (e.deal_size.isEmpty() && e.status == "filed")
+                ds->setToolTip(QStringLiteral("S-1 filed — not priced. The S-1 fee-table maximum offering price is a registration-fee placeholder, not a deal size."));
+            table_->setItem(i, 8, ds);
+        }
         // SECTOR is populated lazily after the batch_info enrichment lands;
         // empty until then, "—" once we know the daemon couldn't resolve it.
         const QString sector_disp = e.sector.isEmpty()
@@ -1641,8 +1643,12 @@ void IpoWatchView::render_performance() {
         auto* pop = new NumSortItem(pop_str, e.perf_fetched ? e.pop_pct : -1e9);
         pop->setForeground(QBrush(pop_col));
         table_->setItem(r, 6, pop);
-        table_->setItem(r, 7, new NumSortItem(
-            e.deal_size.isEmpty() ? "—" : e.deal_size, e.deal_size_dollars));
+        {
+            auto* ds = new NumSortItem(e.deal_size.isEmpty() ? "—" : e.deal_size, e.deal_size_dollars);
+            if (e.deal_size.isEmpty() && e.status == "filed")
+                ds->setToolTip(QStringLiteral("S-1 filed — not priced. The S-1 fee-table maximum offering price is a registration-fee placeholder, not a deal size."));
+            table_->setItem(r, 7, ds);
+        }
         const QString sector_disp = e.sector.isEmpty()
             ? (e.profile_fetched ? QStringLiteral("—") : QStringLiteral("…"))
             : e.sector;
@@ -1751,8 +1757,12 @@ void IpoWatchView::render_watchlist() {
         auto* pop = new NumSortItem(pop_str, (e.status == "priced" && e.perf_fetched) ? e.pop_pct : -1e9);
         pop->setForeground(QBrush(pop_col));
         table_->setItem(r, 8, pop);
-        table_->setItem(r, 9, new NumSortItem(
-            e.deal_size.isEmpty() ? "—" : e.deal_size, e.deal_size_dollars));
+        {
+            auto* ds = new NumSortItem(e.deal_size.isEmpty() ? "—" : e.deal_size, e.deal_size_dollars);
+            if (e.deal_size.isEmpty() && e.status == "filed")
+                ds->setToolTip(QStringLiteral("S-1 filed — not priced. The S-1 fee-table maximum offering price is a registration-fee placeholder, not a deal size."));
+            table_->setItem(r, 9, ds);
+        }
         const QString sector_disp = e.sector.isEmpty()
             ? (e.profile_fetched ? QStringLiteral("—") : QStringLiteral("…"))
             : e.sector;
@@ -1788,16 +1798,27 @@ void IpoWatchView::render_watchlist() {
         table_->setItem(r, 6, new QTableWidgetItem(QStringLiteral("—")));      // no offer/range
         table_->setItem(r, 7, new QTableWidgetItem(QStringLiteral("—")));      // no last
         table_->setItem(r, 8, new QTableWidgetItem(QStringLiteral("—")));      // no pop
-        // DEAL $ → last-reported valuation if curated, else capital raised.
-        QString deal_str; double deal_key = 0;
+        // DEAL $ column: a private company has NO deal size. Show the
+        // last-reported valuation (or capital raised) explicitly labelled as
+        // such, with "as reported · date · source" provenance — never as a
+        // bare number that reads like an offering size.
+        QString deal_str = QStringLiteral("—"), deal_tip; double deal_key = 0;
         if (c.last_valuation_usd > 0) {
-            deal_str = fmt_valuation(c.last_valuation_usd);
+            deal_str = QStringLiteral("val. ") + fmt_valuation(c.last_valuation_usd);
             deal_key = c.last_valuation_usd;
-        } else {
-            deal_str = fmt_raised_m(c.cumulative_raised_m);
+            QString prov = "Last-reported valuation (not a deal size) — as reported";
+            if (c.seed_as_of.isValid()) prov += " · " + c.seed_as_of.toString("MMM yyyy");
+            if (!c.seed_source.isEmpty()) prov += " · " + c.seed_source;
+            if (!c.seed_round.isEmpty())  prov += " · " + c.seed_round;
+            deal_tip = prov;
+        } else if (c.cumulative_raised_m > 0) {
+            deal_str = QStringLiteral("raised ") + fmt_raised_m(c.cumulative_raised_m);
             deal_key = c.cumulative_raised_m * 1e6;
+            deal_tip = QStringLiteral("Cumulative capital raised (not a deal size)");
         }
-        table_->setItem(r, 9, new NumSortItem(deal_str, deal_key));
+        auto* deal_item = new NumSortItem(deal_str, deal_key);
+        if (!deal_tip.isEmpty()) deal_item->setToolTip(deal_tip);
+        table_->setItem(r, 9, deal_item);
         table_->setItem(r, 10, new QTableWidgetItem(c.sector.isEmpty() ? "—" : c.sector));
     };
 
@@ -2178,13 +2199,18 @@ void IpoWatchView::show_add_company_dialog() {
         e[QStringLiteral("sector")] = sector->currentText().trimmed();
 
     // Only stamp a valuation (and its provenance) when one was actually given —
-    // never invent a number. "as reported · today · <source>" in the UI.
+    // never invent a number. provenance reads "... · <source> (user entered <date>)".
     const double val = parse_user_amount(valuation->text());
     if (val > 0.0) {
         e[QStringLiteral("last_valuation_usd")] = val;
         e[QStringLiteral("as_of")] = QDate::currentDate().toString(Qt::ISODate);
         const QString src = source->text().trimmed();
-        e[QStringLiteral("source_label")] = src.isEmpty() ? QStringLiteral("User-added") : src;
+        // as_of is the ENTRY date, not when the valuation was reported —
+        // say so in the provenance the UI renders.
+        const QString entered = QStringLiteral("entered ") + QDate::currentDate().toString(Qt::ISODate);
+        e[QStringLiteral("source_label")] = src.isEmpty()
+            ? QStringLiteral("User-added, ") + entered
+            : src + QStringLiteral(" (user ") + entered + QStringLiteral(")");
     }
 
     const QStringList hqp = hq->text().split(',', Qt::SkipEmptyParts);
@@ -2634,7 +2660,8 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
                 h += QString("<tr><td>%1</td><td>%2</td><td>%3</td><td class='k'>%4</td></tr>")
                          .arg(r.filed_date.isValid() ? r.filed_date.toString("MMM d, yyyy") : "—")
                          .arg(amt)
-                         .arg(money_m(r.amount_offered_m))
+                         .arg(r.offering_indefinite ? QStringLiteral("Indefinite")
+                                                    : money_m(r.amount_offered_m))
                          .arg(r.exemption.isEmpty() ? "—" : esc(r.exemption));
             }
             h += "</table>";
@@ -3276,6 +3303,7 @@ QString IpoWatchView::build_deal_html(const Entry& e) const {
     }
     if (!e.shares_raw.isEmpty()) h += kvg_row("Shares offered", e.shares_raw.toHtmlEscaped());
     if (!e.deal_size.isEmpty())  h += kvg_row("Deal size",      e.deal_size.toHtmlEscaped());
+    else if (e.status == "filed") h += kvg_row("Deal size",     QStringLiteral("— (S-1 filed, not priced)"));
     if (!e.exchange.isEmpty())   h += kvg_row("Exchange",       e.exchange.toHtmlEscaped());
     if (!e.bookrunner.isEmpty()) h += kvg_row("Lead bookrunner", e.bookrunner.toHtmlEscaped());
     h += "</table>";

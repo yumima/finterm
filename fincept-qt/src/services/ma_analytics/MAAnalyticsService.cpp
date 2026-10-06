@@ -97,14 +97,42 @@ MAAnalyticsService::MAAnalyticsService(QObject* parent) : QObject(parent) {
 }
 
 // ── Python helpers ───────────────────────────────────────────────────────────
+// The M&A scripts print {"error": ...} (or {"success": false, ...}) to stdout
+// and exit 1, often with an empty stderr. Returns the in-band error message,
+// or empty when the payload is a real result.
+static QString ma_in_band_error(const QJsonObject& o) {
+    const QJsonValue ev = o.value("error");
+    const bool has_error = !ev.isUndefined() && !ev.isNull() && !(ev.isString() && ev.toString().isEmpty()) &&
+                           !(ev.isBool() && !ev.toBool());
+    if (!has_error && o.value("success").toBool(true))
+        return {};
+    if (ev.isString())
+        return ev.toString();
+    if (o.value("message").isString())
+        return o.value("message").toString();
+    return QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact)).left(500);
+}
+
+// Failure message for a non-zero exit: in-band JSON error, else stderr, else exit code.
+static QString ma_failure_message(const python::PythonResult& result) {
+    const auto doc = QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
+    QString msg = doc.isObject() ? ma_in_band_error(doc.object()) : QString();
+    if (msg.isEmpty())
+        msg = result.error.trimmed();
+    if (msg.isEmpty())
+        msg = QString("M&A script failed (exit code %1)").arg(result.exit_code);
+    return msg;
+}
+
 void MAAnalyticsService::run_python(const QString& script, const QStringList& args, const QString& context) {
     QPointer<MAAnalyticsService> self = this;
     python::PythonRunner::instance().run(script, args, [self, context](python::PythonResult result) {
         if (!self)
             return;
         if (!result.success) {
-            LOG_ERROR("MAAnalytics", QString("Python call failed [%1]: %2").arg(context, result.error));
-            emit self->error_occurred(context, result.error);
+            const QString msg = ma_failure_message(result);
+            LOG_ERROR("MAAnalytics", QString("Python call failed [%1]: %2").arg(context, msg));
+            emit self->error_occurred(context, msg);
             return;
         }
         auto json_str = python::extract_json(result.output);
@@ -115,6 +143,11 @@ void MAAnalyticsService::run_python(const QString& script, const QStringList& ar
             return;
         }
         auto obj = doc.object();
+        if (const QString msg = ma_in_band_error(obj); !msg.isEmpty()) {
+            LOG_ERROR("MAAnalytics", QString("Script reported error [%1]: %2").arg(context, msg));
+            emit self->error_occurred(context, msg);
+            return;  // never persist an error payload as a cached result
+        }
         // Persist by-context — these are the slow paths (deal-database EDGAR
         // walk especially) so the next launch hydrates instantly.
         disk_cache().save(context_filename(context), doc);
@@ -150,19 +183,28 @@ void MAAnalyticsService::run_python_json(const QString& script, const QString& c
         [self, context, cache_key, params_for_hash](python::PythonResult result) {
             if (!self)
                 return;
-            if (!result.success) {
-                LOG_ERROR("MAAnalytics", QString("Python call failed [%1]: %2").arg(context, result.error));
-                emit self->error_occurred(context, result.error);
-                return;
-            }
+            // Failures are often stdout {"error": ...} + exit 1 with empty
+            // stderr — ma_failure_message() pulls the real message out.
             auto json_str = python::extract_json(result.output);
             auto doc = QJsonDocument::fromJson(json_str.toUtf8());
+            if (!result.success) {
+                const QString msg = ma_failure_message(result);
+                LOG_ERROR("MAAnalytics", QString("Python call failed [%1]: %2").arg(context, msg));
+                emit self->error_occurred(context, msg);
+                return;
+            }
             if (doc.isNull()) {
                 LOG_ERROR("MAAnalytics", QString("Invalid JSON from [%1]").arg(context));
                 emit self->error_occurred(context, "Invalid JSON response");
                 return;
             }
             auto obj = doc.object();
+            if (const QString msg = ma_in_band_error(obj); !msg.isEmpty()) {
+                // Don't cache an error payload as a result.
+                LOG_ERROR("MAAnalytics", QString("Script reported error [%1]: %2").arg(context, msg));
+                emit self->error_occurred(context, msg);
+                return;
+            }
             fincept::CacheManager::instance().put(
                 cache_key,
                 QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),

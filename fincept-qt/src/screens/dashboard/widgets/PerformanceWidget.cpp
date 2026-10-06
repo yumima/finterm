@@ -1,5 +1,6 @@
 #include "screens/dashboard/widgets/PerformanceWidget.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -129,7 +130,8 @@ void PerformanceWidget::populate(const QVector<services::QuoteData>& quotes) {
     for (const auto& q : quotes)
         map[q.symbol] = &q;
 
-    auto fmt_pct = [](double v) -> QString { return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 2); };
+    // NaN (no previous close) → "—" via format_percent, neutral colour below.
+    auto fmt_pct = [](double v) -> QString { return ui::formatting::format_percent(v, 2, true); };
     auto set_row = [&](int idx, double val) {
         if (idx >= rows_.size())
             return;

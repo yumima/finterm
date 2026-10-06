@@ -1,10 +1,11 @@
 """
 QuantStats Analysis — Comprehensive quantitative statistics for a portfolio.
-Input: JSON via stdin:
+Input: JSON as the first argv argument (PythonRunner passes it there; an
+"@/path" argument names a spill file holding the JSON), stdin as fallback:
   {"symbols": ["AAPL","MSFT"],
    "weights_by_symbol": {"AAPL": 0.5, "MSFT": 0.5},   # preferred
    "weights": [0.5, 0.5],                             # legacy positional
-   "risk_free": 0.042}                                # annual decimal
+   "risk_free": 0.042}                                # annual decimal; null = unknown
 Output: JSON to stdout with performance, risk, and ratio metrics.
 
 Weights are keyed by symbol because yf.download orders columns its own way
@@ -13,8 +14,14 @@ and a single failed symbol used to shift every weight onto the wrong ticker
 reported in "dropped_symbols" — the caller decides whether a partial answer
 is still an answer. Note the model: constant weights, i.e. a daily-rebalanced
 portfolio, not buy-and-hold; stated here so nobody mistakes it.
+
+A statistic that cannot be computed (no variance, no losing days, unknown
+risk-free rate, NaN/inf) is emitted as null — never 0.0, which would read as
+a real measurement. The caller renders null as a dash.
 """
 import sys
+
+from script_args import read_input
 import json
 import numpy as np
 
@@ -29,17 +36,17 @@ def convert_numpy(obj):
     elif isinstance(obj, (np.floating,)):
         v = float(obj)
         if np.isnan(v) or np.isinf(v):
-            return 0.0
+            return None  # unknown, not zero
         return v
     elif isinstance(obj, np.ndarray):
         return [convert_numpy(x) for x in obj]
     elif isinstance(obj, float):
         if np.isnan(obj) or np.isinf(obj):
-            return 0.0
+            return None  # unknown, not zero
     return obj
 
 
-def compute_stats(symbols, weights_by_symbol, risk_free=0.04, period="1y"):
+def compute_stats(symbols, weights_by_symbol, risk_free=None, period="1y"):
     import yfinance as yf
 
     # auto_adjust=True deliberately: statistics over TOTAL returns, so a
@@ -62,47 +69,62 @@ def compute_stats(symbols, weights_by_symbol, risk_free=0.04, period="1y"):
     returns = close.pct_change().dropna()
     # Weights aligned BY SYMBOL to the columns that actually arrived, then
     # renormalised over the survivors.
+    if returns.empty:
+        return {"error": "Not enough overlapping price history to compute returns",
+                "dropped_symbols": dropped}
     w = np.array([float(weights_by_symbol.get(c, 0.0)) for c in returns.columns])
     if w.sum() <= 0:
-        w = np.ones(returns.shape[1])
+        # No real weight survived — inventing equal weights would analyse a
+        # portfolio the user does not hold.
+        return {"error": "No weighted symbol returned price data", "dropped_symbols": dropped}
     w = w / w.sum()
 
     port_returns = (returns * w).sum(axis=1)
     cumulative = (1 + port_returns).cumprod()
 
-    rf = float(risk_free)
-    rf_daily = rf / 252
+    # Unknown risk-free rate (the app never fetched one): the rf-dependent
+    # figures are null rather than computed against an invented hurdle.
+    rf = float(risk_free) if risk_free is not None else None
+    rf_daily = rf / 252 if rf is not None else None
     trading_days = len(port_returns)
     ann_factor = 252
 
-    total_return = float(cumulative.iloc[-1] / cumulative.iloc[0] - 1) if len(cumulative) > 0 else 0
+    # cumulative already includes the first day's return, so the total is
+    # cumulative[-1] - 1; dividing by cumulative[0] silently dropped day 1.
+    total_return = float(cumulative.iloc[-1] - 1)
     ann_return = float((1 + total_return) ** (ann_factor / max(trading_days, 1)) - 1)
     ann_vol = float(port_returns.std() * np.sqrt(ann_factor))
-    sharpe = float((ann_return - rf) / ann_vol) if ann_vol > 0 else 0
+    sharpe = float((ann_return - rf) / ann_vol) if (rf is not None and ann_vol > 0) else None
     # Downside deviation over the FULL sample vs the risk-free MAR — dividing
     # only by the count of down days (the old .std() over the negative subset)
     # understates Sortino, increasingly so the fewer down days there are.
-    downside = np.minimum(port_returns - rf_daily, 0.0)
-    sortino_vol = float(np.sqrt((downside ** 2).mean()) * np.sqrt(ann_factor))
-    sortino = float((ann_return - rf) / sortino_vol) if sortino_vol > 0 else 0
+    if rf is not None:
+        downside = np.minimum(port_returns - rf_daily, 0.0)
+        sortino_vol = float(np.sqrt((downside ** 2).mean()) * np.sqrt(ann_factor))
+        sortino = float((ann_return - rf) / sortino_vol) if sortino_vol > 0 else None
+    else:
+        sortino_vol = None
+        sortino = None
 
-    peak = cumulative.expanding().max()
+    # Drawdown from the 1.0 starting value, so a first-day loss counts.
+    peak = cumulative.expanding().max().clip(lower=1.0)
     drawdown = (cumulative - peak) / peak
     max_dd = float(drawdown.min())
-    calmar = float(ann_return / abs(max_dd)) if max_dd != 0 else 0
+    calmar = float(ann_return / abs(max_dd)) if max_dd != 0 else None
 
     var_95 = float(np.percentile(port_returns, 5))
     cvar_95 = float(port_returns[port_returns <= var_95].mean()) if len(port_returns[port_returns <= var_95]) > 0 else var_95
 
     wins = int((port_returns > 0).sum())
     losses = int((port_returns < 0).sum())
-    win_rate = float(wins / (wins + losses)) if (wins + losses) > 0 else 0
+    win_rate = float(wins / (wins + losses)) if (wins + losses) > 0 else None
 
     best_day = float(port_returns.max())
     worst_day = float(port_returns.min())
-    avg_win = float(port_returns[port_returns > 0].mean()) if wins > 0 else 0
-    avg_loss = float(port_returns[port_returns < 0].mean()) if losses > 0 else 0
-    profit_factor = float(abs(avg_win * wins) / abs(avg_loss * losses)) if losses > 0 and avg_loss != 0 else 0
+    avg_win = float(port_returns[port_returns > 0].mean()) if wins > 0 else None
+    avg_loss = float(port_returns[port_returns < 0].mean()) if losses > 0 else None
+    profit_factor = (float(abs(avg_win * wins) / abs(avg_loss * losses))
+                     if (avg_win is not None and avg_loss is not None and avg_loss != 0) else None)
 
     skew = float(port_returns.skew())
     kurt = float(port_returns.kurtosis())
@@ -144,12 +166,16 @@ def compute_stats(symbols, weights_by_symbol, risk_free=0.04, period="1y"):
 
 
 def main():
-    stdin_data = sys.stdin.read()
-    if not stdin_data.strip():
+    raw = read_input()
+    if not raw.strip():
         print(json.dumps({"error": "No input data"}))
         return
 
-    params = json.loads(stdin_data)
+    try:
+        params = json.loads(raw)
+    except json.JSONDecodeError as e:
+        print(json.dumps({"error": f"Invalid JSON input: {e}"}))
+        return
     symbols = params.get("symbols", [])
     if not symbols:
         print(json.dumps({"error": "No symbols provided"}))
@@ -163,10 +189,16 @@ def main():
         if legacy and len(legacy) == len(symbols):
             weights_by_symbol = dict(zip(symbols, legacy))
         else:
-            weights_by_symbol = {s: 1.0 / len(symbols) for s in symbols}
+            print(json.dumps({"error": "No weights provided"}))
+            return
 
-    result = compute_stats(symbols, weights_by_symbol, params.get("risk_free", 0.04))
-    print(json.dumps(convert_numpy(result)))
+    try:
+        result = compute_stats(symbols, weights_by_symbol, params.get("risk_free"))
+    except Exception as e:
+        result = {"error": f"QuantStats analysis failed: {e}"}
+    # allow_nan=False: any non-finite value that slipped past convert_numpy
+    # fails loudly instead of emitting invalid JSON (NaN) the app cannot parse.
+    print(json.dumps(convert_numpy(result), allow_nan=False))
 
 
 if __name__ == "__main__":

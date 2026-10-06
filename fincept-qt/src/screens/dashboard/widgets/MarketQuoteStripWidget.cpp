@@ -4,6 +4,7 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "services/markets/MarketDataService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QDialog>
@@ -147,9 +148,8 @@ void MarketQuoteStripWidget::on_quote(const fincept::services::QuoteData& q) {
         return;
     Row& r = it.value();
     r.price->setText(QString::number(q.price, 'f', 2));
-    const QString sign = q.change_pct >= 0 ? "+" : "";
-    r.change->setText(QString("%1%2%").arg(sign).arg(q.change_pct, 0, 'f', 2));
-    const QColor col = q.change_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
+    r.change->setText(ui::formatting::format_percent(q.change_pct, 2, true));
+    const QColor col(ui::change_color(q.change_pct));
     r.change->setStyleSheet(
         QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(col.name()));
     set_loading(false);

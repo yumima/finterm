@@ -101,6 +101,9 @@ class PortfolioSummaryWidget : public BaseWidget {
 
     // Cached for theme-change re-render
     QVector<Holding> last_holdings_;
+    // Holdings left out because their FX conversion into the portfolio
+    // currency is unknown (no assumed 1.0 rate). Named in the totals' tooltip.
+    QStringList fx_excluded_;
     QVector<services::QuoteData> last_quotes_;
 
     QHash<QString, services::QuoteData> row_cache_;

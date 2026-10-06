@@ -7,6 +7,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <cmath>
+
 namespace fincept::services {
 
 PortfolioAnalyticsService& PortfolioAnalyticsService::instance() {
@@ -30,8 +32,12 @@ void PortfolioAnalyticsService::run_quantstats(const QStringList& symbols,
     // Keyed by symbol: yf.download orders columns its own way, and a single
     // failed ticker used to shift every positional weight onto the wrong one.
     args["weights_by_symbol"] = weights_by_symbol;
-    args["risk_free"] = risk_free;
-    run_script(QStringLiteral("quantstats_analysis"),
+    // NaN = no risk-free rate has ever been fetched: send null so the script
+    // leaves the rf-dependent ratios null instead of assuming a rate.
+    args["risk_free"] = std::isfinite(risk_free) ? QJsonValue(risk_free) : QJsonValue();
+    // PythonRunner resolves `scripts_dir/<script>` verbatim — the name needs
+    // its .py, and the JSON travels as argv[1] (the script reads it there).
+    run_script(QStringLiteral("quantstats_analysis.py"),
                QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)),
                std::move(cb));
 }
@@ -44,7 +50,7 @@ void PortfolioAnalyticsService::run_monte_carlo(const QStringList& symbols,
     args["symbols"] = QJsonArray::fromStringList(symbols);
     args["weights"] = to_json_array(weights);
     args["num_simulations"] = num_simulations;
-    run_script(QStringLiteral("quantstats_monte_carlo"),
+    run_script(QStringLiteral("quantstats_monte_carlo.py"),
                QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)),
                std::move(cb));
 }
@@ -61,8 +67,8 @@ void PortfolioAnalyticsService::run_ffn(const QStringList& symbols,
     QJsonObject args;
     args["symbols"] = QJsonArray::fromStringList(symbols);
     args["weights"] = weights_by_symbol;
-    args["risk_free"] = risk_free;
-    run_script(QStringLiteral("ffn_analysis"),
+    args["risk_free"] = std::isfinite(risk_free) ? QJsonValue(risk_free) : QJsonValue();
+    run_script(QStringLiteral("ffn_analysis.py"),
                QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)),
                std::move(cb));
 }

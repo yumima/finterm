@@ -2,13 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-10-05)
+## Today's commits (2026-10-06)
 
 Latest first.
 
-- [`fba7a3f75`](https://github.com/yumima/finterm/commit/fba7a3f75) **docs:** the runbook no longer claims a topic the repo never had
-- [`c4f6d64a5`](https://github.com/yumima/finterm/commit/c4f6d64a5) **docs:** drop the removed topic-sync workflow from the maintainer runbook
-- [`45a8f94db`](https://github.com/yumima/finterm/commit/45a8f94db) **ci:** remove the upstream topic-sync workflow that failed every week
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

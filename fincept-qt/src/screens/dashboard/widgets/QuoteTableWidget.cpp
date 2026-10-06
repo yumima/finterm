@@ -2,6 +2,7 @@
 
 #include "screens/markets/MarketChartDialog.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -126,8 +127,10 @@ void QuoteTableWidget::render_from_cache() {
         QString display_name = label_map_.value(q.symbol, q.symbol);
         QString price_str = QString::number(q.price, 'f', price_decimals_);
         double chg_abs = q.change;
-        QString chg_str = QString("%1%2").arg(chg_abs >= 0 ? "+" : "").arg(chg_abs, 0, 'f', price_decimals_);
-        QString pct_str = QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2);
+        QString chg_str = std::isfinite(chg_abs)
+            ? QString("%1%2").arg(chg_abs >= 0 ? "+" : "").arg(chg_abs, 0, 'f', price_decimals_)
+            : ui::formatting::placeholder();
+        QString pct_str = ui::formatting::format_percent(q.change_pct, 2, true);
 
         table_->add_row({display_name, price_str, chg_str, pct_str});
         row_symbols_.append(q.symbol);
@@ -148,8 +151,10 @@ void QuoteTableWidget::populate(const QVector<services::QuoteData>& quotes) {
         QString display_name = label_map_.value(q.symbol, q.symbol);
         QString price_str = QString::number(q.price, 'f', price_decimals_);
         double chg_abs = q.change;
-        QString chg_str = QString("%1%2").arg(chg_abs >= 0 ? "+" : "").arg(chg_abs, 0, 'f', price_decimals_);
-        QString pct_str = QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2);
+        QString chg_str = std::isfinite(chg_abs)
+            ? QString("%1%2").arg(chg_abs >= 0 ? "+" : "").arg(chg_abs, 0, 'f', price_decimals_)
+            : ui::formatting::placeholder();
+        QString pct_str = ui::formatting::format_percent(q.change_pct, 2, true);
 
         table_->add_row({display_name, price_str, chg_str, pct_str});
         row_symbols_.append(q.symbol);

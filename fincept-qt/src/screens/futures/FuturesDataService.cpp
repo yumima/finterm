@@ -4,6 +4,7 @@
 #include "python/PythonWorker.h"
 #include "screens/futures/FuturesContracts.h"
 
+#include <QtNumeric>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -50,12 +51,13 @@ static FuturesQuote parse_quote(const QJsonObject& o) {
     q.name = o.value("name").toString(q.symbol);
     q.asset_class = o.value("class").toString();
     q.last = o.value("last").toDouble();
-    q.change = o.value("change").toDouble();
-    q.change_pct = o.value("change_pct").toDouble();
-    q.volume = o.value("volume").toDouble();
-    q.open_interest = o.value("open_interest").toDouble();
-    q.high = o.value("high").toDouble(q.last);
-    q.low = o.value("low").toDouble(q.last);
+    // null (no prior bar / not reported) → NaN → rendered "—", never 0 / last.
+    q.change = o.value("change").toDouble(qQNaN());
+    q.change_pct = o.value("change_pct").toDouble(qQNaN());
+    q.volume = o.value("volume").toDouble(qQNaN());
+    q.open_interest = o.value("open_interest").toDouble(qQNaN());
+    q.high = o.value("high").toDouble(qQNaN());
+    q.low = o.value("low").toDouble(qQNaN());
     return q;
 }
 
@@ -115,12 +117,12 @@ void FuturesDataService::fetch_quotes_yahoo(const QStringList& symbols, QuotesCa
                 q.name = def->name;
                 q.asset_class = def->asset_class;
                 q.last = o.value("price").toDouble();
-                q.change = o.value("change").toDouble();
-                q.change_pct = o.value("change_percent").toDouble();
-                q.volume = o.value("volume").toDouble();
-                q.high = o.value("high").toDouble(q.last);
-                q.low = o.value("low").toDouble(q.last);
-                q.open_interest = 0;  // yfinance does not expose OI
+                q.change = o.value("change").toDouble(qQNaN());
+                q.change_pct = o.value("change_percent").toDouble(qQNaN());
+                q.volume = o.value("volume").toDouble(qQNaN());
+                q.high = o.value("high").toDouble(qQNaN());
+                q.low = o.value("low").toDouble(qQNaN());
+                q.open_interest = qQNaN();  // yfinance does not expose OI — unknown, not 0
                 rows.push_back(q);
             }
             cb(true, rows, "yfinance");

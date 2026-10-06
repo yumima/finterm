@@ -19,8 +19,17 @@
 
 namespace fincept::services::geo {
 
-// Geopolitics stub endpoint removed. fetch_events/countries/categories/cities return empty.
+// Geopolitics stub endpoint removed. fetch_events/countries/categories/cities
+// report "unavailable" via error_occurred rather than an empty success.
 static constexpr const char* kApiBase = "";
+
+bool GeopoliticsService::conflict_monitor_available() {
+    return *kApiBase != '\0';
+}
+
+QString GeopoliticsService::conflict_monitor_unavailable_message() {
+    return QStringLiteral("No conflict-event data source configured");
+}
 
 namespace {
 inline void publish_to_hub(const QString& topic, const QVariant& value) {
@@ -131,6 +140,9 @@ GeopoliticsService::GeopoliticsService(QObject* parent) : QObject(parent) {
         } else if (fname == QStringLiteral("trade_restrictions.json")) {
             if (doc.isObject())
                 emit trade_result_ready(QStringLiteral("trade_restrictions"), doc.object());
+        } else if (fname == QStringLiteral("trade_blocs.json")) {
+            if (doc.isObject())
+                emit trade_result_ready(QStringLiteral("trade_blocs"), doc.object());
         } else if (fname == QStringLiteral("geolocation.json")) {
             if (doc.isObject())
                 emit geolocation_ready(doc.object());
@@ -158,7 +170,7 @@ void GeopoliticsService::run_python(const QString& script, const QStringList& ar
 
 void GeopoliticsService::fetch_events(const QString& country, const QString& city, const QString& category, int limit) {
     Q_UNUSED(country); Q_UNUSED(city); Q_UNUSED(category); Q_UNUSED(limit);
-    if (!*kApiBase) { emit events_loaded({}, 0); return; }
+    if (!conflict_monitor_available()) { emit error_occurred("events", conflict_monitor_unavailable_message()); return; }
     // Build URL with query params
     QUrl url(kApiBase);
     QUrlQuery q;
@@ -243,7 +255,7 @@ void GeopoliticsService::fetch_events(const QString& country, const QString& cit
 }
 
 void GeopoliticsService::fetch_unique_countries() {
-    if (!*kApiBase) { emit countries_loaded({}); return; }
+    if (!conflict_monitor_available()) { emit error_occurred("countries", conflict_monitor_unavailable_message()); return; }
     // Cache hit — deserialize and emit, otherwise go to network.
     const QVariant cached = fincept::CacheManager::instance().get("geo:countries");
     if (!cached.isNull()) {
@@ -294,7 +306,7 @@ void GeopoliticsService::fetch_unique_countries() {
 }
 
 void GeopoliticsService::fetch_unique_categories() {
-    if (!*kApiBase) { emit categories_loaded({}); return; }
+    if (!conflict_monitor_available()) { emit error_occurred("categories", conflict_monitor_unavailable_message()); return; }
     const QVariant cached = fincept::CacheManager::instance().get("geo:categories");
     if (!cached.isNull()) {
         const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
@@ -343,7 +355,7 @@ void GeopoliticsService::fetch_unique_categories() {
 }
 
 void GeopoliticsService::fetch_unique_cities() {
-    if (!*kApiBase) { emit cities_loaded({}); return; }
+    if (!conflict_monitor_available()) { emit error_occurred("cities", conflict_monitor_unavailable_message()); return; }
     QPointer<GeopoliticsService> self = this;
     HttpClient::instance().get(QString(kApiBase) + "?get_unique_cities=true", [self](Result<QJsonDocument> result) {
         if (!self)
@@ -532,6 +544,24 @@ void GeopoliticsService::analyze_trade_restrictions(const QJsonObject& params) {
                    emit trade_result_ready("trade_restrictions", obj);
                    if (hub_registered_)
                        publish_to_hub(QStringLiteral("geopolitics:trade:restrictions"), QVariant(obj));
+               });
+}
+
+void GeopoliticsService::analyze_trading_blocs(const QJsonObject& params) {
+    auto json_str = QJsonDocument(params).toJson(QJsonDocument::Compact);
+    run_python("Analytics/economics/trade_geopolitics.py", {"trading_blocs", json_str}, "trade_blocs",
+               [this](bool ok, const QString& out) {
+                   if (!ok) {
+                       emit error_occurred("trade_blocs", out);
+                       return;
+                   }
+                   auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
+                   const auto obj = doc.object();
+                   if (!doc.isNull())
+                       disk_cache().save(QStringLiteral("trade_blocs.json"), doc);
+                   emit trade_result_ready("trade_blocs", obj);
+                   if (hub_registered_)
+                       publish_to_hub(QStringLiteral("geopolitics:trade:blocs"), QVariant(obj));
                });
 }
 

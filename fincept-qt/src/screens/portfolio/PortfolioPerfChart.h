@@ -82,9 +82,11 @@ class PortfolioPerfChart : public QWidget {
     void set_symbol_intraday(const QString& symbol,
                              const QVector<qint64>& timestamps_ms,
                              const QVector<double>& closes);
-    /// Feed today's 1-minute aggregate-NAV series for portfolio view.
+    /// Feed today's 1-minute aggregate-NAV series for portfolio view. An empty
+    /// series with a non-empty `unavailable_reason` renders that reason.
     void set_portfolio_intraday(const QVector<qint64>& timestamps_ms,
-                                const QVector<double>& navs);
+                                const QVector<double>& navs,
+                                const QString& unavailable_reason = QString());
 
   signals:
     /// Emitted when the user clicks a period button that requires backfilling
@@ -197,6 +199,7 @@ class PortfolioPerfChart : public QWidget {
     // (e.g. weekend, holiday, pre-open) — the latter should show a terminal
     // message, not "Loading…" forever.
     bool             intraday_resolved_    = false;
+    QString          intraday_unavailable_reason_; // why the aggregate 1D NAV is empty
     QVector<double> focus_closes_;
     bool focus_data_loaded_ = false; // true once set_focus_history fires (even with empty data)
     QLabel* title_label_ = nullptr;

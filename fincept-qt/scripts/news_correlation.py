@@ -1,10 +1,9 @@
 """
-News Correlation Engine — Signal detection, Country Instability Index,
-baseline tracking, and deviation analysis.
+News Correlation Engine — Signal detection, baseline tracking, and
+deviation analysis.
 
 Commands:
   detect_signals <json_articles> <json_market_data>
-  compute_instability <country_code> <json_signals>
   baseline_update <json_category_counts> <json_existing_baseline>
   detect_deviations <json_current_counts> <json_baseline>
   focal_points <json_geolocated_articles>
@@ -185,75 +184,6 @@ def detect_signals(articles_json, market_json=None):
     }
 
 
-def compute_instability(country_code, signals_json):
-    """Compute Country Instability Index (0-100) from multi-signal blend."""
-    try:
-        signals = json.loads(signals_json) if isinstance(signals_json, str) else signals_json
-    except json.JSONDecodeError:
-        return {"success": False, "error": "Invalid JSON"}
-
-    # Baseline weights per signal type
-    weights = {
-        "conflict": 25,      # max 25 points from conflict signals
-        "cyber": 10,         # max 10 from cyber threats
-        "natural": 15,       # max 15 from natural disasters
-        "market": 15,        # max 15 from market stress
-        "regulatory": 10,    # max 10 from regulatory action
-        "velocity_spike": 10,  # max 10 from velocity spikes
-        "triangulation": 5,   # max 5 from multi-source confirmation
-        "hotspot_escalation": 10, # max 10 from hotspot escalation
-    }
-
-    # Known baseline adjustments (tier-1 nations have higher baseline stability)
-    tier1_nations = {"US", "GB", "DE", "FR", "JP", "CA", "AU", "KR", "SG", "CH",
-                     "NL", "SE", "NO", "DK", "FI", "NZ", "AT", "BE", "IE", "LU"}
-    baseline = 10 if country_code in tier1_nations else 25  # starting instability
-
-    # Accumulate from signals
-    signal_scores = defaultdict(float)
-    for signal in signals:
-        s_type = signal.get("type", "")
-        severity = signal.get("severity", "low")
-        value = signal.get("value", 1)
-
-        severity_mult = {"critical": 1.0, "high": 0.7, "medium": 0.4, "low": 0.2}.get(severity, 0.1)
-
-        if s_type in weights:
-            max_w = weights[s_type]
-            score = min(max_w, value * severity_mult * 5)
-            signal_scores[s_type] = max(signal_scores[s_type], score)
-
-        # Category-based scoring
-        category = signal.get("category", "")
-        if category in weights:
-            max_w = weights[category]
-            score = min(max_w, value * severity_mult * 3)
-            signal_scores[category] = max(signal_scores[category], score)
-
-    total = baseline + sum(signal_scores.values())
-    cii = min(100, max(0, int(total)))
-
-    # Risk level
-    if cii >= 75:
-        level = "CRITICAL"
-    elif cii >= 50:
-        level = "HIGH"
-    elif cii >= 30:
-        level = "ELEVATED"
-    else:
-        level = "STABLE"
-
-    return {
-        "success": True,
-        "country": country_code,
-        "cii_score": cii,
-        "level": level,
-        "baseline": baseline,
-        "signal_contributions": dict(signal_scores),
-        "total_signals": len(signals),
-    }
-
-
 def baseline_update(current_json, existing_json):
     """Update rolling 7-day hourly baseline with current counts."""
     try:
@@ -393,10 +323,10 @@ def main(args=None):
         market = resolve_arg(args[2]) if len(args) > 2 else None
         result = detect_signals(resolve_arg(args[1]), market)
     elif command == "compute_instability":
-        if len(args) < 3:
-            result = {"success": False, "error": "Usage: compute_instability <country_code> <json_signals>"}
-        else:
-            result = compute_instability(args[1], resolve_arg(args[2]))
+        # Removed: the "instability index" was hardcoded tier-1/other floors
+        # (10/25) plus ad-hoc weights, presented as a measured score.
+        result = {"success": False,
+                  "error": "compute_instability is not available: no real country instability data source"}
     elif command == "baseline_update":
         if len(args) < 3:
             result = {"success": False, "error": "Usage: baseline_update <current> <existing>"}

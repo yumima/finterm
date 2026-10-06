@@ -1,5 +1,5 @@
 """Returns Calculator - IRR and MOIC"""
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import numpy as np
 try:
     import numpy_financial as npf
@@ -10,16 +10,51 @@ class ReturnsCalculator:
     """Calculate LBO returns metrics"""
 
     @staticmethod
-    def calculate_irr(cash_flows: List[float]) -> float:
-        """Calculate Internal Rate of Return"""
+    def _irr_bisect(cash_flows: List[float]) -> Optional[float]:
+        """IRR by bisection on NPV (numpy_financial is not bundled and
+        np.irr was removed in numpy 1.20). Returns None when no sign change
+        brackets a root."""
+        def npv(r: float) -> float:
+            return sum(cf / (1.0 + r) ** t for t, cf in enumerate(cash_flows))
+
+        lo, hi = -0.9999, 1.0
+        f_lo = npv(lo)
+        f_hi = npv(hi)
+        while f_lo * f_hi > 0 and hi < 1e4:
+            hi *= 4.0
+            f_hi = npv(hi)
+        if f_lo * f_hi > 0:
+            return None
+        for _ in range(200):
+            mid = (lo + hi) / 2.0
+            f_mid = npv(mid)
+            if abs(f_mid) < 1e-10 or (hi - lo) < 1e-12:
+                return mid
+            if f_lo * f_mid < 0:
+                hi, f_hi = mid, f_mid
+            else:
+                lo, f_lo = mid, f_mid
+        return (lo + hi) / 2.0
+
+    @staticmethod
+    def calculate_irr(cash_flows: List[float]) -> Optional[float]:
+        """Calculate Internal Rate of Return.
+
+        Returns None when the IRR is undefined (never a fabricated 0%). A
+        total loss (outflows only, all later flows zero) is -100%.
+        """
+        if not cash_flows or not any(cf < 0 for cf in cash_flows):
+            return None
+        if not any(cf > 0 for cf in cash_flows):
+            return -1.0
         try:
             if npf is not None:
                 irr = npf.irr(cash_flows)
-            else:
-                irr = np.irr(cash_flows)
-            return float(irr) if irr is not None and not np.isnan(irr) else 0
-        except:
-            return 0
+                if irr is not None and not np.isnan(irr):
+                    return float(irr)
+            return ReturnsCalculator._irr_bisect(cash_flows)
+        except Exception:
+            return None
 
     @staticmethod
     def calculate_moic(initial_investment: float, exit_proceeds: float) -> float:
@@ -58,7 +93,7 @@ class ReturnsCalculator:
             'initial_equity_investment': initial_equity,
             'exit_equity_value': exit_equity_value,
             'holding_period_years': holding_period_years,
-            'irr': irr * 100,
+            'irr': irr * 100 if irr is not None else None,
             'moic': moic,
             'cash_on_cash_multiple': coc,
             'annualized_return': annualized_return * 100,
@@ -81,14 +116,14 @@ class ReturnsCalculator:
                                 hurdle_irr: float = 0.20) -> Dict[str, Any]:
         """Calculate excess returns vs hurdle rate"""
 
-        actual_irr = returns['irr'] / 100
-        excess_irr = actual_irr - hurdle_irr
+        actual_irr = returns['irr'] / 100 if returns['irr'] is not None else None
+        excess_irr = actual_irr - hurdle_irr if actual_irr is not None else None
 
         return {
             'hurdle_irr': hurdle_irr * 100,
             'actual_irr': returns['irr'],
-            'excess_irr': excess_irr * 100,
-            'meets_hurdle': actual_irr >= hurdle_irr,
+            'excess_irr': excess_irr * 100 if excess_irr is not None else None,
+            'meets_hurdle': actual_irr >= hurdle_irr if actual_irr is not None else None,
             'hurdle_moic': (1 + hurdle_irr) ** returns['holding_period_years'],
             'actual_moic': returns['moic'],
             'excess_moic': returns['moic'] - ((1 + hurdle_irr) ** returns['holding_period_years'])

@@ -1,6 +1,6 @@
 """
 QuantStats Monte Carlo Simulation
-Input (stdin JSON): {"symbols": ["AAPL","MSFT"], "weights": [0.6, 0.4], "num_simulations": 1000}
+Input (JSON as argv[1] or "@/path" spill file; stdin fallback): {"symbols": ["AAPL","MSFT"], "weights": [0.6, 0.4], "num_simulations": 1000}
 Output (stdout JSON): {
     "median_return": float (%),
     "percentile_5": float (%),
@@ -13,6 +13,8 @@ Output (stdout JSON): {
 All monetary/return values are in percent (multiplied by 100).
 """
 import sys
+
+from script_args import read_input
 import json
 import numpy as np
 
@@ -27,13 +29,13 @@ def convert_numpy(obj):
     elif isinstance(obj, (np.floating,)):
         v = float(obj)
         if np.isnan(v) or np.isinf(v):
-            return 0.0
+            return None
         return v
     elif isinstance(obj, np.ndarray):
         return [convert_numpy(x) for x in obj]
     elif isinstance(obj, float):
         if np.isnan(obj) or np.isinf(obj):
-            return 0.0
+            return None
     return obj
 
 
@@ -68,22 +70,27 @@ def run_simulation(symbols, weights, num_simulations=1000):
     # Drop rows with all NaN
     close = close.dropna(how="all")
 
-    # Align columns to requested symbols, filling missing with forward-fill
-    available = [s for s in symbols if s in close.columns]
-    if not available:
-        return {"error": "None of the requested symbols found in downloaded data"}
+    # Every requested holding must have real price history; simulating a
+    # portfolio with holdings silently dropped would misrepresent it.
+    missing = [s for s in symbols
+               if s not in close.columns or close[s].dropna().empty]
+    if missing:
+        return {"error": "No price data for: " + ", ".join(missing)}
 
-    close = close[available].ffill().bfill().dropna()
+    # Forward-fill only interior gaps (e.g. differing exchange holidays), then
+    # drop leading rows so the sample is the common date range on which every
+    # symbol actually traded. Never back-fill pre-listing history.
+    close = close[symbols].ffill().dropna()
 
     if len(close) < 30:
-        return {"error": "Insufficient historical data (need at least 30 trading days)"}
+        return {"error": "Insufficient common price history across "
+                         + ", ".join(symbols) + " (need at least 30 trading days, have "
+                         + str(len(close)) + ")"}
 
-    # Recompute weights for available symbols only
-    w = np.array([weights[symbols.index(s)] for s in available], dtype=float)
-    if w.sum() == 0:
-        w = np.ones(len(available)) / len(available)
-    else:
-        w = w / w.sum()  # renormalise in case some symbols dropped
+    w = np.array(weights, dtype=float)
+    if not np.all(np.isfinite(w)) or w.sum() == 0:
+        return {"error": "Portfolio weights are invalid (non-finite or summing to zero)"}
+    w = w / w.sum()
 
     # Daily returns
     daily_returns = close.pct_change().dropna()
@@ -95,8 +102,9 @@ def run_simulation(symbols, weights, num_simulations=1000):
     mu_daily = float(np.mean(port_returns))
     sigma_daily = float(np.std(port_returns, ddof=1))
 
-    if sigma_daily < 1e-8:
-        sigma_daily = 1e-4  # guard against degenerate input
+    if not np.isfinite(sigma_daily) or sigma_daily < 1e-8:
+        return {"error": "Portfolio return series has zero/undefined volatility; "
+                         "cannot fit a Monte Carlo model"}
 
     # Annualised equivalents (for reference only — simulation uses daily params)
     # mu_ann = mu_daily * 252
@@ -155,12 +163,12 @@ def run_simulation(symbols, weights, num_simulations=1000):
 
 def main():
     try:
-        stdin_data = sys.stdin.read()
-        if not stdin_data.strip():
+        raw = read_input()
+        if not raw.strip():
             print(json.dumps({"error": "No input data"}))
             return
 
-        params = json.loads(stdin_data)
+        params = json.loads(raw)
         symbols = params.get("symbols", [])
         weights = params.get("weights", [])
         num_simulations = int(params.get("num_simulations", 1000))
@@ -170,7 +178,8 @@ def main():
             return
 
         if not weights or len(weights) != len(symbols):
-            weights = [1.0 / len(symbols)] * len(symbols)
+            print(json.dumps({"error": "weights must be provided, one per symbol"}))
+            return
 
         # Clamp simulations to a reasonable range
         num_simulations = max(100, min(num_simulations, 5000))

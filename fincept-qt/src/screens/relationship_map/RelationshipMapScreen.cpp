@@ -6,6 +6,7 @@
 #include "python/PythonWorker.h"
 #include "screens/relationship_map/RelationshipGraphScene.h"
 #include "services/relationship_map/RelationshipMapService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QCheckBox>
@@ -26,6 +27,21 @@ using namespace fincept::relmap;
 
 static inline QString MF() {
     return QStringLiteral("font-family:'Consolas','Courier New',monospace;");
+}
+
+namespace fmt = fincept::ui::formatting;
+
+// NaN (JSON null) renders as "—"; money uses the reported currency and never
+// invents a "$" when none was reported.
+static QString rm_money(double v, const QString& cur, bool compact = false) {
+    if (!cur.isEmpty())
+        return fmt::format_money(v, cur, compact);
+    if (!std::isfinite(v))
+        return fmt::placeholder();
+    return compact ? fmt::format_compact(v) : QString::number(v, 'f', 2);
+}
+static QString rm_num(double v, int dp) {
+    return std::isfinite(v) ? QString::number(v, 'f', dp) : fmt::placeholder();
 }
 
 static constexpr int kSearchDebounceMs = 300;
@@ -780,14 +796,17 @@ void RelationshipMapScreen::on_node_selected() {
                 };
                 add_prop("Sector", current_data_.company.sector);
                 add_prop("Industry", current_data_.company.industry);
-                add_prop("Mkt Cap", QString("$%1B").arg(current_data_.company.market_cap / 1e9, 0, 'f', 1));
-                add_prop("Price", QString("$%1").arg(current_data_.company.current_price, 0, 'f', 2));
-                add_prop("P/E", QString::number(current_data_.company.pe_ratio, 'f', 1));
-                add_prop("ROE", QString("%1%").arg(current_data_.company.roe * 100, 0, 'f', 1));
-                add_prop("Growth", QString("%1%").arg(current_data_.company.revenue_growth * 100, 0, 'f', 1));
-                add_prop("Margins", QString("%1%").arg(current_data_.company.profit_margins * 100, 0, 'f', 1));
-                add_prop("Employees", QString::number(current_data_.company.employees));
-                add_prop("Signal", current_data_.valuation.action);
+                const auto& co = current_data_.company;
+                add_prop("Mkt Cap", rm_money(co.market_cap, co.currency, true));
+                add_prop("Price", rm_money(co.current_price, co.currency));
+                add_prop("P/E", rm_num(co.pe_ratio, 1));
+                add_prop("ROE", fmt::format_percent(co.roe * 100, 1));
+                add_prop("Growth", fmt::format_percent(co.revenue_growth * 100, 1));
+                add_prop("Margins", fmt::format_percent(co.profit_margins * 100, 1));
+                add_prop("Employees", co.employees > 0 ? QString::number(co.employees) : fmt::placeholder());
+                add_prop("Signal", current_data_.valuation.action.isEmpty()
+                                       ? fmt::placeholder() + QStringLiteral(" (no peer data)")
+                                       : current_data_.valuation.action);
             }
 
             // Try to match peer
@@ -798,11 +817,12 @@ void RelationshipMapScreen::on_node_selected() {
                         row->setStyleSheet(QString("color: %1; font-size: 10px; %2").arg(colors::TEXT_SECONDARY(), MF()));
                         layout->addWidget(row);
                     };
-                    add_prop("Mkt Cap", QString("$%1B").arg(p.market_cap / 1e9, 0, 'f', 1));
-                    add_prop("Price", QString("$%1").arg(p.current_price, 0, 'f', 2));
-                    add_prop("P/E", QString::number(p.pe_ratio, 'f', 1));
-                    add_prop("ROE", QString("%1%").arg(p.roe * 100, 0, 'f', 1));
-                    add_prop("Growth", QString("%1%").arg(p.revenue_growth * 100, 0, 'f', 1));
+                    // Peer rows carry no currency field — no symbol is assumed.
+                    add_prop("Mkt Cap", rm_money(p.market_cap, QString(), true));
+                    add_prop("Price", rm_money(p.current_price, QString()));
+                    add_prop("P/E", rm_num(p.pe_ratio, 1));
+                    add_prop("ROE", fmt::format_percent(p.roe * 100, 1));
+                    add_prop("Growth", fmt::format_percent(p.revenue_growth * 100, 1));
                     break;
                 }
             }
@@ -820,9 +840,14 @@ void RelationshipMapScreen::update_status_bar() {
         return;
     }
     int node_count = scene_->items().size(); // approximate
-    status_nodes_->setText(QString("%1 ITEMS | %2 PEERS | %3 HOLDERS")
+    // No peer data source is wired (Yahoo has no peers API) — say so rather
+    // than a bare "0 PEERS".
+    const QString peers_txt = current_data_.peers.isEmpty()
+                                  ? QStringLiteral("PEERS UNAVAILABLE")
+                                  : QString("%1 PEERS").arg(current_data_.peers.size());
+    status_nodes_->setText(QString("%1 ITEMS | %2 | %3 HOLDERS")
                                .arg(node_count)
-                               .arg(current_data_.peers.size())
+                               .arg(peers_txt)
                                .arg(current_data_.institutional_holders.size()));
     status_quality_->setText(QString("QUALITY: %1%").arg(current_data_.data_quality));
 }

@@ -7,6 +7,8 @@
 
 #include <QHash>
 #include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonValue>
 #include <QPointer>
 
 static constexpr int kStrategiesTtlSec = 10 * 60;
@@ -59,8 +61,21 @@ void BacktestingService::execute(const QString& provider, const QString& command
                 emit self->error_occurred(ctx, "Invalid JSON response");
                 return;
             }
+            // Providers report data/compute failures in-band as
+            // {"success": false, "error": "..."} with exit code 0. Surface those
+            // as errors so the screen never renders an empty/partial result.
+            const QJsonObject obj = doc.object();
+            const QJsonValue success = obj.value("success");
+            if (success.isBool() && !success.toBool()) {
+                QString msg = obj.value("error").toString();
+                if (msg.isEmpty())
+                    msg = obj.value("message").toString("Provider reported failure without an error message");
+                LOG_ERROR("Backtesting", QString("[%1] Provider error: %2").arg(ctx, msg));
+                emit self->error_occurred(ctx, msg);
+                return;
+            }
             LOG_INFO("Backtesting", QString("[%1] Result ready").arg(ctx));
-            emit self->result_ready(provider, command, doc.object());
+            emit self->result_ready(provider, command, obj);
         });
 }
 

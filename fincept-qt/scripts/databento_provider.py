@@ -1749,53 +1749,20 @@ class DatabentoProvider:
 
     def build_local_vol(self, symbol: str, spot: float, date: str = None,
                         duration_minutes: int = 5, r: float = 0.05) -> Dict[str, Any]:
-        """Dupire local vol from IV surface via finite differences."""
-        try:
-            vs = self.build_vol_surface(symbol, spot, date, duration_minutes, r)
-            if vs.get("error"):
-                return vs
-            opts = vs.get("options", [])
-            from collections import defaultdict
-            grid = defaultdict(dict)
-            strikes_set = set()
-            dtes_set = set()
-            for o in opts:
-                K, dte, iv = o["strike"], o["expiry_days"], o["iv"]
-                if iv > 0:
-                    grid[dte][K] = iv
-                    strikes_set.add(K)
-                    dtes_set.add(dte)
+        """Local volatility surface — not supported.
 
-            strikes = sorted(strikes_set)
-            dtes = sorted(dtes_set)
-            if len(strikes) < 3 or len(dtes) < 2:
-                return {"error": True, "message": "Not enough data for local vol",
-                        "timestamp": int(datetime.now().timestamp())}
-
-            local_vol = []
-            for dte in dtes:
-                T = dte / 365.0
-                row = []
-                for i, K in enumerate(strikes):
-                    iv = grid.get(dte, {}).get(K, 0)
-                    if iv <= 0:
-                        row.append(0.0)
-                        continue
-                    # Dupire approximation: local_vol^2 ≈ iv^2 + 2*iv*T*(dIV/dT)
-                    # Simplified: scale IV by moneyness
-                    moneyness = K / spot
-                    lv = iv * (1.0 + 0.1 * (moneyness - 1.0) ** 2)
-                    row.append(round(lv * 100, 4))
-                local_vol.append(row)
-
-            return {
-                "error": False, "type": "local_vol", "symbol": symbol,
-                "strikes": strikes, "expirations": dtes, "z": local_vol,
-                "timestamp": int(datetime.now().timestamp()),
-            }
-        except Exception as e:
-            return {"error": True, "message": f"Local vol failed: {e}",
-                    "timestamp": int(datetime.now().timestamp())}
+        A real Dupire local vol needs the calendar (dIV/dT) and strike
+        (dIV/dK, d2IV/dK2) derivatives of a smooth, arbitrage-free fitted IV
+        surface. The previous implementation scaled IV by an invented
+        moneyness factor (iv * (1 + 0.1*(m-1)^2)) and labelled it local vol;
+        that number is not local vol, so it is no longer produced.
+        """
+        return {"error": True,
+                "message": ("Local volatility is not supported: a Dupire local vol requires a "
+                            "fitted arbitrage-free IV surface, which this provider does not build. "
+                            "Use the implied volatility surface instead."),
+                "symbol": symbol,
+                "timestamp": int(datetime.now().timestamp())}
 
     def build_implied_dividend(self, symbol: str, spot: float, date: str = None,
                                duration_minutes: int = 5, r: float = 0.05) -> Dict[str, Any]:
@@ -1824,9 +1791,14 @@ class DatabentoProvider:
                     if K in puts.get(dte, {}):
                         C = calls[dte][K]
                         P = puts[dte][K]
+                        if C is None or P is None or not spot:
+                            continue  # missing quote -> no cell (None in z), not 0
                         impl_div = spot - C + P - K * math.exp(-r * T)
-                        if impl_div > -spot * 0.1:  # sanity
-                            div_map[(dte, K)] = max(0, round(impl_div, 4))
+                        # Outlier rejection for crossed/stale quotes only. A
+                        # moderately negative implied dividend is real (hard
+                        # to borrow / funding spread) and is reported as is.
+                        if impl_div > -spot * 0.1:
+                            div_map[(dte, K)] = round(impl_div, 4)
                             strikes_set.add(K)
                             dtes_set.add(dte)
 
@@ -1838,7 +1810,7 @@ class DatabentoProvider:
 
             z = []
             for dte in dtes:
-                row = [div_map.get((dte, K), 0.0) for K in strikes]
+                row = [div_map.get((dte, K)) for K in strikes]
                 z.append(row)
 
             return {
@@ -1897,7 +1869,7 @@ class DatabentoProvider:
 
             z = []
             for dte in dtes:
-                row = [grid.get(dte, {}).get(K, 0.0) for K in strikes]
+                row = [grid.get(dte, {}).get(K) for K in strikes]
                 z.append(row)
 
             return {
@@ -1909,41 +1881,83 @@ class DatabentoProvider:
             return {"error": True, "message": f"Liquidity heatmap failed: {e}",
                     "timestamp": int(datetime.now().timestamp())}
 
+    @staticmethod
+    def _record_day(rec: Dict[str, Any]) -> Optional[str]:
+        """Trading day (YYYY-MM-DD) of an OHLCV record, or None if unknown."""
+        d = rec.get("date")
+        if d:
+            return str(d)[:10]
+        ts = rec.get("ts_event")
+        try:
+            ns = int(ts)
+            return datetime.utcfromtimestamp(ns / 1e9).strftime("%Y-%m-%d")
+        except (TypeError, ValueError):
+            return None
+
+    def _closes_by_day(self, records: List[Dict[str, Any]]) -> Dict[str, float]:
+        out = {}
+        for rec in records or []:
+            day = self._record_day(rec)
+            c = rec.get("close")
+            if day and isinstance(c, (int, float)) and c > 0:
+                out[day] = float(c)
+        return out
+
+    def _aligned_closes(self, data: Dict[str, Any], symbols: List[str],
+                        ref_symbol: str = None, as_of: str = None):
+        """Closes for `symbols` on one common trading day.
+
+        The day is `as_of` if given, otherwise the latest day the reference
+        symbol (default: symbols[0]) printed. A symbol with no close on that
+        day is None — never a stale close from another day and never 0.
+        Returns (as_of_day_or_None, [close_or_None, ...]).
+        """
+        series = {sym: self._closes_by_day(data.get("data", {}).get(sym, []))
+                  for sym in symbols}
+        if as_of is None:
+            ref = series.get(ref_symbol or symbols[0], {})
+            if not ref:
+                return None, [None] * len(symbols)
+            as_of = max(ref.keys())
+        return as_of, [series[sym].get(as_of) for sym in symbols]
+
     def build_commodity_vol(self, root_symbol: str = "CL",
                             num_contracts: int = 6) -> Dict[str, Any]:
-        """Commodity vol surface from futures price returns."""
+        """Realized vol of each continuous futures contract over rolling windows.
+
+        Rows are trading-day windows, columns are contract positions
+        (1 = front month). A cell without enough history is None.
+        """
         try:
             symbols = [f"{root_symbol}.c.{i}" for i in range(num_contracts)]
-            data = self.get_futures_data(symbols, days=30, schema="ohlcv-1d")
+            expirations = [5, 10, 20, 30]  # rolling windows, in trading days
+            # 30 trading days + 1 needs ~45 calendar days; fetch with margin
+            # for holidays so the 30-day row is actually computable.
+            data = self.get_futures_data(symbols, days=70, schema="ohlcv-1d")
             if data.get("error"):
                 return data
 
-            strikes = []  # use contract month as proxy
-            expirations = [5, 10, 20, 30]  # rolling windows
+            strikes = [float(i + 1) for i in range(num_contracts)]  # contract position
             z = []
             for window in expirations:
                 row = []
-                for i, sym in enumerate(symbols):
-                    records = data.get("data", {}).get(sym, [])
-                    if len(records) < window + 1:
-                        row.append(0.0)
+                for sym in symbols:
+                    by_day = self._closes_by_day(data.get("data", {}).get(sym, []))
+                    closes = [by_day[d] for d in sorted(by_day)]
+                    if len(closes) < window + 1:
+                        row.append(None)
                         continue
-                    closes = [r.get("close", 0) for r in records[-window - 1:]]
-                    closes = [c for c in closes if c > 0]
-                    if len(closes) < 2:
-                        row.append(0.0)
-                        continue
+                    closes = closes[-window - 1:]
                     returns = [math.log(closes[j] / closes[j - 1])
-                               for j in range(1, len(closes)) if closes[j - 1] > 0]
-                    if returns:
-                        vol = (sum(r * r for r in returns) / len(returns)) ** 0.5
-                        ann_vol = vol * math.sqrt(252) * 100
-                        row.append(round(ann_vol, 2))
-                    else:
-                        row.append(0.0)
-                    if i >= len(strikes):
-                        strikes.append(float(i + 1))
+                               for j in range(1, len(closes))]
+                    vol = (sum(r * r for r in returns) / len(returns)) ** 0.5
+                    row.append(round(vol * math.sqrt(252) * 100, 2))
                 z.append(row)
+
+            if all(v is None for row in z for v in row):
+                return {"error": True,
+                        "message": f"Not enough {root_symbol} futures history for realized vol",
+                        "timestamp": int(datetime.now().timestamp())}
 
             return {
                 "error": False, "type": "commodity_vol",
@@ -1956,54 +1970,57 @@ class DatabentoProvider:
                     "timestamp": int(datetime.now().timestamp())}
 
     def build_crack_spread(self, num_contracts: int = 6) -> Dict[str, Any]:
-        """Crack spread: gasoline/heating oil vs crude oil."""
-        try:
-            products = {"CL": "Crude", "RB": "Gasoline", "HO": "Heating Oil"}
-            all_data = {}
-            for root in products:
-                symbols = [f"{root}.c.{i}" for i in range(num_contracts)]
-                data = self.get_futures_data(symbols, days=1, schema="ohlcv-1d")
-                if not data.get("error"):
-                    prices = []
-                    for i, sym in enumerate(symbols):
-                        records = data.get("data", {}).get(sym, [])
-                        if records:
-                            prices.append(records[-1].get("close", 0))
-                        else:
-                            prices.append(0)
-                    all_data[root] = prices
+        """Crack spreads in $/bbl per contract month, all legs on one trading day.
 
-            if "CL" not in all_data:
+        Rows: RB-CL 1:1 gasoline crack, HO-CL 1:1 heating-oil crack, and the
+        3-2-1 crack ((2*RB*42 + 1*HO*42 - 3*CL) / 3). RB/HO are quoted in
+        $/gal, CL in $/bbl. A cell whose legs did not all print that day is None.
+        """
+        try:
+            roots = ["CL", "RB", "HO"]
+            symbols = {root: [f"{root}.c.{i}" for i in range(num_contracts)] for root in roots}
+            # A one-day window is empty on Mondays/holidays; fetch a short
+            # lookback and use the latest day crude printed.
+            merged = {"data": {}}
+            for root in roots:
+                data = self.get_futures_data(symbols[root], days=10, schema="ohlcv-1d")
+                if not data.get("error"):
+                    merged["data"].update(data.get("data", {}))
+
+            as_of, cl = self._aligned_closes(merged, symbols["CL"])
+            if as_of is None:
                 return {"error": True, "message": "Could not fetch crude oil data",
                         "timestamp": int(datetime.now().timestamp())}
+            _, rb = self._aligned_closes(merged, symbols["RB"], as_of=as_of)
+            _, ho = self._aligned_closes(merged, symbols["HO"], as_of=as_of)
 
-            spread_types = []
-            months = list(range(1, num_contracts + 1))
-            z = []
+            def crack(i, rb_w, ho_w, cl_w):
+                if cl[i] is None:
+                    return None
+                if rb_w and rb[i] is None:
+                    return None
+                if ho_w and ho[i] is None:
+                    return None
+                prod = (rb_w * (rb[i] or 0.0) + ho_w * (ho[i] or 0.0)) * 42.0
+                return round((prod - cl_w * cl[i]) / cl_w, 2)
 
-            cl_prices = all_data.get("CL", [0] * num_contracts)
-            for product, name in [("RB", "3-2-1 Gasoline"), ("HO", "3-2-1 Heating")]:
-                if product in all_data:
-                    spread_types.append(name)
-                    row = []
-                    for i in range(num_contracts):
-                        cl_p = cl_prices[i] if i < len(cl_prices) else 0
-                        prod_p = all_data[product][i] if i < len(all_data[product]) else 0
-                        if cl_p > 0 and prod_p > 0:
-                            # Crack spread in $/barrel (approx: product*42 - crude)
-                            spread = prod_p * 42 - cl_p
-                            row.append(round(spread, 2))
-                        else:
-                            row.append(0.0)
-                    z.append(row)
-
-            if not z:
-                return {"error": True, "message": "No crack spread data",
+            spread_types = ["RB-CL 1:1 Gasoline Crack", "HO-CL 1:1 Heating Oil Crack", "3-2-1 Crack"]
+            z = [
+                [crack(i, 1, 0, 1) for i in range(num_contracts)],
+                [crack(i, 0, 1, 1) for i in range(num_contracts)],
+                [crack(i, 2, 1, 3) for i in range(num_contracts)],
+            ]
+            keep = [k for k, row in enumerate(z) if any(v is not None for v in row)]
+            if not keep:
+                return {"error": True, "message": "No crack spread data (product legs missing)",
                         "timestamp": int(datetime.now().timestamp())}
 
             return {
                 "error": False, "type": "crack_spread",
-                "spread_types": spread_types, "contract_months": months, "z": z,
+                "spread_types": [spread_types[k] for k in keep],
+                "contract_months": list(range(1, num_contracts + 1)),
+                "z": [z[k] for k in keep],
+                "as_of": as_of,
                 "timestamp": int(datetime.now().timestamp()),
             }
         except Exception as e:
@@ -2021,7 +2038,10 @@ class DatabentoProvider:
                 return data_result
 
             raw_data = data_result.get("data", {})
-            scenarios = ["COVID Crash", "Rate Shock", "Vol Spike", "Flash Crash", "Avg Drawdown"]
+            # Labels describe exactly what is computed from the fetched window —
+            # these are historical tail statistics, not named macro scenarios.
+            scenarios = ["Sum of 5 worst days", "Sum of 10 worst days", "Worst day",
+                         "1st percentile day", "Avg of worst 5% days"]
             portfolios = [s for s in symbols if s in raw_data]
             if not portfolios:
                 return {"error": True, "message": "No OHLCV data for stress test",
@@ -2034,12 +2054,12 @@ class DatabentoProvider:
                     records = raw_data.get(sym, [])
                     closes = [r.get("close", 0) for r in records if r.get("close", 0) > 0]
                     if len(closes) < 10:
-                        row.append(0.0)
+                        row.append(None)
                         continue
                     returns = [closes[j] / closes[j - 1] - 1
                                for j in range(1, len(closes)) if closes[j - 1] > 0]
                     if not returns:
-                        row.append(0.0)
+                        row.append(None)
                         continue
                     returns.sort()
                     n = len(returns)
@@ -2067,91 +2087,65 @@ class DatabentoProvider:
                     "timestamp": int(datetime.now().timestamp())}
 
     def build_yield_curve(self) -> Dict[str, Any]:
-        """Yield curve from treasury futures (ZF 5Y, ZN 10Y, ZB 30Y)."""
-        try:
-            # Fetch treasury futures at multiple months
-            instruments = {
-                "ZF": {"maturity": 60, "name": "5Y"},
-                "ZN": {"maturity": 120, "name": "10Y"},
-                "ZB": {"maturity": 360, "name": "30Y"},
-            }
-            time_points = list(range(1, 7))  # contract months 1-6
-            maturities = []
-            z = []
+        """Yield curve from treasury futures — not supported.
 
-            for root, info in instruments.items():
-                maturities.append(info["maturity"])
-                symbols = [f"{root}.c.{i}" for i in range(6)]
-                data = self.get_futures_data(symbols, days=5, schema="ohlcv-1d")
-                row = []
-                if data.get("error"):
-                    row = [0.0] * 6
-                else:
-                    for i, sym in enumerate(symbols):
-                        records = data.get("data", {}).get(sym, [])
-                        if records:
-                            price = records[-1].get("close", 100)
-                            # Approximate yield from price: y ≈ (100 - price) / maturity * 1200
-                            # For treasury futures, price is in 32nds of par
-                            approx_yield = max(0, (100 - price / 100) * 2) if price > 50 else 0
-                            row.append(round(approx_yield, 4))
-                        else:
-                            row.append(0.0)
-                z.append(row)
+        A Treasury futures price does not map to a yield without the
+        cheapest-to-deliver bond and its conversion factor, which this
+        provider does not have. The previous `(100 - price/100) * 2`
+        approximation produced meaningless numbers and has been removed.
+        """
+        return {"error": True,
+                "message": ("Yield curve from Treasury futures is not supported: implied yields "
+                            "require the cheapest-to-deliver bond and conversion factor. "
+                            "Use a Treasury yield source (e.g. FRED/Treasury) instead."),
+                "timestamp": int(datetime.now().timestamp())}
 
-            return {
-                "error": False, "type": "yield_curve",
-                "time_points": time_points, "maturities": maturities, "z": z,
-                "timestamp": int(datetime.now().timestamp()),
-            }
-        except Exception as e:
-            return {"error": True, "message": f"Yield curve failed: {e}",
-                    "timestamp": int(datetime.now().timestamp())}
+    def _fed_funds_monthly_rates(self, n: int):
+        """Implied average fed funds rate per ZQ contract month (100 - price).
+
+        Returns (as_of_day_or_None, [rate_or_None] * n); ZQ.c.0 = current month.
+        """
+        symbols = [f"ZQ.c.{i}" for i in range(n)]
+        data = self.get_futures_data(symbols, days=10, schema="ohlcv-1d")
+        if data.get("error"):
+            return data, None, None
+        as_of, closes = self._aligned_closes(data, symbols)
+        rates = [round(100.0 - c, 4) if c is not None else None for c in closes]
+        return None, as_of, rates
 
     def build_forward_rate(self) -> Dict[str, Any]:
-        """Forward rate surface from fed funds futures (ZQ)."""
+        """Forward fed funds rates from 30-day fed funds futures (ZQ).
+
+        Each ZQ contract settles on the average fed funds rate of its month,
+        so the forward rate for a period is the average of the implied
+        monthly rates it spans. Cells needing an unavailable month are None.
+        """
         try:
-            symbols = [f"ZQ.c.{i}" for i in range(12)]
-            data = self.get_futures_data(symbols, days=5, schema="ohlcv-1d")
-            if data.get("error"):
-                return data
-
-            # Fed funds futures: price = 100 - implied rate
-            rates = []
-            for i, sym in enumerate(symbols):
-                records = data.get("data", {}).get(sym, [])
-                if records:
-                    price = records[-1].get("close", 95)
-                    rate = max(0, 100 - price) if price < 100 else max(0, 100 - price / 1e7)
-                    rates.append(round(rate, 4))
-                else:
-                    rates.append(0.0)
-
-            # Build forward rate surface: start_tenor x forward_period
             start_tenors = [1, 3, 6, 9, 12]
             forward_periods = [1, 3, 6]
+            n = max(start_tenors) + max(forward_periods) - 1  # months needed
+            err, as_of, rates = self._fed_funds_monthly_rates(n)
+            if err:
+                return err
+            if as_of is None or all(r is None for r in rates):
+                return {"error": True, "message": "No fed funds futures (ZQ) prices available",
+                        "timestamp": int(datetime.now().timestamp())}
+
             z = []
             for start in start_tenors:
                 row = []
                 for fwd in forward_periods:
-                    idx_start = min(start - 1, len(rates) - 1)
-                    idx_end = min(start + fwd - 1, len(rates) - 1)
-                    if idx_start < len(rates) and idx_end < len(rates):
-                        r_start = rates[idx_start]
-                        r_end = rates[idx_end]
-                        if r_start > 0 and r_end > 0:
-                            fwd_rate = ((r_end * (idx_end + 1) - r_start * (idx_start + 1))
-                                        / max(1, fwd))
-                            row.append(round(max(0, fwd_rate), 4))
-                        else:
-                            row.append(0.0)
+                    window = rates[start - 1:start - 1 + fwd]
+                    if len(window) < fwd or any(r is None for r in window):
+                        row.append(None)
                     else:
-                        row.append(0.0)
+                        row.append(round(sum(window) / fwd, 4))
                 z.append(row)
 
             return {
                 "error": False, "type": "forward_rate",
                 "start_tenors": start_tenors, "forward_periods": forward_periods, "z": z,
+                "as_of": as_of,
                 "timestamp": int(datetime.now().timestamp()),
             }
         except Exception as e:
@@ -2159,43 +2153,26 @@ class DatabentoProvider:
                     "timestamp": int(datetime.now().timestamp())}
 
     def build_rate_path(self) -> Dict[str, Any]:
-        """Monetary policy rate path from fed funds and eurodollar futures."""
-        try:
-            # ZQ = fed funds, 6E = euro (ECB proxy), 6J = yen (BOJ proxy)
-            cb_map = {
-                "Fed": {"root": "ZQ", "current_rate": 5.25},
-                "ECB": {"root": "6E", "current_rate": 4.50},
-                "BOJ": {"root": "6J", "current_rate": 0.10},
-            }
-            central_banks = []
-            meetings_ahead = list(range(1, 9))  # 8 meetings ahead
-            z = []
+        """Market-implied Fed policy path from fed funds futures (ZQ).
 
-            for cb_name, info in cb_map.items():
-                root = info["root"]
-                symbols = [f"{root}.c.{i}" for i in range(8)]
-                data = self.get_futures_data(symbols, days=1, schema="ohlcv-1d")
-                row = []
-                if data.get("error"):
-                    row = [info["current_rate"]] * 8
-                else:
-                    for i, sym in enumerate(symbols):
-                        records = data.get("data", {}).get(sym, [])
-                        if records and root == "ZQ":
-                            price = records[-1].get("close", 95)
-                            implied = max(0, 100 - price) if price < 100 else max(0, 100 - price / 1e7)
-                            row.append(round(implied, 4))
-                        elif records:
-                            price = records[-1].get("close", 0)
-                            row.append(round(price, 4) if price > 0 else info["current_rate"])
-                        else:
-                            row.append(info["current_rate"])
-                central_banks.append(cb_name)
-                z.append(row)
+        Only the Fed is produced: currency futures (6E/6J) are FX rates, not
+        policy-rate expectations, so ECB/BOJ rows cannot be derived from them.
+        Columns are ZQ contract months ahead (not FOMC meetings).
+        """
+        try:
+            months_ahead = list(range(1, 9))
+            err, as_of, rates = self._fed_funds_monthly_rates(len(months_ahead))
+            if err:
+                return err
+            if as_of is None or all(r is None for r in rates):
+                return {"error": True, "message": "No fed funds futures (ZQ) prices available",
+                        "timestamp": int(datetime.now().timestamp())}
 
             return {
                 "error": False, "type": "rate_path",
-                "central_banks": central_banks, "meetings_ahead": meetings_ahead, "z": z,
+                "central_banks": ["Fed"], "meetings_ahead": months_ahead, "z": [rates],
+                "axis_note": "meetings_ahead = ZQ contract months ahead",
+                "as_of": as_of,
                 "timestamp": int(datetime.now().timestamp()),
             }
         except Exception as e:
@@ -2203,44 +2180,45 @@ class DatabentoProvider:
                     "timestamp": int(datetime.now().timestamp())}
 
     def build_fx_forward_points(self) -> Dict[str, Any]:
-        """FX forward points from currency futures term structure."""
+        """FX forward points of each futures month relative to the front month.
+
+        Points are quoted in pips of the market pair: 0.0001 for EURUSD/GBPUSD,
+        0.01 for USDJPY. 6J is quoted USD per JPY, so USDJPY = 1 / 6J.
+        The basis is the front-month future, not spot. Missing months are None.
+        """
         try:
+            # root -> (pair name, invert futures quote?, pip size)
             pairs = {
-                "6E": "EURUSD",
-                "6J": "USDJPY",
-                "6B": "GBPUSD",
+                "6E": ("EURUSD", False, 0.0001),
+                "6J": ("USDJPY", True, 0.01),
+                "6B": ("GBPUSD", False, 0.0001),
             }
             pair_names = []
             tenors = list(range(1, 7))  # contract months 1-6
             z = []
 
-            for root, pair_name in pairs.items():
-                symbols = [f"{root}.c.{i}" for i in range(6)]
-                data = self.get_futures_data(symbols, days=1, schema="ohlcv-1d")
-                row = []
-                spot_price = None
+            for root, (pair_name, invert, pip) in pairs.items():
+                symbols = [f"{root}.c.{i}" for i in range(len(tenors))]
+                data = self.get_futures_data(symbols, days=10, schema="ohlcv-1d")
                 if data.get("error"):
-                    row = [0.0] * 6
-                else:
-                    for i, sym in enumerate(symbols):
-                        records = data.get("data", {}).get(sym, [])
-                        if records:
-                            price = records[-1].get("close", 0)
-                            if i == 0:
-                                spot_price = price
-                            if spot_price and spot_price > 0 and price > 0:
-                                fwd_pts = round((price - spot_price) * 10000, 2)
-                                row.append(fwd_pts)
-                            else:
-                                row.append(0.0)
-                        else:
-                            row.append(0.0)
+                    continue
+                as_of, closes = self._aligned_closes(data, symbols)
+                if as_of is None or closes[0] is None:
+                    continue
+                quotes = [(1.0 / c if invert else c) if c is not None else None for c in closes]
+                front = quotes[0]
+                row = [round((q - front) / pip, 2) if q is not None else None for q in quotes]
                 pair_names.append(pair_name)
                 z.append(row)
+
+            if not z:
+                return {"error": True, "message": "No currency futures data for FX forward points",
+                        "timestamp": int(datetime.now().timestamp())}
 
             return {
                 "error": False, "type": "fx_forward_points",
                 "pairs": pair_names, "tenors": tenors, "z": z,
+                "basis": "front-month future",
                 "timestamp": int(datetime.now().timestamp()),
             }
         except Exception as e:
@@ -2531,27 +2509,26 @@ class DatabentoProvider:
             for root in root_symbols:
                 symbols = [f"{root}.c.{i}" for i in range(num_contracts)]
 
-                # Fetch recent OHLCV
-                data = self.get_futures_data(symbols, days=1, schema="ohlcv-1d")
+                # Fetch a short lookback (a one-day window is empty on
+                # Mondays/holidays) and read every month on the same day.
+                data = self.get_futures_data(symbols, days=10, schema="ohlcv-1d")
                 if data.get("error"):
                     # Skip this commodity on error but continue with others
                     continue
 
+                as_of, closes = self._aligned_closes(data, symbols)
+                if as_of is None:
+                    continue
                 curve = []
                 for i, sym in enumerate(symbols):
-                    if sym in data.get("data", {}):
-                        records = data["data"][sym]
-                        if records:
-                            latest = records[-1]
-                            curve.append({
-                                "price": latest.get("close", 0),
-                                "volume": latest.get("volume", 0),
-                                "contract_month": i,
-                            })
-                    else:
-                        curve.append({"price": 0, "volume": 0, "contract_month": i})
+                    vol = None
+                    for rec in data.get("data", {}).get(sym, []):
+                        if self._record_day(rec) == as_of and rec.get("volume") is not None:
+                            vol = rec.get("volume")
+                    curve.append({"price": closes[i], "volume": vol,
+                                  "contract_month": i, "as_of": as_of})
 
-                if any(c["price"] > 0 for c in curve):
+                if any(c["price"] is not None for c in curve):
                     term_structure[root] = curve
 
             if not term_structure:

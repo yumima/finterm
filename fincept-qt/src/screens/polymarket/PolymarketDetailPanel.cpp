@@ -14,6 +14,8 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
+#include <cmath>
+
 namespace fincept::screens::polymarket {
 
 using namespace fincept::ui;
@@ -628,7 +630,10 @@ void PolymarketDetailPanel::set_market(const PredictionMarket& market) {
 
     for (int i = 0; i < market.outcomes.size(); ++i) {
         const auto& outcome = market.outcomes[i];
-        const double pct = qBound(0.0, outcome.price, 1.0);
+        // NaN price = unavailable: no bar fill, "—" labels (qBound would clamp
+        // NaN to 1.0 and draw a fabricated 100%).
+        const bool has_price = std::isfinite(outcome.price);
+        const double pct = has_price ? qBound(0.0, outcome.price, 1.0) : 0.0;
         const int pct_int = qRound(pct * 100.0);
 
         QColor bar_color;
@@ -655,13 +660,13 @@ void PolymarketDetailPanel::set_market(const PredictionMarket& market) {
             QString("color: %1; font-size: 10px; font-weight: 600; background: transparent;")
                 .arg(colors::TEXT_PRIMARY()));
 
-        auto* pct_lbl = new QLabel(QString("%1%").arg(pct_int), top_line);
+        auto* pct_lbl = new QLabel(has_price ? QString("%1%").arg(pct_int) : QStringLiteral("—"), top_line);
         pct_lbl->setStyleSheet(
             QString("color: %1; font-size: 11px; font-weight: 700; background: transparent;")
                 .arg(bar_color.name()));
 
         // Full formatted price (right side)
-        auto* price_lbl = new QLabel(presentation_.format_price(pct), top_line);
+        auto* price_lbl = new QLabel(presentation_.format_price(outcome.price), top_line);
         price_lbl->setStyleSheet(
             QString("color: %1; font-size: 10px; font-weight: 600; background: transparent;")
                 .arg(colors::TEXT_SECONDARY()));

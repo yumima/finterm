@@ -77,6 +77,23 @@ def get_insider_transactions(ticker: str, limit: int = 25) -> Dict[str, Any]:
         return {"error": EdgarError("get_insider_transactions", str(e), traceback.format_exc()).to_dict()}
 
 
+_TXN_TYPES = {
+    "P": "Buy",
+    "S": "Sell",
+    "M": "Option Exercise",
+    "F": "Tax Withholding",
+    "A": "Grant/Award",
+    "G": "Gift",
+}
+
+
+def _txn_type(code):
+    """Form 4 transaction code → label. Only P/S are open-market buys/sells."""
+    if not code:
+        return None
+    return _TXN_TYPES.get(code, "Other")
+
+
 def get_insider_transactions_detailed(ticker: str, limit: int = 25) -> Dict[str, Any]:
     """
     Get detailed insider transactions with full transaction info
@@ -114,12 +131,15 @@ def get_insider_transactions_detailed(ticker: str, limit: int = 25) -> Dict[str,
                     continue
 
                 # Extract owner info
+                # Unknown role flags stay None — absence of the attribute is
+                # "not reported", not "not a director/officer".
+                _owner = getattr(form4, 'owner', None)
                 owner_info = {
-                    "name": form4.owner.name if hasattr(form4, 'owner') and hasattr(form4.owner, 'name') else None,
-                    "is_director": form4.owner.is_director if hasattr(form4, 'owner') and hasattr(form4.owner, 'is_director') else False,
-                    "is_officer": form4.owner.is_officer if hasattr(form4, 'owner') and hasattr(form4.owner, 'is_officer') else False,
-                    "is_ten_percent_owner": form4.owner.is_ten_percent_owner if hasattr(form4, 'owner') and hasattr(form4.owner, 'is_ten_percent_owner') else False,
-                    "officer_title": form4.owner.officer_title if hasattr(form4, 'owner') and hasattr(form4.owner, 'officer_title') else None,
+                    "name": getattr(_owner, 'name', None),
+                    "is_director": getattr(_owner, 'is_director', None),
+                    "is_officer": getattr(_owner, 'is_officer', None),
+                    "is_ten_percent_owner": getattr(_owner, 'is_ten_percent_owner', None),
+                    "officer_title": getattr(_owner, 'officer_title', None),
                 }
 
                 # Extract transactions
@@ -131,7 +151,9 @@ def get_insider_transactions_detailed(ticker: str, limit: int = 25) -> Dict[str,
                             "transaction_code": txn.transaction_code if hasattr(txn, 'transaction_code') else None,
                             "shares": float(txn.shares) if hasattr(txn, 'shares') and txn.shares else None,
                             "price_per_share": float(txn.price_per_share) if hasattr(txn, 'price_per_share') and txn.price_per_share else None,
-                            "transaction_type": "Buy" if hasattr(txn, 'transaction_code') and txn.transaction_code in ['P', 'M'] else "Sell" if hasattr(txn, 'transaction_code') and txn.transaction_code in ['S', 'F'] else "Other",
+                            # Only open-market P/S are buys/sells. M (option exercise)
+                            # and F (tax withholding) are not discretionary trades.
+                            "transaction_type": _txn_type(getattr(txn, 'transaction_code', None)),
                             "ownership_form": txn.ownership_form if hasattr(txn, 'ownership_form') else None,
                             "shares_owned_after": float(txn.shares_owned_after) if hasattr(txn, 'shares_owned_after') and txn.shares_owned_after else None,
                         }
@@ -208,10 +230,12 @@ def get_insider_summary(ticker: str, limit: int = 50) -> Dict[str, Any]:
                         code = txn.transaction_code
                         shares = float(txn.shares) if txn.shares else 0
 
-                        if code in ['P', 'M']:  # Purchase
+                        # Open-market purchase (P) / sale (S) only. M = option
+                        # exercise and F = tax withholding are not buy/sell signals.
+                        if code == 'P':
                             buys += 1
                             buy_volume += shares
-                        elif code in ['S', 'F']:  # Sale
+                        elif code == 'S':
                             sells += 1
                             sell_volume += shares
 

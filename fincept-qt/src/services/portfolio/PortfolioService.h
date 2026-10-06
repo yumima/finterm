@@ -14,6 +14,8 @@
 #include <QPointer>
 #include <QTimer>
 
+#include <limits>
+
 namespace fincept::services {
 
 /// Singleton service managing portfolio data, live quotes, and computed metrics.
@@ -95,6 +97,11 @@ class PortfolioService : public QObject {
     /// Fetch 30-day daily closes for @p symbols and compute pairwise Pearson
     /// correlation matrix. Result emitted via correlation_computed().
     void fetch_correlation(const QStringList& symbols);
+    /// Last emitted correlation matrix ("A|B" → Pearson r; NaN = not
+    /// computable), for views constructed after the signal fired.
+    /// correlation_ready() is false while a fetch is in flight / never ran.
+    const QHash<QString, double>& last_correlation() const { return last_correlation_; }
+    bool correlation_ready() const { return correlation_ready_; }
 
     // ── Benchmark data ───────────────────────────────────────────────────────
     /// Fetch daily closes for an arbitrary benchmark ticker (defaults to SPY
@@ -141,10 +148,13 @@ class PortfolioService : public QObject {
     /// Fetch the current 10-year Treasury yield (^TNX via the quote daemon).
     /// Result is cached 24h in SettingsRepository. Emits risk_free_rate_loaded(rate).
     void fetch_risk_free_rate();
-    /// Last known annual risk-free rate as a decimal (default 4% until the
-    /// first fetch lands). The one hurdle every Sharpe/Sortino in the app
-    /// should use — five call sites used to hardcode 4%, 5% or 8% instead.
+    /// Last successfully fetched annual risk-free rate as a decimal, or NaN
+    /// when no rate has ever been fetched (callers must then show Sharpe/
+    /// Sortino as unavailable — never assume a rate). The one hurdle every
+    /// Sharpe/Sortino in the app should use.
     double risk_free_rate() const { return rf_rate_; }
+    /// When risk_free_rate() was fetched (invalid when NaN / never fetched).
+    QDateTime risk_free_rate_as_of() const { return rf_as_of_; }
 
     // ── Metrics (async computation) ──────────────────────────────────────────
     void compute_metrics(const portfolio::PortfolioSummary& summary);
@@ -257,9 +267,12 @@ class PortfolioService : public QObject {
     void symbol_intraday_loaded(QString symbol, QVector<qint64> timestamps_ms,
                                 QVector<double> closes);
     /// 1-minute aggregate-NAV intraday series for a portfolio. Built by
-    /// summing (qty × close) across all holdings at each shared timestamp.
+    /// summing (qty × close × FX) across all holdings at each shared
+    /// timestamp. Empty when unavailable; `unavailable_reason` then says why
+    /// (a holding without bars, an unknown currency/FX rate) — empty when the
+    /// series is complete or there is simply nothing to fetch.
     void portfolio_intraday_loaded(QString portfolio_id, QVector<qint64> timestamps_ms,
-                                   QVector<double> navs);
+                                   QVector<double> navs, QString unavailable_reason);
 
     /// MV-weighted analyst fundamentals for the whole portfolio.
     void portfolio_fundamentals_loaded(QString portfolio_id,
@@ -333,8 +346,15 @@ class PortfolioService : public QObject {
     QStringList spy_dates_cache_;
     QVector<double> spy_closes_cache_;
 
+    // Last correlation_computed() payload (see last_correlation()).
+    QHash<QString, double> last_correlation_;
+    bool correlation_ready_ = false;
+
     // ── Risk-free rate cache (annual decimal, e.g. 0.043) ────────────────────
-    double rf_rate_ = 0.04; // default 4% until FRED responds
+    // NaN until a real ^TNX value is fetched (or the last persisted one is
+    // loaded). A silent 4% default used to feed every Sharpe/Sortino.
+    double rf_rate_ = std::numeric_limits<double>::quiet_NaN();
+    QDateTime rf_as_of_; // fetch time of rf_rate_ (persisted as portfolio.rf_rate_timestamp)
 
     // ── Backfill state ───────────────────────────────────────────────────────
     // Per-portfolio guard so compute_metrics doesn't kick off backfill on
@@ -431,6 +451,7 @@ class PortfolioService : public QObject {
     // symbol fetch can't cancel a portfolio fetch and vice versa.
     qint64 symbol_intraday_epoch_    = 0;
     qint64 portfolio_intraday_epoch_ = 0;
+    qint64 correlation_epoch_        = 0; // newest fetch_correlation request
 };
 
 } // namespace fincept::services

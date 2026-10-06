@@ -1487,9 +1487,13 @@ class ZiplineProvider(BacktestingProviderBase):
                 continue
             df = data[sym]
             close = np.asarray(df['close'])
-            high = np.asarray(df['high']) if 'high' in df.columns else close
-            low = np.asarray(df['low']) if 'low' in df.columns else close
-            volume = np.asarray(df['volume']) if 'volume' in df.columns else np.ones_like(close)
+            missing_cols = [c for c in ('high', 'low', 'volume') if c not in df.columns]
+            if missing_cols:
+                raise RuntimeError(f'Market data for {sym} is missing {", ".join(missing_cols)}; '
+                                   f'cannot compute {indicator}')
+            high = np.asarray(df['high'])
+            low = np.asarray(df['low'])
+            volume = np.asarray(df['volume'])
             period = int(params.get('period', 14))
 
             if indicator == 'ma' or indicator == 'sma':
@@ -1636,38 +1640,19 @@ class ZiplineProvider(BacktestingProviderBase):
     # ========================================================================
 
     def _load_close_series(self, symbols, start_date, end_date):
-        """Load close price as pd.Series. Returns (close_series, using_synthetic)."""
-        import pandas as pd
+        """Load close price as pd.Series. Raises RuntimeError if unavailable."""
         from zl_data import fetch_yfinance_data
 
-        sym = symbols[0] if isinstance(symbols, list) else symbols
         if isinstance(symbols, str):
             symbols = [symbols]
+        if not symbols:
+            raise RuntimeError('Market data unavailable: no symbols specified')
+        sym = symbols[0]
 
         data = fetch_yfinance_data(symbols, start_date, end_date)
         if sym in data and len(data[sym]) > 0:
-            df = data[sym]
-            close = df['close']
-            # Check if synthetic by seeing if the fetch returned "real" data
-            # (synthetic data has a very specific seed pattern, but we can't
-            # reliably distinguish - just return False as best guess)
-            return close, False
-        # Fallback: generate synthetic GBM
-        print(f'[ZL] WARNING: Using SYNTHETIC data for {sym}. '
-              f'Install yfinance (pip install yfinance) for real data.', file=sys.stderr)
-        dates = pd.bdate_range(start=start_date, end=end_date, tz='UTC')
-        import numpy as np
-        # Use deterministic seed: sum of char codes (NOT hash() which is randomized per-run)
-        seed = sum(ord(c) for c in sym) % (2**31)
-        np.random.seed(seed)
-        price = 100.0
-        prices = []
-        for _ in range(len(dates)):
-            ret = np.random.normal(0.0003, 0.015)
-            price *= (1 + ret)
-            prices.append(price)
-        close = pd.Series(prices, index=dates, name='close')
-        return close, True
+            return data[sym]['close']
+        raise RuntimeError(f'Market data unavailable for {sym}')
 
     # ========================================================================
     # Indicator Signals
@@ -1688,7 +1673,7 @@ class ZiplineProvider(BacktestingProviderBase):
             mode = request.get('mode', 'crossover_signals')
             params = request.get('parameters', {})
 
-            close_series, synthetic = self._load_close_series(symbols, start_date, end_date)
+            close_series = self._load_close_series(symbols, start_date, end_date)
             close = np.asarray(close_series, dtype=float)
             dates = [str(d.date()) if hasattr(d, 'date') else str(d) for d in close_series.index]
             n = len(close)
@@ -1791,7 +1776,6 @@ class ZiplineProvider(BacktestingProviderBase):
                     'exitCount': int(exits.sum()),
                     'entries': entry_dates,
                     'exits': exit_dates,
-                    'synthetic': synthetic,
                 }
             }
 
@@ -1816,7 +1800,7 @@ class ZiplineProvider(BacktestingProviderBase):
             params = request.get('parameters', {})
             seed = int(params.get('seed', 42))
 
-            close_series, synthetic = self._load_close_series(symbols, start_date, end_date)
+            close_series = self._load_close_series(symbols, start_date, end_date)
             close = np.asarray(close_series, dtype=float)
             dates = [str(d.date()) if hasattr(d, 'date') else str(d) for d in close_series.index]
             n = len(close)
@@ -1979,7 +1963,6 @@ class ZiplineProvider(BacktestingProviderBase):
                     'exitCount': int(np.sum(exits)),
                     'entries': entry_dates,
                     'exits': exit_dates,
-                    'synthetic': synthetic,
                 }
             }
 
@@ -2003,7 +1986,7 @@ class ZiplineProvider(BacktestingProviderBase):
             label_type = request.get('labelType', 'FIXLB')
             params = request.get('parameters', {})
 
-            close_series, synthetic = self._load_close_series(symbols, start_date, end_date)
+            close_series = self._load_close_series(symbols, start_date, end_date)
             close = np.asarray(close_series, dtype=float)
             dates = [str(d.date()) if hasattr(d, 'date') else str(d) for d in close_series.index]
             n = len(close)
@@ -2101,7 +2084,6 @@ class ZiplineProvider(BacktestingProviderBase):
                     'labeledBars': labeled_bars,
                     'distribution': dist,
                     'sampleLabels': sample_labels,
-                    'synthetic': synthetic,
                 }
             }
 
@@ -2126,7 +2108,7 @@ class ZiplineProvider(BacktestingProviderBase):
             splitter_type = request.get('splitterType', 'rolling')
             params = request.get('parameters', {})
 
-            close_series, synthetic = self._load_close_series(symbols, start_date, end_date)
+            close_series = self._load_close_series(symbols, start_date, end_date)
             dates = [str(d.date()) if hasattr(d, 'date') else str(d) for d in close_series.index]
             n = len(close_series)
 
@@ -2220,7 +2202,6 @@ class ZiplineProvider(BacktestingProviderBase):
                     'totalBars': n,
                     'nSplits': len(splits),
                     'splits': splits,
-                    'synthetic': synthetic,
                 }
             }
 
@@ -2244,7 +2225,7 @@ class ZiplineProvider(BacktestingProviderBase):
             analysis_type = request.get('analysisType', 'returns_stats')
             params = request.get('parameters', {})
 
-            close_series, synthetic = self._load_close_series(symbols, start_date, end_date)
+            close_series = self._load_close_series(symbols, start_date, end_date)
             close = np.asarray(close_series, dtype=float)
             dates = [str(d.date()) if hasattr(d, 'date') else str(d) for d in close_series.index]
             n = len(close)
@@ -2333,7 +2314,6 @@ class ZiplineProvider(BacktestingProviderBase):
                         },
                         'cumulativeReturns': cum_returns_clean,
                         'dates': dates,
-                        'synthetic': synthetic,
                     }
                 }
 
@@ -2393,7 +2373,6 @@ class ZiplineProvider(BacktestingProviderBase):
                         'events': dd_events[:50],
                         'drawdownSeries': dd_series,
                         'dates': dates,
-                        'synthetic': synthetic,
                     }
                 }
 
@@ -2437,7 +2416,6 @@ class ZiplineProvider(BacktestingProviderBase):
                             'coverage': round(float(coverage), 4),
                         },
                         'ranges': ranges_list[:50],
-                        'synthetic': synthetic,
                     }
                 }
 
@@ -2494,7 +2472,6 @@ class ZiplineProvider(BacktestingProviderBase):
                         'window': window,
                         'metrics': rolling_data,
                         'dates': roll_dates,
-                        'synthetic': synthetic,
                     }
                 }
 
@@ -2529,7 +2506,7 @@ class ZiplineProvider(BacktestingProviderBase):
             entry_label = int(params.get('entryLabel', 1))
             exit_label = int(params.get('exitLabel', -1))
 
-            close_series, synthetic = self._load_close_series(symbols, start_date, end_date)
+            close_series = self._load_close_series(symbols, start_date, end_date)
             close = np.asarray(close_series, dtype=float)
             dates = [str(d.date()) if hasattr(d, 'date') else str(d) for d in close_series.index]
             n = len(close)
@@ -2612,7 +2589,6 @@ class ZiplineProvider(BacktestingProviderBase):
                     'exitCount': int(np.sum(exits_arr)),
                     'entries': entry_dates,
                     'exits': exit_dates,
-                    'synthetic': synthetic,
                 }
             }
 

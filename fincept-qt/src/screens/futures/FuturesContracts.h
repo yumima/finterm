@@ -40,11 +40,9 @@ struct ContractDef {
     QString asset_class;  // "INDEX" / "RATES" / "ENERGY" / ...
     double  tick = 0.0;
     double  multiplier = 0.0;
-    /// Initial-margin estimate in USD (notional, recent CME baseline). These
-    /// are point-in-time values that the exchange revises periodically; we
-    /// surface them as a sizing aid, not a binding figure. A trader should
-    /// confirm with their broker before sizing positions.
-    double  initial_margin_usd = 0.0;
+    // No initial-margin field: CME revises margins often and the app has no
+    // live margin feed, so a hardcoded snapshot would be a stale number shown
+    // as current. Margins come from the broker.
     ExpiryRule expiry_rule = ExpiryRule::None;
     /// Optional yfinance symbol override. Default convention is ROOT+"=F"
     /// (the continuous front-month), which works for every CME-listed root
@@ -73,98 +71,95 @@ inline QString yf_symbol_for(const QString& root); // defined below find_contrac
 
 inline const QVector<ContractDef>& all_contracts() {
     using R = ExpiryRule;
-    // Initial-margin column is a snapshot of CME baseline as of late 2025;
-    // values shift periodically and brokers add their own buffer. Treat
-    // these as sizing references, not binding.
     static const QVector<ContractDef> kContracts = {
         // Index
-        {"ES",  "E-mini S&P 500",       "INDEX",  0.25,      50,         15'000, R::QuarterlyThirdFriday},
-        {"NQ",  "E-mini Nasdaq 100",    "INDEX",  0.25,      20,         22'000, R::QuarterlyThirdFriday},
-        {"YM",  "E-mini Dow",           "INDEX",  1.0,        5,          9'500, R::QuarterlyThirdFriday},
-        {"RTY", "E-mini Russell 2000",  "INDEX",  0.10,      50,          8'500, R::QuarterlyThirdFriday},
+        {"ES",  "E-mini S&P 500",       "INDEX",  0.25,      50, R::QuarterlyThirdFriday},
+        {"NQ",  "E-mini Nasdaq 100",    "INDEX",  0.25,      20, R::QuarterlyThirdFriday},
+        {"YM",  "E-mini Dow",           "INDEX",  1.0,        5, R::QuarterlyThirdFriday},
+        {"RTY", "E-mini Russell 2000",  "INDEX",  0.10,      50, R::QuarterlyThirdFriday},
         // Rates
-        {"ZT",  "2-Year T-Note",        "RATES",  0.0078125, 2000,        1'400, R::QuarterlyTreasuryLastBdayOfMonth},
-        {"ZF",  "5-Year T-Note",        "RATES",  0.0078125, 1000,        1'900, R::QuarterlyTreasuryLastBdayOfMonth},
-        {"ZN",  "10-Year T-Note",       "RATES",  0.015625,  1000,        2'400, R::QuarterlyTreasuryNote7BdaysBeforeEom},
-        {"ZB",  "30-Year T-Bond",       "RATES",  0.03125,   1000,        4'100, R::QuarterlyTreasuryNote7BdaysBeforeEom},
-        {"UB",  "Ultra T-Bond",         "RATES",  0.03125,   1000,        5'500, R::QuarterlyTreasuryNote7BdaysBeforeEom},
-        {"ZQ",  "30-Day Fed Funds",     "RATES",  0.0025,    4167,        1'200, R::MonthlyLastBday},
-        {"SR3", "3-Month SOFR",         "RATES",  0.0025,    2500,        1'100, R::MonthlyLastBday},
+        {"ZT",  "2-Year T-Note",        "RATES",  0.0078125, 2000, R::QuarterlyTreasuryLastBdayOfMonth},
+        {"ZF",  "5-Year T-Note",        "RATES",  0.0078125, 1000, R::QuarterlyTreasuryLastBdayOfMonth},
+        {"ZN",  "10-Year T-Note",       "RATES",  0.015625,  1000, R::QuarterlyTreasuryNote7BdaysBeforeEom},
+        {"ZB",  "30-Year T-Bond",       "RATES",  0.03125,   1000, R::QuarterlyTreasuryNote7BdaysBeforeEom},
+        {"UB",  "Ultra T-Bond",         "RATES",  0.03125,   1000, R::QuarterlyTreasuryNote7BdaysBeforeEom},
+        {"ZQ",  "30-Day Fed Funds",     "RATES",  0.0025,    4167, R::MonthlyLastBday},
+        {"SR3", "3-Month SOFR",         "RATES",  0.0025,    2500, R::MonthlyLastBday},
         // Energy — only CL/NG have one-line rules. RB/HO use the month-before-delivery
         // LTD which we don't currently track; BZ depends on ICE's settlement schedule.
         // Leave the rest as None until properly modelled.
-        {"CL",  "WTI Crude Oil",        "ENERGY", 0.01,      1000,        6'500, R::MonthlyEnergy3BdaysBefore25th},
-        {"BZ",  "Brent Crude",          "ENERGY", 0.01,      1000,        6'500, R::None},
-        {"NG",  "Henry Hub Nat Gas",    "ENERGY", 0.001,     10000,       4'500, R::MonthlyNG3BdaysBeforeDelivery},
-        {"RB",  "RBOB Gasoline",        "ENERGY", 0.0001,    42000,       7'000, R::None},
-        {"HO",  "Heating Oil",          "ENERGY", 0.0001,    42000,       7'500, R::None},
+        {"CL",  "WTI Crude Oil",        "ENERGY", 0.01,      1000, R::MonthlyEnergy3BdaysBefore25th},
+        {"BZ",  "Brent Crude",          "ENERGY", 0.01,      1000, R::None},
+        {"NG",  "Henry Hub Nat Gas",    "ENERGY", 0.001,     10000, R::MonthlyNG3BdaysBeforeDelivery},
+        {"RB",  "RBOB Gasoline",        "ENERGY", 0.0001,    42000, R::None},
+        {"HO",  "Heating Oil",          "ENERGY", 0.0001,    42000, R::None},
         // Metals (Gold/Plat/Palladium active = G/J/M/Q/Z; Silver/HG active = H/K/N/U/Z).
         // We gate by active months in the rule arm itself; both groups use
         // "3rd-last business day of the delivery month".
-        {"GC",  "Gold",                 "METALS", 0.10,      100,        12'500, R::MonthlyMetals3rdLastBday},
-        {"SI",  "Silver",               "METALS", 0.005,     5000,       18'000, R::MonthlySilver3rdLastBday},
-        {"HG",  "Copper",               "METALS", 0.0005,    25000,       7'000, R::MonthlySilver3rdLastBday},
-        {"PL",  "Platinum",             "METALS", 0.10,      50,          3'700, R::MonthlyMetals3rdLastBday},
-        {"PA",  "Palladium",            "METALS", 0.05,      100,         9'500, R::MonthlyMetals3rdLastBday},
+        {"GC",  "Gold",                 "METALS", 0.10,      100, R::MonthlyMetals3rdLastBday},
+        {"SI",  "Silver",               "METALS", 0.005,     5000, R::MonthlySilver3rdLastBday},
+        {"HG",  "Copper",               "METALS", 0.0005,    25000, R::MonthlySilver3rdLastBday},
+        {"PL",  "Platinum",             "METALS", 0.10,      50, R::MonthlyMetals3rdLastBday},
+        {"PA",  "Palladium",            "METALS", 0.05,      100, R::MonthlyMetals3rdLastBday},
         // CBOT grains — LTD is biz day prior to 15th of delivery month;
         // delivery months are (H,K,N,U,Z) for grains, (F,H,K,N,Q,U,X) for soy.
         // We approximate with the grain set (good enough for ZC/ZW; ZS shows
         // a slightly conservative date in Jan/Q/X months).
-        {"ZC",  "Corn",                 "AGS",    0.25,      50,          1'500, R::MonthlyGrainsBdayBeforeMid},
-        {"ZW",  "Wheat",                "AGS",    0.25,      50,          2'200, R::MonthlyGrainsBdayBeforeMid},
-        {"ZS",  "Soybeans",             "AGS",    0.25,      50,          3'200, R::MonthlyGrainsBdayBeforeMid},
-        {"ZL",  "Soybean Oil",          "AGS",    0.0001,    60000,       2'000, R::MonthlyGrainsBdayBeforeMid},
-        {"ZM",  "Soybean Meal",         "AGS",    0.10,      100,         2'600, R::MonthlyGrainsBdayBeforeMid},
-        {"KC",  "Coffee",               "AGS",    0.05,      37500,       9'500, R::None},
-        {"SB",  "Sugar #11",            "AGS",    0.01,      112000,      1'400, R::None},
-        {"CC",  "Cocoa",                "AGS",    1.0,       10,          3'600, R::None},
-        {"CT",  "Cotton",               "AGS",    0.01,      50000,       3'200, R::None},
+        {"ZC",  "Corn",                 "AGS",    0.25,      50, R::MonthlyGrainsBdayBeforeMid},
+        {"ZW",  "Wheat",                "AGS",    0.25,      50, R::MonthlyGrainsBdayBeforeMid},
+        {"ZS",  "Soybeans",             "AGS",    0.25,      50, R::MonthlyGrainsBdayBeforeMid},
+        {"ZL",  "Soybean Oil",          "AGS",    0.0001,    60000, R::MonthlyGrainsBdayBeforeMid},
+        {"ZM",  "Soybean Meal",         "AGS",    0.10,      100, R::MonthlyGrainsBdayBeforeMid},
+        {"KC",  "Coffee",               "AGS",    0.05,      37500, R::None},
+        {"SB",  "Sugar #11",            "AGS",    0.01,      112000, R::None},
+        {"CC",  "Cocoa",                "AGS",    1.0,       10, R::None},
+        {"CT",  "Cotton",               "AGS",    0.01,      50000, R::None},
         // FX
-        {"6E",  "Euro FX",              "FX",     0.00005,   125000,      2'800, R::QuarterlyTwoBdaysBeforeThirdWed},
-        {"6J",  "Japanese Yen",         "FX",     0.0000005, 12500000,    3'400, R::QuarterlyTwoBdaysBeforeThirdWed},
-        {"6B",  "British Pound",        "FX",     0.0001,    62500,       2'400, R::QuarterlyTwoBdaysBeforeThirdWed},
-        {"6A",  "Australian Dollar",    "FX",     0.0001,    100000,      1'800, R::QuarterlyTwoBdaysBeforeThirdWed},
-        {"6C",  "Canadian Dollar",      "FX",     0.00005,   100000,      1'600, R::QuarterlyTwoBdaysBeforeThirdWed},
+        {"6E",  "Euro FX",              "FX",     0.00005,   125000, R::QuarterlyTwoBdaysBeforeThirdWed},
+        {"6J",  "Japanese Yen",         "FX",     0.0000005, 12500000, R::QuarterlyTwoBdaysBeforeThirdWed},
+        {"6B",  "British Pound",        "FX",     0.0001,    62500, R::QuarterlyTwoBdaysBeforeThirdWed},
+        {"6A",  "Australian Dollar",    "FX",     0.0001,    100000, R::QuarterlyTwoBdaysBeforeThirdWed},
+        {"6C",  "Canadian Dollar",      "FX",     0.00005,   100000, R::QuarterlyTwoBdaysBeforeThirdWed},
         // Crypto (CME)
-        {"BTC", "Bitcoin Futures",      "CRYPTO", 5.0,       5,         115'000, R::MonthlyLastFriday},
-        {"MET", "Micro Ether Futures",  "CRYPTO", 0.25,      0.1,         1'100, R::MonthlyLastFriday},
+        {"BTC", "Bitcoin Futures",      "CRYPTO", 5.0,       5, R::MonthlyLastFriday},
+        {"MET", "Micro Ether Futures",  "CRYPTO", 0.25,      0.1, R::MonthlyLastFriday},
         // ── Non-US regions ──────────────────────────────────────────────────
         // EUROPE / JAPAN / ASIA: yfinance's =F namespace mostly covers
         // CME-cross-listed contracts. For everything else we fall back to the
-        // cash-index proxy via yf_override; tick/multiplier/initial-margin are
+        // cash-index proxy via yf_override; tick/multiplier are
         // left at zero because they don't apply to a spot index, and the
         // expiry calendar shows "—" (rule = None). The real futures curve for
         // these is gated behind Databento.
         // EUROPE — Eurex/ICE/LSE benchmarks (spot proxies via yfinance)
-        {"DAX",   "DAX 40 (spot proxy)",         "EUROPE", 0, 0, 0, R::None, "^GDAXI"},
-        {"ESX",   "EuroStoxx 50 (spot proxy)",   "EUROPE", 0, 0, 0, R::None, "^STOXX50E"},
-        {"FTSE",  "FTSE 100 (spot proxy)",       "EUROPE", 0, 0, 0, R::None, "^FTSE"},
-        {"CAC",   "CAC 40 (spot proxy)",         "EUROPE", 0, 0, 0, R::None, "^FCHI"},
-        {"AEX",   "AEX (spot proxy)",            "EUROPE", 0, 0, 0, R::None, "^AEX"},
+        {"DAX",   "DAX 40 (spot proxy)",         "EUROPE", 0, 0, R::None, "^GDAXI"},
+        {"ESX",   "EuroStoxx 50 (spot proxy)",   "EUROPE", 0, 0, R::None, "^STOXX50E"},
+        {"FTSE",  "FTSE 100 (spot proxy)",       "EUROPE", 0, 0, R::None, "^FTSE"},
+        {"CAC",   "CAC 40 (spot proxy)",         "EUROPE", 0, 0, R::None, "^FCHI"},
+        {"AEX",   "AEX (spot proxy)",            "EUROPE", 0, 0, R::None, "^AEX"},
         // JAPAN — Nikkei is CME-cross-listed so we get real futures here.
-        {"NIY",   "Nikkei 225 (Yen, CME)",       "JAPAN",  5.0,  500,  6'500, R::QuarterlyTwoBdaysBeforeThirdWed},
-        {"NKD",   "Nikkei 225 (USD, CME)",       "JAPAN",  5.0,    5,  6'500, R::QuarterlyTwoBdaysBeforeThirdWed},
-        {"TOPX",  "TOPIX (spot proxy)",          "JAPAN",  0, 0, 0, R::None, "^TPX"},
+        {"NIY",   "Nikkei 225 (Yen, CME)",       "JAPAN",  5.0,  500, R::QuarterlyTwoBdaysBeforeThirdWed},
+        {"NKD",   "Nikkei 225 (USD, CME)",       "JAPAN",  5.0,    5, R::QuarterlyTwoBdaysBeforeThirdWed},
+        {"TOPX",  "TOPIX (spot proxy)",          "JAPAN",  0, 0, R::None, "^TPX"},
         // ASIA — HSI, KOSPI, AXJO, TAIEX (spot proxies)
-        {"HSI",   "Hang Seng (spot proxy)",      "ASIA",   0, 0, 0, R::None, "^HSI"},
-        {"HSCEI", "Hang Seng China Ent. (spot)", "ASIA",   0, 0, 0, R::None, "^HSCE"},
-        {"KOSPI", "KOSPI Composite (spot)",      "ASIA",   0, 0, 0, R::None, "^KS11"},
-        {"AXJO",  "ASX 200 (spot proxy)",        "ASIA",   0, 0, 0, R::None, "^AXJO"},
-        {"TWII",  "Taiwan TAIEX (spot proxy)",   "ASIA",   0, 0, 0, R::None, "^TWII"},
+        {"HSI",   "Hang Seng (spot proxy)",      "ASIA",   0, 0, R::None, "^HSI"},
+        {"HSCEI", "Hang Seng China Ent. (spot)", "ASIA",   0, 0, R::None, "^HSCE"},
+        {"KOSPI", "KOSPI Composite (spot)",      "ASIA",   0, 0, R::None, "^KS11"},
+        {"AXJO",  "ASX 200 (spot proxy)",        "ASIA",   0, 0, R::None, "^AXJO"},
+        {"TWII",  "Taiwan TAIEX (spot proxy)",   "ASIA",   0, 0, R::None, "^TWII"},
         // CHINA — onshore index spot proxies. Real CFFEX index futures (IF/IH/
         // IC/IM) aren't on yfinance for free; we route to the underlying SSE/
         // SZSE indices so CHINA renders the same heatmap+watchlist+chart grid
         // as the other regional tabs. Mainland commodities (SHFE/DCE/CZCE Cu,
         // Al, Au, Rb, oil, grains …) need an akshare-backed quote shim — see
         // follow-up task for Option B coverage.
-        {"CSI300",  "CSI 300 (spot proxy)",         "CHINA", 0, 0, 0, R::None, "000300.SS"},
-        {"SSE50",   "SSE 50 (spot proxy)",          "CHINA", 0, 0, 0, R::None, "000016.SS"},
-        {"CSI500",  "CSI 500 (spot proxy)",         "CHINA", 0, 0, 0, R::None, "000905.SS"},
-        {"CSI1000", "CSI 1000 (spot proxy)",        "CHINA", 0, 0, 0, R::None, "000852.SS"},
-        {"SHCOMP",  "Shanghai Composite (spot)",    "CHINA", 0, 0, 0, R::None, "000001.SS"},
-        {"SZCOMP",  "Shenzhen Component (spot)",    "CHINA", 0, 0, 0, R::None, "399001.SZ"},
-        {"CHINEXT", "ChiNext (spot proxy)",         "CHINA", 0, 0, 0, R::None, "399006.SZ"},
-        {"STAR50",  "STAR 50 (spot proxy)",         "CHINA", 0, 0, 0, R::None, "000688.SS"},
+        {"CSI300",  "CSI 300 (spot proxy)",         "CHINA", 0, 0, R::None, "000300.SS"},
+        {"SSE50",   "SSE 50 (spot proxy)",          "CHINA", 0, 0, R::None, "000016.SS"},
+        {"CSI500",  "CSI 500 (spot proxy)",         "CHINA", 0, 0, R::None, "000905.SS"},
+        {"CSI1000", "CSI 1000 (spot proxy)",        "CHINA", 0, 0, R::None, "000852.SS"},
+        {"SHCOMP",  "Shanghai Composite (spot)",    "CHINA", 0, 0, R::None, "000001.SS"},
+        {"SZCOMP",  "Shenzhen Component (spot)",    "CHINA", 0, 0, R::None, "399001.SZ"},
+        {"CHINEXT", "ChiNext (spot proxy)",         "CHINA", 0, 0, R::None, "399006.SZ"},
+        {"STAR50",  "STAR 50 (spot proxy)",         "CHINA", 0, 0, R::None, "000688.SS"},
     };
     return kContracts;
 }

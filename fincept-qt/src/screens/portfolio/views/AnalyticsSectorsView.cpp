@@ -1,6 +1,8 @@
 // src/screens/portfolio/views/AnalyticsSectorsView.cpp
 #include "screens/portfolio/views/AnalyticsSectorsView.h"
 
+#include "services/portfolio/PortfolioService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QChart>
@@ -20,6 +22,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace fincept::screens {
 
@@ -93,6 +96,17 @@ QColor AnalyticsSectorsView::sector_color(int index) {
 }
 
 AnalyticsSectorsView::AnalyticsSectorsView(QWidget* parent) : QWidget(parent) {
+    // Correlation is the service's real date-aligned matrix; pick up any
+    // result that landed before this view existed, then follow updates.
+    auto& svc = services::PortfolioService::instance();
+    corr_matrix_ = svc.last_correlation();
+    corr_ready_ = svc.correlation_ready();
+    connect(&svc, &services::PortfolioService::correlation_computed, this,
+            [this](QHash<QString, double> matrix) {
+                corr_matrix_ = std::move(matrix);
+                corr_ready_ = true;
+                update_correlation();
+            });
     build_ui();
 }
 
@@ -325,8 +339,8 @@ QWidget* AnalyticsSectorsView::build_correlation_tab() {
     lay->addWidget(title);
 
     corr_note_ = new QLabel(
-        "Top-10 holdings by weight. Values use a day-change sign proxy until "
-        "OHLC history is wired in — treat the magnitudes as directional, not precise.");
+        "Top-10 holdings by weight. Pearson correlation of date-aligned daily returns "
+        "over the last ~60 calendar days. \u2014 = too little overlapping history to state one.");
     corr_note_->setWordWrap(true);
     corr_note_->setStyleSheet(QString("color:%1; font-size:%2px;")
                                    .arg(ui::colors::TEXT_SECONDARY())
@@ -362,9 +376,13 @@ QVector<AnalyticsSectorsView::SectorInfo> AnalyticsSectorsView::compute_sectors(
         auto& info = map[sec];
         info.name = sec;
         info.weight += h.weight;
-        info.market_value += h.market_value;
-        info.cost_basis += h.cost_basis;
-        info.pnl += h.unrealized_pnl;
+        // Unpriced holdings (no price at all) stay out of value, cost and
+        // P&L — same rule as the portfolio totals — but still count.
+        if (h.valued()) {
+            info.market_value += h.market_value;
+            info.cost_basis += h.cost_basis;
+            info.pnl += h.unrealized_pnl;
+        }
         info.count++;
         info.holdings.append(h);
     }
@@ -720,6 +738,17 @@ void AnalyticsSectorsView::update_correlation() {
         return;
     }
 
+    if (corr_ready_ && corr_matrix_.isEmpty()) {
+        auto* msg = new QLabel("Correlation unavailable — daily price history could not be fetched",
+                               corr_panel_);
+        msg->setAlignment(Qt::AlignCenter);
+        msg->setStyleSheet(QString("color:%1; font-size:%2px; padding:40px; background:transparent;")
+                                .arg(ui::colors::TEXT_SECONDARY())
+                                .arg(ui::fonts::font_px()));
+        corr_grid_->addWidget(msg, 0, 0);
+        return;
+    }
+
     auto sorted = summary_.holdings;
     std::sort(sorted.begin(), sorted.end(),
               [](const auto& a, const auto& b) { return a.weight > b.weight; });
@@ -746,24 +775,37 @@ void AnalyticsSectorsView::update_correlation() {
         corr_grid_->addWidget(make_header(sorted[r].symbol.left(6), false), r + 1, 0);
 
         for (int c = 0; c < n; ++c) {
-            double corr;
+            // Real matrix only. This used to be derived from whether today's
+            // day changes shared a sign — a number with no relation to
+            // correlation. Missing / NaN pair → "—"; "…" while fetching.
+            double corr = std::numeric_limits<double>::quiet_NaN();
             if (r == c) {
                 corr = 1.0;
             } else {
-                double a = sorted[r].day_change_percent;
-                double b = sorted[c].day_change_percent;
-                bool same_sign = (a >= 0) == (b >= 0);
-                double mag = std::min(std::abs(a) + std::abs(b), 10.0) / 10.0;
-                corr = same_sign ? (mag * 0.8 + 0.1) : -(mag * 0.6 + 0.05);
+                const auto ab = corr_matrix_.constFind(sorted[r].symbol + "|" + sorted[c].symbol);
+                const auto ba = corr_matrix_.constFind(sorted[c].symbol + "|" + sorted[r].symbol);
+                if (ab != corr_matrix_.cend())
+                    corr = ab.value();
+                else if (ba != corr_matrix_.cend())
+                    corr = ba.value();
             }
+            const bool known = std::isfinite(corr);
 
-            auto* cell = new QLabel(QString::number(corr, 'f', 2));
+            auto* cell = new QLabel(known        ? QString::number(corr, 'f', 2)
+                                    : corr_ready_ ? ui::formatting::placeholder()
+                                                  : QStringLiteral("\u2026"));
             cell->setAlignment(Qt::AlignCenter);
             cell->setFixedSize(54, 26);
+            if (!known)
+                cell->setToolTip(corr_ready_ ? tr("Not computable: too little overlapping daily price history")
+                                             : tr("Loading price history…"));
 
             QColor bg;
             QString fg;
-            if (r == c) {
+            if (!known) {
+                bg = QColor(ui::colors::BG_RAISED());
+                fg = ui::colors::TEXT_TERTIARY();
+            } else if (r == c) {
                 bg = QColor(ui::colors::AMBER());
                 fg = ui::colors::BG_BASE();
             } else if (corr > 0) {

@@ -1,5 +1,6 @@
 #include "screens/dashboard/widgets/ScreenerWidget.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -19,6 +20,11 @@ static const QStringList kScreenerSymbols = {
     "SLB",  "NEE",   "DUK",   "SO",   "CAT",  "GE",   "HON",  "RTX",  "PLTR", "COIN", "SOFI", "PYPL", "SNAP", "UBER"};
 
 ScreenerWidget::ScreenerWidget(QWidget* parent) : BaseWidget("STOCK SCREENER", parent, ui::colors::INFO()) {
+    // Disclose the universe: sorts a fixed watch basket, not the whole market.
+    set_title(QString("SCREENER (%1-STOCK BASKET)").arg(kScreenerSymbols.size()));
+    drag_handle()->setToolTip(QString("Sorts a fixed %1-stock watch basket — not a market-wide screen.\nBasket: %2")
+                                  .arg(kScreenerSymbols.size())
+                                  .arg(kScreenerSymbols.join(", ")));
     build_body();
 
     // Coalesce the burst of per-symbol quote callbacks (42/cycle) into a single
@@ -53,7 +59,7 @@ void ScreenerWidget::build_body() {
     fl->addWidget(filter_combo_);
     fl->addStretch();
 
-    count_lbl_ = new QLabel(QString("%1 symbols").arg(kScreenerSymbols.size()));
+    count_lbl_ = new QLabel(QString("%1-stock basket").arg(kScreenerSymbols.size()));
     fl->addWidget(count_lbl_);
 
     vl->addWidget(filter_bar_);
@@ -280,17 +286,28 @@ void ScreenerWidget::apply_filter() {
     QVector<services::QuoteData> sorted = all_quotes_;
     int idx = filter_combo_ ? filter_combo_->currentIndex() : 0;
 
+    // Unknown values (NaN — no previous close / no volume) sort last; a raw
+    // NaN comparison would break std::sort's strict-weak-ordering contract.
+    auto nan_last = [](double a, double b, bool desc) {
+        const bool fa = std::isfinite(a), fb = std::isfinite(b);
+        if (fa != fb)
+            return fa;
+        if (!fa)
+            return false;
+        return desc ? a > b : a < b;
+    };
     switch (idx) {
         case 0: // % change asc (top gainers first)
             std::sort(sorted.begin(), sorted.end(),
-                      [](const auto& a, const auto& b) { return a.change_pct > b.change_pct; });
+                      [&](const auto& a, const auto& b) { return nan_last(a.change_pct, b.change_pct, true); });
             break;
         case 1: // % change desc (top losers first)
             std::sort(sorted.begin(), sorted.end(),
-                      [](const auto& a, const auto& b) { return a.change_pct < b.change_pct; });
+                      [&](const auto& a, const auto& b) { return nan_last(a.change_pct, b.change_pct, false); });
             break;
         case 2: // volume desc
-            std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) { return a.volume > b.volume; });
+            std::sort(sorted.begin(), sorted.end(),
+                      [&](const auto& a, const auto& b) { return nan_last(a.volume, b.volume, true); });
             break;
         case 3: // price desc
             std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) { return a.price > b.price; });
@@ -320,7 +337,7 @@ void ScreenerWidget::render_rows(const QVector<services::QuoteData>& rows) {
         row.sym->setText(q.symbol);
         row.price->setText(QString("$%1").arg(q.price, 0, 'f', 2));
 
-        row.chg->setText(QString("%1%2%").arg(q.change_pct >= 0 ? "+" : "").arg(q.change_pct, 0, 'f', 2));
+        row.chg->setText(ui::formatting::format_percent(q.change_pct, 2, true));
         const QString chg_col = q.change_pct > 0   ? ui::colors::POSITIVE()
                                 : q.change_pct < 0 ? ui::colors::NEGATIVE()
                                                    : ui::colors::TEXT_PRIMARY();
@@ -329,7 +346,9 @@ void ScreenerWidget::render_rows(const QVector<services::QuoteData>& rows) {
 
         // Format volume: e.g. 45.2M
         QString vol_str;
-        if (q.volume >= 1e9)
+        if (!std::isfinite(q.volume))
+            vol_str = ui::formatting::placeholder();
+        else if (q.volume >= 1e9)
             vol_str = QString("%1B").arg(q.volume / 1e9, 0, 'f', 1);
         else if (q.volume >= 1e6)
             vol_str = QString("%1M").arg(q.volume / 1e6, 0, 'f', 1);

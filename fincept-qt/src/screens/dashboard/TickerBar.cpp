@@ -4,6 +4,7 @@
 
 #include "services/markets/MarketDataService.h"
 #include "storage/repositories/SettingsRepository.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -155,7 +156,7 @@ void TickerBar::set_data(const QVector<Entry>& entries) {
         const int symbol_w = fm.horizontalAdvance(e.symbol);
         const int price_w  = fm.horizontalAdvance(QString::number(e.price, 'f', 2));
         const QString change_str =
-            QString("%1%2%").arg(e.change >= 0 ? "+" : "").arg(e.change, 0, 'f', 2);
+            ui::formatting::format_percent(e.change, 2, true);
         const int change_w = fm.horizontalAdvance(change_str);
         const int w = symbol_w + kSegmentGap + price_w + kSegmentGap + change_w + kItemSpacing;
         entry_widths_.append(w);
@@ -303,7 +304,7 @@ void TickerBar::paintEvent(QPaintEvent*) {
 
             // Change — green / red
             const QString change_str =
-                QString("%1%2%").arg(e.change >= 0 ? "+" : "").arg(e.change, 0, 'f', 2);
+                ui::formatting::format_percent(e.change, 2, true);
             p.setPen(QColor(ui::change_color(e.change)));
             p.drawText(QPointF(x, text_y), change_str);
             x += fm.horizontalAdvance(change_str) + kItemSpacing;

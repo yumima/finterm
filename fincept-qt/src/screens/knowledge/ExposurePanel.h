@@ -25,7 +25,8 @@ class ExposurePanel : public QWidget {
 
   private:
     void load_holdings_and_evaluate();
-    void render_results(int total, const QStringList& matching, const QString& criterion);
+    void render_results(int total, const QStringList& matching, const QStringList& unavailable,
+                        const QString& criterion);
 
     KnowledgeEntry entry_;
     QVBoxLayout* root_ = nullptr;

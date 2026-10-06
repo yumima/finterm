@@ -43,7 +43,7 @@ struct MarketKey {
 struct Outcome {
     QString name;      // "Yes" / "No" / free-form for multi-outcome markets.
     QString asset_id;  // Exchange-opaque ID for subscribing / ordering.
-    double price = 0.0;  // 0.0–1.0 probability.
+    double price = 0.0;  // 0.0–1.0 probability; NaN = no real price available.
 };
 
 struct PredictionMarket {

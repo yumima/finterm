@@ -314,7 +314,8 @@ void FuturesWatchlistPanel::render_from_cache() {
         add(1, q.name);
         add(2, fmt_num(q.last, 4));
         add(3, fmt_signed(q.change, 4), color_for_change(q.change));
-        add(4, fmt_signed(q.change_pct, 2) + "%", color_for_change(q.change));
+        add(4, std::isfinite(q.change_pct) ? fmt_signed(q.change_pct, 2) + "%" : QStringLiteral("—"),
+            color_for_change(q.change));
         add(5, fmt_volume(q.volume));
         add(6, fmt_volume(q.open_interest));
     }
@@ -883,7 +884,8 @@ void FuturesHeatmapPanel::render_from_cache() {
             // 36px two-line height that made the panel dominate vertically.
             // 2 decimals so a real move shows as "+12.34%", not a clipped "+1.2".
             const QString tile_text =
-                QString("%1 : %2%").arg(q.symbol, fmt_signed(q.change_pct, 2));
+                std::isfinite(q.change_pct) ? QString("%1 : %2%").arg(q.symbol, fmt_signed(q.change_pct, 2))
+                                            : QString("%1 : —").arg(q.symbol);
             auto* tile = new QLabel(tile_text);
             tile->setAlignment(Qt::AlignCenter);
             // Width = text advance + chrome (8px padding + 2px border + slack),
@@ -892,15 +894,20 @@ void FuturesHeatmapPanel::render_from_cache() {
             const int tile_w = std::max(72, tile_fm.horizontalAdvance(tile_text) + 12);
             tile->setMinimumSize(tile_w, 20);
             tile->setToolTip(QString("%1\nLast %2  ·  %3").arg(q.name, fmt_num(q.last, 4),
-                                                                fmt_signed(q.change_pct, 2) + "%"));
+                                                                std::isfinite(q.change_pct)
+                                                                    ? fmt_signed(q.change_pct, 2) + "%"
+                                                                    : QStringLiteral("—")));
             // Use the standard POSITIVE/NEGATIVE accent colors (the same green
             // and red used everywhere else for gains/losses) with alpha-scaled
             // intensity for magnitude. The previous code used *_BG variants
             // (darker, near-black) which made positive tiles read as
             // "black-green" rather than "green".
-            const double pct = std::clamp(q.change_pct / 3.0, -1.0, 1.0);
+            // Unknown change (NaN) → faintest neutral-ish tint, no UB from NaN→int.
+            const double pct = std::isfinite(q.change_pct) ? std::clamp(q.change_pct / 3.0, -1.0, 1.0) : 0.0;
             const int alpha = static_cast<int>(70 + std::abs(pct) * 160); // 70..230
-            QColor bg = pct >= 0 ? QColor(colors::POSITIVE()) : QColor(colors::NEGATIVE());
+            QColor bg = !std::isfinite(q.change_pct) ? QColor(colors::TEXT_TERTIARY())
+                        : pct >= 0                    ? QColor(colors::POSITIVE())
+                                                      : QColor(colors::NEGATIVE());
             bg.setAlpha(alpha);
             // 12px tile font (font_px(-2)) — keeps the row narrow vertically so
             // 10 asset-class rows fit without dominating the panel. Padding is
@@ -1120,8 +1127,10 @@ void FuturesChinaPanel::populate(const QJsonArray& rows) {
 FuturesExpiryPanel::FuturesExpiryPanel(QWidget* parent)
     : FuturesPanelBase("EXPIRY CALENDAR", parent) {
     table_ = new QTableWidget(this);
-    table_->setColumnCount(5);
-    table_->setHorizontalHeaderLabels({"Symbol", "Name", "Next Expiry", "DTE", "Init. Margin"});
+    // No margin column: there is no live margin feed, and a hardcoded CME
+    // snapshot would be a stale number presented as current.
+    table_->setColumnCount(4);
+    table_->setHorizontalHeaderLabels({"Symbol", "Name", "Next Expiry", "DTE"});
     table_->setSelectionMode(QAbstractItemView::NoSelection);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setShowGrid(false);
@@ -1135,8 +1144,6 @@ FuturesExpiryPanel::FuturesExpiryPanel(QWidget* parent)
     table_->horizontalHeader()->resizeSection(2, 110);
     table_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
     table_->horizontalHeader()->resizeSection(3, 60);
-    table_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Fixed);
-    table_->horizontalHeader()->resizeSection(4, 100);
     table_->setStyleSheet(
         QString("QTableWidget{background:%1;color:%2;border:none;"
                 "  font-family:'%3';font-size:%4px;gridline-color:transparent;}"
@@ -1207,15 +1214,6 @@ void FuturesExpiryPanel::rebuild() {
         }
         dte_item->setTextAlignment(Qt::AlignCenter);
         table_->setItem(row, 3, dte_item);
-
-        auto* mg = new QTableWidgetItem;
-        mg->setData(Qt::EditRole, c.initial_margin_usd);
-        mg->setData(Qt::DisplayRole,
-                    c.initial_margin_usd > 0
-                        ? QString("$%L1").arg(static_cast<long long>(c.initial_margin_usd))
-                        : QStringLiteral("—"));
-        mg->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        table_->setItem(row, 4, mg);
 
         ++row;
     }

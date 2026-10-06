@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioOrderPanel.cpp
 #include "screens/portfolio/PortfolioOrderPanel.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QColor>
@@ -215,10 +216,14 @@ void PortfolioOrderPanel::update_display() {
     }
 
     symbol_label_->setText(holding_->symbol);
-    price_label_->setText(QString::number(holding_->current_price, 'f', 2));
+    // No price → "—" (see HoldingWithQuote::price_known), never "nan" or 0.
+    price_label_->setText(holding_->price_known ? QString::number(holding_->current_price, 'f', 2)
+                                                : ui::formatting::placeholder());
     qty_label_->setText(
         QString::number(holding_->quantity, 'f', holding_->quantity == std::floor(holding_->quantity) ? 0 : 2));
-    mv_label_->setText(QString("%1 %2").arg(currency_).arg(QString::number(holding_->market_value, 'f', 2)));
+    mv_label_->setText(holding_->valued()
+                           ? QString("%1 %2").arg(currency_).arg(QString::number(holding_->market_value, 'f', 2))
+                           : ui::formatting::placeholder());
 }
 
 } // namespace fincept::screens

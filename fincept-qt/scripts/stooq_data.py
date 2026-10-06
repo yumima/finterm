@@ -133,11 +133,14 @@ def _fetch_one_futures_quote(root, start, end):
     records = parsed["data"]
     try:
         last = records[-1]
-        prev = records[-2] if len(records) >= 2 else last
-        last_close = float(last.get("Close") or 0)
-        prev_close = float(prev.get("Close") or last_close)
-        change = last_close - prev_close
-        change_pct = (change / prev_close * 100.0) if prev_close else 0.0
+        if not last.get("Close"):
+            return None  # no real last price -> no quote (never a 0 print)
+        last_close = float(last["Close"])
+        prev = records[-2] if len(records) >= 2 else None
+        prev_close = float(prev["Close"]) if prev and prev.get("Close") else None
+        change = (last_close - prev_close) if prev_close is not None else None
+        change_pct = (change / prev_close * 100.0) if prev_close else None
+        opt = lambda k: float(last[k]) if last.get(k) not in (None, "") else None
         return {
             "symbol": root,
             "name": root,
@@ -145,10 +148,10 @@ def _fetch_one_futures_quote(root, start, end):
             "last": last_close,
             "change": change,
             "change_pct": change_pct,
-            "volume": float(last.get("Volume") or 0),
-            "open_interest": 0,
-            "high": float(last.get("High") or last_close),
-            "low": float(last.get("Low") or last_close),
+            "volume": opt("Volume"),
+            "open_interest": None,  # Stooq daily CSV carries no open interest
+            "high": opt("High"),
+            "low": opt("Low"),
         }
     except (ValueError, KeyError):
         return None
@@ -207,15 +210,17 @@ def get_futures_history(symbol: str, period: str = "6mo") -> Any:
         try:
             from datetime import datetime as _dt
             ts = int(_dt.strptime(r["Date"], "%Y-%m-%d").timestamp())
+            # A bar missing a price is dropped (KeyError/ValueError below),
+            # never plotted at 0. Volume may be genuinely absent -> None.
             pts.append({
                 "timestamp": ts,
-                "open": float(r.get("Open") or 0),
-                "high": float(r.get("High") or 0),
-                "low": float(r.get("Low") or 0),
-                "close": float(r.get("Close") or 0),
-                "volume": float(r.get("Volume") or 0),
+                "open": float(r["Open"]),
+                "high": float(r["High"]),
+                "low": float(r["Low"]),
+                "close": float(r["Close"]),
+                "volume": float(r["Volume"]) if r.get("Volume") not in (None, "") else None,
             })
-        except (ValueError, KeyError):
+        except (ValueError, KeyError, TypeError):
             continue
     return {"success": True, "data": pts, "source": "stooq", "error": None,
             "timestamp": int(time.time())}

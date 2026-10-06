@@ -968,6 +968,13 @@ void DerivativesScreen::display_results(const QJsonObject& result) {
     vl->setContentsMargins(12, 12, 12, 12);
     vl->setSpacing(8);
 
+    // A field the pricer couldn't produce (null/absent) renders "—", never 0.
+    auto num_or_dash = [](const QJsonValue& v, int dp, const QString& suffix = QString()) -> QString {
+        if (!v.isDouble())
+            return QStringLiteral("—");
+        return QString::number(v.toDouble(), 'f', dp) + suffix;
+    };
+
     auto make_card = [](const QString& label, const QString& value, bool big = false) {
         auto* card = new QWidget(nullptr);
         card->setObjectName("derivResultCard");
@@ -991,49 +998,49 @@ void DerivativesScreen::display_results(const QJsonObject& result) {
         auto* r1l = new QHBoxLayout(row1);
         r1l->setContentsMargins(0, 0, 0, 0);
         r1l->setSpacing(8);
-        r1l->addWidget(make_card("CLEAN PRICE", QString::number(result["clean_price"].toDouble(), 'f', 4)));
-        r1l->addWidget(make_card("DIRTY PRICE", QString::number(result["dirty_price"].toDouble(), 'f', 4)));
+        r1l->addWidget(make_card("CLEAN PRICE", num_or_dash(result["clean_price"], 4)));
+        r1l->addWidget(make_card("DIRTY PRICE", num_or_dash(result["dirty_price"], 4)));
         vl->addWidget(row1);
 
         auto* row2 = new QWidget(this);
         auto* r2l = new QHBoxLayout(row2);
         r2l->setContentsMargins(0, 0, 0, 0);
         r2l->setSpacing(8);
-        r2l->addWidget(make_card("DURATION", QString::number(result["duration"].toDouble(), 'f', 4)));
-        r2l->addWidget(make_card("CONVEXITY", QString::number(result["convexity"].toDouble(), 'f', 4)));
-        r2l->addWidget(make_card("ACCRUED INT", QString::number(result["accrued_interest"].toDouble(), 'f', 4)));
+        r2l->addWidget(make_card("DURATION", num_or_dash(result["duration"], 4)));
+        r2l->addWidget(make_card("CONVEXITY", num_or_dash(result["convexity"], 4)));
+        r2l->addWidget(make_card("ACCRUED INT", num_or_dash(result["accrued_interest"], 4)));
         vl->addWidget(row2);
     }
     // YTM result
     else if (result.contains("ytm") && !result.contains("clean_price")) {
-        vl->addWidget(make_card("YIELD TO MATURITY", QString::number(result["ytm"].toDouble(), 'f', 6) + "%", true));
+        vl->addWidget(make_card("YIELD TO MATURITY", num_or_dash(result["ytm"], 6, "%"), true));
     }
     // Option results (price + greeks)
     else if (result.contains("price") && result.contains("greeks")) {
-        vl->addWidget(make_card("OPTION PRICE", QString::number(result["price"].toDouble(), 'f', 6), true));
+        vl->addWidget(make_card("OPTION PRICE", num_or_dash(result["price"], 6), true));
 
         auto greeks = result["greeks"].toObject();
         auto* grow = new QWidget(this);
         auto* gl = new QHBoxLayout(grow);
         gl->setContentsMargins(0, 0, 0, 0);
         gl->setSpacing(8);
-        gl->addWidget(make_card("DELTA", QString::number(greeks["delta"].toDouble(), 'f', 6)));
-        gl->addWidget(make_card("GAMMA", QString::number(greeks["gamma"].toDouble(), 'f', 6)));
-        gl->addWidget(make_card("VEGA", QString::number(greeks["vega"].toDouble(), 'f', 6)));
-        gl->addWidget(make_card("THETA", QString::number(greeks["theta"].toDouble(), 'f', 6)));
-        gl->addWidget(make_card("RHO", QString::number(greeks["rho"].toDouble(), 'f', 6)));
+        gl->addWidget(make_card("DELTA", num_or_dash(greeks["delta"], 6)));
+        gl->addWidget(make_card("GAMMA", num_or_dash(greeks["gamma"], 6)));
+        gl->addWidget(make_card("VEGA", num_or_dash(greeks["vega"], 6)));
+        gl->addWidget(make_card("THETA", num_or_dash(greeks["theta"], 6)));
+        gl->addWidget(make_card("RHO", num_or_dash(greeks["rho"], 6)));
         vl->addWidget(grow);
     }
     // Implied volatility
     else if (result.contains("implied_volatility")) {
         vl->addWidget(make_card("IMPLIED VOLATILITY",
-                                QString::number(result["implied_volatility"].toDouble(), 'f', 4) + "%", true));
+                                num_or_dash(result["implied_volatility"], 4, "%"), true));
     }
     // FX option (price + greeks)
     else if (result.contains("price") && result.contains("notional")) {
-        vl->addWidget(make_card("OPTION PRICE", QString::number(result["price"].toDouble(), 'f', 4), true));
+        vl->addWidget(make_card("OPTION PRICE", num_or_dash(result["price"], 4), true));
         if (result.contains("price_per_unit")) {
-            vl->addWidget(make_card("PRICE PER UNIT", QString::number(result["price_per_unit"].toDouble(), 'f', 6)));
+            vl->addWidget(make_card("PRICE PER UNIT", num_or_dash(result["price_per_unit"], 6)));
         }
         if (result.contains("greeks")) {
             auto greeks = result["greeks"].toObject();
@@ -1041,37 +1048,37 @@ void DerivativesScreen::display_results(const QJsonObject& result) {
             auto* gl = new QHBoxLayout(grow);
             gl->setContentsMargins(0, 0, 0, 0);
             gl->setSpacing(8);
-            gl->addWidget(make_card("DELTA", QString::number(greeks["delta"].toDouble(), 'f', 6)));
-            gl->addWidget(make_card("GAMMA", QString::number(greeks["gamma"].toDouble(), 'f', 6)));
-            gl->addWidget(make_card("VEGA", QString::number(greeks["vega"].toDouble(), 'f', 6)));
-            gl->addWidget(make_card("THETA", QString::number(greeks["theta"].toDouble(), 'f', 6)));
-            gl->addWidget(make_card("RHO", QString::number(greeks["rho"].toDouble(), 'f', 6)));
+            gl->addWidget(make_card("DELTA", num_or_dash(greeks["delta"], 6)));
+            gl->addWidget(make_card("GAMMA", num_or_dash(greeks["gamma"], 6)));
+            gl->addWidget(make_card("VEGA", num_or_dash(greeks["vega"], 6)));
+            gl->addWidget(make_card("THETA", num_or_dash(greeks["theta"], 6)));
+            gl->addWidget(make_card("RHO", num_or_dash(greeks["rho"], 6)));
             vl->addWidget(grow);
         }
     }
     // Swap results
     else if (result.contains("swap_value")) {
-        vl->addWidget(make_card("SWAP VALUE", QString::number(result["swap_value"].toDouble(), 'f', 2), true));
+        vl->addWidget(make_card("SWAP VALUE", num_or_dash(result["swap_value"], 2), true));
 
         auto* row = new QWidget(this);
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(0, 0, 0, 0);
         rl->setSpacing(8);
-        rl->addWidget(make_card("FIXED LEG PV", QString::number(result["fixed_leg_pv"].toDouble(), 'f', 2)));
-        rl->addWidget(make_card("FLOATING LEG PV", QString::number(result["floating_leg_pv"].toDouble(), 'f', 2)));
-        rl->addWidget(make_card("PAR SWAP RATE", QString::number(result["par_swap_rate"].toDouble(), 'f', 4) + "%"));
+        rl->addWidget(make_card("FIXED LEG PV", num_or_dash(result["fixed_leg_pv"], 2)));
+        rl->addWidget(make_card("FLOATING LEG PV", num_or_dash(result["floating_leg_pv"], 2)));
+        rl->addWidget(make_card("PAR SWAP RATE", num_or_dash(result["par_swap_rate"], 4, "%")));
         vl->addWidget(row);
     }
     // CDS results
     else if (result.contains("upfront_value")) {
-        vl->addWidget(make_card("UPFRONT VALUE", QString::number(result["upfront_value"].toDouble(), 'f', 2), true));
+        vl->addWidget(make_card("UPFRONT VALUE", num_or_dash(result["upfront_value"], 2), true));
 
         auto* row1 = new QWidget(this);
         auto* r1l = new QHBoxLayout(row1);
         r1l->setContentsMargins(0, 0, 0, 0);
         r1l->setSpacing(8);
-        r1l->addWidget(make_card("PREMIUM LEG PV", QString::number(result["premium_leg_pv"].toDouble(), 'f', 2)));
-        r1l->addWidget(make_card("PROTECTION LEG PV", QString::number(result["protection_leg_pv"].toDouble(), 'f', 2)));
+        r1l->addWidget(make_card("PREMIUM LEG PV", num_or_dash(result["premium_leg_pv"], 2)));
+        r1l->addWidget(make_card("PROTECTION LEG PV", num_or_dash(result["protection_leg_pv"], 2)));
         vl->addWidget(row1);
 
         auto* row2 = new QWidget(this);
@@ -1079,10 +1086,10 @@ void DerivativesScreen::display_results(const QJsonObject& result) {
         r2l->setContentsMargins(0, 0, 0, 0);
         r2l->setSpacing(8);
         r2l->addWidget(
-            make_card("BREAKEVEN SPREAD", QString::number(result["breakeven_spread_bps"].toDouble(), 'f', 2) + " bps"));
-        r2l->addWidget(make_card("HAZARD RATE", QString::number(result["hazard_rate"].toDouble(), 'f', 4) + "%"));
+            make_card("BREAKEVEN SPREAD", num_or_dash(result["breakeven_spread_bps"], 2, " bps")));
+        r2l->addWidget(make_card("HAZARD RATE", num_or_dash(result["hazard_rate"], 4, "%")));
         r2l->addWidget(
-            make_card("SURVIVAL PROB", QString::number(result["survival_probability"].toDouble(), 'f', 2) + "%"));
+            make_card("SURVIVAL PROB", num_or_dash(result["survival_probability"], 2, "%")));
         vl->addWidget(row2);
     }
     // Generic fallback — display all keys

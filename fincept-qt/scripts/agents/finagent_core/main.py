@@ -682,7 +682,10 @@ def dispatch_action(
         from finagent_core.core_agent import CoreAgent
         agent = CoreAgent(api_keys=api_keys, user_id=params.get("user_id"))
         _setup_agent_modules(agent, config, params)
-        portfolio_data = params.get("portfolio_data", params)
+        portfolio_data = params.get("portfolio_data")
+        if not portfolio_data:
+            # Never fall back to the raw params dict as if it were holdings.
+            return {"success": False, "error": "no portfolio data supplied"}
         result = agent.run_portfolio_rebalancing(portfolio_data, config)
         response_text = _extract_workflow_response(result)
         return {"success": True, "response": response_text, "result": result if isinstance(result, dict) else None}
@@ -691,7 +694,10 @@ def dispatch_action(
         from finagent_core.core_agent import CoreAgent
         agent = CoreAgent(api_keys=api_keys, user_id=params.get("user_id"))
         _setup_agent_modules(agent, config, params)
-        portfolio_data = params.get("portfolio_data", params)
+        portfolio_data = params.get("portfolio_data")
+        if not portfolio_data:
+            # Never fall back to the raw params dict as if it were holdings.
+            return {"success": False, "error": "no portfolio data supplied"}
         result = agent.run_risk_assessment(portfolio_data, config)
         response_text = _extract_workflow_response(result)
         return {"success": True, "response": response_text, "result": result if isinstance(result, dict) else None}
@@ -1034,6 +1040,7 @@ def dispatch_action_streaming(
             # RunOutput, deferred.
             fallback_response = None
             except_fallback = False
+            stream_error = None
             # Use StreamingCoreAgent for real streaming
             try:
                 streaming_agent = StreamingCoreAgent(
@@ -1062,10 +1069,21 @@ def dispatch_action_streaming(
                             chunk = ' '.join(words[i:i+chunk_size])
                             stream_print("token", chunk)
                 except Exception as fallback_err:
-                    stream_print("error", str(fallback_err))
+                    stream_error = str(fallback_err)
+                    stream_print("error", stream_error)
 
             if core_agent._tracing:
                 core_agent.end_trace()
+
+            if not (resp_content or "").strip():
+                # An empty answer is a failure, not success with "".
+                err = stream_error or "agent returned an empty response"
+                if not stream_error:
+                    stream_print("error", err)
+                result = {"success": False, "error": err, "response": ""}
+                if fallback_response is not None:
+                    _attach_tool_calls(result, fallback_response)
+                return result
 
             stream_print("done", "completed")
             result = {"success": True, "response": resp_content}

@@ -149,8 +149,6 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     entities_section_ = build_hidden_section("ENTITIES", entities_layout_);
     locations_section_ = build_hidden_section("LOCATIONS", locations_layout_);
     signals_section_ = build_hidden_section("SIGNALS", signals_layout_);
-    cii_section_ = build_hidden_section("INSTABILITY", cii_layout_);
-    predictions_section_ = build_hidden_section("PREDICTIONS", predictions_layout_);
     saved_section_ = build_hidden_section("BOOKMARKS", saved_layout_);
 
     layout->addStretch();
@@ -546,70 +544,6 @@ void NewsSidePanel::update_signals(const QVector<services::CorrelationSignal>& s
         lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(color));
         lbl->setToolTip(sig.detail);
         signals_layout_->addWidget(lbl);
-    }
-}
-
-void NewsSidePanel::update_instability(const QString& country, const services::InstabilityScore& score) {
-    cii_section_->show();
-
-    // Check if already exists
-    for (int i = 0; i < cii_layout_->count(); ++i) {
-        auto* w = cii_layout_->itemAt(i)->widget();
-        if (w && w->property("country").toString() == country) {
-            auto* lbl = qobject_cast<QLabel*>(w);
-            if (lbl) {
-                QString color = score.level == "CRITICAL"
-                                    ? "" + QString(ui::colors::NEGATIVE()) + ""
-                                    : (score.level == "HIGH"
-                                           ? "" + QString(ui::colors::WARNING()) + ""
-                                           : (score.level == "ELEVATED" ? "" + QString(ui::colors::WARNING()) + ""
-                                                                        : "" + QString(ui::colors::POSITIVE()) + ""));
-                lbl->setText(QString("%1  %2  %3").arg(country, -4).arg(score.cii_score, 3).arg(score.level));
-                lbl->setStyleSheet(QString("color: %1; font-weight: 700; background: transparent;").arg(color));
-            }
-            return;
-        }
-    }
-
-    // New entry
-    QString color =
-        score.level == "CRITICAL"
-            ? "" + QString(ui::colors::NEGATIVE()) + ""
-            : (score.level == "HIGH" ? "" + QString(ui::colors::WARNING()) + ""
-                                     : (score.level == "ELEVATED" ? "" + QString(ui::colors::WARNING()) + ""
-                                                                  : "" + QString(ui::colors::POSITIVE()) + ""));
-    auto* lbl = new QLabel(QString("%1  %2  %3").arg(country, -4).arg(score.cii_score, 3).arg(score.level), this);
-    lbl->setObjectName("newsDeviationScore");
-    lbl->setProperty("country", country);
-    lbl->setStyleSheet(QString("color: %1; font-weight: 700; background: transparent;").arg(color));
-    cii_layout_->addWidget(lbl);
-}
-
-void NewsSidePanel::update_predictions(const QVector<services::PredictionMarket>& predictions) {
-    while (predictions_layout_->count() > 0) {
-        auto* item = predictions_layout_->takeAt(0);
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
-
-    if (predictions.isEmpty()) {
-        predictions_section_->hide();
-        return;
-    }
-    predictions_section_->show();
-
-    for (int i = 0; i < std::min(6, static_cast<int>(predictions.size())); ++i) {
-        const auto& pm = predictions[i];
-        int pct = static_cast<int>(pm.yes_price * 100);
-        QString color = pct >= 70 ? "" + QString(ui::colors::POSITIVE()) + ""
-                                  : (pct <= 30 ? "" + QString(ui::colors::NEGATIVE()) + ""
-                                               : "" + QString(ui::colors::WARNING()) + "");
-        auto* lbl = new QLabel(QString("%1%  %2").arg(pct).arg(pm.question.left(32)), this);
-        lbl->setObjectName("newsMonitorLabel");
-        lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(color));
-        lbl->setToolTip(pm.question);
-        predictions_layout_->addWidget(lbl);
     }
 }
 

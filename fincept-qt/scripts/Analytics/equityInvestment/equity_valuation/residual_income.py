@@ -184,8 +184,9 @@ class ResidualIncomeModel(BaseValuationModel):
         }
 
         # Generate recommendation
-        recommendation = "HOLD"
-        upside_downside = 0
+        # No market price -> no recommendation/upside (not a default HOLD / 0%)
+        recommendation = None
+        upside_downside = None
         if current_price:
             recommendation = self.generate_recommendation(intrinsic_value, current_price)
             upside_downside = self.calculate_upside_downside(intrinsic_value, current_price)
@@ -193,7 +194,7 @@ class ResidualIncomeModel(BaseValuationModel):
         return ValuationResult(
             method=self.valuation_method,
             intrinsic_value=intrinsic_value,
-            current_price=current_price or 0,
+            current_price=current_price,
             recommendation=recommendation,
             upside_downside=upside_downside,
             confidence_level="MEDIUM",

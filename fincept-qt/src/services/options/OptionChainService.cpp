@@ -53,7 +53,6 @@ const QString kMaxPainPrefix = QStringLiteral("fno:max_pain:");
 
 constexpr int kGreeksThrottleMs = 500;        // per-strike Greeks recompute floor
 constexpr int kPerLegTickCoalesceMs = 100;    // option:tick coalesce window
-constexpr double kDefaultRiskFreeRate = 0.067; // RBI 91-day T-bill ballpark
 
 QString cache_key(const QString& broker, const QString& underlying) {
     return broker + "|" + underlying;
@@ -374,16 +373,22 @@ double OptionChainService::compute_pcr(const QVector<OptionChainRow>& rows, doub
 double OptionChainService::risk_free_rate() {
     if (risk_free_rate_loaded_)
         return risk_free_rate_;
+    // No built-in rate: an unset or invalid `fno.risk_free_rate` means the rate
+    // is unknown, and IV/Greeks/POP stay unavailable rather than priced off an
+    // invented number.
     risk_free_rate_loaded_ = true;
-    auto r = fincept::SettingsRepository::instance().get(QStringLiteral("fno.risk_free_rate"),
-                                                         QString::number(kDefaultRiskFreeRate, 'f', 4));
-    if (r.is_err()) {
-        risk_free_rate_ = kDefaultRiskFreeRate;
+    risk_free_rate_ = std::numeric_limits<double>::quiet_NaN();
+    auto r = fincept::SettingsRepository::instance().get(QStringLiteral("fno.risk_free_rate"), QString());
+    if (r.is_err() || r.value().trimmed().isEmpty()) {
+        LOG_WARN("OptionChain", "fno.risk_free_rate not set — IV/Greeks unavailable until configured");
         return risk_free_rate_;
     }
     bool ok = false;
     const double v = r.value().toDouble(&ok);
-    risk_free_rate_ = (ok && v > 0 && v < 0.5) ? v : kDefaultRiskFreeRate;
+    if (ok && v > 0 && v < 0.5)
+        risk_free_rate_ = v;
+    else
+        LOG_WARN("OptionChain", QString("Invalid fno.risk_free_rate '%1' — IV/Greeks unavailable").arg(r.value()));
     LOG_INFO("OptionChain", QString("Risk-free rate r=%1").arg(risk_free_rate_, 0, 'f', 4));
     return risk_free_rate_;
 }
@@ -466,6 +471,8 @@ void OptionChainService::enrich_with_greeks(const OptionChain& chain, const QStr
         return;
 
     const double r = risk_free_rate();
+    if (!std::isfinite(r))
+        return; // rate unknown — leave IV/Greeks unset rather than guess
     const double t = compute_t_years(chain.expiry);
     // q=0 for indices and stocks v1 (no per-stock dividend lookup yet).
     const double q = 0.0;

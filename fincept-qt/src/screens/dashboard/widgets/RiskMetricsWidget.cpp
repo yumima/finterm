@@ -1,5 +1,6 @@
 #include "screens/dashboard/widgets/RiskMetricsWidget.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #    include "datahub/DataHub.h"
@@ -304,7 +305,7 @@ void RiskMetricsWidget::populate(const QVector<services::QuoteData>& quotes) {
         const auto& q = *map[sym];
 
         double chg = q.change_pct;
-        QString chg_str = QString("%1%2%").arg(chg >= 0 ? "+" : "").arg(chg, 0, 'f', 2);
+        QString chg_str = ui::formatting::format_percent(chg, 2, true);
         QString chg_col = chg > 0   ? ui::colors::POSITIVE()
                           : chg < 0 ? ui::colors::NEGATIVE()
                                     : ui::colors::TEXT_PRIMARY();
@@ -320,11 +321,12 @@ void RiskMetricsWidget::populate(const QVector<services::QuoteData>& quotes) {
 
     // Spread proxies
     auto spread_str = [](double a, double b) -> QString {
-        double diff = a - b;
-        return QString("%1%2%").arg(diff >= 0 ? "+" : "").arg(diff, 0, 'f', 2);
+        return ui::formatting::format_percent(a - b, 2, true);  // NaN leg → "—"
     };
     auto spread_color = [](double a, double b) -> QString {
         double diff = a - b;
+        if (!std::isfinite(diff))
+            return QString(ui::colors::TEXT_SECONDARY());
         return diff > 0 ? ui::colors::POSITIVE() : diff < 0 ? ui::colors::NEGATIVE() : ui::colors::TEXT_PRIMARY();
     };
 

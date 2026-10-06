@@ -4,6 +4,7 @@
 #include "services/portfolio/PortfolioService.h"
 
 #include "core/logging/Logger.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #define QT_CHARTS_USE_NAMESPACE
@@ -311,9 +312,10 @@ void CustomIndexView::update_constituents() {
         };
 
         set_item(1, h.symbol, ui::colors::CYAN);
-        set_item(2, QString::number(h.current_price, 'f', 2));
+        set_item(2, h.price_known ? QString::number(h.current_price, 'f', 2) : ui::formatting::placeholder());
         set_item(3, QString("%1%").arg(QString::number(h.weight, 'f', 1)), ui::colors::AMBER);
-        set_item(4, QString("%1 %2").arg(currency_, QString::number(h.market_value, 'f', 2)));
+        set_item(4, h.valued() ? QString("%1 %2").arg(currency_, QString::number(h.market_value, 'f', 2))
+                                  : ui::formatting::placeholder());
     }
 }
 
@@ -334,6 +336,7 @@ void CustomIndexView::create_index() {
 
     // Collect checked constituents
     QVector<CustomIndexConstituent> constituents;
+    QStringList unpriced;
     for (int r = 0; r < const_table_->rowCount(); ++r) {
         const auto* chk = const_table_->item(r, 0);
         if (!chk || chk->checkState() != Qt::Checked)
@@ -346,6 +349,11 @@ void CustomIndexView::create_index() {
         // Find matching holding
         for (const auto& h : summary_.holdings) {
             if (h.symbol == symbol) {
+                // A baseline needs a real price; never anchor one on "unknown".
+                if (!h.price_known || !(h.current_price > 0)) {
+                    unpriced.append(h.symbol);
+                    break;
+                }
                 CustomIndexConstituent c;
                 c.symbol = h.symbol;
                 c.weight = h.weight;
@@ -354,6 +362,14 @@ void CustomIndexView::create_index() {
                 break;
             }
         }
+    }
+
+    if (!unpriced.isEmpty()) {
+        create_status_->setText(QString("No current price for %1 — deselect or wait for a quote.")
+                                    .arg(unpriced.join(", ")));
+        create_status_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
+        create_status_->show();
+        return;
     }
 
     if (constituents.isEmpty()) {

@@ -17,6 +17,7 @@
 #include "services/databento/DatabentoService.h"
 
 #include <QJsonArray>
+#include <cmath>
 #include <QJsonObject>
 #include <QObject>
 
@@ -97,7 +98,10 @@ QJsonArray z_to_json(const std::vector<std::vector<float>>& z) {
     QJsonArray rows;
     for (const auto& row : z) {
         QJsonArray r;
-        for (float v : row) r.append(v);
+        // A NaN cell is a gap in the source data and travels as null, so a
+        // client never reads it as a computed 0.
+        for (float v : row)
+            r.append(std::isfinite(v) ? QJsonValue(v) : QJsonValue(QJsonValue::Null));
         rows.append(r);
     }
     return rows;
@@ -388,7 +392,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
     // 8. fetch_databento_local_vol
     {
         ToolDef t = make_db_surface_tool("fetch_databento_local_vol",
-            "Fetch local volatility surface for an underlying.", {});
+            "Local volatility surface. Currently NOT supported (a Dupire local vol needs a fitted arbitrage-free IV surface) and returns an error; use fetch_databento_options_surface for implied vol.", {});
         t.input_schema = ToolSchemaBuilder()
             .string("symbol", "Underlying ticker").required().length(1, 16)
             .number("spot", "Spot price (0 = auto)").default_num(0).min(0)
@@ -448,7 +452,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
     // 11. fetch_databento_commodity_vol
     {
         ToolDef t = make_db_surface_tool("fetch_databento_commodity_vol",
-            "Fetch commodity volatility surface for a root symbol.", {});
+            "Realized (historical) volatility of each continuous futures month over 5/10/20/30-trading-day windows. Not implied vol. Cells without enough history are null.", {});
         t.input_schema = ToolSchemaBuilder()
             .string("root_symbol", "Commodity root (e.g. CL, NG)").required().length(1, 16)
             .build();
@@ -466,7 +470,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
     // 12. fetch_databento_crack_spread
     {
         ToolDef t = make_db_surface_tool("fetch_databento_crack_spread",
-            "Fetch crack-spread / crush-spread surface (energy/grains).", {});
+            "Energy crack spreads in $/bbl by contract month: RB-CL 1:1, HO-CL 1:1 and 3-2-1, all legs on the same trading day. Null where a leg did not print.", {});
         t.async_handler = [](const QJsonObject&, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             bridge_db_fetch(std::move(ctx), promise,
@@ -480,7 +484,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
     // 13. fetch_databento_stress_test
     {
         ToolDef t = make_db_surface_tool("fetch_databento_stress_test",
-            "Run stress-test P&L surface for a basket of symbols.", {});
+            "Historical tail-return statistics per symbol (sum of 5/10 worst days, worst day, 1st percentile day, avg of worst 5% days), in percent. Not named macro scenarios.", {});
         t.input_schema = ToolSchemaBuilder()
             .array("symbols", "Basket symbols", QJsonObject{{"type", "string"}})
             .build();
@@ -499,7 +503,7 @@ std::vector<ToolDef> get_surface_analytics_tools() {
     // 14. fetch_databento_yield_curve
     {
         ToolDef t = make_db_surface_tool("fetch_databento_yield_curve",
-            "Fetch a yield-curve surface (Treasuries / sovereigns).", {});
+            "Yield curve from Treasury futures. Currently NOT supported (implied yields need the CTD bond and conversion factor) and returns an error; use a Treasury/FRED yield source instead.", {});
         t.async_handler = [](const QJsonObject&, ToolContext ctx,
                               std::shared_ptr<QPromise<ToolResult>> promise) {
             bridge_db_fetch(std::move(ctx), promise,

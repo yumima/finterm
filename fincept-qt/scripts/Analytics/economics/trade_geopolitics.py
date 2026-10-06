@@ -87,21 +87,21 @@ class TradeAnalyzer(EconomicsBase):
         return {
             'tariffs': {
                 'mechanism': 'Tax on imports',
-                'economic_effects': self._analyze_tariff_effects(restriction_data.get('tariff_rate', 0)),
+                'economic_effects': self._analyze_tariff_effects(restriction_data.get('tariff_rate'), restriction_data),
                 'revenue_generation': 'Provides government revenue',
                 'protection_level': 'Proportional to tariff rate',
                 'welfare_impact': 'Net welfare loss (deadweight loss)'
             },
             'quotas': {
                 'mechanism': 'Quantity limit on imports',
-                'economic_effects': self._analyze_quota_effects(restriction_data.get('quota_volume', 0)),
+                'economic_effects': self._analyze_quota_effects(restriction_data.get('quota_volume')),
                 'revenue_generation': 'No government revenue (quota rents to importers)',
                 'protection_level': 'Fixed quantity protection',
                 'welfare_impact': 'Similar to tariffs but different rent distribution'
             },
             'export_subsidies': {
                 'mechanism': 'Government payments to exporters',
-                'economic_effects': self._analyze_subsidy_effects(restriction_data.get('subsidy_rate', 0)),
+                'economic_effects': self._analyze_subsidy_effects(restriction_data.get('subsidy_rate')),
                 'revenue_generation': 'Costs government revenue',
                 'protection_level': 'Supports domestic producers',
                 'welfare_impact': 'Welfare loss in subsidizing country'
@@ -200,26 +200,50 @@ class TradeAnalyzer(EconomicsBase):
             'policy_recommendations': self._recommend_liberalization_policies(liberalization_data)
         }
 
-    def _calculate_trade_gains(self, data: Dict[str, Any]) -> Decimal:
-        """Calculate quantitative trade gains"""
-        trade_volume = self.to_decimal(data.get('trade_volume_gdp', 0))
-        efficiency_gain = self.to_decimal(0.05)  # Typical 5% efficiency gain
-        return trade_volume * efficiency_gain
+    def _calculate_trade_gains(self, data: Dict[str, Any]) -> Any:
+        """Calculate quantitative trade gains.
 
-    def _estimate_consumer_surplus_gain(self, data: Dict[str, Any]) -> Decimal:
-        """Estimate consumer surplus gains from trade"""
-        price_reduction = self.to_decimal(data.get('price_reduction_percent', 5))
-        consumption_share = self.to_decimal(data.get('traded_goods_consumption', 30))
+        Requires the caller's trade_volume_gdp; the efficiency-gain rate is an
+        explicit assumption (overridable via efficiency_gain_percent) and is
+        returned alongside the result so it is never mistaken for a measurement.
+        """
+        if data.get('trade_volume_gdp') is None:
+            return None
+        trade_volume = self.to_decimal(data['trade_volume_gdp'])
+        eff_pct = self.to_decimal(data.get('efficiency_gain_percent', 5))
+        return {
+            'value_pct_gdp': trade_volume * eff_pct / self.to_decimal(100),
+            'assumed_efficiency_gain_percent': eff_pct,
+            'basis': 'trade_volume_gdp x assumed efficiency gain (illustrative assumption, not measured)'
+        }
+
+    def _estimate_consumer_surplus_gain(self, data: Dict[str, Any]) -> Any:
+        """Estimate consumer surplus gains from trade (simplified triangle
+        approximation). Both inputs are required; missing -> None."""
+        if data.get('price_reduction_percent') is None or data.get('traded_goods_consumption') is None:
+            return None
+        price_reduction = self.to_decimal(data['price_reduction_percent'])
+        consumption_share = self.to_decimal(data['traded_goods_consumption'])
         return price_reduction * consumption_share / self.to_decimal(200)  # Simplified calculation
 
-    def _analyze_tariff_effects(self, tariff_rate: float) -> Dict[str, Any]:
-        """Analyze economic effects of tariffs"""
+    def _analyze_tariff_effects(self, tariff_rate: Any, data: Dict[str, Any] = None) -> Dict[str, Any]:
+        """Analyze economic effects of tariffs.
+
+        Elasticities are explicit assumptions (overridable via
+        import_demand_elasticity / domestic_supply_response) and are echoed in
+        the output; a missing tariff rate yields no numbers.
+        """
+        if tariff_rate is None:
+            return {'status': 'Tariff rate not provided - no quantitative estimate'}
+        data = data or {}
         rate = self.to_decimal(tariff_rate)
+        elasticity = self.to_decimal(data.get('import_demand_elasticity', 1.5))
+        supply_resp = self.to_decimal(data.get('domestic_supply_response', 0.8))
         return {
-            'price_increase': f"Domestic price rises by approximately {rate}%",
-            'import_reduction': f"Imports fall by {rate * self.to_decimal(1.5)}% (assuming elasticity 1.5)",
-            'domestic_production': f"Domestic production increases by {rate * self.to_decimal(0.8)}%",
-            'welfare_loss': f"Deadweight loss approximately {rate ** 2 / self.to_decimal(200)}% of GDP"
+            'price_increase': f"Domestic price rises by up to {rate}% (full pass-through assumed)",
+            'import_reduction': f"Imports fall by {rate * elasticity}% (assumed import demand elasticity {elasticity})",
+            'domestic_production': f"Domestic production increases by {rate * supply_resp}% (assumed supply response {supply_resp})",
+            'welfare_loss': f"Deadweight loss approximately {rate ** 2 / self.to_decimal(200)}% of GDP (textbook Harberger approximation)"
         }
 
     def _analyze_quota_effects(self, quota_volume: float) -> Dict[str, Any]:
@@ -231,12 +255,15 @@ class TradeAnalyzer(EconomicsBase):
             'supply_response': 'Domestic producers expand to fill demand gap'
         }
 
-    def _analyze_subsidy_effects(self, subsidy_rate: float) -> Dict[str, Any]:
-        """Analyze economic effects of export subsidies"""
+    def _analyze_subsidy_effects(self, subsidy_rate: Any) -> Dict[str, Any]:
+        """Analyze economic effects of export subsidies (multipliers are
+        stated assumptions; missing rate yields no numbers)"""
+        if subsidy_rate is None:
+            return {'status': 'Subsidy rate not provided - no quantitative estimate'}
         rate = self.to_decimal(subsidy_rate)
         return {
-            'export_increase': f"Exports rise by approximately {rate * self.to_decimal(1.2)}%",
-            'domestic_price_rise': f"Domestic price increases by {rate * self.to_decimal(0.5)}%",
+            'export_increase': f"Exports rise by approximately {rate * self.to_decimal(1.2)}% (assumed export elasticity 1.2)",
+            'domestic_price_rise': f"Domestic price increases by {rate * self.to_decimal(0.5)}% (assumed 50% pass-through)",
             'fiscal_cost': f"Government cost {rate}% of export value",
             'foreign_welfare': 'Foreign consumers benefit from lower prices'
         }
@@ -265,8 +292,10 @@ class TradeAnalyzer(EconomicsBase):
 
     def _assess_fta_impact(self, data: Dict[str, Any]) -> str:
         """Assess free trade agreement impact"""
-        trade_creation = self.to_decimal(data.get('trade_creation', 0))
-        trade_diversion = self.to_decimal(data.get('trade_diversion', 0))
+        if data.get('trade_creation') is None or data.get('trade_diversion') is None:
+            return 'Trade creation/diversion estimates not provided - cannot assess net effect'
+        trade_creation = self.to_decimal(data['trade_creation'])
+        trade_diversion = self.to_decimal(data['trade_diversion'])
 
         if trade_creation > trade_diversion:
             return 'Net welfare gain from trade creation effects'
@@ -642,7 +671,9 @@ class GeopoliticalRiskAnalyzer(EconomicsBase):
 
     def _assess_conflict_probability(self, data: Dict[str, Any]) -> str:
         """Assess probability of interstate conflict"""
-        tension_level = data.get('tension_index', 0.5)
+        tension_level = data.get('tension_index')
+        if tension_level is None:
+            return 'Unavailable - tension_index not provided'
 
         if tension_level > 0.8:
             return 'High risk of conflict escalation'
@@ -653,7 +684,9 @@ class GeopoliticalRiskAnalyzer(EconomicsBase):
 
     def _assess_instability_probability(self, data: Dict[str, Any]) -> str:
         """Assess probability of domestic instability"""
-        governance_score = data.get('governance_index', 0.5)
+        governance_score = data.get('governance_index')
+        if governance_score is None:
+            return 'Unavailable - governance_index not provided'
 
         if governance_score < 0.3:
             return 'High instability risk'
@@ -794,8 +827,10 @@ class TradingBlocAnalyzer(EconomicsBase):
 
     def _calculate_intra_bloc_growth(self, data: Dict[str, Any]) -> str:
         """Calculate intra-bloc trade growth"""
-        baseline_trade = self.to_decimal(data.get('baseline_intra_trade', 100))
-        current_trade = self.to_decimal(data.get('current_intra_trade', 120))
+        if not data.get('baseline_intra_trade') or data.get('current_intra_trade') is None:
+            return 'Unavailable - baseline_intra_trade and current_intra_trade not provided'
+        baseline_trade = self.to_decimal(data['baseline_intra_trade'])
+        current_trade = self.to_decimal(data['current_intra_trade'])
 
         growth_rate = ((current_trade - baseline_trade) / baseline_trade) * self.to_decimal(100)
         return f"Intra-bloc trade grew by {growth_rate:.1f}% since formation"

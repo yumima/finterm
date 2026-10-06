@@ -3,6 +3,7 @@
 #include <QDateTime>
 #include <QHash>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 #include <optional>
@@ -100,7 +101,35 @@ struct HoldingWithQuote {
     // labelled with the portfolio currency.
     QString currency;      // empty = unknown (treated as the portfolio currency)
     double fx_rate = 1.0;  // instrument → portfolio currency multiplier
+
+    // Price provenance. price_known=false means there is NO price at all —
+    // no live quote and nothing cached (cold start offline, delisted symbol).
+    // current_price / unrealized_pnl(_percent) / day_change(_percent) are then
+    // NaN (rendered "—"), market_value is 0 and weight 0: the holding is left
+    // OUT of every total and listed in PortfolioSummary::unpriced_symbols. It
+    // used to be valued at its average buy price, painting P&L 0.00 as fact.
+    // price_stale=true means the price is a last-known `market_last:` print
+    // (up to 7 days old), not a fresh quote — the valuation is an estimate.
+    bool price_known = true;
+    bool price_stale = false;
+    // False when the instrument's currency or its FX rate into the portfolio
+    // currency is unknown. The converted figures (market_value 0 = excluded,
+    // cost_basis / unrealized_pnl NaN, fx_rate NaN) are then unknown and the
+    // holding is left out of every total and listed in
+    // PortfolioSummary::fx_unknown_symbols — it used to enter them at an
+    // assumed 1.0 rate. Per-share fields and P&L % (currency-free) stay real.
+    bool fx_known = true;
+
+    /// True when the holding has a portfolio-currency valuation (price AND
+    /// conversion known) and therefore counts in the totals.
+    bool valued() const { return price_known && fx_known; }
 };
+
+/// True when the holding has a usable (finite) value for `v`. NaN marks an
+/// unknown figure — consumers must render placeholder() for it, never 0.
+inline bool has_value(double v) {
+    return v == v; // !isnan without pulling <cmath> into every includer
+}
 
 // ── Trailing-stop maths ──────────────────────────────────────────────────────
 
@@ -108,7 +137,7 @@ struct HoldingWithQuote {
 /// A price above the stored peak IS the new peak — waiting for tomorrow's
 /// daily bar would report a phantom drawdown while the position prints highs.
 inline void refresh_drawdown(HoldingWithQuote& h) {
-    if (h.peak_price <= 0 || h.current_price <= 0) {
+    if (h.peak_price <= 0 || !(h.current_price > 0)) { // !(>0) also catches NaN (no price)
         h.drawdown_from_peak_percent = 0;
         return;
     }
@@ -149,10 +178,10 @@ struct PortfolioSummary {
     // "CACHED" badge so the user knows the numbers may be stale until
     // the in-flight quote refetch lands and emits a fresh summary.
     bool from_cache = false;
-    // True when a cross-currency holding could not be converted (its trading
-    // currency is still unknown, or no FX rate was available) and entered the
-    // totals at face value. The totals are then approximate and the UI must
-    // say so rather than present them as exact.
+    // True when some conversion into the portfolio currency is unknown (a
+    // holding's currency/FX rate — such holdings are excluded from the totals
+    // and listed in fx_unknown_symbols — or a closed position's realized
+    // P&L/dividends, excluded from those totals). The UI marks totals "≈".
     bool fx_incomplete = false;
     // Instrument→portfolio-currency multiplier for EVERY symbol in the
     // transaction log, not just open holdings — closed positions still
@@ -160,6 +189,20 @@ struct PortfolioSummary {
     // "no conversion known"; consumers treat that as 1.0 and should already
     // have set fx_incomplete.
     QHash<QString, double> fx_rates;
+    // Holdings with no price at all (excluded from every total), holdings
+    // priced from a stale last-known cache entry, and holdings whose day
+    // change is unknown (excluded from total_day_change). Non-empty lists
+    // make the totals partial/approximate and the UI must say so.
+    QStringList unpriced_symbols;
+    QStringList stale_symbols;
+    QStringList day_change_unknown_symbols;
+    // Holdings whose currency / FX rate is unknown — excluded from totals.
+    QStringList fx_unknown_symbols;
+    /// Totals leave out whole holdings (no price, or no FX conversion).
+    bool book_incomplete() const { return !unpriced_symbols.isEmpty() || !fx_unknown_symbols.isEmpty(); }
+    bool valuation_partial() const {
+        return book_incomplete() || !stale_symbols.isEmpty();
+    }
 };
 
 // ── Computed analytics ───────────────────────────────────────────────────────
@@ -182,7 +225,29 @@ struct ComputedMetrics {
     std::optional<double> risk_score;         // 0-100 composite
     std::optional<double> concentration_top3; // sum of top 3 weights %
     int return_days = 0;                      // observations behind the series-based metrics
+    // The risk-free hurdle behind sharpe/sortino: the ^TNX value used (annual
+    // decimal) and when it was fetched. Set only when those ratios are.
+    std::optional<double> rf_rate;
+    QDateTime rf_as_of;
 };
+
+/// True when the risk-free rate behind Sharpe/Sortino is older than a day —
+/// the last successful fetch, carried because today's failed.
+inline bool rf_is_stale(const ComputedMetrics& m) {
+    return m.rf_rate && (!m.rf_as_of.isValid() || m.rf_as_of.secsTo(QDateTime::currentDateTimeUtc()) > 86400);
+}
+
+/// Tooltip line naming the risk-free rate used and its as-of date.
+inline QString rf_label(const ComputedMetrics& m) {
+    if (!m.rf_rate)
+        return QStringLiteral("No risk-free rate has been fetched yet (^TNX) — Sharpe/Sortino unavailable.");
+    const QString when = m.rf_as_of.isValid() ? m.rf_as_of.toLocalTime().toString(QStringLiteral("yyyy-MM-dd HH:mm"))
+                                              : QStringLiteral("unknown date");
+    return QStringLiteral("Risk-free rate: %1% (10y Treasury, ^TNX) as of %2%3")
+        .arg(QString::number(*m.rf_rate * 100.0, 'f', 2), when,
+             rf_is_stale(m) ? QStringLiteral(" — STALE: today's fetch failed, last fetched value used.")
+                            : QStringLiteral("."));
+}
 
 // ── Snapshot for performance history ─────────────────────────────────────────
 

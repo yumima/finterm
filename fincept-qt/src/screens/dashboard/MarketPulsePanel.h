@@ -16,7 +16,8 @@ namespace fincept::screens {
 /// snapshot, market hours.
 ///
 /// Subscribes to `market:quote:<sym>` on the DataHub for the union of
-/// breadth + mover + snapshot symbol sets. Each delivery updates the
+/// breadth-basket + snapshot symbol sets. Gainers/losers come from the
+/// market-wide screener via MarketDataService::fetch_top_movers(). Each delivery updates the
 /// matching row cache and triggers the relevant `rebuild_*_from_cache()`
 /// to re-render that section. The hub scheduler owns data-refresh cadence;
 /// `hours_timer_` is retained only because it drives wall-clock status
@@ -82,7 +83,7 @@ class MarketPulsePanel : public QWidget {
     QFrame* fg_gradient_bar_ = nullptr;
 
     // ── Market Breadth ──
-    // per-exchange: {name_label, adv_label, slash_label, dec_label, green_bar, red_bar}
+    // {name_label, adv_label, slash_label, dec_label, green_bar, red_bar}
     struct BreadthRow {
         QLabel* name = nullptr;
         QLabel* adv = nullptr;
@@ -91,9 +92,9 @@ class MarketPulsePanel : public QWidget {
         QWidget* green = nullptr;
         QWidget* red = nullptr;
     };
-    BreadthRow nyse_row_;
-    BreadthRow nasdaq_row_;
-    BreadthRow sp500_row_;
+    // Single row: advancers/decliners within the fixed watch basket. Not
+    // exchange-wide breadth, so no NYSE/NASDAQ/S&P rows.
+    BreadthRow basket_row_;
 
     // ── Top Movers ──
     // Persistent mover rows: built once (3 gainers + 3 losers) and updated
@@ -141,10 +142,15 @@ class MarketPulsePanel : public QWidget {
     void hub_unsubscribe_all();
     void rebuild_breadth_from_cache();
     void rebuild_movers_from_cache();
+    /// Pull real market-wide gainers/losers (yfinance day_gainers/day_losers
+    /// screener) — same source as TopMoversWidget.
+    void fetch_movers();
     void rebuild_snapshot_from_cache();
 
     QHash<QString, services::QuoteData> breadth_cache_;
-    QHash<QString, services::QuoteData> movers_cache_;
+    services::MarketDataService::TopMovers movers_data_;
+    bool movers_loaded_ = false;
+    QTimer* movers_timer_ = nullptr;
     QHash<QString, services::QuoteData> snapshot_cache_;
     bool hub_active_ = false;
     QTimer* hours_timer_ = nullptr;

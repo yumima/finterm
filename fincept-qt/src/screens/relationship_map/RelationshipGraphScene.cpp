@@ -5,6 +5,7 @@
 // Each cluster owns an exclusive vertical band. No angle math.
 #include "screens/relationship_map/RelationshipGraphScene.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QFont>
@@ -22,6 +23,21 @@
 #include <cmath>
 
 namespace fincept::relmap {
+
+namespace fmt = fincept::ui::formatting;
+
+// Missing values arrive as NaN (JSON null) and render as "—". Money uses the
+// reported currency; with no reported currency no symbol is invented.
+static QString rm_money(double v, const QString& cur, bool compact = false) {
+    if (!cur.isEmpty())
+        return fmt::format_money(v, cur, compact);
+    if (!std::isfinite(v))
+        return fmt::placeholder();
+    return compact ? fmt::format_compact(v) : QString::number(v, 'f', 2);
+}
+static QString rm_num(double v, int dp) {
+    return std::isfinite(v) ? QString::number(v, 'f', dp) : fmt::placeholder();
+}
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 static constexpr qreal kCenterW      = 220.0;
@@ -346,13 +362,12 @@ void RelationshipGraphScene::build_graph(
     const QColor cMet  ("#6b7280");
 
     // ── Center node ──────────────────────────────────────────────────────────
-    bool up = data.company.day_change_pct >= 0;
-    QString center_sub = QString("%1\n$%2  %3%4%\nMktCap $%5B")
-        .arg(data.company.name.left(24))
-        .arg(data.company.current_price, 0, 'f', 2)
-        .arg(up ? "+" : "")
-        .arg(data.company.day_change_pct, 0, 'f', 2)
-        .arg(data.company.market_cap / 1e9, 0, 'f', 0);
+    const QString& cur = data.company.currency;
+    QString center_sub = QString("%1\n%2  %3\nMktCap %4")
+        .arg(data.company.name.left(24),
+             rm_money(data.company.current_price, cur),
+             fmt::format_percent(data.company.day_change_pct, 2, true),
+             rm_money(data.company.market_cap, cur, true));
 
     auto* center_node = new RelNode(data.company.ticker, center_sub,
                                     cAmber, kCenterW, kCenterH, RelNode::Role::Center);
@@ -383,8 +398,9 @@ void RelationshipGraphScene::build_graph(
         QVector<LeafInfo> lv;
         for (const auto& p : data.peers) {
             if (lv.size() >= 12) break;
-            QColor acc = (p.week52_change >= 0) ? cPeer : QColor("#dc2626");
-            lv.append({p.ticker, QString("$%1").arg(p.current_price, 0, 'f', 2), acc});
+            QColor acc = (p.week52_change < 0) ? QColor("#dc2626") : cPeer;
+            // Peer rows carry no currency field — no symbol is assumed.
+            lv.append({p.ticker, rm_money(p.current_price, QString()), acc});
         }
         push_right(QString("Peers (%1/%2)").arg(lv.size()).arg(data.peers.size()),
                    cPeer, std::move(lv));
@@ -395,8 +411,8 @@ void RelationshipGraphScene::build_graph(
         QVector<LeafInfo> lv;
         for (const auto& h : data.institutional_holders) {
             if (lv.size() >= 8) break;
-            if (h.percentage < filters.min_ownership) continue;
-            lv.append({h.name.left(14), QString("%1%").arg(h.percentage, 0, 'f', 2), cInst});
+            if (filters.min_ownership > 0 && !(h.percentage >= filters.min_ownership)) continue;
+            lv.append({h.name.left(14), fmt::format_percent(h.percentage, 2), cInst});
         }
         push_right(QString("Holders (%1/%2)").arg(lv.size()).arg(data.institutional_holders.size()),
                    cInst, std::move(lv));
@@ -407,7 +423,7 @@ void RelationshipGraphScene::build_graph(
         QVector<LeafInfo> lv;
         for (const auto& h : data.mutualfund_holders) {
             if (lv.size() >= 8) break;
-            lv.append({h.name.left(14), QString("%1%").arg(h.percentage, 0, 'f', 2), cMF});
+            lv.append({h.name.left(14), fmt::format_percent(h.percentage, 2), cMF});
         }
         push_right(QString("Funds (%1/%2)").arg(lv.size()).arg(data.mutualfund_holders.size()),
                    cMF, std::move(lv));
@@ -419,7 +435,7 @@ void RelationshipGraphScene::build_graph(
         if (data.company.analyst_count > 0) {
             QString rec = data.company.recommendation.toUpper();
             bool bull = rec.contains("BUY") || rec.contains("OUTPERFORM");
-            lv.append({rec, QString("PT $%1").arg(data.company.target_mean, 0, 'f', 0),
+            lv.append({rec, QString("PT %1").arg(rm_money(data.company.target_mean, cur)),
                        bull ? QColor("#16a34a") : QColor("#dc2626")});
         }
         for (const auto& ud : data.upgrades_downgrades) {
@@ -462,20 +478,19 @@ void RelationshipGraphScene::build_graph(
         QVector<LeafInfo> lv;
         if (data.company.pe_ratio > 0)
             lv.append({"P/E", QString("%1  fwd %2")
-                       .arg(data.company.pe_ratio, 0, 'f', 1)
-                       .arg(data.company.forward_pe, 0, 'f', 1), cMet});
+                       .arg(rm_num(data.company.pe_ratio, 1), rm_num(data.company.forward_pe, 1)), cMet});
         if (data.margins.gross > 0)
-            lv.append({"Margins", QString("Gr %1%  Net %2%")
-                       .arg(data.margins.gross * 100, 0, 'f', 1)
-                       .arg(data.margins.net * 100, 0, 'f', 1), cMet});
+            lv.append({"Margins", QString("Gr %1  Net %2")
+                       .arg(fmt::format_percent(data.margins.gross * 100, 1),
+                            fmt::format_percent(data.margins.net * 100, 1)), cMet});
         if (data.technicals.beta > 0)
-            lv.append({"Beta", QString("%1   52W $%2")
-                       .arg(data.technicals.beta, 0, 'f', 2)
-                       .arg(data.technicals.fifty_two_week_high, 0, 'f', 0), cMet});
+            lv.append({"Beta", QString("%1   52W %2")
+                       .arg(rm_num(data.technicals.beta, 2),
+                            rm_money(data.technicals.fifty_two_week_high, cur)), cMet});
         if (data.short_interest.short_pct_float > 0)
-            lv.append({"Short Int", QString("%1%  %2d cvr")
-                       .arg(data.short_interest.short_pct_float * 100, 0, 'f', 1)
-                       .arg(data.short_interest.short_ratio, 0, 'f', 1),
+            lv.append({"Short Int", QString("%1  %2d cvr")
+                       .arg(fmt::format_percent(data.short_interest.short_pct_float * 100, 1),
+                            rm_num(data.short_interest.short_ratio, 1)),
                        data.short_interest.short_pct_float > 0.05 ? QColor("#dc2626") : cMet});
         if (data.governance.overall_risk > 0)
             lv.append({"Governance", QString("Risk %1/10  Audit %2")

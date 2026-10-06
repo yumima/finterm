@@ -5,6 +5,7 @@
 #include "core/logging/Logger.h"
 #include "services/agents/AgentService.h"
 #include "ui/markdown/MarkdownRenderer.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QComboBox>
@@ -607,10 +608,19 @@ QString PortfolioInsightsPanel::build_portfolio_context() const {
         lines << QString("  %1 [%2]  qty %3 @ %4  |  P&L %5%  |  wt %6%")
                      .arg(h.symbol, h.sector.isEmpty() ? "Unclassified" : h.sector)
                      .arg(QString::number(h.quantity, 'f', 2))
-                     .arg(QString::number(h.current_price, 'f', 2))
-                     .arg(QString::number(h.unrealized_pnl_percent, 'f', 2))
+                     .arg(h.price_known ? QString::number(h.current_price, 'f', 2)
+                                        : QStringLiteral("no price (excluded from NAV)"))
+                     .arg(std::isfinite(h.unrealized_pnl_percent)
+                              ? QString::number(h.unrealized_pnl_percent, 'f', 2)
+                              : ui::formatting::placeholder())
                      .arg(QString::number(h.weight, 'f', 1));
     }
+    if (!summary_.unpriced_symbols.isEmpty())
+        lines << QString("Note: NAV and P&L exclude unpriced holdings: %1")
+                     .arg(summary_.unpriced_symbols.join(", "));
+    if (!summary_.fx_unknown_symbols.isEmpty())
+        lines << QString("Note: NAV and P&L exclude holdings with no FX rate: %1")
+                     .arg(summary_.fx_unknown_symbols.join(", "));
     return lines.join("\n");
 }
 
@@ -638,8 +648,10 @@ void PortfolioInsightsPanel::run_ai(bool force) {
         o["sector"] = h.sector.isEmpty() ? QStringLiteral("Unclassified") : h.sector;
         o["quantity"] = h.quantity;
         o["avg_buy_price"] = h.avg_buy_price;
+        // Unknown figures go out as null (QJson writes NaN as null), and an
+        // unpriced holding's market value is unknown, not 0.
         o["current_price"] = h.current_price;
-        o["market_value"] = h.market_value;
+        o["market_value"] = h.valued() ? QJsonValue(h.market_value) : QJsonValue();
         o["cost_basis"] = h.cost_basis;
         o["unrealized_pnl"] = h.unrealized_pnl;
         o["unrealized_pnl_percent"] = h.unrealized_pnl_percent;

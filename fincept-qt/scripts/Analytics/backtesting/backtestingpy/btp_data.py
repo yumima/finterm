@@ -1,70 +1,13 @@
 """
 Backtesting.py Data Module
 
-Data helpers: random_ohlc_data, resample_apply, OHLCV_AGG, TRADES_AGG,
+Data helpers: yfinance loading, resample_apply, OHLCV_AGG, TRADES_AGG,
 FractionalBacktest, MultiBacktest wrappers.
 """
 
 import pandas as pd
 import numpy as np
 from typing import Dict, Any, List, Optional
-
-
-# ============================================================================
-# Random OHLC Data Generation
-# ============================================================================
-
-def random_ohlc_data(n_bars: int = 500, start_price: float = 100.0,
-                     volatility: float = 0.02, trend: float = 0.0001,
-                     start_date: str = '2020-01-01',
-                     seed: Optional[int] = None) -> pd.DataFrame:
-    """
-    Generate random OHLCV data using geometric Brownian motion.
-    Wraps backtesting.lib.random_ohlc_data if available, else custom impl.
-
-    Args:
-        n_bars: Number of bars
-        start_price: Starting price
-        volatility: Daily volatility
-        trend: Daily drift
-        start_date: Start date string
-        seed: Random seed
-
-    Returns:
-        DataFrame with Open, High, Low, Close, Volume columns
-    """
-    # backtesting.lib.random_ohlc_data returns a generator, not directly useful.
-    # Use our own implementation for deterministic, seeded OHLCV data.
-
-    rng = np.random.default_rng(seed)
-    dates = pd.bdate_range(start=start_date, periods=n_bars)
-
-    returns = rng.normal(trend, volatility, n_bars)
-    close = start_price * np.exp(np.cumsum(returns))
-
-    # Generate OHLC from close
-    intraday_vol = volatility * 0.5
-    open_prices = close * (1 + rng.normal(0, intraday_vol * 0.3, n_bars))
-    high_noise = np.abs(rng.normal(0, intraday_vol, n_bars))
-    low_noise = np.abs(rng.normal(0, intraday_vol, n_bars))
-
-    high = np.maximum(open_prices, close) * (1 + high_noise)
-    low = np.minimum(open_prices, close) * (1 - low_noise)
-    volume = rng.integers(500_000, 10_000_000, n_bars)
-
-    data = pd.DataFrame({
-        'Open': open_prices,
-        'High': high,
-        'Low': low,
-        'Close': close,
-        'Volume': volume,
-    }, index=dates)
-
-    # Ensure consistency
-    data['High'] = data[['Open', 'High', 'Close']].max(axis=1)
-    data['Low'] = data[['Open', 'Low', 'Close']].min(axis=1)
-
-    return data
 
 
 # ============================================================================
@@ -97,54 +40,19 @@ def load_yfinance_data(symbol: str, start_date: str = None,
     return None
 
 
-def load_builtin_data(symbol: str = 'GOOG') -> Optional[pd.DataFrame]:
-    """Load built-in test data from backtesting.py"""
-    try:
-        if symbol.upper() in ('GOOG', 'GOOGL'):
-            from backtesting.test import GOOG
-            return GOOG.copy()
-    except Exception:
-        pass
-    return None
-
-
 def load_data(symbol: str, start_date: str = None,
-              end_date: str = None) -> Optional[pd.DataFrame]:
+              end_date: str = None) -> pd.DataFrame:
     """
-    Load market data with fallback chain:
-    1. Built-in test data (GOOG)
-    2. yfinance
-    3. Synthetic random data
-    """
-    # Try built-in
-    if symbol.upper() in ('GOOG', 'GOOGL'):
-        data = load_builtin_data(symbol)
-        if data is not None:
-            if start_date:
-                try:
-                    data = data[data.index >= pd.Timestamp(start_date)]
-                except Exception:
-                    pass
-            if end_date:
-                try:
-                    data = data[data.index <= pd.Timestamp(end_date)]
-                except Exception:
-                    pass
-            if len(data) > 0:
-                return data
+    Load real market data via yfinance.
 
-    # Try yfinance
+    Raises RuntimeError naming the symbol when no real data can be obtained;
+    never substitutes bundled sample or synthetic data.
+    """
     data = load_yfinance_data(symbol, start_date, end_date)
     if data is not None and len(data) > 0:
         return data
-
-    # Fallback to synthetic
-    seed = sum(ord(c) for c in symbol) % (2**31)
-    return random_ohlc_data(
-        n_bars=500,
-        start_date=start_date or '2020-01-01',
-        seed=seed
-    )
+    raise RuntimeError(f'Market data unavailable for {symbol}: yfinance returned no data '
+                       f'(or yfinance is not installed)')
 
 
 # ============================================================================

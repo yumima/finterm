@@ -43,8 +43,7 @@ Indicators:
 
 Data Handling:
 - OHLCV data support
-- GOOG test data (built-in from backtesting.py)
-- Synthetic data generation (fallback)
+- Real OHLCV data via yfinance (errors out if unavailable; no synthetic fallback)
 - Date range filtering
 
 FEATURES NOT IMPLEMENTED:
@@ -53,12 +52,12 @@ FEATURES NOT IMPLEMENTED:
 - SAMBO optimization (model-based optimization)
 - Heatmap generation
 - Live trading integration
-- Real-time data fetching (uses synthetic data)
+- Real-time data fetching
 
 LIMITATIONS:
 ============
 - Custom strategies require valid Python code
-- No built-in data providers (uses synthetic data)
+- Historical data via yfinance only
 - Results depend on data quality
 """
 
@@ -200,7 +199,7 @@ class BacktestingPyProvider(BacktestingProviderBase):
             primary_asset = assets[0]
             symbol = primary_asset.get('symbol', 'SPY')
 
-            # Load or generate data
+            # Load real data (raises if unavailable)
             data = self._load_data(symbol, start_date, end_date)
 
             if data is None or len(data) == 0:
@@ -234,35 +233,24 @@ class BacktestingPyProvider(BacktestingProviderBase):
             self._log(f'Running backtest for {symbol} from {start_date} to {end_date}')
             stats = bt.run()
 
-            # Detect if synthetic data was used (no yfinance available or fetch failed)
-            using_synthetic = not self._has_real_data(symbol)
-
             # Convert results to our format
             result = self._convert_results(stats, symbol, start_date, end_date, initial_capital)
 
             self._log('Backtest completed successfully')
             result_dict = asdict(result)
-            result_dict['using_synthetic_data'] = using_synthetic
-
-            if using_synthetic:
-                result_dict['synthetic_data_warning'] = (
-                    'WARNING: This backtest used SYNTHETIC (fake) data because real market data '
-                    'could not be loaded. Install yfinance (pip install yfinance) and ensure '
-                    'internet connectivity for real results. These results have NO financial meaning.'
-                )
 
             # Add backtesting.py-specific extended stats
             result_dict['extended_stats'] = {
-                'sqn': self._safe_stat(stats, 'SQN', 0),
-                'kellyCriterion': self._safe_stat(stats, 'Kelly Criterion', 0),
-                'exposureTime': self._safe_stat(stats, 'Exposure Time [%]', 0) / 100.0,
-                'buyAndHoldReturn': self._safe_stat(stats, 'Buy & Hold Return [%]', 0) / 100.0,
-                'avgDrawdown': self._safe_stat(stats, 'Avg. Drawdown [%]', 0) / 100.0,
+                'sqn': self._safe_stat(stats, 'SQN'),
+                'kellyCriterion': self._safe_stat(stats, 'Kelly Criterion'),
+                'exposureTime': self._pct(stats, 'Exposure Time [%]'),
+                'buyAndHoldReturn': self._pct(stats, 'Buy & Hold Return [%]'),
+                'avgDrawdown': self._pct(stats, 'Avg. Drawdown [%]'),
                 'maxDrawdownDuration': str(stats.get('Max. Drawdown Duration', '')),
                 'avgDrawdownDuration': str(stats.get('Avg. Drawdown Duration', '')),
                 'avgTradeDuration': str(stats.get('Avg. Trade Duration', '')),
                 'maxTradeDuration': str(stats.get('Max. Trade Duration', '')),
-                'cagr': self._safe_stat(stats, 'CAGR [%]', 0) / 100.0,
+                'cagr': self._pct(stats, 'CAGR [%]'),
             }
 
             # --- Advanced Metrics ---
@@ -583,126 +571,54 @@ class BacktestingPyProvider(BacktestingProviderBase):
                 normalized = close / close[0]
                 # Resample to match target length if needed
                 if len(normalized) != target_len:
-                    indices = np.linspace(0, len(normalized) - 1, target_len).astype(int)
-                    normalized = normalized[indices]
+                    # Calendars differ; position-resampling would pair benchmark
+                    # prices with the wrong dates. Report benchmark as unavailable.
+                    self._error(f'Benchmark {symbol} has {len(normalized)} bars vs {target_len} '
+                                f'strategy bars; benchmark comparison unavailable')
+                    return None
                 return normalized
         except Exception as e:
             self._error(f'Failed to load benchmark {symbol}', e)
         return None
 
-    def _has_real_data(self, symbol: str) -> bool:
-        """Check if real data was actually used (not synthetic fallback).
+    def _load_data(self, symbol: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """Load real OHLCV data for backtesting via yfinance.
 
-        This tracks whether _load_data ended up using real data or fell back
-        to synthetic generation. The flag is set during _load_data execution.
+        Raises RuntimeError naming the symbol when real data cannot be
+        obtained -- never substitutes bundled sample or synthetic data.
         """
-        return getattr(self, '_last_load_was_real', False)
-
-    def _load_data(self, symbol: str, start_date: str, end_date: str) -> Optional[pd.DataFrame]:
-        """Load or generate OHLCV data for backtesting.
-
-        Sets self._last_load_was_real to track whether real or synthetic data was used.
-        """
-        self._last_load_was_real = False  # Assume synthetic until proven otherwise
         try:
-            # Try to use test data if available
-            if symbol == 'GOOG' or symbol == 'GOOGL':
-                try:
-                    from backtesting.test import GOOG
-                    data = GOOG.copy()
+            import yfinance as yf
+        except ImportError:
+            raise RuntimeError(f'Market data unavailable for {symbol}: yfinance is not installed')
 
-                    # Filter by date if specified
-                    if start_date and start_date != '':
-                        try:
-                            start_ts = pd.Timestamp(start_date)
-                            data = data[data.index >= start_ts]
-                        except:
-                            pass
-
-                    if end_date and end_date != '':
-                        try:
-                            end_ts = pd.Timestamp(end_date)
-                            data = data[data.index <= end_ts]
-                        except:
-                            pass
-
-                    self._log(f'Loaded {len(data)} bars of GOOG test data (from {data.index[0]} to {data.index[-1]})')
-                    if len(data) > 0:
-                        self._last_load_was_real = True
-                        return data
-                    return None
-                except Exception as e:
-                    self._log(f'Could not load GOOG test data: {e}')
-                    # Fall through to yfinance / synthetic data
-
-            # Try to fetch real data using yfinance if available
-            try:
-                import yfinance as yf
-                self._log(f'Fetching real market data for {symbol} via yfinance')
-                ticker = yf.Ticker(symbol)
-                data = ticker.history(
-                    start=start_date or '2020-01-01',
-                    end=end_date or None,
-                    auto_adjust=True
-                )
-                if data is not None and len(data) > 0:
-                    # Ensure column names match expected format
-                    data.columns = [c.capitalize() if c.lower() in ['open', 'high', 'low', 'close', 'volume'] else c for c in data.columns]
-                    # Keep only OHLCV columns
-                    ohlcv_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
-                    available_cols = [c for c in ohlcv_cols if c in data.columns]
-                    data = data[available_cols]
-                    # Round to 4 decimal places to eliminate float32 rounding noise
-                    for col in ['Open', 'High', 'Low', 'Close']:
-                        if col in data.columns:
-                            data[col] = data[col].round(4)
-                    self._log(f'Loaded {len(data)} bars of real data for {symbol}')
-                    self._last_load_was_real = True
-                    return data
-                else:
-                    self._log(f'No data returned from yfinance for {symbol}')
-            except ImportError:
-                self._log('yfinance not installed - falling back to synthetic data. Install with: pip install yfinance')
-            except Exception as e:
-                self._log(f'Failed to fetch real data for {symbol}: {e} - falling back to synthetic data')
-
-            # Fallback: Generate synthetic data with clear warning
-            self._last_load_was_real = False
-            import sys
-            print(f'[WARNING] Using SYNTHETIC data for {symbol}. Results are NOT based on real market data. '
-                  f'Install yfinance (pip install yfinance) for real data.', file=sys.stderr)
-            self._log(f'WARNING: Generating SYNTHETIC data for {symbol} - results will not reflect real market behavior')
-
-            date_range = pd.date_range(
+        self._log(f'Fetching real market data for {symbol} via yfinance')
+        try:
+            ticker = yf.Ticker(symbol)
+            data = ticker.history(
                 start=start_date or '2020-01-01',
-                end=end_date or '2024-12-31',
-                freq='B'  # Business days only for more realistic data
+                end=end_date or None,
+                auto_adjust=True
             )
-
-            # Generate synthetic price data with random seed based on symbol
-            # so different symbols produce different data
-            seed = sum(ord(c) for c in symbol) % (2**31)
-            rng = np.random.default_rng(seed)
-            returns = rng.normal(0.0003, 0.015, len(date_range))  # Realistic daily returns
-            close = 100 * np.exp(np.cumsum(returns))
-
-            data = pd.DataFrame({
-                'Open': close * (1 + rng.normal(0, 0.005, len(date_range))),
-                'High': close * (1 + np.abs(rng.normal(0, 0.01, len(date_range)))),
-                'Low': close * (1 - np.abs(rng.normal(0, 0.01, len(date_range)))),
-                'Close': close,
-                'Volume': rng.integers(1000000, 10000000, len(date_range))
-            }, index=date_range)
-
-            # Ensure High is highest and Low is lowest
-            data['High'] = data[['Open', 'High', 'Close']].max(axis=1)
-            data['Low'] = data[['Open', 'Low', 'Close']].min(axis=1)
-
-            return data
-
         except Exception as e:
-            self._error(f'Failed to load data for {symbol}', e)
-            return None
+            raise RuntimeError(f'Market data unavailable for {symbol}: {e}') from e
+
+        if data is None or len(data) == 0:
+            raise RuntimeError(f'Market data unavailable for {symbol}: yfinance returned no data '
+                               f'for {start_date or "?"} to {end_date or "today"}')
+
+        # Ensure column names match expected format
+        data.columns = [c.capitalize() if c.lower() in ['open', 'high', 'low', 'close', 'volume'] else c for c in data.columns]
+        # Keep only OHLCV columns
+        ohlcv_cols = ['Open', 'High', 'Low', 'Close', 'Volume']
+        available_cols = [c for c in ohlcv_cols if c in data.columns]
+        data = data[available_cols]
+        # Round to 4 decimal places to eliminate float32 rounding noise
+        for col in ['Open', 'High', 'Low', 'Close']:
+            if col in data.columns:
+                data[col] = data[col].round(4)
+        self._log(f'Loaded {len(data)} bars of real data for {symbol}')
+        return data
 
     def _create_strategy_class(self, strategy_def: Dict[str, Any], opt_params: Dict = None):
         """Create a backtesting.py Strategy class from strategy definition"""
@@ -1304,13 +1220,13 @@ class BacktestingPyProvider(BacktestingProviderBase):
         equity_curve = self._extract_equity_curve(stats)
 
         # Extract statistics including daily analysis
-        winning_days = 0
-        losing_days = 0
-        avg_daily_return = 0.0
-        best_day = 0.0
-        worst_day = 0.0
-        consecutive_wins = 0
-        consecutive_losses = 0
+        winning_days = None
+        losing_days = None
+        avg_daily_return = None
+        best_day = None
+        worst_day = None
+        consecutive_wins = None
+        consecutive_losses = None
 
         equity_curve_df = stats.get('_equity_curve')
         if equity_curve_df is not None and len(equity_curve_df) > 1:
@@ -1346,16 +1262,16 @@ class BacktestingPyProvider(BacktestingProviderBase):
                 consecutive_losses = max_consec_losses
 
         # Commissions from stats (if available)
-        total_fees = self._safe_stat(stats, 'Commissions [$]', 0.0)
+        total_fees = self._safe_stat(stats, 'Commissions [$]')
 
         statistics = BacktestStatistics(
             start_date=start_date,
             end_date=end_date,
             initial_capital=initial_capital,
-            final_capital=float(self._safe_stat(stats, 'Equity Final [$]', initial_capital)),
+            final_capital=self._safe_stat(stats, 'Equity Final [$]'),
             total_fees=total_fees,
-            total_slippage=0.0,
-            total_trades=int(self._safe_stat(stats, '# Trades', 0)),
+            total_slippage=None,  # backtesting.py does not model slippage
+            total_trades=(int(self._safe_stat(stats, '# Trades')) if self._safe_stat(stats, '# Trades') is not None else None),
             winning_days=winning_days,
             losing_days=losing_days,
             average_daily_return=avg_daily_return,
@@ -1383,17 +1299,18 @@ class BacktestingPyProvider(BacktestingProviderBase):
     def _extract_performance_metrics(self, stats) -> PerformanceMetrics:
         """Extract performance metrics from backtesting.py stats"""
 
-        total_trades = int(stats.get('# Trades', 0))
-        win_rate = float(self._safe_stat(stats, 'Win Rate [%]', 0)) / 100.0
+        total_trades = self._safe_stat(stats, '# Trades')
+        total_trades = int(total_trades) if total_trades is not None else None
+        win_rate = self._pct(stats, 'Win Rate [%]')
 
         # Extract trade-level metrics from _trades DataFrame for accuracy
         trades_df = stats.get('_trades')
-        winning_trades = 0
-        losing_trades = 0
-        avg_win = 0.0
-        avg_loss = 0.0
-        largest_win = 0.0
-        largest_loss = 0.0
+        winning_trades = None
+        losing_trades = None
+        avg_win = None
+        avg_loss = None
+        largest_win = None
+        largest_loss = None
 
         if trades_df is not None and len(trades_df) > 0:
             returns_col = trades_df['ReturnPct'] if 'ReturnPct' in trades_df.columns else None
@@ -1404,36 +1321,36 @@ class BacktestingPyProvider(BacktestingProviderBase):
                 losers = returns_col[returns_col <= 0]
                 winning_trades = len(winners)
                 losing_trades = len(losers)
-                avg_win = float(winners.mean()) if len(winners) > 0 else 0.0
-                avg_loss = float(losers.mean()) if len(losers) > 0 else 0.0
-                largest_win = float(returns_col.max()) if len(returns_col) > 0 else 0.0
-                largest_loss = float(returns_col.min()) if len(returns_col) > 0 else 0.0
+                avg_win = float(winners.mean()) if len(winners) > 0 else None
+                avg_loss = float(losers.mean()) if len(losers) > 0 else None
+                largest_win = float(returns_col.max()) if len(returns_col) > 0 else None
+                largest_loss = float(returns_col.min()) if len(returns_col) > 0 else None
             elif pnl_col is not None:
                 winners = pnl_col[pnl_col > 0]
                 losers = pnl_col[pnl_col <= 0]
                 winning_trades = len(winners)
                 losing_trades = len(losers)
-        else:
-            # Fallback to computed values
-            winning_trades = int(total_trades * win_rate)
-            losing_trades = total_trades - winning_trades
+        elif total_trades == 0:
+            # No trades: the counts are genuinely zero
+            winning_trades = 0
+            losing_trades = 0
 
         # Extract annualized metrics - handle NaN/inf from backtesting.py
-        ann_return = self._safe_stat(stats, 'Return (Ann.) [%]', 0) / 100.0
-        volatility = self._safe_stat(stats, 'Volatility (Ann.) [%]', 0) / 100.0
-        sharpe = self._safe_stat(stats, 'Sharpe Ratio', 0)
-        sortino = self._safe_stat(stats, 'Sortino Ratio', 0)
-        calmar = self._safe_stat(stats, 'Calmar Ratio', 0)
+        ann_return = self._pct(stats, 'Return (Ann.) [%]')
+        volatility = self._pct(stats, 'Volatility (Ann.) [%]')
+        sharpe = self._safe_stat(stats, 'Sharpe Ratio')
+        sortino = self._safe_stat(stats, 'Sortino Ratio')
+        calmar = self._safe_stat(stats, 'Calmar Ratio')
 
         return PerformanceMetrics(
-            total_return=self._safe_stat(stats, 'Return [%]', 0) / 100.0,
+            total_return=self._pct(stats, 'Return [%]'),
             annualized_return=ann_return,
             sharpe_ratio=sharpe,
             sortino_ratio=sortino,
-            max_drawdown=abs(self._safe_stat(stats, 'Max. Drawdown [%]', 0)) / 100.0,
+            max_drawdown=(abs(self._pct(stats, 'Max. Drawdown [%]')) if self._pct(stats, 'Max. Drawdown [%]') is not None else None),
             win_rate=win_rate,
-            loss_rate=1.0 - win_rate,
-            profit_factor=self._safe_stat(stats, 'Profit Factor', 0),
+            loss_rate=(1.0 - win_rate) if win_rate is not None else None,
+            profit_factor=self._safe_stat(stats, 'Profit Factor'),
             volatility=volatility,
             calmar_ratio=calmar,
             total_trades=total_trades,
@@ -1443,22 +1360,27 @@ class BacktestingPyProvider(BacktestingProviderBase):
             average_loss=avg_loss,
             largest_win=largest_win,
             largest_loss=largest_loss,
-            average_trade_return=self._safe_stat(stats, 'Avg. Trade [%]', 0) / 100.0,
-            expectancy=self._safe_stat(stats, 'Expectancy [%]', 0) / 100.0,
+            average_trade_return=self._pct(stats, 'Avg. Trade [%]'),
+            expectancy=self._pct(stats, 'Expectancy [%]'),
         )
 
-    def _safe_stat(self, stats, key: str, default=0.0) -> float:
-        """Safely extract a stat value, handling NaN/inf/None"""
+    def _safe_stat(self, stats, key: str) -> Optional[float]:
+        """Extract a stat value; None when missing, NaN or inf (never a default)."""
         try:
-            val = stats.get(key, default)
+            val = stats.get(key)
             if val is None:
-                return float(default)
+                return None
             val = float(val)
             if np.isnan(val) or np.isinf(val):
-                return float(default)
+                return None
             return val
         except (TypeError, ValueError):
-            return float(default)
+            return None
+
+    def _pct(self, stats, key: str) -> Optional[float]:
+        """Percent stat converted to a fraction, or None."""
+        val = self._safe_stat(stats, key)
+        return val / 100.0 if val is not None else None
 
     def _extract_trades(self, stats, symbol: str = 'UNKNOWN') -> List[Trade]:
         """Extract trade list from backtesting.py stats"""

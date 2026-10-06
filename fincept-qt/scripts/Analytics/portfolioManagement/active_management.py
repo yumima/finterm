@@ -968,17 +968,28 @@ class StrategyCombination:
 
     @staticmethod
     def analyze_strategy_combination(strategy1_data: Dict, strategy2_data: Dict,
-                                     correlation: float = 0.3) -> Dict:
-        """Analyze combination of two active management strategies"""
+                                     correlation: float) -> Dict:
+        """Analyze combination of two active management strategies.
+
+        Both strategy dicts must supply 'expected_return' and 'tracking_error';
+        missing inputs raise ValueError rather than being defaulted.
+        """
+
+        for label, sd in (("strategy1", strategy1_data), ("strategy2", strategy2_data)):
+            missing = [k for k in ("expected_return", "tracking_error") if sd.get(k) is None]
+            if missing:
+                raise ValueError(f"{label} is missing required inputs: {', '.join(missing)}")
+        if correlation is None:
+            raise ValueError("correlation is required")
 
         # Extract strategy metrics
-        s1_return = strategy1_data.get("expected_return", 0.02)
-        s1_risk = strategy1_data.get("tracking_error", 0.04)
-        s1_ir = s1_return / s1_risk if s1_risk > 0 else 0
+        s1_return = strategy1_data["expected_return"]
+        s1_risk = strategy1_data["tracking_error"]
+        s1_ir = s1_return / s1_risk if s1_risk > 0 else None
 
-        s2_return = strategy2_data.get("expected_return", 0.015)
-        s2_risk = strategy2_data.get("tracking_error", 0.03)
-        s2_ir = s2_return / s2_risk if s2_risk > 0 else 0
+        s2_return = strategy2_data["expected_return"]
+        s2_risk = strategy2_data["tracking_error"]
+        s2_ir = s2_return / s2_risk if s2_risk > 0 else None
 
         # Equal weight combination (can be optimized)
         weight1 = 0.5
@@ -989,11 +1000,11 @@ class StrategyCombination:
         combined_variance = (weight1 * s1_risk) ** 2 + (
                     weight2 * s2_risk) ** 2 + 2 * weight1 * weight2 * correlation * s1_risk * s2_risk
         combined_risk = np.sqrt(combined_variance)
-        combined_ir = combined_return / combined_risk if combined_risk > 0 else 0
+        combined_ir = combined_return / combined_risk if combined_risk > 0 else None
 
         # Optimal weights for maximum IR
         optimal_weights = StrategyCombination._calculate_optimal_weights(
-            s1_return, s1_risk, s2_return, s2_risk, correlation
+            s1_return, s1_risk, s2_return, s2_risk, correlation, combined_ir
         )
 
         return {
@@ -1018,8 +1029,13 @@ class StrategyCombination:
 
     @staticmethod
     def _calculate_optimal_weights(return1: float, risk1: float, return2: float,
-                                   risk2: float, correlation: float) -> Dict:
-        """Calculate optimal weights for maximum Information Ratio"""
+                                   risk2: float, correlation: float,
+                                   equal_weight_ir: Optional[float]) -> Dict:
+        """Calculate optimal weights for maximum Information Ratio.
+
+        Returns an error entry (no weights) when the problem is degenerate,
+        rather than substituting equal weights.
+        """
 
         # Covariance matrix
         cov_matrix = np.array([
@@ -1030,31 +1046,40 @@ class StrategyCombination:
         # Expected returns vector
         returns = np.array([return1, return2])
 
-        # Calculate optimal weights (maximize IR = w'μ / sqrt(w'Σw))
+        # Calculate optimal weights (maximize IR = w'mu / sqrt(w'Sigma w))
         try:
             inv_cov = np.linalg.inv(cov_matrix)
-            optimal_weights = np.dot(inv_cov, returns)
-            optimal_weights = optimal_weights / np.sum(optimal_weights)  # Normalize to sum to 1
-
-            # Calculate optimal portfolio metrics
-            opt_return = np.dot(optimal_weights, returns)
-            opt_variance = np.dot(optimal_weights, np.dot(cov_matrix, optimal_weights))
-            opt_risk = np.sqrt(opt_variance)
-            opt_ir = opt_return / opt_risk if opt_risk > 0 else 0
-
-            return {
-                "optimal_weights": optimal_weights.tolist(),
-                "optimal_return": opt_return,
-                "optimal_risk": opt_risk,
-                "optimal_ir": opt_ir,
-                "improvement_vs_equal_weight": opt_ir - (opt_return / opt_risk if opt_risk > 0 else 0)
-            }
-
         except np.linalg.LinAlgError:
             return {
-                "optimal_weights": [0.5, 0.5],
-                "note": "Singular covariance matrix - using equal weights"
+                "optimal_weights": None,
+                "error": "Singular covariance matrix - maximum-IR weights are undefined"
             }
+
+        raw_weights = np.dot(inv_cov, returns)
+        weight_sum = np.sum(raw_weights)
+        if not np.isfinite(weight_sum) or abs(weight_sum) < 1e-12:
+            return {
+                "optimal_weights": None,
+                "error": "Maximum-IR weights cannot be normalized (weights sum to zero)"
+            }
+        optimal_weights = raw_weights / weight_sum  # Normalize to sum to 1
+
+        # Calculate optimal portfolio metrics
+        opt_return = float(np.dot(optimal_weights, returns))
+        opt_variance = float(np.dot(optimal_weights, np.dot(cov_matrix, optimal_weights)))
+        opt_risk = float(np.sqrt(opt_variance))
+        opt_ir = opt_return / opt_risk if opt_risk > 0 else None
+
+        improvement = (opt_ir - equal_weight_ir
+                       if opt_ir is not None and equal_weight_ir is not None else None)
+
+        return {
+            "optimal_weights": optimal_weights.tolist(),
+            "optimal_return": opt_return,
+            "optimal_risk": opt_risk,
+            "optimal_ir": opt_ir,
+            "improvement_vs_equal_weight": improvement
+        }
 
     @staticmethod
     def _analyze_correlation_impact(risk1: float, risk2: float, correlation: float) -> Dict:

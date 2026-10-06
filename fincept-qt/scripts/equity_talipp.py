@@ -536,12 +536,20 @@ def main():
         if not isinstance(data, list) or len(data) == 0:
             raise ValueError("OHLCV data must be a non-empty JSON array")
 
-        opens  = [float(r.get("open",  0)) for r in data]
-        highs  = [float(r.get("high",  0)) for r in data]
-        lows   = [float(r.get("low",   0)) for r in data]
-        closes = [float(r.get("close", 0)) for r in data]
-        vols   = [float(r.get("volume", 0)) for r in data]
-        ts     = [int(r.get("timestamp", 0)) for r in data]
+        # A missing field is an error, never a 0 bar: a zero price/volume
+        # would silently corrupt every indicator value downstream of it.
+        def field(r, key, cast):
+            v = r.get(key)
+            if v is None:
+                raise ValueError(f"OHLCV bar missing '{key}': {r}")
+            return cast(v)
+
+        opens  = [field(r, "open", float) for r in data]
+        highs  = [field(r, "high", float) for r in data]
+        lows   = [field(r, "low", float) for r in data]
+        closes = [field(r, "close", float) for r in data]
+        vols   = [field(r, "volume", float) for r in data]
+        ts     = [field(r, "timestamp", int) for r in data]
 
         if indicator not in DISPATCH:
             raise ValueError(f"Unknown indicator: {indicator}. "

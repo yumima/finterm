@@ -14,11 +14,20 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <algorithm>
+#include <limits>
+
 namespace fincept::services {
 
 using namespace fincept::relmap;
 
 namespace {
+
+// JSON null / missing -> NaN (rendered as "—"), never a silent 0. The Python
+// fetcher emits null for any field Yahoo didn't report.
+double num_or_nan(const QJsonValue& v) {
+    return v.isDouble() ? v.toDouble() : std::numeric_limits<double>::quiet_NaN();
+}
 
 // Persistent on-disk cache so the relationship-map panel paints the most
 // recently-viewed ticker immediately on next launch. One file per ticker;
@@ -65,6 +74,9 @@ RelationshipMapService::RelationshipMapService() {
         // a corrupted filename doesn't poison the cache key. Falls back to
         // fname stem if the payload doesn't carry company.ticker.
         const QJsonObject root = doc.object();
+        // Pre-"peers_source" payloads carried peers from a hardcoded
+        // industry table and 0.0 for missing fields — don't replay them.
+        if (!root.contains(QStringLiteral("peers_source"))) continue;
         QString ticker = root.value("company").toObject().value("ticker").toString();
         if (ticker.isEmpty()) {
             ticker = fname;
@@ -163,38 +175,38 @@ void RelationshipMapService::parse_result(const QString& json_output) {
     data_.company.exchange             = co["exchange"].toString();
     data_.company.currency             = co["currency"].toString();
     data_.company.employees            = co["employees"].toInt();
-    data_.company.market_cap           = co["market_cap"].toDouble();
-    data_.company.current_price        = co["current_price"].toDouble();
-    data_.company.previous_close       = co["previous_close"].toDouble();
-    data_.company.day_change_pct       = co["day_change_pct"].toDouble();
-    data_.company.pe_ratio             = co["pe_ratio"].toDouble();
-    data_.company.forward_pe           = co["forward_pe"].toDouble();
-    data_.company.price_to_book        = co["price_to_book"].toDouble();
-    data_.company.roe                  = co["roe"].toDouble();
-    data_.company.roa                  = co["roa"].toDouble();
-    data_.company.revenue_growth       = co["revenue_growth"].toDouble();
-    data_.company.earnings_growth      = co["earnings_growth"].toDouble();
-    data_.company.profit_margins       = co["profit_margins"].toDouble();
-    data_.company.revenue              = co["revenue"].toDouble();
-    data_.company.ebitda               = co["ebitda"].toDouble();
-    data_.company.free_cashflow        = co["free_cashflow"].toDouble();
-    data_.company.operating_cashflow   = co["operating_cashflow"].toDouble();
-    data_.company.total_cash           = co["total_cash"].toDouble();
-    data_.company.total_debt           = co["total_debt"].toDouble();
-    data_.company.insider_percent      = co["insider_percent"].toDouble();
-    data_.company.institutional_percent= co["institutional_percent"].toDouble();
+    data_.company.market_cap           = num_or_nan(co["market_cap"]);
+    data_.company.current_price        = num_or_nan(co["current_price"]);
+    data_.company.previous_close       = num_or_nan(co["previous_close"]);
+    data_.company.day_change_pct       = num_or_nan(co["day_change_pct"]);
+    data_.company.pe_ratio             = num_or_nan(co["pe_ratio"]);
+    data_.company.forward_pe           = num_or_nan(co["forward_pe"]);
+    data_.company.price_to_book        = num_or_nan(co["price_to_book"]);
+    data_.company.roe                  = num_or_nan(co["roe"]);
+    data_.company.roa                  = num_or_nan(co["roa"]);
+    data_.company.revenue_growth       = num_or_nan(co["revenue_growth"]);
+    data_.company.earnings_growth      = num_or_nan(co["earnings_growth"]);
+    data_.company.profit_margins       = num_or_nan(co["profit_margins"]);
+    data_.company.revenue              = num_or_nan(co["revenue"]);
+    data_.company.ebitda               = num_or_nan(co["ebitda"]);
+    data_.company.free_cashflow        = num_or_nan(co["free_cashflow"]);
+    data_.company.operating_cashflow   = num_or_nan(co["operating_cashflow"]);
+    data_.company.total_cash           = num_or_nan(co["total_cash"]);
+    data_.company.total_debt           = num_or_nan(co["total_debt"]);
+    data_.company.insider_percent      = num_or_nan(co["insider_percent"]);
+    data_.company.institutional_percent= num_or_nan(co["institutional_percent"]);
     data_.company.recommendation       = co["recommendation"].toString();
-    data_.company.recommendation_mean  = co["recommendation_mean"].toDouble();
-    data_.company.target_high          = co["target_high"].toDouble();
-    data_.company.target_low           = co["target_low"].toDouble();
-    data_.company.target_mean          = co["target_mean"].toDouble();
-    data_.company.target_median        = co["target_median"].toDouble();
+    data_.company.recommendation_mean  = num_or_nan(co["recommendation_mean"]);
+    data_.company.target_high          = num_or_nan(co["target_high"]);
+    data_.company.target_low           = num_or_nan(co["target_low"]);
+    data_.company.target_mean          = num_or_nan(co["target_mean"]);
+    data_.company.target_median        = num_or_nan(co["target_median"]);
     data_.company.analyst_count        = co["analyst_count"].toInt();
-    data_.company.dividend_yield       = co["dividend_yield"].toDouble();
-    data_.company.payout_ratio         = co["payout_ratio"].toDouble();
-    data_.company.trailing_eps         = co["trailing_eps"].toDouble();
-    data_.company.forward_eps          = co["forward_eps"].toDouble();
-    data_.company.shares_outstanding   = co["shares_outstanding"].toDouble();
+    data_.company.dividend_yield       = num_or_nan(co["dividend_yield"]);
+    data_.company.payout_ratio         = num_or_nan(co["payout_ratio"]);
+    data_.company.trailing_eps         = num_or_nan(co["trailing_eps"]);
+    data_.company.forward_eps          = num_or_nan(co["forward_eps"]);
+    data_.company.shares_outstanding   = num_or_nan(co["shares_outstanding"]);
 
     // ── Governance ───────────────────────────────────────────────────────
     QJsonObject gov = root["governance"].toObject();
@@ -206,49 +218,49 @@ void RelationshipMapService::parse_result(const QString& json_output) {
 
     // ── Technicals ───────────────────────────────────────────────────────
     QJsonObject tech = root["technicals"].toObject();
-    data_.technicals.fifty_two_week_high   = tech["fifty_two_week_high"].toDouble();
-    data_.technicals.fifty_two_week_low    = tech["fifty_two_week_low"].toDouble();
-    data_.technicals.fifty_day_avg         = tech["fifty_day_avg"].toDouble();
-    data_.technicals.two_hundred_day_avg   = tech["two_hundred_day_avg"].toDouble();
-    data_.technicals.beta                  = tech["beta"].toDouble();
-    data_.technicals.week52_change_pct     = tech["week52_change_pct"].toDouble();
-    data_.technicals.sp500_52wk_change     = tech["sp500_52wk_change"].toDouble();
+    data_.technicals.fifty_two_week_high   = num_or_nan(tech["fifty_two_week_high"]);
+    data_.technicals.fifty_two_week_low    = num_or_nan(tech["fifty_two_week_low"]);
+    data_.technicals.fifty_day_avg         = num_or_nan(tech["fifty_day_avg"]);
+    data_.technicals.two_hundred_day_avg   = num_or_nan(tech["two_hundred_day_avg"]);
+    data_.technicals.beta                  = num_or_nan(tech["beta"]);
+    data_.technicals.week52_change_pct     = num_or_nan(tech["week52_change_pct"]);
+    data_.technicals.sp500_52wk_change     = num_or_nan(tech["sp500_52wk_change"]);
     data_.technicals.avg_volume            = tech["avg_volume"].toInt();
     data_.technicals.avg_volume_10d        = tech["avg_volume_10d"].toInt();
 
     // ── Short Interest ────────────────────────────────────────────────────
     QJsonObject si = root["short_interest"].toObject();
-    data_.short_interest.shares_short     = si["shares_short"].toDouble();
-    data_.short_interest.short_ratio      = si["short_ratio"].toDouble();
-    data_.short_interest.short_pct_float  = si["short_pct_float"].toDouble();
-    data_.short_interest.float_shares     = si["float_shares"].toDouble();
+    data_.short_interest.shares_short     = num_or_nan(si["shares_short"]);
+    data_.short_interest.short_ratio      = num_or_nan(si["short_ratio"]);
+    data_.short_interest.short_pct_float  = num_or_nan(si["short_pct_float"]);
+    data_.short_interest.float_shares     = num_or_nan(si["float_shares"]);
 
     // ── Enterprise ────────────────────────────────────────────────────────
     QJsonObject ent = root["enterprise"].toObject();
-    data_.enterprise.enterprise_value = ent["enterprise_value"].toDouble();
-    data_.enterprise.ev_to_revenue    = ent["ev_to_revenue"].toDouble();
-    data_.enterprise.ev_to_ebitda     = ent["ev_to_ebitda"].toDouble();
-    data_.enterprise.peg_ratio        = ent["peg_ratio"].toDouble();
-    data_.enterprise.price_to_sales   = ent["price_to_sales"].toDouble();
-    data_.enterprise.book_value       = ent["book_value"].toDouble();
+    data_.enterprise.enterprise_value = num_or_nan(ent["enterprise_value"]);
+    data_.enterprise.ev_to_revenue    = num_or_nan(ent["ev_to_revenue"]);
+    data_.enterprise.ev_to_ebitda     = num_or_nan(ent["ev_to_ebitda"]);
+    data_.enterprise.peg_ratio        = num_or_nan(ent["peg_ratio"]);
+    data_.enterprise.price_to_sales   = num_or_nan(ent["price_to_sales"]);
+    data_.enterprise.book_value       = num_or_nan(ent["book_value"]);
 
     // ── Margins & Debt ────────────────────────────────────────────────────
     QJsonObject mg = root["margins"].toObject();
-    data_.margins.gross          = mg["gross"].toDouble();
-    data_.margins.operating      = mg["operating"].toDouble();
-    data_.margins.ebitda         = mg["ebitda"].toDouble();
-    data_.margins.net            = mg["net"].toDouble();
-    data_.margins.debt_to_equity = mg["debt_to_equity"].toDouble();
-    data_.margins.current_ratio  = mg["current_ratio"].toDouble();
-    data_.margins.quick_ratio    = mg["quick_ratio"].toDouble();
+    data_.margins.gross          = num_or_nan(mg["gross"]);
+    data_.margins.operating      = num_or_nan(mg["operating"]);
+    data_.margins.ebitda         = num_or_nan(mg["ebitda"]);
+    data_.margins.net            = num_or_nan(mg["net"]);
+    data_.margins.debt_to_equity = num_or_nan(mg["debt_to_equity"]);
+    data_.margins.current_ratio  = num_or_nan(mg["current_ratio"]);
+    data_.margins.quick_ratio    = num_or_nan(mg["quick_ratio"]);
 
     // ── Analyst Targets ───────────────────────────────────────────────────
     QJsonObject at = root["analyst_targets"].toObject();
-    data_.analyst_targets.current = at["current"].toDouble();
-    data_.analyst_targets.high    = at["high"].toDouble();
-    data_.analyst_targets.low     = at["low"].toDouble();
-    data_.analyst_targets.mean    = at["mean"].toDouble();
-    data_.analyst_targets.median  = at["median"].toDouble();
+    data_.analyst_targets.current = num_or_nan(at["current"]);
+    data_.analyst_targets.high    = num_or_nan(at["high"]);
+    data_.analyst_targets.low     = num_or_nan(at["low"]);
+    data_.analyst_targets.mean    = num_or_nan(at["mean"]);
+    data_.analyst_targets.median  = num_or_nan(at["median"]);
 
     // ── Recommendations Summary ───────────────────────────────────────────
     for (const auto& v : root["recommendations_summary"].toArray()) {
@@ -272,8 +284,8 @@ void RelationshipMapService::parse_result(const QString& json_output) {
         upg.to_grade     = u["to_grade"].toString();
         upg.from_grade   = u["from_grade"].toString();
         upg.action       = u["action"].toString();
-        upg.price_target = u["price_target"].toDouble();
-        upg.prior_target = u["prior_target"].toDouble();
+        upg.price_target = num_or_nan(u["price_target"]);
+        upg.prior_target = num_or_nan(u["prior_target"]);
         data_.upgrades_downgrades.append(upg);
     }
 
@@ -292,12 +304,12 @@ void RelationshipMapService::parse_result(const QString& json_output) {
     // ── Calendar ──────────────────────────────────────────────────────────
     QJsonObject cal = root["calendar"].toObject();
     data_.calendar.earnings_date    = cal["earnings_date"].toString();
-    data_.calendar.earnings_avg     = cal["earnings_avg"].toDouble();
-    data_.calendar.earnings_low     = cal["earnings_low"].toDouble();
-    data_.calendar.earnings_high    = cal["earnings_high"].toDouble();
-    data_.calendar.revenue_avg      = cal["revenue_avg"].toDouble();
-    data_.calendar.revenue_low      = cal["revenue_low"].toDouble();
-    data_.calendar.revenue_high     = cal["revenue_high"].toDouble();
+    data_.calendar.earnings_avg     = num_or_nan(cal["earnings_avg"]);
+    data_.calendar.earnings_low     = num_or_nan(cal["earnings_low"]);
+    data_.calendar.earnings_high    = num_or_nan(cal["earnings_high"]);
+    data_.calendar.revenue_avg      = num_or_nan(cal["revenue_avg"]);
+    data_.calendar.revenue_low      = num_or_nan(cal["revenue_low"]);
+    data_.calendar.revenue_high     = num_or_nan(cal["revenue_high"]);
     data_.calendar.ex_dividend_date = cal["ex_dividend_date"].toString();
     data_.calendar.dividend_date    = cal["dividend_date"].toString();
 
@@ -306,10 +318,10 @@ void RelationshipMapService::parse_result(const QString& json_output) {
         QJsonObject h = v.toObject();
         InstitutionalHolder holder;
         holder.name           = h["name"].toString();
-        holder.shares         = h["shares"].toDouble();
-        holder.value          = h["value"].toDouble();
-        holder.percentage     = h["percentage"].toDouble();
-        holder.change_percent = h["change_percent"].toDouble();
+        holder.shares         = num_or_nan(h["shares"]);
+        holder.value          = num_or_nan(h["value"]);
+        holder.percentage     = num_or_nan(h["percentage"]);
+        holder.change_percent = num_or_nan(h["change_percent"]);
         holder.fund_family    = h["fund_family"].toString();
         holder.type           = "institutional";
         if (!holder.name.isEmpty())
@@ -321,10 +333,10 @@ void RelationshipMapService::parse_result(const QString& json_output) {
         QJsonObject h = v.toObject();
         InstitutionalHolder holder;
         holder.name           = h["name"].toString();
-        holder.shares         = h["shares"].toDouble();
-        holder.value          = h["value"].toDouble();
-        holder.percentage     = h["percentage"].toDouble();
-        holder.change_percent = h["change_percent"].toDouble();
+        holder.shares         = num_or_nan(h["shares"]);
+        holder.value          = num_or_nan(h["value"]);
+        holder.percentage     = num_or_nan(h["percentage"]);
+        holder.change_percent = num_or_nan(h["change_percent"]);
         holder.fund_family    = h["fund_family"].toString();
         holder.type           = "mutualfund";
         if (!holder.name.isEmpty())
@@ -337,8 +349,8 @@ void RelationshipMapService::parse_result(const QString& json_output) {
         InsiderHolder insider;
         insider.name             = h["name"].toString();
         insider.title            = h["title"].toString();
-        insider.shares           = h["shares"].toDouble();
-        insider.percentage       = h["percentage"].toDouble();
+        insider.shares           = num_or_nan(h["shares"]);
+        insider.percentage       = num_or_nan(h["percentage"]);
         insider.last_transaction = h["last_transaction"].toString();
         if (!insider.name.isEmpty())
             data_.insider_holders.append(insider);
@@ -350,19 +362,19 @@ void RelationshipMapService::parse_result(const QString& json_output) {
         PeerCompany peer;
         peer.ticker          = p["ticker"].toString();
         peer.name            = p["name"].toString();
-        peer.market_cap      = p["market_cap"].toDouble();
-        peer.pe_ratio        = p["pe_ratio"].toDouble();
-        peer.forward_pe      = p["forward_pe"].toDouble();
-        peer.roe             = p["roe"].toDouble();
-        peer.revenue_growth  = p["revenue_growth"].toDouble();
-        peer.profit_margins  = p["profit_margins"].toDouble();
-        peer.gross_margins   = p["gross_margins"].toDouble();
-        peer.current_price   = p["current_price"].toDouble();
+        peer.market_cap      = num_or_nan(p["market_cap"]);
+        peer.pe_ratio        = num_or_nan(p["pe_ratio"]);
+        peer.forward_pe      = num_or_nan(p["forward_pe"]);
+        peer.roe             = num_or_nan(p["roe"]);
+        peer.revenue_growth  = num_or_nan(p["revenue_growth"]);
+        peer.profit_margins  = num_or_nan(p["profit_margins"]);
+        peer.gross_margins   = num_or_nan(p["gross_margins"]);
+        peer.current_price   = num_or_nan(p["current_price"]);
         peer.sector          = p["sector"].toString();
-        peer.beta            = p["beta"].toDouble();
-        peer.ev_to_ebitda    = p["ev_to_ebitda"].toDouble();
-        peer.price_to_book   = p["price_to_book"].toDouble();
-        peer.week52_change   = p["week52_change"].toDouble();
+        peer.beta            = num_or_nan(p["beta"]);
+        peer.ev_to_ebitda    = num_or_nan(p["ev_to_ebitda"]);
+        peer.price_to_book   = num_or_nan(p["price_to_book"]);
+        peer.week52_change   = num_or_nan(p["week52_change"]);
         peer.recommendation  = p["recommendation"].toString();
         if (!peer.ticker.isEmpty())
             data_.peers.append(peer);
@@ -393,9 +405,12 @@ void RelationshipMapService::parse_result(const QString& json_output) {
 
 ValuationSignal RelationshipMapService::compute_valuation(const CompanyInfo& co, const QVector<PeerCompany>& peers) {
     ValuationSignal sig;
-    if (peers.isEmpty() || co.pe_ratio <= 0) {
+    // No real peer set (none is sourced today) or no positive P/E -> no
+    // signal at all. Don't emit a default "HOLD" that reads as a call.
+    // NaN-safe: !(x > 0) also catches a missing (NaN) P/E.
+    if (peers.isEmpty() || !(co.pe_ratio > 0)) {
         sig.status = "INSUFFICIENT DATA";
-        sig.action = "HOLD";
+        sig.action = QString();
         sig.score = 0;
         return sig;
     }
@@ -408,7 +423,7 @@ ValuationSignal RelationshipMapService::compute_valuation(const CompanyInfo& co,
     }
     if (peer_pes.isEmpty()) {
         sig.status = "INSUFFICIENT DATA";
-        sig.action = "HOLD";
+        sig.action = QString();
         sig.score = 0;
         return sig;
     }

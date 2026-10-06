@@ -39,6 +39,7 @@
 #endif
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 
 namespace fincept::services {
@@ -477,8 +478,13 @@ bool news_parse_analysis(const QString& content, NewsAnalysis& out) {
     const QJsonObject mi = a.value("market_impact").toObject();
     const QJsonObject rs = a.value("risk_signals").toObject();
     out.summary = a.value("summary").toString();
-    out.sentiment = {sent.value("score").toDouble(), sent.value("intensity").toDouble(),
-                     sent.value("confidence").toDouble()};
+    // A field the model omitted (or returned non-numeric) stays NaN so the UI
+    // renders "—" instead of a fabricated neutral 0.00.
+    auto num_or_nan = [&sent](const char* k) {
+        const QJsonValue v = sent.value(QString::fromLatin1(k));
+        return v.isDouble() ? v.toDouble() : std::numeric_limits<double>::quiet_NaN();
+    };
+    out.sentiment = {num_or_nan("score"), num_or_nan("intensity"), num_or_nan("confidence")};
     out.market_impact = {mi.value("urgency").toString(), mi.value("prediction").toString()};
     for (const auto& v : a.value("keywords").toArray())
         out.keywords << v.toString();
@@ -1134,9 +1140,11 @@ void NewsService::connect_live_feed(const QString& ws_url) {
         article.source = obj["source"].toString();
         article.link = obj["link"].toString(obj["url"].toString());
         article.category = obj["category"].toString("MARKETS");
-        article.sort_ts = obj["timestamp"].toInteger(QDateTime::currentSecsSinceEpoch());
-        // EVENT-STAMP: a publication instant.
-        article.time = QDateTime::fromSecsSinceEpoch(article.sort_ts).toString("MMM dd, HH:mm");
+        // EVENT-STAMP: a publication instant. A message without a timestamp
+        // stays undated (sort_ts 0, empty time) — never stamped with receipt time.
+        article.sort_ts = obj["timestamp"].toInteger(0);
+        if (article.sort_ts > 0)
+            article.time = QDateTime::fromSecsSinceEpoch(article.sort_ts).toString("MMM dd, HH:mm");
         article.tier = obj["tier"].toInt(2);
 
         if (article.headline.isEmpty())
@@ -1312,10 +1320,9 @@ QVector<NewsArticle> NewsService::parse_rss_xml(const QByteArray& xml, const RSS
                 if (current.headline.isEmpty())
                     continue;
 
-                if (current.time.isEmpty())
-                    current.time = QDateTime::currentDateTime().toString("MMM dd, HH:mm");
-                if (current.sort_ts == 0)
-                    current.sort_ts = QDateTime::currentSecsSinceEpoch();
+                // No parseable pubDate: leave the item undated (sort_ts 0,
+                // time empty) rather than stamping it with the fetch time —
+                // time-window filters exclude undated items.
 
                 enrich_article(current);
                 articles.append(std::move(current));
@@ -1477,7 +1484,7 @@ void NewsService::enrich_article(NewsArticle& article) {
     article.source_flag = source_flag_for(article.source);
 }
 
-// ── Threat classification with confidence ───────────────────────────────────
+// ── Threat classification (keyword heuristic) ───────────────────────────────
 
 ThreatClassification NewsService::classify_threat(const NewsArticle& article) {
     // Convenience overload — builds text itself (used only outside enrich_article)
@@ -1487,62 +1494,62 @@ ThreatClassification NewsService::classify_threat(const NewsArticle& article) {
 ThreatClassification NewsService::classify_threat(const NewsArticle& article, const QString& text) {
     ThreatClassification tc;
     tc.category = "general";
-    tc.confidence = 0.3; // base confidence from keyword matching
+    // Keyword matching has no calibrated probability behind it, so no
+    // confidence number is produced.
 
     // Critical — immediate, high-impact events
     struct PatternScore {
         const char* pattern;
         const char* category;
         ThreatLevel level;
-        double conf;
     };
     static const PatternScore critical_patterns[] = {
-        {"nuclear strike", "conflict", ThreatLevel::CRITICAL, 0.95},
-        {"nuclear attack", "conflict", ThreatLevel::CRITICAL, 0.95},
-        {"war declared", "conflict", ThreatLevel::CRITICAL, 0.95},
-        {"market crash", "market", ThreatLevel::CRITICAL, 0.9},
-        {"flash crash", "market", ThreatLevel::CRITICAL, 0.9},
-        {"circuit breaker", "market", ThreatLevel::CRITICAL, 0.85},
-        {"trading halt", "market", ThreatLevel::CRITICAL, 0.85},
-        {"bank run", "market", ThreatLevel::CRITICAL, 0.9},
-        {"sovereign default", "market", ThreatLevel::CRITICAL, 0.9},
-        {"cyberattack", "cyber", ThreatLevel::HIGH, 0.8},
-        {"data breach", "cyber", ThreatLevel::HIGH, 0.75},
-        {"ransomware", "cyber", ThreatLevel::HIGH, 0.8},
+        {"nuclear strike", "conflict", ThreatLevel::CRITICAL},
+        {"nuclear attack", "conflict", ThreatLevel::CRITICAL},
+        {"war declared", "conflict", ThreatLevel::CRITICAL},
+        {"market crash", "market", ThreatLevel::CRITICAL},
+        {"flash crash", "market", ThreatLevel::CRITICAL},
+        {"circuit breaker", "market", ThreatLevel::CRITICAL},
+        {"trading halt", "market", ThreatLevel::CRITICAL},
+        {"bank run", "market", ThreatLevel::CRITICAL},
+        {"sovereign default", "market", ThreatLevel::CRITICAL},
+        {"cyberattack", "cyber", ThreatLevel::HIGH},
+        {"data breach", "cyber", ThreatLevel::HIGH},
+        {"ransomware", "cyber", ThreatLevel::HIGH},
     };
 
     // High — significant events
     static const PatternScore high_patterns[] = {
-        {"invasion", "conflict", ThreatLevel::HIGH, 0.85},
-        {"airstrike", "conflict", ThreatLevel::HIGH, 0.85},
-        {"missile launch", "conflict", ThreatLevel::HIGH, 0.85},
-        {"military deploy", "conflict", ThreatLevel::HIGH, 0.8},
-        {"coup attempt", "conflict", ThreatLevel::HIGH, 0.85},
-        {"martial law", "conflict", ThreatLevel::HIGH, 0.85},
-        {"bankruptcy fil", "market", ThreatLevel::HIGH, 0.8},
-        {"rate hike", "market", ThreatLevel::HIGH, 0.7},
-        {"rate cut", "market", ThreatLevel::HIGH, 0.7},
-        {"earnings miss", "market", ThreatLevel::HIGH, 0.75},
-        {"profit warning", "market", ThreatLevel::HIGH, 0.75},
-        {"downgrad", "market", ThreatLevel::HIGH, 0.7},
-        {"sanction", "regulatory", ThreatLevel::HIGH, 0.7},
-        {"embargo", "regulatory", ThreatLevel::HIGH, 0.75},
-        {"earthquake", "natural", ThreatLevel::HIGH, 0.8},
-        {"tsunami", "natural", ThreatLevel::HIGH, 0.85},
-        {"hurricane", "natural", ThreatLevel::HIGH, 0.75},
-        {"pandemic", "natural", ThreatLevel::HIGH, 0.8},
+        {"invasion", "conflict", ThreatLevel::HIGH},
+        {"airstrike", "conflict", ThreatLevel::HIGH},
+        {"missile launch", "conflict", ThreatLevel::HIGH},
+        {"military deploy", "conflict", ThreatLevel::HIGH},
+        {"coup attempt", "conflict", ThreatLevel::HIGH},
+        {"martial law", "conflict", ThreatLevel::HIGH},
+        {"bankruptcy fil", "market", ThreatLevel::HIGH},
+        {"rate hike", "market", ThreatLevel::HIGH},
+        {"rate cut", "market", ThreatLevel::HIGH},
+        {"earnings miss", "market", ThreatLevel::HIGH},
+        {"profit warning", "market", ThreatLevel::HIGH},
+        {"downgrad", "market", ThreatLevel::HIGH},
+        {"sanction", "regulatory", ThreatLevel::HIGH},
+        {"embargo", "regulatory", ThreatLevel::HIGH},
+        {"earthquake", "natural", ThreatLevel::HIGH},
+        {"tsunami", "natural", ThreatLevel::HIGH},
+        {"hurricane", "natural", ThreatLevel::HIGH},
+        {"pandemic", "natural", ThreatLevel::HIGH},
     };
 
     // Medium patterns
     static const PatternScore medium_patterns[] = {
-        {"protest", "conflict", ThreatLevel::MEDIUM, 0.6},     {"riot", "conflict", ThreatLevel::MEDIUM, 0.7},
-        {"tension", "conflict", ThreatLevel::MEDIUM, 0.5},     {"escalat", "conflict", ThreatLevel::MEDIUM, 0.65},
-        {"tariff", "regulatory", ThreatLevel::MEDIUM, 0.65},   {"regulation", "regulatory", ThreatLevel::MEDIUM, 0.5},
-        {"antitrust", "regulatory", ThreatLevel::MEDIUM, 0.6}, {"investigat", "regulatory", ThreatLevel::MEDIUM, 0.55},
-        {"layoff", "market", ThreatLevel::MEDIUM, 0.6},        {"recession", "market", ThreatLevel::MEDIUM, 0.65},
-        {"inflation", "market", ThreatLevel::MEDIUM, 0.55},    {"selloff", "market", ThreatLevel::MEDIUM, 0.6},
-        {"sell-off", "market", ThreatLevel::MEDIUM, 0.6},      {"volatil", "market", ThreatLevel::MEDIUM, 0.5},
-        {"wildfire", "natural", ThreatLevel::MEDIUM, 0.6},     {"flood", "natural", ThreatLevel::MEDIUM, 0.6},
+        {"protest", "conflict", ThreatLevel::MEDIUM},     {"riot", "conflict", ThreatLevel::MEDIUM},
+        {"tension", "conflict", ThreatLevel::MEDIUM},     {"escalat", "conflict", ThreatLevel::MEDIUM},
+        {"tariff", "regulatory", ThreatLevel::MEDIUM},   {"regulation", "regulatory", ThreatLevel::MEDIUM},
+        {"antitrust", "regulatory", ThreatLevel::MEDIUM}, {"investigat", "regulatory", ThreatLevel::MEDIUM},
+        {"layoff", "market", ThreatLevel::MEDIUM},        {"recession", "market", ThreatLevel::MEDIUM},
+        {"inflation", "market", ThreatLevel::MEDIUM},    {"selloff", "market", ThreatLevel::MEDIUM},
+        {"sell-off", "market", ThreatLevel::MEDIUM},      {"volatil", "market", ThreatLevel::MEDIUM},
+        {"wildfire", "natural", ThreatLevel::MEDIUM},     {"flood", "natural", ThreatLevel::MEDIUM},
     };
 
     // Check patterns in priority order — first critical, then high, then medium
@@ -1550,7 +1557,6 @@ ThreatClassification NewsService::classify_threat(const NewsArticle& article, co
         if (text.contains(p.pattern)) {
             tc.level = p.level;
             tc.category = p.category;
-            tc.confidence = p.conf;
             return tc;
         }
     }
@@ -1558,7 +1564,6 @@ ThreatClassification NewsService::classify_threat(const NewsArticle& article, co
         if (text.contains(p.pattern)) {
             tc.level = p.level;
             tc.category = p.category;
-            tc.confidence = p.conf;
             return tc;
         }
     }
@@ -1566,7 +1571,6 @@ ThreatClassification NewsService::classify_threat(const NewsArticle& article, co
         if (text.contains(p.pattern)) {
             tc.level = p.level;
             tc.category = p.category;
-            tc.confidence = p.conf;
             return tc;
         }
     }
@@ -1574,7 +1578,6 @@ ThreatClassification NewsService::classify_threat(const NewsArticle& article, co
     // Low: any negative sentiment article
     if (article.sentiment == Sentiment::BEARISH) {
         tc.level = ThreatLevel::LOW;
-        tc.confidence = 0.4;
     }
 
     return tc;

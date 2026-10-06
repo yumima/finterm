@@ -1,5 +1,6 @@
 #include "SurfaceTableWidget.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QColor>
@@ -127,11 +128,15 @@ void SurfaceTableWidget::show_generic_matrix(const std::vector<std::string>& row
     for (int r = 0; r < nr; r++) {
         for (int c = 0; c < (int)z[r].size() && c < nc; c++) {
             float v = z[r][c];
-            QString text = QString::number((double)v, 'f', 2);
+            // A NaN cell is a gap in the source data: show the placeholder and
+            // leave it uncoloured rather than painting it as a real value.
+            const bool has = std::isfinite(v);
+            QString text = has ? QString::number((double)v, 'f', 2) : fincept::ui::formatting::placeholder();
             auto* item = new QTableWidgetItem(text);
             item->setTextAlignment(Qt::AlignCenter);
             table_->setItem(r, c, item);
-            apply_heatmap(v, min_val, max_val, diverging, r, c);
+            if (has)
+                apply_heatmap(v, min_val, max_val, diverging, r, c);
         }
     }
     table_->resizeColumnsToContents();

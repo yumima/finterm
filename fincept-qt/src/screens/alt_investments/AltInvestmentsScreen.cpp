@@ -6,10 +6,12 @@
 #include "storage/cache/CacheManager.h"
 #include "ui/theme/Theme.h"
 
+#include <QDoubleValidator>
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QLocale>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QScrollArea>
@@ -121,22 +123,23 @@ using namespace fincept::ui;
 
 // ── Field factory helpers ────────────────────────────────────────────────────
 
-static AltField text_field(const QString& key, const QString& label, const QString& def = "") {
+// Forms start EMPTY: no prefilled prices, rates or asset names. Every numeric
+// field is required and the analysis refuses to run until the user enters it,
+// so results are never computed from values the user didn't supply.
+static AltField text_field(const QString& key, const QString& label) {
     AltField f;
     f.key = key;
     f.label = label;
     f.type = AltField::Text;
-    f.combo_items = def;
     return f;
 }
 
-static AltField spin_field(const QString& key, const QString& label, double def, double min_v, double max_v,
-                           int dec = 2, const QString& pfx = "", const QString& sfx = "", bool div100 = false) {
+static AltField spin_field(const QString& key, const QString& label, double min_v, double max_v, int dec = 2,
+                           const QString& pfx = "", const QString& sfx = "", bool div100 = false) {
     AltField f;
     f.key = key;
     f.label = label;
     f.type = AltField::Spin;
-    f.default_val = def;
     f.min_val = min_v;
     f.max_val = max_v;
     f.decimals = dec;
@@ -153,6 +156,22 @@ static AltField combo_field(const QString& key, const QString& label, const QStr
     f.type = AltField::Combo;
     f.combo_items = items;
     return f;
+}
+
+// Numeric input that starts empty. Placeholder states the unit/range only —
+// never an example value — so nothing on screen looks like a real quote.
+static QLineEdit* make_numeric_edit(const AltField& field, QWidget* parent) {
+    auto* le = new QLineEdit(parent);
+    auto* v = new QDoubleValidator(field.min_val, field.max_val, field.decimals, le);
+    v->setNotation(QDoubleValidator::StandardNotation);
+    v->setLocale(QLocale::c());
+    le->setValidator(v);
+    QString unit = field.prefix;
+    if (!field.suffix.isEmpty())
+        unit += (unit.isEmpty() ? "" : " ") + field.suffix;
+    le->setPlaceholderText(unit.isEmpty() ? QStringLiteral("enter value")
+                                          : QStringLiteral("enter value (%1)").arg(unit));
+    return le;
 }
 
 // ── Category definitions ─────────────────────────────────────────────────────
@@ -253,196 +272,193 @@ static QList<AltCategory> build_categories() {
 static QList<AltField> fields_for(const QString& id) {
     if (id == "high-yield")
         return {
-            text_field("name", "BOND NAME", "HY Corp Bond"),
-            spin_field("par_value", "PAR VALUE ($)", 1000, 100, 1e9, 0, "$"),
-            spin_field("price", "MARKET PRICE ($)", 950, 100, 1e9, 2, "$"),
-            spin_field("coupon_rate", "COUPON RATE (%)", 8.5, 0, 30, 2, "", "%"),
-            spin_field("maturity_years", "MATURITY (years)", 5, 0.5, 30, 1),
+            text_field("name", "BOND NAME"),
+            spin_field("face_value", "FACE VALUE ($)", 100, 1e9, 0, "$"),
+            spin_field("current_market_value", "MARKET PRICE ($)", 1, 1e9, 2, "$"),
+            spin_field("coupon_rate", "COUPON RATE (%)", 0, 30, 2, "", "%", true),
+            spin_field("maturity_years", "MATURITY (years)", 0.5, 30, 1),
+            spin_field("treasury_yield", "BENCHMARK TREASURY YIELD (%)", 0, 30, 2, "", "%", true),
             combo_field("credit_rating", "CREDIT RATING", "BB|B|CCC|BB+|BB-|B+|B-|CCC+"),
         };
     if (id == "em-bonds")
         return {
-            text_field("name", "BOND NAME", "Brazil 2030"),
-            spin_field("face_value", "FACE VALUE ($)", 1000, 100, 1e9, 0, "$"),
-            spin_field("current_market_value", "MARKET PRICE ($)", 950, 100, 1e9, 2, "$"),
-            spin_field("coupon_rate", "COUPON RATE (%)", 6.0, 0, 25, 2, "", "%"),
-            spin_field("maturity_years", "MATURITY (years)", 10, 0.5, 30, 1),
-            spin_field("credit_spread", "CREDIT SPREAD (%)", 3.0, 0, 20, 2, "", "%", true),
+            text_field("name", "BOND NAME"),
+            spin_field("face_value", "FACE VALUE ($)", 100, 1e9, 0, "$"),
+            spin_field("current_market_value", "MARKET PRICE ($)", 100, 1e9, 2, "$"),
+            spin_field("coupon_rate", "COUPON RATE (%)", 0, 25, 2, "", "%", true),
+            spin_field("maturity_years", "MATURITY (years)", 0.5, 30, 1),
+            spin_field("credit_spread", "CREDIT SPREAD (%)", 0, 20, 2, "", "%", true),
         };
     if (id == "convertible-bonds")
         return {
-            text_field("name", "BOND NAME", "Tesla Conv 2028"),
-            spin_field("par_value", "PAR VALUE ($)", 1000, 100, 1e9, 0, "$"),
-            spin_field("current_price", "MARKET PRICE ($)", 1100, 100, 1e9, 2, "$"),
-            spin_field("coupon_rate", "COUPON RATE (%)", 2.0, 0, 15, 2, "", "%"),
-            spin_field("maturity_years", "MATURITY (years)", 5, 0.5, 30, 1),
-            spin_field("stock_price", "STOCK PRICE ($)", 55, 1, 1e6, 2, "$"),
-            spin_field("conversion_ratio", "CONVERSION RATIO", 18, 1, 1e4, 2),
+            text_field("name", "BOND NAME"),
+            spin_field("face_value", "FACE VALUE ($)", 100, 1e9, 0, "$"),
+            spin_field("current_market_value", "MARKET PRICE ($)", 1, 1e9, 2, "$"),
+            spin_field("coupon_rate", "COUPON RATE (%)", 0, 15, 2, "", "%", true),
+            spin_field("maturity_years", "MATURITY (years)", 0.5, 30, 1),
+            spin_field("stock_price", "STOCK PRICE ($)", 1, 1e6, 2, "$"),
+            spin_field("conversion_ratio", "CONVERSION RATIO", 1, 1e4, 2),
         };
     if (id == "preferred-stocks")
         return {
-            text_field("name", "SECURITY NAME", "JPM Series J Preferred"),
-            spin_field("par_value", "PAR VALUE ($)", 25, 1, 1e4, 2, "$"),
-            spin_field("current_price", "MARKET PRICE ($)", 24.5, 1, 1e4, 2, "$"),
-            spin_field("dividend_rate", "DIVIDEND RATE (%)", 5.5, 0, 20, 2, "", "%", true),
+            text_field("name", "SECURITY NAME"),
+            spin_field("par_value", "PAR VALUE ($)", 1, 1e4, 2, "$"),
+            spin_field("current_price", "MARKET PRICE ($)", 1, 1e4, 2, "$"),
+            spin_field("dividend_rate", "DIVIDEND RATE (%)", 0, 20, 2, "", "%", true),
         };
     if (id == "real-estate")
         return {
-            text_field("name", "PROPERTY NAME", "Class A Office"),
-            spin_field("acquisition_price", "PURCHASE PRICE ($)", 1000000, 1000, 1e12, 0, "$"),
-            spin_field("gross_income", "GROSS INCOME ($/yr)", 120000, 0, 1e9, 0, "$"),
-            spin_field("vacancy_rate", "VACANCY RATE (%)", 5.0, 0, 100, 1, "", "%", true),
-            spin_field("operating_expenses", "OPER. EXPENSES ($/yr)", 40000, 0, 1e9, 0, "$"),
-            spin_field("loan_amount", "LOAN AMOUNT ($)", 700000, 0, 1e12, 0, "$"),
-            spin_field("interest_rate", "MORTGAGE RATE (%)", 6.5, 0, 30, 2, "", "%", true),
-            spin_field("loan_term", "LOAN TERM (years)", 30, 5, 50, 0),
+            text_field("name", "PROPERTY NAME"),
+            spin_field("acquisition_price", "PURCHASE PRICE ($)", 1000, 1e12, 0, "$"),
+            spin_field("gross_rental_income", "GROSS INCOME ($/yr)", 0, 1e9, 0, "$"),
+            spin_field("vacancy_rate", "VACANCY RATE (%)", 0, 100, 1, "", "%", true),
+            spin_field("operating_expenses", "OPER. EXPENSES ($/yr)", 0, 1e9, 0, "$"),
+            spin_field("loan_amount", "LOAN AMOUNT ($)", 0, 1e12, 0, "$"),
+            spin_field("interest_rate", "MORTGAGE RATE (%)", 0, 30, 2, "", "%", true),
+            spin_field("loan_term", "LOAN TERM (years)", 5, 50, 0),
         };
     if (id == "hedge-funds")
         return {
-            text_field("name", "FUND NAME", "Global Macro Fund"),
-            spin_field("management_fee", "MGMT FEE (%)", 2.0, 0, 10, 2, "", "%", true),
-            spin_field("performance_fee", "PERF FEE (%)", 20.0, 0, 50, 1, "", "%", true),
-            spin_field("hurdle_rate", "HURDLE RATE (%)", 6.0, 0, 20, 2, "", "%", true),
+            text_field("name", "FUND NAME"),
+            spin_field("management_fee", "MGMT FEE (%)", 0, 10, 2, "", "%", true),
+            spin_field("performance_fee", "PERF FEE (%)", 0, 50, 1, "", "%", true),
+            spin_field("hurdle_rate", "HURDLE RATE (%)", 0, 20, 2, "", "%", true),
             combo_field("strategy_type", "STRATEGY",
                         "equity_long_short|global_macro|event_driven|relative_value|multi_strategy"),
         };
     if (id == "managed-futures")
         return {
-            text_field("name", "FUND NAME", "CTA Trend Fund"),
-            spin_field("management_fee", "MGMT FEE (%)", 2.0, 0, 10, 2, "", "%", true),
-            spin_field("performance_fee", "PERF FEE (%)", 20.0, 0, 50, 1, "", "%", true),
-            spin_field("gross_return", "GROSS RETURN (%)", 12.0, -50, 100, 2, "", "%", true),
+            text_field("name", "FUND NAME"),
+            spin_field("management_fee", "MGMT FEE (%)", 0, 10, 2, "", "%", true),
+            spin_field("performance_fee", "PERF FEE (%)", 0, 50, 1, "", "%", true),
+            spin_field("gross_return", "GROSS RETURN (%)", -50, 100, 2, "", "%", true),
         };
     if (id == "market-neutral")
         return {
-            text_field("name", "FUND NAME", "Market Neutral Fund"),
-            spin_field("gross_leverage", "GROSS LEVERAGE", 2.0, 0.5, 10, 1),
-            spin_field("management_fee", "MGMT FEE (%)", 1.5, 0, 10, 2, "", "%", true),
-            spin_field("performance_fee", "PERF FEE (%)", 20.0, 0, 50, 1, "", "%", true),
+            text_field("name", "FUND NAME"),
+            spin_field("long_exposure", "LONG EXPOSURE (x NAV)", 0, 10, 2),
+            spin_field("short_exposure", "SHORT EXPOSURE (x NAV)", 0, 10, 2),
+            spin_field("management_fee", "MGMT FEE (%)", 0, 10, 2, "", "%", true),
+            spin_field("performance_fee", "PERF FEE (%)", 0, 50, 1, "", "%", true),
         };
     if (id == "natural-resources")
         return {
-            text_field("name", "COMMODITY NAME", "WTI Crude Oil"),
-            spin_field("spot_price", "SPOT PRICE ($)", 80, 0, 1e6, 2, "$"),
-            spin_field("three_month_futures", "3M FUTURES ($)", 82, 0, 1e6, 2, "$"),
-            spin_field("six_month_futures", "6M FUTURES ($)", 84, 0, 1e6, 2, "$"),
-            spin_field("twelve_month_futures", "12M FUTURES ($)", 87, 0, 1e6, 2, "$"),
+            text_field("name", "COMMODITY NAME"),
+            spin_field("spot_price", "SPOT PRICE ($)", 0, 1e6, 2, "$"),
+            spin_field("three_month_futures", "3M FUTURES ($)", 0, 1e6, 2, "$"),
             combo_field("sector", "SECTOR", "energy|metals|agriculture|livestock"),
         };
     if (id == "pme")
         return {
-            text_field("name", "FUND NAME", "Gold Miners ETF"),
+            text_field("name", "FUND NAME"),
         };
     if (id == "private-capital")
         return {
-            text_field("name", "FUND NAME", "Buyout Fund III"),
-            spin_field("management_fee", "MGMT FEE (%)", 2.0, 0, 10, 2, "", "%", true),
-            spin_field("performance_fee", "CARRIED INT (%)", 20.0, 0, 40, 1, "", "%", true),
-            spin_field("hurdle_rate", "HURDLE RATE (%)", 8.0, 0, 20, 2, "", "%", true),
+            text_field("name", "FUND NAME"),
+            spin_field("management_fee", "MGMT FEE (%)", 0, 10, 2, "", "%", true),
+            spin_field("performance_fee", "CARRIED INT (%)", 0, 40, 1, "", "%", true),
+            spin_field("hurdle_rate", "HURDLE RATE (%)", 0, 20, 2, "", "%", true),
         };
     if (id == "annuities")
         return {
-            text_field("name", "ANNUITY NAME", "Fixed Annuity"),
-            spin_field("premium", "PREMIUM ($)", 100000, 1000, 1e9, 0, "$"),
-            spin_field("annual_payout_rate", "ANNUAL PAYOUT RATE (%)", 5.0, 0.1, 20, 2, "", "%", true),
-            spin_field("payout_years", "PAYOUT TERM (years)", 20, 5, 50, 0),
-            spin_field("guaranteed_rate", "GUARANTEED RATE (%)", 4.0, 0, 15, 2, "", "%", true),
+            text_field("name", "ANNUITY NAME"),
+            spin_field("acquisition_price", "PREMIUM ($)", 1000, 1e9, 0, "$"),
+            spin_field("annuity_rate", "ANNUAL PAYOUT RATE (%)", 0.1, 20, 2, "", "%", true),
+            spin_field("payout_years", "PAYOUT TERM (years)", 5, 50, 0),
         };
     if (id == "variable-annuities")
         return {
-            text_field("name", "ANNUITY NAME", "Variable Annuity"),
-            spin_field("premium", "PREMIUM ($)", 100000, 1000, 1e9, 0, "$"),
-            spin_field("me_fee", "M&E FEE (%)", 1.25, 0, 5, 2, "", "%", true),
-            spin_field("investment_fee", "INVESTMENT FEE (%)", 0.75, 0, 5, 2, "", "%", true),
-            spin_field("admin_fee", "ADMIN FEE (%)", 0.15, 0, 3, 2, "", "%", true),
-            spin_field("surrender_period", "SURRENDER PERIOD (yrs)", 7, 0, 20, 0),
+            text_field("name", "ANNUITY NAME"),
+            spin_field("premium", "PREMIUM ($)", 1000, 1e9, 0, "$"),
+            spin_field("me_fee", "M&E FEE (%)", 0, 5, 2, "", "%", true),
+            spin_field("investment_fee", "INVESTMENT FEE (%)", 0, 5, 2, "", "%", true),
+            spin_field("admin_fee", "ADMIN FEE (%)", 0, 3, 2, "", "%", true),
+            spin_field("surrender_period", "SURRENDER PERIOD (yrs)", 0, 20, 0),
         };
     if (id == "eia")
         return {
-            text_field("name", "PRODUCT NAME", "EIA Product"),
-            spin_field("index_return", "INDEX RETURN (%)", 10.0, -50, 100, 2, "", "%", true),
-            spin_field("participation_rate", "PARTICIPATION (%)", 80.0, 10, 100, 1, "", "%", true),
-            spin_field("cap_rate", "CAP RATE (%)", 6.0, 0, 50, 2, "", "%", true),
-            spin_field("floor_rate", "FLOOR RATE (%)", 0.0, -10, 10, 2, "", "%", true),
+            text_field("name", "PRODUCT NAME"),
+            spin_field("index_return", "INDEX RETURN (%)", -50, 100, 2, "", "%", true),
+            spin_field("participation_rate", "PARTICIPATION (%)", 10, 100, 1, "", "%", true),
+            spin_field("cap_rate", "CAP RATE (%)", 0, 50, 2, "", "%", true),
+            spin_field("floor_rate", "FLOOR RATE (%)", -10, 10, 2, "", "%", true),
         };
     if (id == "inflation-annuity")
         return {
-            text_field("name", "ANNUITY NAME", "Inflation-Indexed Annuity"),
-            spin_field("real_payout_rate", "REAL PAYOUT RATE (%)", 4.0, 0, 15, 2, "", "%", true),
-            spin_field("inflation_rate", "ASSUMED INFLATION (%)", 3.0, 0, 15, 2, "", "%", true),
-            spin_field("payout_years", "PAYOUT TERM (years)", 20, 5, 50, 0),
-            spin_field("fixed_payout_rate", "FIXED ALT RATE (%)", 5.5, 0, 15, 2, "", "%", true),
+            text_field("name", "ANNUITY NAME"),
+            spin_field("real_payout_rate", "REAL PAYOUT RATE (%)", 0, 15, 2, "", "%", true),
+            spin_field("inflation_rate", "ASSUMED INFLATION (%)", 0, 15, 2, "", "%", true),
+            spin_field("payout_years", "PAYOUT TERM (years)", 5, 50, 0),
+            spin_field("fixed_payout_rate", "FIXED ALT RATE (%)", 0, 15, 2, "", "%", true),
         };
     if (id == "structured-products")
         return {
-            text_field("name", "PRODUCT NAME", "Principal Protected Note"),
-            spin_field("principal", "PRINCIPAL ($)", 50000, 1000, 1e9, 0, "$"),
-            spin_field("participation_rate", "PARTICIPATION (%)", 80.0, 10, 100, 1, "", "%", true),
-            spin_field("cap_rate", "UPSIDE CAP (%)", 20.0, 0, 100, 1, "", "%", true),
-            spin_field("maturity_years", "MATURITY (years)", 5, 1, 30, 0),
+            text_field("name", "PRODUCT NAME"),
+            spin_field("principal", "PRINCIPAL ($)", 1000, 1e9, 0, "$"),
+            spin_field("participation_rate", "PARTICIPATION (%)", 10, 100, 1, "", "%", true),
+            spin_field("cap_rate", "UPSIDE CAP (%)", 0, 100, 1, "", "%", true),
+            spin_field("maturity_years", "MATURITY (years)", 1, 30, 0),
         };
     if (id == "leveraged-funds")
         return {
-            text_field("name", "FUND NAME", "3x S&P 500 ETF"),
-            spin_field("leverage_ratio", "LEVERAGE RATIO", 3.0, 2.0, 4.0, 1),
+            text_field("name", "FUND NAME"),
+            spin_field("leverage_ratio", "LEVERAGE RATIO", 2.0, 4.0, 1),
         };
     if (id == "tips")
         return {
-            text_field("name", "SECURITY NAME", "TIPS 2031"),
-            spin_field("face_value", "FACE VALUE ($)", 10000, 1000, 1e9, 0, "$"),
-            spin_field("current_market_value", "MARKET PRICE ($)", 10200, 1000, 1e9, 2, "$"),
-            spin_field("coupon_rate", "REAL COUPON (%)", 2.5, 0, 10, 2, "", "%", true),
-            spin_field("maturity_years", "MATURITY (years)", 7, 1, 30, 1),
+            text_field("name", "SECURITY NAME"),
+            spin_field("face_value", "FACE VALUE ($)", 1000, 1e9, 0, "$"),
+            spin_field("current_market_value", "MARKET PRICE ($)", 1000, 1e9, 2, "$"),
+            spin_field("coupon_rate", "REAL COUPON (%)", 0, 10, 2, "", "%", true),
+            spin_field("maturity_years", "MATURITY (years)", 1, 30, 1),
         };
     if (id == "ibonds")
         return {
-            text_field("name", "BOND NAME", "I-Bond 2025"),
-            spin_field("purchase_price", "PURCHASE PRICE ($)", 10000, 25, 10000, 0, "$"),
-            spin_field("fixed_rate", "FIXED RATE (%)", 0.4, 0, 5, 2, "", "%", true),
-            spin_field("inflation_rate", "CPI-U INFLATION (%)", 3.4, 0, 20, 2, "", "%", true),
+            text_field("name", "BOND NAME"),
+            spin_field("purchase_price", "PURCHASE PRICE ($)", 25, 10000, 0, "$"),
+            spin_field("fixed_rate", "FIXED RATE (%)", 0, 5, 2, "", "%", true),
+            spin_field("inflation_rate", "CPI-U INFLATION (%)", 0, 20, 2, "", "%", true),
         };
     if (id == "stable-value")
         return {
-            text_field("name", "FUND NAME", "Stable Value Fund"),
-            spin_field("book_value", "BOOK VALUE ($)", 100000, 1000, 1e9, 0, "$"),
-            spin_field("market_value", "MARKET VALUE ($)", 98000, 1000, 1e9, 0, "$"),
-            spin_field("crediting_rate", "CREDITING RATE (%)", 3.2, 0, 15, 2, "", "%", true),
+            text_field("name", "FUND NAME"),
+            spin_field("acquisition_price", "BOOK VALUE ($)", 1000, 1e9, 0, "$"),
+            spin_field("current_market_value", "MARKET VALUE ($)", 1000, 1e9, 0, "$"),
+            spin_field("crediting_rate", "CREDITING RATE (%)", 0, 15, 2, "", "%", true),
         };
     if (id == "covered-calls")
         return {
-            text_field("name", "POSITION NAME", "AAPL Covered Call"),
-            spin_field("stock_price", "STOCK PRICE ($)", 150, 1, 1e6, 2, "$"),
-            spin_field("strike_price", "STRIKE PRICE ($)", 160, 1, 1e6, 2, "$"),
-            spin_field("premium", "PREMIUM / SHARE ($)", 5, 0, 1e4, 2, "$"),
-            spin_field("shares", "SHARES", 100, 1, 1e6, 0),
-            spin_field("cost_basis", "COST BASIS ($)", 125, 1, 1e6, 2, "$"),
-            spin_field("holding_period_days", "HOLDING DAYS", 400, 1, 3650, 0),
+            text_field("name", "POSITION NAME"),
+            spin_field("stock_price", "STOCK PRICE ($)", 1, 1e6, 2, "$"),
+            spin_field("strike_price", "STRIKE PRICE ($)", 1, 1e6, 2, "$"),
+            spin_field("option_premium", "PREMIUM / SHARE ($)", 0, 1e4, 2, "$"),
+            spin_field("shares_owned", "SHARES", 1, 1e6, 0),
+            spin_field("holding_period_days", "HOLDING DAYS", 1, 3650, 0),
         };
     if (id == "sri")
         return {
-            text_field("name", "FUND NAME", "ESG Equity Fund"),
-            spin_field("sri_return", "SRI RETURN (%)", 9.0, -30, 100, 2, "", "%", true),
-            spin_field("benchmark_return", "BENCHMARK RETURN (%)", 10.0, -30, 100, 2, "", "%", true),
-            spin_field("expense_ratio", "EXPENSE RATIO (%)", 0.8, 0, 5, 2, "", "%", true),
-            spin_field("time_period_years", "TIME PERIOD (years)", 10, 1, 50, 0),
+            text_field("name", "FUND NAME"),
+            spin_field("fund_return", "SRI FUND RETURN (%)", -30, 100, 2, "", "%", true),
+            spin_field("benchmark_return", "BENCHMARK RETURN (%)", -30, 100, 2, "", "%", true),
+            spin_field("expense_ratio", "EXPENSE RATIO (%)", 0, 5, 2, "", "%", true),
+            spin_field("time_period_years", "TIME PERIOD (years)", 1, 50, 0),
         };
     if (id == "asset-location")
         return {
-            text_field("name", "ASSET NAME", "REITs / High-Yield"),
+            text_field("name", "ASSET NAME"),
             combo_field("asset_class", "ASSET CLASS",
                         "reits|high_yield_bonds|stocks|municipal_bonds|tips|commodities|cash"),
-            spin_field("tax_bracket", "TAX BRACKET (%)", 24.0, 10, 45, 1, "", "%", true),
+            spin_field("tax_bracket", "TAX BRACKET (%)", 10, 45, 1, "", "%", true),
         };
     if (id == "digital-assets")
         return {
-            text_field("name", "ASSET NAME", "Bitcoin"),
-            spin_field("price", "PRICE ($)", 45000, 0, 1e9, 2, "$"),
-            spin_field("market_cap", "MARKET CAP ($B)", 850, 0, 1e6, 1, "$", "B"),
-            spin_field("volume_24h", "24H VOLUME ($B)", 25, 0, 1e6, 1, "$", "B"),
-            spin_field("circulating_supply", "CIRC. SUPPLY (M)", 19.5, 0, 1e6, 1, "", "M"),
-            spin_field("max_supply", "MAX SUPPLY (M)", 21.0, 0, 1e6, 1, "", "M"),
+            text_field("name", "ASSET NAME"),
+            spin_field("market_cap", "MARKET CAP ($B)", 0, 1e6, 3, "$", "B"),
+            spin_field("trading_volume_24h", "24H VOLUME ($B)", 0, 1e6, 3, "$", "B"),
+            spin_field("circulating_supply", "CIRC. SUPPLY (M)", 0, 1e6, 3, "", "M"),
+            spin_field("total_supply", "TOTAL / MAX SUPPLY (M)", 0, 1e6, 3, "", "M"),
         };
-    return {text_field("name", "NAME", "")};
+    return {text_field("name", "NAME")};
 }
 
 // ── Constructor ──────────────────────────────────────────────────────────────
@@ -748,17 +764,9 @@ void AltInvestmentsScreen::rebuild_form(int cat, int ana) {
                 auto* lbl = new QLabel(field.label);
                 lbl->setObjectName("altFieldLabel");
                 cl->addWidget(lbl);
-                auto* sp = new QDoubleSpinBox;
-                sp->setRange(field.min_val, field.max_val);
-                sp->setValue(field.default_val);
-                sp->setDecimals(field.decimals);
-                sp->setButtonSymbols(QAbstractSpinBox::NoButtons);
-                if (!field.prefix.isEmpty())
-                    sp->setPrefix(field.prefix);
-                if (!field.suffix.isEmpty())
-                    sp->setSuffix(field.suffix);
-                cl->addWidget(sp);
-                field_widgets_.append(sp);
+                auto* le = make_numeric_edit(field, col);
+                cl->addWidget(le);
+                field_widgets_.append(le);
                 return col;
             };
 
@@ -776,7 +784,8 @@ void AltInvestmentsScreen::rebuild_form(int cat, int ana) {
             cl->addWidget(lbl);
 
             if (f.type == AltField::Text) {
-                auto* le = new QLineEdit(f.combo_items);
+                auto* le = new QLineEdit;
+                le->setPlaceholderText(QStringLiteral("optional label"));
                 cl->addWidget(le);
                 field_widgets_.append(le);
             } else if (f.type == AltField::Combo) {
@@ -786,17 +795,9 @@ void AltInvestmentsScreen::rebuild_form(int cat, int ana) {
                 cl->addWidget(cb);
                 field_widgets_.append(cb);
             } else {
-                auto* sp = new QDoubleSpinBox;
-                sp->setRange(f.min_val, f.max_val);
-                sp->setValue(f.default_val);
-                sp->setDecimals(f.decimals);
-                sp->setButtonSymbols(QAbstractSpinBox::NoButtons);
-                if (!f.prefix.isEmpty())
-                    sp->setPrefix(f.prefix);
-                if (!f.suffix.isEmpty())
-                    sp->setSuffix(f.suffix);
-                cl->addWidget(sp);
-                field_widgets_.append(sp);
+                auto* le = make_numeric_edit(f, col);
+                cl->addWidget(le);
+                field_widgets_.append(le);
             }
             form_layout_->addWidget(col);
             ++i;
@@ -850,6 +851,20 @@ void AltInvestmentsScreen::on_analyze() {
     if (loading_)
         return;
     const auto& ana = categories_[active_category_].analyzers[active_analyzer_];
+    // Every numeric input is required — refuse to run on blanks rather than
+    // letting the analyzer substitute an invented default.
+    QStringList missing;
+    for (int i = 0; i < current_fields_.size() && i < field_widgets_.size(); ++i) {
+        if (current_fields_[i].type != AltField::Spin)
+            continue;
+        auto* le = qobject_cast<QLineEdit*>(field_widgets_[i]);
+        if (!le || le->text().trimmed().isEmpty() || !le->hasAcceptableInput())
+            missing << current_fields_[i].label;
+    }
+    if (!missing.isEmpty()) {
+        display_error("Enter a valid value for: " + missing.join(", "));
+        return;
+    }
     run_analysis(ana.id, collect_form_data());
 }
 
@@ -861,14 +876,17 @@ QJsonObject AltInvestmentsScreen::collect_form_data() const {
         const auto& f = current_fields_[i];
         auto* w = field_widgets_[i];
         if (f.type == AltField::Text) {
-            if (auto* le = qobject_cast<QLineEdit*>(w))
-                form[f.key] = le->text();
+            if (auto* le = qobject_cast<QLineEdit*>(w); le && !le->text().trimmed().isEmpty())
+                form[f.key] = le->text().trimmed();
         } else if (f.type == AltField::Combo) {
             if (auto* cb = qobject_cast<QComboBox*>(w))
                 form[f.key] = cb->currentText();
         } else {
-            if (auto* sp = qobject_cast<QDoubleSpinBox*>(w)) {
-                double val = sp->value();
+            if (auto* le = qobject_cast<QLineEdit*>(w)) {
+                bool ok = false;
+                double val = QLocale::c().toDouble(le->text().trimmed(), &ok);
+                if (!ok)
+                    continue; // blank/invalid: omitted — on_analyze() blocks this case
                 if (f.suffix == "B")
                     val *= 1e9;
                 else if (f.suffix == "M")
@@ -929,6 +947,12 @@ void AltInvestmentsScreen::run_analysis(const QString& command, const QJsonObjec
             }
 
             const QJsonObject obj = r.data;
+            // Analyzers report insufficient input (e.g. no return history) inside metrics.
+            const QJsonObject m = obj.value("metrics").toObject();
+            if (m.contains("error")) {
+                self->display_error(m.value("error").toString());
+                return;
+            }
 
             fincept::CacheManager::instance().put(
                 cache_key,

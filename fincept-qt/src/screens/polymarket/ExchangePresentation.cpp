@@ -2,7 +2,10 @@
 
 #include "services/prediction/PredictionExchangeAdapter.h"
 #include "services/prediction/PredictionExchangeRegistry.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
+
+#include <cmath>
 
 namespace fincept::screens::polymarket {
 
@@ -14,7 +17,9 @@ QString ExchangePresentation::format_price(double prob) const {
     // prediction::* always stores outcome price as 0.0–1.0 probability. Both
     // exchanges feed the adapter in that canonical form (Polymarket native,
     // Kalshi cent-prices divided by 100 by the type map). The presentation
-    // decides how to render it.
+    // decides how to render it. NaN = no real price (e.g. empty Kalshi book).
+    if (!std::isfinite(prob))
+        return fincept::ui::formatting::placeholder();
     switch (price_style) {
     case PriceStyle::ProbabilityCents:
         return QStringLiteral("%1\u00A2").arg(qRound(prob * 100.0));  // "52¢"

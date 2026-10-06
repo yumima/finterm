@@ -8,7 +8,7 @@ Modules:
 - fasttrade_provider: Main orchestrator (CLI entry point)
 - ft_backtest: Core backtesting engine (run_backtest, validate, signal logic)
 - ft_indicators: All 90+ FINTA TA indicators + transformer map + inputvalidator
-- ft_data: Data loading, preparation, archive (Binance/Coinbase/DB), synthetic data
+- ft_data: Data loading, preparation, archive (Binance/Coinbase/DB)
 - ft_summary: Performance metrics, trade analysis, risk metrics, drawdowns
 - ft_analysis: Trade execution logic (enter/exit, fees, position management)
 - ft_evaluate: Rule evaluation engine for post-backtest filtering

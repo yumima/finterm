@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioSectorPanel.cpp
 #include "screens/portfolio/PortfolioSectorPanel.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QChart>
@@ -103,7 +104,9 @@ void PortfolioSectorPanel::build_ui() {
         QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_SECONDARY()));
     corr_header->addWidget(corr_title);
 
-    auto* corr_note = new QLabel("(P&L return proxy)");
+    // The matrix is Pearson r of date-aligned daily returns (~60 calendar
+    // days, PortfolioService::fetch_correlation) — not a P&L proxy.
+    auto* corr_note = new QLabel("(daily returns, ~60d)");
     corr_note->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     corr_header->addWidget(corr_note);
     corr_header->addStretch();
@@ -119,7 +122,10 @@ void PortfolioSectorPanel::build_ui() {
 void PortfolioSectorPanel::set_holdings(const QVector<portfolio::HoldingWithQuote>& holdings) {
     holdings_ = holdings;
     selected_sector_.clear(); // reset filter on fresh data
-    corr_matrix_.clear();     // invalidate stale correlation data
+    // Keep the correlation matrix: it is keyed by symbol pair, so pairs for
+    // holdings that left simply go unused, and the screen re-fetches when the
+    // symbol set changes. Clearing it on every 20 s summary refresh blanked
+    // the matrix for good (the re-fetch only fires on a symbol-set change).
     update_donut();
     update_correlation();
 }
@@ -157,7 +163,8 @@ void PortfolioSectorPanel::update_donut() {
     for (const auto& h : holdings_) {
         QString sector = h.sector.isEmpty() ? QStringLiteral("Unclassified") : h.sector;
         sector_weights[sector] += h.weight;
-        sector_pnl[sector] += h.unrealized_pnl;
+        if (std::isfinite(h.unrealized_pnl)) // unpriced holding: no P&L to add
+            sector_pnl[sector] += h.unrealized_pnl;
         sector_counts[sector]++;
     }
 
@@ -308,10 +315,19 @@ void PortfolioSectorPanel::update_correlation() {
         grid->addWidget(row_label, r + 1, 0);
 
         for (int c = 0; c < n; ++c) {
-            const auto opt_corr = corr_pair(r, c);
+            auto opt_corr = corr_pair(r, c);
             const bool is_diag = (r == c);
+            // NaN from the service = not computable (too little overlapping
+            // history) → "—"; absent while the fetch is pending → "…".
+            const bool not_computable = opt_corr && !std::isfinite(*opt_corr);
+            if (not_computable)
+                opt_corr.reset();
             const double corr = opt_corr.value_or(0.0);
-            const QString label = is_diag ? "1.00" : opt_corr ? QString::number(corr, 'f', 2) : "\u2026"; // "…" pending
+            const QString label = is_diag          ? QStringLiteral("1.00")
+                                  : opt_corr       ? QString::number(corr, 'f', 2)
+                                  : not_computable ? ui::formatting::placeholder()
+                                  : has_real_corr  ? ui::formatting::placeholder()
+                                                   : QStringLiteral("\u2026"); // "…" pending
 
             auto* cell = new QLabel(label);
             cell->setAlignment(Qt::AlignCenter);

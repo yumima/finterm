@@ -36,8 +36,8 @@ enum class SourceFlag {
 
 struct ThreatClassification {
     ThreatLevel level = ThreatLevel::INFO;
-    QString category;      // "conflict", "cyber", "natural", "market", "regulatory", "general"
-    double confidence = 0; // 0.0 - 1.0
+    QString category; // "conflict", "cyber", "natural", "market", "regulatory", "general"
+    // No confidence: keyword matching has no calibrated probability behind it.
 };
 
 struct NewsArticle {
@@ -87,8 +87,6 @@ struct NewsAnalysis {
     RiskSignal geopolitical;
     RiskSignal operational;
     RiskSignal market;
-    int credits_used = 0;
-    int credits_remaining = 0;
 };
 
 // ── RSS Feed definition ─────────────────────────────────────────────────────

@@ -708,7 +708,12 @@ def _fallback_plan_from_query(query: str) -> Dict[str, Any]:
     # Detect symbol — first uppercase word-like token
     import re
     symbol_match = re.search(r'\b([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\b', query)
-    symbol = symbol_match.group(1) if symbol_match else "AAPL"
+    if not symbol_match:
+        # Never substitute a default ticker — a plan for a symbol the user
+        # didn't ask about is fabricated work.
+        return {"success": False,
+                "error": "could not build a plan: no ticker symbol found in the query"}
+    symbol = symbol_match.group(1)
 
     if any(w in query_lower for w in ["portfolio", "rebalance", "holdings"]):
         plan = ExecutionPlanner.portfolio_rebalance_plan(symbol)

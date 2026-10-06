@@ -297,13 +297,20 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
                             return;
                         auto comps2 = s.components();
                         auto cfg2 = comps2[idx2].config;
-                        cfg2["price"] = QString::number(q.price, 'f', 2);
-                        cfg2["change"] = QString::number(q.change, 'f', 2);
-                        cfg2["change_pct"] = QString::number(q.change_pct, 'f', 2);
+                        // Unknown fields stay empty (the canvas skips them) —
+                        // change/change_pct are NaN when the feed had no
+                        // previous close, and must not print "nan" or 0.00.
+                        auto num2 = [](double v) {
+                            return std::isfinite(v) ? QString::number(v, 'f', 2) : QString();
+                        };
+                        cfg2["price"] = q.price > 0 ? num2(q.price) : QString();
+                        cfg2["change"] = num2(q.change);
+                        cfg2["change_pct"] = num2(q.change_pct);
                         cfg2["name"] = q.name;
                         cfg2["high"] = q.high > 0 ? QString::number(q.high, 'f', 2) : "";
                         cfg2["low"] = q.low > 0 ? QString::number(q.low, 'f', 2) : "";
-                        cfg2["volume"] = q.volume > 0 ? QString::number(q.volume, 'f', 0) : "";
+                        cfg2["volume"] = (std::isfinite(q.volume) && q.volume > 0)
+                                             ? QString::number(q.volume, 'f', 0) : "";
                         cfg2["status"] = "ok";
                         s.update_component(comp_id, comps2[idx2].content, cfg2);
                     };

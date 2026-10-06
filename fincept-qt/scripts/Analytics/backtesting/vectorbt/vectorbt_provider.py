@@ -146,11 +146,11 @@ class VectorBTProvider(BacktestingProviderBase):
             logs.append(f'{self._current_timestamp()}: Downloading data for {symbols}')
             logs.append(f'{self._current_timestamp()}: Normalized symbols: {self._normalize_symbols(symbols)}')
 
-            close_series, using_synthetic = self._load_market_data(
+            close_series = self._load_market_data(
                 symbols, start_date, end_date
             )
 
-            print(f'[PY-BT] Data loaded: {len(close_series)} bars, synthetic={using_synthetic}', file=sys.stderr)
+            print(f'[PY-BT] Data loaded: {len(close_series)} bars', file=sys.stderr)
             print(f'[PY-BT] Data range: {close_series.index[0]} to {close_series.index[-1]}', file=sys.stderr)
             print(f'[PY-BT] Price range: {close_series.min():.2f} - {close_series.max():.2f}', file=sys.stderr)
             print(f'[PY-BT] First 5 prices: {close_series.head().tolist()}', file=sys.stderr)
@@ -159,8 +159,7 @@ class VectorBTProvider(BacktestingProviderBase):
 
             logs.append(f'{self._current_timestamp()}: Data: {len(close_series)} bars, '
                         f'range: {close_series.index[0]} to {close_series.index[-1]}, '
-                        f'price range: {close_series.min():.2f} - {close_series.max():.2f}, '
-                        f'synthetic={using_synthetic}')
+                        f'price range: {close_series.min():.2f} - {close_series.max():.2f}')
 
             # --- Handle custom code strategy ---
             if strategy_type == 'code':
@@ -292,16 +291,7 @@ class VectorBTProvider(BacktestingProviderBase):
             )
 
             result_dict = result.to_dict()
-            result_dict['using_synthetic_data'] = using_synthetic
             result_dict['extended_stats'] = extended
-
-            if using_synthetic:
-                result_dict['synthetic_data_warning'] = (
-                    'WARNING: This backtest used SYNTHETIC (fake) data because real market data '
-                    'could not be loaded. Install yfinance (pip install yfinance) and ensure '
-                    'internet connectivity for real results. These results have NO financial meaning.'
-                )
-                logs.append(f'{self._current_timestamp()}: *** SYNTHETIC DATA WARNING: Results are based on fake data ***')
 
             # Include detailed analysis sub-results
             result_dict['trade_analysis'] = all_metrics.get('trade_analysis', {})
@@ -464,23 +454,39 @@ class VectorBTProvider(BacktestingProviderBase):
                         symbol_data = data
                     elif isinstance(data.columns, pd.MultiIndex):
                         # MultiIndex: extract per-symbol OHLCV
-                        symbol_data = data.xs(norm_sym, axis=1, level=1) if norm_sym in data.columns.get_level_values(1) else data
+                        if norm_sym not in data.columns.get_level_values(1):
+                            raise ValueError('symbol not present in download')
+                        symbol_data = data.xs(norm_sym, axis=1, level=1)
                     else:
-                        symbol_data = data
+                        raise ValueError('unexpected multi-symbol column layout')
+
+                    symbol_data = symbol_data.dropna(how='all')
+                    if symbol_data.empty:
+                        raise ValueError('no data returned')
+
+                    def _field(row, key, cast=float):
+                        # Missing/NaN fields are reported as None, never 0
+                        val = row.get(key) if hasattr(row, 'get') else None
+                        if isinstance(val, pd.Series):
+                            val = val.iloc[0] if len(val) else None
+                        if val is None or pd.isna(val):
+                            return None
+                        return cast(val)
 
                     bars = []
                     for date, row in symbol_data.iterrows():
                         bars.append({
                             'date': date.isoformat(),
-                            'open': float(row.get('Open', 0) if hasattr(row, 'get') else 0),
-                            'high': float(row.get('High', 0) if hasattr(row, 'get') else 0),
-                            'low': float(row.get('Low', 0) if hasattr(row, 'get') else 0),
-                            'close': float(row.get('Close', 0) if hasattr(row, 'get') else 0),
-                            'volume': int(row.get('Volume', 0) if hasattr(row, 'get') else 0),
+                            'open': _field(row, 'Open'),
+                            'high': _field(row, 'High'),
+                            'low': _field(row, 'Low'),
+                            'close': _field(row, 'Close'),
+                            'volume': _field(row, 'Volume', int),
                         })
                     result.append({'symbol': symbol, 'timeframe': timeframe, 'data': bars})
-                except Exception:
-                    result.append({'symbol': symbol, 'timeframe': timeframe, 'data': []})
+                except Exception as e:
+                    result.append({'symbol': symbol, 'timeframe': timeframe, 'data': [],
+                                   'error': f'Market data unavailable for {norm_sym}: {e}'})
 
             return result
         except Exception as e:
@@ -501,7 +507,7 @@ class VectorBTProvider(BacktestingProviderBase):
             params = request.get('params', {})
 
             # Load market data to get a close series
-            close_series, using_synthetic = self._load_market_data(
+            close_series = self._load_market_data(
                 self._normalize_symbols(symbols), start_date, end_date
             )
 
@@ -521,8 +527,7 @@ class VectorBTProvider(BacktestingProviderBase):
                                                exit_prob=params.get('exit_prob', 0.2), seed=params.get('seed')),
             }
 
-            result_data = {'generatorType': generator_type, 'totalBars': len(close_series),
-                           'usingSyntheticData': using_synthetic}
+            result_data = {'generatorType': generator_type, 'totalBars': len(close_series)}
 
             if generator_type in gen_map:
                 output = gen_map[generator_type]()
@@ -586,7 +591,7 @@ class VectorBTProvider(BacktestingProviderBase):
             end_date = request.get('endDate')
             params = request.get('params', {})
 
-            close_series, using_synthetic = self._load_market_data(
+            close_series = self._load_market_data(
                 self._normalize_symbols(symbols), start_date, end_date
             )
 
@@ -616,7 +621,6 @@ class VectorBTProvider(BacktestingProviderBase):
                 'labelType': label_type,
                 'totalBars': len(close_series),
                 'labeledBars': int(labels.notna().sum()) if hasattr(labels, 'notna') else int(np.sum(~np.isnan(labels))),
-                'usingSyntheticData': using_synthetic,
                 'distribution': distribution,
                 'sampleLabels': [
                     {'date': str(labels.index[i]), 'label': int(labels.iloc[i])}
@@ -642,16 +646,17 @@ class VectorBTProvider(BacktestingProviderBase):
             total_bars = request.get('totalBars')
             params = request.get('params', {})
 
-            # Build an index - from market data if available, else synthetic
+            # Build an index - from market data when symbols given, else from the requested bar count
             if symbols and start_date and end_date:
-                close_series, using_synthetic = self._load_market_data(
+                close_series = self._load_market_data(
                     self._normalize_symbols(symbols), start_date, end_date
                 )
                 index = close_series.index
-            elif total_bars:
-                index = pd.date_range(start=start_date or '2020-01-01', periods=total_bars, freq='B')
+            elif total_bars and start_date:
+                index = pd.date_range(start=start_date, periods=total_bars, freq='B')
             else:
-                index = pd.date_range(start='2020-01-01', end='2024-01-01', freq='B')
+                return {'success': False,
+                        'error': 'Splitter requires symbols + startDate + endDate, or totalBars + startDate'}
 
             splitter_map = {
                 'RollingSplitter': lambda: sp.RollingSplitter(
@@ -740,7 +745,7 @@ class VectorBTProvider(BacktestingProviderBase):
             benchmark = request.get('benchmark', '')
             params = request.get('params', {})
 
-            close_series, using_synthetic = self._load_market_data(
+            close_series = self._load_market_data(
                 self._normalize_symbols(symbols), start_date, end_date
             )
             returns = close_series.pct_change().dropna()
@@ -764,7 +769,6 @@ class VectorBTProvider(BacktestingProviderBase):
                 'analysisType': analysis_type,
                 'totalBars': len(close_series),
                 'returnBars': len(returns),
-                'usingSyntheticData': using_synthetic,
             }
 
             if analysis_type == 'returns_stats':
@@ -927,14 +931,13 @@ class VectorBTProvider(BacktestingProviderBase):
             indicator = request.get('indicator', 'rsi')
             params = request.get('params', {})
 
-            close_series, using_synthetic = self._load_market_data(
+            close_series = self._load_market_data(
                 self._normalize_symbols(symbols), start_date, end_date
             )
 
             result_data = {
                 'mode': mode,
                 'totalBars': len(close_series),
-                'usingSyntheticData': using_synthetic,
                 'symbol': symbols[0] if symbols else 'Unknown',
                 'dateRange': {
                     'start': str(close_series.index[0]),
@@ -1144,9 +1147,6 @@ class VectorBTProvider(BacktestingProviderBase):
         print("[INDICATOR_SWEEP] === STARTING ===", flush=True)
         sys.stdout.flush()
 
-        # TEST: Return immediately to see if function is being called
-        # return {'success': True, 'data': {'indicator': 'TEST', 'totalCombinations': 999, 'usingSyntheticData': False, 'results': []}}
-
         try:
             import numpy as np
             import pandas as pd
@@ -1164,7 +1164,6 @@ class VectorBTProvider(BacktestingProviderBase):
 
             # Load full OHLCV data instead of just close
             normalized_symbols = self._normalize_symbols(symbols)
-            using_synthetic = False
 
             try:
                 import yfinance as yf
@@ -1190,14 +1189,14 @@ class VectorBTProvider(BacktestingProviderBase):
                     low_series = raw_data['Low'].iloc[:, 0].values
                     volume_series = raw_data['Volume'].iloc[:, 0].values
 
+            except ImportError:
+                return {'success': False,
+                        'error': f'Market data unavailable for {", ".join(normalized_symbols)}: '
+                                 f'yfinance is not installed'}
             except Exception as e:
-                print(f"[INDICATOR_SWEEP] Data load failed: {e}, using synthetic")
-                using_synthetic = True
-                # Generate synthetic OHLCV
-                close_series = self._generate_synthetic_data(symbols, start_date, end_date).values
-                high_series = close_series * 1.02  # High = close * 1.02
-                low_series = close_series * 0.98   # Low = close * 0.98
-                volume_series = np.random.randint(1000000, 10000000, len(close_series))
+                print(f"[INDICATOR_SWEEP] Data load failed: {e}")
+                return {'success': False,
+                        'error': f'Market data unavailable for {", ".join(normalized_symbols)}: {e}'}
 
             # Build parameter lists from ranges
             param_lists = {}
@@ -1327,7 +1326,6 @@ class VectorBTProvider(BacktestingProviderBase):
             result_data = {
                 'indicator': indicator,
                 'totalCombinations': len(results),
-                'usingSyntheticData': using_synthetic,
                 'results': summaries,
             }
             print(f"[INDICATOR_SWEEP] Returning: {result_data}")
@@ -1353,7 +1351,7 @@ class VectorBTProvider(BacktestingProviderBase):
             entry_label = request.get('entryLabel', 1)
             exit_label = request.get('exitLabel', -1)
 
-            close_series, using_synthetic = self._load_market_data(
+            close_series = self._load_market_data(
                 self._normalize_symbols(symbols), start_date, end_date
             )
 
@@ -1380,7 +1378,6 @@ class VectorBTProvider(BacktestingProviderBase):
                 'entryLabel': entry_label,
                 'exitLabel': exit_label,
                 'totalBars': len(close_series),
-                'usingSyntheticData': using_synthetic,
                 'entryCount': int(entries.sum()),
                 'exitCount': int(exits.sum()),
                 'entries': [str(d) for d in entries[entries].index[:50]],
@@ -1415,7 +1412,10 @@ class VectorBTProvider(BacktestingProviderBase):
 
     def _load_market_data(self, symbols: list, start_date: str, end_date: str):
         """
-        Load market data via yfinance, falling back to synthetic if unavailable.
+        Load market data via yfinance.
+
+        Raises RuntimeError naming the symbol(s) when real data cannot be
+        obtained -- never substitutes synthetic prices.
 
         Args:
             symbols: List of ticker symbols
@@ -1423,15 +1423,15 @@ class VectorBTProvider(BacktestingProviderBase):
             end_date: End date string
 
         Returns:
-            (close_series, using_synthetic) tuple
+            close_series (pd.Series)
         """
         import pandas as pd
         import numpy as np
 
-        using_synthetic = False
-
         # --- Normalize symbols for yfinance compatibility ---
         normalized_symbols = self._normalize_symbols(symbols)
+        if not normalized_symbols:
+            raise RuntimeError('Market data unavailable: no symbols specified')
 
         try:
             import yfinance as yf
@@ -1470,19 +1470,14 @@ class VectorBTProvider(BacktestingProviderBase):
             close_series = close_series.round(4)
 
         except ImportError:
-            print('[VBT] WARNING: yfinance not installed - using SYNTHETIC data. '
-                  'Results will NOT reflect real market conditions. '
-                  'Install yfinance: pip install yfinance', file=sys.stderr)
-            using_synthetic = True
-            close_series = self._generate_synthetic_data(symbols, start_date, end_date)
+            raise RuntimeError(
+                f'Market data unavailable for {", ".join(normalized_symbols)}: '
+                f'yfinance is not installed')
         except Exception as e:
-            print(f'[VBT] WARNING: Data download failed for {normalized_symbols}: {e} - '
-                  f'using SYNTHETIC data. Results will NOT reflect real market conditions.',
-                  file=sys.stderr)
-            using_synthetic = True
-            close_series = self._generate_synthetic_data(symbols, start_date, end_date)
+            raise RuntimeError(
+                f'Market data unavailable for {", ".join(normalized_symbols)}: {e}') from e
 
-        return close_series, using_synthetic
+        return close_series
 
     @staticmethod
     def _normalize_symbols(symbols: list) -> list:
@@ -1518,8 +1513,7 @@ class VectorBTProvider(BacktestingProviderBase):
         if isinstance(columns, pd.Index) and not isinstance(columns, pd.MultiIndex):
             if 'Close' in columns:
                 return raw_data['Close']
-            # Fallback to first column
-            return raw_data.iloc[:, 0] if len(columns) > 0 else None
+            raise ValueError(f'No Close column in data for {symbols}')
 
         # Case 2: MultiIndex columns (multi-symbol download)
         if isinstance(columns, pd.MultiIndex):
@@ -1541,39 +1535,9 @@ class VectorBTProvider(BacktestingProviderBase):
                     return close_data
                 return close_data.dropna(how='all')
 
-            # Fallback: take first level-0 group
-            first_group = level_0_vals[0]
-            return raw_data[first_group]
+            raise ValueError(f'No Close column in data for {symbols}')
 
-        # Fallback
-        return raw_data.iloc[:, 0] if len(raw_data.columns) > 0 else None
-
-    @staticmethod
-    def _generate_synthetic_data(symbols: list, start_date: str, end_date: str):
-        """Generate synthetic price data as fallback.
-
-        WARNING: This produces fake data and should only be used when real market
-        data is unavailable. Results from synthetic data have no financial meaning.
-        Uses a deterministic seed based on symbol name (not Python's hash() which
-        is randomized across runs).
-        """
-        import pandas as pd
-        import numpy as np
-
-        dates = pd.date_range(start=start_date, end=end_date, freq='B')
-        if len(dates) == 0:
-            dates = pd.date_range(start='2023-01-01', periods=252, freq='B')
-
-        # Use deterministic seed: sum of char codes (NOT hash() which is randomized per-run)
-        sym = symbols[0] if symbols else 'DEFAULT'
-        seed = sum(ord(c) for c in sym) % (2**31)
-        np.random.seed(seed)
-        price = 100.0
-        prices = []
-        for _ in range(len(dates)):
-            price *= (1 + np.random.normal(0.0003, 0.015))
-            prices.append(price)
-        return pd.Series(prices, index=dates, name='Close', dtype=float)
+        raise ValueError(f'No Close column in data for {symbols}')
 
     def _run_custom_code(self, vbt, strategy: dict, close_series, initial_capital: float):
         """Execute custom strategy code."""
@@ -1786,8 +1750,11 @@ class VectorBTProvider(BacktestingProviderBase):
                 values = np.round(bench_data.values.astype(float).flatten(), 4)
                 normalized = values / values[0]
                 if len(normalized) != target_len:
-                    indices = np.linspace(0, len(normalized) - 1, target_len).astype(int)
-                    normalized = normalized[indices]
+                    # Calendars differ; position-resampling would pair benchmark
+                    # prices with the wrong dates. Report benchmark as unavailable.
+                    self._error(f'Benchmark {symbol} has {len(normalized)} bars vs {target_len} '
+                                f'strategy bars; benchmark comparison unavailable')
+                    return None
                 return normalized
         except Exception as e:
             self._error(f'Benchmark load failed for {symbol}', e)

@@ -109,6 +109,14 @@ PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double 
             flow += flow_it.value();
             ++flow_it;
         }
+        if (!std::isfinite(flow)) {
+            // A flow with an unknown FX rate: the window's growth cannot be
+            // chained honestly. No return at all (valid stays false) — and
+            // flag it so callers don't fall back to a naive NAV ratio.
+            out = PeriodReturn{};
+            out.fx_unknown = true;
+            return out;
+        }
         out.net_external_flow += flow;
 
         if (v_prev < kMinBaseNav) {
@@ -151,7 +159,9 @@ QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, cons
             ++flow_it;
         }
         const double prev = snapshots[i - 1].total_value;
-        if (prev < kMinBaseNav) {
+        // A flow with an unknown FX rate (NaN) leaves the day's flow — and so
+        // its return — unknown: can't-compute, never a guessed conversion.
+        if (prev < kMinBaseNav || !std::isfinite(flow)) {
             out.append(std::numeric_limits<double>::quiet_NaN());
             continue;
         }

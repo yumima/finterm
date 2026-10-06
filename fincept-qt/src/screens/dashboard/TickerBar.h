@@ -21,7 +21,7 @@ class TickerBar : public QWidget {
     struct Entry {
         QString symbol;
         double  price  = 0;
-        double  change = 0;
+        double  change = 0;  // percent change; NaN when unknown → "—"
     };
 
     void set_data(const QVector<Entry>& entries);

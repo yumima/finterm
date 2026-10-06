@@ -26,6 +26,7 @@ import sys
 import os
 import json
 import time
+import math
 import io
 import importlib
 from typing import Any, Dict, List, Optional
@@ -161,12 +162,24 @@ def _yf_quotes(symbols: List[str]) -> Dict[str, Any]:
             if len(closes) < 1:
                 continue
             last = float(closes.iloc[-1])
-            prev = float(closes.iloc[-2]) if len(closes) >= 2 else last
-            chg = last - prev
-            chg_pct = (chg / prev * 100.0) if prev else 0.0
-            vol = float(sub["Volume"].iloc[-1]) if "Volume" in sub.columns and len(sub["Volume"]) else 0.0
-            high = float(sub["High"].iloc[-1]) if "High" in sub.columns else last
-            low = float(sub["Low"].iloc[-1]) if "Low" in sub.columns else last
+            # Single bar → previous close unknown → change None, never 0%.
+            prev = float(closes.iloc[-2]) if len(closes) >= 2 else None
+            chg = (last - prev) if prev is not None else None
+            chg_pct = (chg / prev * 100.0) if (chg is not None and prev) else None
+
+            def _last_of(col):
+                if col not in sub.columns or not len(sub[col]):
+                    return None
+                v = sub[col].iloc[-1]
+                try:
+                    v = float(v)
+                except (TypeError, ValueError):
+                    return None
+                return v if math.isfinite(v) else None
+
+            vol = _last_of("Volume")
+            high = _last_of("High")
+            low = _last_of("Low")
             rows.append({
                 "symbol": root,
                 "name": meta["name"],
@@ -175,7 +188,7 @@ def _yf_quotes(symbols: List[str]) -> Dict[str, Any]:
                 "change": chg,
                 "change_pct": chg_pct,
                 "volume": vol,
-                "open_interest": 0,  # yfinance doesn't expose OI
+                "open_interest": None,  # yfinance doesn't expose OI — unknown, not 0
                 "high": high,
                 "low": low,
                 "__yf_sym": yf_sym,  # internal, stripped before _ok
@@ -201,7 +214,7 @@ def _yf_quotes(symbols: List[str]) -> Dict[str, Any]:
             last = r["last"]
             chg = last - prior
             r["change"] = chg
-            r["change_pct"] = (chg / prior) * 100.0 if prior else 0.0
+            r["change_pct"] = (chg / prior) * 100.0
     except Exception:
         pass
 
@@ -300,25 +313,37 @@ def _databento_quotes(symbols: List[str]) -> Optional[Dict[str, Any]]:
             if not meta:
                 continue
             try:
-                data = prov.get_futures_data([meta["cme"]], days=2, schema="ohlcv-1d")
+                # 5-day lookback so a Monday/holiday still has a prior session bar.
+                data = prov.get_futures_data([meta["cme"]], days=5, schema="ohlcv-1d")
                 if not data:
                     continue
+
+                def _num(bar, key):
+                    v = bar.get(key) if bar else None
+                    try:
+                        v = float(v)
+                    except (TypeError, ValueError):
+                        return None
+                    return v if math.isfinite(v) else None
+
                 last_bar = data[-1]
-                prev_bar = data[-2] if len(data) >= 2 else last_bar
-                last = float(last_bar.get("close", 0))
-                prev = float(prev_bar.get("close", 0))
-                chg = last - prev
+                last = _num(last_bar, "close")
+                if last is None:
+                    continue  # no real last price — don't emit a row of zeros
+                # Single bar → no previous close → change unknown (None), never 0%.
+                prev = _num(data[-2], "close") if len(data) >= 2 else None
+                chg = (last - prev) if prev is not None else None
                 rows.append({
                     "symbol": s,
                     "name": meta["name"],
                     "class": meta["class"],
                     "last": last,
                     "change": chg,
-                    "change_pct": (chg / prev * 100.0) if prev else 0.0,
-                    "volume": float(last_bar.get("volume", 0)),
-                    "open_interest": float(last_bar.get("open_interest", 0) or 0),
-                    "high": float(last_bar.get("high", last)),
-                    "low": float(last_bar.get("low", last)),
+                    "change_pct": (chg / prev * 100.0) if (chg is not None and prev) else None,
+                    "volume": _num(last_bar, "volume"),
+                    "open_interest": _num(last_bar, "open_interest"),
+                    "high": _num(last_bar, "high"),
+                    "low": _num(last_bar, "low"),
                 })
             except Exception:
                 continue

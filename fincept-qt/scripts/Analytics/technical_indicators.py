@@ -471,44 +471,16 @@ def main(args):
     import sys
 
     if not args:
-        return json.dumps({"error": "No command provided"})
+        return json.dumps({"success": False, "error": "No command provided"})
 
     command = args[0]
 
-    # Example: Handle different commands
-    if command == "test":
-        # Run test with sample data
-        np.random.seed(42)
-        dates = pd.date_range(start='2023-01-01', end='2024-01-01', freq='D')
-
-        base_price = 100
-        returns = np.random.normal(0.001, 0.02, len(dates))
-        prices = [base_price]
-
-        for ret in returns[1:]:
-            prices.append(prices[-1] * (1 + ret))
-
-        sample_data = pd.DataFrame({
-            'date': dates,
-            'close': prices,
-            'high': [p * (1 + abs(np.random.normal(0, 0.01))) for p in prices],
-            'low': [p * (1 - abs(np.random.normal(0, 0.01))) for p in prices],
-            'volume': np.random.randint(1000, 10000, len(dates))
-        })
-
-        result = calculate_all_indicators(sample_data)
-
-        # Convert to JSON-serializable format
-        output = {
-            "success": True,
-            "data_points": len(result),
-            "indicators": [col for col in result.columns if col not in ['date', 'close', 'high', 'low', 'volume']],
-            "sample": result[result.columns[-5:]].tail(5).to_dict(orient='records')
-        }
-
-        return json.dumps(output)
-    else:
-        return json.dumps({"error": f"Unknown command: {command}"})
+    # This module exposes calculate_all_indicators() for import; it has no
+    # CLI command that fetches real price data, so every command is an error
+    # (no synthetic sample data is ever substituted).
+    return json.dumps({"success": False,
+                       "error": f"Unknown command: {command}. technical_indicators.py has no "
+                                f"CLI data commands; call calculate_all_indicators() with real OHLCV data."})
 
 
 # Example usage and testing (for subprocess backward compatibility)

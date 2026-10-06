@@ -53,9 +53,10 @@ def get_indicators():
             price = float(getattr(info, "last_price", 0) or 0)
             prev = float(getattr(info, "previous_close", 0) or 0)
             if price > 0:
-                change_pct = ((price - prev) / prev * 100) if prev > 0 else 0
                 indicators[name] = price
-                indicators[f"{name}_change_pct"] = round(change_pct, 4)
+                # No previous close -> change unavailable (omitted), not 0%
+                if prev > 0:
+                    indicators[f"{name}_change_pct"] = round((price - prev) / prev * 100, 4)
         except Exception:
             pass
 
@@ -87,14 +88,17 @@ def get_indicators():
                 current = float(vals[-1])
                 high_52w = float(np.max(vals))
                 low_52w = float(np.min(vals))
-                sma_200 = float(np.mean(vals[-200:])) if len(vals) >= 200 else float(np.mean(vals))
-                sma_50 = float(np.mean(vals[-50:])) if len(vals) >= 50 else float(np.mean(vals))
+                # Too few bars -> the SMA is unavailable, not a shorter-window mean
+                sma_200 = float(np.mean(vals[-200:])) if len(vals) >= 200 else None
+                sma_50 = float(np.mean(vals[-50:])) if len(vals) >= 50 else None
                 indicators["sp500_52w_high"] = round(high_52w, 2)
                 indicators["sp500_52w_low"] = round(low_52w, 2)
-                indicators["sp500_sma_200"] = round(sma_200, 2)
-                indicators["sp500_sma_50"] = round(sma_50, 2)
-                indicators["sp500_above_sma200"] = "Yes" if current > sma_200 else "No"
-                indicators["sp500_ytd_return_pct"] = round(
+                indicators["sp500_sma_200"] = round(sma_200, 2) if sma_200 is not None else None
+                indicators["sp500_sma_50"] = round(sma_50, 2) if sma_50 is not None else None
+                indicators["sp500_above_sma200"] = (("Yes" if current > sma_200 else "No")
+                                                    if sma_200 is not None else None)
+                # period="1y" -> this is a trailing 1-year return, not YTD
+                indicators["sp500_1y_return_pct"] = round(
                     (current / float(vals[0]) - 1) * 100, 2
                 )
     except Exception:

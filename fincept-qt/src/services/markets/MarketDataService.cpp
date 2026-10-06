@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
+#include <QtNumeric>
 
 #include <cmath>
 #include <QTimer>
@@ -167,11 +168,11 @@ void MarketDataService::refresh(const QStringList& topics) {
                 qd.symbol     = q["symbol"].toString();
                 qd.name       = q["name"].toString(q["symbol"].toString());
                 qd.price      = q["price"].toDouble();
-                qd.change     = q["change"].toDouble();
-                qd.change_pct = q["change_percent"].toDouble();
+                qd.change     = q["change"].toDouble(qQNaN());
+                qd.change_pct = q["change_percent"].toDouble(qQNaN());
                 qd.high       = q["high"].toDouble();
                 qd.low        = q["low"].toDouble();
-                qd.volume     = q["volume"].toDouble();
+                qd.volume     = q["volume"].toDouble(qQNaN());
                 qd.bid        = q["bid"].toDouble();
                 qd.ask        = q["ask"].toDouble();
                 qd.bid_size   = q["bid_size"].toDouble();
@@ -457,11 +458,11 @@ void MarketDataService::hydrate_quotes_from_cache() {
         qd.symbol     = o.value("symbol").toString(sym);
         qd.name       = o.value("name").toString(qd.symbol);
         qd.price      = o.value("price").toDouble();
-        qd.change     = o.value("change").toDouble();
-        qd.change_pct = o.value("change_pct").toDouble();
+        qd.change     = o.value("change").toDouble(qQNaN());
+        qd.change_pct = o.value("change_pct").toDouble(qQNaN());
         qd.high       = o.value("high").toDouble();
         qd.low        = o.value("low").toDouble();
-        qd.volume     = o.value("volume").toDouble();
+        qd.volume     = o.value("volume").toDouble(qQNaN());
         hydrate_pending_.append(qd);
     }
     hydrate_pending_total_ = hydrate_pending_.size();
@@ -541,11 +542,11 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
             qd.symbol     = o["symbol"].toString();
             qd.name       = o["name"].toString();
             qd.price      = o["price"].toDouble();
-            qd.change     = o["change"].toDouble();
-            qd.change_pct = o["change_pct"].toDouble();
+            qd.change     = o["change"].toDouble(qQNaN());
+            qd.change_pct = o["change_pct"].toDouble(qQNaN());
             qd.high       = o["high"].toDouble();
             qd.low        = o["low"].toDouble();
-            qd.volume     = o["volume"].toDouble();
+            qd.volume     = o["volume"].toDouble(qQNaN());
             qd.bid        = o["bid"].toDouble();
             qd.ask        = o["ask"].toDouble();
             qd.bid_size   = o["bid_size"].toDouble();
@@ -607,11 +608,11 @@ void MarketDataService::flush_batch() {
                     qd.symbol     = q["symbol"].toString();
                     qd.name       = q["name"].toString(q["symbol"].toString());
                     qd.price      = q["price"].toDouble();
-                    qd.change     = q["change"].toDouble();
-                    qd.change_pct = q["change_percent"].toDouble();
+                    qd.change     = q["change"].toDouble(qQNaN());
+                    qd.change_pct = q["change_percent"].toDouble(qQNaN());
                     qd.high       = q["high"].toDouble();
                     qd.low        = q["low"].toDouble();
-                    qd.volume     = q["volume"].toDouble();
+                    qd.volume     = q["volume"].toDouble(qQNaN());
                     qd.bid        = q["bid"].toDouble();
                     qd.ask        = q["ask"].toDouble();
                     qd.bid_size   = q["bid_size"].toDouble();
@@ -670,11 +671,11 @@ void MarketDataService::flush_batch() {
                             qd.symbol     = o["symbol"].toString();
                             qd.name       = o["name"].toString();
                             qd.price      = o["price"].toDouble();
-                            qd.change     = o["change"].toDouble();
-                            qd.change_pct = o["change_pct"].toDouble();
+                            qd.change     = o["change"].toDouble(qQNaN());
+                            qd.change_pct = o["change_pct"].toDouble(qQNaN());
                             qd.high       = o["high"].toDouble();
                             qd.low        = o["low"].toDouble();
-                            qd.volume     = o["volume"].toDouble();
+                            qd.volume     = o["volume"].toDouble(qQNaN());
                             qd.bid        = o["bid"].toDouble();
                             qd.ask        = o["ask"].toDouble();
                             qd.bid_size   = o["bid_size"].toDouble();
@@ -1029,11 +1030,11 @@ void MarketDataService::fetch_top_movers(int count, TopMoversCallback cb) {
             q.symbol     = o["symbol"].toString();
             q.name       = o["name"].toString();
             q.price      = o["price"].toDouble();
-            q.change     = o["change"].toDouble();
-            q.change_pct = o["change_pct"].toDouble();
+            q.change     = o["change"].toDouble(qQNaN());
+            q.change_pct = o["change_pct"].toDouble(qQNaN());
             q.high       = o["high"].toDouble();
             q.low        = o["low"].toDouble();
-            q.volume     = o["volume"].toDouble();
+            q.volume     = o["volume"].toDouble(qQNaN());
             if (!q.symbol.isEmpty()) out.append(q);
         }
         return out;

@@ -170,7 +170,9 @@ class ECBDataWrapper:
                                 data_point = {
                                     "date": item.get("PERIOD"),
                                     "maturity": self.maturities[i],
-                                    "rate": float(item.get("OBS_VALUE_AS_IS", 0)) / 100,  # Convert to decimal
+                                    # Convert to decimal; a missing observation stays None, not 0%
+                                    "rate": (float(item["OBS_VALUE_AS_IS"]) / 100
+                                             if item.get("OBS_VALUE_AS_IS") not in (None, "") else None),
                                     "rating": rating,
                                     "curve_type": yield_curve_type
                                 }

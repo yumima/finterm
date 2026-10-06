@@ -176,7 +176,8 @@ class BOIWrapper:
                 result_rows.append({
                     "currency":    r.get("key"),
                     "rate":        r.get("currentExchangeRate"),
-                    "change_pct":  round(r.get("currentChange", 0), 6),
+                    "change_pct":  (round(r["currentChange"], 6)
+                                    if r.get("currentChange") is not None else None),
                     "unit":        r.get("unit", 1),
                     "last_update": r.get("lastUpdate"),
                 })

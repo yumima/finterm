@@ -11,6 +11,8 @@
 #include "services/news/NewsService.h"
 #include "storage/repositories/NewsArticleRepository.h"
 
+#include <cmath>
+
 #include <QDateTime>
 #include <QEventLoop>
 #include <QJsonDocument>
@@ -105,7 +107,8 @@ static QVector<NewsArticle> filter_articles(const QVector<NewsArticle>& articles
 
     QVector<NewsArticle> out;
     for (const auto& a : articles) {
-        if (a.sort_ts > 0 && a.sort_ts < cutoff)
+        // Undated items (sort_ts == 0) can't be placed in any time window.
+        if (a.sort_ts <= 0 || a.sort_ts < cutoff)
             continue;
         if (!cat_upper.isEmpty() && cat_upper != "ALL" && a.category.toUpper() != cat_upper)
             continue;
@@ -157,7 +160,9 @@ std::vector<ToolDef> get_news_tools() {
                         "Categories: ALL, MARKETS (MKT), EARNINGS (EARN), ECONOMIC (ECO), CRYPTO (CRPT), "
                         "GEOPOLITICS (GEO), ENERGY (NRG), DEFENSE (DEF), TECH, REGULATORY. "
                         "Time ranges: 1H, 6H, 24H (default), 48H, 7D, 30D. "
-                        "Sentiment: ALL (default), BULLISH, BEARISH, NEUTRAL.";
+                        "Sentiment: ALL (default), BULLISH, BEARISH, NEUTRAL. "
+                        "Note: per-article sentiment is a keyword-count heuristic on the headline/summary, "
+                        "not a model judgement.";
         t.category = "news";
         t.input_schema.properties = QJsonObject{
             {"category", QJsonObject{{"type", "string"}, {"description", "Category filter (default: ALL)"}}},
@@ -277,7 +282,8 @@ std::vector<ToolDef> get_news_tools() {
         ToolDef t;
         t.name = "get_news_summary";
         t.description = "Get a breakdown of current news: article count and sentiment per category. "
-                        "Useful for a quick market intelligence overview.";
+                        "Useful for a quick market intelligence overview. Sentiment counts come from a "
+                        "keyword-count heuristic on headlines/summaries, not a model judgement.";
         t.category = "news";
         t.input_schema.properties =
             QJsonObject{{"time_range", QJsonObject{{"type", "string"}, {"description", "Time window (default: 24H)"}}}};
@@ -427,12 +433,25 @@ std::vector<ToolDef> get_news_tools() {
             if (id.isEmpty())
                 return ToolResult::fail("Missing 'id'");
             auto* svc = &NewsMonitorService::instance();
-            detail::run_async_wait(svc, [svc, id](auto signal_done) {
+            // Verify the monitor exists and report its real post-toggle state —
+            // toggle_monitor() silently no-ops on an unknown id.
+            bool found = false;
+            bool enabled = false;
+            detail::run_async_wait(svc, [svc, id, &found, &enabled](auto signal_done) {
                 svc->toggle_monitor(id);
+                for (const auto& m : svc->get_monitors())
+                    if (m.id == id) {
+                        found = true;
+                        enabled = m.enabled;
+                        break;
+                    }
                 signal_done();
             });
+            if (!found)
+                return ToolResult::fail("No news monitor with id: " + id);
             EventBus::instance().publish("news.monitor_toggled", QVariantMap{{"id", id}});
-            return ToolResult::ok("Monitor toggled: " + id, QJsonObject{{"id", id}});
+            return ToolResult::ok(QString("Monitor %1: %2").arg(enabled ? "enabled" : "disabled", id),
+                                  QJsonObject{{"id", id}, {"enabled", enabled}});
         };
         tools.push_back(std::move(t));
     }
@@ -451,10 +470,26 @@ std::vector<ToolDef> get_news_tools() {
             if (id.isEmpty())
                 return ToolResult::fail("Missing 'id'");
             auto* svc = &NewsMonitorService::instance();
-            detail::run_async_wait(svc, [svc, id](auto signal_done) {
-                svc->delete_monitor(id);
+            // delete_monitor() silently no-ops on an unknown id — check that the
+            // monitor existed before and is gone after, instead of always "deleted".
+            bool existed = false;
+            bool still_there = false;
+            detail::run_async_wait(svc, [svc, id, &existed, &still_there](auto signal_done) {
+                for (const auto& m : svc->get_monitors())
+                    if (m.id == id)
+                        existed = true;
+                if (existed) {
+                    svc->delete_monitor(id);
+                    for (const auto& m : svc->get_monitors())
+                        if (m.id == id)
+                            still_there = true;
+                }
                 signal_done();
             });
+            if (!existed)
+                return ToolResult::fail("No news monitor with id: " + id);
+            if (still_there)
+                return ToolResult::fail("Failed to delete news monitor: " + id);
             EventBus::instance().publish("news.monitor_deleted", QVariantMap{{"id", id}});
             return ToolResult::ok("Monitor deleted: " + id, QJsonObject{{"id", id}});
         };
@@ -467,7 +502,8 @@ std::vector<ToolDef> get_news_tools() {
         t.name = "analyze_news_article";
         t.description = "Run AI sentiment + market-impact + risk analysis on a single article URL. "
                         "Returns sentiment score, urgency, key points, and regulatory/geopolitical/"
-                        "operational/market risk signals. Consumes API credits.";
+                        "operational/market risk signals. Runs on the configured local LLM. "
+                        "Sentiment fields the model omitted are returned as null.";
         t.category = "news";
         t.input_schema.properties =
             QJsonObject{{"url", QJsonObject{{"type", "string"}, {"description", "Article URL"}}}};
@@ -490,16 +526,18 @@ std::vector<ToolDef> get_news_tools() {
             });
 
             if (!ok)
-                return ToolResult::fail("Analysis failed (network error or insufficient credits)");
+                return ToolResult::fail("Analysis failed (article fetch or LLM analysis error)");
 
             auto risk_to_json = [](const RiskSignal& r) {
                 return QJsonObject{{"level", r.level}, {"details", r.details}};
             };
+            // Missing sentiment fields are NaN — emit JSON null, never 0.
+            auto num_or_null = [](double v) { return std::isfinite(v) ? QJsonValue(v) : QJsonValue(); };
             return ToolResult::ok_data(QJsonObject{
                 {"summary", analysis.summary},
-                {"sentiment", QJsonObject{{"score", analysis.sentiment.score},
-                                          {"intensity", analysis.sentiment.intensity},
-                                          {"confidence", analysis.sentiment.confidence}}},
+                {"sentiment", QJsonObject{{"score", num_or_null(analysis.sentiment.score)},
+                                          {"intensity", num_or_null(analysis.sentiment.intensity)},
+                                          {"confidence", num_or_null(analysis.sentiment.confidence)}}},
                 {"market_impact", QJsonObject{{"urgency", analysis.market_impact.urgency},
                                               {"prediction", analysis.market_impact.prediction}}},
                 {"keywords", QJsonArray::fromStringList(analysis.keywords)},
@@ -508,9 +546,7 @@ std::vector<ToolDef> get_news_tools() {
                 {"risk_signals", QJsonObject{{"regulatory", risk_to_json(analysis.regulatory)},
                                              {"geopolitical", risk_to_json(analysis.geopolitical)},
                                              {"operational", risk_to_json(analysis.operational)},
-                                             {"market", risk_to_json(analysis.market)}}},
-                {"credits_used", analysis.credits_used},
-                {"credits_remaining", analysis.credits_remaining}});
+                                             {"market", risk_to_json(analysis.market)}}}});
         };
         tools.push_back(std::move(t));
     }
@@ -660,8 +696,9 @@ std::vector<ToolDef> get_news_tools() {
         t.name = "get_threat_alerts";
         t.description = "Return only news articles classified as HIGH or CRITICAL threat — "
                         "war/conflict, market crashes, cyberattacks, sovereign defaults, etc. "
-                        "Each result carries threat level, threat category (conflict/cyber/"
-                        "natural/market/regulatory/general), and confidence score (0-1). "
+                        "Each result carries threat level and threat category (conflict/cyber/"
+                        "natural/market/regulatory/general), assigned by a keyword heuristic "
+                        "(no confidence score is estimated). "
                         "Filter by min_level (CRITICAL or HIGH; default: HIGH) and time_range.";
         t.category = "news";
         t.input_schema.properties = QJsonObject{
@@ -705,7 +742,7 @@ std::vector<ToolDef> get_news_tools() {
                 QJsonObject obj = article_to_json(a);
                 obj["threat_level"] = threat_level_string(level);
                 obj["threat_category"] = a.threat.category;
-                obj["threat_confidence"] = a.threat.confidence;
+                obj["threat_method"] = "keyword_heuristic";
                 result.append(obj);
 
                 if (level == ThreatLevel::CRITICAL)

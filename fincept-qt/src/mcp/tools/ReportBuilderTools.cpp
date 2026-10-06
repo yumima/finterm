@@ -192,15 +192,15 @@ std::vector<ToolDef> get_report_builder_tools() {
             "Data-bearing components (use `config`):\n"
             "• table: config={'csv':'Header1,Header2,Header3|Row1Col1,Row1Col2,Row1Col3|...'}. "
             "  Use | to separate rows, , to separate cells. First row is bolded as header. "
-            "  Numeric cells right-align automatically. Example for financials:\n"
-            "    'Metric,FY22,FY23,FY24|Revenue ($M),81462,96773,97690|Gross Margin,25.6%,17.7%,17.9%'\n"
-            "• chart: config={'chart_type':'bar'|'line'|'pie','title':'Revenue','data':'10,20,30',"
-            "  'labels':'Q1,Q2,Q3','width':'640'}. Data is CSV numbers, labels CSV strings.\n"
-            "• stats_block: config={'title':'Key Stats','data':'P/E:42.1\\nMarket Cap:$890B\\n...'}. "
+            "  Numeric cells right-align automatically. Shape (fill with REAL sourced values only, never invent):\n"
+            "    'Metric,<period1>,<period2>|<metric name>,<value>,<value>'\n"
+            "• chart: config={'chart_type':'bar'|'line'|'pie','title':'<title>','data':'<n1>,<n2>,<n3>',"
+            "  'labels':'<l1>,<l2>,<l3>','width':'640'}. Data is CSV numbers (real, sourced values only), labels CSV strings.\n"
+            "• stats_block: config={'title':'Key Stats','data':'<Label>:<value>\\n<Label>:<value>\\n...'}. "
             "  Use Label:Value lines, \\n separated.\n"
             "• market_data: config={'symbol':'TSLA'}. The symbol is enough — quote auto-fills.\n"
             "• image: config={'path':'/abs/path.png','width':'400','caption':'Fig. 1','align':'center'}.\n"
-            "• sparkline: config={'title':'Revenue trend','data':'10,12,11,15','current':'15.2','change_pct':'+8.4'}.\n"
+            "• sparkline: config={'title':'<title>','data':'<n1>,<n2>,...','current':'<value>','change_pct':'<pct>'}.\n"
             "\n"
             "If insert_at is omitted, the component is appended.";
         t.category = "report-builder";
@@ -456,6 +456,16 @@ std::vector<ToolDef> get_report_builder_tools() {
             QString name = args.value("name").toString().trimmed();
             if (name.isEmpty())
                 return ToolResult::fail("Missing 'name'");
+            static const QStringList kTemplates = {
+                "Blank Report", "Meeting Notes", "Investment Memo", "Stock Research", "Portfolio Review",
+                "Watchlist Report", "Dividend Income Report", "Daily Market Brief", "Trade Journal",
+                "Technical Analysis", "Pre-Market Checklist", "Equity Research Report", "Earnings Review",
+                "M&A Deal Summary", "Sector Deep Dive", "Macro Economic Summary", "Country Risk Report",
+                "Central Bank Monitor", "Crypto Research Report", "DeFi Protocol Analysis",
+                "Crypto Portfolio Review", "Bond Research Report", "Yield Curve Analysis", "Quant Strategy Report",
+                "Risk Management Report", "Business Performance", "Project Status Report", "Financial Statement"};
+            if (!kTemplates.contains(name))
+                return ToolResult::fail("Unknown template '" + name + "'. Valid names: " + kTemplates.join(", "));
             on_llm_mutation_start();
             run_on_service_thread([&]() { Service::instance().apply_template(name); });
             return ToolResult::ok("Applied template: " + name);

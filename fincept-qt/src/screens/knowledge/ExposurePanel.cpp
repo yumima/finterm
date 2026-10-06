@@ -168,43 +168,66 @@ void ExposurePanel::load_holdings_and_evaluate() {
     QPointer<ExposurePanel> guard(this);
     auto* shared_count = new int(0);
     auto* shared_matches = new QStringList();
+    // Holdings whose info fetch failed or lacked the metric: reported as
+    // unknown, never silently counted as "doesn't match".
+    auto* shared_unknown = new QStringList();
     const int total = holdings.size();
     for (const auto& h : holdings) {
         const QString sym = h.symbol;
         services::MarketDataService::instance().fetch_info(
-            sym, [guard, sym, crit, shared_count, shared_matches, total](bool ok, services::InfoData info) {
+            sym, [guard, sym, crit, shared_count, shared_matches, shared_unknown, total](bool ok, services::InfoData info) {
                 ++*shared_count;
-                if (ok) {
-                    const double v = pluck_metric(info, crit.metric);
-                    // isfinite, not `!= 0`: NaN passes a `!= 0` test, and a
-                    // real 0.0 is a legitimate value to match on (a
-                    // "yield < 1%" screen should find the non-payers).
-                    if (std::isfinite(v) && compare(v, crit.op, crit.threshold))
-                        shared_matches->push_back(sym.toUpper());
-                }
+                const double v = ok ? pluck_metric(info, crit.metric) : std::numeric_limits<double>::quiet_NaN();
+                // isfinite, not `!= 0`: NaN passes a `!= 0` test, and a
+                // real 0.0 is a legitimate value to match on (a
+                // "yield < 1%" screen should find the non-payers).
+                if (!std::isfinite(v))
+                    shared_unknown->push_back(sym.toUpper());
+                else if (compare(v, crit.op, crit.threshold))
+                    shared_matches->push_back(sym.toUpper());
                 if (*shared_count >= total) {
                     if (guard) {
                         QStringList m = *shared_matches;
                         std::sort(m.begin(), m.end());
-                        guard->render_results(total, m, guard->entry_.exposure_criterion);
+                        QStringList u = *shared_unknown;
+                        std::sort(u.begin(), u.end());
+                        guard->render_results(total, m, u, guard->entry_.exposure_criterion);
                     }
                     delete shared_count;
                     delete shared_matches;
+                    delete shared_unknown;
                 }
             });
     }
 }
 
-void ExposurePanel::render_results(int total, const QStringList& matching, const QString& criterion) {
-    if (matching.isEmpty()) {
-        status_->setText(QString("Of your %1 holdings, none currently match: %2").arg(total).arg(criterion));
+void ExposurePanel::render_results(int total, const QStringList& matching, const QStringList& unavailable,
+                                   const QString& criterion) {
+    const QString unknown_note =
+        unavailable.isEmpty()
+            ? QString()
+            : QString("\nData unavailable for %1 holding%2 (not evaluated): %3")
+                  .arg(unavailable.size())
+                  .arg(unavailable.size() == 1 ? "" : "s")
+                  .arg(unavailable.join(", "));
+    const int evaluated = total - unavailable.size();
+    if (evaluated == 0) {
+        status_->setText(QString("Could not evaluate \"%1\": data unavailable for all %2 holdings.")
+                             .arg(criterion)
+                             .arg(total));
         return;
     }
-    status_->setText(QString("%1 of %2 holdings match \"%3\":\n%4")
+    if (matching.isEmpty()) {
+        status_->setText(QString("Of %1 evaluated holdings, none currently match: %2").arg(evaluated).arg(criterion) +
+                         unknown_note);
+        return;
+    }
+    status_->setText(QString("%1 of %2 evaluated holdings match \"%3\":\n%4")
                          .arg(matching.size())
-                         .arg(total)
+                         .arg(evaluated)
                          .arg(criterion)
-                         .arg(matching.join(", ")));
+                         .arg(matching.join(", ")) +
+                     unknown_note);
 }
 
 } // namespace fincept::knowledge

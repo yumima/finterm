@@ -361,6 +361,8 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
         const auto& q  = quotes[row];
         row_symbols_[row] = {q.symbol, q.name};
         bool pos          = q.change >= 0;
+        // No previous close → change unknown (NaN): "—", not a 0.00 arrow.
+        const bool chg_known = std::isfinite(q.change) && std::isfinite(q.change_pct);
         const QString cc  = pos ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
         const QString arr = pos ? QString::fromUtf8("\xe2\x96\xb2") : QString::fromUtf8("\xe2\x96\xbc");
         int prec = q.price > 1.0 ? 2 : 4;
@@ -379,8 +381,8 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
             if      (col == "SYMBOL") table_->setItem(row, ci, mk(q.symbol, ui::colors::TEXT_PRIMARY(), Qt::AlignLeft | Qt::AlignVCenter));
             else if (col == "NAME")   table_->setItem(row, ci, mk(q.name,   ui::colors::TEXT_SECONDARY(),     Qt::AlignLeft | Qt::AlignVCenter));
             else if (col == "LAST")   table_->setItem(row, ci, mk(QString::number(q.price,  'f', prec), ui::colors::AMBER()));
-            else if (col == "CHG")    table_->setItem(row, ci, mk(QString("%1 %2").arg(arr).arg(std::abs(q.change),     0, 'f', 2), cc));
-            else if (col == "CHG%")   table_->setItem(row, ci, mk(QString("%1%2%").arg(arr).arg(std::abs(q.change_pct), 0, 'f', 2), cc));
+            else if (col == "CHG")    table_->setItem(row, ci, chg_known ? mk(QString("%1 %2").arg(arr).arg(std::abs(q.change),     0, 'f', 2), cc) : mk(ui::formatting::placeholder(), ui::colors::TEXT_SECONDARY()));
+            else if (col == "CHG%")   table_->setItem(row, ci, chg_known ? mk(QString("%1%2%").arg(arr).arg(std::abs(q.change_pct), 0, 'f', 2), cc) : mk(ui::formatting::placeholder(), ui::colors::TEXT_SECONDARY()));
             else if (col == "HIGH")   table_->setItem(row, ci, mk(QString::number(q.high, 'f', 2), ui::colors::TEXT_SECONDARY()));
             else if (col == "LOW")    table_->setItem(row, ci, mk(QString::number(q.low,  'f', 2), ui::colors::TEXT_SECONDARY()));
             else if (col == "VOL")    table_->setItem(row, ci, mk(ui::formatting::format_compact_volume(q.volume), ui::colors::TEXT_SECONDARY()));

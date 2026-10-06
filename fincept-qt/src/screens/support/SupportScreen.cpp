@@ -839,17 +839,10 @@ void SupportScreen::load_tickets() {
             }
         }
 
-        // Demo ticket
-        QJsonObject demo;
-        demo["id"] = "DEMO-001";
-        demo["subject"] = "Welcome — this is a community open-source project";
-        demo["status"] = "resolved";
-        demo["priority"] = "low";
-        demo["category"] = "general";
-        demo["created_at"] = "2026-01-01T00:00:00Z";
-
+        // Only the user's real tickets: a canned "DEMO-001" entry used to be
+        // prepended here, inflating the total/resolved counts with a ticket
+        // that never existed.
         QJsonArray all;
-        all.append(demo);
         for (const auto& v : tickets)
             all.append(v);
 
