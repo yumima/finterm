@@ -33,8 +33,10 @@ class EarnoutCalculator:
         if len(earnout_tranches) != len(probability_weights):
             raise ValueError("Must provide probability for each tranche")
 
-        if not abs(sum(probability_weights) - 1.0) < 0.01:
-            raise ValueError(f"Probabilities must sum to 1.0, got {sum(probability_weights)}")
+        # Each tranche has its own achievement probability; tranches are not
+        # mutually exclusive outcomes, so the probabilities need not sum to 1.
+        if any(not 0 <= p <= 1 for p in probability_weights):
+            raise ValueError("Each tranche probability must be in [0, 1]")
 
         tranche_details = []
         total_expected_earnout = 0
@@ -263,69 +265,105 @@ class EarnoutCalculator:
             'measurement_period_years': measurement_period
         }
 
+# ── JSON contract (MAAnalyticsService "calculate") ───────────────────────────
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from corporateFinance._cli import is_json_call, run_json, num, opt_num, has, InputError, pct  # noqa: E402
+
+
+def _first_key(p: Dict[str, Any], *keys: str) -> Optional[str]:
+    for k in keys:
+        if has(p, k):
+            return k
+    return None
+
+
+def _req(p: Dict[str, Any], keys, label: str, **kw) -> float:
+    k = _first_key(p, *keys)
+    if not k:
+        raise InputError(f"Missing required input: {label}")
+    return num(p, k, label=label, **kw)
+
+
+def json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Probability-weighted PV of an earnout.
+
+    Single tranche: earnout_amount (alias max_earnout), probability (alias
+    probability_achieve, decimal), years (alias period / years_to_payment),
+    discount_rate (decimal) -- all required; threshold (alias
+    revenue_threshold / target_metric) is informational.
+    Multiple tranches: tranches = [{payment, probability, years, threshold?}].
+    Optional base_price (upfront consideration) for the total.
+    Value = sum(probability_i * payment_i / (1 + discount_rate) ** years_i).
+    """
+    r = num(p, 'discount_rate', label='discount_rate (decimal)', min=0, max=1)
+    raw = p.get('tranches')
+    if raw is not None:
+        if not isinstance(raw, list) or not raw:
+            raise InputError("tranches must be a non-empty list of {payment, probability, years}")
+        specs = raw
+    else:
+        specs = [{
+            'payment': _req(p, ('earnout_amount', 'max_earnout', 'payment'), 'earnout_amount', min=0),
+            'probability': _req(p, ('probability', 'probability_achieve'), 'probability (decimal 0-1)',
+                                min=0, max=1),
+            'years': _req(p, ('years', 'period', 'years_to_payment'), 'years (to payment)', min=0),
+            'threshold': p.get('threshold', p.get('revenue_threshold', p.get('target_metric'))),
+        }]
+
+    rows = []
+    for i, t in enumerate(specs):
+        if not isinstance(t, dict):
+            raise InputError(f"tranches[{i}] must be an object")
+        pay = num(t, 'payment', label=f'tranches[{i}].payment', min=0)
+        prob = num(t, 'probability', label=f'tranches[{i}].probability (decimal)', min=0, max=1)
+        yrs = num(t, 'years', label=f'tranches[{i}].years', min=0)
+        pv = pay / (1 + r) ** yrs
+        rows.append({
+            'tranche': i + 1,
+            'threshold': float(t['threshold']) if t.get('threshold') not in (None, '') else None,
+            'payment_if_achieved': pay,
+            'probability_pct': pct(prob),
+            'years_to_payment': yrs,
+            'pv_if_achieved': pv,
+            'expected_value': prob * pv,
+        })
+
+    face = sum(x['payment_if_achieved'] for x in rows)
+    expected = sum(x['expected_value'] for x in rows)
+    out: Dict[str, Any] = {
+        'earnout_expected_value': expected,
+        'earnout_face_value': face,
+        'pv_if_fully_achieved': sum(x['pv_if_achieved'] for x in rows),
+        'expected_value_share_of_face_pct': (expected / face * 100) if face else None,
+        'discount_rate_pct': pct(r),
+    }
+    if len(rows) == 1:
+        out['probability_pct'] = rows[0]['probability_pct']
+        out['years_to_payment'] = rows[0]['years_to_payment']
+        if rows[0]['threshold'] is not None:
+            out['threshold'] = rows[0]['threshold']
+    else:
+        out['tranches'] = rows
+    if has(p, 'base_price'):
+        base = num(p, 'base_price', min=0)
+        total = base + expected
+        out['base_price'] = base
+        out['total_expected_consideration'] = total
+        out['earnout_share_of_consideration_pct'] = (expected / total * 100) if total else None
+    return out
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({"calculate": json_calculate})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "earnout":
-            if len(sys.argv) < 4:
-                raise ValueError("Earnout params and financial projections required")
-
-            earnout_params = json.loads(sys.argv[2])
-            financial_projections = json.loads(sys.argv[3])
-
-            calculator = EarnoutCalculator(discount_rate=earnout_params.get('discount_rate', 0.10))
-
-            # Basic earnout calculation
-            base_price = earnout_params.get('base_price', 0)
-            tranches_data = earnout_params.get('tranches', [])
-
-            tranches = []
-            for t in tranches_data:
-                # Handle metric: accept string or EarnoutMetric enum value
-                metric_raw = t.get('metric', 'revenue')
-                try:
-                    metric = EarnoutMetric(metric_raw)
-                except (ValueError, KeyError):
-                    metric = EarnoutMetric.CUSTOM
-
-                tranches.append(EarnoutTranche(
-                    metric=metric,
-                    threshold=t.get('threshold', t.get('target_value', 0)),
-                    payment=t.get('payment', 0),
-                    measurement_period_years=t.get('measurement_period_years', t.get('measurement_period', 1)),
-                    description=t.get('description', '')
-                ))
-
-            # Handle probabilities: default to equal weighting that sums to 1.0
-            probabilities = earnout_params.get('probabilities', None)
-            if probabilities is None or len(probabilities) != len(tranches):
-                n = len(tranches)
-                probabilities = [1.0 / n] * n if n > 0 else []
-
-            analysis = calculator.calculate_simple_earnout(base_price, tranches, probabilities)
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

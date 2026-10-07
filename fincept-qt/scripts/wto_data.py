@@ -677,6 +677,25 @@ class WTODataWrapper:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+# WTO timeseries economy codes are numeric (UN M49-style); "EU" is WTO's 918.
+_ISO2_TO_WTO = {
+    "US": "840", "CN": "156", "DE": "276", "JP": "392", "GB": "826", "UK": "826",
+    "FR": "250", "IN": "699", "BR": "076", "CA": "124", "KR": "410", "IT": "380",
+    "MX": "484", "AU": "036", "RU": "643", "ES": "724", "NL": "528", "CH": "756",
+    "SG": "702", "HK": "344", "ID": "360", "TR": "792", "SA": "682",
+    "ZA": "710", "AR": "032", "SE": "752", "PL": "616", "BE": "056", "TH": "764",
+    "VN": "704", "MY": "458", "NZ": "554", "NO": "578", "EU": "918",
+}
+
+
+def _wto_economy_codes(value) -> str:
+    """Map ISO alpha-2 codes (comma-separated) to WTO numeric economy codes;
+    numeric codes and keywords such as all/default pass through unchanged."""
+    if not isinstance(value, str):
+        return value
+    return ",".join(_ISO2_TO_WTO.get(c.strip().upper(), c.strip()) for c in value.split(","))
+
+
 def main():
     """Main function for CLI interface"""
     # Check if API key is provided as last argument
@@ -810,12 +829,15 @@ def main():
         elif command == "timeseries_data":
             if "i" not in args:
                 raise ValueError("i (indicator) parameter is required")
+            # Accept the WTO API's own short names (--r, --p, --ps, --pc) as
+            # well as the long ones; the Economics panel sends --r/--ps.
+            reporters = args.get("reporters") or args.get("r") or "all"
             result = asyncio.run(wrapper.get_timeseries_data(
                 args["i"],
-                args.get("reporters", "all"),
-                args.get("partners", "default"),
-                args.get("periods", "default"),
-                args.get("products", "default"),
+                _wto_economy_codes(reporters),
+                _wto_economy_codes(args.get("partners") or args.get("p") or "default"),
+                args.get("periods") or args.get("ps") or "default",
+                args.get("products") or args.get("pc") or "default",
                 args.get("include_sub_products") == "true",
                 args.get("format_type", "json"),
                 args.get("mode", "full"),

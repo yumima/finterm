@@ -209,7 +209,7 @@ void WorldBankPanel::on_result(const QString& request_id, const services::Econom
                 clean.append(obj);
         }
         auto* ind = indicator_list_->currentItem();
-        display(clean, (ind ? ind->text() : selected_indicator_) + " — " + selected_country_);
+        display(clean, (ind ? ind->text() : selected_indicator_) + " — " + selected_country_, QStringLiteral("value"), QStringLiteral("date"));
         LOG_INFO("WorldBankPanel", QString("Displayed %1 data points").arg(clean.size()));
     }
 }

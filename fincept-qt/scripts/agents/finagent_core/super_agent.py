@@ -64,10 +64,25 @@ class RoutingResult:
     """Result of routing decision"""
     intent: QueryIntent
     agent_id: str
-    confidence: float
+    # NOT a calibrated probability.  Keyword path: 0.3 per matched keyword +
+    # 0.5 per matched pattern, capped at 1.0.  LLM path: the router model's
+    # self-reported number (None when it gave none).  `score_basis` says which.
+    match_score: Optional[float]
     config: Dict[str, Any]
     matched_keywords: List[str] = field(default_factory=list)
     matched_patterns: List[str] = field(default_factory=list)
+    score_basis: str = "keyword_match"
+    reasoning: str = ""
+
+    def to_routing_dict(self) -> Dict[str, Any]:
+        return {
+            "intent": self.intent.value,
+            "agent_id": self.agent_id,
+            "match_score": self.match_score,
+            "score_basis": self.score_basis,
+            "matched_keywords": self.matched_keywords,
+            "reasoning": self.reasoning,
+        }
 
 
 class IntentClassifier:
@@ -226,23 +241,25 @@ class LLMRouter:
         Classify query intent using LLM if available, else keyword fallback.
 
         Returns:
-            (QueryIntent, confidence: float, reasoning: str)
+            (QueryIntent, match_score: Optional[float], reasoning: str, score_basis: str)
         """
         provider = self.model_config.get("provider", "")
         model_id = self.model_config.get("model_id", "")
 
         if provider and model_id:
             try:
-                return self._llm_classify(query, provider, model_id)
+                intent, score, reasoning = self._llm_classify(query, provider, model_id)
+                return intent, score, reasoning, "llm_self_reported"
             except Exception as e:
                 logger.warning(f"LLM routing failed, using keyword fallback: {e}")
 
         # Keyword fallback
         results = self._fallback.classify(query)
         if results:
-            intent, confidence, _, _ = results[0]
-            return intent, confidence, "keyword-based classification"
-        return QueryIntent.GENERAL, 0.1, "no match found"
+            intent, score, kws, pts = results[0]
+            matched = ", ".join(kws + pts) or "none"
+            return intent, score, f"keyword match ({matched})", "keyword_match"
+        return QueryIntent.GENERAL, None, "no keyword matched", "keyword_match"
 
     def _llm_classify(self, query: str, provider: str, model_id: str) -> tuple:
         """Ask the LLM to classify the query. Returns (QueryIntent, confidence, reasoning)."""
@@ -282,7 +299,13 @@ class LLMRouter:
 
         parsed = json.loads(text)
         intent_str = parsed.get("intent", "general").lower()
-        confidence = float(parsed.get("confidence", 0.8))
+        # Self-reported by the router model; not calibrated.  No invented
+        # default when the model omits it.
+        raw_score = parsed.get("confidence")
+        try:
+            confidence = float(raw_score) if raw_score is not None else None
+        except (TypeError, ValueError):
+            confidence = None
         reasoning = parsed.get("reasoning", "")
 
         # Validate intent value
@@ -290,7 +313,7 @@ class LLMRouter:
             intent_str = "general"
 
         intent = QueryIntent(intent_str)
-        logger.info(f"LLM routed '{query[:60]}' → {intent_str} (conf={confidence:.2f}): {reasoning}")
+        logger.info(f"LLM routed '{query[:60]}' → {intent_str} (self-reported score={confidence}): {reasoning}")
         return intent, confidence, reasoning
 
 
@@ -327,7 +350,13 @@ class SuperAgent:
                 self.add_route(route)
 
     def _setup_default_routes(self) -> None:
-        """Setup default routing table"""
+        """Setup default routing table.
+
+        Every agent_id here must exist as a card in finagent_core/configs
+        (or be the generic `core_agent`).  Intents with no dedicated curated
+        agent (risk, research, general) go to core_agent with intent-specific
+        instructions rather than to an agent name that doesn't exist.
+        """
         default_routes = [
             RouteConfig(
                 intent=QueryIntent.TRADING,
@@ -352,35 +381,35 @@ class SuperAgent:
             ),
             RouteConfig(
                 intent=QueryIntent.RISK,
-                agent_id="risk_agent",
+                agent_id="core_agent",
                 keywords=["risk", "volatility"],
                 priority=8,
                 config_override={"tools": ["yfinance", "calculator"]}
             ),
             RouteConfig(
                 intent=QueryIntent.NEWS,
-                agent_id="news_agent",
+                agent_id="sentiment_news_analyst",
                 keywords=["news", "headlines"],
                 priority=5,
                 config_override={"tools": ["duckduckgo"]}
             ),
             RouteConfig(
                 intent=QueryIntent.GEOPOLITICS,
-                agent_id="geopolitics_agent",
+                agent_id="geopolitical_risk_analyst",
                 keywords=["geopolitical", "conflict"],
                 priority=5,
                 config_override={"tools": ["duckduckgo"]}
             ),
             RouteConfig(
                 intent=QueryIntent.ECONOMICS,
-                agent_id="economics_agent",
+                agent_id="macro_cycle_agent",
                 keywords=["gdp", "inflation"],
                 priority=6,
                 config_override={"tools": ["duckduckgo", "calculator"]}
             ),
             RouteConfig(
                 intent=QueryIntent.RESEARCH,
-                agent_id="research_agent",
+                agent_id="core_agent",
                 keywords=["research", "investigate"],
                 priority=7,
                 config_override={"reasoning": True, "tools": ["duckduckgo", "yfinance"]}
@@ -436,18 +465,20 @@ class SuperAgent:
             query: User query
 
         Returns:
-            RoutingResult with agent info and confidence
+            RoutingResult with agent info and match score
         """
-        intent, confidence, reasoning = self.llm_router.classify(query)
+        intent, score, reasoning, basis = self.llm_router.classify(query)
         route = self.routes.get(intent, self.routes.get(QueryIntent.GENERAL))
 
         return RoutingResult(
             intent=intent,
             agent_id=route.agent_id if route else self.fallback_agent_id,
-            confidence=confidence,
+            match_score=score,
             config=route.config_override if route else {},
             matched_keywords=[reasoning],  # repurpose field to carry LLM reasoning
             matched_patterns=[],
+            score_basis=basis,
+            reasoning=reasoning,
         )
 
     def route_multi(self, query: str, max_agents: int = 3) -> List[RoutingResult]:
@@ -464,8 +495,8 @@ class SuperAgent:
         classifications = self.classifier.classify(query)
         results = []
 
-        for intent, confidence, matched_kw, matched_pt in classifications[:max_agents]:
-            if confidence < 0.2:  # Skip low confidence
+        for intent, score, matched_kw, matched_pt in classifications[:max_agents]:
+            if score < 0.2:  # Skip weak keyword matches
                 continue
 
             route = self.routes.get(intent)
@@ -473,13 +504,61 @@ class SuperAgent:
                 results.append(RoutingResult(
                     intent=intent,
                     agent_id=route.agent_id,
-                    confidence=confidence,
+                    match_score=score,
                     config=route.config_override,
                     matched_keywords=matched_kw,
-                    matched_patterns=matched_pt
+                    matched_patterns=matched_pt,
+                    score_basis="keyword_match",
                 ))
 
         return results
+
+    def build_agent_config(self, routing: RoutingResult,
+                           user_config: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Config for running a routed agent: the agent's curated card config
+        (with its grounding rules) as the base, then the route's tool
+        overrides, then explicit user overrides.  Model comes from the user's
+        resolved config, never from a guessed provider."""
+        config: Dict[str, Any] = {}
+        card = None
+        if routing.agent_id and routing.agent_id != "core_agent":
+            try:
+                from finagent_core.agent_loader import get_loader
+                loader = get_loader()
+                card = loader.registry.get(routing.agent_id)
+                if card is None:
+                    loader.discover_agents()
+                    card = loader.registry.get(routing.agent_id)
+            except Exception as e:
+                logger.warning(f"Could not load agent card '{routing.agent_id}': {e}")
+        if card is not None and not card.config.get("disabled"):
+            config.update({k: v for k, v in card.config.items() if k != "model"})
+            # The curated card's tools are its own; only fill from the route
+            # when the card has none.
+            for k, v in routing.config.items():
+                config.setdefault(k, v)
+        else:
+            config["instructions"] = self._get_instructions_for_intent(routing.intent)
+            config.update(routing.config)
+        if not config.get("instructions"):
+            config["instructions"] = self._get_instructions_for_intent(routing.intent)
+
+        if user_config and user_config.get("model"):
+            config["model"] = user_config["model"]
+        else:
+            config["model"] = self._resolve_model_config_from_keys(getattr(self, "api_keys", {}))
+        # Deliberately NOT applying the caller's instructions / tools: those
+        # belong to whatever agent was selected in the UI, and letting them
+        # override would strip the routed agent's curated rules again.
+        if user_config and user_config.get("reasoning") is not None:
+            config["reasoning"] = user_config["reasoning"]
+        # finterm's own tools (session-scoped bridge attached by AgentService).
+        if user_config:
+            for key in ("terminal_mcp_endpoint", "terminal_tools"):
+                if user_config.get(key):
+                    config[key] = user_config[key]
+        config["agent_id"] = routing.agent_id
+        return config
 
     def execute(
         self,
@@ -500,37 +579,27 @@ class SuperAgent:
         Returns:
             Response from routed agent
         """
-        from finagent_core.core_agent import CoreAgent
-        from finagent_core.agent_loader import get_loader
-
         # Pass user model config to LLM router so it can use the same provider
         if user_config and user_config.get("model"):
             self.llm_router.model_config = user_config["model"]
 
         # Route query (LLM-based)
         routing = self.route(query)
-        logger.info(f"Routed to {routing.agent_id} with confidence {routing.confidence:.2f}")
+        logger.info(f"Routed to {routing.agent_id} (match score {routing.match_score}, {routing.score_basis})")
+        return self._execute_routing(query, routing, session_id, user_config)
 
-        # Build config - use user's model config if provided, otherwise resolve from api_keys
-        if user_config and user_config.get("model"):
-            model_config = user_config["model"]
-        else:
-            model_config = self._resolve_model_config_from_keys(getattr(self, "api_keys", {}))
+    def _execute_routing(
+        self,
+        query: str,
+        routing: RoutingResult,
+        session_id: Optional[str] = None,
+        user_config: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Run one already-routed agent with its curated config."""
+        from finagent_core.core_agent import CoreAgent
 
-        config = {
-            "model": model_config,
-            "instructions": self._get_instructions_for_intent(routing.intent),
-            **routing.config
-        }
-
-        # Merge user config overrides (tools, reasoning, etc.)
-        if user_config:
-            if user_config.get("tools"):
-                config["tools"] = user_config["tools"]
-            if user_config.get("reasoning") is not None:
-                config["reasoning"] = user_config["reasoning"]
-            if user_config.get("instructions"):
-                config["instructions"] = user_config["instructions"]
+        config = self.build_agent_config(routing, user_config)
+        routing_info = routing.to_routing_dict()
 
         # Validate model config before execution
         model_provider = config.get("model", {}).get("provider", "")
@@ -544,21 +613,12 @@ class SuperAgent:
                     "Programmatic: pass user_config={'model': {'provider': '...', 'model_id': '...'}} "
                     "to execute() / execute_multi()."
                 ),
-                "routing": {
-                    "intent": routing.intent.value,
-                    "agent_id": routing.agent_id,
-                    "confidence": routing.confidence,
-                    "matched_keywords": routing.matched_keywords
-                }
+                "routing": routing_info,
             }
 
-        # Try to load specific agent
-        loader = get_loader()
-        try:
-            agent = loader.create_agent(routing.agent_id, self.api_keys, config)
-        except Exception:
-            # Fallback to CoreAgent
-            agent = CoreAgent(api_keys=self.api_keys)
+        # CoreAgent builds the agno agent from `config`, which now carries the
+        # routed agent's curated instructions (incl. its never-estimate rules).
+        agent = CoreAgent(api_keys=self.api_keys)
 
         # Execute
         try:
@@ -576,24 +636,14 @@ class SuperAgent:
                 return {
                     "success": False,
                     "error": content,
-                    "routing": {
-                        "intent": routing.intent.value,
-                        "agent_id": routing.agent_id,
-                        "confidence": routing.confidence,
-                        "matched_keywords": routing.matched_keywords
-                    },
+                    "routing": routing_info,
                     "model_attempted": f"{model_provider}/{model_id}"
                 }
 
             return {
                 "success": True,
                 "response": content,
-                "routing": {
-                    "intent": routing.intent.value,
-                    "agent_id": routing.agent_id,
-                    "confidence": routing.confidence,
-                    "matched_keywords": routing.matched_keywords
-                },
+                "routing": routing_info,
                 "model_used": f"{model_provider}/{model_id}"
             }
         except Exception as e:
@@ -607,11 +657,7 @@ class SuperAgent:
             return {
                 "success": False,
                 "error": error_msg,
-                "routing": {
-                    "intent": routing.intent.value,
-                    "agent_id": routing.agent_id,
-                    "confidence": routing.confidence
-                },
+                "routing": routing_info,
                 "model_attempted": f"{model_provider}/{model_id}"
             }
 
@@ -643,6 +689,18 @@ class SuperAgent:
 
         routings = self.route_multi(query)
 
+        # One run per distinct agent: several intents can map to the same
+        # agent (e.g. risk/research/general -> core_agent), and running it
+        # twice and labelling the copies as different agents is misleading.
+        distinct: List[RoutingResult] = []
+        seen_agents = set()
+        for r in routings:
+            if r.agent_id in seen_agents:
+                continue
+            seen_agents.add(r.agent_id)
+            distinct.append(r)
+        routings = distinct
+
         if not routings:
             return self.execute(query, session_id, user_config=user_config)
 
@@ -659,22 +717,21 @@ class SuperAgent:
             logger.info(
                 f"Multi-agent step {index}/{len(routings)}: "
                 f"agent={routing.agent_id} intent={routing.intent.value} "
-                f"confidence={routing.confidence:.2f}"
+                f"match_score={routing.match_score}"
             )
 
-            result = self.execute(query, session_id, user_config=user_config)
+            # Run THIS routed agent — not a fresh LLM re-route, which used to
+            # pick the same agent every iteration.
+            result = self._execute_routing(query, routing, session_id, user_config)
             latency_ms = int((time.time() - step_started_at) * 1000)
-
-            # Preserve original confidence as priority (route_multi's confidence
-            # may differ from the per-step LLM-routed confidence in execute()).
-            result.setdefault("routing", {})["priority"] = routing.confidence
             responses.append(result)
 
             step = {
                 "index": index,
                 "intent": routing.intent.value,
                 "agent_id": routing.agent_id,
-                "confidence": routing.confidence,
+                "match_score": routing.match_score,
+                "score_basis": routing.score_basis,
                 "success": bool(result.get("success")),
                 "latency_ms": latency_ms,
                 "error": result.get("error"),
@@ -712,7 +769,8 @@ class SuperAgent:
             combined = []
             for resp in responses:
                 if resp.get("success"):
-                    combined.append(f"[{resp['routing']['intent']}]\n{resp['response']}")
+                    r = resp['routing']
+                    combined.append(f"[{r['agent_id']} / {r['intent']}]\n{resp['response']}")
 
             return {
                 "success": success_count > 0,
@@ -792,14 +850,23 @@ def route_query(query: str, api_keys: Dict[str, str] = None, config: Dict[str, A
     model_config = (config or {}).get("model")
     agent = SuperAgent(api_keys=api_keys, model_config=model_config)
     routing = agent.route(query)
+    # `config` is the full config to run the routed agent with (curated
+    # instructions + tools), minus the model: the caller's own resolved model
+    # is applied at dispatch, so don't bake a guessed provider in here.
+    run_cfg = agent.build_agent_config(routing, config)
+    run_cfg.pop("model", None)
+    # Bridge sessions are per dispatch; the run that follows gets its own.
+    run_cfg.pop("terminal_mcp_endpoint", None)
+    run_cfg.pop("terminal_tools", None)
     return {
         "success": True,
         "intent": routing.intent.value,
         "agent_id": routing.agent_id,
-        "confidence": routing.confidence,
+        "match_score": routing.match_score,
+        "score_basis": routing.score_basis,
         "matched_keywords": routing.matched_keywords,
         "matched_patterns": routing.matched_patterns,
-        "config": routing.config
+        "config": run_cfg
     }
 
 

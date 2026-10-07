@@ -7,11 +7,13 @@
 // must report the same growth rate for a small and a large account holding
 // the same positions.
 
+#include "services/portfolio/PortfolioDates.h"
 #include "services/portfolio/PortfolioReturns.h"
 
 #include <QtTest/QtTest>
 
 #include <cmath>
+#include <ctime>
 
 using namespace fincept::portfolio;
 
@@ -44,6 +46,7 @@ class TestPortfolioReturns : public QObject {
     Q_OBJECT
 
   private slots:
+    void initTestCase();
     void plain_growth_no_flows();
     void deposit_into_flat_market_is_zero_return();
     void withdrawal_from_flat_market_is_zero_return();
@@ -65,7 +68,27 @@ class TestPortfolioReturns : public QObject {
     void unmapped_symbol_is_treated_as_same_currency();
     void flow_converts_at_its_own_trade_date_rate();
     void trade_before_the_series_uses_the_earliest_rate();
+    // Trading-day calendar (weekend rows, multi-day gaps).
+    void weekend_snapshot_merges_into_next_session();
+    void weekend_flow_stays_exact_under_merging();
+    void multi_day_gap_is_flagged_not_called_daily();
+    void trailing_weekend_row_folds_into_last_segment();
+    void calendar_holiday_is_not_a_session();
+    // UTC trade stamps vs local snapshot dates.
+    void utc_evening_trade_lands_on_its_local_date();
+    void date_only_and_zoneless_stamps_pass_through();
+    // Like-for-like index.
+    void twr_index_ignores_deposits();
+    // Migration-dated opening BUYs: read-time exclusion, never deletion.
+    void pre_opening_backfill_rows_are_excluded_not_live();
 };
+
+void TestPortfolioReturns::initTestCase() {
+    // A fixed zone west of UTC, so a US-evening trade has a later UTC date —
+    // the case that used to land the flow one segment late.
+    qputenv("TZ", "America/Los_Angeles");
+    tzset();
+}
 
 void TestPortfolioReturns::plain_growth_no_flows() {
     const auto r = compute_period_return(
@@ -330,6 +353,138 @@ void TestPortfolioReturns::trade_before_the_series_uses_the_earliest_rate() {
     QCOMPARE(fx.rate_for(QStringLiteral("RY.TO"), QStringLiteral("2026-06-01")), 0.70);
     // An unknown symbol still falls back to 1:1.
     QCOMPARE(fx.rate_for(QStringLiteral("NOPE"), QStringLiteral("2026-01-02")), 1.0);
+}
+
+// 2026-01-02 is a Friday, 01-03/04 the weekend, 01-05 a Monday.
+
+void TestPortfolioReturns::weekend_snapshot_merges_into_next_session() {
+    // Fri 100 → Sat 100 (no session) → Mon 110. As consecutive "days" that
+    // is a 0% day plus a 10% day — a fake quiet day diluting volatility.
+    // On the trading calendar it is ONE session of +10%.
+    const auto r = trading_day_returns(
+        {snap("2026-01-02", 100.0), snap("2026-01-03", 100.0), snap("2026-01-05", 110.0)}, {});
+    QCOMPARE(r.size(), 1);
+    QCOMPARE(r[0].start_date, QStringLiteral("2026-01-02"));
+    QCOMPARE(r[0].end_date, QStringLiteral("2026-01-05"));
+    QCOMPARE(r[0].trading_days, 1);
+    QVERIFY(std::abs(r[0].pct - 10.0) < 1e-9);
+}
+
+void TestPortfolioReturns::weekend_flow_stays_exact_under_merging() {
+    // A $100 purchase entered on Saturday is in Saturday's NAV. Merging
+    // chains the pieces, so the flow is stripped in the piece that contains
+    // it and the merged session return is the market's alone: Fri 100 →
+    // Sat 200 (deposit) → Mon 220 = +10%.
+    const auto r = trading_day_returns(
+        {snap("2026-01-02", 100.0), snap("2026-01-03", 200.0), snap("2026-01-05", 220.0)},
+        {txn("BUY", 10, 10.0, "2026-01-03")});
+    QCOMPARE(r.size(), 1);
+    QVERIFY(std::abs(r[0].pct - 10.0) < 1e-9);
+    // The period TWR over the same path agrees.
+    const auto p = compute_period_return(
+        {snap("2026-01-02", 100.0), snap("2026-01-03", 200.0), snap("2026-01-05", 220.0)}, 220.0, "2026-01-05",
+        {txn("BUY", 10, 10.0, "2026-01-03")});
+    QVERIFY(std::abs(p.twr_pct - 10.0) < 1e-9);
+}
+
+void TestPortfolioReturns::multi_day_gap_is_flagged_not_called_daily() {
+    // Mon → Thu: three sessions in one return. It must say so, so per-day
+    // statistics can leave it out instead of annualising it with √252.
+    const auto r = trading_day_returns(
+        {snap("2026-01-05", 100.0), snap("2026-01-06", 101.0), snap("2026-01-09", 104.03)}, {});
+    QCOMPARE(r.size(), 2);
+    QCOMPARE(r[0].trading_days, 1);
+    QCOMPARE(r[1].trading_days, 3);
+    QVERIFY(std::abs(r[1].pct - 3.0) < 1e-9);
+    // Chaining every segment (gaps included) still gives the exact growth.
+    const double chained = (1 + r[0].pct / 100.0) * (1 + r[1].pct / 100.0);
+    QVERIFY(std::abs(chained - 1.0403) < 1e-9);
+}
+
+void TestPortfolioReturns::trailing_weekend_row_folds_into_last_segment() {
+    // Thu → Fri → Sat: the Saturday piece crosses no session; it folds into
+    // Friday's segment so the chained growth stays complete.
+    const auto r = trading_day_returns(
+        {snap("2026-01-01", 100.0), snap("2026-01-02", 110.0), snap("2026-01-03", 121.0)}, {});
+    QCOMPARE(r.size(), 1);
+    QCOMPARE(r[0].trading_days, 1);
+    QCOMPARE(r[0].end_date, QStringLiteral("2026-01-03"));
+    QVERIFY(std::abs(r[0].pct - 21.0) < 1e-9);
+}
+
+void TestPortfolioReturns::calendar_holiday_is_not_a_session() {
+    // Fri → Tue over a Monday holiday: two weekdays, but ONE session when the
+    // exchange calendar is known.
+    const QSet<QString> cal{QStringLiteral("2026-01-16"), QStringLiteral("2026-01-20"),
+                            QStringLiteral("2026-01-21")};
+    const QVector<PortfolioSnapshot> s{snap("2026-01-16", 100.0), snap("2026-01-20", 102.0)};
+    QCOMPARE(trading_day_returns(s, {}, {}, cal).value(0).trading_days, 1);
+    QCOMPARE(trading_day_returns(s, {}).value(0).trading_days, 2); // weekday fallback
+}
+
+void TestPortfolioReturns::utc_evening_trade_lands_on_its_local_date() {
+    // 19:00 Friday in Los Angeles is 03:00 SATURDAY in UTC — add_asset's
+    // stamp. Friday's snapshot (local date) already contains the purchase.
+    // Keyed on the UTC date, the flow moved to the next segment: +100% on
+    // Friday, −50% on Monday. On the local date both are 0%.
+    QCOMPARE(local_date_of(QStringLiteral("2026-01-03T03:00:00Z")), QStringLiteral("2026-01-02"));
+    const auto buy = txn("BUY", 10, 10.0, "2026-01-03T03:00:00Z");
+    const QVector<PortfolioSnapshot> s{snap("2026-01-01", 100.0), snap("2026-01-02", 200.0),
+                                       snap("2026-01-05", 200.0)};
+    const auto r = flow_adjusted_returns(s, {buy});
+    QCOMPARE(r.size(), 2);
+    QVERIFY(std::abs(r[0]) < 1e-9);
+    QVERIFY(std::abs(r[1]) < 1e-9);
+    const auto p = compute_period_return(s, 200.0, "2026-01-05", {buy});
+    QVERIFY(std::abs(p.twr_pct) < 1e-9);
+}
+
+void TestPortfolioReturns::date_only_and_zoneless_stamps_pass_through() {
+    // User-entered dates and SQLite datetime('now') strings carry no zone:
+    // they are taken as written, never shifted.
+    QCOMPARE(local_date_of(QStringLiteral("2026-01-03")), QStringLiteral("2026-01-03"));
+    QCOMPARE(local_date_of(QStringLiteral("2026-01-03 03:00:00")), QStringLiteral("2026-01-03"));
+    QCOMPARE(local_date_of(QStringLiteral("2026-01-03T03:00:00")), QStringLiteral("2026-01-03"));
+    QCOMPARE(local_date_of(QStringLiteral("2026-01-03T20:00:00Z")), QStringLiteral("2026-01-03"));
+}
+
+void TestPortfolioReturns::twr_index_ignores_deposits() {
+    // Raw NAV doubles on a deposit; the like-for-like index does not.
+    const QVector<NavPoint> path{{"2026-01-05", 100.0}, {"2026-01-06", 210.0}, {"2026-01-07", 231.0}};
+    const auto idx = twr_index(path, {txn("BUY", 10, 10.0, "2026-01-06")});
+    QCOMPARE(idx.size(), 3);
+    QCOMPARE(idx[0], 1.0);
+    QVERIFY(std::abs(idx[1] - 1.10) < 1e-9);
+    QVERIFY(std::abs(idx[2] - 1.21) < 1e-9);
+}
+
+void TestPortfolioReturns::pre_opening_backfill_rows_are_excluded_not_live() {
+    // v049 dated a holding's opening BUY at migration time (2026-01-05). A
+    // reconstructed row before it lacks the position; read as history it
+    // would make the whole position one day's "gain" (the BUY is not a
+    // flow). Such rows are skipped at read time; live rows, which did hold
+    // the position, stay — and so does everything from the opening date on.
+    auto opening = txn("BUY", 100, 500.0, "2026-01-05");
+    opening.notes = QStringLiteral("Opening balance — synthesized from the holdings row (v049)");
+    opening.created_at = QStringLiteral("2026-01-05 12:00:00");
+    QCOMPARE(fabricated_opening_cutoff({opening}), QStringLiteral("2026-01-05"));
+
+    auto bf = [](const QString& d, double v) {
+        auto s = snap(d, v);
+        s.source = QStringLiteral("backfill");
+        return s;
+    };
+    const QVector<PortfolioSnapshot> all{bf("2026-01-01", 10.0), snap("2026-01-02", 50000.0), bf("2026-01-05", 50100.0),
+                                         snap("2026-01-06", 50200.0)};
+    const auto kept = usable_snapshots(all, {opening});
+    QCOMPARE(kept.size(), 3);
+    QCOMPARE(kept[0].snapshot_date, QStringLiteral("2026-01-02"));
+    // No fabricated opening → nothing filtered.
+    QCOMPARE(usable_snapshots(all, {txn("BUY", 1, 1.0, "2026-01-05")}).size(), 4);
+    // And the kept series reports market movement, not the position's value.
+    const auto r = compute_period_return(kept, 50200.0, "2026-01-06", {opening});
+    QVERIFY(r.valid);
+    QVERIFY(std::abs(r.twr_pct - 0.4) < 1e-9);
 }
 
 QTEST_GUILESS_MAIN(TestPortfolioReturns)

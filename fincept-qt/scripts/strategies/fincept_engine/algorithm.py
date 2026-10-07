@@ -36,7 +36,7 @@ from .indicators import (
     IndicatorBase, ExponentialMovingAverage, SimpleMovingAverage,
     MovingAverageConvergenceDivergence, RelativeStrengthIndex,
     BollingerBands, AverageTrueRange, Stochastic,
-    RateOfChange, Momentum, WilliamsPercentR,
+    RateOfChange, MomentumPercent, Momentum, WilliamsPercentR,
     CommodityChannelIndex, AverageDirectionalIndex
 )
 from .portfolio import SecurityPortfolioManager
@@ -689,13 +689,6 @@ class FutureChainProvider:
     def get_future_contract_list(self, symbol, date):
         raise RuntimeError(f"Future chain unavailable for {str(symbol).upper()}: no real futures "
                            f"contract data source in the local engine")
-
-
-class _RateOfChangeFraction(RateOfChange):
-    """LEAN-compatible ROC: (value - value_n) / value_n as a fraction."""
-
-    def _compute(self, value: float) -> float:
-        return super()._compute(value) / 100.0
 
 
 class QCAlgorithm:
@@ -1620,10 +1613,9 @@ class QCAlgorithm:
         return indicator
 
     def roc(self, symbol, period=14, resolution=None):
-        # LEAN's ROC is a fraction; the engine's RateOfChange class returns
-        # percent (which is LEAN's MOMP/ROCP), so rescale here.
+        # LEAN's ROC is a fraction — RateOfChange matches that directly.
         name = f"ROC_{symbol}_{period}"
-        indicator = _RateOfChangeFraction(name, period)
+        indicator = RateOfChange(name, period)
         self._indicators[name] = indicator
         return indicator
 
@@ -2078,7 +2070,7 @@ class QCAlgorithm:
     def momp(self, symbol, period=14, resolution=None, selector=None):
         """Momentum Percent indicator."""
         name = f"MOMP_{symbol}_{period}"
-        indicator = RateOfChange(name, period)
+        indicator = MomentumPercent(name, period)
         self._indicators[name] = indicator
         return indicator
 

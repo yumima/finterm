@@ -570,9 +570,11 @@ QWidget* DerivativesScreen::create_credit_panel() {
     cds_recovery_ = create_spin(40.0, 0, 100, 2, "%");
     cds_spread_ = create_spin(150.0, 0, 10000, 1);
     cds_notional_ = create_spin(10000000, 0, 1e12, 0);
+    cds_discount_ = create_spin(3.5, -20, 100, 2, "%");
 
-    bl->addWidget(create_two_col(create_input_row("VALUATION DATE", cds_val_date_),
-                                 create_input_row("MATURITY DATE", cds_mat_date_)));
+    bl->addWidget(create_three_col(create_input_row("VALUATION DATE", cds_val_date_),
+                                   create_input_row("MATURITY DATE", cds_mat_date_),
+                                   create_input_row("DISCOUNT RATE (%)", cds_discount_)));
     bl->addWidget(create_three_col(create_input_row("RECOVERY RATE (%)", cds_recovery_),
                                    create_input_row("SPREAD (BPS)", cds_spread_),
                                    create_input_row("NOTIONAL", cds_notional_)));
@@ -817,6 +819,8 @@ void DerivativesScreen::on_calculate() {
                                          QString::number(cds_notional_->value(), 'f', 0),
                                          "--spread-bps",
                                          QString::number(cds_spread_->value()),
+                                         "--discount-rate",
+                                         QString::number(cds_discount_->value()),
                                      });
             break;
         }

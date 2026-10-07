@@ -39,18 +39,12 @@ class CollarMechanism:
         base_value = self.base_exchange_ratio * self.announcement_price
 
         for price in price_scenarios:
-            if price < floor_price:
-                effective_ratio = base_value / floor_price
-                value_per_share = floor_price
-                protection_type = "floor_active"
-            elif price > cap_price:
-                effective_ratio = base_value / cap_price
-                value_per_share = cap_price
-                protection_type = "cap_active"
-            else:
-                effective_ratio = self.base_exchange_ratio
-                value_per_share = price
-                protection_type = "within_collar"
+            # Fixed value inside the band (ratio floats); ratio locks at the
+            # floor / cap outside it. See collar_terms().
+            t = collar_terms('fixed_value', self.base_exchange_ratio, self.announcement_price,
+                             floor_price, cap_price, price)
+            effective_ratio = t['effective_exchange_ratio']
+            protection_type = {'below_floor': 'floor_active', 'above_cap': 'cap_active'}.get(t['zone'], 'within_collar')
 
             actual_value = effective_ratio * price
 
@@ -102,15 +96,19 @@ class CollarMechanism:
 
         scenarios = []
 
+        base_value = self.base_exchange_ratio * self.announcement_price
         for price in price_scenarios:
-            if self.base_exchange_ratio < min_exchange_ratio:
-                effective_ratio = min_exchange_ratio
-                protection_type = "floor_active"
-            elif self.base_exchange_ratio > max_exchange_ratio:
+            # Ratio floats to deliver the announced value, bounded by the
+            # min / max ratio; at a bound the value moves with the price.
+            floating_ratio = base_value / price
+            if floating_ratio > max_exchange_ratio:
                 effective_ratio = max_exchange_ratio
-                protection_type = "cap_active"
+                protection_type = "max_ratio_active"
+            elif floating_ratio < min_exchange_ratio:
+                effective_ratio = min_exchange_ratio
+                protection_type = "min_ratio_active"
             else:
-                effective_ratio = self.base_exchange_ratio
+                effective_ratio = floating_ratio
                 protection_type = "within_collar"
 
             value_per_share = effective_ratio * price
@@ -164,11 +162,14 @@ class CollarMechanism:
         for price in price_scenarios:
             protection_type = "no_protection"
 
+            # Fixed ratio with one-sided protection: below the floor the ratio
+            # rises so the target still receives base_ratio x floor; above the
+            # cap it falls so the target receives base_ratio x cap.
             if floor_price and price < floor_price:
-                effective_ratio = base_value / floor_price
+                effective_ratio = self.base_exchange_ratio * floor_price / price
                 protection_type = "floor_active"
             elif cap_price and price > cap_price:
-                effective_ratio = base_value / cap_price
+                effective_ratio = self.base_exchange_ratio * cap_price / price
                 protection_type = "cap_active"
             else:
                 effective_ratio = self.base_exchange_ratio
@@ -332,63 +333,129 @@ class CollarMechanism:
             'structures': structures
         }
 
-def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import sys
-    import json
+# ── JSON contract (MAAnalyticsService "analyze") ─────────────────────────────
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from corporateFinance._cli import (is_json_call, run_json, num, opt_num, num_list, text,  # noqa: E402
+                                   has, InputError, pct)
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
 
-    command = sys.argv[1]
+def collar_terms(collar_type: str, base_ratio: float, reference_price: float,
+                 floor_price: float, cap_price: float, price: float) -> Dict[str, Any]:
+    """Effective exchange ratio and value per target share at one acquirer price.
 
-    try:
-        if command == "collar":
-            if len(sys.argv) < 3:
-                raise ValueError("Collar parameters required")
-
-            # Accept either JSON dict or positional args
-            try:
-                params = json.loads(sys.argv[2])
-                announcement_price = float(params.get('announcement_price', params.get('acquirer_price', 50.0)))
-                target_shares = float(params.get('target_shares', 1000000))
-                base_exchange_ratio = float(params.get('base_exchange_ratio', params.get('exchange_ratio', 1.0)))
-                floor_price = float(params.get('floor_price', params.get('collar_low', announcement_price * 0.85)))
-                cap_price = float(params.get('cap_price', params.get('collar_high', announcement_price * 1.15)))
-            except (json.JSONDecodeError, TypeError):
-                if len(sys.argv) < 7:
-                    raise ValueError("Announcement price, target shares, base exchange ratio, floor price, and cap price required")
-                announcement_price = float(sys.argv[2])
-                target_shares = float(sys.argv[3])
-                base_exchange_ratio = float(sys.argv[4])
-                floor_price = float(sys.argv[5])
-                cap_price = float(sys.argv[6])
-
-            collar = CollarMechanism(
-                announcement_price=announcement_price,
-                target_shares=target_shares,
-                base_exchange_ratio=base_exchange_ratio
-            )
-
-            analysis = collar.fixed_collar(
-                floor_price=floor_price,
-                cap_price=cap_price
-            )
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
+    fixed_ratio : ratio = base inside [floor, cap]; outside, the ratio floats so
+                  the target receives base x floor (below) / base x cap (above).
+    fixed_value : value = base x reference_price inside the band (ratio floats);
+                  outside, the ratio locks at value/floor (below) or value/cap
+                  (above) and value moves with the acquirer price.
+    """
+    if collar_type == 'fixed_ratio':
+        if price < floor_price:
+            ratio, zone = base_ratio * floor_price / price, 'below_floor'
+        elif price > cap_price:
+            ratio, zone = base_ratio * cap_price / price, 'above_cap'
         else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
+            ratio, zone = base_ratio, 'within_collar'
+    else:
+        target_value = base_ratio * reference_price
+        if price < floor_price:
+            ratio, zone = target_value / floor_price, 'below_floor'
+        elif price > cap_price:
+            ratio, zone = target_value / cap_price, 'above_cap'
+        else:
+            ratio, zone = target_value / price, 'within_collar'
+    return {'acquirer_price': price, 'effective_exchange_ratio': ratio,
+            'value_per_target_share': ratio * price, 'zone': zone}
 
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
+
+def _key(p: Dict[str, Any], *keys: str) -> Optional[str]:
+    for k in keys:
+        if has(p, k):
+            return k
+    return None
+
+
+def json_analyze(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Collar on a stock deal.
+
+    Inputs (required): base_ratio (alias base_exchange_ratio / fixed_exchange_ratio),
+    floor_price (alias collar_floor), cap_price (alias collar_ceiling),
+    acquirer_price (alias acquirer_share_price / announcement_price; the
+    reference price the collar was struck at).
+    Optional: collar_type 'fixed_ratio' (default) | 'fixed_value',
+    target_shares (alias target_shares_outstanding), price_scenarios (list).
+    """
+    def req(keys, label, **kw):
+        k = _key(p, *keys)
+        if not k:
+            raise InputError(f"Missing required input: {label}")
+        return num(p, k, label=label, **kw)
+
+    base = req(('base_ratio', 'base_exchange_ratio', 'fixed_exchange_ratio'), 'base_ratio', gt=0)
+    floor_px = req(('floor_price', 'collar_floor'), 'floor_price', gt=0)
+    cap_px = req(('cap_price', 'collar_ceiling'), 'cap_price', gt=0)
+    ref = req(('acquirer_price', 'acquirer_share_price', 'announcement_price'),
+              'acquirer_price (acquirer share price the collar is struck at)', gt=0)
+    if floor_px >= cap_px:
+        raise InputError("floor_price must be below cap_price")
+    ctype = text(p, 'collar_type', choices=('fixed_ratio', 'fixed_value')) if has(p, 'collar_type') else 'fixed_ratio'
+    sk = _key(p, 'target_shares', 'target_shares_outstanding')
+    tgt_sh = num(p, sk, gt=0) if sk else None
+
+    if has(p, 'price_scenarios'):
+        prices = [x for x in num_list(p, 'price_scenarios') if x > 0]
+    else:
+        lo, hi = min(floor_px, ref) * 0.8, max(cap_px, ref) * 1.2
+        prices = [lo + (hi - lo) * i / 10 for i in range(11)]
+    prices = sorted(set(prices + [floor_px, cap_px, ref]))
+
+    rows = []
+    for px in prices:
+        r = collar_terms(ctype, base, ref, floor_px, cap_px, px)
+        r['price_change_pct'] = (px / ref - 1) * 100
+        if tgt_sh is not None:
+            r['shares_issued'] = r['effective_exchange_ratio'] * tgt_sh
+            r['total_deal_value'] = r['value_per_target_share'] * tgt_sh
+        rows.append(r)
+
+    now = collar_terms(ctype, base, ref, floor_px, cap_px, ref)
+    out = {
+        'collar_type': ctype,
+        'base_exchange_ratio': base,
+        'reference_acquirer_price': ref,
+        'floor_price': floor_px,
+        'cap_price': cap_px,
+        'floor_vs_reference_pct': (floor_px / ref - 1) * 100,
+        'cap_vs_reference_pct': (cap_px / ref - 1) * 100,
+        'current_effective_ratio': now['effective_exchange_ratio'],
+        'current_value_per_target_share': now['value_per_target_share'],
+        'current_zone': now['zone'],
+        'min_ratio_in_band': (base if ctype == 'fixed_ratio' else base * ref / cap_px),
+        'max_ratio_in_band': (base if ctype == 'fixed_ratio' else base * ref / floor_px),
+        'scenarios': rows,
+    }
+    if ctype == 'fixed_ratio':
+        out['protected_value_at_floor'] = base * floor_px
+        out['capped_value_at_cap'] = base * cap_px
+    else:
+        out['fixed_value_per_target_share'] = base * ref
+    if tgt_sh is not None:
+        out['current_shares_issued'] = now['effective_exchange_ratio'] * tgt_sh
+        out['current_deal_value'] = now['value_per_target_share'] * tgt_sh
+    return out
+
+def main():
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({"analyze": json_analyze})
+
 
 if __name__ == '__main__':
     main()

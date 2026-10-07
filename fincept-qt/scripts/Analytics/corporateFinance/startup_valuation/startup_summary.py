@@ -290,101 +290,83 @@ class StartupValuationSummary:
             first_chicago_scenarios=scenarios
         )
 
-def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+def comprehensive_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON contract: any subset (>= 1) of
+    {berkus: {...}, scorecard: {...}, vc: {...}, first_chicago: {...}, risk_factor: {...}}
+    where each object is exactly the payload of that method's own `calculate`.
+    Returns each method's value plus the range / mean / median across methods.
+    No method weighting is invented: a weighted value is reported only when the
+    caller supplies `weights` ({method: weight}).
+    """
+    from corporateFinance._cli import InputError
+    from corporateFinance.startup_valuation.berkus_method import berkus_json
+    from corporateFinance.startup_valuation.scorecard_method import scorecard_json
+    from corporateFinance.startup_valuation.vc_method import vc_json
+    from corporateFinance.startup_valuation.first_chicago_method import first_chicago_json
+    from corporateFinance.startup_valuation.risk_factor_summation import risk_factor_json
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    def _parse_optional_json(val):
-        """Parse a JSON string, returning None for 'null' or empty strings"""
-        if val is None or val == 'null' or val == '' or val == 'None':
-            return None
+    runners = [
+        ('berkus', 'Berkus', berkus_json, 'pre_money_valuation'),
+        ('scorecard', 'Scorecard', scorecard_json, 'pre_money_valuation'),
+        ('vc', 'VC Method', vc_json, 'pre_money_valuation'),
+        ('first_chicago', 'First Chicago', first_chicago_json, 'valuation'),
+        ('risk_factor', 'Risk Factor Summation', risk_factor_json, 'pre_money_valuation'),
+    ]
+    rows, errors, details = [], [], {}
+    for key, label, fn, value_key in runners:
+        sub = p.get(key)
+        if sub is None:
+            continue
+        if not isinstance(sub, dict):
+            raise InputError(f"{key} must be an object")
         try:
-            return json.loads(val)
-        except (json.JSONDecodeError, TypeError):
-            return None
+            res = fn(sub)
+        except Exception as e:  # one method's bad input should not hide the others
+            errors.append({'method': label, 'error': str(e)})
+            continue
+        details[key] = res
+        rows.append({'method': label, 'valuation': res.get(value_key)})
+    if not rows and not errors:
+        raise InputError("Provide inputs for at least one method: berkus, scorecard, vc, first_chicago, risk_factor")
+    vals = sorted(r['valuation'] for r in rows if r['valuation'] is not None)
+    if not vals:
+        raise InputError("; ".join(f"{e['method']}: {e['error']}" for e in errors) or "No method produced a value")
+    n = len(vals)
+    median = vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2
+    weighted = None
+    if isinstance(p.get('weights'), dict):
+        keyed = {k: details[k] for k in details}
+        num_, den = 0.0, 0.0
+        for key, label, fn, value_key in runners:
+            w = p['weights'].get(key)
+            if w is None or key not in keyed or keyed[key].get(value_key) is None:
+                continue
+            num_ += float(w) * keyed[key][value_key]
+            den += float(w)
+        weighted = num_ / den if den > 0 else None
+    return {
+        'methods_used': n,
+        'low': vals[0],
+        'high': vals[-1],
+        'mean': sum(vals) / n,
+        'median': median,
+        'weighted_valuation': weighted,
+        'valuations': rows,
+        'errors': errors,
+        'detail': details,
+    }
 
-    try:
-        if command == "quick_pre_revenue":
-            # Host sends: "quick_pre_revenue" idea_quality team_quality prototype_status market_size
-            if len(sys.argv) < 6:
-                raise ValueError("Quality scores required: idea_quality, team_quality, prototype_status, market_size")
 
-            # Parse quality scores - accept int, float, or descriptive strings
-            def parse_quality(val):
-                try:
-                    f = float(val)
-                    # If 0-1 scale, convert to 0-100
-                    return int(f * 100) if f <= 1.0 else int(f)
-                except ValueError:
-                    # Map string descriptions to 0-100 scale
-                    quality_map = {'low': 25, 'small': 25, 'medium': 50, 'moderate': 50,
-                                   'high': 75, 'large': 75, 'very_high': 90, 'excellent': 90}
-                    return quality_map.get(val.lower(), 50)
+def main():
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'comprehensive': comprehensive_json})
 
-            idea_quality = parse_quality(sys.argv[2])
-            team_quality = parse_quality(sys.argv[3])
-            prototype_status = parse_quality(sys.argv[4])
-            market_size = parse_quality(sys.argv[5])
-
-            startup = StartupValuationSummary("Startup")
-            valuation = startup.quick_pre_revenue_valuation(
-                idea_quality=idea_quality,
-                team_quality=team_quality,
-                prototype_status=prototype_status,
-                market_size=market_size
-            )
-
-            result = {"success": True, "data": valuation}
-            print(json.dumps(result))
-
-        elif command == "comprehensive":
-            # Host sends: "comprehensive" startup_name berkus_scores scorecard_inputs vc_inputs first_chicago_scenarios risk_factor_assessments
-            # Any of the optional args may be "null"
-            if len(sys.argv) < 3:
-                raise ValueError("Startup name required")
-
-            startup_name = sys.argv[2]
-            berkus_scores = _parse_optional_json(sys.argv[3]) if len(sys.argv) > 3 else None
-            scorecard_inputs = _parse_optional_json(sys.argv[4]) if len(sys.argv) > 4 else None
-            vc_inputs = _parse_optional_json(sys.argv[5]) if len(sys.argv) > 5 else None
-            first_chicago_scenarios = _parse_optional_json(sys.argv[6]) if len(sys.argv) > 6 else None
-            risk_factor_assessments = _parse_optional_json(sys.argv[7]) if len(sys.argv) > 7 else None
-
-            startup = StartupValuationSummary(startup_name)
-
-            inputs = {}
-            if berkus_scores is not None:
-                inputs['berkus_scores'] = berkus_scores
-            if scorecard_inputs is not None:
-                inputs['scorecard_inputs'] = scorecard_inputs
-            if vc_inputs is not None:
-                inputs['vc_inputs'] = vc_inputs
-            if first_chicago_scenarios is not None:
-                inputs['first_chicago_scenarios'] = first_chicago_scenarios
-            if risk_factor_assessments is not None:
-                inputs['risk_factor_assessments'] = risk_factor_assessments
-
-            valuation = startup.comprehensive_valuation(**inputs)
-
-            result = {"success": True, "data": valuation}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}. Available: quick_pre_revenue, comprehensive"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

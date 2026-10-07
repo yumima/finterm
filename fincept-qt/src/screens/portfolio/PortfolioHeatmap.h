@@ -149,6 +149,7 @@ class PortfolioHeatmap : public QWidget {
     QLabel* stat_holdings_ = nullptr;
     QLabel* stat_conc_ = nullptr;
     QLabel* stat_vol_ = nullptr;
+    QLabel* stat_vol_label_ = nullptr; // "VOL <window>" — the span the figure covers
 
     // State
     QVector<portfolio::HoldingWithQuote> holdings_;

@@ -156,7 +156,12 @@ void ImfPanel::on_result(const QString& request_id, const services::EconomicsRes
         const QJsonArray rows = flatten_pivot(values, code, country);
         const QString title = (ind_item ? ind_item->text() : code) +
                               (country.isEmpty() ? " — All Countries" : " — " + country_combo_->currentText());
-        display(rows, title);
+        // One country → {year, value} series; "All Countries" is a wide
+        // cross-sectional pivot with no single series → stat cards "—".
+        if (country.isEmpty())
+            display(rows, title);
+        else
+            display(rows, title, QStringLiteral("value"), QStringLiteral("year"));
         LOG_INFO("ImfPanel", QString("Displayed %1 rows").arg(rows.size()));
     }
 }

@@ -72,9 +72,12 @@ inline QString build_top(const QString& stories, const QString& portfolio) {
         // bullet underneath each story, which doubles the bullet count and
         // reads like a form. Fold it into the sentence instead.
         "- **Top stories:** 5 bullets covering the five biggest stories in the blocks. Write "
+        // The shape is given as a template, not a sample sentence: a concrete
+        // example (company, quarter, region) gets copied into briefs by small
+        // models as if it were today's news.
         "each as ONE flowing sentence that states what happened and why it matters together — "
-        "e.g. 'Mercedes-Benz held Q2 margins despite softening China demand, a read-through for "
-        "every European exporter'. Do NOT write 'Why it matters' as a label, a separate line, "
+        "shaped like '<who> <did what, per the story block>, <why that matters>', using only "
+        "facts from the blocks. Do NOT write 'Why it matters' as a label, a separate line, "
         "or a sub-bullet.\n");
     if (!portfolio.isEmpty())
         p += QStringLiteral(

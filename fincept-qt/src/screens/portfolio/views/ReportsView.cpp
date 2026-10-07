@@ -1,6 +1,8 @@
 // src/screens/portfolio/views/ReportsView.cpp
 #include "screens/portfolio/views/ReportsView.h"
 
+#include "services/portfolio/PortfolioDates.h"
+#include "services/portfolio/PortfolioService.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -87,7 +89,10 @@ void ReportsView::build_ui() {
 
     attr_table_ = new QTableWidget;
     attr_table_->setColumnCount(6);
-    attr_table_->setHorizontalHeaderLabels({"SYMBOL", "WEIGHT", "RETURN", "CONTRIBUTION", "P&L", "STATUS"});
+    // Every figure here is UNREALIZED (open positions vs average cost), and
+    // the last column is a ±5% band on that — not a benchmark comparison.
+    attr_table_->setHorizontalHeaderLabels(
+        {"SYMBOL", "WEIGHT", "UNREAL. RETURN", "UNREAL. CONTRIB.", "UNREAL. P&L", "VS COST"});
     attr_table_->setSelectionMode(QAbstractItemView::NoSelection);
     attr_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     attr_table_->setShowGrid(false);
@@ -183,11 +188,26 @@ void ReportsView::update_summary() {
     add_card(1, 0, "POSITIONS", QString::number(summary_.total_positions), ui::colors::TEXT_PRIMARY);
     add_card(1, 1, "GAINERS", QString::number(summary_.gainers), ui::colors::POSITIVE);
     add_card(1, 2, "LOSERS", QString::number(summary_.losers), ui::colors::NEGATIVE);
-    add_card(1, 3, "RETURN",
+    // Unrealized only — open positions against their average cost.
+    add_card(1, 3, "UNREALIZED RETURN",
              QString("%1%2%")
                  .arg(summary_.total_unrealized_pnl_percent >= 0 ? "+" : "")
                  .arg(fmt(summary_.total_unrealized_pnl_percent)),
              summary_.total_unrealized_pnl_percent >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+
+    // The all-in figure, separately and named for what it sums: unrealized
+    // (open positions) + realized (closed lots, trade-date FX) + dividends.
+    const QString approx = summary_.fx_incomplete || summary_.valuation_partial() ? QStringLiteral("≈") : QString();
+    const auto money = [&](double v) {
+        return QString("%1 %2%3%4").arg(currency_, approx, v >= 0 ? "+" : "").arg(fmt(v));
+    };
+    const double total_pnl =
+        summary_.total_unrealized_pnl + summary_.total_realized_pnl + summary_.total_dividend_income;
+    add_card(2, 0, "REALIZED P&L", money(summary_.total_realized_pnl),
+             summary_.total_realized_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+    add_card(2, 1, "DIVIDENDS", money(summary_.total_dividend_income), ui::colors::CYAN);
+    add_card(2, 2, "TOTAL P&L (UNREAL. + REAL. + DIV.)", money(total_pnl),
+             total_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
 
     layout->addLayout(grid);
 
@@ -200,7 +220,7 @@ void ReportsView::update_summary() {
     auto* breakdown = new QTableWidget;
     breakdown_table_ = breakdown; // held for scroll save/restore across refreshes
     breakdown->setColumnCount(6);
-    breakdown->setHorizontalHeaderLabels({"SYMBOL", "QTY", "AVG COST", "CURRENT", "P&L", "WEIGHT"});
+    breakdown->setHorizontalHeaderLabels({"SYMBOL", "QTY", "AVG COST", "CURRENT", "UNREAL. P&L", "WEIGHT"});
     breakdown->setSelectionMode(QAbstractItemView::NoSelection);
     breakdown->setEditTriggers(QAbstractItemView::NoEditTriggers);
     breakdown->setShowGrid(false);
@@ -259,6 +279,22 @@ void ReportsView::update_transactions() {
 
     const auto& txns = txns_r.value();
     txn_table_->setRowCount(txns.size());
+    QHash<QString, QString> ccy_memo;
+    const auto instrument_ccy = [&](const QString& symbol) -> QString {
+        const QString up = symbol.toUpper();
+        if (const auto it = ccy_memo.constFind(up); it != ccy_memo.constEnd())
+            return it.value();
+        QString c;
+        for (const auto& h : summary_.holdings)
+            if (h.symbol.toUpper() == up) {
+                c = h.currency;
+                break;
+            }
+        if (c.isEmpty())
+            c = services::PortfolioService::cached_symbol_currency(up);
+        ccy_memo.insert(up, c);
+        return c;
+    };
 
     for (int r = 0; r < txns.size(); ++r) {
         const auto& t = txns[r];
@@ -276,12 +312,16 @@ void ReportsView::update_transactions() {
                                  : t.transaction_type == "SELL" ? ui::colors::NEGATIVE
                                                                 : ui::colors::WARNING;
 
-        set(0, t.transaction_date, ui::colors::TEXT_SECONDARY);
+        // Local trade date — the calendar the NAV history is kept on.
+        set(0, portfolio::transaction_local_date(t), ui::colors::TEXT_SECONDARY);
         set(1, t.symbol, ui::colors::CYAN);
         set(2, t.transaction_type, type_color);
         set(3, QString::number(t.quantity, 'f', 2));
         set(4, QString::number(t.price, 'f', 2));
-        set(5, QString("%1 %2").arg(currency_, QString::number(t.total_value, 'f', 2)));
+        // A trade's value is in the INSTRUMENT's currency (quantity × its
+        // price), not the portfolio's; unknown currency gets no label rather
+        // than a wrong one.
+        set(5, QString("%1 %2").arg(instrument_ccy(t.symbol), QString::number(t.total_value, 'f', 2)).trimmed());
         set(6, t.notes, ui::colors::TEXT_TERTIARY);
     }
 }
@@ -319,12 +359,13 @@ void ReportsView::update_attribution() {
 
         const char* ret_color = h.unrealized_pnl_percent >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
         const char* contrib_color = contribution >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-        QString status = h.unrealized_pnl_percent > 5    ? "OUTPERFORM"
-                         : h.unrealized_pnl_percent < -5 ? "UNDERPERFORM"
-                                                         : "NEUTRAL";
-        const char* status_color = status == "OUTPERFORM"     ? ui::colors::POSITIVE
-                                   : status == "UNDERPERFORM" ? ui::colors::NEGATIVE
-                                                              : ui::colors::TEXT_TERTIARY;
+        // A ±5% band on the unrealized return against cost — there is no
+        // benchmark in this comparison, so it must not say OUTPERFORM.
+        const bool up = h.unrealized_pnl_percent > 5;
+        const bool down = h.unrealized_pnl_percent < -5;
+        const QString status = up ? QStringLiteral("UP >5%") : down ? QStringLiteral("DOWN >5%")
+                                                                    : QStringLiteral("WITHIN ±5%");
+        const char* status_color = up ? ui::colors::POSITIVE : down ? ui::colors::NEGATIVE : ui::colors::TEXT_TERTIARY;
 
         set(0, h.symbol, ui::colors::CYAN);
         set(1, QString("%1%").arg(QString::number(h.weight, 'f', 1)));

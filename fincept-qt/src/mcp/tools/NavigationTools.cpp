@@ -4,6 +4,12 @@
 
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
+#include "app/DockScreenRouter.h"
+#include "mcp/AsyncDispatch.h"
+
+#include <QApplication>
+#include <QPromise>
+#include <QWidget>
 
 #include <QVariantMap>
 
@@ -142,11 +148,41 @@ std::vector<ToolDef> get_navigation_tools() {
     {
         ToolDef t;
         t.name = "get_current_tab";
-        t.description = "Query the currently active screen (publishes event, screen responds).";
+        t.description = "Get the screen the user currently has active in the terminal (screen id and, "
+                        "when it is a known tab, its display name).";
         t.category = "navigation";
-        t.handler = [](const QJsonObject&) -> ToolResult {
-            EventBus::instance().publish("nav.get_current_screen", {});
-            return ToolResult::ok("Current screen query sent via event bus");
+        // Used to publish an event nothing answered and return "query sent" —
+        // a success with no tab in it. Now reads the dock router's current
+        // screen on the GUI thread (window that has focus, else the first).
+        t.async_handler = [](const QJsonObject&, ToolContext ctx,
+                             std::shared_ptr<QPromise<ToolResult>> promise) {
+            AsyncDispatch::callback_to_promise(qApp, std::move(ctx), promise, [](auto resolve) {
+                QWidget* preferred = QApplication::activeWindow();
+                QString screen_id;
+                auto read_from = [&screen_id](QWidget* w) {
+                    if (!w || !screen_id.isEmpty())
+                        return;
+                    for (auto* r : w->findChildren<fincept::DockScreenRouter*>()) {
+                        screen_id = r->current_screen_id();
+                        if (!screen_id.isEmpty())
+                            return;
+                    }
+                };
+                read_from(preferred);
+                for (QWidget* w : QApplication::topLevelWidgets())
+                    read_from(w);
+                if (screen_id.isEmpty()) {
+                    resolve(ToolResult::fail("No active screen could be determined."));
+                    return;
+                }
+                QJsonObject out{{"screen_id", screen_id}};
+                const int idx = find_tab_index(screen_id);
+                if (idx >= 0) {
+                    out["display_name"] = TAB_MAP[idx].display_name;
+                    out["tab_index"] = TAB_MAP[idx].index;
+                }
+                resolve(ToolResult::ok_data(out));
+            });
         };
         tools.push_back(std::move(t));
     }

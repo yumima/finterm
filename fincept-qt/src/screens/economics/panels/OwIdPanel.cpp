@@ -29,7 +29,7 @@ struct OwIdSeries {
 static const QList<OwIdSeries> kOwIdSeries = {
     {"CO2 Emissions", "co2", "United States"}, {"CO2 Per Capita", "co2_per_capita", "United States"},
     {"Energy Consumption", "energy", "China"}, {"Life Expectancy", "life_expectancy", "Japan"},
-    {"Poverty Headcount", "poverty", "World"}, {"GDP Per Capita", "gdp_per_capita", "Germany"},
+    {"Extreme Poverty Share ($3/day)", "poverty", "World"}, {"GDP Per Capita", "gdp_per_capita", "Germany"},
 };
 
 } // namespace
@@ -106,7 +106,7 @@ void OwIdPanel::on_fetch() {
     show_loading("Fetching OWID: " + series.label + " — " + country + "…");
 
     services::EconomicsService::instance().execute(kOwIdSourceId, kOwIdScript, series.command, {country, start, end},
-                                                   "owid_" + series.command);
+                                                   "owid_" + series.command + "|" + country + "|" + start + "|" + end);
 }
 
 void OwIdPanel::on_result(const QString& request_id, const services::EconomicsResult& result) {
@@ -133,15 +133,29 @@ void OwIdPanel::on_result(const QString& request_id, const services::EconomicsRe
         return;
     }
 
+    // co2/energy rows are wide (dozens of columns per year); name the
+    // headline column explicitly and say so in the title. The grapher-chart
+    // commands return a single {year, value} series.
+    const QString cmd = request_id.mid(5).section('|', 0, 0);
+    QString value_key = QStringLiteral("value");
+    QString stats_note;
+    if (cmd == QLatin1String("co2")) {
+        value_key = QStringLiteral("co2");
+        stats_note = QStringLiteral(" — stats: annual CO₂ (Mt)");
+    } else if (cmd == QLatin1String("energy")) {
+        value_key = QStringLiteral("primary_energy_consumption");
+        stats_note = QStringLiteral(" — stats: primary energy (TWh)");
+    }
+
+    QString label = cmd;
+    for (const auto& s : kOwIdSeries)
+        if (s.command == cmd)
+            label = s.label;
     const QString title = result.data["title"].toString();
     const QString country = result.data["country"].toString();
-    const QString display_title =
-        title.isEmpty()
-            ? ("OWID: " + (series_combo_->currentIndex() >= 0 ? kOwIdSeries[series_combo_->currentIndex()].label
-                                                              : request_id.mid(5)))
-            : (title + (country.isEmpty() || country == "All" ? "" : " — " + country));
-
-    display(rows, display_title);
+    const QString display_title = (title.isEmpty() ? "OWID: " + label : title) +
+                                  (country.isEmpty() || country == "All" ? "" : " — " + country) + stats_note;
+    display(rows, display_title, value_key, value_key.isEmpty() ? QString() : QStringLiteral("year"));
     LOG_INFO("OwIdPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(display_title));
 }
 

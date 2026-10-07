@@ -137,10 +137,9 @@ class DCFModel:
         if maintenance_capex is not None and growth_capex is not None:
             total_capex = maintenance_capex + growth_capex
         else:
+            # No maintenance/growth split was supplied: report the total only
+            # (an assumed split would be invented data).
             total_capex = capex
-            # Default split: 60% maintenance, 40% growth if not provided
-            maintenance_capex = capex * 0.6 if maintenance_capex is None else maintenance_capex
-            growth_capex = capex * 0.4 if growth_capex is None else growth_capex
 
         # NOPAT = EBIT × (1 - Tax)
         nopat = ebit * (1 - tax_rate)
@@ -203,8 +202,8 @@ class DCFModel:
         """
 
         # Input validation
-        if not (0 <= terminal_growth_rate <= 0.05):
-            raise ValueError(f"Terminal growth rate {terminal_growth_rate:.2%} should be 0-5% (GDP growth)")
+        if method == 'perpetuity' and not (-0.05 <= terminal_growth_rate <= 0.05):
+            raise ValueError(f"Terminal growth rate {terminal_growth_rate:.2%} should be within -5%..5% (long-run nominal GDP)")
 
         if method == 'perpetuity':
             if wacc <= terminal_growth_rate:
@@ -224,8 +223,8 @@ class DCFModel:
             if exit_multiple is None or exit_metric is None:
                 raise ValueError("exit_multiple and exit_metric required for exit_multiple method")
 
-            if not (3.0 <= exit_multiple <= 30.0):
-                raise ValueError(f"Exit multiple {exit_multiple}x outside typical range (3-30x)")
+            if exit_multiple <= 0:
+                raise ValueError(f"Exit multiple must be positive (got {exit_multiple}x)")
 
             terminal_value = exit_multiple * exit_metric
 
@@ -243,7 +242,8 @@ class DCFModel:
     def calculate_enterprise_value(self, fcf_projections: List[float],
                                   terminal_value: float,
                                   wacc: float,
-                                  mid_year_convention: bool = False) -> Dict[str, Any]:
+                                  mid_year_convention: bool = False,
+                                  terminal_method: str = 'perpetuity') -> Dict[str, Any]:
         """Calculate enterprise value from DCF
 
         Args:
@@ -251,6 +251,10 @@ class DCFModel:
             terminal_value: Terminal value
             wacc: Weighted average cost of capital
             mid_year_convention: If True, assumes cash flows occur mid-year (default: False)
+            terminal_method: 'perpetuity' or 'exit_multiple'. Under the mid-year
+                convention a perpetuity-growth TV (a stream of mid-year flows) is
+                discounted N-0.5 years, but an exit-multiple TV (a sale at the
+                end of year N on trailing EBITDA) is discounted the full N years.
         """
 
         pv_fcf_list = []
@@ -275,7 +279,7 @@ class DCFModel:
 
         terminal_year = len(fcf_projections)
 
-        if mid_year_convention:
+        if mid_year_convention and terminal_method == 'perpetuity':
             terminal_discount_factor = (1 + wacc) ** (terminal_year - 0.5)
         else:
             terminal_discount_factor = (1 + wacc) ** terminal_year
@@ -288,7 +292,7 @@ class DCFModel:
             'pv_of_fcf': pv_fcf_total,
             'pv_of_terminal_value': pv_terminal_value,
             'enterprise_value': enterprise_value,
-            'terminal_value_contribution': (pv_terminal_value / enterprise_value * 100) if enterprise_value > 0 else 0,
+            'terminal_value_contribution': (pv_terminal_value / enterprise_value * 100) if enterprise_value > 0 else None,
             'fcf_details': pv_fcf_list,
             'wacc_used': wacc * 100,
             'mid_year_convention': mid_year_convention
@@ -335,7 +339,7 @@ class DCFModel:
 
         shares = diluted_shares if diluted_shares else shares_outstanding
 
-        price_per_share = equity_value / shares if shares > 0 else 0
+        price_per_share = equity_value / shares if shares and shares > 0 else None
 
         return {
             'equity_value': equity_value,
@@ -563,93 +567,235 @@ class DCFModel:
 
         return inputs
 
-def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+# ── JSON contract (MAAnalyticsService / ma_dcf MCP tool) ─────────────────────
 
-    if len(sys.argv) < 2:
-        result = {
-            "success": False,
-            "error": "No command specified. Usage: dcf_model.py <command> [args...]"
+def _dcf_inputs(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Resolve the DCF inputs from one params object. Every assumption is a
+    required input; nothing is defaulted.
+
+    WACC: either `wacc` directly, or its components risk_free_rate, beta,
+          market_risk_premium, cost_of_debt, tax_rate, market_cap (equity
+          market value) and debt (market value of debt).
+    FCF:  either `fcf_projections` (list of explicit FCFF per year) or a base
+          year build -- ebit, tax_rate, d_and_a, capex, change_in_nwc -- grown
+          by `growth_rates` (list, decimal per projection year).
+    Terminal: terminal_method 'perpetuity' (needs terminal_growth) or
+          'exit_multiple' (needs exit_multiple and terminal_ebitda, or a base
+          `ebitda` grown at the same growth_rates).
+    Bridge: cash, debt (or net_debt), optional minority_interest /
+          preferred_stock (0 = none), shares_outstanding.
+    """
+    from corporateFinance._cli import num, opt_num, num_list, has, InputError
+
+    out: Dict[str, Any] = {}
+    model = DCFModel(str(p.get('company_name') or 'Target'))
+
+    # WACC
+    if has(p, 'wacc'):
+        out['wacc'] = num(p, 'wacc', gt=0, max=1)
+        out['wacc_detail'] = {'source': 'input'}
+    else:
+        tax = num(p, 'tax_rate', min=0, max=0.6)
+        w = model.calculate_wacc(
+            risk_free_rate=num(p, 'risk_free_rate', min=0, max=0.2),
+            market_risk_premium=num(p, 'market_risk_premium', label='market_risk_premium (equity risk premium)', min=0, max=0.2),
+            beta=num(p, 'beta', min=0.1, max=3.0),
+            cost_of_debt=num(p, 'cost_of_debt', min=0, max=0.3),
+            tax_rate=tax,
+            market_value_equity=num(p, 'market_cap', label='market_cap (market value of equity)', min=0),
+            market_value_debt=num(p, 'debt', min=0),
+            country_risk_premium=opt_num(p, 'country_risk_premium', 0.0, min=0, max=0.15),
+            size_premium=opt_num(p, 'size_premium', 0.0, min=0, max=0.10),
+        )
+        if p.get('market_cap', 0) + p.get('debt', 0) <= 0:
+            raise InputError("market_cap + debt must be positive to weight the WACC")
+        out['wacc'] = w['wacc']
+        out['wacc_detail'] = {
+            'source': 'capm',
+            'cost_of_equity_pct': w['cost_of_equity'],
+            'cost_of_debt_after_tax_pct': w['cost_of_debt_aftertax'],
+            'equity_weight_pct': w['equity_weight'],
+            'debt_weight_pct': w['debt_weight'],
         }
-        print(json.dumps(result))
-        sys.exit(1)
 
-    command = sys.argv[1]
+    # Free cash flows
+    if has(p, 'fcf_projections'):
+        fcfs = num_list(p, 'fcf_projections')
+        out['fcf_rows'] = [{'year': i + 1, 'fcf': f} for i, f in enumerate(fcfs)]
+        out['base_fcf'] = None
+        growth = None
+    else:
+        growth = num_list(p, 'growth_rates', label='growth_rates (FCF growth per projection year)')
+        if any(g <= -1 for g in growth):
+            raise InputError("growth_rates must be > -100%")
+        base = model.calculate_free_cash_flow(
+            ebit=num(p, 'ebit'),
+            tax_rate=num(p, 'tax_rate', min=0, max=0.6),
+            depreciation=num(p, 'd_and_a', label='d_and_a (depreciation & amortization)', min=0),
+            capex=num(p, 'capex', min=0),
+            change_in_nwc=num(p, 'change_in_nwc', label='change_in_nwc (increase in net working capital)'),
+        )
+        out['base_fcf'] = base['free_cash_flow']
+        proj = model.project_cash_flows(base['free_cash_flow'], growth)
+        fcfs = [r['fcf'] for r in proj]
+        out['fcf_rows'] = [{'year': r['year'], 'growth_pct': r['growth_rate'], 'fcf': r['fcf']} for r in proj]
+        out['base_fcf_detail'] = {
+            'ebit': base['ebit'], 'taxes': base['tax'], 'nopat': base['nopat'],
+            'add_d_and_a': base['add_depreciation'], 'less_capex': base['less_capex'],
+            'less_change_in_nwc': base['less_change_in_nwc'], 'base_year_fcf': base['free_cash_flow'],
+        }
+    out['fcfs'] = fcfs
 
-    try:
-        if command in ("calculate", "dcf"):
-            # Host sends: "dcf" wacc_inputs fcf_inputs growth_rates terminal_growth balance_sheet shares_outstanding
-            if len(sys.argv) < 8:
-                raise ValueError("All DCF inputs required: wacc_inputs, fcf_inputs, growth_rates, terminal_growth, balance_sheet, shares")
-
-            wacc_inputs = json.loads(sys.argv[2])
-            fcf_inputs = json.loads(sys.argv[3])
-            growth_rates = json.loads(sys.argv[4])
-            terminal_growth_rate = float(sys.argv[5])
-            balance_sheet = json.loads(sys.argv[6])
-            shares_outstanding = float(sys.argv[7])
-
-            dcf = DCFModel("Target Company")
-            dcf_result = dcf.comprehensive_dcf(
-                wacc_inputs=wacc_inputs,
-                fcf_inputs=fcf_inputs,
-                growth_rates=growth_rates,
-                terminal_growth_rate=terminal_growth_rate,
-                balance_sheet=balance_sheet,
-                shares_outstanding=shares_outstanding
-            )
-
-            result = {
-                "success": True,
-                "data": dcf_result
-            }
-            print(json.dumps(result))
-
-        elif command == "sensitivity":
-            # Host sends: "sensitivity" base_fcf growth_rates terminal_growth_scenarios wacc_scenarios balance_sheet shares_outstanding
-            if len(sys.argv) < 8:
-                raise ValueError("Sensitivity inputs required: base_fcf, growth_rates, terminal_growth_scenarios, wacc_scenarios, balance_sheet, shares")
-
-            base_fcf = float(sys.argv[2])
-            growth_rates = json.loads(sys.argv[3])
-            terminal_growth_scenarios = json.loads(sys.argv[4])
-            wacc_scenarios = json.loads(sys.argv[5])
-            balance_sheet = json.loads(sys.argv[6])
-            shares_outstanding = float(sys.argv[7])
-
-            dcf = DCFModel("Target Company")
-            sensitivity_result = dcf.sensitivity_analysis(
-                base_fcf=base_fcf,
-                growth_rates=growth_rates,
-                terminal_growth_scenarios=terminal_growth_scenarios,
-                wacc_scenarios=wacc_scenarios,
-                balance_sheet=balance_sheet,
-                shares_outstanding=shares_outstanding
-            )
-
-            result = {
-                "success": True,
-                "data": sensitivity_result
-            }
-            print(json.dumps(result))
-
+    # Terminal value
+    method = str(p.get('terminal_method') or '').strip().lower()
+    if method in ('perpetuity', 'gordon', 'perpetuity_growth'):
+        method = 'perpetuity'
+        out['terminal_growth'] = num(p, 'terminal_growth', min=-0.05, max=0.05)
+    elif method in ('exit_multiple', 'multiple'):
+        method = 'exit_multiple'
+        out['exit_multiple'] = num(p, 'exit_multiple', gt=0)
+        if has(p, 'terminal_ebitda'):
+            out['terminal_ebitda'] = num(p, 'terminal_ebitda')
+            out['terminal_ebitda_basis'] = 'input'
         else:
-            result = {
-                "success": False,
-                "error": f"Unknown command: {command}. Available: dcf, sensitivity"
-            }
-            print(json.dumps(result))
-            sys.exit(1)
+            if growth is None:
+                raise InputError("exit_multiple method needs terminal_ebitda when fcf_projections are given")
+            e = num(p, 'ebitda', label='ebitda (base-year EBITDA, or give terminal_ebitda)')
+            for g in growth:
+                e *= (1 + g)
+            out['terminal_ebitda'] = e
+            out['terminal_ebitda_basis'] = 'base EBITDA grown at growth_rates'
+    else:
+        raise InputError("Missing required input: terminal_method ('perpetuity' or 'exit_multiple')")
+    out['terminal_method'] = method
 
-    except Exception as e:
-        result = {
-            "success": False,
-            "error": str(e),
-            "command": command
-        }
-        print(json.dumps(result))
-        sys.exit(1)
+    mid = p.get('mid_year_convention')
+    if mid is None:
+        raise InputError("Missing required input: mid_year_convention (true/false)")
+    out['mid_year'] = bool(mid)
+
+    # Bridge
+    if has(p, 'net_debt') and not has(p, 'cash'):
+        out['net_debt'] = num(p, 'net_debt')
+    else:
+        out['cash'] = num(p, 'cash', min=0)
+        out['debt'] = num(p, 'debt', min=0)
+        out['net_debt'] = out['debt'] - out['cash']
+    out['minority_interest'] = opt_num(p, 'minority_interest', 0.0, min=0)
+    out['preferred_stock'] = opt_num(p, 'preferred_stock', 0.0, min=0)
+    out['shares'] = num(p, 'shares_outstanding', gt=0) if has(p, 'shares_outstanding') else num(p, 'shares', label='shares_outstanding', gt=0)
+    out['model'] = model
+    return out
+
+
+def _dcf_value(i: Dict[str, Any], wacc: float, terminal_growth: Optional[float] = None) -> Dict[str, Any]:
+    model: DCFModel = i['model']
+    fcfs = i['fcfs']
+    if i['terminal_method'] == 'perpetuity':
+        g = i['terminal_growth'] if terminal_growth is None else terminal_growth
+        tv = model.calculate_terminal_value(fcfs[-1], g, wacc, method='perpetuity')
+    else:
+        tv = model.calculate_terminal_value(fcfs[-1], 0.0, wacc, method='exit_multiple',
+                                            exit_multiple=i['exit_multiple'], exit_metric=i['terminal_ebitda'])
+    ev = model.calculate_enterprise_value(fcfs, tv['terminal_value'], wacc,
+                                          mid_year_convention=i['mid_year'], terminal_method=i['terminal_method'])
+    equity = ev['enterprise_value'] - i['net_debt'] - i['minority_interest'] - i['preferred_stock']
+    return {'tv': tv, 'ev': ev, 'equity_value': equity, 'price_per_share': equity / i['shares']}
+
+
+def _json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    i = _dcf_inputs(p)
+    wacc = i['wacc']
+    r = _dcf_value(i, wacc)
+    ev = r['ev']
+    rows = []
+    for row, d in zip(i['fcf_rows'], ev['fcf_details']):
+        rows.append({**row, 'discount_factor': d['discount_factor'], 'present_value': d['present_value']})
+    data = {
+        'enterprise_value': ev['enterprise_value'],
+        'equity_value': r['equity_value'],
+        'value_per_share': r['price_per_share'],
+        'wacc_pct': wacc * 100,
+        'terminal_method': i['terminal_method'],
+        'terminal_value': r['tv']['terminal_value'],
+        'pv_fcf': ev['pv_of_fcf'],
+        'pv_terminal_value': ev['pv_of_terminal_value'],
+        'terminal_value_share_pct': ev['terminal_value_contribution'],
+        'mid_year_convention': i['mid_year'],
+        'projections': rows,
+        'equity_bridge': {
+            'enterprise_value': ev['enterprise_value'],
+            'less_net_debt': i['net_debt'],
+            'less_minority_interest': i['minority_interest'],
+            'less_preferred_stock': i['preferred_stock'],
+            'equity_value': r['equity_value'],
+            'shares_outstanding': i['shares'],
+            'value_per_share': r['price_per_share'],
+        },
+        'wacc_build': i['wacc_detail'],
+    }
+    if i['terminal_method'] == 'perpetuity':
+        data['terminal_growth_pct'] = i['terminal_growth'] * 100
+        # Implied exit multiple is informative only when EBITDA was supplied.
+    else:
+        data['exit_multiple_x'] = i['exit_multiple']
+        data['terminal_ebitda'] = i['terminal_ebitda']
+        data['terminal_ebitda_basis'] = i['terminal_ebitda_basis']
+        # Implied perpetuity growth: TV = FCF_N (1+g)/(wacc-g)  =>  g = (TV*wacc - FCF_N)/(TV + FCF_N)
+        tvv, f = r['tv']['terminal_value'], i['fcfs'][-1]
+        data['implied_terminal_growth_pct'] = (tvv * wacc - f) / (tvv + f) * 100 if (tvv + f) else None
+    if i.get('base_fcf_detail'):
+        data['base_year_fcf'] = i['base_fcf_detail']
+    return data
+
+
+def _json_sensitivity(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Grid of value per share over WACC x terminal growth (perpetuity) or
+    WACC alone (exit multiple). Base inputs are the same as `calculate`
+    (optionally nested under base_params)."""
+    from corporateFinance._cli import num_list, InputError
+    base = p.get('base_params') if isinstance(p.get('base_params'), dict) else p
+    i = _dcf_inputs(base)
+    waccs = num_list(p, 'wacc_range', label='wacc_range (list of WACC values)')
+    if i['terminal_method'] == 'perpetuity':
+        tgs = num_list(p, 'tgr_range', label='tgr_range (list of terminal growth values)')
+    else:
+        tgs = [None]
+    grid = []
+    for g in tgs:
+        row = {'terminal_growth_pct': g * 100 if g is not None else None}
+        for w in waccs:
+            key = f"WACC {w * 100:.2f}%"
+            if g is not None and w <= g:
+                row[key] = None
+                continue
+            row[key] = _dcf_value(i, w, g)['price_per_share']
+        grid.append(row)
+    return {
+        'terminal_method': i['terminal_method'],
+        'base_wacc_pct': i['wacc'] * 100,
+        'value_per_share_grid': grid,
+        'note': 'Rows: terminal growth; columns: WACC; cells: value per share. Null where WACC <= g.',
+    }
+
+
+JSON_COMMANDS = {
+    'calculate': _json_calculate,
+    'dcf': _json_calculate,
+    'sensitivity': _json_sensitivity,
+}
+
+
+def main():
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json(JSON_COMMANDS)
+
 
 if __name__ == '__main__':
     main()

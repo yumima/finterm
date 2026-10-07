@@ -394,96 +394,75 @@ class CostSynergyAnalyzer:
             'on_track': realization_rate >= 85.0
         }
 
+# ── JSON contract (MAAnalyticsService "calculate") ───────────────────────────
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from corporateFinance._cli import is_json_call, run_json, num, opt_num, text, has, pct  # noqa: E402
+from corporateFinance.synergies.synergy_valuation import (  # noqa: E402
+    project_synergies, projection_inputs)
+
+
+def _run_rate_cost_synergy(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Steady-state annual pre-tax cost savings and one-time cost to achieve
+    for the chosen method; every driver is a caller input."""
+    kind = text(p, 'type', choices=('simple', 'headcount', 'facilities', 'procurement')) \
+        if has(p, 'type') else 'simple'
+    if kind == 'simple':
+        base_key = 'combined_opex' if has(p, 'combined_opex') else 'combined_cost_base'
+        base = num(p, base_key, label='combined_opex (combined cost base)', min=0)
+        frac = num(p, 'synergy_pct', label='synergy_pct (decimal share of the cost base)', min=0, max=1)
+        return {'type': kind, 'run_rate': base * frac,
+                'one_time': opt_num(p, 'one_time_cost', 0.0, min=0),
+                'combined_opex': base, 'synergy_pct': pct(frac)}
+    if kind == 'headcount':
+        roles = num(p, 'duplicate_roles', min=0)
+        loaded = num(p, 'average_loaded_cost', min=0)
+        sev = num(p, 'severance_multiple', label='severance_multiple (x annual loaded cost)', min=0)
+        return {'type': kind, 'run_rate': roles * loaded, 'one_time': roles * loaded * sev,
+                'duplicate_roles': roles, 'severance_multiple_x': sev}
+    if kind == 'facilities':
+        n = num(p, 'facilities_to_close', min=0)
+        annual = num(p, 'annual_cost_per_facility', min=0)
+        closure = num(p, 'closure_cost_per_facility', min=0)
+        lease = opt_num(p, 'lease_termination_cost', 0.0, min=0)
+        return {'type': kind, 'run_rate': n * annual, 'one_time': n * closure + lease,
+                'facilities_to_close': n}
+    spend = num(p, 'combined_spend', min=0)
+    vol = num(p, 'volume_discount', label='volume_discount (decimal)', min=0, max=1)
+    rat = opt_num(p, 'supplier_rationalization_benefit', 0.0, min=0, max=1)
+    return {'type': kind, 'run_rate': spend * (vol + rat),
+            'one_time': opt_num(p, 'implementation_cost', 0.0, min=0),
+            'volume_savings': spend * vol, 'rationalization_savings': spend * rat}
+
+
+def json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Cost synergy run-rate + DCF. Requires tax_rate, discount_rate,
+    ramp_years, projection_years; optional terminal_growth,
+    integration_cost_years (phasing of the one-time cost to achieve)."""
+    rr = _run_rate_cost_synergy(p)
+    t = projection_inputs(p)
+    val = project_synergies(0.0, None, rr['run_rate'], rr['one_time'], **t)
+    out = {'synergy_type': rr['type'], 'run_rate_cost_synergy': rr['run_rate'],
+           'one_time_cost_to_achieve': rr['one_time']}
+    out.update({k: v for k, v in rr.items() if k not in ('type', 'run_rate', 'one_time')})
+    out.update({k: v for k, v in val.items()
+                if k not in ('run_rate_revenue_synergy', 'revenue_synergy_margin_pct', 'one_time_integration_cost')})
+    for row in out['yearly_projections']:
+        for k in ('revenue_synergy', 'revenue_synergy_ebitda'):
+            row.pop(k, None)
+    return out
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({"calculate": json_calculate})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "cost":
-            # Host sends: "cost" synergy_type synergy_params_json
-            if len(sys.argv) < 4:
-                raise ValueError("Synergy type and params required")
-
-            synergy_type = sys.argv[2]
-            params = json.loads(sys.argv[3])
-
-            analyzer = CostSynergyAnalyzer(
-                tax_rate=params.get('tax_rate', 0.25),
-                cost_of_capital=params.get('cost_of_capital', 0.10)
-            )
-
-            if synergy_type == "headcount":
-                analysis = analyzer.calculate_headcount_synergy(
-                    duplicate_roles=params.get('duplicate_roles', 0),
-                    average_loaded_cost=params.get('average_loaded_cost', 0),
-                    severance_multiple=params.get('severance_multiple', 1.0),
-                    ramp_years=params.get('ramp_years', 2)
-                )
-            elif synergy_type == "facilities":
-                analysis = analyzer.calculate_facilities_synergy(
-                    facilities_to_close=params.get('facilities_to_close', 0),
-                    annual_cost_per_facility=params.get('annual_cost_per_facility', 0),
-                    closure_cost_per_facility=params.get('closure_cost_per_facility', 0),
-                    lease_termination_cost=params.get('lease_termination_cost', 0),
-                    ramp_years=params.get('ramp_years', 2)
-                )
-            elif synergy_type == "procurement":
-                analysis = analyzer.calculate_procurement_synergy(
-                    combined_spend=params.get('combined_spend', 0),
-                    volume_discount=params.get('volume_discount', 0.05),
-                    supplier_rationalization_benefit=params.get('supplier_rationalization_benefit', 0.02),
-                    implementation_cost=params.get('implementation_cost', 0),
-                    ramp_years=params.get('ramp_years', 3)
-                )
-            else:
-                analysis = analyzer.calculate_headcount_synergy(
-                    duplicate_roles=params.get('duplicate_roles', 0),
-                    average_loaded_cost=params.get('average_loaded_cost', 0),
-                    severance_multiple=params.get('severance_multiple', 1.0),
-                    ramp_years=params.get('ramp_years', 2)
-                )
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        elif command == "cost_synergy":
-            if len(sys.argv) < 6:
-                raise ValueError("Duplicate roles, average loaded cost, severance multiple, and ramp years required")
-
-            duplicate_roles = int(sys.argv[2])
-            average_loaded_cost = float(sys.argv[3])
-            severance_multiple = float(sys.argv[4])
-            ramp_years = int(sys.argv[5])
-
-            analyzer = CostSynergyAnalyzer(tax_rate=0.25, cost_of_capital=0.10)
-
-            analysis = analyzer.calculate_headcount_synergy(
-                duplicate_roles=duplicate_roles,
-                average_loaded_cost=average_loaded_cost,
-                severance_multiple=severance_multiple,
-                ramp_years=ramp_years
-            )
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}. Available: cost, cost_synergy"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

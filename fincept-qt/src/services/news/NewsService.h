@@ -87,6 +87,13 @@ struct NewsAnalysis {
     RiskSignal geopolitical;
     RiskSignal operational;
     RiskSignal market;
+    // Which model actually wrote this analysis. Differs from the configured
+    // one when the quota-fallback chain hopped elsewhere (fell_back) — the UI
+    // names it rather than implying the configured model answered.
+    QString model_used;
+    QString provider_used;
+    QString requested_model;
+    bool fell_back = false;
 };
 
 // ── RSS Feed definition ─────────────────────────────────────────────────────

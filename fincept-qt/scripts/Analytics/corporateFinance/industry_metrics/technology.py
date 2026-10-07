@@ -1,4 +1,10 @@
 """Technology Industry-Specific M&A Metrics"""
+import sys as _sys
+from pathlib import Path as _Path
+
+_ANALYTICS = str(_Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in _sys.path:
+    _sys.path.insert(0, _ANALYTICS)
 from typing import Dict, Any, List, Optional
 from enum import Enum
 
@@ -429,174 +435,108 @@ def _build_standard_output(analysis: dict, sector: str) -> dict:
     }
 
 
+
+
+def _div(a, b):
+    """a / b, or None when either side is missing or b is zero."""
+    if a is None or b is None or b == 0:
+        return None
+    return a / b
+
+# ── JSON contract (MAAnalyticsService "calculate") ──────────────────────────
+# Only metrics the inputs actually determine are reported. No benchmark
+# multiples or "suggested" ranges: the hardcoded tables above are not data.
+
+def tech_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """{sector: saas|marketplace|semiconductor, ...}
+
+    saas         : arr, growth, gross_margin, profit_margin (FCF or EBITDA margin);
+                   optional nrr, sm_expense, net_new_arr, new_customers, arpa,
+                   annual_churn, enterprise_value
+    marketplace  : gmv, revenue; optional growth, enterprise_value
+    semiconductor: revenue, gross_margin, rd_spend; optional backlog, ebitda,
+                   enterprise_value
+    Rates are decimals (0.40 = 40 %).
+    """
+    from corporateFinance._cli import num, opt_num, pct, text
+    q = dict(p)
+    if q.get('sector') is None and q.get('sub_sector') is not None:
+        q['sector'] = str(q['sub_sector']).lower()
+    if q.get('growth') is None and q.get('growth_rate') is not None:
+        q['growth'] = q['growth_rate']
+    sector = text(q, 'sector', choices=['saas', 'marketplace', 'semiconductor'])
+    ev = opt_num(q, 'enterprise_value', None, label='Enterprise value', gt=0)
+    out: Dict[str, Any] = {'sector': sector}
+
+    if sector == 'saas':
+        arr = num(q, 'arr', label='ARR', gt=0)
+        growth = num(q, 'growth', label='ARR growth (decimal)')
+        gm = num(q, 'gross_margin', label='Gross margin (decimal)', min=-1, max=1)
+        pm = num(q, 'profit_margin', label='FCF/EBITDA margin (decimal)', min=-5, max=1)
+        nrr = opt_num(q, 'nrr', None, label='Net revenue retention (decimal)', min=0)
+        sm = opt_num(q, 'sm_expense', None, label='Sales & marketing expense', gt=0)
+        nna = opt_num(q, 'net_new_arr', None, label='Net new ARR')
+        new_cust = opt_num(q, 'new_customers', None, label='New customers', gt=0)
+        arpa = opt_num(q, 'arpa', None, label='ARR per account', gt=0)
+        churn = opt_num(q, 'annual_churn', None, label='Annual gross churn (decimal)', gt=0, max=1)
+        cac = _div(sm, new_cust)
+        gross_profit_per_month = arpa * gm / 12 if arpa is not None else None
+        ltv = arpa * gm / churn if arpa is not None and churn is not None else None
+        out.update({
+            'arr': arr,
+            'growth_pct': pct(growth),
+            'gross_margin_pct': pct(gm),
+            'profit_margin_pct': pct(pm),
+            'rule_of_40_pct': pct(growth + pm),
+            'passes_rule_of_40': (growth + pm) >= 0.40,
+            'net_revenue_retention_pct': pct(nrr),
+            'magic_number_x': _div(nna, sm),
+            'cac': cac,
+            'cac_payback_months': _div(cac, gross_profit_per_month) if gross_profit_per_month and gross_profit_per_month > 0 else None,
+            'ltv': ltv,
+            'ltv_cac_x': _div(ltv, cac),
+            'ev_arr_x': _div(ev, arr),
+        })
+    elif sector == 'marketplace':
+        gmv = num(q, 'gmv', label='GMV', gt=0)
+        rev = num(q, 'revenue', label='Net revenue', min=0)
+        growth = opt_num(q, 'growth', None, label='GMV growth (decimal)')
+        out.update({
+            'gmv': gmv,
+            'revenue': rev,
+            'take_rate_pct': pct(rev / gmv),
+            'growth_pct': pct(growth),
+            'ev_gmv_x': _div(ev, gmv),
+            'ev_revenue_x': _div(ev, rev),
+        })
+    else:
+        rev = num(q, 'revenue', label='Revenue', gt=0)
+        gm = num(q, 'gross_margin', label='Gross margin (decimal)', min=-1, max=1)
+        rd = num(q, 'rd_spend', label='R&D spend', min=0)
+        backlog = opt_num(q, 'backlog', None, label='Design-win backlog', min=0)
+        ebitda = opt_num(q, 'ebitda', None, label='EBITDA')
+        out.update({
+            'revenue': rev,
+            'gross_margin_pct': pct(gm),
+            'rd_intensity_pct': pct(rd / rev),
+            'backlog_coverage_x': _div(backlog, rev),
+            'ebitda_margin_pct': pct(_div(ebitda, rev)),
+            'ev_revenue_x': _div(ev, rev),
+            'ev_ebitda_x': _div(ev, ebitda) if ebitda and ebitda > 0 else None,
+        })
+    return out
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'calculate': tech_json})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "tech":
-            if len(sys.argv) < 4:
-                raise ValueError("Sector and company data required")
-
-            sector = sys.argv[2]
-            company_data = json.loads(sys.argv[3])
-
-            # Determine business model from sector
-            if 'saas' in sector.lower():
-                model = TechBusinessModel.SAAS
-            elif 'consumer' in sector.lower():
-                model = TechBusinessModel.CONSUMER_SOFTWARE
-            elif 'marketplace' in sector.lower():
-                model = TechBusinessModel.MARKETPLACE
-            elif 'semiconductor' in sector.lower():
-                model = TechBusinessModel.SEMICONDUCTOR
-            else:
-                model = TechBusinessModel.SAAS  # default
-
-            analyzer = TechnologyMetrics(model)
-            sector_key = sector.lower()
-
-            # Route to appropriate calculation based on model
-            if model == TechBusinessModel.SAAS:
-                # Map frontend keys to Python parameter names
-                saas_aliases = {
-                    'revenue': 'arr', 'annual_recurring_revenue': 'arr',
-                    'arr_growth': 'revenue_growth_rate',
-                    'growth_rate': 'revenue_growth_rate', 'growth': 'revenue_growth_rate',
-                    'net_retention': 'net_retention_rate', 'nrr': 'net_retention_rate',
-                    'customer_acquisition_cost': 'cac',
-                    'lifetime_value': 'ltv',
-                }
-                for old_key, new_key in saas_aliases.items():
-                    if old_key in company_data and new_key not in company_data:
-                        company_data[new_key] = company_data.pop(old_key)
-
-                # ltv_cac ratio: split into ltv=ratio and cac=1 so ltv/cac = ratio
-                if 'ltv_cac' in company_data and 'cac' not in company_data:
-                    company_data['cac'] = 1.0
-                    company_data['ltv'] = float(company_data.pop('ltv_cac'))
-                elif 'ltv_cac' in company_data:
-                    company_data.pop('ltv_cac')
-
-                # gross_margin: normalize to 0-1 fraction if given as percentage
-                if 'gross_margin' in company_data and company_data['gross_margin'] > 1:
-                    company_data['gross_margin'] = company_data['gross_margin'] / 100.0
-
-                # net_retention_rate: keep as-is (Python compares >= 110 treating it as percentage)
-                # rule_of_40 and cac_payback are outputs, not inputs — drop them
-                for drop_key in ('rule_of_40', 'cac_payback'):
-                    company_data.pop(drop_key, None)
-
-                # Set defaults for required params not provided by frontend
-                company_data.setdefault('revenue_growth_rate', 30.0)
-                company_data.setdefault('net_retention_rate', 100.0)
-                company_data.setdefault('cac', 1.0)
-                company_data.setdefault('ltv', 3.0)
-
-                import inspect
-                valid_params = set(inspect.signature(analyzer.calculate_saas_metrics).parameters.keys())
-                filtered = {k: v for k, v in company_data.items() if k in valid_params}
-                analysis = analyzer.calculate_saas_metrics(**filtered)
-                sector_key = 'saas'
-
-            elif model == TechBusinessModel.CONSUMER_SOFTWARE:
-                import inspect
-                valid_params = set(inspect.signature(analyzer.calculate_user_metrics).parameters.keys())
-                filtered = {k: v for k, v in company_data.items() if k in valid_params}
-                analysis = analyzer.calculate_user_metrics(**filtered)
-                sector_key = 'consumer'
-
-            elif model == TechBusinessModel.MARKETPLACE:
-                # Map frontend keys to Python parameter names
-                marketplace_aliases = {
-                    'gmv_growth': None,          # computed metric, not an input — drop
-                    'active_buyers': None,        # not a param — drop
-                    'active_sellers': None,       # not a param — drop
-                    'repeat_rate': 'demand_side_retention',
-                }
-                for old_key, new_key in marketplace_aliases.items():
-                    if old_key in company_data:
-                        if new_key:
-                            if new_key not in company_data:
-                                company_data[new_key] = company_data.pop(old_key)
-                            else:
-                                company_data.pop(old_key)
-                        else:
-                            company_data.pop(old_key)
-
-                # take_rate: normalize to fraction if given as percentage
-                if 'take_rate' in company_data and company_data['take_rate'] > 1:
-                    company_data['take_rate'] = company_data['take_rate'] / 100.0
-
-                # Provide defaults for params not in frontend form
-                company_data.setdefault('revenue', company_data.get('gmv', 0) * company_data.get('take_rate', 0.15))
-                company_data.setdefault('liquidity_score', 70.0)
-                company_data.setdefault('supply_side_retention', company_data.get('demand_side_retention', 70.0))
-                company_data.setdefault('demand_side_retention', 70.0)
-
-                import inspect
-                valid_params = set(inspect.signature(analyzer.calculate_marketplace_metrics).parameters.keys())
-                filtered = {k: v for k, v in company_data.items() if k in valid_params}
-                analysis = analyzer.calculate_marketplace_metrics(**filtered)
-                sector_key = 'marketplace'
-
-            elif model == TechBusinessModel.SEMICONDUCTOR:
-                # Map frontend keys to Python parameter names
-                semi_aliases = {
-                    'r_and_d_intensity': 'r_and_d_pct',
-                    'design_wins': 'design_win_backlog',
-                    'revenue_growth': None,   # computed metric, not an input — drop
-                    'book_to_bill': None,     # not a param — drop
-                }
-                for old_key, new_key in semi_aliases.items():
-                    if old_key in company_data:
-                        if new_key:
-                            if new_key not in company_data:
-                                company_data[new_key] = company_data.pop(old_key)
-                            else:
-                                company_data.pop(old_key)
-                        else:
-                            company_data.pop(old_key)
-
-                # r_and_d_pct: normalize to fraction if given as percentage
-                if 'r_and_d_pct' in company_data and company_data['r_and_d_pct'] > 1:
-                    company_data['r_and_d_pct'] = company_data['r_and_d_pct'] / 100.0
-
-                # gross_margin: normalize to fraction
-                if 'gross_margin' in company_data and company_data['gross_margin'] > 1:
-                    company_data['gross_margin'] = company_data['gross_margin'] / 100.0
-
-                # Provide defaults for params not in frontend form
-                company_data.setdefault('process_node', 14)   # nm — 14nm default (mature)
-                company_data.setdefault('fabless', True)
-
-                import inspect
-                valid_params = set(inspect.signature(analyzer.calculate_semiconductor_metrics).parameters.keys())
-                filtered = {k: v for k, v in company_data.items() if k in valid_params}
-                analysis = analyzer.calculate_semiconductor_metrics(**filtered)
-                sector_key = 'semiconductor'
-
-            analysis_with_standard = _build_standard_output(analysis, sector_key)
-            result = {"success": True, "data": analysis_with_standard}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

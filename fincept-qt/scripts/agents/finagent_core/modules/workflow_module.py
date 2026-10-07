@@ -18,6 +18,16 @@ logger = logging.getLogger(__name__)
 
 # ─── Helpers ──────────────────────────────────────────────────────────────────
 
+# Appended to every workflow agent's instructions.  Workflow prompts ask for
+# prices, ratios and risk figures; without this a model with a failed or
+# missing tool call fills them in from memory.
+_GROUNDING_RULES = (
+    "GROUNDING RULES: Use only figures that appear in your tool output or in the "
+    "data supplied in the prompt. If a figure is not there, write 'not available' "
+    "- never estimate, recall from memory, or invent prices, ratios, returns, VaR "
+    "or any other number. State the source (tool name) for each figure you use."
+)
+
 def _today() -> str:
     return date.today().strftime("%B %d, %Y")
 
@@ -43,9 +53,11 @@ def _make_model(api_keys: Dict[str, str], model_config: Optional[Dict] = None):
     return ModelsRegistry.create_model(
         provider=provider,
         model_id=cfg.get("model_id"),
+        api_key=cfg.get("api_key") or None,
         api_keys=api_keys,
         temperature=cfg.get("temperature"),
         max_tokens=cfg.get("max_tokens"),
+        base_url=cfg.get("base_url") or None,
     )
 
 
@@ -98,6 +110,8 @@ def _make_workflow_agent(api_keys: Dict[str, str],
     Uses Agent (supports tools) when tools are provided,
     falls back to WorkflowAgent when no tools are needed.
     """
+    from finagent_core.clock import with_current_date
+    instructions = with_current_date(instructions + "\n\n" + _GROUNDING_RULES)
     model = _make_model(api_keys, model_config)
     if tools:
         from agno.agent import Agent
@@ -140,10 +154,20 @@ class StockAnalysisWorkflow:
         from agno.workflow import Workflow, Step, Parallel
         from agno.workflow.types import StepOutput
 
+        if not self._tools:
+            # Every step asks for current price / volume / metrics; without a
+            # market-data tool the model can only make them up.
+            return {
+                "success": False,
+                "error": ("stock analysis needs a market-data tool (yfinance) and none could be "
+                          "loaded - refusing to run without live data"),
+            }
+
         today = _today()
         agent = _make_workflow_agent(
             self.api_keys,
-            f"You are a professional financial analyst. Today is {today}. Always use today's date in reports.",
+            f"You are a professional financial analyst. Today is {today}. Always use today's date in reports. "
+            f"Call your market-data tools for every price, volume and metric.",
             self.model_config,
             tools=self._tools,
         )
@@ -152,8 +176,9 @@ class StockAnalysisWorkflow:
             inp = _extract_content(step_input)
             sym = inp.get("symbol", symbol) if isinstance(inp, dict) else symbol
             response = agent.run(
-                f"Today is {today}. Fetch and summarize current market data for {sym} "
-                f"including price, volume, recent news, and key metrics."
+                f"Today is {today}. Call your market-data tools to fetch current market data for {sym} "
+                f"(price, volume, recent news, key metrics) and summarize only what the tools return. "
+                f"If a tool call fails, say which figure is unavailable."
             )
             return _step_output(getattr(response, "content", str(response)))
 
@@ -278,6 +303,58 @@ class PortfolioRebalancingWorkflow:
 
 # ─── Risk Assessment Workflow ─────────────────────────────────────────────────
 
+def compute_risk_metrics(portfolio_data: Any) -> Dict[str, Any]:
+    """Historical VaR / volatility computed in code from a supplied return series.
+
+    Looks for a periodic portfolio return series (decimal fractions, e.g. 0.012
+    for +1.2%) under `returns` / `daily_returns`.  Returns {} when no usable
+    series is supplied — the caller must then not report VaR at all.
+    """
+    if not isinstance(portfolio_data, dict):
+        return {}
+    series = portfolio_data.get("returns")
+    if series is None:
+        series = portfolio_data.get("daily_returns")
+    if not isinstance(series, list):
+        return {}
+    rets = []
+    for v in series:
+        if isinstance(v, dict):
+            v = v.get("return", v.get("value"))
+        try:
+            f = float(v)
+        except (TypeError, ValueError):
+            continue
+        if f == f:  # drop NaN
+            rets.append(f)
+    n = len(rets)
+    if n < 20:
+        return {"error": f"only {n} usable returns supplied; at least 20 are needed for historical VaR"}
+
+    def pct(sorted_vals, q):
+        # Linear-interpolated empirical quantile (numpy's default method).
+        pos = (len(sorted_vals) - 1) * q
+        lo = int(pos)
+        hi = min(lo + 1, len(sorted_vals) - 1)
+        return sorted_vals[lo] + (sorted_vals[hi] - sorted_vals[lo]) * (pos - lo)
+
+    srt = sorted(rets)
+    mean = sum(rets) / n
+    var_s = sum((r - mean) ** 2 for r in rets) / (n - 1)
+    sd = var_s ** 0.5
+    tail95 = [r for r in rets if r <= pct(srt, 0.05)]
+    return {
+        "method": "historical simulation on the supplied return series",
+        "observations": n,
+        "period_volatility": sd,
+        "historical_var_95": -pct(srt, 0.05),
+        "historical_var_99": -pct(srt, 0.01),
+        "expected_shortfall_95": -(sum(tail95) / len(tail95)) if tail95 else None,
+        "worst_period_return": srt[0],
+        "units": "fraction of portfolio value per period of the supplied series (0.02 = 2%)",
+    }
+
+
 class RiskAssessmentWorkflow:
     """Risk assessment using Router to route to the right risk analysis."""
 
@@ -291,9 +368,23 @@ class RiskAssessmentWorkflow:
         from agno.workflow import Workflow, Step, Router
 
         today = _today()
+        metrics = compute_risk_metrics(portfolio_data)
+        if metrics and "error" not in metrics:
+            import json as _json
+            metrics_block = (
+                "COMPUTED RISK METRICS (calculated in code from the supplied returns; quote these "
+                "verbatim, do not recompute or adjust):\n" + _json.dumps(metrics, indent=2)
+            )
+        else:
+            reason = (metrics or {}).get("error", "no return series ('returns') was supplied")
+            metrics_block = (
+                f"NO VaR AVAILABLE: {reason}. Do NOT state any VaR, expected shortfall or "
+                f"volatility number; say it could not be computed and why."
+            )
         agent = _make_workflow_agent(
             self.api_keys,
-            f"You are a risk analyst. Today is {today}.",
+            f"You are a risk analyst. Today is {today}. Never compute VaR yourself - only "
+            f"report the code-computed metrics you are given.\n\n{metrics_block}",
             self.model_config,
             tools=self._tools,
         )
@@ -308,7 +399,8 @@ class RiskAssessmentWorkflow:
         def market_risk_step(step_input):
             prev = getattr(step_input, "previous_step_content", "")
             response = agent.run(
-                f"Today is {today}. Perform market risk analysis (VaR, beta, volatility). Context: {prev}"
+                f"Today is {today}. Perform market risk analysis. Use only the code-computed metrics "
+                f"in your instructions for VaR / volatility; do not estimate beta or VaR. Context: {prev}"
             )
             return _step_output(getattr(response, "content", str(response)))
 
@@ -364,7 +456,8 @@ class RiskAssessmentWorkflow:
         )
 
         result = workflow.run(input=portfolio_data)
-        return {"success": True, "response": getattr(result, "content", str(result))}
+        return {"success": True, "response": getattr(result, "content", str(result)),
+                "computed_metrics": metrics if metrics and "error" not in metrics else None}
 
 
 # ─── Backwards-compatible factory (used by core_agent.py) ────────────────────

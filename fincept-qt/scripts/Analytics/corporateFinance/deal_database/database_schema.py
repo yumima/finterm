@@ -506,6 +506,77 @@ class MADatabase:
             self.conn.close()
             self.conn = None
 
+# ── JSON contract (MAAnalyticsService create_deal / update_deal) ─────────────
+
+# Friendly / MCP field names -> ma_deals columns.
+_DEAL_ALIASES = {
+    'acquirer': 'acquirer_name',
+    'target': 'target_name',
+    'announced_date': 'announcement_date',
+    'status': 'deal_status',
+}
+
+
+def _deal_columns(db: 'MADatabase') -> set:
+    cur = db._get_connection().cursor()
+    cur.execute("PRAGMA table_info(ma_deals)")
+    return {row[1] for row in cur.fetchall()}
+
+
+def _map_deal_fields(db: 'MADatabase', data: Dict[str, Any]) -> Dict[str, Any]:
+    """Rename aliases and reject anything that is not a real ma_deals column
+    (column names are interpolated into SQL, so they are whitelisted)."""
+    cols = _deal_columns(db)
+    out: Dict[str, Any] = {}
+    for k, v in data.items():
+        col = _DEAL_ALIASES.get(k, k)
+        if col not in cols:
+            raise ValueError(f"Unknown deal field '{k}'. Valid fields: "
+                             f"{', '.join(sorted(set(_DEAL_ALIASES) | cols))}")
+        out[col] = v
+    return out
+
+
+def _json_create(db: 'MADatabase', p: Dict[str, Any]) -> Dict[str, Any]:
+    row = _map_deal_fields(db, p)
+    for col in ('acquirer_name', 'target_name', 'announcement_date', 'deal_type', 'deal_status'):
+        if row.get(col) in (None, ''):
+            alias = next((a for a, c in _DEAL_ALIASES.items() if c == col), col)
+            raise ValueError(f"Missing required input: {alias}")
+    try:
+        datetime.strptime(str(row['announcement_date'])[:10], '%Y-%m-%d')
+    except ValueError:
+        raise ValueError("announced_date must be YYYY-MM-DD")
+    if row.get('deal_value') is not None:
+        row['deal_value'] = float(row['deal_value'])
+    if not row.get('deal_id'):
+        a = str(row['acquirer_name'])[:10].upper().replace(' ', '')
+        t = str(row['target_name'])[:10].upper().replace(' ', '')
+        row['deal_id'] = f"{a}_{t}_{str(row['announcement_date']).replace('-', '')[:8]}"
+    if db.get_deal_by_id(row['deal_id']) is not None:
+        raise ValueError(f"Deal {row['deal_id']} already exists; use update")
+    row.setdefault('data_source', 'manual entry')
+    db.insert_deal(row)
+    return {'deal_id': row['deal_id'], 'deal': db.get_deal_by_id(row['deal_id'])}
+
+
+def _json_update(db: 'MADatabase', p: Dict[str, Any]) -> Dict[str, Any]:
+    p = dict(p)
+    deal_id = str(p.pop('deal_id', '') or '').strip()
+    if not deal_id:
+        raise ValueError("Missing required input: deal_id")
+    if db.get_deal_by_id(deal_id) is None:
+        raise ValueError(f"No deal with id {deal_id}")
+    updates = _map_deal_fields(db, p)
+    updates.pop('deal_id', None)
+    if not updates:
+        raise ValueError("No fields to update")
+    updates['updated_at'] = datetime.now().isoformat()
+    db.update_deal(deal_id, updates)
+    return {'deal_id': deal_id, 'updated_fields': sorted(k for k in updates if k != 'updated_at'),
+            'deal': db.get_deal_by_id(deal_id)}
+
+
 def main():
     """CLI entry point - outputs JSON for C++ integration"""
     import sys
@@ -520,6 +591,23 @@ def main():
         sys.exit(1)
 
     command = sys.argv[1]
+
+    # JSON contract: <command> '<params object>' (MAAnalyticsService).
+    if len(sys.argv) == 3 and sys.argv[2].lstrip().startswith('{') and command in ('create', 'update'):
+        db = None
+        try:
+            params = json.loads(sys.argv[2])
+            db = MADatabase()
+            data = (_json_create if command == 'create' else _json_update)(db, params)
+            print(json.dumps({"success": True, "data": data}, default=str))
+        except Exception as e:
+            print(json.dumps({"success": False, "error": str(e)}))
+            sys.exit(1)
+        finally:
+            if db is not None:
+                db.close()
+        return
+
     db = MADatabase()
 
     try:

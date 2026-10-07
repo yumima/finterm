@@ -127,8 +127,9 @@ std::vector<ToolDef> get_edgar_tools() {
     {
         ToolDef t;
         t.name = "edgar_get_financials";
-        t.description = "Fetch XBRL financials from SEC EDGAR: revenue, EBITDA, net income, debt, cash, shares. "
-                        "Returns annual and TTM figures.";
+        t.description = "Fetch XBRL financial statements from SEC EDGAR (balance sheet, income statement, "
+                        "cash flow) as filed in the company's latest annual 10-K. Figures are per fiscal "
+                        "year as reported — no TTM aggregation and no computed EBITDA.";
         t.category = "sec-edgar";
         t.input_schema.properties =
             QJsonObject{{"cik", QJsonObject{{"type", "string"}, {"description", "10-digit SEC CIK number"}}},
@@ -199,19 +200,27 @@ std::vector<ToolDef> get_edgar_tools() {
     {
         ToolDef t;
         t.name = "edgar_calc_multiples";
-        t.description = "Calculate valuation multiples (EV/Revenue, EV/EBITDA, implied P/E, price per share) given a "
-                        "deal value and target CIK.";
+        t.description = "Calculate deal multiples from the target's latest annual 10-K (not TTM): EV/Revenue "
+                        "and EV/Net income from an enterprise (deal) value. A P/E (implied_pe = equity value / "
+                        "net income) is returned only when equity_value is supplied. No EV/EBITDA.";
         t.category = "sec-edgar";
         t.input_schema.properties = QJsonObject{
             {"deal_value", QJsonObject{{"type", "number"}, {"description", "Total deal / enterprise value in USD"}}},
-            {"cik", QJsonObject{{"type", "string"}, {"description", "10-digit SEC CIK of the target company"}}}};
+            {"cik", QJsonObject{{"type", "string"}, {"description", "10-digit SEC CIK of the target company"}}},
+            {"equity_value", QJsonObject{{"type", "number"},
+                                         {"description", "Optional equity value in USD (price x diluted shares, "
+                                                         "or equity purchase price) — enables implied_pe"}}}};
         t.input_schema.required = {"deal_value", "cik"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             double deal_value = args["deal_value"].toDouble(0);
             QString cik = args["cik"].toString().trimmed();
             if (cik.isEmpty() || deal_value <= 0)
                 return ToolResult::fail("Missing or invalid 'deal_value' / 'cik'");
-            return run_edgar({"calc_multiples", cik, QString::number(deal_value, 'f', 2)});
+            const double equity_value = args["equity_value"].toDouble(0);
+            QStringList cmd{"calc_multiples", cik, QString::number(deal_value, 'f', 2)};
+            if (equity_value > 0)
+                cmd << QString::number(equity_value, 'f', 2);
+            return run_edgar(cmd);
         };
         tools.push_back(std::move(t));
     }

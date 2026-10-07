@@ -42,7 +42,9 @@ def get_industrial_production(country: str = "DE", nace: str = "B-D", freq: str 
 
 
 def get_retail_trade(country: str = "DE", freq: str = "M") -> Any:
-    params = {"geo": country.upper(), "s_adj": "SCA", "unit": "I15", "nace_r2": "G47"}
+    # indic_bt pinned to volume of sales: without it the response mixes
+    # volume and net-turnover series.
+    params = {"geo": country.upper(), "s_adj": "SCA", "unit": "I15", "nace_r2": "G47", "indic_bt": "VOL_SLS"}
     return _make_request("STS_TRTU_M" if freq == "M" else "STS_TRTU_Q", params)
 
 
@@ -51,24 +53,30 @@ def get_energy_balance(country: str = "DE", product: str = "TOTAL", freq: str = 
     return _make_request("nrg_bal_c", params)
 
 
-def get_trade_in_goods(country: str = "DE", partner: str = "US", product: str = "TOTAL", flow: str = "EXP") -> Any:
+def get_trade_in_goods(country: str = "DE", partner: str = "WORLD", product: str = "ET-T", flow: str = "BAL_RT") -> Any:
+    """Monthly trade in goods (euro indicators, ei_eteu27_2020_m), € million,
+    seasonally and working-day adjusted. Default: total goods balance with the
+    world. (The old Comext DS-059341 endpoint is gone from this API.)"""
     params = {
-        "reporter": country.upper(),
+        "geo": country.upper(),
         "partner": partner.upper(),
-        "product": product,
-        "flow": flow,
-        "stat_procedure": "U",
+        "indic": product,
+        "stk_flow": flow,
+        "unit": "MIO-EUR-SA",
     }
-    return _make_request("DS-059341", params)
+    return _make_request("ei_eteu27_2020_m", params)
 
 
 def get_construction_output(country: str = "DE", freq: str = "M") -> Any:
-    params = {"geo": country.upper(), "s_adj": "SCA", "unit": "I15"}
+    # nace_r2 pinned to F (construction total); otherwise 8 sub-sectors mix.
+    params = {"geo": country.upper(), "s_adj": "SCA", "unit": "I15", "nace_r2": "F"}
     return _make_request("STS_COPR_M" if freq == "M" else "STS_COPR_Q", params)
 
 
 def get_tourism_stats(country: str = "DE", freq: str = "M") -> Any:
-    params = {"geo": country.upper(), "c_resid": "TOTAL", "unit": "NR"}
+    # nace_r2 pinned to I551-I553 (all tourist accommodation); otherwise the
+    # total and its sub-categories mix.
+    params = {"geo": country.upper(), "c_resid": "TOTAL", "unit": "NR", "nace_r2": "I551-I553"}
     return _make_request("tour_occ_nim", params)
 
 
@@ -97,9 +105,9 @@ def main(args=None):
         result = get_energy_balance(country, product, freq)
     elif command == "trade":
         country = args[1] if len(args) > 1 else "DE"
-        partner = args[2] if len(args) > 2 else "US"
-        product = args[3] if len(args) > 3 else "TOTAL"
-        flow = args[4] if len(args) > 4 else "EXP"
+        partner = args[2] if len(args) > 2 else "WORLD"
+        product = args[3] if len(args) > 3 else "ET-T"
+        flow = args[4] if len(args) > 4 else "BAL_RT"
         result = get_trade_in_goods(country, partner, product, flow)
     elif command == "construction":
         country = args[1] if len(args) > 1 else "DE"

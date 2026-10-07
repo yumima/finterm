@@ -1,11 +1,9 @@
 // src/screens/economics/panels/BisPanel.cpp
-// BIS SDMX API — 13 statistical domains, no API key required.
-// Commands: get_central_bank_policy_rates, get_effective_exchange_rates,
-//           get_exchange_rates, get_long_term_interest_rates,
-//           get_short_term_interest_rates, get_credit_to_non_financial_sector,
-//           get_house_prices, get_economic_overview
-// Response: { "success": true, "data": [...], "metadata": {...} }
-// data[] rows: { "date": "YYYY-MM", "value": 1.23, "country": "US", "series_key": "..." }
+// BIS SDMX API — no API key required.
+// Command: fetch <dataflow> <country> [start] [end]; bis_data.py pins each
+// flow's key to ONE series (policy rate, nominal broad EER, period-average
+// FX, CPI YoY, private credit % GDP, real property prices).
+// Response: { "success": true, "data": [{date, value}], "metadata": {...} }
 #include "screens/economics/panels/BisPanel.h"
 
 #include "core/logging/Logger.h"
@@ -25,23 +23,23 @@ static constexpr const char* kBisSourceId = "bis";
 static constexpr const char* kBisColor = "#9D4EDD"; // purple
 } // namespace
 
-// Dataset combo entries: { display label, CLI command, placeholder country hint }
+// Dataset combo entries: { display label, BIS dataflow, country hint, default country }
+// (BIS publishes no long/short-term market interest-rate flows, and the old
+// multi-series "economic overview" was not a single series, so neither is here.)
 struct BisDataset {
     QString label;
-    QString command;
+    QString command; // BIS dataflow passed to `fetch`
     QString country_hint;
     QString default_country;
 };
 
 static const QList<BisDataset> kBisDatasets = {
-    {"Central Bank Policy Rates", "get_central_bank_policy_rates", "e.g. US, GB, JP, DE", "US"},
-    {"Effective Exchange Rates", "get_effective_exchange_rates", "e.g. US, GB, JP", "US"},
-    {"Exchange Rates vs USD", "get_exchange_rates", "e.g. GB, JP, DE, AU", "GB"},
-    {"Long-term Interest Rates", "get_long_term_interest_rates", "e.g. US, DE, JP, GB", "US"},
-    {"Short-term Interest Rates", "get_short_term_interest_rates", "e.g. US, DE, JP, GB", "US"},
-    {"Credit to Non-Financial Sector", "get_credit_to_non_financial_sector", "e.g. US, CN, JP", "US"},
-    {"House Prices", "get_house_prices", "e.g. US, GB, DE, AU", "US"},
-    {"Economic Overview (multi-series)", "get_economic_overview", "e.g. US", "US"},
+    {"Central Bank Policy Rate (%)", "WS_CBPOL", "e.g. US, GB, JP, XM", "US"},
+    {"Nominal Effective Exchange Rate (broad, 2020=100)", "WS_EER", "e.g. US, GB, JP", "US"},
+    {"Exchange Rate (national currency per USD, avg)", "WS_XRU", "e.g. GB, JP, XM, AU", "GB"},
+    {"Consumer Prices (YoY %)", "WS_LONG_CPI", "e.g. US, DE, JP, GB", "US"},
+    {"Credit to Private Non-Fin. Sector (% of GDP)", "WS_TC", "e.g. US, CN, JP", "US"},
+    {"Real Residential Property Prices (2010=100)", "WS_SPP", "e.g. US, GB, DE, AU", "US"},
 };
 
 // ── Constructor ───────────────────────────────────────────────────────────────
@@ -109,8 +107,6 @@ void BisPanel::on_dataset_changed(int index) {
         country_input_->text() == kBisDatasets[qMax(0, index - 1)].default_country) {
         country_input_->setText(ds.default_country);
     }
-    // Economic overview doesn't use a country filter
-    country_input_->setEnabled(ds.command != "get_economic_overview");
 }
 
 // ── Fetch ─────────────────────────────────────────────────────────────────────
@@ -121,27 +117,24 @@ void BisPanel::on_fetch() {
         return;
     const auto& ds = kBisDatasets[idx];
 
-    QStringList args;
     const QString country = country_input_->text().trimmed().toUpper();
     const QString start = start_input_->text().trimmed();
     const QString end = end_input_->text().trimmed();
+    if (country.isEmpty()) {
+        show_empty("Enter a country code (e.g. US, GB, JP)");
+        return;
+    }
 
-    // economic_overview doesn't take country/date args
-    if (ds.command != "get_economic_overview") {
-        if (country.isEmpty()) {
-            show_empty("Enter a country code (e.g. US, GB, JP)");
-            return;
-        }
-        args << country;
-        if (!start.isEmpty())
-            args << start;
-        if (!start.isEmpty() && !end.isEmpty())
+    QStringList args = {ds.command, country};
+    if (!start.isEmpty()) {
+        args << start;
+        if (!end.isEmpty())
             args << end;
     }
 
     show_loading("Fetching BIS " + ds.label + "…");
-    services::EconomicsService::instance().execute(kBisSourceId, kBisScript, ds.command, args,
-                                                   "bis_" + ds.command + "_" + country);
+    services::EconomicsService::instance().execute(kBisSourceId, kBisScript, "fetch", args,
+                                                   "bis_" + ds.command + "_" + country + "_" + start + "_" + end);
 }
 
 // ── Result ────────────────────────────────────────────────────────────────────
@@ -155,22 +148,8 @@ void BisPanel::on_result(const QString& request_id, const services::EconomicsRes
         return;
     }
 
-    // BIS response: { "success": true, "data": [...], "metadata": {...} }
-    // data[] rows: { "date": "YYYY-MM", "value": 1.23, "country": "US", "series_key": "..." }
-    // economic_overview may return nested: { "data": { "exchange_rates": [...], ... } }
-    QJsonArray rows = result.data["data"].toArray();
-
-    if (rows.isEmpty()) {
-        // Try nested overview structure — flatten all sub-arrays into one
-        const QJsonObject data_obj = result.data["data"].toObject();
-        if (!data_obj.isEmpty()) {
-            for (const auto& key : data_obj.keys()) {
-                const QJsonArray sub = data_obj[key].toArray();
-                for (const auto& v : sub)
-                    rows.append(v);
-            }
-        }
-    }
+    // fetch response: { "success": true, "data": [{date, value[, series]}], "metadata": {...} }
+    const QJsonArray rows = result.data["data"].toArray();
 
     if (rows.isEmpty()) {
         show_empty("No data returned — try a different country or date range");
@@ -180,7 +159,13 @@ void BisPanel::on_result(const QString& request_id, const services::EconomicsRes
     // Build title from metadata
     const QString title = "BIS: " + dataset_combo_->currentText() + " — " + country_input_->text().trimmed().toUpper();
 
-    display(rows, title);
+    // "series" appears only if the key matched several series (kept apart by
+    // the script) — then there is no single series for the stat cards.
+    const bool multi = result.data["metadata"].toObject()["series_count"].toInt(1) > 1;
+    if (multi)
+        display(rows, title);
+    else
+        display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
     LOG_INFO("BisPanel", QString("Displayed %1 rows for %2").arg(rows.size()).arg(request_id));
 }
 

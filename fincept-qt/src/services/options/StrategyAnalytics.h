@@ -91,7 +91,7 @@ double compute_pop(const Strategy& s, double current_spot, double t, double r, d
 
 /// Sum each active leg's live Greeks × signed (lots × lot_size). Looks up
 /// each leg in `chain` by token; legs with no match contribute 0. Vega
-/// and rho remain in the C++ struct's "per 1.00 σ / r" convention.
+/// is per 1 vol point and rho per 1% rate (see OptionChainTypes.h).
 OptionGreeks combined_greeks(const Strategy& s, const OptionChain& chain);
 
 /// One-shot bundle — fills in everything `StrategyAnalytics` carries.

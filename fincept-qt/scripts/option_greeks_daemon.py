@@ -40,8 +40,8 @@ Response result (one entry per input contract, same order):
                 "delta": <float>,
                 "gamma": <float>,
                 "theta": <float>,         # PER CALENDAR DAY (py_vollib convention)
-                "vega": <float>,          # PER 1.00 σ (py_vollib value × 100)
-                "rho": <float>,           # PER 1.00 r (py_vollib value × 100)
+                "vega": <float>,          # PER 1 VOL POINT (py_vollib value, unscaled)
+                "rho": <float>,           # PER 1% RATE CHANGE (py_vollib value, unscaled)
                 "valid": <bool>,
                 "error": <string>         # only when valid=false
             },
@@ -54,9 +54,8 @@ Note on Greek scaling — py_vollib's analytical greeks return:
   - rho    per 1% absolute rate change
   - theta  per CALENDAR DAY (already day-scaled, NOT per year)
 
-The C++ OptionGreeks struct documents vega/rho as "per 1.00 σ" / "per 1.00 r",
-so the daemon multiplies vega and rho by 100 before returning. Theta is
-already per-day and is returned unscaled.
+All three are returned unscaled: vega per 1 vol point, rho per 1% rate,
+theta per calendar day — matching the C++ OptionGreeks contract.
 """
 
 import json
@@ -138,7 +137,8 @@ def _write_frame(stream, data_bytes):
 
 # ─── Per-contract IV + Greeks ───────────────────────────────────────────────
 
-_MIN_T = 1.0 / 365.0  # one calendar day; clamp expiry-day options
+_MIN_T = 60.0 / (365.0 * 86400.0)  # one minute — div-by-zero guard only;
+                                   # caller sends exact time to the exchange close
 
 
 def _compute_one(c):
@@ -187,8 +187,8 @@ def _compute_one(c):
             "delta": d,
             "gamma": g,
             "theta": th,           # already per-day from py_vollib
-            "vega": v * 100.0,     # py_vollib per-1% → struct per-1.00 σ
-            "rho": rh * 100.0,     # py_vollib per-1% → struct per-1.00 r
+            "vega": v,             # py_vollib: per 1 vol point (1% σ) — market convention
+            "rho": rh,             # py_vollib: per 1% change in r
             "valid": True,
         }
     except Exception as e:

@@ -939,7 +939,24 @@ void EquityAiTab::send_chat() {
         // reason. on_done carries the LlmResponse — a 429 or a 400 now reaches
         // the user and the log instead of dying here.
         [self, epoch, reply_idx](fincept::ai_chat::LlmResponse resp) {
-            if (!self || resp.success || resp.error.isEmpty())
+            if (!self)
+                return;
+            // A quota fallback answered on a different model than the one
+            // configured — say which one (appended under the reply).
+            if (resp.success && resp.fell_back && !resp.model_used.isEmpty()) {
+                const QString note = QStringLiteral("\n\n(Answered by %1 via %2 — fell back from %3 after a quota limit.)")
+                                         .arg(resp.model_used, resp.provider_used,
+                                              resp.requested_model.isEmpty() ? QStringLiteral("the configured model")
+                                                                             : resp.requested_model);
+                QMetaObject::invokeMethod(self.data(), [self, note, epoch, reply_idx]() {
+                    if (!self || epoch != self->chat_epoch_ || reply_idx >= self->chat_turns_.size())
+                        return;
+                    self->chat_turns_[reply_idx].second += note;
+                    self->render_chat();
+                }, Qt::QueuedConnection);
+                return;
+            }
+            if (resp.success || resp.error.isEmpty())
                 return;
             const QString err = resp.error;
             QMetaObject::invokeMethod(self.data(), [self, err, epoch, reply_idx]() {
@@ -1294,7 +1311,22 @@ void EquityAiTab::run_forecast(bool automatic) {
         // "No structured forecast returned", blaming the model's output shape
         // for what is actually a transport or quota error.
         [self, epoch](fincept::ai_chat::LlmResponse resp) {
-            if (!self || resp.success || resp.error.isEmpty())
+            if (!self)
+                return;
+            // Quota fallback: the forecast was written by a different model
+            // than the configured one — say so next to the status line.
+            if (resp.success && resp.fell_back && !resp.model_used.isEmpty()) {
+                const QString note = QStringLiteral("  Answered by %1 via %2 (fell back from %3 after a quota limit).")
+                                         .arg(resp.model_used, resp.provider_used,
+                                              resp.requested_model.isEmpty() ? QStringLiteral("the configured model")
+                                                                             : resp.requested_model);
+                QMetaObject::invokeMethod(self.data(), [self, note, epoch]() {
+                    if (!self || epoch != self->forecast_epoch_) return;
+                    self->status_lbl_->setText(self->status_lbl_->text() + note);
+                }, Qt::QueuedConnection);
+                return;
+            }
+            if (resp.success || resp.error.isEmpty())
                 return;
             const QString err = resp.error;
             QMetaObject::invokeMethod(self.data(), [self, err, epoch]() {

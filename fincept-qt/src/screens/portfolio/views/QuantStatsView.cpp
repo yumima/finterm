@@ -394,12 +394,12 @@ void QuantStatsView::update_metrics() {
         double calmar = qs_val("ratios", "calmar_ratio");
         double pf = qs_val("ratios", "profit_factor");
 
-        rows.push_back({"", "Sharpe Ratio", ratio_str(sharpe), "--", sharpe >= 0});
+        rows.push_back({"", "Sharpe Ratio (geo)", ratio_str(sharpe), "--", sharpe >= 0});
         rows.push_back({"", "Sortino Ratio", ratio_str(sortino), "--", sortino >= 0});
         rows.push_back({"", "Calmar Ratio", ratio_str(calmar), "--", calmar >= 0});
         rows.push_back({"", "Profit Factor", ratio_str(pf), "--", pf >= 1.0});
     } else {
-        rows.push_back({"", "Sharpe Ratio", "--", "--", true});
+        rows.push_back({"", "Sharpe Ratio (geo)", "--", "--", true});
         rows.push_back({"", "Sortino Ratio", "--", "--", true});
         rows.push_back({"", "Calmar Ratio", "--", "--", true});
         rows.push_back({"", "Profit Factor", "--", "--", true});
@@ -418,7 +418,10 @@ void QuantStatsView::update_metrics() {
         double avg_loss = qs_pct("distribution", "avg_loss");
 
         rows.push_back({"", "Skewness", ratio_str(skew, 3), "--", skew >= 0});
-        rows.push_back({"", "Kurtosis", ratio_str(kurt, 3), "--", kurt <= 3.5});
+        // pandas .kurtosis() is EXCESS kurtosis (normal = 0), so "fat tails"
+        // starts near 0.5 here — the old 3.5 cut-off was a raw-kurtosis one
+        // and coloured almost any series as benign.
+        rows.push_back({"", "Kurtosis (excess)", ratio_str(kurt, 3), "--", kurt <= 0.5});
         rows.push_back({"", "Win Rate", pct_str(win_rate), "--", win_rate >= 50.0});
         rows.push_back({"", "Win Days", QString::number(win_days), "--", true});
         rows.push_back({"", "Loss Days", QString::number(los_days), "--", los_days == 0});
@@ -426,7 +429,7 @@ void QuantStatsView::update_metrics() {
         rows.push_back({"", "Avg Loss", pct_str(avg_loss), "--", avg_loss >= 0});
     } else {
         rows.push_back({"", "Skewness", "--", "--", true});
-        rows.push_back({"", "Kurtosis", "--", "--", true});
+        rows.push_back({"", "Kurtosis (excess)", "--", "--", true});
         rows.push_back({"", "Win Rate", "--", "--", true});
         rows.push_back({"", "Win Days", "--", "--", true});
         rows.push_back({"", "Loss Days", "--", "--", true});
@@ -531,7 +534,7 @@ void QuantStatsView::update_returns() {
         {"AVG WIN", pct_str(avg_win), ui::colors::POSITIVE()},
         {"AVG LOSS", pct_str(avg_loss), ui::colors::NEGATIVE()},
         {"SKEWNESS", ratio_str(skew, 3), ui::colors::TEXT_PRIMARY()},
-        {"KURTOSIS", ratio_str(kurt, 3), ui::colors::TEXT_PRIMARY()},
+        {"EXCESS KURTOSIS", ratio_str(kurt, 3), ui::colors::TEXT_PRIMARY()},
     };
 
     auto* grid_w = new QWidget(this);
@@ -732,7 +735,7 @@ void QuantStatsView::update_rolling() {
         bool positive;
     };
     QVector<RatioRow> rrows = {
-        {"Sharpe Ratio", ratio_str(sharpe), sharpe >= 0},
+        {"Sharpe Ratio (geo)", ratio_str(sharpe), sharpe >= 0},
         {"Sortino Ratio", ratio_str(sortino), sortino >= 0},
         {"Calmar Ratio", ratio_str(calmar), calmar >= 0},
         {"Profit Factor", ratio_str(pf), pf >= 1.0},

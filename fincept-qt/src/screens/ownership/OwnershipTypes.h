@@ -150,13 +150,15 @@ struct HoldersSummary {
     int   sellers = 0;
     int   exited = 0;      ///< held last quarter, filed this one, do not hold
     double exited_shares = 0.0;
-    /// Value share of the ten largest positions, over all filers.
+    /// Value share of the ten largest positions, over the filers that pass the
+    /// book-size / position-count floors (min_book_value, min_book_positions).
     std::optional<double> top10_share;
     /// Value share held by index and broad books — the part of the register
     /// that rebalances rather than decides.
     std::optional<double> broad_share;
     QString sort;          ///< "value" or "weight" — which ranking the rows are in
-    double min_book_value = 0.0;
+    double min_book_value = 0.0;  ///< filers with a smaller equity book are excluded
+    int    min_book_positions = 0; ///< filers with fewer stock positions are excluded
     QDate partial_quarter; ///< a newer, incomplete quarter exists in the index
     int   partial_filers = 0;
 

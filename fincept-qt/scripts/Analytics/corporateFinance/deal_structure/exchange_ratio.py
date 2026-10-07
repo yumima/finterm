@@ -159,26 +159,26 @@ class ExchangeRatioCalculator:
 
         combined_ni = acquirer_net_income + target_net_income + synergies
 
-        breakeven_ratio_results = []
+        # EPS-neutral ratio solves combined_ni / (A + r * T) = acquirer_eps:
+        #   r* = (combined_ni / acquirer_eps - A) / T
+        breakeven_ratio = None
+        if acquirer_eps > 0 and target_shares > 0:
+            breakeven_ratio = (combined_ni / acquirer_eps - acquirer_shares) / target_shares
+            if breakeven_ratio <= 0:
+                breakeven_ratio = None
 
-        for ratio in np.linspace(0.5, 2.0, 50):
+        breakeven_ratio_results = []
+        grid = list(np.linspace(0.5, 2.0, 16))
+        for ratio in grid:
             new_shares = ratio * target_shares
             post_deal_shares = acquirer_shares + new_shares
             post_deal_eps = combined_ni / post_deal_shares
-
-            accretion = ((post_deal_eps - acquirer_eps) / acquirer_eps) * 100
-
+            accretion = ((post_deal_eps - acquirer_eps) / acquirer_eps) * 100 if acquirer_eps else None
             breakeven_ratio_results.append({
-                'exchange_ratio': ratio,
+                'exchange_ratio': float(ratio),
                 'post_deal_eps': post_deal_eps,
                 'accretion_dilution': accretion
             })
-
-            if abs(accretion) < 0.01:
-                breakeven_ratio = ratio
-                break
-        else:
-            breakeven_ratio = None
 
         return {
             'breakeven_exchange_ratio': breakeven_ratio,
@@ -196,10 +196,12 @@ class ExchangeRatioCalculator:
         scenarios = []
 
         for price in acquirer_price_scenarios:
+            # Fixed ratio inside the band; outside it the ratio floats so the
+            # target holder receives the value at the floor / cap.
             if price < floor_price:
-                effective_ratio = base_exchange_ratio * (floor_price / self.acquirer_price)
+                effective_ratio = base_exchange_ratio * (floor_price / price)
             elif price > cap_price:
-                effective_ratio = base_exchange_ratio * (cap_price / self.acquirer_price)
+                effective_ratio = base_exchange_ratio * (cap_price / price)
             else:
                 effective_ratio = base_exchange_ratio
 
@@ -220,56 +222,93 @@ class ExchangeRatioCalculator:
             'scenarios': scenarios
         }
 
+# ── JSON contract (MAAnalyticsService "calculate") ───────────────────────────
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from corporateFinance._cli import is_json_call, run_json, num, opt_num, has, InputError, pct  # noqa: E402
+
+
+def _key(p: Dict[str, Any], *keys: str) -> Optional[str]:
+    for k in keys:
+        if has(p, k):
+            return k
+    return None
+
+
+def json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Fixed exchange ratio = offer price per target share / acquirer share price.
+
+    Inputs: acquirer_price (alias acquirer_share_price), required.
+    Offer: offer_price (alias offer_price_per_target_share), or target_price
+    (unaffected) + premium (decimal). target_price is also used to report the
+    premium when the offer is given directly.
+    Optional: target_shares_outstanding (shares issued, deal value),
+    acquirer_shares_outstanding (pro-forma ownership).
+    """
+    ak = _key(p, 'acquirer_price', 'acquirer_share_price')
+    if not ak:
+        raise InputError("Missing required input: acquirer_price (acquirer share price)")
+    acq_px = num(p, ak, gt=0)
+    tk = _key(p, 'target_price', 'target_share_price')
+    tgt_px = num(p, tk, gt=0) if tk else None
+
+    ok = _key(p, 'offer_price', 'offer_price_per_target_share')
+    if ok:
+        offer = num(p, ok, gt=0)
+        if has(p, 'premium') and tgt_px is not None:
+            implied = tgt_px * (1 + num(p, 'premium', min=-1))
+            if abs(implied - offer) > 1e-6 * max(1.0, offer):
+                raise InputError(f"offer_price {offer:g} disagrees with target_price x (1 + premium) = {implied:g}; "
+                                 "give one or the other")
+    elif has(p, 'premium'):
+        if tgt_px is None:
+            raise InputError("premium needs target_price (unaffected target share price)")
+        offer = tgt_px * (1 + num(p, 'premium', label='premium (decimal)', min=-1))
+    else:
+        raise InputError("Missing required input: offer_price, or target_price + premium")
+
+    ratio = offer / acq_px
+    out: Dict[str, Any] = {
+        'exchange_ratio': ratio,
+        'offer_price_per_target_share': offer,
+        'acquirer_share_price': acq_px,
+        'target_share_price': tgt_px,
+        'premium_pct': ((offer / tgt_px - 1) * 100) if tgt_px else None,
+    }
+    sk = _key(p, 'target_shares_outstanding', 'target_shares')
+    if sk:
+        tgt_sh = num(p, sk, gt=0)
+        new_sh = ratio * tgt_sh
+        out['new_acquirer_shares_issued'] = new_sh
+        out['deal_equity_value'] = offer * tgt_sh
+        ak2 = _key(p, 'acquirer_shares_outstanding', 'acquirer_shares')
+        if ak2:
+            acq_sh = num(p, ak2, gt=0)
+            post = acq_sh + new_sh
+            out['pro_forma_shares_outstanding'] = post
+            out['acquirer_ownership_pct'] = acq_sh / post * 100
+            out['target_holders_ownership_pct'] = new_sh / post * 100
+    # Value per target share as the acquirer price moves (fixed ratio, no collar).
+    out['acquirer_price_sensitivity'] = [
+        {'acquirer_price_change_pct': chg * 100,
+         'acquirer_price': acq_px * (1 + chg),
+         'value_per_target_share': ratio * acq_px * (1 + chg),
+         'premium_pct': ((ratio * acq_px * (1 + chg) / tgt_px - 1) * 100) if tgt_px else None}
+        for chg in (-0.20, -0.10, 0.0, 0.10, 0.20)
+    ]
+    return out
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({"calculate": json_calculate})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "exchange_ratio":
-            if len(sys.argv) < 5:
-                raise ValueError("Acquirer price, target price, and offer premium required")
-
-            acquirer_price = float(sys.argv[2])
-            target_price = float(sys.argv[3])
-            offer_premium_or_price = float(sys.argv[4])
-
-            # Host sends offer_premium as a fraction (e.g. 0.30 for 30%).
-            # Detect: if value < target_price * 0.5, it's likely a premium fraction.
-            # If value >= target_price * 0.5, it's likely an absolute price.
-            if offer_premium_or_price < target_price * 0.5:
-                # It's a premium fraction: compute offer price
-                offer_price = target_price * (1 + offer_premium_or_price)
-            else:
-                # It's already an absolute offer price
-                offer_price = offer_premium_or_price
-
-            calc = ExchangeRatioCalculator(
-                acquirer_price=acquirer_price,
-                target_price=target_price
-            )
-
-            analysis = calc.calculate_fixed_exchange_ratio(offer_price_per_share=offer_price)
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

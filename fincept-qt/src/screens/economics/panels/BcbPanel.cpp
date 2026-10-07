@@ -134,7 +134,7 @@ void BcbPanel::on_result(const QString& request_id, const services::EconomicsRes
     const QString unit = (idx >= 0 && idx < kBcbSeries.size()) ? " (" + kBcbSeries[idx].unit + ")" : "";
     const QString title = "BCB: " + (series_ptr ? series_ptr->label : cmd) + unit;
 
-    display(rows, title);
+    display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
     LOG_INFO("BcbPanel", QString("Displayed %1 records: %2").arg(rows.size()).arg(title));
 }
 

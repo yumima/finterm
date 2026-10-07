@@ -194,7 +194,21 @@ void AdbPanel::on_result(const QString& request_id, const services::EconomicsRes
     const QString cat_label = category_combo_->currentText();
     const QString title = "ADB: " + cat_label + " — " + economy_label;
 
-    display(rows, title);
+    // Stats only for a single series: one indicator for one economy. The
+    // all-indicator categories and "All Economies" interleave series by year.
+    bool single_series = false;
+    const QString rest = request_id.mid(4); // strip "adb_"
+    for (const auto& cat : kAdbCategories) {
+        if (rest.startsWith(cat.command + "_")) {
+            const QString economy = rest.mid(cat.command.size() + 1).section('_', 0, 0);
+            single_series = cat.uses_indicator && economy != QLatin1String("all");
+            break;
+        }
+    }
+    if (single_series)
+        display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
+    else
+        display(rows, title);
     LOG_INFO("AdbPanel", QString("Displayed %1 rows for %2").arg(rows.size()).arg(request_id));
 }
 

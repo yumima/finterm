@@ -89,54 +89,47 @@ def _run(acquirer_data: Dict[str, Any], target_data: Dict[str, Any], ownership: 
     return analyzer.analyze_contributions(acquirer_units, new_units)
 
 
+def _json_analyze(params: Dict[str, Any]) -> Dict[str, Any]:
+    """{acquirer: {...}, target: {...}, ownership_split} -- or flat
+    acquirer_<field> / target_<field> keys. ownership_split is the TARGET
+    holders' share of the combined company (fraction)."""
+    def side(prefix: str) -> Dict[str, Any]:
+        if isinstance(params.get(prefix), dict):
+            return params[prefix]
+        flat = {k[len(prefix) + 1:]: v for k, v in params.items() if k.startswith(prefix + '_')}
+        if not flat:
+            raise ValueError(f"{prefix} financials are required")
+        return flat
+    data = _run(side('acquirer'), side('target'), params.get('ownership_split'))
+    own = data['ownership']
+    out = {
+        'acquirer_ownership_pct': own['acquirer_pct'],
+        'target_ownership_pct': own['target_pct'],
+    }
+    rows = []
+    for key, label in (('revenue_contribution', 'revenue'), ('ebitda_contribution', 'EBITDA'),
+                       ('net_income_contribution', 'net income'), ('assets_contribution', 'total assets')):
+        c = data[key]
+        if c['acquirer_pct'] is None:
+            continue
+        rows.append({'metric': label, 'acquirer_pct': c['acquirer_pct'], 'target_pct': c['target_pct'],
+                     'target_contribution_vs_ownership_pct': c['target_pct'] - own['target_pct']})
+    out['contributions'] = rows
+    out['note'] = ('Positive target_contribution_vs_ownership: target holders contribute more of that metric '
+                   'than the share of the combined company they receive.')
+    return out
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'analyze': _json_analyze})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "contribution":
-            if len(sys.argv) < 5:
-                raise ValueError("Acquirer data, target data, and ownership split required")
-
-            acquirer_data = json.loads(sys.argv[2])
-            target_data = json.loads(sys.argv[3])
-            # ownership_split can be a float or a JSON dict with acquirer_shares/target_shares
-            ownership_arg = sys.argv[4]
-            try:
-                ownership = float(ownership_arg)
-            except ValueError:
-                ownership = json.loads(ownership_arg)
-
-            result = {"success": True, "data": _run(acquirer_data, target_data, ownership)}
-            print(json.dumps(result))
-
-        elif command == "analyze":
-            # Single JSON params object: {acquirer, target, ownership_split}
-            if len(sys.argv) < 3:
-                raise ValueError("Params JSON required")
-            params = json.loads(sys.argv[2])
-            if not isinstance(params.get('acquirer'), dict) or not isinstance(params.get('target'), dict):
-                raise ValueError("acquirer and target financials are required")
-            result = {"success": True,
-                      "data": _run(params['acquirer'], params['target'], params.get('ownership_split'))}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

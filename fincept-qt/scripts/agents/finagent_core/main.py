@@ -78,6 +78,9 @@ def _extract_workflow_response(result: Any) -> str:
             return str(content)
     # SimpleWorkflowExecutor dict: {"success": True, "results": [...], "context": {...}}
     if isinstance(result, dict):
+        # Workflow classes return {"success": ..., "response"|"error": ...}
+        if isinstance(result.get("response"), str):
+            return result["response"]
         # Collect all step results into a readable string
         parts = []
         for step_result in result.get("results", []):
@@ -133,6 +136,58 @@ def _attach_tool_calls(result: Dict[str, Any], response: Any) -> None:
         logger.warning(f"tool_calls log extraction failed: {_e}")
     if tool_calls_log:
         result["tool_calls"] = tool_calls_log
+
+
+def _workflow_result(result: Any, **extra) -> Dict[str, Any]:
+    """Map a workflow result to the C++ reply, propagating workflow failures
+    (e.g. no market-data tool) instead of reporting them as success."""
+    if isinstance(result, dict) and result.get("success") is False:
+        return {"success": False, "error": result.get("error") or "workflow failed", **extra}
+    out = {"success": True, "response": _extract_workflow_response(result),
+           "result": result if isinstance(result, dict) else None, **extra}
+    return out
+
+
+def _resolve_agent_card(agent_id: str):
+    """Look up a Python agent card, discovering on first use.
+
+    The registry is per-process and empty until discovery runs, so a bare
+    registry.get() in a fresh `run` process always missed and the agent's
+    curated config was silently dropped.
+    """
+    if not agent_id:
+        return None
+    from finagent_core.agent_loader import get_loader
+    loader = get_loader()
+    card = loader.registry.get(agent_id)
+    if card is None:
+        loader.discover_agents()
+        card = loader.registry.get(agent_id)
+    return card
+
+
+def _apply_agent_card(agent_id: str, config: Dict[str, Any]):
+    """Merge a Python agent card's curated config under the caller's config.
+
+    Returns (config, error).  error is set when the agent is disabled.
+    """
+    card = _resolve_agent_card(agent_id)
+    if card is None:
+        return config, None
+    if card.config.get("disabled"):
+        return config, (f"Agent '{card.name}' is disabled: "
+                        f"{card.config.get('disabled_reason', 'not runnable in this build')}")
+    if not card.config.get("instructions"):
+        return config, None
+    # Card is the base; anything the caller actually set (edited
+    # instructions, resolved model, allowlist, toggles) wins.  Empty values
+    # don't erase the card's curated fields.
+    merged = {**card.config}
+    for key, value in config.items():
+        if value is None or value == "" or value == [] or value == {}:
+            continue
+        merged[key] = value
+    return merged, None
 
 
 def _setup_agent_modules(agent, config: Dict[str, Any], params: Dict[str, Any]):
@@ -314,13 +369,9 @@ def dispatch_action(
         agent_id = config.get("agent_id", "")
         if agent_id:
             try:
-                from finagent_core.agent_loader import get_loader
-                card = get_loader().registry.get(agent_id)
-                if card and card.config.get("instructions"):
-                    agent_card_cfg = {**card.config}
-                    if config.get("model"):
-                        agent_card_cfg["model"] = config["model"]
-                    config = agent_card_cfg
+                config, card_err = _apply_agent_card(agent_id, config)
+                if card_err:
+                    return {"success": False, "error": card_err}
             except Exception as _e:
                 logger.warning(f"Could not load agent card '{agent_id}': {_e}")
 
@@ -512,7 +563,10 @@ def dispatch_action(
         plan_dict = params.get("plan")
         if not plan_dict:
             return {"success": False, "error": "Missing 'plan'"}
-        return execute_plan(plan_dict, api_keys)
+        # config carries the resolved model (active_llm, or the plan's
+        # llm_profile_id resolved C++-side) so steps don't fall back to the
+        # first provider that happens to have an API key.
+        return execute_plan(plan_dict, api_keys, config)
 
     if action == "generate_dynamic_plan":
         from finagent_core.execution_planner import generate_dynamic_plan
@@ -675,8 +729,7 @@ def dispatch_action(
         if not symbol:
             return {"success": False, "error": "Missing 'symbol' in params"}
         result = agent.run_stock_analysis(symbol, config)
-        response_text = _extract_workflow_response(result)
-        return {"success": True, "symbol": symbol, "response": response_text, "result": result if isinstance(result, dict) else None}
+        return _workflow_result(result, symbol=symbol)
 
     if action == "portfolio_rebal":
         from finagent_core.core_agent import CoreAgent
@@ -687,8 +740,7 @@ def dispatch_action(
             # Never fall back to the raw params dict as if it were holdings.
             return {"success": False, "error": "no portfolio data supplied"}
         result = agent.run_portfolio_rebalancing(portfolio_data, config)
-        response_text = _extract_workflow_response(result)
-        return {"success": True, "response": response_text, "result": result if isinstance(result, dict) else None}
+        return _workflow_result(result)
 
     if action == "risk_assessment":
         from finagent_core.core_agent import CoreAgent
@@ -699,8 +751,7 @@ def dispatch_action(
             # Never fall back to the raw params dict as if it were holdings.
             return {"success": False, "error": "no portfolio data supplied"}
         result = agent.run_risk_assessment(portfolio_data, config)
-        response_text = _extract_workflow_response(result)
-        return {"success": True, "response": response_text, "result": result if isinstance(result, dict) else None}
+        return _workflow_result(result)
 
     if action == "macro_scan":
         from finagent_core.core_agent import CoreAgent
@@ -999,17 +1050,13 @@ def dispatch_action_streaming(
         agent_id = config.get("agent_id", "")
         if agent_id:
             try:
-                from finagent_core.agent_loader import get_loader
-                loader = get_loader()
-                card = loader.registry.get(agent_id)
-                if card and card.config.get("instructions"):
-                    # Agent card config is the base; active_llm model takes priority
-                    agent_card_cfg = {**card.config}
-                    # Preserve the resolved model from active_llm — don't let the
-                    # card's provider override what the user configured in Settings
-                    if config.get("model"):
-                        agent_card_cfg["model"] = config["model"]
-                    config = agent_card_cfg
+                # Agent card config is the base; active_llm model takes priority
+                config, card_err = _apply_agent_card(agent_id, config)
+                if card_err:
+                    stream_print("error", card_err)
+                    return {"success": False, "error": card_err}
+                card = _resolve_agent_card(agent_id)
+                if card is not None:
                     stream_print("thinking", f"Using agent: {card.name}")
             except Exception as _e:
                 logger.warning(f"Could not load agent card '{agent_id}': {_e}")

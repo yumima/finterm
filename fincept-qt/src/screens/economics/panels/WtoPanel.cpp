@@ -28,6 +28,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
+#include <QSet>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -153,8 +154,10 @@ void WtoPanel::on_fetch() {
         show_loading("Fetching WTO Trade Statistics: " + indicator_combo_->currentText() + " for " + reporter + "…");
         services::EconomicsService::instance().execute(
             kWtoSourceId, kWtoScript, "timeseries_data",
-            {"--i=" + indicator, "--r=" + reporter, "--ps=" + (years.isEmpty() ? "default" : years)},
-            "wto_ts_" + indicator + "_" + reporter);
+            // heading_style=M → machine-readable keys (ReportingEconomy, Year, Value, …).
+            {"--i=" + indicator, "--r=" + reporter, "--ps=" + (years.isEmpty() ? "default" : years),
+             "--heading_style=M"},
+            "wto_ts_" + indicator + "_" + reporter + "_" + years);
 
     } else if (section == "qr_members") {
         QStringList args;
@@ -210,10 +213,19 @@ void WtoPanel::on_result(const QString& request_id, const services::EconomicsRes
         for (const auto& v : dataset) {
             const auto obj = v.toObject();
             QJsonObject row;
-            row["reporter"] = obj["ReporterName"].isUndefined() ? obj["ReporterCode"] : obj["ReporterName"];
+            auto first = [&obj](std::initializer_list<const char*> keys) {
+                for (const char* k : keys) {
+                    const QJsonValue v = obj.value(QLatin1String(k));
+                    if (!v.isUndefined() && !v.isNull())
+                        return v;
+                }
+                return QJsonValue();
+            };
+            row["reporter"] = first({"ReportingEconomy", "ReporterName", "ReportingEconomyCode", "ReporterCode"});
+            row["partner"] = first({"PartnerEconomy", "PartnerEconomyCode"});
             row["year"] = obj["Year"];
             row["value"] = obj["Value"];
-            row["product"] = obj["ProductOrSectorCode"];
+            row["product"] = first({"ProductOrSectorCode", "ProductOrSector"});
             row["indicator"] = indicator_combo_->currentData().toString();
             rows.append(row);
         }
@@ -223,7 +235,19 @@ void WtoPanel::on_result(const QString& request_id, const services::EconomicsRes
                        "Also verify WTO_API_KEY is set correctly");
             return;
         }
-        display(rows, "WTO Trade Statistics: " + indicator_combo_->currentText());
+        // Stats only when the rows are ONE series (single reporter, partner and
+        // product); otherwise they mix series and the cards stay "—".
+        QSet<QString> series_ids;
+        for (const auto& v : rows) {
+            const auto r = v.toObject();
+            series_ids.insert(r["reporter"].toVariant().toString() + '|' + r["partner"].toVariant().toString() +
+                              '|' + r["product"].toVariant().toString());
+        }
+        const QString ts_title = "WTO Trade Statistics: " + indicator_combo_->currentText();
+        if (series_ids.size() == 1)
+            display(rows, ts_title, QStringLiteral("value"), QStringLiteral("year"));
+        else
+            display(rows, ts_title);
 
     } else if (request_id.startsWith("wto_qrm_")) {
         // QR Members: data is array of { code, name, ... }

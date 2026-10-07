@@ -26,12 +26,13 @@ struct StatCanSeries {
     QString description;
 };
 
+// Commands must match STATCAN_VECTORS in statcan_data.py (WDS vector fetch).
 static const QList<StatCanSeries> kStatCanSeries = {
-    {"Real GDP (Chained 2017 $, SA)", "gdp", "Table 36-10-0104-01, v65201210, quarterly"},
+    {"Real GDP, All Industries (Chained 2017 $, SAAR)", "gdp", "Table 36-10-0434-01, v65201210, monthly"},
     {"CPI All-Items, Canada", "cpi", "Table 18-10-0004-01, v41690973, monthly"},
-    {"Unemployment Rate", "unemployment", "Table 14-10-0287-01, v2062815, monthly"},
-    {"Employment Rate", "employment", "Table 14-10-0287-01, v2062817, monthly"},
-    {"Population Estimate (Canada)", "population", "Table 17-10-0005-01, v466668, quarterly"},
+    {"Unemployment Rate (15+, SA)", "unemployment", "Table 14-10-0287-01, v2062815, monthly"},
+    {"Employment Rate (15+, SA)", "employment", "Table 14-10-0287-01, v2062817, monthly"},
+    {"Population Estimate (Canada)", "population", "Table 17-10-0005-01, v466668, annual"},
     {"Housing Starts (SA, SAAR)", "housing", "Table 34-10-0158-01, v52300157, monthly"},
 };
 
@@ -114,7 +115,7 @@ void StatCanPanel::on_result(const QString& request_id, const services::Economic
     }
     const QString title = "StatCan: " + (label.isEmpty() ? request_id.mid(8) : label);
 
-    display(rows, title);
+    display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
     LOG_INFO("StatCanPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 

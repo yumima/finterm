@@ -86,13 +86,14 @@ void TradingEconomicsPanel::on_fetch() {
 
     show_loading("Fetching Trading Economics: " + dataset.label + "…");
 
-    QStringList args = {dataset.command};
+    // EconomicsService already puts the command first in argv.
+    QStringList args;
     if (dataset.country_arg == "required" || dataset.country_arg == "optional")
         args << country;
 
     services::EconomicsService::instance().execute(kTradingEconomicsSourceId, kTradingEconomicsScript, dataset.command,
                                                    args,
-                                                   "te_" + dataset.command + (args.size() > 1 ? "_" + country : ""));
+                                                   "te_" + dataset.command + (!args.isEmpty() ? "_" + country : ""));
 }
 
 // Normalise various Trading Economics response shapes into displayable rows.
@@ -175,6 +176,7 @@ void TradingEconomicsPanel::on_result(const QString& request_id, const services:
     const int idx = dataset_combo_->currentIndex();
     const QString title =
         "Trading Economics: " + (idx >= 0 && idx < kTEDatasets.size() ? kTEDatasets[idx].label : request_id.mid(3));
+    // One row per country/instrument (cross-sectional): no single series value.
     display(rows, title);
     LOG_INFO("TradingEconomicsPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }

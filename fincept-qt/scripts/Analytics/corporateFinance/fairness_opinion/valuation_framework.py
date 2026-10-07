@@ -1,8 +1,15 @@
 """Fairness Opinion Valuation Framework"""
+import math
+import sys
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
 import numpy as np
+
+_ANALYTICS = str(Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in sys.path:
+    sys.path.insert(0, _ANALYTICS)
 
 class ValuationMethod(Enum):
     DCF = "dcf"
@@ -333,116 +340,124 @@ class FairnessOpinionFramework:
             }
         }
 
-def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import sys
-    import json
+_FLAT_METHODS = [
+    ('dcf_value', 'DCF'),
+    ('comps_value', 'Trading Comps'),
+    ('precedent_value', 'Precedent Transactions'),
+]
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
 
-    command = sys.argv[1]
+def fairness_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON contract:
+    {offer_price, methods: [{method, low, high} | {method, valuation}, weight?],
+     week52_low?, week52_high?}   (flat dcf_value/comps_value/precedent_value accepted)
 
-    try:
-        if command == "fairness":
-            if len(sys.argv) < 5:
-                raise ValueError("Valuation methods, offer price, and qualitative factors required")
+    Per-share values throughout. A method given as a single `valuation` is a
+    point (low = high = valuation) -- no range is invented around it.
+    Reference range = [min of method lows, max of method highs].
+    Perspective: the target's shareholders. The offer supports a fairness
+    conclusion when it is at or above the reference range's low end AND at or
+    above the low end of a majority of the individual methods.
+    """
+    from corporateFinance._cli import InputError, has, num, pct
+    offer = num(p, 'offer_price', label='Offer price per share', gt=0)
 
-            valuation_methods = json.loads(sys.argv[2])
-            offer_price = float(sys.argv[3])
-            qualitative_factors = json.loads(sys.argv[4])
+    methods = p.get('methods')
+    if methods is None:
+        methods = [{'method': label, 'valuation': p[key]} for key, label in _FLAT_METHODS if has(p, key)]
+    if not isinstance(methods, list) or not methods:
+        raise InputError("Missing required input: methods (valuation per share by method)")
 
-            # valuation_methods can be a dict with 'methods' key, or a list directly
-            company_name = 'Target Company'
-            if isinstance(valuation_methods, dict):
-                company_name = valuation_methods.get('company_name', 'Target Company')
-                methods_list = valuation_methods.get('methods', [])
-            elif isinstance(valuation_methods, list):
-                methods_list = valuation_methods
-            else:
-                methods_list = []
-
-            if not methods_list:
-                raise ValueError("No valuation methods provided. Expected a list of methods or a dict with 'methods' key.")
-
-            framework = FairnessOpinionFramework(
-                company_name=company_name,
-                offer_price=offer_price
-            )
-
-            # Convert valuation methods data to ValuationRange objects
-            # Handles both {low, high} format and {valuation, range: {min, max}} format
-            valuation_ranges = []
-            for method_data in methods_list:
-                method_name = method_data.get('method', 'DCF').upper().replace(' ', '_').replace(' ', '_')
-                # Map common method names to enum keys
-                method_name_map = {
-                    'TRADING_COMPS': 'TRADING_COMPS',
-                    'TRADING COMPS': 'TRADING_COMPS',
-                    'PRECEDENT_TRANSACTIONS': 'PRECEDENT_TRANSACTIONS',
-                    'PRECEDENT TRANSACTIONS': 'PRECEDENT_TRANSACTIONS',
-                    'LBO_ANALYSIS': 'LBO_ANALYSIS',
-                    'LBO ANALYSIS': 'LBO_ANALYSIS',
-                    'PREMIUMS_PAID': 'PREMIUMS_PAID',
-                    'PREMIUMS PAID': 'PREMIUMS_PAID',
-                    'REPLACEMENT_COST': 'REPLACEMENT_COST',
-                    'DCF': 'DCF',
-                }
-                enum_key = method_name_map.get(method_name, method_name)
-                try:
-                    vm = ValuationMethod[enum_key]
-                except KeyError:
-                    vm = ValuationMethod.DCF
-
-                # Support {low, high} or {valuation, range: {min, max}} formats
-                if 'low' in method_data and 'high' in method_data:
-                    low = float(method_data['low'])
-                    high = float(method_data['high'])
-                elif 'range' in method_data and isinstance(method_data['range'], dict):
-                    low = float(method_data['range'].get('min', method_data.get('valuation', 0) * 0.9))
-                    high = float(method_data['range'].get('max', method_data.get('valuation', 0) * 1.1))
-                else:
-                    val = float(method_data.get('valuation', 0))
-                    low, high = val * 0.9, val * 1.1
-
-                midpoint = float(method_data.get('midpoint', method_data.get('mid', method_data.get('valuation', (low + high) / 2))))
-                val_range = ValuationRange(
-                    method=vm,
-                    low=low,
-                    high=high,
-                    midpoint=midpoint,
-                    weight=method_data.get('weight', 1.0)
-                )
-                valuation_ranges.append(val_range)
-
-            # Auto-normalize weights if they don't sum to 1.0
-            total_weight = sum(v.weight for v in valuation_ranges)
-            if total_weight > 0 and abs(total_weight - 1.0) > 0.01:
-                for v in valuation_ranges:
-                    v.weight = v.weight / total_weight
-
-            analysis = framework.weighted_valuation_summary(valuation_ranges)
-
-            # Also compute fairness determination for the frontend
-            fairness = framework.fairness_determination(analysis, qualitative_factors)
-            analysis['is_fair'] = fairness['fairness_conclusion']['is_fair']
-            analysis['fairness_conclusion'] = fairness['fairness_conclusion']['conclusion']
-            analysis['quantitative_analysis'] = fairness['quantitative_analysis']
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
+    rows = []
+    for i, m in enumerate(methods):
+        if not isinstance(m, dict):
+            raise InputError("each method must be an object")
+        name = str(m.get('method') or f"Method {i + 1}")
+        if has(m, 'low') and has(m, 'high'):
+            low = num(m, 'low', label=f"{name} low", gt=0)
+            high = num(m, 'high', label=f"{name} high", gt=0)
+            if high < low:
+                raise InputError(f"{name}: high ({high}) is below low ({low})")
+            mid = num(m, 'midpoint', label=f"{name} midpoint", gt=0) if has(m, 'midpoint') else (low + high) / 2
         else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
+            v = num(m, 'valuation', label=f"{name} valuation per share", gt=0)
+            low = high = mid = v
+        w = num(m, 'weight', label=f"{name} weight", min=0) if has(m, 'weight') else None
+        rows.append({'method': name, 'low': low, 'high': high, 'midpoint': mid, 'weight': w,
+                     'offer_vs_midpoint_pct': pct(offer / mid - 1.0),
+                     'offer_at_or_above_low': offer >= low,
+                     'offer_within_range': low <= offer <= high})
 
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
+    weights = [r['weight'] for r in rows]
+    if any(w is not None for w in weights):
+        if any(w is None for w in weights):
+            raise InputError("weight must be given for every method or for none")
+        total_w = sum(weights)
+        if total_w <= 0:
+            raise InputError("method weights must sum to more than 0")
+        weighting = 'user weights'
+        mid_ref = sum(r['midpoint'] * r['weight'] for r in rows) / total_w
+    else:
+        weighting = 'equal weights'
+        mid_ref = sum(r['midpoint'] for r in rows) / len(rows)
+    for r in rows:
+        r.pop('weight')
+
+    ref_low = min(r['low'] for r in rows)
+    ref_high = max(r['high'] for r in rows)
+    supporting = sum(1 for r in rows if r['offer_at_or_above_low'])
+    majority = math.floor(len(rows) / 2) + 1
+
+    if offer < ref_low:
+        position = 'below reference range'
+    elif offer > ref_high:
+        position = 'above reference range'
+    else:
+        position = 'within reference range'
+    supports = offer >= ref_low and supporting >= majority
+
+    out = {
+        'offer_price': offer,
+        'reference_low': ref_low,
+        'reference_high': ref_high,
+        'reference_midpoint': mid_ref,
+        'midpoint_weighting': weighting,
+        'offer_vs_midpoint_pct': pct(offer / mid_ref - 1.0),
+        'offer_vs_low_pct': pct(offer / ref_low - 1.0),
+        # 0% = at the reference low, 100% = at the high; null outside the range
+        'position_in_range_pct': (pct((offer - ref_low) / (ref_high - ref_low))
+                                  if ref_high > ref_low and ref_low <= offer <= ref_high else None),
+        'offer_position': position,
+        'methods_supporting': supporting,
+        'methods_total': len(rows),
+        'supports_fairness': supports,
+        'conclusion': ('Offer is at or above the reference range low end and at or above the low end of '
+                       f'{supporting} of {len(rows)} methods: supports a fairness conclusion'
+                       if supports else
+                       f'Offer is {position} and at or above the low end of only {supporting} of {len(rows)} '
+                       'methods: does not support a fairness conclusion'),
+        'perspective': "target shareholders (offer vs. standalone value per share)",
+        'methods': rows,
+    }
+    if has(p, 'week52_low') or has(p, '52w_low'):
+        lo = float(p.get('week52_low', p.get('52w_low')))
+        out['offer_vs_52w_low_pct'] = pct(offer / lo - 1.0) if lo > 0 else None
+    if has(p, 'week52_high') or has(p, '52w_high'):
+        hi = float(p.get('week52_high', p.get('52w_high')))
+        out['offer_vs_52w_high_pct'] = pct(offer / hi - 1.0) if hi > 0 else None
+    return out
+
+
+def main():
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'generate': fairness_json})
+
 
 if __name__ == '__main__':
     main()

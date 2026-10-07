@@ -1,7 +1,13 @@
 """Premium Analysis for Fairness Opinions"""
+import sys
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 import numpy as np
+
+_ANALYTICS = str(Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in sys.path:
+    sys.path.insert(0, _ANALYTICS)
 
 class PremiumAnalysis:
     """Analyze acquisition premiums for fairness opinion"""
@@ -263,57 +269,61 @@ class PremiumAnalysis:
             'within_analyst_range': min_target <= self.offer_price_per_share <= max_target
         }
 
+# Reference points, in display order. Every one is an UNAFFECTED price: it must
+# be taken before the announcement (and before any leak/rumour), never the
+# post-announcement trading price, which already embeds the offer.
+_PREMIUM_REFS = [
+    ('price_1d', '1-day prior (unaffected)'),
+    ('price_1w', '1-week prior'),
+    ('price_4w', '4-week average'),
+    ('price_1m', '1-month prior'),
+    ('price_3m', '3-month prior'),
+    ('price_52w', '52-week high'),
+    ('price_52w_low', '52-week low'),
+]
+
+
+def premium_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON contract:
+    {offer_price, price_1d, price_1w?, price_4w?, price_1m?, price_3m?,
+     price_52w? (52-week high), price_52w_low?, shares_outstanding?}
+    premium = offer / unaffected reference price - 1.
+    """
+    from corporateFinance._cli import has, num, opt_num, pct
+    offer = num(p, 'offer_price', label='Offer price per share', gt=0)
+    unaffected = num(p, 'price_1d', label='Unaffected price (1 day before announcement)', gt=0)
+    rows = []
+    out = {'offer_price': offer, 'unaffected_price': unaffected}
+    for key, label in _PREMIUM_REFS:
+        if not has(p, key):
+            continue
+        ref = num(p, key, label=label, gt=0)
+        prem = offer / ref - 1.0
+        rows.append({'reference': label, 'price': ref, 'premium_pct': pct(prem),
+                     'premium_per_share': offer - ref})
+        out[key.replace('price_', 'premium_') + '_pct'] = pct(prem)
+    shares = opt_num(p, 'shares_outstanding', None, label='Shares outstanding', gt=0)
+    if shares is not None:
+        out['equity_offer_value'] = offer * shares
+        out['unaffected_equity_value'] = unaffected * shares
+        out['aggregate_premium_paid'] = (offer - unaffected) * shares
+    if has(p, 'price_52w'):
+        out['offer_above_52w_high'] = offer > float(p['price_52w'])
+    out['premiums'] = rows
+    out['basis'] = 'Premium = offer / unaffected pre-announcement reference price - 1'
+    return out
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'analyze': premium_json})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "premium":
-            if len(sys.argv) < 4:
-                raise ValueError("Daily prices (JSON), offer price, and announcement date required")
-
-            daily_prices = json.loads(sys.argv[2])
-            offer_price = float(sys.argv[3])
-            announcement_date = int(sys.argv[4]) if len(sys.argv) > 4 else None
-
-            shares_outstanding = 50_000_000  # Default or could be passed as param
-
-            analyzer = PremiumAnalysis(
-                offer_price_per_share=offer_price,
-                shares_outstanding=shares_outstanding
-            )
-
-            if announcement_date:
-                analysis = analyzer.unaffected_price_analysis(daily_prices, rumor_date=announcement_date)
-            else:
-                # Use last price as current price
-                historical_prices = {
-                    '1_day': daily_prices[-1] if daily_prices else 0,
-                    '1_week': daily_prices[-5] if len(daily_prices) >= 5 else daily_prices[0],
-                    '1_month': daily_prices[-20] if len(daily_prices) >= 20 else daily_prices[0]
-                }
-                analysis = analyzer.calculate_premiums(historical_prices)
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

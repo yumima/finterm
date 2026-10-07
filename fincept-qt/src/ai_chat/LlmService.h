@@ -149,6 +149,14 @@ struct LlmResponse {
     int completion_tokens = 0;
     int total_tokens = 0;
     bool success = false;
+    // Which provider/model actually produced this response. Differs from the
+    // requested target when the quota-fallback chain hopped elsewhere
+    // (`fell_back` is then true) — the UI must show the model that answered,
+    // not the one that was asked.
+    QString provider_used = {};
+    QString model_used = {};
+    bool fell_back = false;
+    QString requested_model = {};
 };
 
 // chunk_text, is_done
@@ -283,6 +291,20 @@ class LlmService : public QObject {
     // else fall back to the global persona snapshot.
     QString dynamic_system_suffix(const PersonaScope& persona) const;
     QStringList resolve_tool_globs(const PersonaScope& persona) const;
+
+    // The system prompt for ONE request, composed at call time: the user's
+    // custom prompt or the built-in one (whose tool guidance is generated
+    // from the tools this request actually exposes), the optional suffix, and
+    // LAST the day-granularity date line (recomputed per call — a session can
+    // span midnight — but kept at the end so the prefix stays cacheable).
+    //   with_tools  — tools are attached to this request
+    //   with_suffix — also append persona instructions + ambient context
+    QString compose_system_prompt(const PersonaScope& persona, bool with_tools, bool with_suffix) const;
+
+    // Quota-fallback walk shared by chat() and the streaming path. Stamps
+    // provider_used / model_used / fell_back on the response.
+    LlmResponse request_with_fallback(const QString& user_message, const std::vector<ConversationMessage>& history,
+                                      bool use_tools, const PersonaScope& persona);
 
     // Request builders → QJsonObject
     // ── Ollama native route ──────────────────────────────────────────────
@@ -430,9 +452,6 @@ class LlmService : public QObject {
     static QString get_models_url(const QString& provider, const QString& api_key, const QString& base_url);
     static QMap<QString, QString> get_models_headers(const QString& provider, const QString& api_key);
     static QStringList parse_models_response(const QString& provider, const QByteArray& body);
-
-    // Parse SSE data line → extracted text chunk
-    static QString parse_sse_chunk(const QString& data, const QString& provider);
 
     // Parse token usage from response JSON
     static void parse_usage(LlmResponse& resp, const QJsonObject& rj, const QString& provider);

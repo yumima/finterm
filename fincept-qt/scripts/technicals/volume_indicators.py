@@ -256,6 +256,8 @@ def calculate_all_volume_indicators(df, **kwargs):
     safe_assign(result_df, 'nvi', lambda: calculate_nvi(df, **kwargs.get('nvi', {})))
 
     # VWAP — `ta`'s rolling volume-weighted price, not a session VWAP.
+    # NOTE: `vwap` is ta's ROLLING 14-bar VWAP, not a session VWAP — surface it
+    # as "VWAP (14-bar rolling)".
     safe_assign(result_df, 'vwap', lambda: calculate_vwap(df, **kwargs.get('vwap', {})))
 
     # MFI

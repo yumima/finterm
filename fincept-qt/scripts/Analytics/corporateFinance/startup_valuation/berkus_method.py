@@ -1,6 +1,12 @@
 """Berkus Method - Pre-Revenue Startup Valuation"""
-from typing import Dict, Any
+import sys
+from pathlib import Path
+from typing import Dict, Any, List
 from enum import Enum
+
+_ANALYTICS = str(Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in sys.path:
+    sys.path.insert(0, _ANALYTICS)
 
 class BerkusFactor(Enum):
     """Five key value factors in Berkus Method"""
@@ -132,57 +138,74 @@ class BerkusMethod:
             }
         }
 
+BERKUS_KEYS = ['sound_idea', 'prototype', 'quality_team', 'strategic_relationships', 'product_rollout']
+BERKUS_LABELS = ['Sound Idea', 'Prototype', 'Quality Team', 'Strategic Relationships', 'Product Rollout']
+_BERKUS_ALIASES = {
+    'sound_idea': ('sound_idea', 'idea_score'),
+    'prototype': ('prototype', 'prototype_score'),
+    'quality_team': ('quality_team', 'quality_management', 'team_score'),
+    'strategic_relationships': ('strategic_relationships', 'relationships_score'),
+    'product_rollout': ('product_rollout', 'rollout_score'),
+}
+
+
+def berkus_scores_from_params(p: Dict[str, Any]) -> List[float]:
+    """Five factor scores in [0, 1], from `scores` (ordered list) or named keys.
+    Every factor is required -- a missing factor is not silently 'average'."""
+    from corporateFinance._cli import InputError
+    raw = p.get('scores')
+    if isinstance(raw, list):
+        if len(raw) != 5:
+            raise InputError(f"scores must list 5 factor scores ({', '.join(BERKUS_LABELS)})")
+        vals = raw
+    else:
+        src = raw if isinstance(raw, dict) else p
+        vals = []
+        for key in BERKUS_KEYS:
+            v = next((src[a] for a in _BERKUS_ALIASES[key] if src.get(a) is not None), None)
+            if v is None:
+                raise InputError(f"Missing required input: Berkus score for {key}")
+            vals.append(v)
+    out = []
+    for label, v in zip(BERKUS_LABELS, vals):
+        if v is None:
+            raise InputError(f"Missing required input: Berkus score for {label}")
+        f = float(v)
+        if not 0.0 <= f <= 1.0:
+            raise InputError(f"{label} score must be between 0 and 1 (got {f})")
+        out.append(f)
+    return out
+
+
+def berkus_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON contract: {scores: [5 x 0-1] | {sound_idea,...}, max_value_per_factor}"""
+    from corporateFinance._cli import num, pct
+    scores = berkus_scores_from_params(p)
+    max_value = num(p, 'max_value_per_factor', label='Max value per factor ($)', gt=0)
+    factors = [{'factor': label, 'score_pct': pct(s), 'value': s * max_value, 'max_value': max_value}
+               for label, s in zip(BERKUS_LABELS, scores)]
+    total = sum(f['value'] for f in factors)
+    max_total = max_value * 5
+    return {
+        'method': 'Berkus Method',
+        'pre_money_valuation': total,
+        'max_possible_valuation': max_total,
+        'share_of_max_pct': pct(total / max_total),
+        'max_value_per_factor': max_value,
+        'factors': factors,
+    }
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'calculate': berkus_json})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "berkus":
-            if len(sys.argv) < 3:
-                raise ValueError("Factor scores required")
-            factor_scores = json.loads(sys.argv[2])
-
-            berkus = BerkusMethod(max_value_per_factor=factor_scores.get('max_value_per_factor', 500_000))
-            # Map frontend keys to quick_assessment params (0-100 scale → 0-1)
-            key_map = {
-                'sound_idea': 'idea_score', 'idea_score': 'idea_score',
-                'prototype': 'prototype_score', 'prototype_score': 'prototype_score',
-                'quality_team': 'team_score', 'quality_management': 'team_score', 'team_score': 'team_score',
-                'strategic_relationships': 'relationships_score', 'relationships_score': 'relationships_score',
-                'product_rollout': 'rollout_score', 'rollout_score': 'rollout_score',
-            }
-            mapped = {}
-            for k, v in factor_scores.items():
-                if k in key_map and k != 'max_value_per_factor':
-                    # Normalize: if score > 1, treat as percentage (0-100) → (0-1)
-                    normalized = v / 100.0 if v > 1 else v
-                    mapped[key_map[k]] = normalized
-            # Provide defaults for any missing required args
-            defaults = {'idea_score': 0.5, 'prototype_score': 0.5, 'team_score': 0.5,
-                       'relationships_score': 0.5, 'rollout_score': 0.5}
-            for param, default in defaults.items():
-                if param not in mapped:
-                    mapped[param] = default
-            valuation = berkus.quick_assessment(**mapped)
-
-            result = {"success": True, "data": valuation}
-            print(json.dumps(result))
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

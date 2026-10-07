@@ -29,9 +29,82 @@ PARAMETERS:
 
 """
 
+import math
 from decimal import Decimal
-from typing import Dict, List, Any, Tuple
-from .core import EconomicsBase, ValidationError
+from typing import Dict, List, Any, Optional, Tuple
+
+try:
+    from .core import EconomicsBase, ValidationError
+except ImportError:  # run as a script (python trade_geopolitics.py ...): sibling import
+    from core import EconomicsBase, ValidationError
+
+
+# ── Tariff price / volume framework ─────────────────────────────────────────
+#
+# Partial-equilibrium import market, ad valorem tariff t (fraction):
+#   pass-through pt in [0, 1] is the elasticity of the domestic import price
+#   with respect to (1 + t):  P_d1/P_d0 = ((1+t1)/(1+t0))^pt
+#   the rest falls on the foreign border price: P_w1/P_w0 = ((1+t1)/(1+t0))^(pt-1)
+#   (pt = 1: small country, full pass-through, border price unchanged).
+#   Import demand is iso-elastic with elasticity -e (e > 0):
+#       Q1/Q0 = (P_d1/P_d0)^(-e)            (exact for constant elasticity)
+#   the linear approximation -e * dP/P is reported alongside.
+#   Border import value V = P_w Q; tariff revenue R = t V.
+#   Consumer surplus change on the import demand curve (area left of the
+#   curve between the two domestic prices), D0 = V0 (1 + t0):
+#       dCS = D0 (r^(1-e) - 1) / (e - 1)      (e != 1)
+#       dCS = D0 ln(1/r)                      (e == 1)
+#   National welfare change = dCS + dR (terms-of-trade effects enter through
+#   the border price inside R and D).
+
+def _iso_cs_change(d0: float, r: float, e: float) -> float:
+    """Consumer-surplus gain when the domestic price moves from P0 to r*P0
+    on Q = Q0 (P/P0)^-e, with D0 = P0*Q0. Positive when r < 1."""
+    if abs(e - 1.0) < 1e-12:
+        return d0 * math.log(1.0 / r)
+    return d0 * (r ** (1.0 - e) - 1.0) / (e - 1.0)
+
+
+def tariff_change_effects(t0: float, t1: float, elasticity: float, pass_through: float,
+                          import_value: Optional[float] = None) -> Dict[str, Any]:
+    """Effects of moving an ad valorem tariff from t0 to t1 (fractions).
+    `elasticity` is the magnitude of the import demand elasticity (> 0),
+    `pass_through` in [0, 1]; `import_value` (border value at t0) scales the
+    amounts and is optional (percent effects need no value)."""
+    if t0 < 0 or t1 < 0:
+        raise ValidationError("tariff rates must be >= 0")
+    if elasticity <= 0:
+        raise ValidationError("import demand elasticity must be > 0 (magnitude)")
+    if not 0 <= pass_through <= 1:
+        raise ValidationError("pass-through must be between 0 and 100%")
+    k = (1.0 + t1) / (1.0 + t0)
+    r = k ** pass_through                 # domestic import price ratio
+    b = k ** (pass_through - 1.0)         # border price ratio
+    q = r ** (-elasticity)                # import volume ratio
+    out = {
+        'domestic_import_price_change_pct': (r - 1.0) * 100,
+        'border_price_change_pct': (b - 1.0) * 100,
+        'import_volume_change_pct': (q - 1.0) * 100,
+        'import_volume_change_linear_approx_pct': -elasticity * (r - 1.0) * 100,
+        'border_import_value_change_pct': (q * b - 1.0) * 100,
+    }
+    if import_value is not None:
+        v0 = float(import_value)
+        if v0 < 0:
+            raise ValidationError("import value must be >= 0")
+        v1 = v0 * q * b
+        r0, r1 = t0 * v0, t1 * v1
+        d_cs = _iso_cs_change(v0 * (1.0 + t0), r, elasticity)
+        out.update({
+            'import_value_before': v0,
+            'import_value_after': v1,
+            'tariff_revenue_before': r0,
+            'tariff_revenue_after': r1,
+            'tariff_revenue_change': r1 - r0,
+            'consumer_surplus_change': d_cs,
+            'net_welfare_change': d_cs + (r1 - r0),
+        })
+    return out
 
 
 class TradeAnalyzer(EconomicsBase):
@@ -149,68 +222,76 @@ class TradeAnalyzer(EconomicsBase):
             }
         }
 
+        type_key = {'fta': 'free_trade_area'}.get(bloc_data.get('integration_type'),
+                                                    bloc_data.get('integration_type'))
+        summary: Dict[str, Any] = {'integration_type': type_key}
+        if type_key is not None and type_key not in integration_types:
+            raise ValidationError(f"Unknown integration_type: {bloc_data.get('integration_type')}")
+        if bloc_data.get('trade_creation') is not None and bloc_data.get('trade_diversion') is not None:
+            tc = float(bloc_data['trade_creation'])
+            td = float(bloc_data['trade_diversion'])
+            summary.update({
+                'trade_creation': tc,
+                'trade_diversion': td,
+                'net_trade_creation': tc - td,
+                'diversion_share_pct': td / (tc + td) * 100 if (tc + td) > 0 else None,
+                'note': ('Volumes, not welfare: diverted trade costs the gap between the non-member and member '
+                         'supply prices, created trade gains the gap to domestic cost'),
+            })
         return {
+            'selected': summary,
             'integration_levels': integration_types,
             'motivations_for_integration': self._analyze_integration_motivations(),
             'success_factors': self._identify_integration_success_factors(),
             'trade_creation_vs_diversion': self._analyze_trade_creation_diversion(bloc_data)
         }
 
-    def assess_trade_barrier_removal(self, liberalization_data: Dict[str, Any]) -> Dict[str, Any]:
-        """Assess impact of removing trade barriers"""
-        return {
-            'capital_investment_effects': {
-                'foreign_direct_investment': {
-                    'expected_change': 'Significant increase',
-                    'mechanisms': ['Market access', 'Lower costs', 'Efficiency seeking'],
-                    'sectoral_impact': 'Manufacturing and services benefit most',
-                    'quantitative_estimate': self._estimate_fdi_increase(liberalization_data)
-                },
-                'domestic_investment': {
-                    'expected_change': 'Mixed effects',
-                    'mechanisms': ['Competitive pressure', 'Technology access', 'Scale opportunities'],
-                    'adjustment_period': '3-7 years for full effects',
-                    'productivity_gains': self._estimate_productivity_gains(liberalization_data)
-                }
-            },
-            'employment_wage_effects': {
-                'aggregate_employment': {
-                    'short_term': 'May decline due to adjustment',
-                    'long_term': 'Likely increase from higher productivity',
-                    'skill_composition': 'Shift toward higher-skilled jobs',
-                    'quantitative_estimate': self._estimate_employment_effects(liberalization_data)
-                },
-                'wage_effects': {
-                    'average_wages': 'Generally increase over time',
-                    'wage_distribution': 'May increase inequality initially',
-                    'sectoral_variation': 'Export sectors gain, import-competing sectors lose',
-                    'skill_premium_changes': self._analyze_skill_premium_effects(liberalization_data)
-                }
-            },
-            'growth_effects': {
-                'gdp_impact': {
-                    'magnitude': self._estimate_gdp_impact(liberalization_data),
-                    'channels': ['Productivity', 'Investment', 'Competition', 'Innovation'],
-                    'time_horizon': 'Full effects realized over 10-15 years',
-                    'persistence': 'Permanent level effects, temporary growth effects'
-                },
-                'sectoral_growth': self._analyze_sectoral_growth_effects(liberalization_data),
-                'regional_effects': self._assess_regional_impact_variation(liberalization_data)
-            },
-            'policy_recommendations': self._recommend_liberalization_policies(liberalization_data)
+    def assess_trade_barrier_removal(self, d: Dict[str, Any]) -> Dict[str, Any]:
+        """Quantify cutting an ad valorem tariff from its current level to a
+        new level (both percent levels, not a percent reduction). Required:
+        current_tariff_pct, new_tariff_pct, import_demand_elasticity
+        (magnitude), pass_through_pct (0-100), import_value (border value at
+        the current tariff). Optional: gdp (same unit as import_value) to
+        express the welfare change as % of GDP."""
+        req = ['current_tariff_pct', 'new_tariff_pct', 'import_demand_elasticity',
+               'pass_through_pct', 'import_value']
+        missing = [k for k in req if d.get(k) is None or d.get(k) == '']
+        if missing:
+            raise ValidationError('Missing required input(s): ' + ', '.join(missing))
+        t0 = float(d['current_tariff_pct'])
+        t1 = float(d['new_tariff_pct'])
+        if t1 > t0:
+            raise ValidationError('new_tariff_pct must not exceed current_tariff_pct (barrier removal)')
+        res = tariff_change_effects(t0 / 100.0, t1 / 100.0, float(d['import_demand_elasticity']),
+                                    float(d['pass_through_pct']) / 100.0, float(d['import_value']))
+        gdp = d.get('gdp')
+        if gdp is not None and float(gdp) > 0:
+            res['net_welfare_change_pct_gdp'] = res['net_welfare_change'] / float(gdp) * 100
+        res['tariff_cut_pct_points'] = t0 - t1
+        res['tariff_cut_relative_pct'] = (t0 - t1) / t0 * 100 if t0 > 0 else None
+        res['assumptions'] = {
+            'current_tariff_pct': t0,
+            'new_tariff_pct': t1,
+            'import_demand_elasticity': float(d['import_demand_elasticity']),
+            'pass_through_pct': float(d['pass_through_pct']),
+            'import_value': float(d['import_value']),
+            'gdp': float(gdp) if gdp is not None else None,
         }
+        res['model'] = ('Partial equilibrium, iso-elastic import demand; domestic price ratio = '
+                        '((1+t1)/(1+t0))^pass_through; welfare = consumer surplus change + tariff revenue change')
+        return res
 
     def _calculate_trade_gains(self, data: Dict[str, Any]) -> Any:
         """Calculate quantitative trade gains.
 
-        Requires the caller's trade_volume_gdp; the efficiency-gain rate is an
-        explicit assumption (overridable via efficiency_gain_percent) and is
-        returned alongside the result so it is never mistaken for a measurement.
+        Requires the caller's trade_volume_gdp and efficiency_gain_percent (an
+        explicit assumption, echoed in the result so it is never mistaken for a
+        measurement); either missing -> None.
         """
-        if data.get('trade_volume_gdp') is None:
+        if data.get('trade_volume_gdp') is None or data.get('efficiency_gain_percent') is None:
             return None
         trade_volume = self.to_decimal(data['trade_volume_gdp'])
-        eff_pct = self.to_decimal(data.get('efficiency_gain_percent', 5))
+        eff_pct = self.to_decimal(data['efficiency_gain_percent'])
         return {
             'value_pct_gdp': trade_volume * eff_pct / self.to_decimal(100),
             'assumed_efficiency_gain_percent': eff_pct,
@@ -227,24 +308,22 @@ class TradeAnalyzer(EconomicsBase):
         return price_reduction * consumption_share / self.to_decimal(200)  # Simplified calculation
 
     def _analyze_tariff_effects(self, tariff_rate: Any, data: Dict[str, Any] = None) -> Dict[str, Any]:
-        """Analyze economic effects of tariffs.
-
-        Elasticities are explicit assumptions (overridable via
-        import_demand_elasticity / domestic_supply_response) and are echoed in
-        the output; a missing tariff rate yields no numbers.
-        """
+        """Effects of imposing `tariff_rate` (percent) from free trade, using
+        tariff_change_effects(). Import demand elasticity and pass-through are
+        required inputs (no assumed values); without them no numbers."""
         if tariff_rate is None:
             return {'status': 'Tariff rate not provided - no quantitative estimate'}
         data = data or {}
-        rate = self.to_decimal(tariff_rate)
-        elasticity = self.to_decimal(data.get('import_demand_elasticity', 1.5))
-        supply_resp = self.to_decimal(data.get('domestic_supply_response', 0.8))
-        return {
-            'price_increase': f"Domestic price rises by up to {rate}% (full pass-through assumed)",
-            'import_reduction': f"Imports fall by {rate * elasticity}% (assumed import demand elasticity {elasticity})",
-            'domestic_production': f"Domestic production increases by {rate * supply_resp}% (assumed supply response {supply_resp})",
-            'welfare_loss': f"Deadweight loss approximately {rate ** 2 / self.to_decimal(200)}% of GDP (textbook Harberger approximation)"
-        }
+        if data.get('import_demand_elasticity') is None or data.get('pass_through_pct') is None:
+            return {'status': 'Provide import demand elasticity and pass-through to quantify tariff effects'}
+        res = tariff_change_effects(0.0, float(tariff_rate) / 100.0,
+                                    float(data['import_demand_elasticity']),
+                                    float(data['pass_through_pct']) / 100.0,
+                                    data.get('import_value'))
+        res['basis'] = (f"Tariff 0% -> {float(tariff_rate):g}%, import demand elasticity "
+                        f"{float(data['import_demand_elasticity']):g}, pass-through "
+                        f"{float(data['pass_through_pct']):g}% (iso-elastic import demand)")
+        return res
 
     def _analyze_quota_effects(self, quota_volume: float) -> Dict[str, Any]:
         """Analyze economic effects of import quotas"""
@@ -894,21 +973,34 @@ if __name__ == "__main__":
             return [to_serializable(i) for i in obj]
         return obj
 
-    analysis_type = sys.argv[1] if len(sys.argv) > 1 else "benefits_costs"
-    params = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
+    if len(sys.argv) < 2:
+        print(json.dumps({"error": "Usage: trade_geopolitics.py <benefits_costs|restrictions|trading_blocs|barrier_removal> '<params JSON>'"}))
+        sys.exit(1)
+    analysis_type = sys.argv[1]
+    try:
+        params = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
+        analyzer = TradeAnalyzer()
+        if analysis_type == "benefits_costs":
+            result = analyzer.analyze_trade_benefits_costs(params)
+        elif analysis_type == "restrictions":
+            result = analyzer.analyze_trade_restrictions(params)
+        elif analysis_type == "trading_blocs":
+            result = analyzer.analyze_trading_blocs(params)
+        elif analysis_type == "barrier_removal":
+            result = analyzer.assess_trade_barrier_removal(params)
+        else:
+            raise ValidationError(f"Unknown analysis type: {analysis_type}")
+    except Exception as e:  # noqa: BLE001
+        print(json.dumps({"error": str(e)}))
+        sys.exit(1)
 
-    analyzer = TradeAnalyzer()
+    def _finite(o):
+        if isinstance(o, float) and not math.isfinite(o):
+            return None
+        if isinstance(o, dict):
+            return {k: _finite(v) for k, v in o.items()}
+        if isinstance(o, list):
+            return [_finite(v) for v in o]
+        return o
 
-    # Map analysis_type to correct method with correct data key
-    if analysis_type == "benefits_costs":
-        result = analyzer.analyze_trade_benefits_costs(params)
-    elif analysis_type == "restrictions":
-        result = analyzer.analyze_trade_restrictions(params)
-    elif analysis_type == "trading_blocs":
-        result = analyzer.analyze_trading_blocs(params)
-    elif analysis_type == "barrier_removal":
-        result = analyzer.assess_trade_barrier_removal(params)
-    else:
-        result = {"error": f"Unknown analysis type: {analysis_type}"}
-
-    print(json.dumps(to_serializable(result), indent=2))
+    print(json.dumps(_finite(to_serializable(result)), indent=2))

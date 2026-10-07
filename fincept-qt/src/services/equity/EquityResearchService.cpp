@@ -1571,7 +1571,7 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
     };
     static const QList<QPair<QString, QString>> kVolume = {
         {"OBV", "obv"},
-        {"Rolling VWAP", "vwap"},
+        {"VWAP (14-bar rolling)", "vwap"},
         {"CMF", "cmf"},
         {"ADI", "adi"},
     };

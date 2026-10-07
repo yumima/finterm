@@ -109,8 +109,9 @@ class PrecedentTransactionAnalyzer:
         def calc_stats(values: List[float], name: str) -> Dict[str, float]:
             clean_vals = [v for v in values if v > 0 and not np.isnan(v) and not np.isinf(v)]
             if not clean_vals:
-                return {f'{name}_mean': 0, f'{name}_median': 0, f'{name}_min': 0,
-                       f'{name}_max': 0, f'{name}_std': 0, f'{name}_count': 0}
+                return {f'{name}_mean': None, f'{name}_median': None, f'{name}_min': None,
+                       f'{name}_max': None, f'{name}_std': None, f'{name}_count': 0,
+                       f'{name}_q1': None, f'{name}_q3': None}
 
             return {
                 f'{name}_mean': mean(clean_vals),
@@ -155,7 +156,7 @@ class PrecedentTransactionAnalyzer:
 
         if target_financials.get('revenue'):
             revenue = target_financials['revenue']
-            if stats['ev_revenue']['ev_revenue_median'] > 0:
+            if (stats['ev_revenue']['ev_revenue_median'] or 0) > 0:
                 valuations['ev_revenue_median'] = revenue * stats['ev_revenue']['ev_revenue_median']
                 valuations['ev_revenue_mean'] = revenue * stats['ev_revenue']['ev_revenue_mean']
                 valuations['ev_revenue_q1'] = revenue * stats['ev_revenue']['ev_revenue_q1']
@@ -163,7 +164,7 @@ class PrecedentTransactionAnalyzer:
 
         if target_financials.get('ebitda'):
             ebitda = target_financials['ebitda']
-            if stats['ev_ebitda']['ev_ebitda_median'] > 0:
+            if (stats['ev_ebitda']['ev_ebitda_median'] or 0) > 0:
                 valuations['ev_ebitda_median'] = ebitda * stats['ev_ebitda']['ev_ebitda_median']
                 valuations['ev_ebitda_mean'] = ebitda * stats['ev_ebitda']['ev_ebitda_mean']
                 valuations['ev_ebitda_q1'] = ebitda * stats['ev_ebitda']['ev_ebitda_q1']
@@ -171,13 +172,13 @@ class PrecedentTransactionAnalyzer:
 
         if target_financials.get('ebit'):
             ebit = target_financials['ebit']
-            if stats['ev_ebit']['ev_ebit_median'] > 0:
+            if (stats['ev_ebit']['ev_ebit_median'] or 0) > 0:
                 valuations['ev_ebit_median'] = ebit * stats['ev_ebit']['ev_ebit_median']
                 valuations['ev_ebit_mean'] = ebit * stats['ev_ebit']['ev_ebit_mean']
 
         if target_financials.get('net_income'):
             net_income = target_financials['net_income']
-            if stats['price_earnings']['pe_median'] > 0:
+            if (stats['price_earnings']['pe_median'] or 0) > 0:
                 valuations['pe_median'] = net_income * stats['price_earnings']['pe_median']
                 valuations['pe_mean'] = net_income * stats['price_earnings']['pe_mean']
 
@@ -332,67 +333,93 @@ class PrecedentTransactionAnalyzer:
             'premium_dollars': implied_price_per_share - current_price
         }
 
+# ── JSON contract (MAAnalyticsService "calculate" / ma_precedent_transactions)
+
+def _json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Value a target off user-supplied precedent deals (no database access).
+
+    transactions: [{target, acquirer, date, enterprise_value, revenue, ebitda,
+                    ebit?, ev_revenue?, ev_ebitda?, ev_ebit?, premium_1day_pct?}]
+      Multiples are computed from enterprise_value / metric unless given
+      explicitly. A deal's equity purchase price is NOT an EV: supply EV or
+      the multiples.
+    target: target_revenue / target_ebitda / target_ebit, optional
+      target_net_debt, target_shares, target_price.
+    Precedent multiples already embed the control premium paid, so no
+    separate control premium is added.
+    """
+    from corporateFinance._cli import obj_list, opt_num, InputError
+    from corporateFinance.valuation.trading_comps import implied_valuation
+    deals = obj_list(p, 'transactions', label='transactions (list of precedent deals)')
+
+    def f(d, k):
+        v = d.get(k)
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+
+    rows = []
+    mult = {'ev_revenue': [], 'ev_ebitda': [], 'ev_ebit': [], 'pe': []}
+    premiums = []
+    for d in deals:
+        ev = f(d, 'enterprise_value') if f(d, 'enterprise_value') is not None else f(d, 'ev')
+        def m(explicit, metric):
+            if f(d, explicit) is not None:
+                return f(d, explicit)
+            return ev / f(d, metric) if ev is not None and f(d, metric) else None
+        r = {'target': d.get('target') or d.get('target_name') or '',
+             'acquirer': d.get('acquirer') or d.get('acquirer_name') or '',
+             'date': d.get('date') or d.get('announcement_date') or '',
+             'enterprise_value': ev,
+             'ev_revenue_x': m('ev_revenue', 'revenue'),
+             'ev_ebitda_x': m('ev_ebitda', 'ebitda'),
+             'ev_ebit_x': m('ev_ebit', 'ebit'),
+             'premium_1day_pct': f(d, 'premium_1day_pct')}
+        rows.append(r)
+        mult['ev_revenue'].append(r['ev_revenue_x'])
+        mult['ev_ebitda'].append(r['ev_ebitda_x'])
+        mult['ev_ebit'].append(r['ev_ebit_x'])
+        if r['premium_1day_pct'] is not None:
+            premiums.append(r['premium_1day_pct'])
+    if all(v is None for k in mult for v in mult[k]):
+        raise InputError("No usable multiples: give each transaction an enterprise_value with revenue/EBITDA, or the multiples")
+    target = {'revenue': opt_num(p, 'target_revenue'), 'ebitda': opt_num(p, 'target_ebitda'),
+              'ebit': opt_num(p, 'target_ebit'), 'net_income': None,
+              'net_debt': opt_num(p, 'target_net_debt'), 'shares': opt_num(p, 'target_shares', gt=0),
+              'price': opt_num(p, 'target_price', gt=0)}
+    if all(target[k] is None for k in ('revenue', 'ebitda', 'ebit')):
+        raise InputError("Enter at least one target metric (target_revenue / target_ebitda / target_ebit)")
+    imp = implied_valuation(mult, target)
+    imp['implied_valuation'] = [r for r in imp['implied_valuation'] if r['multiple'] != 'P/E']
+    out = {
+        'transaction_count': len(rows),
+        'median_ev_ebitda_x': next((r['median_x'] for r in imp['implied_valuation'] if r['multiple'] == 'EV/EBITDA'), None),
+        'median_ev_revenue_x': next((r['median_x'] for r in imp['implied_valuation'] if r['multiple'] == 'EV/Revenue'), None),
+        'median_premium_1day_pct': median(premiums) if premiums else None,
+        'implied_ev_median_of_methods': imp['implied_ev_median_of_methods'],
+        'implied_equity_median_of_methods': imp['implied_equity_median_of_methods'],
+        'implied_per_share_median_of_methods': imp.get('implied_per_share_median_of_methods'),
+        'transactions': rows,
+        'implied_valuation': imp['implied_valuation'],
+        'method': 'Multiples = deal EV / target LTM metric; non-positive multiples excluded; quartiles across '
+                  'deals; control premium is already embedded in precedent multiples.',
+    }
+    if imp.get('note'):
+        out['note'] = imp['note']
+    return out
+
+
+JSON_COMMANDS = {'calculate': _json_calculate}
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json(JSON_COMMANDS)
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified. Usage: precedent_transactions.py <command> [args...]"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-    analyzer = PrecedentTransactionAnalyzer()
-
-    try:
-        if command == "precedent":
-            if len(sys.argv) < 4:
-                raise ValueError("Target data and comp deals required")
-            target_data = json.loads(sys.argv[2])
-            comp_deals = json.loads(sys.argv[3])
-
-            # Convert comp_deals dicts to TransactionComp objects
-            # Frontend sends MADeal-shaped objects; map to TransactionComp fields
-            comps = []
-            for deal in comp_deals:
-                if isinstance(deal, dict):
-                    ev = deal.get('deal_value', 0)
-                    revenue = deal.get('revenue', 0)
-                    ebitda = deal.get('ebitda', 0)
-                    comps.append(TransactionComp(
-                        deal_id=deal.get('deal_id', ''),
-                        announcement_date=deal.get('announcement_date', deal.get('announced_date', '')),
-                        acquirer_name=deal.get('acquirer_name', 'Unknown'),
-                        target_name=deal.get('target_name', 'Unknown'),
-                        deal_value=ev,
-                        enterprise_value=deal.get('enterprise_value', ev),
-                        revenue=revenue,
-                        ebitda=ebitda,
-                        ev_revenue=deal.get('ev_revenue', 0) or (ev / revenue if revenue else 0),
-                        ev_ebitda=deal.get('ev_ebitda', 0) or (ev / ebitda if ebitda else 0),
-                        ev_ebit=deal.get('ev_ebit', 0),
-                        price_earnings=deal.get('price_earnings', deal.get('pe', 0)) or 0,
-                        premium_1day=deal.get('premium_1day', 0),
-                        premium_4week=deal.get('premium_4week', 0),
-                        payment_method=deal.get('payment_method', deal.get('payment', '')),
-                        deal_status=deal.get('deal_status', deal.get('status', ''))
-                    ))
-                else:
-                    comps.append(deal)
-
-            comp_table = analyzer.build_comp_table(comps, target_data)
-            result = {"success": True, "data": comp_table}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}. Available: precedent"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e), "command": command}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

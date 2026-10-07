@@ -60,6 +60,8 @@ class SynergyValuation:
                 'present_value': pv
             })
 
+        if self.terminal_growth_rate >= self.wacc:
+            raise ValueError("terminal growth rate must be below the discount rate (WACC)")
         terminal_year_synergy = gross_synergy * (1 - self.tax_rate)
         terminal_value = terminal_year_synergy * (1 + self.terminal_growth_rate) / (self.wacc - self.terminal_growth_rate)
         terminal_pv = terminal_value / ((1 + self.wacc) ** projection_years)
@@ -288,60 +290,179 @@ class SynergyValuation:
             }
         }
 
+# ── JSON contract (MAAnalyticsService "value") ───────────────────────────────
+# Every assumption is a caller input; nothing below substitutes a default rate.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from corporateFinance._cli import (is_json_call, run_json, num, opt_num, has,  # noqa: E402
+                                   InputError, pct)
+
+
+def _first(p: Dict[str, Any], *keys: str) -> Optional[str]:
+    """First key (of aliases) present in p."""
+    for k in keys:
+        if has(p, k):
+            return k
+    return None
+
+
+def projection_inputs(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Shared timing/discounting inputs for every synergy projection."""
+    out = {
+        'tax_rate': num(p, 'tax_rate', label='tax_rate (decimal)', min=0, max=0.99),
+        'discount_rate': num(p, 'discount_rate', label='discount_rate (decimal)', gt=0, max=1),
+        'ramp_years': num(p, 'ramp_years', label='ramp_years (years to full run-rate)', min=1, max=30, integer=True),
+        'projection_years': num(p, 'projection_years', label='projection_years', min=1, max=50, integer=True),
+        'terminal_growth': opt_num(p, 'terminal_growth', label='terminal_growth (decimal)', min=-0.5, max=0.5),
+    }
+    if out['terminal_growth'] is not None and out['terminal_growth'] >= out['discount_rate']:
+        raise InputError("terminal_growth must be below discount_rate")
+    out['integration_cost_years'] = int(opt_num(p, 'integration_cost_years', out['ramp_years'],
+                                                label='integration_cost_years', min=1, max=30, integer=True))
+    return out
+
+
+def project_synergies(run_rate_revenue_synergy: float,
+                      revenue_synergy_margin: Optional[float],
+                      run_rate_cost_synergy: float,
+                      one_time_cost: float,
+                      tax_rate: float,
+                      discount_rate: float,
+                      ramp_years: int,
+                      projection_years: int,
+                      terminal_growth: Optional[float] = None,
+                      integration_cost_years: Optional[int] = None) -> Dict[str, Any]:
+    """Year-by-year synergy DCF.
+
+    - Run-rate synergies phase in linearly: year y realises min(1, y / ramp_years).
+    - Revenue synergies count only at `revenue_synergy_margin` (incremental
+      EBITDA per $ of synergy revenue); cost synergies are EBITDA directly.
+    - Pre-tax synergy EBITDA is taxed at tax_rate; one-time integration costs
+      are tax-deductible, spread evenly over `integration_cost_years`.
+    - End-of-year discounting at discount_rate. A Gordon terminal value on the
+      final-year after-tax run-rate synergy is added only when terminal_growth
+      is supplied.
+    """
+    if run_rate_revenue_synergy and revenue_synergy_margin is None:
+        raise InputError("revenue_synergy_margin is required when revenue synergies are non-zero")
+    margin = revenue_synergy_margin or 0.0
+    n_cost_years = integration_cost_years or ramp_years
+    per_year_cost = one_time_cost / n_cost_years if one_time_cost else 0.0
+
+    rows = []
+    explicit_pv = 0.0
+    cumulative = 0.0
+    payback_year = None
+    for year in range(1, projection_years + 1):
+        realization = min(1.0, year / ramp_years)
+        rev = run_rate_revenue_synergy * realization
+        rev_ebitda = rev * margin
+        cost = run_rate_cost_synergy * realization
+        pretax = rev_ebitda + cost
+        after_tax = pretax * (1 - tax_rate)
+        integ = per_year_cost if year <= n_cost_years else 0.0
+        integ_after_tax = integ * (1 - tax_rate)
+        net = after_tax - integ_after_tax
+        df = (1 + discount_rate) ** year
+        pv = net / df
+        explicit_pv += pv
+        cumulative += net
+        if payback_year is None and cumulative >= 0 and (one_time_cost or 0) > 0:
+            payback_year = year
+        rows.append({
+            'year': year,
+            'realization_pct': realization * 100,
+            'revenue_synergy': rev,
+            'revenue_synergy_ebitda': rev_ebitda,
+            'cost_synergy': cost,
+            'pretax_synergy': pretax,
+            'after_tax_synergy': after_tax,
+            'integration_cost': integ,
+            'net_cash_flow': net,
+            'present_value': pv,
+        })
+
+    run_rate_pretax = run_rate_revenue_synergy * margin + run_rate_cost_synergy
+    run_rate_after_tax = run_rate_pretax * (1 - tax_rate)
+    terminal_value = terminal_pv = None
+    if terminal_growth is not None:
+        final_after_tax = rows[-1]['after_tax_synergy']
+        terminal_value = final_after_tax * (1 + terminal_growth) / (discount_rate - terminal_growth)
+        terminal_pv = terminal_value / (1 + discount_rate) ** projection_years
+    total = explicit_pv + (terminal_pv or 0.0)
+    integration_pv = sum(r['integration_cost'] * (1 - tax_rate) / (1 + discount_rate) ** r['year'] for r in rows)
+    return {
+        'total_synergy_value': total,
+        'explicit_period_pv': explicit_pv,
+        'terminal_value': terminal_value,
+        'terminal_value_pv': terminal_pv,
+        'terminal_share_pct': (terminal_pv / total * 100) if (terminal_pv is not None and total) else None,
+        'run_rate_revenue_synergy': run_rate_revenue_synergy,
+        'run_rate_cost_synergy': run_rate_cost_synergy,
+        'run_rate_pretax_synergy': run_rate_pretax,
+        'run_rate_after_tax_synergy': run_rate_after_tax,
+        'one_time_integration_cost': one_time_cost,
+        'integration_cost_after_tax_pv': integration_pv,
+        'payback_year': payback_year,
+        'discount_rate_pct': pct(discount_rate),
+        'tax_rate_pct': pct(tax_rate),
+        'revenue_synergy_margin_pct': pct(revenue_synergy_margin) if revenue_synergy_margin is not None else None,
+        'terminal_growth_pct': pct(terminal_growth),
+        'ramp_years': ramp_years,
+        'projection_years': projection_years,
+        'integration_cost_years': n_cost_years,
+        'yearly_projections': rows,
+    }
+
+
+def _run_rate(p: Dict[str, Any], amount_keys, pct_key: str, base_keys, what: str) -> float:
+    """Run-rate synergy from an explicit amount, or pct x base."""
+    k = _first(p, *amount_keys)
+    if k:
+        return num(p, k, min=0)
+    if has(p, pct_key):
+        frac = num(p, pct_key, label=f"{pct_key} (decimal)", min=0, max=1)
+        if frac == 0:
+            return 0.0
+        b = _first(p, *base_keys)
+        if not b:
+            raise InputError(f"{pct_key} needs the base it applies to: {' or '.join(base_keys)}")
+        return frac * num(p, b, min=0)
+    return 0.0
+
+
+def json_value(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Synergy DCF (revenue + cost - integration costs).
+
+    Inputs: revenue_synergy ($ run-rate) or revenue_synergy_pct x combined_revenue;
+    cost_synergy / annual_synergies ($ run-rate, EBITDA-level) or
+    cost_synergy_pct x combined_cost_base; revenue_synergy_margin (needed when
+    revenue synergies > 0); integration_cost ($, optional); tax_rate,
+    discount_rate, ramp_years, projection_years (required); terminal_growth,
+    integration_cost_years (optional).
+    """
+    rev = _run_rate(p, ('revenue_synergy', 'annual_revenue_synergy'), 'revenue_synergy_pct',
+                    ('combined_revenue', 'revenue_base'), 'revenue')
+    cost = _run_rate(p, ('cost_synergy', 'annual_cost_synergy', 'annual_synergies'), 'cost_synergy_pct',
+                     ('combined_cost_base', 'combined_opex', 'cost_base'), 'cost')
+    if rev == 0 and cost == 0:
+        raise InputError("No synergies supplied: give revenue_synergy(_pct) and/or cost_synergy(_pct)")
+    margin = opt_num(p, 'revenue_synergy_margin', label='revenue_synergy_margin (decimal)', min=0, max=1)
+    one_time = opt_num(p, 'integration_cost', 0.0, min=0)
+    t = projection_inputs(p)
+    return project_synergies(rev, margin, cost, one_time, **t)
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({"value": json_value})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command in ("dcf", "synergy_valuation"):
-            # Host sends: "dcf" revenue_synergies cost_synergies integration_costs discount_rate
-            if len(sys.argv) < 5:
-                raise ValueError("Revenue synergies, cost synergies, and integration costs required")
-
-            revenue_synergies_raw = json.loads(sys.argv[2])
-            cost_synergies_raw = json.loads(sys.argv[3])
-            integration_costs_raw = json.loads(sys.argv[4])
-            discount_rate = float(sys.argv[5]) if len(sys.argv) > 5 else 0.10
-
-            # Ensure all inputs are lists (host may send scalar values)
-            def ensure_list(val, years=10):
-                if isinstance(val, (int, float)):
-                    return [val] * years
-                return list(val)
-
-            revenue_synergies = ensure_list(revenue_synergies_raw)
-            cost_synergies = ensure_list(cost_synergies_raw)
-            integration_costs = ensure_list(integration_costs_raw)
-
-            valuator = SynergyValuation(wacc=discount_rate, terminal_growth_rate=0.02, tax_rate=0.25)
-
-            analysis = valuator.value_synergies_dcf(
-                annual_revenue_synergies=revenue_synergies,
-                annual_cost_synergies=cost_synergies,
-                integration_costs_by_year=integration_costs,
-                projection_years=10
-            )
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}. Available: dcf, synergy_valuation"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

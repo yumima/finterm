@@ -517,8 +517,13 @@ void NewsCommandBar::update_deviations(const QVector<QPair<QString, double>>& de
     }
     QStringList parts;
     for (int i = 0; i < std::min(3, static_cast<int>(deviations.size())); ++i)
-        parts << QString("%1 %2x").arg(deviations[i].first.left(4)).arg(deviations[i].second, 0, 'f', 1);
+        parts << QStringLiteral("%1 %2%3σ")
+                     .arg(deviations[i].first.left(4))
+                     .arg(deviations[i].second >= 0 ? "+" : "")
+                     .arg(deviations[i].second, 0, 'f', 1);
     intel_deviations_->setText(parts.join("  "));
+    intel_deviations_->setToolTip(
+        QStringLiteral("Volume z-scores: standard deviations from each category's hourly baseline"));
     intel_deviations_->show();
 }
 

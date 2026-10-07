@@ -257,8 +257,12 @@ class ExecutionPlanner:
     - Error handling and recovery
     """
 
-    def __init__(self, api_keys: Optional[Dict[str, str]] = None):
+    def __init__(self, api_keys: Optional[Dict[str, str]] = None,
+                 model_config: Optional[Dict[str, Any]] = None):
         self.api_keys = api_keys or {}
+        # Resolved model (active LLM or the plan's llm_profile_id).  Without
+        # it CoreAgent falls back to the first provider with an API key.
+        self.model_config = model_config or {}
         self.plans: Dict[str, ExecutionPlan] = {}
         self.checkpoints: Dict[str, Dict[str, Any]] = {}
 
@@ -378,10 +382,30 @@ class ExecutionPlanner:
         from finagent_core.core_agent import CoreAgent
 
         query = step.config.get("query", "")
-        agent_config = step.config.get("agent_config", {})
+        agent_config = dict(step.config.get("agent_config", {}) or {})
+        if self.model_config and not agent_config.get("model"):
+            agent_config["model"] = self.model_config
 
         # Interpolate context into query
         query = self._interpolate(query, plan.context)
+
+        # Hand the step the outputs of the steps it depends on (or, when it
+        # declares none, every step completed so far) — otherwise "based on
+        # the data collected" steps run blind and invent the data.
+        dep_ids = step.dependencies or [s.id for s in plan.steps
+                                        if s.status == StepStatus.COMPLETED and s.id != step.id]
+        prior = []
+        for dep_id in dep_ids:
+            dep = plan.get_step(dep_id)
+            if dep is None or dep.status != StepStatus.COMPLETED or dep.result in (None, ""):
+                continue
+            if dep.step_type == StepType.CHECKPOINT:
+                continue
+            text = dep.result if isinstance(dep.result, str) else json.dumps(dep.result, default=str)
+            prior.append(f"### {dep.name} ({dep.id})\n{text}")
+        if prior:
+            query = ("Results from earlier plan steps (use these; do not re-invent them):\n\n"
+                     + "\n\n".join(prior) + "\n\n---\n\nYour task:\n" + query)
 
         agent = CoreAgent(api_keys=self.api_keys)
         response = agent.run(query, agent_config)
@@ -574,6 +598,19 @@ class ExecutionPlanner:
 # Dynamic LLM-based Plan Generation
 # =========================================================================
 
+# Tools the planner may offer.  Filtered against ToolsRegistry at call time so
+# the prompt never advertises a tool that can't be loaded.
+_PLAN_TOOL_CANDIDATES = ["yfinance", "financial_datasets", "edgar", "duckduckgo", "calculator", "wikipedia"]
+
+
+def _registered_tool_names() -> set:
+    from finagent_core.registries import ToolsRegistry
+    names = set()
+    for tools in ToolsRegistry.list_tools().values():
+        names.update(tools)
+    return names
+
+
 _PLAN_GENERATION_SYSTEM_PROMPT = """You are an expert financial analyst AI that creates structured execution plans.
 Given a user's analysis request, generate a step-by-step execution plan as a JSON object.
 
@@ -596,7 +633,7 @@ The plan must follow this exact JSON schema:
 
 Rules:
 - step_type must be one of: agent, tool, checkpoint
-- tools can include: yfinance, duckduckgo, calculator, edgar, fred, worldbank
+- tools may ONLY be chosen from: {plan_tools}
 - dependencies is a list of step IDs that must complete before this step
 - Set reasoning=true for analysis/synthesis steps that require deep thinking
 - Keep steps focused — each step should do one clear thing
@@ -618,10 +655,14 @@ def generate_dynamic_plan(query: str, api_keys: Dict[str, str] = None, caller_co
         from finagent_core.core_agent import CoreAgent
 
         agent = CoreAgent(api_keys=api_keys)
+        registered = _registered_tool_names()
+        plan_tools = [t for t in _PLAN_TOOL_CANDIDATES if t in registered]
+        dropped_tools: List[Dict[str, Any]] = []
 
         # Use active_llm model from caller if available (user's configured LLM)
         config: Dict[str, Any] = {
-            "instructions": _PLAN_GENERATION_SYSTEM_PROMPT,
+            "instructions": _PLAN_GENERATION_SYSTEM_PROMPT.replace(
+                "{plan_tools}", ", ".join(plan_tools) or "(none - use no tools)"),
             "markdown": False,
             "reasoning": False,
         }
@@ -663,10 +704,17 @@ def generate_dynamic_plan(query: str, api_keys: Dict[str, str] = None, caller_co
         step_id_map: Dict[str, str] = {}
         for i, s in enumerate(plan_spec.get("steps", []), start=1):
             logical_id = s.get("id", f"step_{i}")
-            tools = s.get("tools", [])
+            requested = [t for t in (s.get("tools") or []) if isinstance(t, str)]
+            tools = [t for t in requested if t in registered]
+            unknown = [t for t in requested if t not in registered]
+            if unknown:
+                logger.warning(f"Plan step {logical_id!r}: dropping unknown tool(s) {unknown}")
+                dropped_tools.append({"step": s.get("name", logical_id), "tools": unknown})
             agent_cfg: Dict[str, Any] = {}
             if tools:
                 agent_cfg["tools"] = tools
+            if unknown:
+                agent_cfg["dropped_tools"] = unknown
             if s.get("reasoning"):
                 agent_cfg["reasoning"] = True
 
@@ -690,7 +738,15 @@ def generate_dynamic_plan(query: str, api_keys: Dict[str, str] = None, caller_co
             step_id_map[logical_id] = real_id
 
         plan = builder.build()
-        return {"success": True, "plan": plan.to_dict(), "generated_by": "llm"}
+        plan_dict = plan.to_dict()
+        result = {"success": True, "plan": plan_dict, "generated_by": "llm"}
+        if dropped_tools:
+            note = "; ".join(f"{d['step']}: {', '.join(d['tools'])}" for d in dropped_tools)
+            warning = f"Dropped tools that don't exist in this build ({note})."
+            result["warnings"] = [warning]
+            plan_dict["warnings"] = [warning]
+            plan_dict["description"] = f"{plan_dict.get('description', '')}\n\n[!] {warning}".strip()
+        return result
 
     except json.JSONDecodeError as e:
         logger.error(f"LLM returned invalid JSON for plan generation: {e}\nRaw output was: {raw[:300]}")
@@ -732,7 +788,8 @@ def create_stock_analysis_plan(symbol: str) -> Dict[str, Any]:
     return plan.to_dict()
 
 
-def execute_plan(plan_dict: Dict[str, Any], api_keys: Dict[str, str] = None) -> Dict[str, Any]:
+def execute_plan(plan_dict: Dict[str, Any], api_keys: Dict[str, str] = None,
+                 config: Dict[str, Any] = None) -> Dict[str, Any]:
     """Execute a plan from dict"""
     # Reconstruct plan from dict
     plan = ExecutionPlan(
@@ -753,7 +810,7 @@ def execute_plan(plan_dict: Dict[str, Any], api_keys: Dict[str, str] = None) -> 
         )
         plan.add_step(step)
 
-    planner = ExecutionPlanner(api_keys=api_keys)
+    planner = ExecutionPlanner(api_keys=api_keys, model_config=(config or {}).get("model"))
     return planner.execute_plan(plan)
 
 

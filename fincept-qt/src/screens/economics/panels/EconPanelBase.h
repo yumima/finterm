@@ -46,7 +46,15 @@ class EconPanelBase : public QWidget {
     void show_table();
 
     /// Populate the shared table + update stat cards.
-    void display(const QJsonArray& rows, const QString& title = {});
+    /// value_key: the row field holding the headline series value. Empty means
+    ///   the table has no single series value (cross-sectional / multi-column),
+    ///   so the value stat cards show "—" instead of guessing a column.
+    /// date_key: the row field the series is ordered by. Rows are sorted
+    ///   oldest→newest on it before LATEST/CHANGE are computed (sources such as
+    ///   BLS and FiscalData send newest-first). Empty means no time order, so
+    ///   LATEST/CHANGE show "—".
+    void display(const QJsonArray& rows, const QString& title = {}, const QString& value_key = {},
+                 const QString& date_key = {});
     void export_csv();
 
     /// Per-provider accent color stylesheet (uses live theme tokens).
@@ -82,7 +90,7 @@ class EconPanelBase : public QWidget {
     QString color_;
 
   private:
-    void update_stats(const QJsonArray& rows);
+    void update_stats(const QJsonArray& rows, const QString& value_key, const QString& date_key);
 
     QWidget* container_ = nullptr; // root widget that owns panel_style()
     QWidget* cards_row_ = nullptr;

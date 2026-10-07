@@ -49,6 +49,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace fincept::screens::widgets {
 
@@ -88,7 +89,7 @@ class DateSortItem : public QTableWidgetItem {
     }
 };
 
-/// Same trick for numeric columns (POP %, DEAL $, OFFER, LAST) so sorting by
+/// Same trick for numeric columns (SINCE IPO %, DEAL $, OFFER, LAST) so sorting by
 /// click-on-header gives a real numeric ordering instead of "$1.02B" < "$100M"
 /// lexical compare.
 class NumSortItem : public QTableWidgetItem {
@@ -347,9 +348,9 @@ void IpoWatchView::build_kpi_strip(QVBoxLayout* root) {
     };
     add_cell(kpi_week_,  "THIS WEEK —",   TW_ThisWeek);
     add_cell(kpi_month_, "THIS MONTH —",  TW_30Days);
-    add_cell(kpi_pop_,   "30D POP —",     TW_Past30Days);
+    add_cell(kpi_pop_,   "30D SINCE IPO —", TW_Past30Days);
     add_cell(kpi_above_, "ABOVE —",       TW_Past30Days);
-    add_cell(kpi_in_,    "IN-RANGE —",    TW_Past30Days);
+    add_cell(kpi_in_,    "FLAT —",        TW_Past30Days);
     add_cell(kpi_below_, "BELOW —",       TW_Past30Days);
     h->addStretch();
 
@@ -1271,8 +1272,10 @@ void IpoWatchView::enrich_priced_with_quotes() {
                 auto it = price_map.constFind(e.ticker);
                 if (it == price_map.constEnd()) continue;
                 e.last_price = it.value();
-                e.pop_pct = (e.final_price > 0)
-                    ? (e.last_price - e.final_price) / e.final_price * 100.0 : 0;
+                // No offer price or no usable quote → return since IPO is unknown.
+                e.pop_pct = (e.final_price > 0 && std::isfinite(e.last_price) && e.last_price > 0)
+                    ? (e.last_price - e.final_price) / e.final_price * 100.0
+                    : std::numeric_limits<double>::quiet_NaN();
                 e.perf_fetched = true;
             }
             if (self->active_lens_ == LensPerformance) self->render();
@@ -1479,7 +1482,7 @@ void IpoWatchView::render_kpis() {
             const qint64 d = e.date.daysTo(today);
             if (d >= 0 && d <= kDays30) {
                 ++priced_30;
-                if (e.perf_fetched && e.final_price > 0) {
+                if (e.perf_fetched && std::isfinite(e.pop_pct)) {
                     pop_sum += e.pop_pct; ++n_priced_with_pop;
                     if      (e.pop_pct >  2)  ++abv;
                     else if (e.pop_pct < -2) ++blw;
@@ -1509,15 +1512,15 @@ void IpoWatchView::render_kpis() {
         const QString color = (n_priced_with_pop == 0)
             ? QString(TEXT_SECONDARY)
             : (pop_sum >= 0 ? QString(POSITIVE) : QString(NEGATIVE));
-        kpi_pop_->setText(QString("<b>30D AVG POP</b><br><span style='color:%1;'>%2</span>").arg(color, s));
+        kpi_pop_->setText(QString("<b>30D AVG SINCE IPO</b><br><span style='color:%1;'>%2</span>").arg(color, s));
     }
     if (kpi_above_)
-        kpi_above_->setText(QString("<b>ABOVE (pop&gt;2%%)</b><br><span style='color:%1;'>%2 (%3)</span>")
+        kpi_above_->setText(QString("<b>ABOVE IPO (&gt;+2%)</b><br><span style='color:%1;'>%2 (%3)</span>")
                                 .arg(POSITIVE()).arg(abv).arg(pct(abv, n_priced_with_pop)));
     if (kpi_in_)
-        kpi_in_->setText(QString("<b>NEAR-RANGE</b><br>%1 (%2)").arg(inr).arg(pct(inr, n_priced_with_pop)));
+        kpi_in_->setText(QString("<b>FLAT (±2%)</b><br>%1 (%2)").arg(inr).arg(pct(inr, n_priced_with_pop)));
     if (kpi_below_)
-        kpi_below_->setText(QString("<b>BELOW (pop&lt;-2%%)</b><br><span style='color:%1;'>%2 (%3)</span>")
+        kpi_below_->setText(QString("<b>BELOW IPO (&lt;−2%)</b><br><span style='color:%1;'>%2 (%3)</span>")
                                 .arg(NEGATIVE()).arg(blw).arg(pct(blw, n_priced_with_pop)));
 }
 
@@ -1594,7 +1597,7 @@ void IpoWatchView::render_performance() {
     using ui::colors::NEGATIVE;
     using ui::colors::TEXT_SECONDARY;
 
-    const QStringList headers{"★", "COMPANY", "TKR", "PRICED", "OFFER", "LAST", "POP %", "DEAL $", "SECTOR"};
+    const QStringList headers{"★", "COMPANY", "TKR", "PRICED", "OFFER", "LAST", "SINCE IPO %", "DEAL $", "SECTOR"};
     table_->setSortingEnabled(false);
     table_->clear();
     table_->setColumnCount(headers.size());
@@ -1634,13 +1637,13 @@ void IpoWatchView::render_performance() {
             e.last_price));
         QString pop_str;
         QColor  pop_col(TEXT_SECONDARY());
-        if (e.perf_fetched && e.final_price > 0) {
+        if (e.perf_fetched && std::isfinite(e.pop_pct)) {
             pop_str = QString("%1%2%").arg(e.pop_pct >= 0 ? "+" : "").arg(e.pop_pct, 0, 'f', 1);
             pop_col = QColor(e.pop_pct >= 0 ? POSITIVE() : NEGATIVE());
         } else {
             pop_str = "…";
         }
-        auto* pop = new NumSortItem(pop_str, e.perf_fetched ? e.pop_pct : -1e9);
+        auto* pop = new NumSortItem(pop_str, (e.perf_fetched && std::isfinite(e.pop_pct)) ? e.pop_pct : -1e9);
         pop->setForeground(QBrush(pop_col));
         table_->setItem(r, 6, pop);
         {
@@ -1676,7 +1679,7 @@ void IpoWatchView::render_watchlist() {
     // here — the watchlist is a curated set the user wants to track regardless
     // of what filter the other lenses use. Search and exchange still apply.
     const QStringList headers{"★", "COMPANY", "TKR", "EXCH", "DATE", "STATUS",
-                              "OFFER / RANGE", "LAST", "POP %", "DEAL $", "SECTOR"};
+                              "OFFER / RANGE", "LAST", "SINCE IPO %", "DEAL $", "SECTOR"};
     table_->setSortingEnabled(false);
     table_->clear();
     table_->setColumnCount(headers.size());
@@ -1750,11 +1753,11 @@ void IpoWatchView::render_watchlist() {
             e.last_price));
         QString pop_str = "—";
         QColor  pop_col(TEXT_SECONDARY());
-        if (e.status == "priced" && e.perf_fetched && e.final_price > 0) {
+        if (e.status == "priced" && e.perf_fetched && std::isfinite(e.pop_pct)) {
             pop_str = QString("%1%2%").arg(e.pop_pct >= 0 ? "+" : "").arg(e.pop_pct, 0, 'f', 1);
             pop_col = QColor(e.pop_pct >= 0 ? POSITIVE() : NEGATIVE());
         }
-        auto* pop = new NumSortItem(pop_str, (e.status == "priced" && e.perf_fetched) ? e.pop_pct : -1e9);
+        auto* pop = new NumSortItem(pop_str, (e.status == "priced" && e.perf_fetched && std::isfinite(e.pop_pct)) ? e.pop_pct : -1e9);
         pop->setForeground(QBrush(pop_col));
         table_->setItem(r, 8, pop);
         {
@@ -3295,9 +3298,9 @@ QString IpoWatchView::build_deal_html(const Entry& e) const {
     h += kvg_row(date_label, e.date.isValid() ? e.date.toString("MMMM d, yyyy") : e.date_raw.toHtmlEscaped());
     if (!e.price_range.isEmpty())
         h += kvg_row(e.status == "priced" ? "Final price" : "Filed range", e.price_range.toHtmlEscaped());
-    if (e.status == "priced" && e.perf_fetched && e.final_price > 0) {
+    if (e.status == "priced" && e.perf_fetched && std::isfinite(e.pop_pct)) {
         h += kvg_row("Last price", QString("<span class='big'>$%1</span>").arg(e.last_price, 0, 'f', 2));
-        h += kvg_row("Pop since IPO",
+        h += kvg_row("Return since IPO",
                      QString("<span class='%1 big'>%2%3%</span>")
                          .arg(pct_cls(e.pop_pct), e.pop_pct >= 0 ? "+" : "").arg(e.pop_pct, 0, 'f', 1));
     }
@@ -4161,7 +4164,7 @@ QString IpoWatchView::build_sector_comps_html(const Entry& e) const {
         if (e.date.isValid() && other.date.isValid() &&
             std::abs(e.date.daysTo(other.date)) > 180) continue;
         ++comp_count;
-        if (other.perf_fetched) { comp_pop_sum += other.pop_pct; ++comp_pop_n; }
+        if (other.perf_fetched && std::isfinite(other.pop_pct)) { comp_pop_sum += other.pop_pct; ++comp_pop_n; }
         if (comp_top.size() < 8) comp_top.append(&other);
     }
 
@@ -4180,7 +4183,7 @@ QString IpoWatchView::build_sector_comps_html(const Entry& e) const {
             : avg > -15 ? "<span class='neg'>COOL</span>"
                         : "<span class='neg'>❄ COLD</span>";
         h += QString("<div>%1 · <span class='big %2'>%3%4%</span> "
-                     "<span class='muted'>avg pop · %5 peer%6</span></div>")
+                     "<span class='muted'>avg since IPO · %5 peer%6</span></div>")
                  .arg(verdict, pct_cls(avg))
                  .arg(avg >= 0 ? "+" : "").arg(avg, 0, 'f', 1)
                  .arg(comp_pop_n).arg(comp_pop_n == 1 ? "" : "s");
@@ -4197,7 +4200,7 @@ QString IpoWatchView::build_sector_comps_html(const Entry& e) const {
         h += "<table class='grid' style='margin-top:4px;'>";
         for (const auto* c : comp_top) {
             QString pop;
-            if (c->perf_fetched && c->final_price > 0) {
+            if (c->perf_fetched && std::isfinite(c->pop_pct)) {
                 pop = QString("<span class='%1'>%2%3%</span>")
                           .arg(pct_cls(c->pop_pct), c->pop_pct >= 0 ? "+" : "")
                           .arg(c->pop_pct, 0, 'f', 1);

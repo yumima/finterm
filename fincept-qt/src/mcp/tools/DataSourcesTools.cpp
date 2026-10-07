@@ -11,6 +11,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QTcpSocket>
 #include <QUuid>
 
@@ -19,6 +20,56 @@ namespace fincept::mcp::tools {
 using namespace fincept::screens::datasources;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+// Saved connection configs hold API keys, passwords and tokens. These tool
+// results go straight into an LLM context (and, for a hosted provider, off the
+// machine), so secrets are replaced with a marker. A field is secret when its
+// connector declares it a Password field or its name looks like a credential;
+// URLs / DSNs with embedded user:password@ have the password masked.
+static const QString kDsRedacted = QStringLiteral("[redacted]");
+
+static bool ds_is_secret_field(const QString& provider, const QString& key) {
+    if (const auto* c = ConnectorRegistry::instance().get(provider)) {
+        for (const auto& f : c->fields)
+            if (f.name == key && f.type == FieldType::Password)
+                return true;
+    }
+    static const QStringList kHints = {"password", "passwd", "pwd", "secret", "token", "api_key", "apikey",
+                                       "access_key", "private_key", "privatekey", "credential", "auth",
+                                       "passphrase", "client_secret", "key"};
+    const QString k = key.toLower();
+    for (const auto& h : kHints) {
+        if (h == QLatin1String("key") ? (k == h || k.endsWith(QLatin1String("_key")) || k.endsWith(QLatin1String("key")))
+                                      : k.contains(h))
+            return true;
+    }
+    return false;
+}
+
+static QString ds_mask_url_password(const QString& v) {
+    // scheme://user:password@host → scheme://user:[redacted]@host
+    static const QRegularExpression re(QStringLiteral("(://[^/:@\\s]+:)([^@/\\s]+)(@)"));
+    QString out = v;
+    out.replace(re, QStringLiteral("\\1") + kDsRedacted + QStringLiteral("\\3"));
+    return out;
+}
+
+static QJsonObject ds_redacted_config(const DataSource& ds) {
+    QJsonParseError pe;
+    const auto doc = QJsonDocument::fromJson(ds.config.toUtf8(), &pe);
+    if (pe.error != QJsonParseError::NoError || !doc.isObject())
+        return QJsonObject{{"_note", "config not shown (unparseable; may contain secrets)"}};
+    QJsonObject cfg = doc.object();
+    for (auto it = cfg.begin(); it != cfg.end(); ++it) {
+        if (ds_is_secret_field(ds.provider, it.key())) {
+            if (!(it.value().isString() && it.value().toString().isEmpty()) && !it.value().isNull())
+                it.value() = kDsRedacted;
+        } else if (it.value().isString()) {
+            it.value() = ds_mask_url_password(it.value().toString());
+        }
+    }
+    return cfg;
+}
 
 static QJsonObject ds_to_json(const DataSource& ds) {
     return QJsonObject{
@@ -29,7 +80,8 @@ static QJsonObject ds_to_json(const DataSource& ds) {
         {"type", ds.type},
         {"provider", ds.provider},
         {"category", ds.category},
-        {"config", ds.config},
+        {"config", ds_redacted_config(ds)},
+        {"config_note", "secret fields are shown as [redacted]; pass [redacted] back unchanged to keep them"},
         {"enabled", ds.enabled},
         {"tags", ds.tags},
         {"created_at", ds.created_at},
@@ -125,7 +177,7 @@ std::vector<ToolDef> get_data_sources_tools() {
     {
         ToolDef t;
         t.name = "ds_get_connection";
-        t.description = "Get full details (including config JSON) for a saved connection by ID.";
+        t.description = "Get full details for a saved connection by ID (config with secrets redacted).";
         t.category = "data-sources";
         t.input_schema.properties = QJsonObject{
             {"id", QJsonObject{{"type", "string"}, {"description", "Connection ID (UUID)"}}},
@@ -239,7 +291,17 @@ std::vector<ToolDef> get_data_sources_tools() {
             if (args.contains("enabled"))
                 ds.enabled = args["enabled"].toBool();
             if (args.contains("config") && args["config"].isObject()) {
-                ds.config = QString::fromUtf8(QJsonDocument(args["config"].toObject()).toJson(QJsonDocument::Compact));
+                // The model only ever saw redacted secrets: a "[redacted]"
+                // value (or a URL carrying the marker) means "keep what is
+                // stored", never "store the marker".
+                const QJsonObject old_cfg = QJsonDocument::fromJson(ds.config.toUtf8()).object();
+                QJsonObject new_cfg = args["config"].toObject();
+                for (auto it = new_cfg.begin(); it != new_cfg.end(); ++it) {
+                    if (it.value().isString() && it.value().toString().contains(kDsRedacted) &&
+                        old_cfg.contains(it.key()))
+                        it.value() = old_cfg.value(it.key());
+                }
+                ds.config = QString::fromUtf8(QJsonDocument(new_cfg).toJson(QJsonDocument::Compact));
             }
 
             auto sr = DataSourceRepository::instance().save(ds);

@@ -233,6 +233,7 @@ void parse_holders_into(const QJsonObject& root, OwnershipSnapshot& snap) {
     sum.broad_share    = opt_num(root, "broad_share");
     sum.sort           = root.value(QStringLiteral("sort")).toString();
     sum.min_book_value = root.value(QStringLiteral("min_book_value")).toDouble();
+    sum.min_book_positions = root.value(QStringLiteral("min_book_positions")).toInt();
     const auto np = root.value(QStringLiteral("newer_partial")).toObject();
     if (!np.isEmpty()) {
         sum.partial_quarter = QDate::fromString(np.value(QStringLiteral("quarter")).toString(), Qt::ISODate);

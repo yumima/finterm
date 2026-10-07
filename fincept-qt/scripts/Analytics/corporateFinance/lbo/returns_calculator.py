@@ -129,48 +129,74 @@ class ReturnsCalculator:
             'excess_moic': returns['moic'] - ((1 + hurdle_irr) ** returns['holding_period_years'])
         }
 
-def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+# ── JSON contract (MAAnalyticsService "calculate" / ma_lbo_returns) ──────────
+
+def _json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Sponsor returns from entry equity and exit equity.
+
+    exit equity = exit_equity_value, or exit_valuation (exit EV) - exit_net_debt.
+    Optional interim_distributions: list of annual distributions for years
+    1..N-1 (dividend recaps); absent = none.
+    """
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import num, opt_num, num_list, has, InputError
+    equity = num(p, 'equity_invested', gt=0)
+    n = num(p, 'holding_period', min=1, max=50, integer=True)
+    if has(p, 'exit_equity_value'):
+        exit_equity = num(p, 'exit_equity_value')
+        exit_ev = None
+        exit_net_debt = None
+    else:
+        exit_ev = num(p, 'exit_valuation', label='exit_valuation (exit enterprise value)', min=0)
+        exit_net_debt = num(p, 'exit_net_debt', label='exit_net_debt (debt - cash at exit)')
+        exit_equity = exit_ev - exit_net_debt
+    interim = num_list(p, 'interim_distributions', min_len=0) if has(p, 'interim_distributions') else []
+    if len(interim) > n - 1:
+        raise InputError("interim_distributions can cover at most years 1..N-1")
+    interim = interim + [0.0] * (n - 1 - len(interim))
+    # Equity is worth at most zero to the sponsor at exit if debt exceeds EV.
+    proceeds = max(0.0, exit_equity)
+    flows = [-equity] + interim + [proceeds]
+    irr = ReturnsCalculator.calculate_irr(flows)
+    total_back = proceeds + sum(interim)
+    out = {
+        'irr_pct': irr * 100 if irr is not None else None,
+        'moic_x': total_back / equity,
+        'equity_invested': equity,
+        'exit_equity_value': proceeds,
+        'interim_distributions_total': sum(interim),
+        'absolute_gain': total_back - equity,
+        'holding_period_years': n,
+        'cash_flows': [{'year': t, 'cash_flow': cf} for t, cf in enumerate(flows)],
+    }
+    if exit_ev is not None:
+        out['exit_enterprise_value'] = exit_ev
+        out['exit_net_debt'] = exit_net_debt
+        if exit_equity < 0:
+            out['note'] = 'Exit net debt exceeds exit EV: equity is wiped out (proceeds floored at 0).'
+    if has(p, 'entry_valuation'):
+        entry_ev = num(p, 'entry_valuation', gt=0)
+        out['entry_enterprise_value'] = entry_ev
+        out['implied_entry_net_debt'] = entry_ev - equity
+        out['entry_equity_share_pct'] = equity / entry_ev * 100
+    return out
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
 
-    command = sys.argv[1]
+JSON_COMMANDS = {'calculate': _json_calculate, 'returns_json': _json_calculate}
 
-    try:
-        if command == "returns":
-            if len(sys.argv) < 6:
-                raise ValueError("Entry valuation, exit valuation, equity invested, and holding period required")
 
-            entry_valuation = float(sys.argv[2])  # Not directly used, but enterprise value at entry
-            exit_valuation = float(sys.argv[3])    # Not directly used, but enterprise value at exit
-            equity_invested = float(sys.argv[4])   # Initial equity investment
-            holding_period = int(sys.argv[5])
+def main():
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json(JSON_COMMANDS)
 
-            # Calculate exit equity value from exit enterprise valuation
-            # In an LBO, equity value at exit = exit EV - remaining debt
-            # For simplification, we'll use exit_valuation directly as exit equity
-            # In real scenario, you'd subtract remaining debt
-
-            calc = ReturnsCalculator()
-            analysis = calc.comprehensive_returns(equity_invested, exit_valuation, holding_period)
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

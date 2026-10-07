@@ -22,6 +22,8 @@
 #include <QJsonObject>
 #include <QLabel>
 #include <QMap>
+#include <QSet>
+#include <QVector>
 
 namespace fincept::screens {
 namespace {
@@ -37,12 +39,12 @@ struct EurostatDataset {
 };
 
 static const QList<EurostatDataset> kEurostatDatasets = {
-    {"Industrial Production", "industrial", true},
-    {"Retail Trade", "retail", true},
-    {"Energy Balance", "energy", true},
-    {"Trade in Goods", "trade", true},
-    {"Construction Output", "construction", true},
-    {"Tourism Statistics", "tourism", true},
+    {"Industrial Production (2015=100, SA)", "industrial", true},
+    {"Retail Trade Volume (2015=100, SA)", "retail", true},
+    {"Primary Energy Production (GWh)", "energy", true},
+    {"Goods Trade Balance vs World (EUR mn, SA)", "trade", true},
+    {"Construction Output (2015=100, SA)", "construction", true},
+    {"Nights at Tourist Accommodation", "tourism", true},
 };
 
 static const QList<QPair<QString, QString>> kEurostatCountries = {
@@ -56,8 +58,9 @@ static const QList<QPair<QString, QString>> kEurostatCountries = {
 
 // ── SDMX-JSON flattener ───────────────────────────────────────────────────────
 
-QJsonArray EurostatPanel::flatten_sdmx(const QJsonObject& response) {
-    // Check for error
+QJsonArray EurostatPanel::flatten_sdmx(const QJsonObject& response, int* series_count) {
+    if (series_count)
+        *series_count = 0;
     if (response.contains("error"))
         return {};
 
@@ -66,42 +69,65 @@ QJsonArray EurostatPanel::flatten_sdmx(const QJsonObject& response) {
     const QJsonObject dims = response["dimension"].toObject();
     const QJsonObject vals = response["value"].toObject();
 
-    if (id_arr.isEmpty() || size_arr.isEmpty() || vals.isEmpty())
+    if (id_arr.isEmpty() || id_arr.size() != size_arr.size() || vals.isEmpty())
         return {};
 
-    // Time is always the last dimension
-    const int time_size = size_arr.last().toInt(1);
+    // JSON-stat is row-major over id[] with sizes size[]. Decode every
+    // dimension (not just time) so observations of different series are
+    // never collapsed into one {period, value} stream.
+    const int ndim = id_arr.size();
+    QVector<int> sizes(ndim);
+    QVector<QMap<int, QString>> labels(ndim); // position -> category label (code for time)
+    int time_dim = -1;
+    for (int d = 0; d < ndim; ++d) {
+        const QString id = id_arr[d].toString();
+        sizes[d] = qMax(1, size_arr[d].toInt(1));
+        if (id == QLatin1String("time"))
+            time_dim = d;
+        const QJsonObject cat = dims[id].toObject()["category"].toObject();
+        const QJsonObject index = cat["index"].toObject();
+        const QJsonObject label = cat["label"].toObject();
+        for (auto it = index.constBegin(); it != index.constEnd(); ++it)
+            labels[d][it.value().toInt()] = (id == QLatin1String("time")) ? it.key() : label.value(it.key()).toString(it.key());
+    }
+    if (time_dim < 0)
+        return {};
 
-    // Build reverse map: int_position -> period_string from time dimension index
-    // dimension.time.category.index = {"1953-01": 0, "1953-02": 1, ...}
-    const QJsonObject time_cat = dims["time"].toObject()["category"].toObject();
-    const QJsonObject time_index = time_cat["index"].toObject();
-
-    QMap<int, QString> pos_to_period;
-    for (auto it = time_index.constBegin(); it != time_index.constEnd(); ++it)
-        pos_to_period[it.value().toInt()] = it.key();
-
-    // Flatten: for each value entry, derive time position and look up period
-    QJsonArray rows;
+    QSet<QString> series_ids;
+    QList<QJsonValue> sorted;
     for (auto it = vals.constBegin(); it != vals.constEnd(); ++it) {
-        const int flat_idx = it.key().toInt();
-        const int time_pos = flat_idx % time_size;
-        const QString period = pos_to_period.value(time_pos, QString::number(time_pos));
+        if (!it.value().isDouble())
+            continue; // null / missing observation — skip, never 0
+        int flat = it.key().toInt();
+        QVector<int> pos(ndim);
+        for (int d = ndim - 1; d >= 0; --d) {
+            pos[d] = flat % sizes[d];
+            flat /= sizes[d];
+        }
         QJsonObject row;
-        row["period"] = period;
+        row["period"] = labels[time_dim].value(pos[time_dim], QString::number(pos[time_dim]));
         row["value"] = it.value().toDouble();
-        rows.append(row);
+        QString sid;
+        for (int d = 0; d < ndim; ++d) {
+            if (d == time_dim || sizes[d] <= 1)
+                continue;
+            const QString lbl = labels[d].value(pos[d]);
+            row[id_arr[d].toString()] = lbl;
+            sid += lbl + QLatin1Char('|');
+        }
+        series_ids.insert(sid);
+        sorted.append(row);
     }
 
-    // Sort by period string — copy to QList to avoid QJsonValueRef swap issue on MSVC
-    QList<QJsonValue> sorted(rows.begin(), rows.end());
+    // Sort by series then period — copy to QList to avoid QJsonValueRef swap issue on MSVC
     std::sort(sorted.begin(), sorted.end(), [](const QJsonValue& a, const QJsonValue& b) {
         return a.toObject()["period"].toString() < b.toObject()["period"].toString();
     });
-    rows = QJsonArray();
+    QJsonArray rows;
     for (const auto& v : sorted)
         rows.append(v);
-
+    if (series_count)
+        *series_count = series_ids.size();
     return rows;
 }
 
@@ -149,7 +175,8 @@ void EurostatPanel::on_fetch() {
 
     show_loading("Fetching Eurostat: " + dataset.label + " — " + country_combo_->currentText() + "…");
 
-    QStringList args = {dataset.command};
+    // EconomicsService already puts the command first in argv.
+    QStringList args;
     if (dataset.has_country)
         args << country;
 
@@ -174,7 +201,8 @@ void EurostatPanel::on_result(const QString& request_id, const services::Economi
     const auto& dataset = kEurostatDatasets[ds_idx];
 
     // Try SDMX flatten first (raw Eurostat format)
-    QJsonArray rows = flatten_sdmx(result.data);
+    int series_count = 0;
+    QJsonArray rows = flatten_sdmx(result.data, &series_count);
 
     // Fallback: service may have wrapped as {data:[...]}
     if (rows.isEmpty())
@@ -188,7 +216,12 @@ void EurostatPanel::on_result(const QString& request_id, const services::Economi
     }
 
     const QString title = "Eurostat: " + dataset.label + " — " + country_combo_->currentText();
-    display(rows, title);
+    // One series → stats on {period, value}. Several series (extra dimension
+    // columns in the table) → no single series, so every stat card is "—".
+    if (series_count == 1)
+        display(rows, title, QStringLiteral("value"), QStringLiteral("period"));
+    else
+        display(rows, title);
     LOG_INFO("EurostatPanel", QString("Displayed %1 rows for %2").arg(rows.size()).arg(title));
 }
 

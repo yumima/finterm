@@ -2,6 +2,7 @@
 #include "screens/portfolio/PortfolioDialogs.h"
 
 #include "python/PythonWorker.h"
+#include "services/portfolio/PortfolioDates.h"
 #include "services/file_manager/FileManagerService.h"
 #include "ui/theme/Theme.h"
 
@@ -792,7 +793,7 @@ EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, 
     auto* subtitle = new QLabel(
         QString("This edits the %1 lot dated %2. Your position is recalculated from every "
                 "transaction for %3, not from this lot alone.")
-            .arg(txn.transaction_type, txn.transaction_date.left(10), txn.symbol));
+            .arg(txn.transaction_type, portfolio::transaction_local_date(txn), txn.symbol));
     subtitle->setWordWrap(true);
     subtitle->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(subtitle);
@@ -810,7 +811,9 @@ EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, 
     date_edit_->setCalendarPopup(true);
     date_edit_->setDisplayFormat("yyyy-MM-dd");
     {
-        QDate d = QDate::fromString(txn.transaction_date, "yyyy-MM-dd");
+        // Local trade date: a UTC "…Z" stamp (add_asset/sell_asset) did not
+        // parse as yyyy-MM-dd, so the editor showed — and saved — TODAY.
+        QDate d = QDate::fromString(portfolio::transaction_local_date(txn), Qt::ISODate);
         date_edit_->setDate(d.isValid() ? d : QDate::currentDate());
     }
     date_edit_->setStyleSheet(

@@ -72,11 +72,12 @@ inline QVector<QuantModule> all_quant_modules() {
          "Risk metrics, portfolio analytics, options Greeks, VaR"},
         {"statsmodels", "Statsmodels", "STATS", "ANALYTICS", QColor("#2196F3"), "Analytics/statsmodels_cli.py",
          "Statistical modeling and econometrics"},
-        {"functime", "Functime", "FUNC", "ANALYTICS", QColor("#4CAF50"), "Analytics/quantstats_analytics.py",
+        {"functime", "Functime", "FUNC", "ANALYTICS", QColor("#4CAF50"), "Analytics/functime_wrapper/functime_service.py",
          "Time-series forecasting and analysis"},
-        {"fortitudo", "Fortitudo", "FORT", "ANALYTICS", QColor("#FF5722"), "Analytics/riskfoliolib_wrapper.py",
+        {"fortitudo", "Fortitudo", "FORT", "ANALYTICS", QColor("#FF5722"),
+         "Analytics/fortitudo_tech_wrapper/fortitudo_service.py",
          "Risk-aware portfolio optimization"},
-        {"gluonts", "GluonTS", "GLUON", "ANALYTICS", QColor("#795548"), "Analytics/quantstats_analytics.py",
+        {"gluonts", "GluonTS", "GLUON", "ANALYTICS", QColor("#795548"), "Analytics/gluonts_wrapper/gluonts_service.py",
          "Probabilistic time-series forecasting"},
     };
 }

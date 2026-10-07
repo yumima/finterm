@@ -155,7 +155,9 @@ class TerminalToolkit:
                 method="POST",
             )
 
-            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+            # Loopback bridge: never route through an HTTP(S)_PROXY from the env.
+            opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            with opener.open(req, timeout=self.timeout_seconds) as resp:
                 response_body = resp.read().decode("utf-8")
 
             result = json.loads(response_body)

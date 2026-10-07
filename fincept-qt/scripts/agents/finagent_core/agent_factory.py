@@ -10,6 +10,9 @@ from typing import Dict, Any, Optional, List
 from agno.agent import Agent
 
 
+from finagent_core.clock import with_current_date as _with_date
+
+
 class AgentFactory:
     """Factory for creating configured Agno agents"""
 
@@ -55,7 +58,7 @@ class AgentFactory:
         agent_kwargs = {
             "name": config.get("name", "Agent"),
             "model": model,
-            "instructions": config.get("instructions", ""),
+            "instructions": _with_date(config.get("instructions") or config.get("system_prompt") or ""),
             "markdown": config.get("output_format") == "markdown",
         }
 

@@ -129,6 +129,10 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
             n = QStringLiteral("%1 filers · %2 · filed by %3")
                     .arg(QLocale().toString(sum.holder_count), quarter_label(sum.quarter),
                          short_date(sum.filed_by()));
+            if (sum.min_book_value > 0.0 || sum.min_book_positions > 0)
+                n += QStringLiteral(" · books ≥ $%1 and ≥ %2 positions only")
+                         .arg(fmt::format_compact(sum.min_book_value))
+                         .arg(sum.min_book_positions);
             if (sum.partial_quarter.isValid())
                 n += QStringLiteral(" · %1 filers already in for %2")
                          .arg(sum.partial_filers).arg(quarter_label(sum.partial_quarter));
@@ -136,12 +140,14 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
         } else if (!s.holders_error.isEmpty()) {
             n = QStringLiteral("13F holders: ") + esc(s.holders_error.left(120));
         } else {
-            n = QStringLiteral("Computed from every 13F filing in the local index — a floor, "
-                               "since filers below the 13F threshold do not appear.");
+            n = QStringLiteral("Computed from 13F filings in the local index whose equity book "
+                               "passes a size and position-count floor — a floor, since smaller "
+                               "books and filers below the 13F threshold do not appear.");
         }
         institutions_.note->setText(n);
         institutions_.note->setToolTip(ui::tooltip_wrap(QStringLiteral(
-            "Institutional shares summed from the filings, divided by the vendor's share "
+            "Institutional shares summed from the filings of filers whose equity book passes "
+            "the size and position-count floors noted below, divided by the vendor's share "
             "count (and float). The vendor's own percentage is shown beside it for comparison; "
             "it is institutions ÷ float in practice and the two can differ by a quarter of drift.")));
     }

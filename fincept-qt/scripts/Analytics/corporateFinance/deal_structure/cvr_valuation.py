@@ -115,16 +115,20 @@ class CVRValuation:
         expected_payments = []
         total_expected_pv = 0
 
+        from scipy.stats import norm
+        sigma_rt = price_volatility * np.sqrt(years_to_maturity)
         for tier in payment_schedule:
             threshold = tier['threshold']
             payment = tier['payment']
 
-            z_score = (np.log(threshold / current_price)) / (price_volatility * np.sqrt(years_to_maturity))
+            # Cash-or-nothing digital: risk-neutral P(S_T > K) = N(d2) with
+            # d2 = (ln(S/K) + (r - sigma^2/2) T) / (sigma sqrt T), and the
+            # payment discounted at the risk-free rate (consistent measure).
+            d2 = (np.log(current_price / threshold)
+                  + (self.risk_free_rate - 0.5 * price_volatility ** 2) * years_to_maturity) / sigma_rt
+            probability = float(norm.cdf(d2))
 
-            from scipy.stats import norm
-            probability = 1 - norm.cdf(z_score)
-
-            pv = payment / ((1 + self.discount_rate) ** years_to_maturity)
+            pv = payment * np.exp(-self.risk_free_rate * years_to_maturity)
             expected_value = pv * probability
 
             total_expected_pv += expected_value
@@ -152,14 +156,17 @@ class CVRValuation:
                             expected_resolution_years: float,
                             legal_costs: float = 0,
                             settlement_probability: float = 0,
-                            settlement_amount: float = 0) -> Dict[str, Any]:
+                            settlement_amount: float = 0,
+                            settlement_timing_years: Optional[float] = None) -> Dict[str, Any]:
         """Value litigation outcome CVR"""
 
         win_pv = (case_value - legal_costs) / ((1 + self.discount_rate) ** expected_resolution_years)
         win_expected = win_pv * win_probability
 
         if settlement_probability > 0:
-            settlement_timing = expected_resolution_years * 0.7
+            if settlement_timing_years is None:
+                raise ValueError("settlement_timing_years is required when settlement_probability > 0")
+            settlement_timing = settlement_timing_years
             settlement_pv = settlement_amount / ((1 + self.discount_rate) ** settlement_timing)
             settlement_expected = settlement_pv * settlement_probability
 
@@ -193,6 +200,8 @@ class CVRValuation:
                          years_to_measurement: int) -> Dict[str, Any]:
         """Value multi-tier earnout CVR"""
 
+        if base_probability < 0 or stretch_probability < 0 or base_probability + stretch_probability > 1:
+            raise ValueError("base_probability and stretch_probability are exclusive outcomes and must sum to <= 1")
         base_pv = base_earnout / ((1 + self.discount_rate) ** years_to_measurement)
         base_expected = base_pv * base_probability
 
@@ -287,126 +296,121 @@ class CVRValuation:
             'risk_reward_ratio': upside_scenario / downside_risk if downside_risk > 0 else float('inf')
         }
 
+# ── JSON contract (MAAnalyticsService "calculate") ───────────────────────────
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from corporateFinance._cli import is_json_call, run_json, num, opt_num, text, has, InputError, pct  # noqa: E402
+
+
+def _key(p: Dict[str, Any], *keys: str) -> Optional[str]:
+    for k in keys:
+        if has(p, k):
+            return k
+    return None
+
+
+def json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Expected PV of a binary-trigger CVR: probability x payment / (1 + r) ** t.
+
+    Inputs (required): payment (alias max_payout / cvr_payment /
+    payment_if_triggered; total $ paid if triggered), probability (decimal),
+    years (alias expiry_years / time_to_milestone), discount_rate (decimal).
+    Optional: type (milestone | revenue | regulatory; label), shares_outstanding
+    (per-share values), appeal_probability + appeal_delay_years (regulatory:
+    chance a rejection is overturned on appeal, paid later), cash_alternative
+    (per-CVR cash the holder could take instead), triggers = [{payment,
+    probability, years, description?}] for several independent milestones.
+    """
+    def req(keys, label, **kw):
+        k = _key(p, *keys)
+        if not k:
+            raise InputError(f"Missing required input: {label}")
+        return num(p, k, label=label, **kw)
+
+    r = num(p, 'discount_rate', label='discount_rate (decimal)', min=0, max=1)
+    cvr_type = text(p, 'type', choices=('milestone', 'revenue', 'regulatory')) if has(p, 'type') else 'milestone'
+
+    raw = p.get('triggers')
+    if raw is not None:
+        if not isinstance(raw, list) or not raw:
+            raise InputError("triggers must be a non-empty list of {payment, probability, years}")
+        specs = []
+        for i, t in enumerate(raw):
+            if not isinstance(t, dict):
+                raise InputError(f"triggers[{i}] must be an object")
+            specs.append({'description': str(t.get('description') or f'trigger_{i + 1}'),
+                          'payment': num(t, 'payment', label=f'triggers[{i}].payment', min=0),
+                          'probability': num(t, 'probability', label=f'triggers[{i}].probability', min=0, max=1),
+                          'years': num(t, 'years', label=f'triggers[{i}].years', min=0)})
+    else:
+        specs = [{'description': cvr_type,
+                  'payment': req(('payment', 'max_payout', 'cvr_payment', 'payment_if_triggered'),
+                                 'payment (amount paid if triggered)', min=0),
+                  'probability': req(('probability', 'approval_probability'), 'probability (decimal 0-1)',
+                                     min=0, max=1),
+                  'years': req(('years', 'expiry_years', 'time_to_milestone', 'expected_timing_years'),
+                               'years (to the trigger)', min=0)}]
+
+    rows = []
+    for s in specs:
+        pv = s['payment'] / (1 + r) ** s['years']
+        rows.append({'trigger': s['description'], 'payment_if_triggered': s['payment'],
+                     'probability_pct': pct(s['probability']), 'years': s['years'],
+                     'pv_if_triggered': pv, 'expected_value': s['probability'] * pv})
+
+    appeal_ev = None
+    if has(p, 'appeal_probability'):
+        if len(specs) != 1:
+            raise InputError("appeal_probability applies to a single-trigger CVR")
+        ap = num(p, 'appeal_probability', label='appeal_probability (decimal)', min=0, max=1)
+        delay = num(p, 'appeal_delay_years', label='appeal_delay_years', min=0)
+        s = specs[0]
+        appeal_ev = (1 - s['probability']) * ap * s['payment'] / (1 + r) ** (s['years'] + delay)
+        rows.append({'trigger': 'appeal_after_rejection', 'payment_if_triggered': s['payment'],
+                     'probability_pct': pct((1 - s['probability']) * ap), 'years': s['years'] + delay,
+                     'pv_if_triggered': s['payment'] / (1 + r) ** (s['years'] + delay),
+                     'expected_value': appeal_ev})
+
+    expected = sum(x['expected_value'] for x in rows)
+    face = sum(s['payment'] for s in specs)
+    out: Dict[str, Any] = {
+        'cvr_type': cvr_type,
+        'expected_value': expected,
+        'max_payout': face,
+        'pv_if_triggered': sum(x['pv_if_triggered'] for x in rows[:len(specs)]),
+        'expected_value_share_of_max_pct': (expected / face * 100) if face else None,
+        'discount_rate_pct': pct(r),
+    }
+    if len(specs) == 1:
+        out['probability_pct'] = rows[0]['probability_pct']
+        out['years'] = specs[0]['years']
+    if len(rows) > 1:
+        out['triggers'] = rows
+    if appeal_ev is not None:
+        out['appeal_expected_value'] = appeal_ev
+    sk = _key(p, 'shares_outstanding', 'cvrs_outstanding')
+    if sk:
+        sh = num(p, sk, gt=0)
+        out['expected_value_per_share'] = expected / sh
+        out['max_payout_per_share'] = face / sh
+    if has(p, 'cash_alternative'):
+        cash = num(p, 'cash_alternative', min=0)
+        per_unit = out.get('expected_value_per_share', expected)
+        out['cash_alternative'] = cash
+        out['cvr_minus_cash'] = per_unit - cash
+    return out
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({"calculate": json_calculate})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "cvr":
-            if len(sys.argv) < 3:
-                raise ValueError("CVR parameters required")
-
-            # Host sends: "cvr" cvr_type cvr_params_json
-            # OR legacy: "cvr" cvr_params_json (single JSON arg)
-            # Detect format: if sys.argv[2] is valid JSON dict, it's legacy single-arg
-            # If it's a plain string (e.g. "milestone"), sys.argv[3] has the JSON params
-            try:
-                maybe_params = json.loads(sys.argv[2])
-                if isinstance(maybe_params, dict):
-                    # Legacy format: single JSON arg containing all params
-                    params = maybe_params
-                    cvr_type_str = params.get('cvr_type', 'regulatory')
-                else:
-                    raise ValueError("Not a dict")
-            except (json.JSONDecodeError, ValueError, TypeError):
-                # New format: sys.argv[2] is cvr_type string, sys.argv[3] is JSON params
-                cvr_type_str = sys.argv[2]
-                if len(sys.argv) > 3:
-                    params = json.loads(sys.argv[3])
-                else:
-                    params = {}
-
-            discount_rate = float(params.get('discount_rate', 0.12))
-            risk_free_rate = float(params.get('risk_free_rate', 0.04))
-            cvr = CVRValuation(discount_rate=discount_rate, risk_free_rate=risk_free_rate)
-
-            if cvr_type_str == "milestone":
-                triggers_data = params.get('triggers', [])
-                triggers = []
-                for t in triggers_data:
-                    triggers.append(CVRTrigger(
-                        trigger_type=CVRType(t.get('trigger_type', 'milestone')),
-                        description=t.get('description', ''),
-                        payment_if_triggered=float(t.get('payment_if_triggered', t.get('payment', 0))),
-                        probability=float(t.get('probability', 0.5)),
-                        expected_timing_years=float(t.get('expected_timing_years', t.get('timing_years', 2)))
-                    ))
-                if not triggers:
-                    # Fallback: build single trigger from flat params
-                    triggers.append(CVRTrigger(
-                        trigger_type=CVRType.MILESTONE,
-                        description=params.get('description', 'Milestone CVR'),
-                        payment_if_triggered=float(params.get('payment_if_triggered', params.get('payout_per_share', 0))),
-                        probability=float(params.get('probability', 0.5)),
-                        expected_timing_years=float(params.get('expected_timing_years', params.get('expected_timeline_years', 2)))
-                    ))
-                analysis = cvr.value_milestone_cvr(triggers)
-
-            elif cvr_type_str == "regulatory":
-                analysis = cvr.value_regulatory_cvr(
-                    payment_if_approved=float(params.get('payment_if_approved', params.get('payout_per_share', 0))),
-                    approval_probability=float(params.get('approval_probability', params.get('probability', 0.5))),
-                    expected_decision_years=float(params.get('expected_decision_years', params.get('expected_timeline_years', 2))),
-                    appeal_possible=bool(params.get('appeal_possible', False)),
-                    appeal_probability=float(params.get('appeal_probability', 0)),
-                    appeal_delay_years=float(params.get('appeal_delay_years', 0))
-                )
-
-            elif cvr_type_str == "earnout":
-                analysis = cvr.value_earnout_cvr(
-                    base_earnout=float(params.get('base_earnout', 0)),
-                    stretch_earnout=float(params.get('stretch_earnout', 0)),
-                    base_probability=float(params.get('base_probability', 0.5)),
-                    stretch_probability=float(params.get('stretch_probability', 0.2)),
-                    years_to_measurement=int(params.get('years_to_measurement', 2))
-                )
-
-            elif cvr_type_str == "litigation":
-                analysis = cvr.value_litigation_cvr(
-                    case_value=float(params.get('case_value', 0)),
-                    win_probability=float(params.get('win_probability', 0.5)),
-                    expected_resolution_years=float(params.get('expected_resolution_years', 2)),
-                    legal_costs=float(params.get('legal_costs', 0)),
-                    settlement_probability=float(params.get('settlement_probability', 0)),
-                    settlement_amount=float(params.get('settlement_amount', 0))
-                )
-
-            elif cvr_type_str == "commodity_price":
-                analysis = cvr.value_commodity_price_cvr(
-                    payment_schedule=params.get('payment_schedule', []),
-                    current_price=float(params.get('current_price', 0)),
-                    price_volatility=float(params.get('price_volatility', 0.3)),
-                    years_to_maturity=float(params.get('years_to_maturity', 2))
-                )
-
-            else:
-                # Default to regulatory for backwards compatibility
-                analysis = cvr.value_regulatory_cvr(
-                    payment_if_approved=float(params.get('payment_if_approved', params.get('payout_per_share', 0))),
-                    approval_probability=float(params.get('approval_probability', params.get('probability', 0.5))),
-                    expected_decision_years=float(params.get('expected_decision_years', params.get('expected_timeline_years', 2)))
-                )
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

@@ -143,6 +143,9 @@ GeopoliticsService::GeopoliticsService(QObject* parent) : QObject(parent) {
         } else if (fname == QStringLiteral("trade_blocs.json")) {
             if (doc.isObject())
                 emit trade_result_ready(QStringLiteral("trade_blocs"), doc.object());
+        } else if (fname == QStringLiteral("trade_barrier_removal.json")) {
+            if (doc.isObject())
+                emit trade_result_ready(QStringLiteral("trade_barrier_removal"), doc.object());
         } else if (fname == QStringLiteral("geolocation.json")) {
             if (doc.isObject())
                 emit geolocation_ready(doc.object());
@@ -160,7 +163,21 @@ void GeopoliticsService::run_python(const QString& script, const QStringList& ar
     python::PythonRunner::instance().run(script, args, [self, context, cb](python::PythonResult result) {
         if (!self)
             return;
-        cb(result.success, result.success ? result.output : result.error);
+        if (result.success) {
+            cb(true, result.output);
+            return;
+        }
+        // Scripts usually print {"error": ...} to stdout and exit 1 with an
+        // empty stderr; prefer that message, then stderr, then the exit code.
+        QString msg;
+        const auto doc = QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
+        if (doc.isObject() && doc.object().value("error").isString())
+            msg = doc.object().value("error").toString();
+        if (msg.isEmpty())
+            msg = result.error.trimmed();
+        if (msg.isEmpty())
+            msg = QString("Script failed (exit code %1)").arg(result.exit_code);
+        cb(false, msg);
     });
 }
 
@@ -511,58 +528,46 @@ void GeopoliticsService::search_hdx_advanced(const QString& query) {
 // TRADE ANALYSIS — Python
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void GeopoliticsService::analyze_trade_benefits(const QJsonObject& params) {
-    auto json_str = QJsonDocument(params).toJson(QJsonDocument::Compact);
-    run_python("Analytics/economics/trade_geopolitics.py", {"benefits_costs", json_str}, "trade_benefits",
-               [this](bool ok, const QString& out) {
+void GeopoliticsService::run_trade_analysis(const QString& command, const QJsonObject& params,
+                                            const QString& context, const QString& topic) {
+    const auto json_str = QString::fromUtf8(QJsonDocument(params).toJson(QJsonDocument::Compact));
+    run_python("Analytics/economics/trade_geopolitics.py", {command, json_str}, context,
+               [this, context, topic](bool ok, const QString& out) {
                    if (!ok) {
-                       emit error_occurred("trade_benefits", out);
+                       emit error_occurred(context, out);
                        return;
                    }
-                   auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
+                   const auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
+                   if (!doc.isObject()) {
+                       emit error_occurred(context, QStringLiteral("Invalid JSON from trade analysis"));
+                       return;
+                   }
                    const auto obj = doc.object();
-                   if (!doc.isNull())
-                       disk_cache().save(QStringLiteral("trade_benefits.json"), doc);
-                   emit trade_result_ready("trade_benefits", obj);
+                   if (obj.value("error").isString() && !obj.value("error").toString().isEmpty()) {
+                       emit error_occurred(context, obj.value("error").toString());
+                       return;  // never persist an error payload as a result
+                   }
+                   disk_cache().save(context + QStringLiteral(".json"), doc);
+                   emit trade_result_ready(context, obj);
                    if (hub_registered_)
-                       publish_to_hub(QStringLiteral("geopolitics:trade:benefits"), QVariant(obj));
+                       publish_to_hub(topic, QVariant(obj));
                });
+}
+
+void GeopoliticsService::analyze_trade_benefits(const QJsonObject& params) {
+    run_trade_analysis("benefits_costs", params, "trade_benefits", "geopolitics:trade:benefits");
 }
 
 void GeopoliticsService::analyze_trade_restrictions(const QJsonObject& params) {
-    auto json_str = QJsonDocument(params).toJson(QJsonDocument::Compact);
-    run_python("Analytics/economics/trade_geopolitics.py", {"restrictions", json_str}, "trade_restrictions",
-               [this](bool ok, const QString& out) {
-                   if (!ok) {
-                       emit error_occurred("trade_restrictions", out);
-                       return;
-                   }
-                   auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
-                   const auto obj = doc.object();
-                   if (!doc.isNull())
-                       disk_cache().save(QStringLiteral("trade_restrictions.json"), doc);
-                   emit trade_result_ready("trade_restrictions", obj);
-                   if (hub_registered_)
-                       publish_to_hub(QStringLiteral("geopolitics:trade:restrictions"), QVariant(obj));
-               });
+    run_trade_analysis("restrictions", params, "trade_restrictions", "geopolitics:trade:restrictions");
 }
 
 void GeopoliticsService::analyze_trading_blocs(const QJsonObject& params) {
-    auto json_str = QJsonDocument(params).toJson(QJsonDocument::Compact);
-    run_python("Analytics/economics/trade_geopolitics.py", {"trading_blocs", json_str}, "trade_blocs",
-               [this](bool ok, const QString& out) {
-                   if (!ok) {
-                       emit error_occurred("trade_blocs", out);
-                       return;
-                   }
-                   auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
-                   const auto obj = doc.object();
-                   if (!doc.isNull())
-                       disk_cache().save(QStringLiteral("trade_blocs.json"), doc);
-                   emit trade_result_ready("trade_blocs", obj);
-                   if (hub_registered_)
-                       publish_to_hub(QStringLiteral("geopolitics:trade:blocs"), QVariant(obj));
-               });
+    run_trade_analysis("trading_blocs", params, "trade_blocs", "geopolitics:trade:blocs");
+}
+
+void GeopoliticsService::analyze_barrier_removal(const QJsonObject& params) {
+    run_trade_analysis("barrier_removal", params, "trade_barrier_removal", "geopolitics:trade:barrier_removal");
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

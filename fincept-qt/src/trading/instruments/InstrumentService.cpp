@@ -504,6 +504,7 @@ void InstrumentService::build_cache(const QString& broker_id, const QVector<Inst
         cache.by_brsymbol.insert({inst.brsymbol, inst.brexchange}, inst);
     }
     cache.loaded = true;
+    generation_.fetch_add(1, std::memory_order_release);
 }
 
 void InstrumentService::do_refresh(const QString& broker_id, const BrokerCredentials& creds) {

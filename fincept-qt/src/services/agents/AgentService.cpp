@@ -6,18 +6,32 @@
 #include "core/logging/Logger.h"
 #include "mcp/McpManager.h"
 #include "mcp/McpProvider.h"
+#include "mcp/McpService.h"
 #include "python/PythonRunner.h"
 #include "services/agents/BudgetService.h"
 #include "services/agents/ElicitBridge.h"
 #include "storage/cache/CacheManager.h"
+#include "storage/repositories/AgentConfigRepository.h"
 #include "storage/repositories/AgentTraceRepository.h"
 #include "storage/repositories/ChatArtefactRepository.h"
 #include "storage/repositories/LlmConfigRepository.h"
+#include "storage/repositories/LlmProfileRepository.h"
 
 #    include "datahub/DataHub.h"
 #    include "datahub/TopicPolicy.h"
 
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QHash>
+#include <QHostAddress>
+#include <QMutex>
+#include <QMutexLocker>
+#include <QRandomGenerator>
+#include <QSet>
+#include <QTcpServer>
+#include <QTcpSocket>
+#include <QThread>
+#include <QtConcurrent/QtConcurrent>
 #include <QElapsedTimer>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -131,8 +145,329 @@ QJsonObject AgentService::build_api_keys() const {
 
 // ── Payload builder ──────────────────────────────────────────────────────────
 
+namespace {
+
+// ── Terminal tool bridge ────────────────────────────────────────────────────
+//
+// finagent_core's TerminalToolkit exposes each `terminal_tools` definition to
+// the agent as a function and POSTs calls to `<terminal_mcp_endpoint>/tool`.
+// Nothing in-app served that endpoint (the old remote relay is gone), so
+// agents had no finterm tools at all.  This is that endpoint: a loopback-only
+// HTTP listener, one random session token per dispatch embedded in the URL
+// path, and each token only authorises the tool set handed to that dispatch.
+// Calls run through McpService::execute_openai_function on a worker thread,
+// so the kill-switch, schema validation and tool errors behave exactly as in
+// chat.
+
+constexpr int kBridgeMaxTools = 40;
+constexpr qint64 kBridgeTokenTtlMs = 3LL * 60 * 60 * 1000; // a long agent run
+constexpr qint64 kBridgeMaxBody = 1 << 20;
+
+// Read-only default when an agent has no allow_tools — bounded, never the
+// whole ~474-tool catalog.
+const QStringList& default_agent_tool_globs() {
+    static const QStringList g = {
+        QStringLiteral("int__get_quote"),         QStringLiteral("int__get_candles"),
+        QStringLiteral("int__get_news"),          QStringLiteral("int__search_news"),
+        QStringLiteral("int__get_top_news"),      QStringLiteral("int__get_news_summary"),
+        QStringLiteral("int__get_watchlists"),    QStringLiteral("int__list_portfolios"),
+        QStringLiteral("int__get_portfolio"),     QStringLiteral("int__get_holdings"),
+        QStringLiteral("int__get_transactions"),  QStringLiteral("int__get_equity_*"),
+        QStringLiteral("int__edgar_search_filings"), QStringLiteral("int__edgar_get_financials"),
+        QStringLiteral("int__edgar_get_financial_metrics"),
+    };
+    return g;
+}
+
+class TerminalToolBridge {
+  public:
+    static TerminalToolBridge& instance() {
+        static TerminalToolBridge b;
+        return b;
+    }
+
+    /// Start (once) on the GUI thread.  Returns the base URL, empty on failure.
+    QString base_url() {
+        QMutexLocker lock(&mutex_);
+        if (port_ != 0)
+            return QStringLiteral("http://127.0.0.1:%1").arg(port_);
+        if (start_failed_)
+            return {};
+        lock.unlock();
+        auto* app = QCoreApplication::instance();
+        if (!app)
+            return {};
+        if (QThread::currentThread() == app->thread())
+            start();
+        else
+            QMetaObject::invokeMethod(app, [this]() { start(); }, Qt::BlockingQueuedConnection);
+        lock.relock();
+        return port_ != 0 ? QStringLiteral("http://127.0.0.1:%1").arg(port_) : QString();
+    }
+
+    /// Authorise `wire_names` for one dispatch; returns the session token.
+    QString open_session(const QSet<QString>& wire_names) {
+        const QString token = QUuid::createUuid().toString(QUuid::Id128) +
+                              QString::number(QRandomGenerator::system()->generate64(), 16);
+        const qint64 now = QDateTime::currentMSecsSinceEpoch();
+        QMutexLocker lock(&mutex_);
+        for (auto it = sessions_.begin(); it != sessions_.end();) {
+            if (now - it->created_ms > kBridgeTokenTtlMs)
+                it = sessions_.erase(it);
+            else
+                ++it;
+        }
+        sessions_.insert(token, Session{wire_names, now});
+        return token;
+    }
+
+  private:
+    struct Session {
+        QSet<QString> allowed;
+        qint64 created_ms = 0;
+    };
+
+    void start() {
+        QMutexLocker lock(&mutex_);
+        if (port_ != 0 || start_failed_)
+            return;
+        server_ = new QTcpServer(QCoreApplication::instance());
+        if (!server_->listen(QHostAddress::LocalHost, 0)) {
+            LOG_ERROR("AgentToolBridge", "listen failed: " + server_->errorString());
+            start_failed_ = true;
+            return;
+        }
+        port_ = server_->serverPort();
+        QObject::connect(server_, &QTcpServer::newConnection, server_, [this]() {
+            while (QTcpSocket* sock = server_->nextPendingConnection())
+                accept(sock);
+        });
+        LOG_INFO("AgentToolBridge", QString("terminal tool bridge on 127.0.0.1:%1").arg(port_));
+    }
+
+    static void reply(QTcpSocket* sock, int code, const QJsonObject& body) {
+        const QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
+        const char* reason = code == 200 ? "OK" : code == 403 ? "Forbidden" : code == 404 ? "Not Found" : "Bad Request";
+        QByteArray head = QByteArray("HTTP/1.1 ") + QByteArray::number(code) + ' ' + reason +
+                          "\r\nContent-Type: application/json\r\nContent-Length: " +
+                          QByteArray::number(payload.size()) + "\r\nConnection: close\r\n\r\n";
+        sock->write(head + payload);
+        sock->disconnectFromHost();
+    }
+
+    void accept(QTcpSocket* sock) {
+        auto buf = std::make_shared<QByteArray>();
+        QObject::connect(sock, &QTcpSocket::disconnected, sock, &QObject::deleteLater);
+        QObject::connect(sock, &QTcpSocket::readyRead, sock, [this, sock, buf]() {
+            buf->append(sock->readAll());
+            const int hdr_end = buf->indexOf("\r\n\r\n");
+            if (hdr_end < 0) {
+                if (buf->size() > 64 * 1024)
+                    reply(sock, 400, {{"success", false}, {"error", "header too large"}});
+                return;
+            }
+            const QList<QByteArray> lines = buf->left(hdr_end).split('\n');
+            const QList<QByteArray> req = lines.value(0).trimmed().split(' ');
+            qint64 content_len = 0;
+            for (int i = 1; i < lines.size(); ++i) {
+                const QByteArray l = lines[i].trimmed();
+                if (l.toLower().startsWith("content-length:"))
+                    content_len = l.mid(15).trimmed().toLongLong();
+            }
+            if (content_len < 0 || content_len > kBridgeMaxBody) {
+                reply(sock, 400, {{"success", false}, {"error", "bad content length"}});
+                return;
+            }
+            if (buf->size() < hdr_end + 4 + content_len)
+                return; // wait for the rest of the body
+            const QByteArray body = buf->mid(hdr_end + 4, content_len);
+            buf->clear();
+            handle(sock, req.value(0), QString::fromUtf8(req.value(1)), body);
+        });
+    }
+
+    void handle(QTcpSocket* sock, const QByteArray& method, const QString& path, const QByteArray& body) {
+        // Path: /s/<token>/tool
+        const QStringList parts = path.split('/', Qt::SkipEmptyParts);
+        if (method != "POST" || parts.size() != 3 || parts[0] != QLatin1String("s") ||
+            parts[2] != QLatin1String("tool")) {
+            reply(sock, 404, {{"success", false}, {"error", "not found"}});
+            return;
+        }
+        QSet<QString> allowed;
+        {
+            QMutexLocker lock(&mutex_);
+            auto it = sessions_.constFind(parts[1]);
+            if (it == sessions_.constEnd() ||
+                QDateTime::currentMSecsSinceEpoch() - it->created_ms > kBridgeTokenTtlMs) {
+                lock.unlock();
+                reply(sock, 403, {{"success", false}, {"error", "unknown or expired agent tool session"}});
+                return;
+            }
+            allowed = it->allowed;
+        }
+        const QJsonObject req = QJsonDocument::fromJson(body).object();
+        const QString tool = req.value("tool").toString();
+        const QJsonObject args = req.value("args").toObject();
+        if (!allowed.contains(tool)) {
+            LOG_WARN("AgentToolBridge", "refused tool not granted to this agent: " + tool);
+            reply(sock, 200, {{"success", false},
+                              {"error", QStringLiteral("tool '%1' is not available to this agent").arg(tool)}});
+            return;
+        }
+        QPointer<QTcpSocket> guard(sock);
+        (void)QtConcurrent::run([guard, tool, args]() {
+            const mcp::ToolResult tr = mcp::McpService::instance().execute_openai_function(tool, args);
+            const QJsonObject out = tr.to_json();
+            QMetaObject::invokeMethod(
+                QCoreApplication::instance(),
+                [guard, out]() {
+                    if (guard)
+                        reply(guard.data(), 200, out);
+                },
+                Qt::QueuedConnection);
+        });
+    }
+
+    QMutex mutex_;
+    QTcpServer* server_ = nullptr;
+    quint16 port_ = 0;
+    bool start_failed_ = false;
+    QHash<QString, Session> sessions_;
+};
+
+// Actions whose Python handler builds agents that consume terminal_tools.
+bool action_uses_terminal_tools(const QString& action) {
+    static const QSet<QString> k = {
+        QStringLiteral("run"),           QStringLiteral("stock_analysis"), QStringLiteral("portfolio_rebal"),
+        QStringLiteral("risk_assessment"), QStringLiteral("execute_query"), QStringLiteral("execute_multi_query"),
+    };
+    return k.contains(action);
+}
+
+// Attach the agent's finterm tools (filtered by its allow_tools, else a
+// bounded read-only default) plus a session-scoped bridge endpoint.
+void attach_terminal_tools(QJsonObject& config) {
+    if (config.contains(QStringLiteral("terminal_tools")))
+        return; // caller supplied its own set
+    QStringList globs;
+    for (const auto& v : config.value(QStringLiteral("allow_tools")).toArray()) {
+        const QString g = v.toString().trimmed();
+        if (!g.isEmpty())
+            globs.append(g);
+    }
+    const bool explicit_allow = !globs.isEmpty();
+    if (!explicit_allow)
+        globs = default_agent_tool_globs();
+
+    QJsonArray defs;
+    QSet<QString> wire_names;
+    int dropped_destructive = 0;
+    for (const auto& t : mcp::McpService::instance().list_tools_for_patterns(globs)) {
+        // Agents run unattended: no mutating tools (orders, deletes, writes)
+        // and no agent-dispatch tools (recursion).
+        if (t.is_destructive) {
+            ++dropped_destructive;
+            continue;
+        }
+        if (t.category == QLatin1String("agents") || t.name.startsWith(QLatin1String("ai_chat")))
+            continue;
+        if (defs.size() >= kBridgeMaxTools)
+            break;
+        const QString wire = t.server_id + QStringLiteral("__") + t.name;
+        QJsonObject schema = t.input_schema;
+        if (schema.isEmpty())
+            schema = QJsonObject{{"type", "object"}, {"properties", QJsonObject()}};
+        defs.append(QJsonObject{{"name", wire}, {"description", t.description}, {"inputSchema", schema}});
+        wire_names.insert(wire);
+    }
+    if (dropped_destructive > 0)
+        LOG_INFO("AgentService", QString("agent tools: withheld %1 mutating tool(s) from unattended agent")
+                                     .arg(dropped_destructive));
+    if (defs.isEmpty()) {
+        if (explicit_allow)
+            LOG_WARN("AgentService", "agent allow_tools matched no registered read-only tool: " + globs.join(", "));
+        return;
+    }
+    const QString base = TerminalToolBridge::instance().base_url();
+    if (base.isEmpty()) {
+        LOG_WARN("AgentService", "terminal tool bridge unavailable — agent runs without finterm tools");
+        return;
+    }
+    const QString token = TerminalToolBridge::instance().open_session(wire_names);
+    config[QStringLiteral("terminal_mcp_endpoint")] = base + QStringLiteral("/s/") + token;
+    config[QStringLiteral("terminal_tools")] = defs;
+}
+
+// Named agents created by migrations v026/v028 (and DB-only agents in
+// general) aren't Python cards, so finagent_core can't look up their prompt
+// or allowlist by id.  Merge the persisted row under the caller's config:
+// caller-supplied fields win; the row's prompt (instructions, else the seeded
+// system_prompt) and allow_tools fill the gaps.  Without this, dispatching a
+// named agent by id ran it as "You are a helpful AI assistant." with no
+// allowlist applied.
+QJsonObject merge_agent_row(const QJsonObject& config) {
+    const QString agent_id = config.value(QStringLiteral("agent_id")).toString();
+    if (agent_id.isEmpty())
+        return config;
+    auto row = AgentConfigRepository::instance().get(agent_id);
+    if (row.is_err())
+        return config;
+    const QJsonObject db = QJsonDocument::fromJson(row.value().config_json.toUtf8()).object();
+    QJsonObject out = config;
+    if (out.value(QStringLiteral("instructions")).toString().trimmed().isEmpty()) {
+        QString instr = db.value(QStringLiteral("instructions")).toString().trimmed();
+        if (instr.isEmpty())
+            instr = db.value(QStringLiteral("system_prompt")).toString().trimmed();
+        if (!instr.isEmpty())
+            out[QStringLiteral("instructions")] = instr;
+    }
+    if (!out.contains(QStringLiteral("allow_tools")) && db.value(QStringLiteral("allow_tools")).isArray() &&
+        !db.value(QStringLiteral("allow_tools")).toArray().isEmpty())
+        out[QStringLiteral("allow_tools")] = db.value(QStringLiteral("allow_tools"));
+    if (!out.contains(QStringLiteral("tools")) && db.value(QStringLiteral("tools")).isArray())
+        out[QStringLiteral("tools")] = db.value(QStringLiteral("tools"));
+    return out;
+}
+
+// Resolve an explicit llm_profile_id (planner / workflow profile combo) to the
+// model JSON Python builds its model from.  Empty when unknown.
+QJsonObject model_for_profile_id(const QString& profile_id) {
+    if (profile_id.isEmpty())
+        return {};
+    auto pr = LlmProfileRepository::instance().get_profile(profile_id);
+    if (pr.is_err()) {
+        LOG_WARN("AgentService", QString("llm_profile_id %1 not found — using the active LLM").arg(profile_id));
+        return {};
+    }
+    const auto& p = pr.value();
+    ResolvedLlmProfile r;
+    r.profile_id = p.id;
+    r.profile_name = p.name;
+    r.provider = p.provider;
+    r.model_id = p.model_id;
+    r.api_key = p.api_key;
+    r.base_url = p.base_url;
+    r.temperature = p.temperature;
+    r.max_tokens = p.max_tokens;
+    r.system_prompt = p.system_prompt;
+    return ai_chat::LlmService::profile_to_json(r);
+}
+
+} // namespace
+
 QJsonObject AgentService::build_payload(const QString& action, const QJsonObject& params,
-                                        const QJsonObject& config) const {
+                                        const QJsonObject& config_in) const {
+    QJsonObject config = action == QLatin1String("run") ? merge_agent_row(config_in) : config_in;
+    // An explicit profile choice (plan / workflow runs put it in params)
+    // overrides the global active LLM for this dispatch.
+    if (!config.contains("model") || config["model"].toObject()["provider"].toString().isEmpty()) {
+        const QJsonObject m = model_for_profile_id(params.value(QStringLiteral("llm_profile_id")).toString());
+        if (!m.isEmpty())
+            config["model"] = m;
+    }
+    if (action_uses_terminal_tools(action))
+        attach_terminal_tools(config);
     QJsonObject payload;
     payload["action"] = action;
     payload["api_keys"] = build_api_keys();
@@ -768,7 +1103,10 @@ QString AgentService::route_query(const QString& query) {
         r.success = ok && result["success"].toBool(ok);
         r.agent_id = result["agent_id"].toString();
         r.intent = result["intent"].toString();
-        r.confidence = result["confidence"].toDouble();
+        const QJsonValue ms = result["match_score"];
+        r.has_match_score = ms.isDouble();
+        r.match_score = ms.toDouble();
+        r.score_basis = result["score_basis"].toString();
         r.config = result["config"].toObject();
 
         QJsonArray kw = result["matched_keywords"].toArray();
@@ -1049,6 +1387,8 @@ QString AgentService::create_plan(const QString& query, const QJsonObject& confi
         plan.description = planObj["description"].toString();
         plan.status = planObj["status"].toString("pending");
         plan.is_complete = planObj["is_complete"].toBool();
+        for (const auto& w : result["warnings"].toArray())
+            plan.warnings.append(w.toString());
 
         QJsonArray steps = planObj["steps"].toArray();
         for (const auto& sv : steps) {
@@ -1988,7 +2328,8 @@ void AgentService::publish_routing_result(const RoutingResult& r) {
         {"success", r.success},
         {"agent_id", r.agent_id},
         {"intent", r.intent},
-        {"confidence", r.confidence},
+        {"match_score", r.has_match_score ? QJsonValue(r.match_score) : QJsonValue()},
+        {"score_basis", r.score_basis},
     };
     fincept::datahub::DataHub::instance().publish(
         QStringLiteral("agent:routing:") + r.request_id, QVariant(obj));

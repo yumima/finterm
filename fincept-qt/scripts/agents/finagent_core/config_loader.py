@@ -87,7 +87,10 @@ class ConfigLoader:
         """
         # Set defaults
         config.setdefault("name", f"{tab_name.title()} Agent")
-        config.setdefault("instructions", "You are a helpful AI assistant.")
+        # Seeded named agents (migrations v026/v028) carry their prompt under
+        # `system_prompt`; fall back to it before the generic default.
+        if not config.get("instructions"):
+            config["instructions"] = config.get("system_prompt") or "You are a helpful AI assistant."
         config.setdefault("tools", [])
         config.setdefault("memory", False)
         config.setdefault("output_format", "markdown")

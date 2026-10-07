@@ -959,19 +959,20 @@ async def main():
                     "WS_EER": "M.N.B.{cc}",
                     "WS_EER_R": "M.R.B.{cc}",
                     # FREQ.REF_AREA.CURRENCY.COLLECTION
-                    "WS_XRU": "M.{cc}",
+                    "WS_XRU": "M.{cc}..A",          # period average, national currency per USD
                     # FREQ.REF_AREA.UNIT_MEASURE
-                    "WS_LONG_CPI": "M.{cc}",
+                    "WS_LONG_CPI": "M.{cc}.771",    # year-on-year % change
                     # FREQ.REF_AREA.COMP_METHOD.UNIT_MEASURE.CURRENCY.TRANSFORMATION
                     "WS_CBTA": "Q.{cc}",
                     # FREQ.BORROWERS_CTY...
                     "WS_CREDIT_GAP": "Q.{cc}",
-                    "WS_TC": "Q.{cc}",
+                    # Private non-financial sector, all lenders, market value, % of GDP, break-adjusted
+                    "WS_TC": "Q.{cc}.P.A.M.770.A",
                     "WS_DSR": "Q.{cc}",
                     # FREQ.CURR_DENOM.BORROWERS_CTY...
                     "WS_GLI": "Q..{cc}",
                     # FREQ.REF_AREA.VALUE.UNIT_MEASURE
-                    "WS_SPP": "Q.{cc}",
+                    "WS_SPP": "Q.{cc}.R.628",       # real residential property prices, 2010=100
                     "WS_CPP": "Q.{cc}",
                     "WS_DPP": "Q.{cc}",
                     # FREQ.L_MEASURE.L_REP_CTY...
@@ -1022,6 +1023,7 @@ async def main():
                             time_values = {str(i): v.get("id", v.get("name", str(i)))
                                            for i, v in enumerate(obs_dims[0].get("values", []))}
 
+                        series_count = sum(len(ds.get("series", {})) for ds in datasets)
                         for ds in datasets:
                             series_map = ds.get("series", {})
                             for _series_key, series_val in series_map.items():
@@ -1037,15 +1039,15 @@ async def main():
                                                 continue
                                         except (ValueError, TypeError):
                                             continue
-                                        flat_data.append({"date": str(period), "value": value})
+                                        row = {"date": str(period), "value": value}
+                                        if series_count > 1:
+                                            # Several series matched: keep them apart.
+                                            # Averaging series with different units or
+                                            # bases would invent a number.
+                                            row["series"] = _series_key
+                                        flat_data.append(row)
 
-                        # Deduplicate by date (average if multiple series for same date)
-                        from collections import defaultdict
-                        date_vals = defaultdict(list)
-                        for d in flat_data:
-                            date_vals[d["date"]].append(d["value"])
-                        flat_data = [{"date": dt, "value": round(sum(vs)/len(vs), 6)}
-                                     for dt, vs in sorted(date_vals.items())]
+                        flat_data.sort(key=lambda d: (d.get("series", ""), d["date"]))
 
                     except Exception as parse_err:
                         result = {"success": False, "error": f"Failed to parse SDMX response: {str(parse_err)}"}
@@ -1058,6 +1060,8 @@ async def main():
                         "metadata": {
                             "dataflow": dataflow,
                             "country": country_code,
+                            "key": key,
+                            "series_count": series_count,
                             "source": "BIS"
                         }
                     }

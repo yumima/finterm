@@ -9,8 +9,18 @@ Guardrails, Evaluation, Tracing, Compression, Hooks, Structured Outputs.
 from typing import Dict, Any, Optional, List
 import logging
 import json
+from fnmatch import fnmatchcase
 
 logger = logging.getLogger(__name__)
+
+
+def tool_allowed(name: str, globs: List[str]) -> bool:
+    """True when `name` (bare, or as internal wire name `int__<name>`) matches
+    any allowlist glob."""
+    if not name:
+        return False
+    candidates = (name, name if "__" in name else f"int__{name}")
+    return any(fnmatchcase(c, g) for g in globs for c in candidates)
 
 
 class CoreAgent:
@@ -597,14 +607,29 @@ class CoreAgent:
         # =================================================================
         # 3. Instructions
         # =================================================================
-        instructions = config.get("instructions", "You are a helpful AI assistant.")
-        agent_kwargs["instructions"] = instructions
+        # Seeded named agents (migrations v026/v028) store their prompt under
+        # `system_prompt`; read it when `instructions` is absent.
+        instructions = (config.get("instructions") or config.get("system_prompt")
+                        or "You are a helpful AI assistant.")
+        from finagent_core.clock import with_current_date
+        agent_kwargs["instructions"] = with_current_date(instructions)
 
         # =================================================================
         # 4. Tools - Load and validate
         # =================================================================
         tool_names = config.get("tools", [])
         all_tools = []
+
+        # Per-agent allowlist (`allow_tools`, wire-form globs such as
+        # `int__get_quote` / `int__edgar_*`).  When present it is a hard
+        # allowlist over every tool source below; tools it doesn't match are
+        # dropped (and logged) rather than silently granted.
+        allow_globs = [g for g in (config.get("allow_tools") or []) if isinstance(g, str) and g.strip()]
+        if allow_globs and tool_names:
+            denied = [t for t in tool_names if not tool_allowed(t, allow_globs)]
+            if denied:
+                logger.warning(f"allow_tools: dropping tools not on the allowlist: {denied}")
+            tool_names = [t for t in tool_names if tool_allowed(t, allow_globs)]
 
         if tool_names:
             tools = ToolsRegistry.get_tools(tool_names, api_keys=self.api_keys)
@@ -615,6 +640,12 @@ class CoreAgent:
         # MCP servers — user-configured servers from the MCP tab
         # Format: [{"id", "name", "command", "args", "env", "transport"}]
         mcp_servers = config.get("mcp_servers", [])
+        if allow_globs and mcp_servers:
+            kept = [srv for srv in mcp_servers
+                    if any(g.startswith(f"{(srv.get('id') or '')}__") for g in allow_globs if srv.get("id"))]
+            if len(kept) != len(mcp_servers):
+                logger.warning("allow_tools: dropping MCP servers with no allowlisted tool")
+            mcp_servers = kept
         if mcp_servers:
             mcp_tools = self._connect_mcp_servers(mcp_servers)
             all_tools.extend(mcp_tools)
@@ -623,6 +654,9 @@ class CoreAgent:
         # endpoint is injected by agents.rs when the bridge is running
         terminal_endpoint = config.get("terminal_mcp_endpoint")
         terminal_tool_defs = config.get("terminal_tools", [])
+        if allow_globs and terminal_tool_defs:
+            terminal_tool_defs = [d for d in terminal_tool_defs
+                                  if tool_allowed(d.get("name", ""), allow_globs)]
         if terminal_endpoint and terminal_tool_defs:
             try:
                 from finagent_core.tools.terminal_toolkit import TerminalToolkit

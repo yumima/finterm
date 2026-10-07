@@ -300,7 +300,7 @@ void UnescoPanel::on_result(const QString& request_id, const services::Economics
     const QString country = meta["country"].toString(country_input_->text().toUpper());
 
     const QString title = "UNESCO: " + ind_name + " — " + country;
-    display(rows, title);
+    display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
 
     LOG_INFO("UnescoPanel", QString("Displayed %1 data points for %2").arg(rows.size()).arg(request_id));
 }

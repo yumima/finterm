@@ -417,7 +417,9 @@ static QList<AltField> fields_for(const QString& id) {
             text_field("name", "BOND NAME"),
             spin_field("purchase_price", "PURCHASE PRICE ($)", 25, 10000, 0, "$"),
             spin_field("fixed_rate", "FIXED RATE (%)", 0, 5, 2, "", "%", true),
-            spin_field("inflation_rate", "CPI-U INFLATION (%)", 0, 20, 2, "", "%", true),
+            // Composite = fixed + 2×semiannual + fixed×semiannual: TreasuryDirect
+            // publishes this semiannual CPI-U rate (not the annual rate).
+            spin_field("inflation_rate", "SEMIANNUAL CPI-U INFLATION (%)", 0, 20, 2, "", "%", true),
         };
     if (id == "stable-value")
         return {

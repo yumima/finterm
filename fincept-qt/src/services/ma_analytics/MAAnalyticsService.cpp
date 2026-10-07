@@ -205,6 +205,12 @@ void MAAnalyticsService::run_python_json(const QString& script, const QString& c
                 emit self->error_occurred(context, msg);
                 return;
             }
+            // JSON contract (corporateFinance/_cli.py): {"success": true, "data": {...}}.
+            // Hand the UI / MCP the payload itself, not the envelope.
+            if (obj.contains("success") && obj.value("data").isObject())
+                obj = obj.value("data").toObject();
+            else if (obj.contains("success") && obj.value("data").isArray())
+                obj = QJsonObject{{"items", obj.value("data")}};
             fincept::CacheManager::instance().put(
                 cache_key,
                 QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),

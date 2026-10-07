@@ -272,81 +272,78 @@ class FootballFieldChart:
             'format_type': format_type
         }
 
-def main():
-    """CLI entry point - outputs JSON for C++ integration
+# ── JSON contract (MAAnalyticsService "generate" / ma_football_field) ────────
 
-    Usage:
-        python football_field.py generate <valuation_methods_json> [current_price] [offer_price] [format_type]
+def _json_generate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Valuation ranges per method, on one basis (per share, or equity value).
 
-    Example:
-        python football_field.py generate '[{"method":"DCF","low":1e9,"high":1.5e9,"midpoint":1.25e9}]' 1.1e9 1.3e9 billions
+    methods: [{method, low, high, midpoint?}]  -- or the flat keys
+    dcf_low/dcf_high, comps_low/comps_high, precedent_low/precedent_high.
+    Optional current_price / offer_price on the same basis.
     """
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import opt_num, InputError
+    methods = []
+    if isinstance(p.get('methods'), list):
+        for m in p['methods']:
+            if isinstance(m, dict):
+                methods.append((str(m.get('method') or 'Method'), m.get('low'), m.get('high'), m.get('midpoint')))
+    for key, label in (('dcf', 'DCF'), ('comps', 'Trading Comps'), ('precedent', 'Precedent Transactions'),
+                       ('lbo', 'LBO'), ('premiums', 'Premiums Paid')):
+        if p.get(f'{key}_low') is not None or p.get(f'{key}_high') is not None:
+            methods.append((label, p.get(f'{key}_low'), p.get(f'{key}_high'), None))
+    if not methods:
+        raise InputError("Missing required input: methods (each with low and high)")
+    rows = []
+    for name, lo, hi, mid in methods:
+        try:
+            lo, hi = float(lo), float(hi)
+        except (TypeError, ValueError):
+            raise InputError(f"{name}: low and high are both required numbers")
+        if hi < lo:
+            raise InputError(f"{name}: high ({hi}) is below low ({lo})")
+        mid = float(mid) if mid is not None else (lo + hi) / 2
+        rows.append({'method': name, 'low': lo, 'midpoint': mid, 'high': hi})
+    current = opt_num(p, 'current_price', gt=0)
+    offer = opt_num(p, 'offer_price', gt=0)
+    for r in rows:
+        if current:
+            r['midpoint_vs_current_pct'] = (r['midpoint'] / current - 1) * 100
+        if offer:
+            r['offer_position'] = ('below range' if offer < r['low'] else
+                                   'above range' if offer > r['high'] else 'within range')
+    out = {
+        'overall_low': min(r['low'] for r in rows),
+        'overall_high': max(r['high'] for r in rows),
+        'overlap_low': max(r['low'] for r in rows),
+        'overlap_high': min(r['high'] for r in rows),
+        'ranges': rows,
+    }
+    if out['overlap_low'] > out['overlap_high']:
+        out['overlap_low'] = out['overlap_high'] = None
+        out['note'] = 'Method ranges do not all overlap.'
+    if current:
+        out['current_price'] = current
+    if offer:
+        out['offer_price'] = offer
+        out['methods_offer_within'] = sum(1 for r in rows if r['low'] <= offer <= r['high'])
+    return out
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "Usage: football_field.py <command> [args...]"}
-        print(json.dumps(result))
-        sys.exit(1)
 
-    command = sys.argv[1]
-    chart = FootballFieldChart()
+JSON_COMMANDS = {'generate': _json_generate}
 
-    try:
-        if command in ("generate", "football_field"):
-            # Host sends: "football_field" valuation_methods_json shares_outstanding
-            if len(sys.argv) < 3:
-                raise ValueError("Valuation methods JSON required")
 
-            valuation_methods = json.loads(sys.argv[2])
-            shares_outstanding = float(sys.argv[3]) if len(sys.argv) > 3 else None
-            current_price = None
-            offer_price = None
-            format_type = 'auto'
+def main():
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json(JSON_COMMANDS)
 
-            # Build valuation ranges
-            valuation_ranges = []
-            for method in valuation_methods:
-                vr = chart.add_valuation_range(
-                    method.get('method', 'Unknown'),
-                    method.get('low', 0),
-                    method.get('high', 0),
-                    method.get('midpoint'),
-                    weight=method.get('weight', 1.0)
-                )
-                valuation_ranges.append(vr)
-
-            # Generate chart data
-            chart_data = chart.generate_chart_data(
-                valuation_ranges,
-                current_price=current_price,
-                offer_price=offer_price,
-                format_type=format_type
-            )
-
-            # Generate summary table
-            summary = chart.generate_summary_table(
-                valuation_ranges,
-                current_price=current_price,
-                format_type=format_type
-            )
-
-            result = {
-                "success": True,
-                "data": {
-                    "chart": chart_data,
-                    "summary": summary
-                }
-            }
-            print(json.dumps(result, default=str))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}. Available: generate, football_field"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e), "command": command}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

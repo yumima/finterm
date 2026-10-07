@@ -395,7 +395,15 @@ PtStats pt_get_stats(const QString& portfolio_id) {
     auto r = repo().get_stats(portfolio_id);
     if (r.is_err())
         return {};
-    return r.value();
+    PtStats s = r.value();
+    // Win rate over CLOSED round trips only. total_trades counts every fill,
+    // and an opening fill realizes nothing (pnl 0), so winning/total_trades
+    // roughly halved the rate. Only a closing fill carries a realized pnl; a
+    // close at exactly zero pnl is indistinguishable here and is left out of
+    // both counts.
+    const int64_t closed = s.winning_trades + s.losing_trades;
+    s.win_rate = closed > 0 ? static_cast<double>(s.winning_trades) / static_cast<double>(closed) : 0.0;
+    return s;
 }
 
 } // namespace fincept::trading

@@ -294,9 +294,15 @@ void PlanningView::recalculate() {
     double monthly_rate = real_ret / 12.0;
     int months = static_cast<int>(years * 12);
     double fv_portfolio = current_value * std::pow(1.0 + monthly_rate, months);
-    double fv_contrib = (monthly_rate > 0.0001)
-                            ? monthly * ((std::pow(1.0 + monthly_rate, months) - 1.0) / monthly_rate)
-                            : monthly * months;
+    // The annuity factor ((1+r)^n − 1)/r holds for any r > −1, NEGATIVE real
+    // returns included; only r ≈ 0 needs its limit n. Guarding on r > 0 used
+    // to grow contributions at exactly 0% whenever inflation exceeded the
+    // expected return, while the lump sum above shrank at the real rate.
+    const bool rate_is_zero = std::abs(monthly_rate) < 1e-9;
+    const double annuity_factor =
+        rate_is_zero ? static_cast<double>(months)
+                     : ((std::pow(1.0 + monthly_rate, months) - 1.0) / monthly_rate);
+    double fv_contrib = monthly * annuity_factor;
     double projected = fv_portfolio + fv_contrib;
     double gap = projected - target;
 
@@ -323,10 +329,7 @@ void PlanningView::recalculate() {
         // the expected return is entirely reachable from these spin boxes.
         // Left unguarded this printed "increase savings by inf/nan", or a
         // NEGATIVE amount when real returns are negative.
-        const double annuity_factor =
-            (monthly_rate > 0.0001)
-                ? ((std::pow(1.0 + monthly_rate, months) - 1.0) / monthly_rate)
-                : static_cast<double>(months); // r→0: the factor tends to n
+        // Same annuity factor as the projection (r→0: the factor tends to n).
         double needed_monthly = annuity_factor > 0.0 ? (-gap) / annuity_factor : 0.0;
         status_label_->setText(QString("\u26A0 Shortfall of %1 %2. Consider increasing monthly savings "
                                        "by %1 %3 to close the gap.")

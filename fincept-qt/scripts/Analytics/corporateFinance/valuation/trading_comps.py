@@ -146,7 +146,8 @@ class TradingCompsAnalyzer:
             )
 
         except Exception as e:
-            print(f"Error fetching {ticker}: {e}")
+            # stderr: stdout carries the JSON result
+            print(f"Error fetching {ticker}: {e}", file=sys.stderr)
             return None
 
     def find_comparables(self, industry: str, custom_tickers: Optional[List[str]] = None) -> List[TradingComp]:
@@ -165,9 +166,12 @@ class TradingCompsAnalyzer:
     def calculate_statistics(self, comps: List[TradingComp]) -> Dict[str, Dict[str, float]]:
         """Calculate trading multiples statistics"""
 
-        def calc_stats(values: List[float], name: str) -> Dict[str, float]:
+        def calc_stats(values: List[float], name: str, positive_only: bool = True) -> Dict[str, float]:
+            # Valuation multiples on negative earnings are not meaningful (NM)
+            # and are excluded; growth / margin / ROE keep negative values.
             clean_vals = [v for v in values
-                          if v is not None and v > 0 and not np.isnan(v) and not np.isinf(v)]
+                          if v is not None and not np.isnan(v) and not np.isinf(v)
+                          and (v > 0 or not positive_only)]
             if not clean_vals:
                 # No usable comps for this multiple: unavailable, not 0x.
                 return {f'{name}_mean': None, f'{name}_median': None, f'{name}_min': None,
@@ -193,10 +197,10 @@ class TradingCompsAnalyzer:
         stats['price_earnings'] = calc_stats([c.price_earnings for c in comps], 'pe')
         stats['price_book'] = calc_stats([c.price_book for c in comps], 'pb')
         stats['price_sales'] = calc_stats([c.price_sales for c in comps], 'ps')
-        stats['revenue_growth'] = calc_stats([c.revenue_growth for c in comps], 'rev_growth')
-        stats['ebitda_margin'] = calc_stats([c.ebitda_margin for c in comps], 'ebitda_margin')
-        stats['net_margin'] = calc_stats([c.net_margin for c in comps], 'net_margin')
-        stats['roe'] = calc_stats([c.roe for c in comps], 'roe')
+        stats['revenue_growth'] = calc_stats([c.revenue_growth for c in comps], 'rev_growth', False)
+        stats['ebitda_margin'] = calc_stats([c.ebitda_margin for c in comps], 'ebitda_margin', False)
+        stats['net_margin'] = calc_stats([c.net_margin for c in comps], 'net_margin', False)
+        stats['roe'] = calc_stats([c.roe for c in comps], 'roe', False)
 
         return stats
 
@@ -234,10 +238,13 @@ class TradingCompsAnalyzer:
             valuations['pe_median'] = apply(net_income, stats['price_earnings']['pe_median'])
             valuations['pe_mean'] = apply(net_income, stats['price_earnings']['pe_mean'])
 
-        valuation_values = [v for v in valuations.values() if v is not None and v > 0]
-        if valuation_values:
-            valuations['blended_median'] = median(valuation_values)
-            valuations['blended_mean'] = mean(valuation_values)
+        # EV multiples imply ENTERPRISE value; P/E implies EQUITY value. Only
+        # the EV-based medians are blended (mixing the two was a unit error).
+        ev_values = [valuations.get(k) for k in ('ev_revenue_median', 'ev_ebitda_median', 'ev_ebit_median')]
+        ev_values = [v for v in ev_values if v is not None and v > 0]
+        if ev_values:
+            valuations['blended_ev_median'] = median(ev_values)
+            valuations['blended_ev_mean'] = mean(ev_values)
 
         return {
             'valuations': valuations,
@@ -345,105 +352,201 @@ class TradingCompsAnalyzer:
             'y_values': y_vals
         }
 
-def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+# ── Implied valuation shared by trading comps and precedent transactions ─────
 
-    if len(sys.argv) < 2:
-        result = {
-            "success": False,
-            "error": "No command specified. Usage: trading_comps.py <command> [args...]"
-        }
-        print(json.dumps(result))
-        sys.exit(1)
+_MULTIPLE_METRIC = [
+    # (label, multiples key, target metric key, kind)
+    ('EV/Revenue', 'ev_revenue', 'revenue', 'ev'),
+    ('EV/EBITDA', 'ev_ebitda', 'ebitda', 'ev'),
+    ('EV/EBIT', 'ev_ebit', 'ebit', 'ev'),
+    ('P/E', 'pe', 'net_income', 'equity'),
+]
 
-    command = sys.argv[1]
-    analyzer = TradingCompsAnalyzer()
 
-    try:
-        if command == "trading_comps":
-            # Host sends: "trading_comps" target_ticker comp_tickers_json
-            if len(sys.argv) < 4:
-                raise ValueError("Target ticker and comp tickers required")
+def implied_valuation(multiples: Dict[str, List[Optional[float]]], target: Dict[str, Any]) -> Dict[str, Any]:
+    """Apply peer multiples (quartiles) to the target.
 
-            target_ticker = sys.argv[2]
-            comp_tickers = json.loads(sys.argv[3])
-
-            # Fetch target data
-            target_comp = analyzer.fetch_comp_data(target_ticker)
-            target_financials = {}
-            if target_comp:
-                target_financials = {
-                    'revenue': target_comp.revenue_ltm,
-                    'ebitda': target_comp.ebitda_ltm,
-                    'ebit': target_comp.ebit_ltm,
-                    'net_income': target_comp.net_income_ltm
-                }
-
-            # Fetch comps
-            comps = []
-            for ticker in comp_tickers:
-                comp = analyzer.fetch_comp_data(ticker)
-                if comp and comp.market_cap and comp.market_cap > 0:
-                    comps.append(comp)
-
-            if not comps:
-                result = {"success": True, "data": {"comparables": [], "comp_count": 0, "target": target_ticker}}
-                print(json.dumps(result))
-            else:
-                comp_table = analyzer.build_comp_table(comps, target_financials if target_financials else None)
-                comp_table['target_ticker'] = target_ticker
-                result = {"success": True, "data": comp_table}
-                print(json.dumps(result, default=str))
-
-        elif command == "find_comps":
-            # find_comparables(industry)
-            if len(sys.argv) < 3:
-                raise ValueError("Industry required")
-
-            industry = sys.argv[2]
-            comps = analyzer.find_comparables(industry)
-
-            result = {
-                "success": True,
-                "data": comps,
-                "count": len(comps)
-            }
-            print(json.dumps(result))
-
-        elif command == "build_table":
-            # build_comp_table(industry, target_financials)
-            if len(sys.argv) < 4:
-                raise ValueError("Industry and target financials required")
-
-            industry = sys.argv[2]
-            target_financials = json.loads(sys.argv[3])
-
-            comps = analyzer.find_comparables(industry)
-            comp_table = analyzer.build_comp_table(comps, target_financials)
-
-            result = {
-                "success": True,
-                "data": comp_table
-            }
-            print(json.dumps(result))
-
+    multiples: {'ev_revenue': [...], 'ev_ebitda': [...], 'ev_ebit': [...], 'pe': [...]};
+    non-positive / missing peer multiples are NM and excluded.
+    target: revenue / ebitda / ebit / net_income, optional net_debt, shares, price.
+    EV multiples imply enterprise value -> equity = EV - net debt; P/E implies
+    equity value directly -> EV = equity + net debt.
+    """
+    net_debt = target.get('net_debt')
+    shares = target.get('shares')
+    price = target.get('price')
+    rows = []
+    equity_medians = []
+    ev_medians = []
+    for label, key, metric_key, kind in _MULTIPLE_METRIC:
+        vals = [float(v) for v in (multiples.get(key) or []) if v is not None and np.isfinite(v) and v > 0]
+        metric = target.get(metric_key)
+        row: Dict[str, Any] = {'multiple': label, 'peers_n': len(vals)}
+        if not vals:
+            row.update({'q1_x': None, 'median_x': None, 'q3_x': None, 'mean_x': None})
         else:
-            result = {
-                "success": False,
-                "error": f"Unknown command: {command}. Available: trading_comps, find_comps, build_table"
-            }
-            print(json.dumps(result))
-            sys.exit(1)
+            row.update({'q1_x': float(np.percentile(vals, 25)), 'median_x': float(median(vals)),
+                        'q3_x': float(np.percentile(vals, 75)), 'mean_x': float(mean(vals))})
+        row['target_metric'] = metric
+        if vals and metric is not None and metric > 0:
+            lo, mid, hi = metric * row['q1_x'], metric * row['median_x'], metric * row['q3_x']
+            if kind == 'ev':
+                ev = (lo, mid, hi)
+                eq = tuple(x - net_debt for x in ev) if net_debt is not None else (None, None, None)
+            else:
+                eq = (lo, mid, hi)
+                ev = tuple(x + net_debt for x in eq) if net_debt is not None else (None, None, None)
+            row.update({'implied_ev_low': ev[0], 'implied_ev_median': ev[1], 'implied_ev_high': ev[2],
+                        'implied_equity_low': eq[0], 'implied_equity_median': eq[1], 'implied_equity_high': eq[2]})
+            if eq[1] is not None and shares:
+                row['implied_per_share_low'] = eq[0] / shares
+                row['implied_per_share_median'] = eq[1] / shares
+                row['implied_per_share_high'] = eq[2] / shares
+                if price:
+                    row['vs_current_price_pct'] = (eq[1] / shares / price - 1) * 100
+            if ev[1] is not None:
+                ev_medians.append(ev[1])
+            if eq[1] is not None:
+                equity_medians.append(eq[1])
+        else:
+            row['note'] = 'NM (no positive peer multiples or target metric <= 0)' if vals else 'no peer data'
+        rows.append(row)
+    out: Dict[str, Any] = {'implied_valuation': rows}
+    out['implied_ev_median_of_methods'] = median(ev_medians) if ev_medians else None
+    out['implied_equity_median_of_methods'] = median(equity_medians) if equity_medians else None
+    if equity_medians and shares:
+        out['implied_per_share_median_of_methods'] = median(equity_medians) / shares
+    if net_debt is None:
+        out['note'] = 'Target net debt unknown: EV-to-equity bridge not applied.'
+    return out
 
-    except Exception as e:
-        result = {
-            "success": False,
-            "error": str(e),
-            "command": command
+
+def peer_from_inputs(d: Dict[str, Any]) -> Dict[str, Any]:
+    """Peer multiples from user-supplied figures: EV = market cap + total debt - cash
+    (plus preferred / minority interest when given), unless explicit
+    multiples are supplied."""
+    def f(k):
+        v = d.get(k)
+        return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
+    ev = f('enterprise_value')
+    if ev is None and None not in (f('market_cap'), f('total_debt'), f('cash')):
+        ev = f('market_cap') + f('total_debt') - f('cash') + (f('preferred_stock') or 0) + (f('minority_interest') or 0)
+    def ratio(a, b):
+        return a / b if a is not None and b else None
+    return {
+        'ticker': d.get('ticker') or d.get('name') or '',
+        'market_cap': f('market_cap'),
+        'enterprise_value': ev,
+        'ev_revenue': f('ev_revenue') if f('ev_revenue') is not None else ratio(ev, f('revenue')),
+        'ev_ebitda': f('ev_ebitda') if f('ev_ebitda') is not None else ratio(ev, f('ebitda')),
+        'ev_ebit': f('ev_ebit') if f('ev_ebit') is not None else ratio(ev, f('ebit')),
+        'pe': f('pe') if f('pe') is not None else ratio(f('market_cap'), f('net_income')),
+    }
+
+
+def _json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Two input modes (can't mix):
+      live:   target_ticker + comp_tickers (comma list) -> figures from yfinance
+      manual: peers [{ticker, market_cap, total_debt, cash, revenue, ebitda,
+              ebit, net_income} or explicit ev_revenue/ev_ebitda/ev_ebit/pe]
+              + target_revenue / target_ebitda / target_ebit / target_net_income,
+              optional target_net_debt, target_shares, target_price.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import has, InputError, num, opt_num
+    if isinstance(p.get('peers'), list) and p['peers']:
+        peers = [peer_from_inputs(d) for d in p['peers'] if isinstance(d, dict)]
+        target = {
+            'revenue': opt_num(p, 'target_revenue'), 'ebitda': opt_num(p, 'target_ebitda'),
+            'ebit': opt_num(p, 'target_ebit'), 'net_income': opt_num(p, 'target_net_income'),
+            'net_debt': opt_num(p, 'target_net_debt'), 'shares': opt_num(p, 'target_shares', gt=0),
+            'price': opt_num(p, 'target_price', gt=0),
         }
-        print(json.dumps(result))
-        sys.exit(1)
+        if all(target[k] is None for k in ('revenue', 'ebitda', 'ebit', 'net_income')):
+            raise InputError("Enter at least one target metric (target_revenue / target_ebitda / target_ebit / target_net_income)")
+        source = 'user-supplied figures'
+        target_label = str(p.get('target_name') or 'Target')
+        table = [{'ticker': x['ticker'], 'market_cap': x['market_cap'], 'enterprise_value': x['enterprise_value'],
+                  'ev_revenue_x': x['ev_revenue'], 'ev_ebitda_x': x['ev_ebitda'], 'ev_ebit_x': x['ev_ebit'],
+                  'pe_x': x['pe']} for x in peers]
+    else:
+        tt = str(p.get('target_ticker') or '').strip().upper()
+        raw = p.get('comp_tickers')
+        tickers = raw if isinstance(raw, list) else str(raw or '').replace(';', ',').split(',')
+        tickers = [str(t).strip().upper() for t in tickers if str(t).strip()]
+        tickers = [t for t in dict.fromkeys(tickers) if t != tt]  # target never in its own peer set
+        if not tt:
+            raise InputError("Missing required input: target_ticker")
+        if not tickers:
+            raise InputError("Missing required input: comp_tickers (comma-separated peers)")
+        analyzer = TradingCompsAnalyzer()
+        tc = analyzer.fetch_comp_data(tt)
+        if tc is None:
+            raise InputError(f"No market data for target {tt}")
+        comps = [c for c in (analyzer.fetch_comp_data(t) for t in tickers) if c and c.market_cap]
+        missing = [t for t in tickers if t not in {c.ticker for c in comps}]
+        if not comps:
+            raise InputError("No market data for any comparable: " + ', '.join(tickers))
+        peers = [{'ticker': c.ticker, 'ev_revenue': c.ev_revenue, 'ev_ebitda': c.ev_ebitda,
+                  'ev_ebit': c.ev_ebit, 'pe': c.price_earnings} for c in comps]
+        net_debt = (tc.total_debt - tc.cash) if None not in (tc.total_debt, tc.cash) else None
+        target = {'revenue': tc.revenue_ltm, 'ebitda': tc.ebitda_ltm, 'ebit': tc.ebit_ltm,
+                  'net_income': tc.net_income_ltm, 'net_debt': net_debt,
+                  'shares': tc.shares_outstanding, 'price': tc.stock_price}
+        source = 'yfinance (LTM)'
+        target_label = tt
+        table = [{'ticker': c.ticker, 'company': c.company_name, 'market_cap': c.market_cap,
+                  'total_debt': c.total_debt, 'cash': c.cash, 'enterprise_value': c.enterprise_value,
+                  'ev_revenue_x': c.ev_revenue, 'ev_ebitda_x': c.ev_ebitda, 'ev_ebit_x': c.ev_ebit,
+                  'pe_x': c.price_earnings, 'revenue_growth_pct': c.revenue_growth,
+                  'ebitda_margin_pct': c.ebitda_margin} for c in comps]
+    if not peers:
+        raise InputError("No comparable companies")
+    mult = {k: [x[k] for x in peers] for k in ('ev_revenue', 'ev_ebitda', 'ev_ebit', 'pe')}
+    imp = implied_valuation(mult, target)
+    med = {'ticker': 'MEDIAN'}
+    for k in ('ev_revenue', 'ev_ebitda', 'ev_ebit', 'pe'):
+        vals = [v for v in mult[k] if v is not None and v > 0]
+        med[k + '_x'] = median(vals) if vals else None
+    out = {
+        'target': target_label,
+        'comp_count': len(peers),
+        'source': source,
+        'median_ev_ebitda_x': med['ev_ebitda_x'],
+        'median_ev_revenue_x': med['ev_revenue_x'],
+        'median_pe_x': med['pe_x'],
+        'implied_ev_median_of_methods': imp['implied_ev_median_of_methods'],
+        'implied_equity_median_of_methods': imp['implied_equity_median_of_methods'],
+        'implied_per_share_median_of_methods': imp.get('implied_per_share_median_of_methods'),
+        'target_net_debt': target.get('net_debt'),
+        'target_price': target.get('price'),
+        'comparables': table + [med],
+        'implied_valuation': imp['implied_valuation'],
+        'method': 'EV = market cap + total debt - cash; non-positive multiples are NM and excluded; '
+                  'EV multiples -> EV -> equity via target net debt; P/E -> equity directly.',
+    }
+    if source.startswith('yfinance'):
+        out['as_of_date'] = datetime.now().strftime('%Y-%m-%d')
+        if missing:
+            out['comps_without_data'] = ', '.join(missing)
+    if imp.get('note'):
+        out['note'] = imp['note']
+    return out
+
+
+JSON_COMMANDS = {'calculate': _json_calculate}
+
+
+def main():
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json(JSON_COMMANDS)
+
 
 if __name__ == '__main__':
     main()

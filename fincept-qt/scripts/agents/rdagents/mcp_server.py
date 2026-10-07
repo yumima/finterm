@@ -348,9 +348,10 @@ def build_mcp_server() -> Any:
         """
         Quick IC/Sharpe estimate for a factor expression on a single symbol.
 
-        Computes the factor value for each bar using the expression, then
-        calculates next-period return rank correlation (IC) and a simple
-        long-top-decile strategy Sharpe.
+        Computes the factor value for each bar using the expression, then a
+        time-series Spearman rank IC of factor(t) against the t->t+1 return
+        (single symbol, not cross-sectional) and a simple long-top-percentile
+        strategy whose threshold uses only past factor values.
 
         Args:
             symbol:      Ticker symbol to test on
@@ -394,21 +395,48 @@ def build_mcp_server() -> Any:
                 return {"error": f"Factor expression error: {e}"}
 
             df["factor"] = factor_vals
-            df["fwd_ret"] = df["returns"].shift(-1)
-            df = df.dropna()
+            # Signal at bar t (built from data up to and including t's close)
+            # is paired with the NEXT bar's return, t -> t+1. Nothing from
+            # t+1 or later may enter the signal side.
+            df["fwd_ret"] = df["close"].shift(-1) / df["close"] - 1.0
+            df = df.replace([np.inf, -np.inf], np.nan).dropna(subset=["factor", "fwd_ret"])
 
             if len(df) < 20:
                 return {"error": "Too few valid bars after factor computation"}
 
-            # IC = rank correlation between factor and forward return
-            ic_series = df["factor"].rolling(20).corr(df["fwd_ret"])
+            # Time-series rank IC: Spearman correlation between factor(t) and
+            # fwd_ret(t->t+1), over rolling 20-bar windows of a SINGLE symbol.
+            # (Previously labelled "rank correlation" but computed as Pearson.)
+            # This is not a cross-sectional IC across a universe.
+            win = 20
+            fac = df["factor"].to_numpy()
+            fwd = df["fwd_ret"].to_numpy()
+            ic_vals = []
+            for end in range(win, len(df) + 1):
+                fr = pd.Series(fac[end - win:end]).rank()
+                rr = pd.Series(fwd[end - win:end]).rank()
+                c = fr.corr(rr)
+                if pd.notna(c):
+                    ic_vals.append(c)
+            ic_series = pd.Series(ic_vals, dtype=float)
+            if ic_series.empty:
+                return {"error": "Factor is constant over every window; IC undefined"}
             ic = float(ic_series.mean())
-            ic_ir = float(ic / ic_series.std()) if ic_series.std() > 0 else 0.0
+            ic_std = float(ic_series.std())
+            ic_ir = float(ic / ic_std) if ic_std > 0 else 0.0
+            ic_full = float(df["factor"].rank().corr(df["fwd_ret"].rank()))
 
-            # Simple long-top strategy
-            threshold = df["factor"].quantile(1 - top_pct)
-            long_mask = df["factor"] >= threshold
-            strategy_ret = df["fwd_ret"].where(long_mask, 0.0)
+            # Simple long-top strategy. The entry threshold uses only factor
+            # values seen BEFORE bar t (expanding quantile, shifted one bar);
+            # a full-sample quantile leaked the future distribution into
+            # every past decision.
+            threshold = df["factor"].expanding(min_periods=60).quantile(1 - top_pct).shift(1)
+            long_mask = (df["factor"] >= threshold) & threshold.notna()
+            eval_mask = threshold.notna()
+            strategy_ret = df["fwd_ret"].where(long_mask, 0.0)[eval_mask]
+            long_mask = long_mask[eval_mask]
+            if strategy_ret.empty:
+                return {"error": "Too few bars to form an out-of-sample threshold (need > 60)"}
             ann = 252 ** 0.5
             sharpe = float(strategy_ret.mean() / strategy_ret.std() * ann) if strategy_ret.std() > 0 else 0.0
             win_rate = float((strategy_ret[long_mask] > 0).mean()) if long_mask.sum() > 0 else 0.0
@@ -424,7 +452,11 @@ def build_mcp_server() -> Any:
                 "period":       period,
                 "bar_count":    len(df),
                 "ic":           round(ic, 4),
+                "ic_method":    "time-series Spearman rank IC, factor(t) vs return(t->t+1), "
+                                "mean of rolling 20-bar windows, single symbol (not cross-sectional)",
+                "ic_full_sample": round(ic_full, 4),
                 "ic_ir":        round(ic_ir, 4),
+                "strategy_bars": int(len(strategy_ret)),
                 "sharpe":       round(sharpe, 3),
                 "win_rate":     round(win_rate, 3),
                 "max_drawdown": round(max_dd, 3),

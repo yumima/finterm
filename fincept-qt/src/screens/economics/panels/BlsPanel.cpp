@@ -153,7 +153,25 @@ static QJsonArray extract_bls_rows(const QJsonObject& data) {
     QJsonArray fallback = data["series_data"].toArray();
     if (fallback.isEmpty())
         fallback = data["data"].toArray();
-    return fallback;
+    if (!fallback.isEmpty())
+        return fallback;
+
+    // Shape 3 (what bls_data.py actually emits): {success, data:{series_data:[...]}}
+    // for get_series, or {data:{unemployment_rate:[...], nonfarm_payrolls:[...], ...}}
+    // for the overview commands. Annual averages live in data.annual_averages
+    // and are deliberately not merged into the sub-annual rows.
+    const QJsonObject inner = data["data"].toObject();
+    QJsonArray rows = inner["series_data"].toArray();
+    if (!rows.isEmpty())
+        return rows;
+    for (auto it = inner.begin(); it != inner.end(); ++it) {
+        if (it.key() == QLatin1String("annual_averages") || !it.value().isArray())
+            continue;
+        for (const auto& v : it.value().toArray())
+            if (v.isObject() && v.toObject().contains("date"))
+                rows.append(v);
+    }
+    return rows;
 }
 
 void BlsPanel::on_result(const QString& request_id, const services::EconomicsResult& result) {
@@ -196,7 +214,13 @@ void BlsPanel::on_result(const QString& request_id, const services::EconomicsRes
     const int idx = preset_combo_->currentIndex();
     const QString title = (idx > 0 && idx < kBlsPresets.size()) ? "BLS: " + kBlsPresets[idx].label
                                                                 : "BLS: " + series_input_->text().trimmed().toUpper();
-    display(rows, title);
+    // A single get_series request is one series (BLS sends it newest-first;
+    // the base sorts by date). Overview commands mix several series → no
+    // single value for the stat cards.
+    if (request_id.startsWith("bls_series_"))
+        display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
+    else
+        display(rows, title);
     LOG_INFO("BlsPanel", QString("Displayed %1 rows").arg(rows.size()));
 }
 

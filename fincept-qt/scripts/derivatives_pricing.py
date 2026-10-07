@@ -127,67 +127,77 @@ def garman_kohlhagen_price(S, K, T, r_d, r_f, sigma, option_type="call", notiona
     return price * notional
 
 
+def _add_months(d, months):
+    """Shift a date by whole months, clamping the day to the target month's end."""
+    import calendar
+    m = d.month - 1 + months
+    y = d.year + m // 12
+    m = m % 12 + 1
+    day = min(d.day, calendar.monthrange(y, m)[1])
+    return d.replace(year=y, month=m, day=day)
+
+
 def bond_price_from_ytm(issue_date, settlement_date, maturity_date, coupon_rate, ytm, freq):
-    """Calculate bond clean/dirty price from YTM"""
+    """Calculate bond clean/dirty price from YTM (street convention).
+
+    The coupon schedule is generated backwards from maturity in 12/freq-month
+    steps. The dirty price discounts every remaining cash flow with a
+    fractional first period w = days(settle, next) / days(prev, next)
+    (Actual/Actual ICMA); accrued = coupon * days(accrual start, settle) /
+    days(prev, next), where accrual starts at max(prev coupon, issue date);
+    clean = dirty - accrued.
+    """
     coupon_rate_dec = coupon_rate / 100.0
     ytm_dec = ytm / 100.0
+    freq = int(freq)
+    if freq <= 0 or 12 % freq != 0:
+        return {"error": "Coupon frequency must be 1, 2, 3, 4, 6 or 12"}
 
-    # Parse dates
     settle = datetime.strptime(settlement_date, "%Y-%m-%d")
     maturity = datetime.strptime(maturity_date, "%Y-%m-%d")
     issue = datetime.strptime(issue_date, "%Y-%m-%d")
 
-    # Time to maturity in years
-    T = (maturity - settle).days / 365.25
-    if T <= 0:
+    if maturity <= settle:
         return {"error": "Settlement must be before maturity"}
+    if settle < issue:
+        return {"error": "Settlement must be on or after issue date"}
 
-    # Number of remaining coupon periods
-    n_periods = int(T * freq)
-    if n_periods < 1:
-        n_periods = 1
+    step = 12 // freq
+    # Remaining coupon dates (strictly after settlement), built back from maturity.
+    k = 0
+    coupon_dates = []
+    d = maturity
+    while d > settle:
+        coupon_dates.append(d)
+        k += 1
+        d = _add_months(maturity, -step * k)
+    prev_coupon = d  # last scheduled coupon date on/before settlement
+    coupon_dates.reverse()
+    next_coupon = coupon_dates[0]
+    n_periods = len(coupon_dates)
 
-    # Coupon per period
     coupon = coupon_rate_dec / freq * 100.0  # per 100 face
     y_per = ytm_dec / freq
 
-    # PV of coupons + PV of par
-    if y_per == 0:
-        pv_coupons = coupon * n_periods
-        pv_par = 100.0
-    else:
-        pv_coupons = coupon * (1 - (1 + y_per) ** (-n_periods)) / y_per
-        pv_par = 100.0 / (1 + y_per) ** n_periods
+    period_days = (next_coupon - prev_coupon).days
+    w = (next_coupon - settle).days / period_days  # fraction of first period remaining
+    accrual_start = max(prev_coupon, issue)
+    accrued = coupon * (settle - accrual_start).days / period_days
 
-    dirty_price = pv_coupons + pv_par
+    # Cash flows at exponents (w + i) for i = 0..n-1, in periods.
+    cfs = [coupon] * n_periods
+    cfs[-1] += 100.0
+    exps = [w + i for i in range(n_periods)]
+    disc = [(1 + y_per) ** (-e) for e in exps]
 
-    # Accrued interest (simple linear)
-    period_days = 365.25 / freq
-    # Days since last coupon
-    days_since = (settle - issue).days % period_days
-    accrued = coupon * (days_since / period_days)
+    dirty_price = sum(cf * df for cf, df in zip(cfs, disc))
     clean_price = dirty_price - accrued
 
-    # Macaulay duration
-    duration_sum = 0
-    for i in range(1, n_periods + 1):
-        t_i = i / freq
-        if y_per == 0:
-            duration_sum += t_i * coupon
-        else:
-            duration_sum += t_i * coupon / (1 + y_per) ** i
-    duration_sum += (n_periods / freq) * 100.0 / (1 + y_per) ** n_periods
-    mac_duration = duration_sum / dirty_price
+    # Macaulay duration (years) on the same fractional schedule
+    mac_duration = sum((e / freq) * cf * df for e, cf, df in zip(exps, cfs, disc)) / dirty_price
 
-    # Convexity
-    conv_sum = 0
-    for i in range(1, n_periods + 1):
-        t_i = i / freq
-        if y_per == 0:
-            conv_sum += t_i * (t_i + 1.0 / freq) * coupon
-        else:
-            conv_sum += t_i * (t_i + 1.0 / freq) * coupon / (1 + y_per) ** i
-    conv_sum += (n_periods / freq) * (n_periods / freq + 1.0 / freq) * 100.0 / (1 + y_per) ** n_periods
+    # Convexity (years^2), periodic-compounding convention
+    conv_sum = sum((e / freq) * ((e + 1) / freq) * cf * df for e, cf, df in zip(exps, cfs, disc))
     convexity = conv_sum / (dirty_price * (1 + y_per) ** 2)
 
     return {
@@ -197,6 +207,7 @@ def bond_price_from_ytm(issue_date, settlement_date, maturity_date, coupon_rate,
         "duration": round(mac_duration, 4),
         "convexity": round(convexity, 4),
         "ytm": round(ytm, 4),
+        "remaining_coupons": n_periods,
     }
 
 
@@ -261,8 +272,10 @@ def swap_value(effective_date, maturity_date, fixed_rate, freq, notional, discou
     }
 
 
-def cds_value(valuation_date, maturity_date, recovery_rate, notional, spread_bps):
-    """Simple CDS valuation"""
+def cds_value(valuation_date, maturity_date, recovery_rate, notional, spread_bps, discount_rate):
+    """Simple CDS valuation. discount_rate is the continuously-compounded risk-free rate in %."""
+    if discount_rate is None:
+        return {"error": "Discount (risk-free) rate is required"}
     rec_rate = recovery_rate / 100.0
     spread = spread_bps / 10000.0
 
@@ -280,8 +293,7 @@ def cds_value(valuation_date, maturity_date, recovery_rate, notional, spread_bps
 
     hazard_rate = spread / lgd
 
-    # Risk-free rate assumption (5% for demo)
-    r = 0.05
+    r = discount_rate / 100.0
 
     # Premium leg PV (quarterly payments)
     premium_pv = 0.0
@@ -416,6 +428,7 @@ def main():
     cd.add_argument("--recovery-rate", type=float, required=True)
     cd.add_argument("--notional", type=float, default=10000000)
     cd.add_argument("--spread-bps", type=float, required=True)
+    cd.add_argument("--discount-rate", type=float, required=True)
 
     # Forward
     fw = subparsers.add_parser("forward_price")
@@ -479,7 +492,8 @@ def main():
         elif args.command == "cds_value":
             result = cds_value(
                 args.valuation_date, args.maturity_date,
-                args.recovery_rate, args.notional, args.spread_bps
+                args.recovery_rate, args.notional, args.spread_bps,
+                args.discount_rate
             )
         elif args.command == "forward_price":
             result = forward_price(

@@ -1,585 +1,540 @@
 // MAAnalyticsTools.cpp — M&A Analytics tab MCP tools
 // Covers all 8 modules: Valuation, Merger, Deal Structure, Deal Database,
-// Startup, Fairness, Industry, Advanced Analytics, Deal Comparison
+// Startup, Fairness, Industry, Advanced Analytics, Deal Comparison.
+//
+// Each analytic tool forwards its arguments unchanged to the same script the
+// M&A screen runs (MAAnalyticsService), so the schemas below ARE the scripts'
+// JSON contract (scripts/Analytics/corporateFinance/_cli.py). Rates and
+// probabilities are decimals unless a key ends in _pct. Model assumptions are
+// required inputs — the scripts never substitute defaults.
 
 #include "mcp/tools/MAAnalyticsTools.h"
 
 #include "core/logging/Logger.h"
-#include "mcp/tools/ThreadHelper.h"
+#include "mcp/AsyncDispatch.h"
 #include "services/ma_analytics/MAAnalyticsService.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
+#include <QPromise>
+#include <QTimer>
+
+#include <memory>
 
 namespace fincept::mcp::tools {
 
 static constexpr const char* TAG = "MAAnalyticsTools";
 
-// Wait for an async MA service operation to complete. The trigger lambda
-// runs on the service thread (so it's safe to start a request that emits
-// signals back on that same thread). Worker thread sleeps on a wait
-// condition until the service emits result_ready or error_occurred.
-static ToolResult run_ma_sync(const QString& context, std::function<void()> trigger) {
-    QJsonObject result_data;
-    QString error_msg;
-    bool got_result = false;
-    bool got_error = false;
+using MaSvc = fincept::services::ma::MAAnalyticsService;
 
-    auto& svc = fincept::services::ma::MAAnalyticsService::instance();
+// Every M&A tool is async: the provider's watchdog (default_timeout_ms) fails
+// the call with a visible timeout error if the script never reports back,
+// matching the geopolitics tools. The result is matched on `context`, which
+// must be the exact context string the service method emits.
+static constexpr int kMaTimeoutMs = 120000;
 
-    detail::run_async_wait(&svc, [&](auto signal_done) {
-        // Hook the signals on the service's thread before triggering, so we
-        // never miss an immediate callback. The connections are scoped via
-        // a heap QObject so we can disconnect deterministically.
-        auto* gate = new QObject;
-        QObject::connect(&svc, &fincept::services::ma::MAAnalyticsService::result_ready, gate,
-                         [&, gate, signal_done](const QString& ctx, const QJsonObject& data) {
-                             if (ctx != context)
+static void ma_dispatch(const QString& context, std::shared_ptr<QPromise<ToolResult>> promise, ToolContext ctx,
+                        std::function<void()> trigger) {
+    auto* svc = &MaSvc::instance();
+    AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, context, trigger](auto resolve) {
+        // Scoped connections; the gate also expires itself so a script that
+        // never reports back can't leave them connected forever.
+        auto* gate = new QObject(svc);
+        QObject::connect(svc, &MaSvc::result_ready, gate,
+                         [resolve, gate, context](const QString& c, const QJsonObject& data) {
+                             if (c != context)
                                  return;
-                             result_data = data;
-                             got_result = true;
+                             resolve(ToolResult::ok_data(data));
                              gate->deleteLater();
-                             signal_done();
                          });
-        QObject::connect(&svc, &fincept::services::ma::MAAnalyticsService::error_occurred, gate,
-                         [&, gate, signal_done](const QString& ctx, const QString& msg) {
-                             if (ctx != context)
+        QObject::connect(svc, &MaSvc::error_occurred, gate,
+                         [resolve, gate, context](const QString& c, const QString& msg) {
+                             if (c != context)
                                  return;
-                             error_msg = msg;
-                             got_error = true;
-                             got_result = true;
+                             resolve(ToolResult::fail(msg.isEmpty() ? "M&A analytics failed: " + context : msg));
                              gate->deleteLater();
-                             signal_done();
                          });
+        QTimer::singleShot(kMaTimeoutMs, gate, [resolve, gate, context]() {
+            LOG_WARN(TAG, QString("M&A analytics '%1' timed out").arg(context));
+            resolve(ToolResult::fail(QString("M&A analytics '%1' timed out after %2 s (the script did not finish)")
+                                         .arg(context)
+                                         .arg(kMaTimeoutMs / 1000)));
+            gate->deleteLater();
+        });
         trigger();
     });
-
-    if (!got_result)
-        return ToolResult::fail("M&A result missing: " + context);
-    // An error signal is a failure even when its message is empty.
-    if (got_error || !error_msg.isEmpty())
-        return ToolResult::fail(error_msg.isEmpty() ? "M&A analytics failed: " + context : error_msg);
-
-    return ToolResult::ok_data(result_data);
 }
+
+namespace {
+
+QJsonObject num(const char* d) { return {{"type", "number"}, {"description", d}}; }
+QJsonObject integer(const char* d) { return {{"type", "integer"}, {"description", d}}; }
+QJsonObject str(const char* d) { return {{"type", "string"}, {"description", d}}; }
+QJsonObject boolean(const char* d) { return {{"type", "boolean"}, {"description", d}}; }
+QJsonObject object(const char* d) { return {{"type", "object"}, {"description", d}}; }
+QJsonObject num_array(const char* d) {
+    return {{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", d}};
+}
+QJsonObject obj_array(const char* d) {
+    return {{"type", "array"}, {"items", QJsonObject{{"type", "object"}}}, {"description", d}};
+}
+QJsonObject enum_str(const char* d, const QStringList& values) {
+    return {{"type", "string"}, {"enum", QJsonArray::fromStringList(values)}, {"description", d}};
+}
+
+// One analytic tool: forwards args to `method` and waits on `context`.
+ToolDef ma_tool(const char* name, const char* context, void (MaSvc::*method)(const QJsonObject&),
+                const QString& description, const QJsonObject& props, const QStringList& required) {
+    ToolDef t;
+    t.name = name;
+    t.description = description;
+    t.category = "ma-analytics";
+    t.input_schema.properties = props;
+    t.input_schema.required = required;
+    t.default_timeout_ms = kMaTimeoutMs;
+    const QString context_name = QString::fromLatin1(context);
+    t.async_handler = [context_name, method](const QJsonObject& args, ToolContext ctx,
+                                             std::shared_ptr<QPromise<ToolResult>> promise) {
+        QJsonObject params = args;
+        params.remove("_meta");
+        ma_dispatch(context_name, promise, std::move(ctx), [method, params]() { (MaSvc::instance().*method)(params); });
+    };
+    return t;
+}
+
+// Shared property blocks ------------------------------------------------------
+
+QJsonObject merge(std::initializer_list<QJsonObject> parts) {
+    QJsonObject o;
+    for (const auto& p : parts)
+        for (auto it = p.begin(); it != p.end(); ++it)
+            o[it.key()] = it.value();
+    return o;
+}
+
+QJsonObject dcf_props() {
+    return QJsonObject{
+        {"wacc", num("WACC (decimal). If omitted it is built by CAPM from the component inputs below")},
+        {"risk_free_rate", num("Risk-free rate (decimal)")},
+        {"beta", num("Levered equity beta")},
+        {"market_risk_premium", num("Equity risk premium (decimal)")},
+        {"cost_of_debt", num("Pre-tax cost of debt (decimal)")},
+        {"tax_rate", num("Tax rate (decimal); also used for NOPAT")},
+        {"market_cap", num("Market value of equity (WACC weight)")},
+        {"debt", num("Total debt (WACC weight and equity bridge)")},
+        {"cash", num("Cash (equity bridge)")},
+        {"net_debt", num("Net debt, instead of debt and cash for the bridge")},
+        {"fcf_projections", num_array("Explicit FCFF per projection year, instead of the base-year build")},
+        {"ebit", num("Base-year EBIT")},
+        {"d_and_a", num("Base-year D&A")},
+        {"capex", num("Base-year capex")},
+        {"change_in_nwc", num("Base-year increase in net working capital")},
+        {"growth_rates", num_array("FCF growth per projection year (decimals); its length sets the horizon")},
+        {"terminal_method", enum_str("Terminal value method", {"perpetuity", "exit_multiple"})},
+        {"terminal_growth", num("Perpetuity growth (decimal, -5%..5%, below WACC)")},
+        {"exit_multiple", num("Exit EV/EBITDA multiple (exit_multiple method)")},
+        {"terminal_ebitda", num("Final-year EBITDA for the exit multiple")},
+        {"ebitda", num("Base-year EBITDA, grown at growth_rates when terminal_ebitda is not given")},
+        {"mid_year_convention",
+         boolean("Discount flows mid-year. A Gordon TV is then discounted N-0.5 years; an exit-multiple TV N years")},
+        {"minority_interest", num("Minority interest (optional, 0 = none)")},
+        {"preferred_stock", num("Preferred stock (optional, 0 = none)")},
+        {"shares_outstanding", num("Diluted shares outstanding")},
+    };
+}
+
+QJsonObject lbo_props() {
+    return QJsonObject{
+        {"ebitda", num("LTM EBITDA at entry")},
+        {"revenue", num("LTM revenue at entry")},
+        {"entry_multiple", num("Entry EV/EBITDA")},
+        {"exit_multiple", num("Exit EV/EBITDA")},
+        {"holding_period", integer("Holding period in years")},
+        {"revenue_growth", num("Annual revenue growth (decimal; a per-year array is also accepted)")},
+        {"ebitda_margin", num("Projected EBITDA margin (decimal)")},
+        {"d_and_a_pct", num("D&A as a fraction of revenue")},
+        {"capex_pct", num("Capex as a fraction of revenue")},
+        {"nwc_pct", num("NWC investment as a fraction of the revenue change")},
+        {"tax_rate", num("Tax rate (decimal)")},
+        {"senior_debt", num("Senior term debt")},
+        {"senior_rate", num("Senior interest rate (decimal)")},
+        {"senior_amort_pct", num("Senior mandatory amortization per year, fraction of original principal")},
+        {"sub_debt", num("Subordinated (bullet) debt, optional")},
+        {"sub_rate", num("Subordinated rate (decimal), required with sub_debt")},
+        {"revolver", num("Revolver drawn at close, optional")},
+        {"revolver_rate", num("Revolver rate (decimal), required with revolver")},
+        {"sweep_pct", num("Share of FCF after mandatory amortization swept to revolver/senior (decimal)")},
+        {"transaction_fees", num("Transaction fees (optional, 0 = none)")},
+        {"financing_fees", num("Financing fees (optional, 0 = none)")},
+    };
+}
+
+QJsonObject ad_props() {
+    return QJsonObject{
+        {"acquirer_net_income", num("Acquirer net income")},
+        {"acquirer_eps", num("Acquirer EPS, instead of acquirer_net_income")},
+        {"acquirer_shares", num("Acquirer diluted shares")},
+        {"acquirer_share_price", num("Acquirer share price (required when any stock is issued)")},
+        {"target_net_income", num("Target net income")},
+        {"deal_value", num("Equity purchase price for the target")},
+        {"cash_pct", num("Cash share of the consideration (decimal 0-1)")},
+        {"cash_from_balance_sheet", num("Acquirer cash used (rest of the cash portion is new debt)")},
+        {"debt_rate", num("Pre-tax rate on new acquisition debt (decimal)")},
+        {"cash_yield", num("Pre-tax interest yield forgone on cash used (decimal)")},
+        {"tax_rate", num("Tax rate (decimal)")},
+        {"synergies", num("Run-rate pre-tax synergies (optional)")},
+        {"synergies_after_tax", num("Run-rate after-tax synergies, instead of synergies")},
+        {"synergy_phase_in", num("Fraction of run-rate synergies realized in the year analysed (optional, 1 = full)")},
+        {"integration_costs", num("Pre-tax integration costs in the year analysed (optional)")},
+        {"new_amortization", num("Pre-tax D&A on purchase-price step-ups (optional)")},
+    };
+}
+
+QJsonObject synergy_timing_props() {
+    return QJsonObject{
+        {"tax_rate", num("Tax rate (decimal)")},
+        {"discount_rate", num("Discount rate (decimal)")},
+        {"ramp_years", integer("Years to reach run-rate (linear ramp)")},
+        {"projection_years", integer("Explicit projection years")},
+        {"terminal_growth", num("Terminal growth (decimal, optional; omitted = no terminal value)")},
+    };
+}
+
+QJsonObject deals_prop() {
+    return QJsonObject{{"deals", obj_array("Deals: acquirer, target, deal_value, premium (PERCENT, 45.3 = 45.3%), "
+                                           "ev_revenue, ev_ebitda, cash_pct / stock_pct (PERCENT), synergies, "
+                                           "industry")}};
+}
+
+} // namespace
 
 std::vector<ToolDef> get_ma_analytics_tools() {
     std::vector<ToolDef> tools;
 
     // ════════════════════════════════════════════════════════════════════
-    // VALUATION MODULE
+    // VALUATION
     // ════════════════════════════════════════════════════════════════════
+    tools.push_back(ma_tool(
+        "ma_dcf", "dcf", &MaSvc::calculate_dcf,
+        "DCF (FCFF) valuation: WACC (given, or CAPM-built), projected free cash flow, Gordon-growth or exit-multiple "
+        "terminal value, optional mid-year convention, and the EV -> equity bridge (less net debt, minority "
+        "interest, preferred). Returns EV, equity value, value per share and the projection table.",
+        dcf_props(), {"terminal_method", "mid_year_convention", "shares_outstanding"}));
 
-    // ── ma_dcf ──────────────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_dcf";
-        t.description = "Run a DCF (Discounted Cash Flow) valuation. Returns WACC, enterprise value, equity value, and "
-                        "per-share value.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"revenue", QJsonObject{{"type", "number"}, {"description", "Current revenue"}}},
-            {"ebitda", QJsonObject{{"type", "number"}, {"description", "Current EBITDA"}}},
-            {"growth_rate",
-             QJsonObject{{"type", "number"}, {"description", "Revenue growth rate (decimal, e.g. 0.10)"}}},
-            {"wacc", QJsonObject{{"type", "number"}, {"description", "Weighted average cost of capital (decimal)"}}},
-            {"terminal_growth", QJsonObject{{"type", "number"}, {"description", "Terminal growth rate (decimal)"}}},
-            {"net_debt", QJsonObject{{"type", "number"}, {"description", "Net debt"}}},
-            {"shares_outstanding", QJsonObject{{"type", "number"}, {"description", "Shares outstanding"}}}};
-        t.input_schema.required = {"revenue", "ebitda", "wacc", "terminal_growth"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("dcf",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().calculate_dcf(args); });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool("ma_dcf_sensitivity", "dcf_sensitivity", &MaSvc::calculate_dcf_sensitivity,
+                            "DCF value per share over a WACC x terminal-growth grid (WACC only for the exit-multiple "
+                            "method).",
+                            QJsonObject{{"base_params", object("ma_dcf inputs")},
+                                        {"wacc_range", num_array("WACC values (decimals)")},
+                                        {"tgr_range", num_array("Terminal growth values (decimals)")}},
+                            {"base_params", "wacc_range"}));
 
-    // ── ma_dcf_sensitivity ──────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_dcf_sensitivity";
-        t.description = "Run a DCF sensitivity analysis varying WACC and terminal growth rate.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"base_params", QJsonObject{{"type", "object"}, {"description", "Base DCF parameters (same as ma_dcf)"}}},
-            {"wacc_range", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Array of WACC values to test"}}},
-            {"tgr_range", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Array of terminal growth rates to test"}}}};
-        t.input_schema.required = {"base_params"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("dcf_sensitivity", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_dcf_sensitivity(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_lbo_returns", "lbo_returns", &MaSvc::calculate_lbo_returns,
+        "Sponsor IRR and MOIC from equity invested and exit equity (exit EV - net debt at exit, or given directly).",
+        QJsonObject{{"equity_invested", num("Sponsor equity invested at entry")},
+                    {"holding_period", integer("Holding period in years")},
+                    {"exit_valuation", num("Exit enterprise value")},
+                    {"exit_net_debt", num("Net debt at exit")},
+                    {"exit_equity_value", num("Exit equity value, instead of exit_valuation - exit_net_debt")},
+                    {"entry_valuation", num("Entry enterprise value (optional, for implied entry leverage)")},
+                    {"interim_distributions", num_array("Distributions in years 1..N-1 (optional)")}},
+        {"equity_invested", "holding_period"}));
 
-    // ── ma_lbo_returns ──────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_lbo_returns";
-        t.description = "Calculate LBO returns (IRR and MOIC) given entry/exit assumptions.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"entry_ev", QJsonObject{{"type", "number"}, {"description", "Entry enterprise value"}}},
-            {"exit_ev", QJsonObject{{"type", "number"}, {"description", "Exit enterprise value"}}},
-            {"equity_invested", QJsonObject{{"type", "number"}, {"description", "Equity invested at entry"}}},
-            {"hold_years", QJsonObject{{"type", "integer"}, {"description", "Holding period in years"}}},
-            {"debt", QJsonObject{{"type", "number"}, {"description", "Initial debt"}}}};
-        t.input_schema.required = {"entry_ev", "exit_ev", "equity_invested", "hold_years"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("lbo_returns", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_lbo_returns(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_lbo_model", "lbo_model", &MaSvc::build_lbo_model,
+        "Full LBO: sources & uses (sponsor equity is the plug), revenue/EBITDA projection, debt waterfall with "
+        "mandatory amortization and cash sweep, exit at an EV/EBITDA multiple, IRR and MOIC.",
+        lbo_props(),
+        {"ebitda", "revenue", "entry_multiple", "exit_multiple", "holding_period", "revenue_growth", "ebitda_margin",
+         "d_and_a_pct", "capex_pct", "nwc_pct", "tax_rate", "senior_debt", "senior_rate", "senior_amort_pct",
+         "sweep_pct"}));
 
-    // ── ma_lbo_model ────────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_lbo_model";
-        t.description = "Build a full LBO model with debt tranches, cash sweeps, and exit analysis.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"purchase_price", QJsonObject{{"type", "number"}, {"description", "Total purchase price"}}},
-            {"ebitda", QJsonObject{{"type", "number"}, {"description", "Entry EBITDA"}}},
-            {"debt_multiple", QJsonObject{{"type", "number"}, {"description", "Debt/EBITDA multiple"}}},
-            {"interest_rate", QJsonObject{{"type", "number"}, {"description", "Debt interest rate (decimal)"}}},
-            {"exit_multiple", QJsonObject{{"type", "number"}, {"description", "Exit EV/EBITDA multiple"}}},
-            {"hold_years", QJsonObject{{"type", "integer"}, {"description", "Holding period in years"}}}};
-        t.input_schema.required = {"purchase_price", "ebitda", "debt_multiple", "exit_multiple", "hold_years"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("lbo_model",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().build_lbo_model(args); });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_lbo_debt_schedule", "lbo_debt_schedule", &MaSvc::analyze_lbo_debt_schedule,
+        "Debt schedule: interest on opening balances, taxes after interest, levered FCF, mandatory amortization and "
+        "cash sweep (revolver then senior; subordinated is a bullet).",
+        QJsonObject{{"years", integer("Years")},
+                    {"ebitda", num("Year-1 EBITDA")},
+                    {"ebitda_growth", num("Annual EBITDA growth (decimal)")},
+                    {"d_and_a", num("Annual D&A")},
+                    {"capex", num("Annual capex")},
+                    {"nwc_change", num("Annual increase in NWC")},
+                    {"tax_rate", num("Tax rate (decimal)")},
+                    {"sweep_pct", num("Cash sweep share (decimal)")},
+                    {"senior_debt", num("Senior debt")},
+                    {"senior_rate", num("Senior rate (decimal)")},
+                    {"senior_amort_pct", num("Senior amortization per year, fraction of original")},
+                    {"sub_debt", num("Subordinated debt (optional)")},
+                    {"sub_rate", num("Subordinated rate (decimal)")},
+                    {"revolver", num("Revolver drawn (optional)")},
+                    {"revolver_rate", num("Revolver rate (decimal)")}},
+        {"years", "ebitda", "ebitda_growth", "d_and_a", "capex", "nwc_change", "tax_rate", "sweep_pct",
+         "senior_debt"}));
 
-    // ── ma_lbo_debt_schedule ────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_lbo_debt_schedule";
-        t.description = "Generate an LBO debt repayment schedule with amortization and cash sweeps.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"initial_debt", QJsonObject{{"type", "number"}, {"description", "Initial debt amount"}}},
-            {"interest_rate", QJsonObject{{"type", "number"}, {"description", "Annual interest rate (decimal)"}}},
-            {"ebitda", QJsonObject{{"type", "number"}, {"description", "Annual EBITDA"}}},
-            {"capex", QJsonObject{{"type", "number"}, {"description", "Annual capex"}}},
-            {"years", QJsonObject{{"type", "integer"}, {"description", "Schedule years"}}}};
-        t.input_schema.required = {"initial_debt", "interest_rate", "ebitda", "years"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("lbo_debt_schedule", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().analyze_lbo_debt_schedule(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool("ma_lbo_sensitivity", "lbo_sensitivity", &MaSvc::calculate_lbo_sensitivity,
+                            "LBO IRR / MOIC grid over entry x exit multiples around the base case (all ma_lbo_model "
+                            "inputs plus the grid).",
+                            merge({lbo_props(),
+                                   QJsonObject{{"range", num("Grid half-width in multiple turns")},
+                                               {"steps", integer("Points per axis (2-15)")},
+                                               {"entry_base", num("Grid centre entry multiple (default: entry_multiple)")},
+                                               {"exit_base", num("Grid centre exit multiple (default: exit_multiple)")}}}),
+                            {"ebitda", "revenue", "entry_multiple", "exit_multiple", "holding_period", "range", "steps"}));
 
-    // ── ma_lbo_sensitivity ──────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_lbo_sensitivity";
-        t.description = "Run LBO sensitivity table varying entry multiple and exit multiple.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"base_params", QJsonObject{{"type", "object"}, {"description", "Base LBO parameters"}}},
-            {"entry_multiples", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Entry EV/EBITDA multiples to test"}}},
-            {"exit_multiples", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Exit EV/EBITDA multiples to test"}}}};
-        t.input_schema.required = {"base_params"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("lbo_sensitivity", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_lbo_sensitivity(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_trading_comps", "trading_comps", &MaSvc::calculate_trading_comps,
+        "Trading comparables. Either live (target_ticker + comp_tickers, LTM data from yfinance) or manual (peers "
+        "with market_cap, total_debt, cash, revenue, ebitda, ebit, net_income — or explicit multiples — plus target "
+        "metrics). EV = market cap + debt - cash; non-positive multiples are excluded; EV multiples imply EV, P/E "
+        "implies equity.",
+        QJsonObject{{"target_ticker", str("Target ticker (live mode)")},
+                    {"comp_tickers", str("Comma-separated peer tickers (live mode)")},
+                    {"peers", obj_array("Manual peers")},
+                    {"target_revenue", num("Target LTM revenue (manual mode)")},
+                    {"target_ebitda", num("Target LTM EBITDA (manual mode)")},
+                    {"target_ebit", num("Target LTM EBIT (manual mode)")},
+                    {"target_net_income", num("Target LTM net income (manual mode)")},
+                    {"target_net_debt", num("Target net debt (manual mode, for the equity bridge)")},
+                    {"target_shares", num("Target diluted shares (manual mode)")},
+                    {"target_price", num("Target share price (manual mode)")}},
+        {}));
 
-    // ── ma_trading_comps ────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_trading_comps";
-        t.description = "Calculate trading comparable company multiples (EV/EBITDA, P/E, EV/Revenue).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"target_revenue", QJsonObject{{"type", "number"}, {"description", "Target company revenue"}}},
-            {"target_ebitda", QJsonObject{{"type", "number"}, {"description", "Target company EBITDA"}}},
-            {"target_earnings", QJsonObject{{"type", "number"}, {"description", "Target company net earnings"}}},
-            {"peer_ev_ebitda", QJsonObject{{"type", "number"}, {"description", "Peer median EV/EBITDA multiple"}}},
-            {"peer_ev_revenue", QJsonObject{{"type", "number"}, {"description", "Peer median EV/Revenue multiple"}}},
-            {"peer_pe", QJsonObject{{"type", "number"}, {"description", "Peer median P/E multiple"}}},
-            {"net_debt", QJsonObject{{"type", "number"}, {"description", "Target net debt"}}}};
-        t.input_schema.required = {"target_ebitda", "peer_ev_ebitda"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("trading_comps", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_trading_comps(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_precedent_transactions", "precedent_txns", &MaSvc::calculate_precedent_transactions,
+        "Value a target off precedent deals: multiples = deal EV / target LTM metric (or given), quartiles across "
+        "deals, implied EV / equity / per share. The control premium is already in precedent multiples.",
+        QJsonObject{{"transactions", obj_array("Deals: target, acquirer, date, enterprise_value, revenue, ebitda, "
+                                               "ebit, or ev_revenue / ev_ebitda; premium_1day_pct optional")},
+                    {"target_revenue", num("Target LTM revenue")},
+                    {"target_ebitda", num("Target LTM EBITDA")},
+                    {"target_ebit", num("Target LTM EBIT")},
+                    {"target_net_debt", num("Target net debt (optional)")},
+                    {"target_shares", num("Target diluted shares (optional)")},
+                    {"target_price", num("Target share price (optional)")}},
+        {"transactions"}));
 
-    // ── ma_precedent_transactions ───────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_precedent_transactions";
-        t.description = "Value a target using precedent transaction multiples from comparable deals.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"target_ebitda", QJsonObject{{"type", "number"}, {"description", "Target EBITDA"}}},
-            {"target_revenue", QJsonObject{{"type", "number"}, {"description", "Target revenue"}}},
-            {"precedent_ev_ebitda", QJsonObject{{"type", "number"}, {"description", "Precedent median EV/EBITDA"}}},
-            {"precedent_ev_revenue", QJsonObject{{"type", "number"}, {"description", "Precedent median EV/Revenue"}}},
-            {"control_premium",
-             QJsonObject{{"type", "number"}, {"description", "Control premium (decimal, e.g. 0.25)"}}}};
-        t.input_schema.required = {"target_ebitda", "precedent_ev_ebitda"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("precedent_transactions", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_precedent_transactions(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── ma_football_field ───────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_football_field";
-        t.description = "Generate a football field valuation chart showing ranges across DCF, comps, and precedents.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"dcf_low", QJsonObject{{"type", "number"}, {"description", "DCF low value"}}},
-            {"dcf_high", QJsonObject{{"type", "number"}, {"description", "DCF high value"}}},
-            {"comps_low", QJsonObject{{"type", "number"}, {"description", "Trading comps low value"}}},
-            {"comps_high", QJsonObject{{"type", "number"}, {"description", "Trading comps high value"}}},
-            {"precedent_low", QJsonObject{{"type", "number"}, {"description", "Precedent transactions low"}}},
-            {"precedent_high", QJsonObject{{"type", "number"}, {"description", "Precedent transactions high"}}},
-            {"current_price", QJsonObject{{"type", "number"}, {"description", "Current share price (optional)"}}}};
-        t.input_schema.required = {"dcf_low", "dcf_high", "comps_low", "comps_high"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("football_field", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().generate_football_field(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_football_field", "football_field", &MaSvc::generate_football_field,
+        "Football field: valuation ranges per method on one basis (per share or equity value), overlap, and where "
+        "the current / offer price sits.",
+        QJsonObject{{"methods", obj_array("Ranges: {method, low, high, midpoint?}")},
+                    {"dcf_low", num("DCF low")},
+                    {"dcf_high", num("DCF high")},
+                    {"comps_low", num("Trading comps low")},
+                    {"comps_high", num("Trading comps high")},
+                    {"precedent_low", num("Precedent transactions low")},
+                    {"precedent_high", num("Precedent transactions high")},
+                    {"current_price", num("Current price (optional)")},
+                    {"offer_price", num("Offer price (optional)")}},
+        {}));
 
     // ════════════════════════════════════════════════════════════════════
-    // MERGER ANALYSIS MODULE
+    // MERGER ANALYSIS
     // ════════════════════════════════════════════════════════════════════
+    const QStringList ad_required = {"acquirer_shares", "target_net_income", "deal_value", "cash_pct", "tax_rate"};
+    const QString ad_desc =
+        "EPS accretion/dilution: pro forma NI = acquirer NI + target NI + after-tax (phased synergies - integration "
+        "costs - new amortization - interest on new debt - interest forgone on cash); pro forma shares = acquirer "
+        "shares + stock consideration / acquirer price. Also breakeven synergies and purchase vs acquirer P/E.";
+    tools.push_back(ma_tool("ma_accretion_dilution", "accretion_dilution", &MaSvc::calculate_accretion_dilution,
+                            ad_desc, ad_props(), ad_required));
+    tools.push_back(ma_tool("ma_merger_model", "merger_model", &MaSvc::build_merger_model,
+                            "Merger model (same engine and inputs as ma_accretion_dilution). " + ad_desc, ad_props(),
+                            ad_required));
 
-    // ── ma_merger_model ─────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_merger_model";
-        t.description = "Build a full merger model combining acquirer and target financials.";
-        t.category = "ma-analytics";
-        t.input_schema.properties =
-            QJsonObject{{"acquirer_revenue", QJsonObject{{"type", "number"}, {"description", "Acquirer revenue"}}},
-                        {"acquirer_ebitda", QJsonObject{{"type", "number"}, {"description", "Acquirer EBITDA"}}},
-                        {"acquirer_eps", QJsonObject{{"type", "number"}, {"description", "Acquirer EPS"}}},
-                        {"target_revenue", QJsonObject{{"type", "number"}, {"description", "Target revenue"}}},
-                        {"target_ebitda", QJsonObject{{"type", "number"}, {"description", "Target EBITDA"}}},
-                        {"deal_value", QJsonObject{{"type", "number"}, {"description", "Total deal value"}}},
-                        {"cash_pct", QJsonObject{{"type", "number"}, {"description", "Cash consideration % (0-1)"}}},
-                        {"synergies", QJsonObject{{"type", "number"}, {"description", "Expected annual synergies"}}}};
-        t.input_schema.required = {"acquirer_eps", "target_ebitda", "deal_value"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("merger_model", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().build_merger_model(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_pro_forma", "pro_forma", &MaSvc::build_pro_forma,
+        "Multi-year pro forma accretion/dilution: standalone net incomes grown at the given rates, synergies phased "
+        "per year, integration costs per year; acquisition debt held constant.",
+        merge({ad_props(),
+               QJsonObject{{"years", integer("Projection years (1-10)")},
+                           {"acquirer_ni_growth", num("Acquirer standalone NI growth (decimal)")},
+                           {"target_ni_growth", num("Target standalone NI growth (decimal)")},
+                           {"synergy_phase_in_by_year", num_array("Fraction of run-rate synergies per year")},
+                           {"integration_costs_by_year", num_array("Pre-tax integration costs per year")},
+                           {"revenue_growth", num("Combined revenue growth (optional, decimal)")},
+                           {"acquirer_revenue", num("Acquirer revenue (optional)")},
+                           {"target_revenue", num("Target revenue (optional)")}}}),
+        QStringList(ad_required) << "years" << "acquirer_ni_growth" << "target_ni_growth"));
 
-    // ── ma_accretion_dilution ───────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_accretion_dilution";
-        t.description = "Calculate EPS accretion/dilution from an acquisition.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"acquirer_eps", QJsonObject{{"type", "number"}, {"description", "Acquirer standalone EPS"}}},
-            {"acquirer_shares", QJsonObject{{"type", "number"}, {"description", "Acquirer shares outstanding"}}},
-            {"target_net_income", QJsonObject{{"type", "number"}, {"description", "Target net income"}}},
-            {"deal_value", QJsonObject{{"type", "number"}, {"description", "Total deal value"}}},
-            {"cash_pct", QJsonObject{{"type", "number"}, {"description", "Cash % of consideration (0-1)"}}},
-            {"new_share_price",
-             QJsonObject{{"type", "number"}, {"description", "Acquirer share price for stock issuance"}}},
-            {"synergies_after_tax", QJsonObject{{"type", "number"}, {"description", "After-tax synergies"}}},
-            {"financing_cost", QJsonObject{{"type", "number"}, {"description", "After-tax cost of debt financing"}}}};
-        t.input_schema.required = {"acquirer_eps", "acquirer_shares", "target_net_income", "deal_value"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("accretion_dilution", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_accretion_dilution(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_sources_uses", "sources_uses", &MaSvc::calculate_sources_uses,
+        "Sources & uses as entered (no plug, no estimated fees); reports any funding shortfall or surplus.",
+        QJsonObject{{"purchase_price", num("Equity purchase price")},
+                    {"target_debt_refinanced", num("Target debt refinanced")},
+                    {"transaction_fees", num("Transaction fees")},
+                    {"financing_fees", num("Financing fees")},
+                    {"acquirer_cash", num("Acquirer cash used")},
+                    {"new_debt", num("New debt raised")},
+                    {"new_equity", num("New equity issued")}},
+        {"purchase_price"}));
 
-    // ── ma_pro_forma ────────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_pro_forma";
-        t.description = "Build pro forma combined financials post-merger.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"acquirer_revenue", QJsonObject{{"type", "number"}, {"description", "Acquirer revenue"}}},
-            {"acquirer_ebitda", QJsonObject{{"type", "number"}, {"description", "Acquirer EBITDA"}}},
-            {"acquirer_net_income", QJsonObject{{"type", "number"}, {"description", "Acquirer net income"}}},
-            {"target_revenue", QJsonObject{{"type", "number"}, {"description", "Target revenue"}}},
-            {"target_ebitda", QJsonObject{{"type", "number"}, {"description", "Target EBITDA"}}},
-            {"target_net_income", QJsonObject{{"type", "number"}, {"description", "Target net income"}}},
-            {"revenue_synergies", QJsonObject{{"type", "number"}, {"description", "Revenue synergies"}}},
-            {"cost_synergies", QJsonObject{{"type", "number"}, {"description", "Cost synergies"}}},
-            {"integration_costs", QJsonObject{{"type", "number"}, {"description", "One-time integration costs"}}}};
-        t.input_schema.required = {"acquirer_revenue", "target_revenue"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("pro_forma",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().build_pro_forma(args); });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_contribution_analysis", "contribution", &MaSvc::analyze_contribution,
+        "Contribution analysis: each party's share of combined revenue / EBITDA / net income / assets vs the "
+        "ownership split.",
+        QJsonObject{{"acquirer", object("Acquirer financials: revenue, ebitda, net_income, total_assets")},
+                    {"target", object("Target financials: revenue, ebitda, net_income, total_assets")},
+                    {"ownership_split", num("Target holders' share of the combined company (decimal)")}},
+        {"acquirer", "target", "ownership_split"}));
 
-    // ── ma_sources_uses ─────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_sources_uses";
-        t.description = "Build a sources and uses of funds table for a deal.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"equity_offered", QJsonObject{{"type", "number"}, {"description", "Equity consideration"}}},
-            {"cash_offered", QJsonObject{{"type", "number"}, {"description", "Cash consideration"}}},
-            {"debt_raised", QJsonObject{{"type", "number"}, {"description", "New debt raised"}}},
-            {"target_debt_assumed", QJsonObject{{"type", "number"}, {"description", "Target debt assumed"}}},
-            {"fees", QJsonObject{{"type", "number"}, {"description", "Advisory and financing fees"}}}};
-        t.input_schema.required = {"equity_offered", "cash_offered"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("sources_uses", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_sources_uses(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_revenue_synergies", "revenue_synergies", &MaSvc::calculate_revenue_synergies,
+        "Value revenue synergies (ramped, taxed at the synergy margin, discounted). type: simple (combined_revenue x "
+        "synergy_pct), cross_sell, market_expansion, pricing_power.",
+        merge({synergy_timing_props(),
+               QJsonObject{{"type", enum_str("Synergy model", {"simple", "cross_sell", "market_expansion",
+                                                               "pricing_power"})},
+                           {"combined_revenue", num("Combined revenue (simple, pricing_power)")},
+                           {"synergy_pct", num("Run-rate synergy as a fraction of revenue (simple)")},
+                           {"revenue_synergy_margin", num("Margin earned on synergy revenue (decimal)")},
+                           {"acquirer_customers", num("cross_sell")},
+                           {"target_customers", num("cross_sell")},
+                           {"acquirer_arpu", num("cross_sell")},
+                           {"target_arpu", num("cross_sell")},
+                           {"cross_sell_rate", num("cross_sell (decimal)")},
+                           {"target_revenue_new_markets", num("market_expansion")},
+                           {"acquirer_product_penetration", num("market_expansion (decimal)")},
+                           {"market_share_gain", num("market_expansion (decimal)")},
+                           {"price_increase", num("pricing_power (decimal)")},
+                           {"volume_elasticity", num("pricing_power")}}}),
+        {"revenue_synergy_margin", "tax_rate", "discount_rate", "ramp_years", "projection_years"}));
 
-    // ── ma_contribution_analysis ────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_contribution_analysis";
-        t.description = "Analyze relative contribution of acquirer and target to combined entity.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"acquirer_revenue", QJsonObject{{"type", "number"}, {"description", "Acquirer revenue"}}},
-            {"acquirer_ebitda", QJsonObject{{"type", "number"}, {"description", "Acquirer EBITDA"}}},
-            {"acquirer_market_cap", QJsonObject{{"type", "number"}, {"description", "Acquirer market cap"}}},
-            {"target_revenue", QJsonObject{{"type", "number"}, {"description", "Target revenue"}}},
-            {"target_ebitda", QJsonObject{{"type", "number"}, {"description", "Target EBITDA"}}},
-            {"target_deal_value", QJsonObject{{"type", "number"}, {"description", "Target deal value"}}}};
-        t.input_schema.required = {"acquirer_revenue", "target_revenue", "acquirer_market_cap", "target_deal_value"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("contribution_analysis", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().analyze_contribution(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_cost_synergies", "cost_synergies", &MaSvc::calculate_cost_synergies,
+        "Value cost synergies (ramped, after tax, discounted; one-time costs tax-deductible). type: simple "
+        "(combined_opex x synergy_pct), headcount, facilities, procurement.",
+        merge({synergy_timing_props(),
+               QJsonObject{{"type", enum_str("Synergy model", {"simple", "headcount", "facilities", "procurement"})},
+                           {"combined_opex", num("Combined cost base (simple)")},
+                           {"synergy_pct", num("Run-rate saving as a fraction of the cost base (simple)")},
+                           {"one_time_cost", num("One-time cost to achieve (simple, optional)")},
+                           {"duplicate_roles", num("headcount")},
+                           {"average_loaded_cost", num("headcount")},
+                           {"severance_multiple", num("headcount")},
+                           {"facilities_to_close", num("facilities")},
+                           {"annual_cost_per_facility", num("facilities")},
+                           {"closure_cost_per_facility", num("facilities")},
+                           {"lease_termination_cost", num("facilities (optional)")},
+                           {"combined_spend", num("procurement")},
+                           {"volume_discount", num("procurement (decimal)")},
+                           {"supplier_rationalization_benefit", num("procurement (decimal, optional)")},
+                           {"implementation_cost", num("procurement (optional)")}}}),
+        {"tax_rate", "discount_rate", "ramp_years", "projection_years"}));
 
-    // ── ma_revenue_synergies ────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_revenue_synergies";
-        t.description = "Model and value revenue synergies from a merger.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"combined_revenue", QJsonObject{{"type", "number"}, {"description", "Combined revenue baseline"}}},
-            {"synergy_pct", QJsonObject{{"type", "number"}, {"description", "Expected synergy as % of revenue"}}},
-            {"ramp_years", QJsonObject{{"type", "integer"}, {"description", "Years to full synergy realization"}}},
-            {"discount_rate", QJsonObject{{"type", "number"}, {"description", "Discount rate for NPV (decimal)"}}}};
-        t.input_schema.required = {"combined_revenue", "synergy_pct"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("revenue_synergies", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_revenue_synergies(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_synergies_dcf", "synergy_dcf", &MaSvc::value_synergies_dcf,
+        "NPV of revenue and cost synergies: linear ramp, revenue synergies at revenue_synergy_margin, taxed, "
+        "integration cost spread and tax-deducted, terminal value only if terminal_growth is given.",
+        merge({synergy_timing_props(),
+               QJsonObject{{"revenue_synergy", num("Run-rate revenue synergy")},
+                           {"revenue_synergy_pct", num("Revenue synergy as a fraction of combined_revenue")},
+                           {"combined_revenue", num("Combined revenue")},
+                           {"revenue_synergy_margin", num("Margin on synergy revenue (required with revenue synergy)")},
+                           {"cost_synergy", num("Run-rate cost synergy")},
+                           {"annual_synergies", num("Run-rate cost synergy (alias)")},
+                           {"cost_synergy_pct", num("Cost synergy as a fraction of combined_cost_base")},
+                           {"combined_cost_base", num("Combined cost base")},
+                           {"integration_cost", num("One-time integration cost (optional)")},
+                           {"integration_cost_years", integer("Years the integration cost is spread over")}}}),
+        {"tax_rate", "discount_rate", "ramp_years", "projection_years"}));
 
-    // ── ma_cost_synergies ───────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_cost_synergies";
-        t.description = "Model and value cost synergies from a merger.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"combined_opex", QJsonObject{{"type", "number"}, {"description", "Combined operating expenses"}}},
-            {"synergy_pct", QJsonObject{{"type", "number"}, {"description", "Expected cost reduction %"}}},
-            {"ramp_years", QJsonObject{{"type", "integer"}, {"description", "Years to full realization"}}},
-            {"discount_rate", QJsonObject{{"type", "number"}, {"description", "Discount rate for NPV (decimal)"}}}};
-        t.input_schema.required = {"combined_opex", "synergy_pct"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("cost_synergies", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_cost_synergies(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── ma_synergies_dcf ────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_synergies_dcf";
-        t.description = "Calculate NPV of combined revenue and cost synergies using DCF.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"annual_synergies", QJsonObject{{"type", "number"}, {"description", "Annual synergy amount"}}},
-            {"ramp_years", QJsonObject{{"type", "integer"}, {"description", "Years to full realization"}}},
-            {"discount_rate", QJsonObject{{"type", "number"}, {"description", "Discount rate (decimal)"}}},
-            {"tax_rate", QJsonObject{{"type", "number"}, {"description", "Tax rate (decimal)"}}},
-            {"terminal_growth", QJsonObject{{"type", "number"}, {"description", "Terminal growth rate (decimal)"}}}};
-        t.input_schema.required = {"annual_synergies", "discount_rate"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("synergies_dcf", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().value_synergies_dcf(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── ma_integration_costs ────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_integration_costs";
-        t.description = "Estimate post-merger integration costs (restructuring, IT, HR, etc.).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"deal_value", QJsonObject{{"type", "number"}, {"description", "Total deal value"}}},
-            {"combined_revenue", QJsonObject{{"type", "number"}, {"description", "Combined revenue"}}},
-            {"combined_headcount", QJsonObject{{"type", "integer"}, {"description", "Combined employee headcount"}}},
-            {"integration_complexity", QJsonObject{{"type", "string"}, {"description", "LOW, MEDIUM, HIGH"}}}};
-        t.input_schema.required = {"deal_value"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("integration_costs", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().estimate_integration_costs(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_integration_costs", "integration_costs", &MaSvc::estimate_integration_costs,
+        "Integration cost build-up from user-supplied cost items and drivers (no built-in unit costs).",
+        QJsonObject{{"deal_value", num("Deal value")},
+                    {"cost_items", obj_array("Line items: {category, amount, year?, capitalized?}")},
+                    {"integration_cost_pct", num("Total integration cost as a fraction of deal value")},
+                    {"systems_to_integrate", num("IT systems (with cost_per_system)")},
+                    {"cost_per_system", num("Cost per IT system")},
+                    {"key_employees", num("Retention: key employees")},
+                    {"average_compensation", num("Retention: average compensation")},
+                    {"retention_bonus_pct", num("Retention bonus as a fraction of compensation")},
+                    {"severance_roles", num("Roles eliminated")},
+                    {"severance_cost_per_role", num("Severance per role")},
+                    {"training_hours_per_employee", num("Training hours per employee")},
+                    {"training_cost_per_hour", num("Training cost per hour")},
+                    {"employees_to_train", num("Employees to train")},
+                    {"advisory_fee_pct", num("Advisory fees as a fraction of deal value")},
+                    {"legal_fees", num("Legal fees")},
+                    {"accounting_fees", num("Accounting fees")},
+                    {"rebranding_cost", num("Rebranding cost")},
+                    {"facilities_cost", num("Facilities cost")},
+                    {"other_costs", num("Other costs")},
+                    {"contingency_pct", num("Contingency as a fraction (optional)")},
+                    {"combined_revenue", num("Combined revenue (optional, for ratios)")},
+                    {"combined_headcount", num("Combined headcount (optional)")}},
+        {"deal_value"}));
 
     // ════════════════════════════════════════════════════════════════════
-    // DEAL STRUCTURE MODULE
+    // DEAL STRUCTURE
     // ════════════════════════════════════════════════════════════════════
+    tools.push_back(ma_tool(
+        "ma_payment_structure", "payment_structure", &MaSvc::analyze_payment_structure,
+        "Cash / stock consideration mix: cash funding vs cash on hand and new debt, shares issued and dilution.",
+        QJsonObject{{"purchase_price", num("Purchase price")},
+                    {"cash_pct", num("Cash share (decimal 0-1)")},
+                    {"stock_pct", num("Stock share (decimal 0-1), alternative to cash_pct")},
+                    {"cash_on_hand", num("Acquirer cash available")},
+                    {"new_debt", num("New debt available")},
+                    {"acquirer_share_price", num("Acquirer share price (required if any stock)")},
+                    {"acquirer_shares_outstanding", num("Acquirer shares (required if any stock)")},
+                    {"target_shares_outstanding", num("Target shares (optional)")}},
+        {"purchase_price"}));
 
-    // ── ma_payment_structure ────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_payment_structure";
-        t.description = "Analyze deal payment structure (cash vs stock mix, tax implications).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"deal_value", QJsonObject{{"type", "number"}, {"description", "Total deal value"}}},
-            {"cash_pct", QJsonObject{{"type", "number"}, {"description", "Cash % (0-1)"}}},
-            {"stock_pct", QJsonObject{{"type", "number"}, {"description", "Stock % (0-1)"}}},
-            {"acquirer_shares_outstanding",
-             QJsonObject{{"type", "number"}, {"description", "Acquirer shares outstanding"}}},
-            {"acquirer_share_price", QJsonObject{{"type", "number"}, {"description", "Acquirer share price"}}},
-            {"target_shares_outstanding",
-             QJsonObject{{"type", "number"}, {"description", "Target shares outstanding"}}}};
-        t.input_schema.required = {"deal_value", "cash_pct"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("payment_structure", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().analyze_payment_structure(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_earnout", "earnout", &MaSvc::value_earnout,
+        "Expected PV of an earnout: probability x payment discounted over the years to payment (or per tranche).",
+        QJsonObject{{"earnout_amount", num("Payment if the target is met")},
+                    {"probability", num("Probability the target is met (decimal)")},
+                    {"years", num("Years until payment")},
+                    {"discount_rate", num("Discount rate (decimal)")},
+                    {"threshold", num("Performance threshold (informational)")},
+                    {"base_price", num("Upfront price (optional)")},
+                    {"tranches", obj_array("Tranches: {payment, probability, years}")}},
+        {"discount_rate"}));
 
-    // ── ma_earnout ──────────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_earnout";
-        t.description = "Value an earnout provision using probability-weighted scenarios.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"max_earnout", QJsonObject{{"type", "number"}, {"description", "Maximum earnout payment"}}},
-            {"target_metric",
-             QJsonObject{{"type", "number"}, {"description", "Target metric threshold (e.g. revenue)"}}},
-            {"probability_achieve",
-             QJsonObject{{"type", "number"}, {"description", "Probability of achieving target (0-1)"}}},
-            {"discount_rate", QJsonObject{{"type", "number"}, {"description", "Discount rate (decimal)"}}},
-            {"years_to_payment", QJsonObject{{"type", "integer"}, {"description", "Years until earnout payment"}}}};
-        t.input_schema.required = {"max_earnout", "probability_achieve", "discount_rate", "years_to_payment"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("earnout",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().value_earnout(args); });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_exchange_ratio", "exchange_ratio", &MaSvc::calculate_exchange_ratio,
+        "Exchange ratio = offer price per target share / acquirer share price (offer = target price x (1+premium) "
+        "or given), shares issued and pro forma ownership.",
+        QJsonObject{{"acquirer_price", num("Acquirer share price")},
+                    {"target_price", num("Target unaffected share price")},
+                    {"premium", num("Offer premium (decimal)")},
+                    {"offer_price", num("Offer price per target share, instead of target_price + premium")},
+                    {"target_shares_outstanding", num("Target shares (optional)")},
+                    {"acquirer_shares_outstanding", num("Acquirer shares (optional)")}},
+        {"acquirer_price"}));
 
-    // ── ma_exchange_ratio ───────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_exchange_ratio";
-        t.description = "Calculate stock-for-stock exchange ratio and resulting ownership split.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"offer_price_per_target_share",
-             QJsonObject{{"type", "number"}, {"description", "Offer price per target share"}}},
-            {"acquirer_share_price", QJsonObject{{"type", "number"}, {"description", "Acquirer share price"}}},
-            {"target_shares_outstanding",
-             QJsonObject{{"type", "number"}, {"description", "Target shares outstanding"}}},
-            {"acquirer_shares_outstanding",
-             QJsonObject{{"type", "number"}, {"description", "Acquirer shares outstanding"}}}};
-        t.input_schema.required = {"offer_price_per_target_share", "acquirer_share_price", "target_shares_outstanding"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("exchange_ratio", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_exchange_ratio(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_collar_mechanism", "collar", &MaSvc::analyze_collar_mechanism,
+        "Collar on a stock deal: fixed-ratio (value floats inside the band, ratio adjusts outside) or fixed-value "
+        "(ratio floats inside, fixed outside), across acquirer price scenarios.",
+        QJsonObject{{"base_ratio", num("Base exchange ratio")},
+                    {"floor_price", num("Lower acquirer price bound")},
+                    {"cap_price", num("Upper acquirer price bound")},
+                    {"acquirer_price", num("Reference acquirer price the collar is struck at")},
+                    {"collar_type", enum_str("Collar type", {"fixed_ratio", "fixed_value"})},
+                    {"target_shares", num("Target shares (optional)")},
+                    {"price_scenarios", num_array("Acquirer prices to evaluate (optional)")}},
+        {"base_ratio", "floor_price", "cap_price", "acquirer_price"}));
 
-    // ── ma_collar_mechanism ─────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_collar_mechanism";
-        t.description = "Analyze a collar mechanism protecting buyer/seller from price swings.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"fixed_exchange_ratio", QJsonObject{{"type", "number"}, {"description", "Base exchange ratio"}}},
-            {"collar_floor", QJsonObject{{"type", "number"}, {"description", "Floor acquirer share price"}}},
-            {"collar_ceiling", QJsonObject{{"type", "number"}, {"description", "Ceiling acquirer share price"}}},
-            {"acquirer_share_price", QJsonObject{{"type", "number"}, {"description", "Current acquirer share price"}}},
-            {"target_shares_outstanding",
-             QJsonObject{{"type", "number"}, {"description", "Target shares outstanding"}}}};
-        t.input_schema.required = {"fixed_exchange_ratio", "collar_floor", "collar_ceiling", "acquirer_share_price"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("collar_mechanism", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().analyze_collar_mechanism(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── ma_cvr ──────────────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_cvr";
-        t.description = "Value a Contingent Value Right (CVR) tied to milestone achievement.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"cvr_payment", QJsonObject{{"type", "number"}, {"description", "CVR payment if milestone achieved"}}},
-            {"probability", QJsonObject{{"type", "number"}, {"description", "Probability of milestone (0-1)"}}},
-            {"time_to_milestone", QJsonObject{{"type", "number"}, {"description", "Years to milestone"}}},
-            {"discount_rate", QJsonObject{{"type", "number"}, {"description", "Discount rate (decimal)"}}},
-            {"shares_outstanding",
-             QJsonObject{{"type", "number"}, {"description", "Shares outstanding for per-share value"}}}};
-        t.input_schema.required = {"cvr_payment", "probability", "time_to_milestone", "discount_rate"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("cvr", [&]() { fincept::services::ma::MAAnalyticsService::instance().value_cvr(args); });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_cvr", "cvr", &MaSvc::value_cvr,
+        "Contingent value right: probability x payment discounted to today (optional appeal leg).",
+        QJsonObject{{"payment", num("Total payment if triggered")},
+                    {"probability", num("Trigger probability (decimal)")},
+                    {"years", num("Years to the trigger")},
+                    {"discount_rate", num("Discount rate (decimal)")},
+                    {"type", str("Label: milestone / revenue / regulatory")},
+                    {"shares_outstanding", num("CVRs outstanding (optional, for per-CVR value)")},
+                    {"appeal_probability", num("Probability of a later payment after appeal (optional)")},
+                    {"appeal_delay_years", num("Extra years for the appeal leg (optional)")}},
+        {"payment", "probability", "years", "discount_rate"}));
 
     // ════════════════════════════════════════════════════════════════════
-    // DEAL DATABASE MODULE
+    // DEAL DATABASE
     // ════════════════════════════════════════════════════════════════════
 
     // ── ma_get_deals ────────────────────────────────────────────────────
@@ -588,9 +543,9 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.name = "ma_get_deals";
         t.description = "Get all deals from the M&A deal database.";
         t.category = "ma-analytics";
-        t.handler = [](const QJsonObject&) -> ToolResult {
-            return run_ma_sync("get_all_deals",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().get_all_deals(); });
+        t.default_timeout_ms = kMaTimeoutMs;
+        t.async_handler = [](const QJsonObject&, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
+            ma_dispatch("all_deals", promise, std::move(ctx), []() { MaSvc::instance().get_all_deals(); });
         };
         tools.push_back(std::move(t));
     }
@@ -601,15 +556,17 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.name = "ma_search_deals";
         t.description = "Search the deal database by company name, industry, or deal type.";
         t.category = "ma-analytics";
-        t.input_schema.properties =
-            QJsonObject{{"query", QJsonObject{{"type", "string"}, {"description", "Search query"}}}};
+        t.input_schema.properties = QJsonObject{{"query", str("Search query")}};
         t.input_schema.required = {"query"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            QString query = args["query"].toString().trimmed();
-            if (query.isEmpty())
-                return ToolResult::fail("Missing 'query'");
-            return run_ma_sync("search_deals",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().search_deals(query); });
+        t.default_timeout_ms = kMaTimeoutMs;
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
+            const QString query = args["query"].toString().trimmed();
+            if (query.isEmpty()) {
+                promise->addResult(ToolResult::fail("Missing 'query'"));
+                promise->finish();
+                return;
+            }
+            ma_dispatch("search_deals", promise, std::move(ctx), [query]() { MaSvc::instance().search_deals(query); });
         };
         tools.push_back(std::move(t));
     }
@@ -618,20 +575,23 @@ std::vector<ToolDef> get_ma_analytics_tools() {
     {
         ToolDef t;
         t.name = "ma_create_deal";
-        t.description = "Add a new deal record to the M&A deal database.";
+        t.description = "Add a new deal record to the M&A deal database (any other ma_deals column, e.g. "
+                        "payment_method, premium_1day, enterprise_value, may also be passed).";
         t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"acquirer", QJsonObject{{"type", "string"}, {"description", "Acquirer company name"}}},
-            {"target", QJsonObject{{"type", "string"}, {"description", "Target company name"}}},
-            {"deal_value", QJsonObject{{"type", "number"}, {"description", "Deal value in millions"}}},
-            {"deal_type", QJsonObject{{"type", "string"}, {"description", "Acquisition, Merger, LBO, etc."}}},
-            {"industry", QJsonObject{{"type", "string"}, {"description", "Industry sector"}}},
-            {"announced_date", QJsonObject{{"type", "string"}, {"description", "Announcement date YYYY-MM-DD"}}},
-            {"status", QJsonObject{{"type", "string"}, {"description", "Announced, Pending, Completed, Failed"}}}};
-        t.input_schema.required = {"acquirer", "target", "deal_value"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("create_deal",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().create_deal(args); });
+        t.input_schema.properties =
+            QJsonObject{{"acquirer", str("Acquirer company name")},
+                        {"target", str("Target company name")},
+                        {"deal_value", num("Deal value in USD (absolute, not millions)")},
+                        {"deal_type", str("Acquisition, Merger, LBO, etc.")},
+                        {"industry", str("Industry sector")},
+                        {"announced_date", str("Announcement date YYYY-MM-DD")},
+                        {"status", str("Announced, Pending, Completed, Failed")}};
+        t.input_schema.required = {"acquirer", "target", "announced_date", "deal_type", "status"};
+        t.default_timeout_ms = kMaTimeoutMs;
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
+            QJsonObject params = args;
+            params.remove("_meta");
+            ma_dispatch("create_deal", promise, std::move(ctx), [params]() { MaSvc::instance().create_deal(params); });
         };
         tools.push_back(std::move(t));
     }
@@ -643,444 +603,269 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.description = "Update an existing deal record in the M&A database.";
         t.category = "ma-analytics";
         t.input_schema.properties =
-            QJsonObject{{"deal_id", QJsonObject{{"type", "string"}, {"description", "Deal ID to update"}}},
-                        {"updates", QJsonObject{{"type", "object"},
-                                                {"description", "Fields to update (status, deal_value, etc.)"}}}};
+            QJsonObject{{"deal_id", str("Deal ID to update")},
+                        {"updates", object("Fields to update: status, deal_value (USD), or any ma_deals column")}};
         t.input_schema.required = {"deal_id", "updates"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            QString deal_id = args["deal_id"].toString().trimmed();
-            if (deal_id.isEmpty())
-                return ToolResult::fail("Missing 'deal_id'");
-            QJsonObject updates = args["updates"].toObject();
-            return run_ma_sync("update_deal", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().update_deal(deal_id, updates);
-            });
+        t.default_timeout_ms = kMaTimeoutMs;
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
+            const QString deal_id = args["deal_id"].toString().trimmed();
+            if (deal_id.isEmpty()) {
+                promise->addResult(ToolResult::fail("Missing 'deal_id'"));
+                promise->finish();
+                return;
+            }
+            const QJsonObject updates = args["updates"].toObject();
+            ma_dispatch("update_deal", promise, std::move(ctx),
+                        [deal_id, updates]() { MaSvc::instance().update_deal(deal_id, updates); });
         };
         tools.push_back(std::move(t));
     }
 
     // ════════════════════════════════════════════════════════════════════
-    // STARTUP VALUATION MODULE
+    // STARTUP VALUATION
     // ════════════════════════════════════════════════════════════════════
+    tools.push_back(ma_tool(
+        "ma_startup_berkus", "berkus", &MaSvc::calculate_berkus,
+        "Berkus method: sum over 5 factors (sound idea, prototype, quality team, strategic relationships, product "
+        "rollout) of score (0-1) x the maximum value per factor.",
+        QJsonObject{{"scores", num_array("5 scores in [0,1], in the order above")},
+                    {"max_value_per_factor", num("Maximum value credited per factor ($)")}},
+        {"scores", "max_value_per_factor"}));
 
-    // ── ma_startup_berkus ───────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_startup_berkus";
-        t.description = "Value a pre-revenue startup using the Berkus method (5 qualitative factors, max $2.5M each).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"sound_idea", QJsonObject{{"type", "number"}, {"description", "Score 0-2.5M: sound idea / basic value"}}},
-            {"prototype", QJsonObject{{"type", "number"}, {"description", "Score 0-2.5M: prototype / technology"}}},
-            {"quality_team", QJsonObject{{"type", "number"}, {"description", "Score 0-2.5M: quality management team"}}},
-            {"strategic_relationships",
-             QJsonObject{{"type", "number"}, {"description", "Score 0-2.5M: strategic relationships"}}},
-            {"product_rollout",
-             QJsonObject{{"type", "number"}, {"description", "Score 0-2.5M: product rollout / sales"}}}};
-        t.input_schema.required = {"sound_idea", "prototype", "quality_team"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("berkus",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().calculate_berkus(args); });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_startup_vc", "vc_method", &MaSvc::calculate_vc_method,
+        "VC method: post-money = exit metric x exit multiple / (1+target return)^years (x retention); pre-money = "
+        "post - investment; required ownership = investment / post.",
+        QJsonObject{{"exit_metric", num("Exit-year revenue or earnings")},
+                    {"exit_multiple", num("Exit multiple")},
+                    {"years", num("Years to exit")},
+                    {"investment", num("Investment amount")},
+                    {"target_return", num("Target annual return (decimal)")},
+                    {"retention_ratio", num("Ownership retained after future dilution (decimal, optional)")}},
+        {"exit_metric", "exit_multiple", "years", "investment", "target_return"}));
 
-    // ── ma_startup_vc ───────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_startup_vc";
-        t.description = "Value a startup using the VC method (terminal value discounted back to today).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"projected_revenue", QJsonObject{{"type", "number"}, {"description", "Projected revenue at exit"}}},
-            {"exit_multiple", QJsonObject{{"type", "number"}, {"description", "Exit revenue or earnings multiple"}}},
-            {"target_ror",
-             QJsonObject{{"type", "number"}, {"description", "Target rate of return (decimal, e.g. 0.40)"}}},
-            {"years_to_exit", QJsonObject{{"type", "integer"}, {"description", "Years until exit"}}},
-            {"investment_needed", QJsonObject{{"type", "number"}, {"description", "Investment amount needed"}}}};
-        t.input_schema.required = {"projected_revenue", "exit_multiple", "target_ror", "years_to_exit"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("vc_method", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_vc_method(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_startup_scorecard", "scorecard", &MaSvc::calculate_scorecard,
+        "Scorecard (Payne) method: benchmark pre-money x sum(weight x factor ratio), 7 factors (team, market size, "
+        "product, competition, marketing/sales, need for funding, other); ratio 1.0 = average.",
+        QJsonObject{{"benchmark_pre_money", num("Average pre-money of comparable deals ($)")},
+                    {"assessments", num_array("7 ratios (0-3), in the order above")},
+                    {"weights", num_array("7 weights summing to 1 (optional; default Payne 30/25/15/10/10/5/5)")},
+                    {"stage", str("Label (optional)")}},
+        {"benchmark_pre_money", "assessments"}));
 
-    // ── ma_startup_scorecard ────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_startup_scorecard";
-        t.description = "Value a startup using the Scorecard method (weighted comparison to median pre-money).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"median_pre_money",
-             QJsonObject{{"type", "number"}, {"description", "Median pre-money for comparable startups"}}},
-            {"team_score", QJsonObject{{"type", "number"}, {"description", "Team strength multiplier (0.5-1.5)"}}},
-            {"opportunity_score", QJsonObject{{"type", "number"}, {"description", "Market opportunity multiplier"}}},
-            {"product_score", QJsonObject{{"type", "number"}, {"description", "Product/technology multiplier"}}},
-            {"competition_score",
-             QJsonObject{{"type", "number"}, {"description", "Competitive environment multiplier"}}},
-            {"marketing_score",
-             QJsonObject{{"type", "number"}, {"description", "Marketing/sales channels multiplier"}}}};
-        t.input_schema.required = {"median_pre_money", "team_score", "opportunity_score"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("scorecard", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_scorecard(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_startup_first_chicago", "first_chicago", &MaSvc::calculate_first_chicago,
+        "First Chicago: sum over scenarios of probability x exit value discounted at the discount rate; "
+        "probabilities must sum to 1.",
+        QJsonObject{{"discount_rate", num("Discount rate (decimal)")},
+                    {"years", num("Years to exit (used when a scenario has no exit_year)")},
+                    {"scenarios", obj_array("{name, probability, exit_value, exit_year?}")}},
+        {"discount_rate", "scenarios"}));
 
-    // ── ma_startup_first_chicago ────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_startup_first_chicago";
-        t.description = "Value a startup using the First Chicago method (3 probability-weighted scenarios).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"success_value", QJsonObject{{"type", "number"}, {"description", "Value in success scenario"}}},
-            {"base_value", QJsonObject{{"type", "number"}, {"description", "Value in base scenario"}}},
-            {"failure_value", QJsonObject{{"type", "number"}, {"description", "Value in failure scenario"}}},
-            {"success_prob", QJsonObject{{"type", "number"}, {"description", "Probability of success (0-1)"}}},
-            {"base_prob", QJsonObject{{"type", "number"}, {"description", "Probability of base (0-1)"}}},
-            {"discount_rate", QJsonObject{{"type", "number"}, {"description", "Discount rate (decimal)"}}}};
-        t.input_schema.required = {"success_value", "base_value", "failure_value", "success_prob", "base_prob"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("first_chicago", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_first_chicago(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_startup_risk_factor", "risk_factor", &MaSvc::calculate_risk_factor,
+        "Risk factor summation: base pre-money + sum(score x adjustment per step) over 12 risks scored -2..+2 "
+        "(management, stage, legislation, manufacturing, sales, funding, competition, technology, litigation, "
+        "international, reputation, exit).",
+        QJsonObject{{"base_valuation", num("Base pre-money ($)")},
+                    {"adjustment_per_step", num("$ adjustment per +/-1 step")},
+                    {"assessments", num_array("12 integer scores -2..+2 in the order above")}},
+        {"base_valuation", "adjustment_per_step", "assessments"}));
 
-    // ── ma_startup_risk_factor ──────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_startup_risk_factor";
-        t.description = "Value a startup using the Risk Factor Summation method (12 risk adjustments).";
-        t.category = "ma-analytics";
-        // clang-format off
-        t.input_schema.properties = QJsonObject{
-            {"base_value", QJsonObject{{"type", "number"}, {"description", "Base median comparable valuation"}}},
-            {"risk_scores", QJsonObject{{"type", "object"}, {"description", "Risk scores -2 to +2 for: management, stage, legislation, manufacturing, sales, funding, competition, technology, litigation, international, reputation, exit"}}}};
-        // clang-format on
-        t.input_schema.required = {"base_value", "risk_scores"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("risk_factor", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_risk_factor(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── ma_startup_comprehensive ────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_startup_comprehensive";
-        t.description = "Run all startup valuation methods and return a weighted composite value.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"params", QJsonObject{{"type", "object"}, {"description", "Combined params for all startup methods"}}}};
-        t.input_schema.required = {"params"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("comprehensive_startup", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_comprehensive_startup(
-                    args["params"].toObject());
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_startup_comprehensive", "startup_comprehensive", &MaSvc::calculate_comprehensive_startup,
+        "Runs the startup methods whose payloads are given and reports the range, mean and median (weighted only if "
+        "weights are given).",
+        QJsonObject{{"berkus", object("ma_startup_berkus inputs")},
+                    {"scorecard", object("ma_startup_scorecard inputs")},
+                    {"vc", object("ma_startup_vc inputs")},
+                    {"first_chicago", object("ma_startup_first_chicago inputs")},
+                    {"risk_factor", object("ma_startup_risk_factor inputs")},
+                    {"weights", object("{method: weight} (optional)")}},
+        {}));
 
     // ════════════════════════════════════════════════════════════════════
-    // FAIRNESS OPINION MODULE
+    // FAIRNESS OPINION
     // ════════════════════════════════════════════════════════════════════
+    tools.push_back(ma_tool(
+        "ma_fairness_opinion", "fairness_opinion", &MaSvc::generate_fairness_opinion,
+        "Fairness analysis: offer per share vs the valuation range of each method (low/high or point), reference "
+        "range and midpoint, and whether the offer supports fairness for the target's holders.",
+        QJsonObject{{"offer_price", num("Offer price per share")},
+                    {"methods", obj_array("{method, low, high} or {method, valuation}; optional weight")},
+                    {"week52_low", num("52-week low (optional)")},
+                    {"week52_high", num("52-week high (optional)")}},
+        {"offer_price", "methods"}));
 
-    // ── ma_fairness_opinion ─────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_fairness_opinion";
-        t.description = "Generate a fairness opinion — concludes whether the deal price is fair to shareholders.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"offer_price", QJsonObject{{"type", "number"}, {"description", "Offer price per share"}}},
-            {"dcf_value", QJsonObject{{"type", "number"}, {"description", "DCF per-share value"}}},
-            {"comps_value", QJsonObject{{"type", "number"}, {"description", "Trading comps per-share value"}}},
-            {"precedent_value",
-             QJsonObject{{"type", "number"}, {"description", "Precedent transactions per-share value"}}},
-            {"52w_high", QJsonObject{{"type", "number"}, {"description", "52-week high price"}}},
-            {"52w_low", QJsonObject{{"type", "number"}, {"description", "52-week low price"}}}};
-        t.input_schema.required = {"offer_price", "dcf_value", "comps_value"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("fairness_opinion", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().generate_fairness_opinion(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_premium_analysis", "premium_analysis", &MaSvc::analyze_premium,
+        "Offer premium vs UNAFFECTED reference prices: premium = offer / reference - 1.",
+        QJsonObject{{"offer_price", num("Offer price per share")},
+                    {"price_1d", num("Unaffected price 1 day before announcement")},
+                    {"price_1w", num("1 week prior (optional)")},
+                    {"price_4w", num("4 weeks prior (optional)")},
+                    {"price_1m", num("1 month prior (optional)")},
+                    {"price_3m", num("3 months prior (optional)")},
+                    {"price_52w", num("52-week high (optional)")},
+                    {"price_52w_low", num("52-week low (optional)")},
+                    {"shares_outstanding", num("Diluted shares (optional)")}},
+        {"offer_price", "price_1d"}));
 
-    // ── ma_premium_analysis ─────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_premium_analysis";
-        t.description = "Analyze acquisition premium over multiple look-back periods (1d, 1w, 1m, 3m).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"offer_price", QJsonObject{{"type", "number"}, {"description", "Offer price per share"}}},
-            {"price_1d", QJsonObject{{"type", "number"}, {"description", "Stock price 1 day before announcement"}}},
-            {"price_1w", QJsonObject{{"type", "number"}, {"description", "Stock price 1 week before"}}},
-            {"price_1m", QJsonObject{{"type", "number"}, {"description", "Stock price 1 month before"}}},
-            {"price_3m", QJsonObject{{"type", "number"}, {"description", "Stock price 3 months before"}}}};
-        t.input_schema.required = {"offer_price", "price_1d"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("premium_analysis",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().analyze_premium(args); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── ma_process_quality ──────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_process_quality";
-        t.description = "Assess the quality of the M&A sale process (board process, market check, advisors).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"num_bidders_contacted", QJsonObject{{"type", "integer"}, {"description", "Number of parties contacted"}}},
-            {"num_bidders_participated",
-             QJsonObject{{"type", "integer"}, {"description", "Number that submitted bids"}}},
-            {"go_shop_period", QJsonObject{{"type", "integer"}, {"description", "Go-shop period in days (0 if none)"}}},
-            {"market_check_conducted",
-             QJsonObject{{"type", "boolean"}, {"description", "Was a market check conducted?"}}},
-            {"independent_committee",
-             QJsonObject{{"type", "boolean"}, {"description", "Was an independent committee formed?"}}},
-            {"financial_advisor_engaged",
-             QJsonObject{{"type", "boolean"}, {"description", "Was a financial advisor engaged?"}}}};
-        t.input_schema.required = {"num_bidders_contacted", "market_check_conducted"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("process_quality", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().assess_process_quality(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_process_quality", "process_quality", &MaSvc::assess_process_quality,
+        "Sale process quality: either 8 scores (1-5: board independence, special committee, independent advisor, "
+        "market check, negotiation, due diligence, disclosure, timing) or a factual checklist.",
+        QJsonObject{{"factors", num_array("8 integer scores 1-5 in the order above")},
+                    {"num_bidders_contacted", num("Checklist: bidders contacted")},
+                    {"num_bidders_participated", num("Checklist: bidders participating (optional)")},
+                    {"market_check_conducted", boolean("Checklist: market check conducted")},
+                    {"go_shop_period", num("Checklist: go-shop days (optional)")},
+                    {"independent_committee", boolean("Checklist: independent committee (optional)")},
+                    {"financial_advisor_engaged", boolean("Checklist: financial advisor (optional)")}},
+        {}));
 
     // ════════════════════════════════════════════════════════════════════
-    // INDUSTRY METRICS MODULE
+    // INDUSTRY METRICS
     // ════════════════════════════════════════════════════════════════════
+    tools.push_back(ma_tool(
+        "ma_tech_metrics", "tech_metrics", &MaSvc::calculate_tech_metrics,
+        "Technology KPIs computed from the inputs (no benchmark tables). saas: arr, growth, gross_margin, "
+        "profit_margin (+ optional nrr, sm_expense, net_new_arr, new_customers, arpa, annual_churn); marketplace: "
+        "gmv, revenue; semiconductor: revenue, gross_margin, rd_spend (+ backlog, ebitda).",
+        QJsonObject{{"sector", enum_str("Sub-sector", {"saas", "marketplace", "semiconductor"})},
+                    {"arr", num("ARR")},
+                    {"revenue", num("Revenue")},
+                    {"gmv", num("Gross merchandise value")},
+                    {"growth", num("Growth (decimal)")},
+                    {"gross_margin", num("Gross margin (decimal)")},
+                    {"profit_margin", num("FCF or EBITDA margin (decimal)")},
+                    {"nrr", num("Net revenue retention (decimal)")},
+                    {"sm_expense", num("Sales & marketing expense")},
+                    {"net_new_arr", num("Net new ARR")},
+                    {"new_customers", num("New customers")},
+                    {"arpa", num("ARR per account")},
+                    {"annual_churn", num("Annual logo churn (decimal)")},
+                    {"rd_spend", num("R&D spend")},
+                    {"backlog", num("Backlog")},
+                    {"ebitda", num("EBITDA")},
+                    {"enterprise_value", num("Enterprise value (optional, for multiples)")}},
+        {"sector"}));
 
-    // ── ma_tech_metrics ─────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_tech_metrics";
-        t.description = "Calculate technology sector M&A metrics (SaaS, Marketplace, Semiconductor).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"sub_sector", QJsonObject{{"type", "string"}, {"description", "SAAS, MARKETPLACE, SEMICONDUCTOR"}}},
-            {"arr", QJsonObject{{"type", "number"}, {"description", "Annual Recurring Revenue (SaaS)"}}},
-            {"gmv", QJsonObject{{"type", "number"}, {"description", "Gross Merchandise Value (Marketplace)"}}},
-            {"revenue", QJsonObject{{"type", "number"}, {"description", "Total revenue"}}},
-            {"growth_rate", QJsonObject{{"type", "number"}, {"description", "YoY growth rate (decimal)"}}},
-            {"gross_margin", QJsonObject{{"type", "number"}, {"description", "Gross margin (decimal)"}}}};
-        t.input_schema.required = {"sub_sector", "revenue"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("tech_metrics", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_tech_metrics(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_healthcare_metrics", "healthcare_metrics", &MaSvc::calculate_healthcare_metrics,
+        "Healthcare KPIs computed from the inputs (no benchmark tables).",
+        QJsonObject{{"sector", enum_str("Sub-sector", {"pharma", "biotech", "devices", "services"})},
+                    {"revenue", num("Revenue")},
+                    {"ebitda_margin", num("EBITDA margin (decimal)")},
+                    {"ebitda", num("EBITDA, instead of ebitda_margin")},
+                    {"rd_spend", num("R&D spend")},
+                    {"pipeline_npv", num("User's risk-adjusted pipeline NPV")},
+                    {"phase3_candidates", integer("Phase 3 candidates")},
+                    {"patent_expiry_revenue", num("Share of revenue losing exclusivity (decimal)")},
+                    {"enterprise_value", num("Enterprise value (optional)")}},
+        {"sector", "revenue"}));
 
-    // ── ma_healthcare_metrics ───────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_healthcare_metrics";
-        t.description = "Calculate healthcare sector M&A metrics (Pharma, Biotech, Medical Devices).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"sub_sector", QJsonObject{{"type", "string"}, {"description", "PHARMA, BIOTECH, DEVICES"}}},
-            {"revenue", QJsonObject{{"type", "number"}, {"description", "Revenue"}}},
-            {"pipeline_value", QJsonObject{{"type", "number"}, {"description", "Estimated pipeline NPV (Biotech)"}}},
-            {"rd_spend", QJsonObject{{"type", "number"}, {"description", "R&D spending"}}},
-            {"ebitda", QJsonObject{{"type", "number"}, {"description", "EBITDA"}}}};
-        t.input_schema.required = {"sub_sector", "revenue"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("healthcare_metrics", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_healthcare_metrics(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── ma_financial_metrics ────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_financial_metrics";
-        t.description = "Calculate financial services sector M&A metrics (Banking, Insurance, Asset Management).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"sub_sector", QJsonObject{{"type", "string"}, {"description", "BANKING, INSURANCE, ASSET_MANAGEMENT"}}},
-            {"revenue", QJsonObject{{"type", "number"}, {"description", "Revenue"}}},
-            {"aum", QJsonObject{{"type", "number"}, {"description", "Assets under management (Asset Mgmt)"}}},
-            {"book_value", QJsonObject{{"type", "number"}, {"description", "Book value (Banking)"}}},
-            {"net_income", QJsonObject{{"type", "number"}, {"description", "Net income"}}}};
-        t.input_schema.required = {"sub_sector", "revenue"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("financial_services_metrics", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().calculate_financial_services_metrics(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ════════════════════════════════════════════════════════════════════
-    // ADVANCED ANALYTICS MODULE
-    // ════════════════════════════════════════════════════════════════════
-
-    // ── ma_monte_carlo ──────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_monte_carlo";
-        t.description = "Run a Monte Carlo simulation on deal value with configurable distributions (1K-100K runs).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"base_value", QJsonObject{{"type", "number"}, {"description", "Base case deal/equity value"}}},
-            {"std_dev_pct", QJsonObject{{"type", "number"}, {"description", "Standard deviation as % of base value"}}},
-            {"num_simulations",
-             QJsonObject{{"type", "integer"}, {"description", "Number of simulations (default: 10000)"}}},
-            {"revenue_growth_mean", QJsonObject{{"type", "number"}, {"description", "Mean revenue growth assumption"}}},
-            {"revenue_growth_std", QJsonObject{{"type", "number"}, {"description", "Std dev of revenue growth"}}},
-            {"wacc_mean", QJsonObject{{"type", "number"}, {"description", "Mean WACC"}}},
-            {"wacc_std", QJsonObject{{"type", "number"}, {"description", "Std dev of WACC"}}}};
-        t.input_schema.required = {"base_value", "std_dev_pct"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("monte_carlo",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().run_monte_carlo(args); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── ma_regression ───────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_regression";
-        t.description = "Run OLS or multiple regression analysis on deal/financial data.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"y_values", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", "Dependent variable values"}}},
-            {"x_values",
-             QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}},
-                         {"description", "Independent variable(s) — array of arrays for multiple regression"}}},
-            {"regression_type", QJsonObject{{"type", "string"}, {"description", "OLS or MULTIPLE (default: OLS)"}}},
-            {"variable_names",
-             QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}, {"description", "Names for independent variables (optional)"}}}};
-        t.input_schema.required = {"y_values", "x_values"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("regression",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().run_regression(args); });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_financial_metrics", "finserv_metrics", &MaSvc::calculate_financial_services_metrics,
+        "Financial-services KPIs computed from the inputs. banking: total_assets, deposits (+ equity, net_income, "
+        "gross_loans, nim, efficiency_ratio, cet1_ratio, npl_ratio, market_cap); insurance: net_premiums_earned, "
+        "losses_incurred, underwriting_expenses; asset_management: aum, revenue (+ net_flows, ebitda).",
+        QJsonObject{{"sector", enum_str("Sub-sector", {"banking", "insurance", "asset_management"})},
+                    {"total_assets", num("Total assets")},
+                    {"deposits", num("Deposits")},
+                    {"equity", num("Shareholders' equity")},
+                    {"tangible_equity", num("Tangible equity")},
+                    {"net_income", num("Net income")},
+                    {"roe", num("ROE (decimal), if net income / equity are not given")},
+                    {"gross_loans", num("Gross loans")},
+                    {"nim", num("Net interest margin (decimal)")},
+                    {"efficiency_ratio", num("Efficiency ratio (decimal)")},
+                    {"cet1_ratio", num("CET1 ratio (decimal)")},
+                    {"npl_ratio", num("NPL ratio (decimal)")},
+                    {"market_cap", num("Market cap")},
+                    {"net_premiums_earned", num("Net premiums earned")},
+                    {"losses_incurred", num("Losses incurred")},
+                    {"underwriting_expenses", num("Underwriting expenses")},
+                    {"aum", num("Assets under management")},
+                    {"revenue", num("Revenue")},
+                    {"net_flows", num("Net flows")},
+                    {"ebitda", num("EBITDA")},
+                    {"enterprise_value", num("Enterprise value")}},
+        {"sector"}));
 
     // ════════════════════════════════════════════════════════════════════
-    // DEAL COMPARISON MODULE
+    // ADVANCED ANALYTICS
     // ════════════════════════════════════════════════════════════════════
+    tools.push_back(ma_tool(
+        "ma_monte_carlo", "monte_carlo", &MaSvc::run_monte_carlo,
+        "Monte Carlo DCF SIMULATION: each path draws annual revenue growth and FCF margin from normal "
+        "distributions; Gordon terminal value. Returns the EV distribution (mean, percentiles) and the "
+        "zero-volatility EV.",
+        QJsonObject{{"base_revenue", num("Current revenue")},
+                    {"rev_growth_mean", num("Mean annual revenue growth (decimal)")},
+                    {"rev_growth_std", num("Std dev of annual growth (decimal)")},
+                    {"margin_mean", num("Mean FCF margin (FCF / revenue, decimal)")},
+                    {"margin_std", num("Std dev of FCF margin (decimal)")},
+                    {"discount_rate", num("Discount rate (decimal)")},
+                    {"terminal_growth", num("Terminal growth (decimal, below discount_rate)")},
+                    {"projection_years", integer("Projection years (1-30)")},
+                    {"simulations", integer("Paths (100-200000)")},
+                    {"seed", integer("Random seed (optional)")}},
+        {"base_revenue", "rev_growth_mean", "rev_growth_std", "margin_mean", "margin_std", "discount_rate",
+         "terminal_growth", "projection_years", "simulations"}));
 
-    // ── ma_compare_deals ────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_compare_deals";
-        t.description = "Side-by-side comparison of multiple M&A deals by key metrics.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"deals",
-             QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}},
-                         {"description",
-                          "Array of deal objects with fields: name, ev, ebitda, revenue, premium, payment_type"}}}};
-        t.input_schema.required = {"deals"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("compare_deals",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().compare_deals(args); });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool(
+        "ma_regression", "regression", &MaSvc::run_regression,
+        "OLS valuation regression on user-supplied comparables (EV ~ EBITDA, or EV ~ revenue + EBITDA + growth) with "
+        "an exact prediction interval for the subject; or raw y_values / x_values.",
+        QJsonObject{{"type", enum_str("Specification", {"ols", "multiple"})},
+                    {"comparables", obj_array("{name, ev, revenue, ebitda, growth (decimal)}; at least k+2")},
+                    {"subject", object("{revenue, ebitda, growth}")},
+                    {"features", QJsonObject{{"type", "array"},
+                                             {"items", QJsonObject{{"type", "string"}}},
+                                             {"description", "Override regressors (optional)"}}},
+                    {"confidence", num("Prediction-interval confidence (optional, default 0.95)")},
+                    {"y_values", num_array("Raw mode: dependent values")},
+                    {"x_values", QJsonObject{{"type", "array"},
+                                             {"description", "Raw mode: regressor values (numbers or arrays)"}}},
+                    {"variable_names", QJsonObject{{"type", "array"},
+                                                   {"items", QJsonObject{{"type", "string"}}},
+                                                   {"description", "Raw mode: regressor names"}}}},
+        {}));
 
-    // ── ma_rank_deals ───────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_rank_deals";
-        t.description = "Rank deals by a specified metric (deal_value, premium, ev_ebitda, etc.).";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"deals", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "object"}}}, {"description", "Array of deal objects"}}},
-            {"rank_by", QJsonObject{{"type", "string"},
-                                    {"description", "Metric to rank by: deal_value, premium, ev_ebitda, ev_revenue"}}},
-            {"ascending", QJsonObject{{"type", "boolean"}, {"description", "Sort ascending (default: false)"}}}};
-        t.input_schema.required = {"deals", "rank_by"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("rank_deals",
-                               [&]() { fincept::services::ma::MAAnalyticsService::instance().rank_deals(args); });
-        };
-        tools.push_back(std::move(t));
-    }
+    // ════════════════════════════════════════════════════════════════════
+    // DEAL COMPARISON
+    // ════════════════════════════════════════════════════════════════════
+    tools.push_back(ma_tool("ma_compare_deals", "compare_deals", &MaSvc::compare_deals,
+                            "Compare deals: median / mean deal value, premium and multiples (missing fields skipped).",
+                            deals_prop(), {"deals"}));
 
-    // ── ma_benchmark_premium ────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_benchmark_premium";
-        t.description = "Benchmark a deal premium against historical M&A premiums by industry and deal size.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"premium_pct", QJsonObject{{"type", "number"}, {"description", "Deal premium percentage"}}},
-            {"industry", QJsonObject{{"type", "string"}, {"description", "Industry sector"}}},
-            {"deal_size_bucket",
-             QJsonObject{{"type", "string"}, {"description", "SMALL (<$500M), MID ($500M-$5B), LARGE (>$5B)"}}}};
-        t.input_schema.required = {"premium_pct"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("benchmark_premium", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().benchmark_deal_premium(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool("ma_rank_deals", "rank_deals", &MaSvc::rank_deals,
+                            "Rank deals by a metric; deals missing it are listed separately; ties share a rank.",
+                            merge({deals_prop(),
+                                   QJsonObject{{"criteria", enum_str("Metric", {"premium", "deal_value", "ev_revenue",
+                                                                                "ev_ebitda", "synergies"})},
+                                               {"ascending", boolean("Sort ascending (optional)")}}}),
+                            {"deals", "criteria"}));
 
-    // ── ma_payment_structures_analysis ─────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_payment_structures_analysis";
-        t.description = "Analyze payment structure trends across a set of comparable deals.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"deals", QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "object"}}},
-                                  {"description", "Array of deals with payment_type, cash_pct, stock_pct fields"}}}};
-        t.input_schema.required = {"deals"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("payment_structures_analysis", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().analyze_payment_structures(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool("ma_benchmark_premium", "benchmark_premium", &MaSvc::benchmark_deal_premium,
+                            "Benchmark a deal premium against comparable deals: percentile rank and quartiles.",
+                            QJsonObject{{"target_premium_pct", num("Deal premium in PERCENT (32.5 = 32.5%)")},
+                                        {"comparables", deals_prop().value("deals")},
+                                        {"industry", str("Filter comparables by industry (optional)")}},
+                            {"target_premium_pct", "comparables"}));
 
-    // ── ma_industry_deals ───────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "ma_industry_deals";
-        t.description = "Analyze M&A deal activity and trends by industry sector.";
-        t.category = "ma-analytics";
-        t.input_schema.properties = QJsonObject{
-            {"industry", QJsonObject{{"type", "string"}, {"description", "Industry to analyze"}}},
-            {"years", QJsonObject{{"type", "integer"}, {"description", "Years of history to analyze (default: 5)"}}}};
-        t.input_schema.required = {"industry"};
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            return run_ma_sync("industry_deals", [&]() {
-                fincept::services::ma::MAAnalyticsService::instance().analyze_industry_deals(args);
-            });
-        };
-        tools.push_back(std::move(t));
-    }
+    tools.push_back(ma_tool("ma_payment_structures_analysis", "payment_structures", &MaSvc::analyze_payment_structures,
+                            "Payment mix across deals: all-cash / all-stock / mixed counts and average cash/stock %.",
+                            deals_prop(), {"deals"}));
 
-    LOG_DEBUG(TAG, QString("Registered %1 MA Analytics tools").arg(tools.size()));
+    tools.push_back(ma_tool("ma_industry_deals", "industry_deals", &MaSvc::analyze_industry_deals,
+                            "Deal statistics by industry (optionally filtered to one industry).",
+                            merge({deals_prop(), QJsonObject{{"industry", str("Industry filter (optional)")}}}),
+                            {"deals"}));
+
+    LOG_INFO(TAG, QString("Registered %1 M&A analytics tools").arg(tools.size()));
     return tools;
 }
 

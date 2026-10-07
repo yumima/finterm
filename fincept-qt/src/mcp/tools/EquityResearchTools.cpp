@@ -28,10 +28,12 @@
 #include "services/equity/EquityResearchService.h"
 #include "services/query/QueryStore.h"
 
+#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
 
+#include <cmath>
 #include <memory>
 
 namespace fincept::mcp::tools {
@@ -49,7 +51,21 @@ static constexpr const char* kEquityResearchTag = "EquityResearchTools";
 // daemon's own timeout so the tool fails fast and the model can answer.
 static constexpr int kEquityResearchTimeoutMs = 20000;
 
+// yfinance's held_percent_* / short_percent_of_float are FRACTIONS (0.0123 =
+// 1.23%) despite their names. Publishing them under *_pct unconverted had a
+// model report "0.01% insider ownership". Convert at the tool boundary so the
+// field name and the unit agree; NaN (vendor gave nothing) stays NaN → null.
+double fraction_to_pct(double f) {
+    return std::isnan(f) ? f : f * 100.0;
+}
+
 QJsonObject quote_to_json(const services::equity::QuoteData& q) {
+    // The feed's `timestamp` is when finterm FETCHED the quote
+    // (datetime.now() in yfinance_data.py), not the exchange's last-trade
+    // time — labelled as such so a model never reports it as the market time.
+    // The daemon does not supply the market time, so none is claimed.
+    const QString fetched_iso =
+        q.timestamp > 0 ? QDateTime::fromSecsSinceEpoch(q.timestamp).toUTC().toString(Qt::ISODate) : QString();
     return QJsonObject{
         {"symbol", q.symbol},
         {"price", q.price},
@@ -61,7 +77,10 @@ QJsonObject quote_to_json(const services::equity::QuoteData& q) {
         {"prev_close", q.prev_close},
         {"volume", q.volume},
         {"exchange", q.exchange},
-        {"timestamp", q.timestamp},
+        {"fetched_at", q.timestamp > 0 ? QJsonValue(fetched_iso) : QJsonValue()},
+        {"fetched_at_unix", q.timestamp > 0 ? QJsonValue(q.timestamp) : QJsonValue()},
+        {"market_time", QJsonValue()},
+        {"market_time_note", QStringLiteral("not supplied by the feed; fetched_at is finterm's fetch time")},
     };
 }
 
@@ -103,10 +122,10 @@ QJsonObject info_to_json(const services::equity::StockInfo& i) {
         {"revenue_growth", i.revenue_growth},
         {"shares_outstanding", i.shares_outstanding},
         {"float_shares", i.float_shares},
-        {"held_insiders_pct", i.held_insiders_pct},
-        {"held_institutions_pct", i.held_institutions_pct},
+        {"held_insiders_pct", fraction_to_pct(i.held_insiders_pct)}, // percent (0-100)
+        {"held_institutions_pct", fraction_to_pct(i.held_institutions_pct)}, // percent (0-100)
         {"short_ratio", i.short_ratio},
-        {"short_pct_of_float", i.short_pct_of_float},
+        {"short_pct_of_float", fraction_to_pct(i.short_pct_of_float)}, // percent (0-100)
         {"week52_high", i.week52_high},
         {"week52_low", i.week52_low},
         {"avg_volume", i.avg_volume},
@@ -395,10 +414,11 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). We ignore
-                                          // the routing fields and surface only the message — the
-                                          // caller already knows the symbol they asked for.
+                                      [resolve, holder](QString, QString context, QString msg) {
+                                          // Search errors are the only ones meant for this call;
+                                          // a quote/info failure for some symbol on the shared
+                                          // service must not fail an unrelated search.
+                                          if (context != QLatin1String("Search")) return;
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -467,17 +487,20 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           try_finish();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::historical_loaded, holder,
-                                      [sym, state, try_finish](QString s, QString, QVector<services::equity::Candle> cs) {
-                                          if (s.toUpper() != sym) return;
+                                      [sym, period, state, try_finish](QString s, QString p, QVector<services::equity::Candle> cs) {
+                                          // A refresh-timer reload of the default period must not
+                                          // stand in for the period this call asked for.
+                                          if (s.toUpper() != sym || p != period) return;
                                           state->candles = candles_to_json(cs);
                                           state->got_hist = true;
                                           try_finish();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). We ignore
-                                          // the routing fields and surface only the message — the
-                                          // caller already knows the symbol they asked for.
+                                      [sym, resolve, holder](QString s, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). The service
+                                          // is shared, so an error for ANOTHER symbol (the user's own
+                                          // tab, a concurrent tool call) must not fail this call.
+                                          if (!s.isEmpty() && s.toUpper() != sym) return;
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -524,10 +547,11 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           });
                     } else { // 'h'
                         QObject::connect(svc, &services::equity::EquityResearchService::historical_loaded, holder,
-                                          [sym, resolve, holder](QString s, QString, QVector<services::equity::Candle> cs) {
-                                              if (s.toUpper() != sym) return;
+                                          [sym, period, resolve, holder](QString s, QString p, QVector<services::equity::Candle> cs) {
+                                              if (s.toUpper() != sym || p != period) return;
                                               resolve(ToolResult::ok_data(QJsonObject{
                                                   {"symbol", s},
+                                                  {"period", p},
                                                   {"candles", candles_to_json(cs)},
                                                   {"count", static_cast<int>(cs.size())},
                                               }));
@@ -535,10 +559,11 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           });
                     }
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). We ignore
-                                          // the routing fields and surface only the message — the
-                                          // caller already knows the symbol they asked for.
+                                      [sym, resolve, holder](QString s, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). The service
+                                          // is shared, so an error for ANOTHER symbol (the user's own
+                                          // tab, a concurrent tool call) must not fail this call.
+                                          if (!s.isEmpty() && s.toUpper() != sym) return;
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -550,9 +575,13 @@ std::vector<ToolDef> get_equity_research_tools() {
 
     // ── 3-5. get_equity_quote / get_equity_info / get_equity_historical ─
     tools.push_back(make_single("get_equity_quote",
-                                  "Get current quote (price/change/volume) for a symbol.", 'q'));
+                                  "Get current quote (price/change/volume) for a symbol. fetched_at is when "
+                                  "finterm fetched it, not the exchange's last-trade time.", 'q'));
     tools.push_back(make_single("get_equity_info",
-                                  "Get full company info + valuation + analyst targets for a symbol.", 'i'));
+                                  "Get full company info + valuation + analyst targets for a symbol. Units: "
+                                  "held_insiders_pct, held_institutions_pct and short_pct_of_float are "
+                                  "percents (0-100); *_margins, roe, roa, revenue_growth and "
+                                  "earnings_growth are vendor fractions (0.25 = 25%). null = not supplied.", 'i'));
     tools.push_back(make_single("get_equity_historical",
                                   "Get OHLCV historical candles for a symbol over a period.", 'h'));
 
@@ -599,10 +628,11 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). We ignore
-                                          // the routing fields and surface only the message — the
-                                          // caller already knows the symbol they asked for.
+                                      [sym, resolve, holder](QString s, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). The service
+                                          // is shared, so an error for ANOTHER symbol (the user's own
+                                          // tab, a concurrent tool call) must not fail this call.
+                                          if (!s.isEmpty() && s.toUpper() != sym) return;
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -661,10 +691,11 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). We ignore
-                                          // the routing fields and surface only the message — the
-                                          // caller already knows the symbol they asked for.
+                                      [sym, resolve, holder](QString s, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). The service
+                                          // is shared, so an error for ANOTHER symbol (the user's own
+                                          // tab, a concurrent tool call) must not fail this call.
+                                          if (!s.isEmpty() && s.toUpper() != sym) return;
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -697,18 +728,19 @@ std::vector<ToolDef> get_equity_research_tools() {
                 [svc, sym, peers](auto resolve) {
                     auto* holder = new QObject(svc);
                     QObject::connect(svc, &services::equity::EquityResearchService::peers_loaded, holder,
-                                      [resolve, holder](QString, QVector<services::equity::PeerData> ps) {
-                                          // finterm's signal carries the anchor symbol as the first
-                                          // arg for routing; we ignore it here since the holder is
-                                          // scoped to this call.
+                                      [sym, resolve, holder](QString s, QVector<services::equity::PeerData> ps) {
+                                          // The anchor symbol routes the emission: another caller's
+                                          // peer fetch must not resolve this one with its data.
+                                          if (s.toUpper() != sym) return;
                                           resolve(ToolResult::ok_data(peers_to_json(ps)));
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). We ignore
-                                          // the routing fields and surface only the message — the
-                                          // caller already knows the symbol they asked for.
+                                      [sym, resolve, holder](QString s, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). The service
+                                          // is shared, so an error for ANOTHER symbol (the user's own
+                                          // tab, a concurrent tool call) must not fail this call.
+                                          if (!s.isEmpty() && s.toUpper() != sym) return;
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -749,10 +781,11 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). We ignore
-                                          // the routing fields and surface only the message — the
-                                          // caller already knows the symbol they asked for.
+                                      [sym, resolve, holder](QString s, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). The service
+                                          // is shared, so an error for ANOTHER symbol (the user's own
+                                          // tab, a concurrent tool call) must not fail this call.
+                                          if (!s.isEmpty() && s.toUpper() != sym) return;
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });
@@ -809,10 +842,11 @@ std::vector<ToolDef> get_equity_research_tools() {
                                           holder->deleteLater();
                                       });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). We ignore
-                                          // the routing fields and surface only the message — the
-                                          // caller already knows the symbol they asked for.
+                                      [sym, resolve, holder](QString s, QString, QString msg) {
+                                          // finterm's signal: (symbol, context, message). The service
+                                          // is shared, so an error for ANOTHER symbol (the user's own
+                                          // tab, a concurrent tool call) must not fail this call.
+                                          if (!s.isEmpty() && s.toUpper() != sym) return;
                                           resolve(ToolResult::fail(msg));
                                           holder->deleteLater();
                                       });

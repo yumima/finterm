@@ -274,376 +274,315 @@ class DealComparator:
             } if synergy_pct else None
         }
 
+
+# ── JSON contract (MAAnalyticsService / ma_* MCP tools) ──────────────────────
+#
+#   deal_comparator.py <command> '<params JSON>'
+#
+# Deal records (list of objects) -- units, all optional per deal; a field a
+# deal lacks is unknown and is skipped by aggregates (never treated as 0):
+#   target / target_name, acquirer / acquirer_name, deal_id, industry,
+#   announced_date
+#   deal_value               amount (any consistent unit across the deals)
+#   premium | premium_1day | premium_pct
+#                            1-day premium in PERCENT units (45.3 == 45.3 %)
+#   ev_revenue, ev_ebitda    multiples (8.7 == 8.7x)
+#   synergies                amount (same unit as deal_value)
+#   cash_pct | payment_cash_pct, stock_pct | payment_stock_pct
+#                            consideration mix in PERCENT units (0-100)
+#
+# Commands:
+#   compare             {deals}
+#   rank                {deals, criteria|rank_by, ascending?}
+#   benchmark           {target_premium_pct (percent) | target_premium (fraction),
+#                        comparables|deals, industry?}
+#   payment_structures  {deals}
+#   industry            {deals, industry?}
+
+import sys
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parent.parent.parent))
+from corporateFinance._cli import (InputError, is_json_call, run_json, has,  # noqa: E402
+                                   num, obj_list, text)
+
+
+def _num(v):
+    """Missing/blank -> None (unknown), never 0."""
+    if v is None or v == '':
+        return None
+    f = float(v)
+    return f if np.isfinite(f) else None
+
+
+def _first(d, *keys):
+    for k in keys:
+        if d.get(k) is not None and d.get(k) != '':
+            return d.get(k)
+    return None
+
+
+def _parse_deals(deals_data):
+    """Parse deal dicts into Deal objects. Fields the deal record lacks
+    stay None so aggregates skip them instead of averaging in zeros."""
+    deals = []
+    for i, d in enumerate(deals_data):
+        if not isinstance(d, dict):
+            raise InputError(f"deals[{i}] must be an object")
+        deals.append(Deal(
+            deal_id=str(d.get('deal_id', '') or ''),
+            target_name=str(_first(d, 'target_name', 'target', 'name') or ''),
+            acquirer_name=str(_first(d, 'acquirer_name', 'acquirer') or ''),
+            deal_value=_num(_first(d, 'deal_value', 'ev')),
+            offer_price_per_share=_num(_first(d, 'offer_price_per_share', 'offer_price')),
+            premium_1day=_num(_first(d, 'premium_1day', 'premium', 'premium_pct')),
+            payment_cash_pct=_num(_first(d, 'payment_cash_pct', 'cash_pct')),
+            payment_stock_pct=_num(_first(d, 'payment_stock_pct', 'stock_pct')),
+            ev_revenue=_num(d.get('ev_revenue')),
+            ev_ebitda=_num(d.get('ev_ebitda')),
+            synergies=_num(d.get('synergies')),
+            status=str(_first(d, 'status', 'deal_status') or ''),
+            industry=str(d.get('industry', '') or ''),
+            announced_date=str(_first(d, 'announced_date', 'announcement_date') or ''),
+        ))
+    return deals
+
+
+def _known(values):
+    return [float(v) for v in values if v is not None]
+
+
+def _stats(values):
+    vals = _known(values)
+    if not vals:
+        return {'n': 0, 'min': None, 'p25': None, 'median': None, 'mean': None, 'p75': None, 'max': None}
+    a = np.array(vals, dtype=float)
+    return {
+        'n': len(vals),
+        'min': float(a.min()),
+        'p25': float(np.percentile(a, 25)),
+        'median': float(np.median(a)),
+        'mean': float(a.mean()),
+        'p75': float(np.percentile(a, 75)),
+        'max': float(a.max()),
+    }
+
+
+_METRICS = [
+    # (attribute, display metric name, output key suffix)
+    ('deal_value', 'Deal value', ''),
+    ('premium_1day', 'Premium (1-day, %)', '_pct'),
+    ('ev_revenue', 'EV/Revenue (x)', '_x'),
+    ('ev_ebitda', 'EV/EBITDA (x)', '_x'),
+    ('synergies', 'Synergies', ''),
+]
+
+
+def _deal_row(d):
+    return {
+        'target': d.target_name,
+        'acquirer': d.acquirer_name,
+        'industry': d.industry or None,
+        'deal_value': d.deal_value,
+        'premium_pct': d.premium_1day,
+        'ev_revenue_x': d.ev_revenue,
+        'ev_ebitda_x': d.ev_ebitda,
+        'synergies': d.synergies,
+        'cash_pct': d.payment_cash_pct,
+        'stock_pct': d.payment_stock_pct,
+    }
+
+
+def _deals_arg(p, key='deals', min_len=1):
+    return _parse_deals(obj_list(p, key, min_len=min_len))
+
+
+def cmd_compare(p):
+    deals = _deals_arg(p, min_len=2)
+    out = {'num_deals': len(deals)}
+    stats_rows = []
+    for attr, name, suffix in _METRICS:
+        s = _stats([getattr(d, attr) for d in deals])
+        stats_rows.append({'metric': name, **s})
+        base = {'deal_value': 'deal_value', 'premium_1day': 'premium', 'ev_revenue': 'ev_revenue',
+                'ev_ebitda': 'ev_ebitda', 'synergies': 'synergies'}[attr]
+        if attr == 'synergies':
+            known = _known([d.synergies for d in deals])
+            out['total_synergies'] = float(sum(known)) if known else None
+            continue
+        out[f'median_{base}{suffix}'] = s['median']
+        out[f'mean_{base}{suffix}'] = s['mean']
+    out['deals'] = [_deal_row(d) for d in deals]
+    out['statistics'] = stats_rows
+    return out
+
+
+_RANK_ATTR = {
+    'premium': ('premium_1day', 'premium_pct'),
+    'deal_value': ('deal_value', 'deal_value'),
+    'ev_revenue': ('ev_revenue', 'ev_revenue_x'),
+    'ev_ebitda': ('ev_ebitda', 'ev_ebitda_x'),
+    'synergies': ('synergies', 'synergies'),
+}
+
+
+def cmd_rank(p):
+    deals = _deals_arg(p)
+    key = 'criteria' if has(p, 'criteria') else 'rank_by'
+    criteria = text(p, key, label='criteria', choices=list(_RANK_ATTR))
+    ascending = bool(p.get('ascending', False))
+    attr, out_key = _RANK_ATTR[criteria]
+    with_val = [d for d in deals if getattr(d, attr) is not None]
+    without = [d for d in deals if getattr(d, attr) is None]
+    with_val.sort(key=lambda d: getattr(d, attr), reverse=not ascending)
+    rankings = []
+    prev, prev_rank = None, 0
+    for i, d in enumerate(with_val, 1):
+        v = getattr(d, attr)
+        rank = prev_rank if v == prev else i   # ties share a rank
+        prev, prev_rank = v, rank
+        rankings.append({'rank': rank, 'target': d.target_name, 'acquirer': d.acquirer_name, out_key: v})
+    return {
+        'ranking_criteria': criteria,
+        'order': 'ascending' if ascending else 'descending',
+        'num_ranked': len(rankings),
+        'num_missing_metric': len(without),
+        'rankings': rankings,
+        'missing_metric': [{'target': d.target_name, 'acquirer': d.acquirer_name} for d in without],
+    }
+
+
+def _percentile_rank(value, sample):
+    """Mid-rank percentile: share of the sample below `value`, counting ties
+    as half (0 = below every comparable, 100 = above every comparable)."""
+    a = np.array(sample, dtype=float)
+    return float((np.sum(a < value) + 0.5 * np.sum(a == value)) / len(a) * 100)
+
+
+def cmd_benchmark(p):
+    if has(p, 'target_premium_pct'):
+        target_premium = num(p, 'target_premium_pct', label='target_premium_pct (percent)')
+    elif has(p, 'premium_pct'):
+        target_premium = num(p, 'premium_pct', label='premium_pct (percent)')
+    elif has(p, 'target_premium'):
+        # fraction form (0.30 == 30 %)
+        target_premium = num(p, 'target_premium', label='target_premium (fraction)') * 100.0
+    else:
+        raise InputError("Missing required input: target_premium_pct (percent, e.g. 30 for 30%)")
+    comps = _deals_arg(p, 'comparables' if p.get('comparables') is not None else 'deals')
+    industry = str(p.get('industry') or '').strip()
+    if industry:
+        comps = [d for d in comps if d.industry.lower() == industry.lower()]
+        if not comps:
+            raise InputError(f"No comparables in industry '{industry}'")
+    prem = _known([d.premium_1day for d in comps])
+    if not prem:
+        raise InputError("No comparable deal has premium data (premium, percent units)")
+    s = _stats(prem)
+    if target_premium < s['p25']:
+        position = "below 25th percentile"
+    elif target_premium < s['median']:
+        position = "between 25th and 50th percentile"
+    elif target_premium <= s['p75']:
+        position = "between 50th and 75th percentile"
+    else:
+        position = "above 75th percentile"
+    return {
+        'target_premium_pct': target_premium,
+        'median_premium_pct': s['median'],
+        'mean_premium_pct': s['mean'],
+        'p25_premium_pct': s['p25'],
+        'p75_premium_pct': s['p75'],
+        'min_premium_pct': s['min'],
+        'max_premium_pct': s['max'],
+        'percentile_rank_pct': _percentile_rank(target_premium, prem),
+        'premium_vs_median_pct': target_premium - s['median'],
+        'target_position': position,
+        'num_comparables': len(prem),
+        'industry_filter': industry or None,
+    }
+
+
+def cmd_payment_structures(p):
+    deals = _deals_arg(p)
+    known = [d for d in deals if d.payment_cash_pct is not None and d.payment_stock_pct is not None]
+    groups = {
+        'all_cash': [d for d in known if d.payment_cash_pct >= 100],
+        'all_stock': [d for d in known if d.payment_stock_pct >= 100],
+        'mixed': [d for d in known if d.payment_cash_pct < 100 and d.payment_stock_pct < 100],
+    }
+    by_type = []
+    for name, g in groups.items():
+        by_type.append({
+            'type': name,
+            'count': len(g),
+            'share_of_classified_pct': (len(g) / len(known) * 100) if known else None,
+            'avg_premium_pct': _stats([d.premium_1day for d in g])['mean'],
+            'avg_deal_value': _stats([d.deal_value for d in g])['mean'],
+        })
+    return {
+        'total_deals': len(deals),
+        'all_cash_deals': len(groups['all_cash']),
+        'all_stock_deals': len(groups['all_stock']),
+        'mixed_deals': len(groups['mixed']),
+        'unclassified_deals': len(deals) - len(known),
+        'avg_cash_pct': _stats([d.payment_cash_pct for d in deals])['mean'],
+        'avg_stock_pct': _stats([d.payment_stock_pct for d in deals])['mean'],
+        'by_type': by_type,
+    }
+
+
+def cmd_industry(p):
+    deals = _deals_arg(p)
+    industry = str(p.get('industry') or '').strip()
+    if industry:
+        deals = [d for d in deals if d.industry.lower() == industry.lower()]
+        if not deals:
+            raise InputError(f"No deals in industry '{industry}'")
+    groups = {}
+    for d in deals:
+        groups.setdefault(d.industry or 'Unknown', []).append(d)
+    rows = []
+    for ind, g in sorted(groups.items(), key=lambda kv: -len(kv[1])):
+        vals = _known([d.deal_value for d in g])
+        rows.append({
+            'industry': ind,
+            'count': len(g),
+            'total_value': float(sum(vals)) if vals else None,
+            'avg_deal_value': _stats(vals)['mean'],
+            'median_premium_pct': _stats([d.premium_1day for d in g])['median'],
+            'mean_premium_pct': _stats([d.premium_1day for d in g])['mean'],
+            'median_ev_revenue_x': _stats([d.ev_revenue for d in g])['median'],
+            'median_ev_ebitda_x': _stats([d.ev_ebitda for d in g])['median'],
+        })
+    return {
+        'total_deals': len(deals),
+        'num_industries': len(groups),
+        'industry_filter': industry or None,
+        'by_industry': rows,
+    }
+
+
+JSON_COMMANDS = {
+    'compare': cmd_compare,
+    'rank': cmd_rank,
+    'benchmark': cmd_benchmark,
+    'payment_structures': cmd_payment_structures,
+    'industry': cmd_industry,
+}
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json(JSON_COMMANDS)
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    def _num(v):
-        """Missing/blank -> None (unknown), never 0."""
-        if v is None or v == '':
-            return None
-        return float(v)
-
-    def _known(values):
-        return [v for v in values if v is not None]
-
-    def _mean(values):
-        vals = _known(values)
-        return float(np.mean(vals)) if vals else None
-
-    def _median(values):
-        vals = _known(values)
-        return float(np.median(vals)) if vals else None
-
-    def _parse_deals(deals_data):
-        """Parse deal dicts into Deal objects. Fields the deal record lacks
-        stay None so aggregates skip them instead of averaging in zeros."""
-        deals = []
-        for d in deals_data:
-            deals.append(Deal(
-                deal_id=d.get('deal_id', ''),
-                target_name=d.get('target_name', d.get('target', '')),
-                acquirer_name=d.get('acquirer_name', d.get('acquirer', '')),
-                deal_value=_num(d.get('deal_value')),
-                offer_price_per_share=d.get('offer_price_per_share', d.get('offer_price', None)),
-                premium_1day=_num(d.get('premium_1day', d.get('premium'))),
-                payment_cash_pct=_num(d.get('payment_cash_pct', d.get('cash_pct'))),
-                payment_stock_pct=_num(d.get('payment_stock_pct', d.get('stock_pct'))),
-                ev_revenue=d.get('ev_revenue', None),
-                ev_ebitda=d.get('ev_ebitda', None),
-                synergies=d.get('synergies', None),
-                status=d.get('status', d.get('deal_status', '')),
-                industry=d.get('industry', ''),
-                announced_date=d.get('announced_date', d.get('announcement_date', ''))
-            ))
-        return deals
-
-    def _safe(v):
-        """Convert numpy types and non-finite floats to JSON-safe values"""
-        try:
-            import numpy as np
-            if isinstance(v, (np.floating, np.integer)):
-                v = v.item()
-        except ImportError:
-            pass
-        if isinstance(v, float) and (v != v or v == float('inf') or v == float('-inf')):
-            return None
-        return v
-
-    try:
-        if command == "compare":
-            # Frontend expects: { comparison: {metric: [v1,v2,...]}, summary: {metric: value} }
-            if len(sys.argv) < 3:
-                raise ValueError("Deals data required")
-
-            deals_data = json.loads(sys.argv[2])
-            deals = _parse_deals(deals_data)
-
-            if len(deals) < 2:
-                analysis = {"comparison": {}, "summary": {}, "num_deals": len(deals)}
-            else:
-                # Build comparison: metric -> list of values per deal (in deal order)
-                metrics = [
-                    'deal_value', 'premium_1day', 'ev_revenue', 'ev_ebitda',
-                    'synergies', 'payment_cash_pct', 'payment_stock_pct',
-                ]
-                comparison = {}
-                for metric in metrics:
-                    vals = []
-                    for d in deals:
-                        v = getattr(d, metric, None)
-                        vals.append(_safe(v) if v is not None else None)
-                    comparison[metric] = vals
-
-                # Build summary: aggregate stats across all deals
-                deal_values = [d.deal_value for d in deals]
-                premiums = [d.premium_1day for d in deals]
-                ev_revenues = [d.ev_revenue for d in deals if d.ev_revenue is not None]
-                ev_ebitdas = [d.ev_ebitda for d in deals if d.ev_ebitda is not None]
-                synergies_list = [d.synergies for d in deals if d.synergies is not None]
-
-                summary = {
-                    'num_deals': len(deals),
-                    'avg_deal_value': _mean(deal_values),
-                    'avg_premium': _mean(premiums),
-                    'median_premium': _median(premiums),
-                }
-                if ev_revenues:
-                    summary['avg_ev_revenue'] = float(np.mean(ev_revenues))
-                if ev_ebitdas:
-                    summary['avg_ev_ebitda'] = float(np.mean(ev_ebitdas))
-                if synergies_list:
-                    summary['total_synergies'] = float(sum(synergies_list))
-
-                analysis = {
-                    'comparison': comparison,
-                    'summary': summary,
-                    'num_deals': len(deals),
-                }
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result, default=str))
-
-        elif command == "rank":
-            # Frontend expects: { rankings: [{target_name, acquirer_name, premium_1day|deal_value|ev_revenue|ev_ebitda|synergies}] }
-            if len(sys.argv) < 4:
-                raise ValueError("Deals data and criteria required")
-
-            deals_data = json.loads(sys.argv[2])
-            criteria = sys.argv[3]
-            deals = _parse_deals(deals_data)
-
-            criteria_map = {
-                'premium': 'premium_1day',
-                'deal_value': 'deal_value',
-                'ev_revenue': 'ev_revenue',
-                'ev_ebitda': 'ev_ebitda',
-                'synergies': 'synergies',
-            }
-            attr = criteria_map.get(criteria, 'premium_1day')
-
-            def sort_key(d):
-                v = getattr(d, attr, None)
-                return float(v) if v is not None else -1
-
-            sorted_deals = sorted(deals, key=sort_key, reverse=True)
-
-            rankings = []
-            for rank, d in enumerate(sorted_deals, 1):
-                row = {
-                    'rank': rank,
-                    'deal_id': d.deal_id,
-                    'target_name': d.target_name,
-                    'acquirer_name': d.acquirer_name,
-                    # Include the actual criteria field with real name so frontend can read it
-                    'premium_1day': _safe(d.premium_1day),
-                    'deal_value': _safe(d.deal_value),
-                    'ev_revenue': _safe(d.ev_revenue),
-                    'ev_ebitda': _safe(d.ev_ebitda),
-                    'synergies': _safe(d.synergies),
-                    'synergy_value': _safe(d.synergies),  # alias for frontend compatibility
-                }
-                rankings.append(row)
-
-            analysis = {
-                'ranking_criteria': criteria,
-                'rankings': rankings,
-            }
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result, default=str))
-
-        elif command == "benchmark":
-            # Frontend expects: { premium_comparison: {target, median, percentile}, insight: str }
-            if len(sys.argv) < 4:
-                raise ValueError("Target deal and comparable deals required")
-
-            target_deal_data = json.loads(sys.argv[2])
-            comparable_deals_data = json.loads(sys.argv[3])
-
-            target_deals = _parse_deals([target_deal_data])
-            comparable_deals = _parse_deals(comparable_deals_data)
-
-            if not target_deals or not comparable_deals:
-                analysis = {"error": "Insufficient data for benchmarking"}
-            else:
-                target = target_deals[0]
-                comp_premiums = _known([d.premium_1day for d in comparable_deals])
-                if target.premium_1day is None or not comp_premiums:
-                    raise ValueError("Premium data unavailable for the target or all comparables")
-                target_premium = float(target.premium_1day)
-
-                p25 = float(np.percentile(comp_premiums, 25))
-                p50 = float(np.percentile(comp_premiums, 50))
-                p75 = float(np.percentile(comp_premiums, 75))
-                mean_prem = float(np.mean(comp_premiums))
-                min_prem = float(min(comp_premiums))
-                max_prem = float(max(comp_premiums))
-
-                # Calculate percentile rank of target within comparables
-                pct_below = float(np.mean([p < target_premium for p in comp_premiums]) * 100)
-
-                if target_premium < p25:
-                    position = "below 25th percentile"
-                elif target_premium < p50:
-                    position = "between 25th and 50th percentile"
-                elif target_premium < p75:
-                    position = "between 50th and 75th percentile"
-                else:
-                    position = "above 75th percentile"
-
-                insight = (
-                    f"{target.target_name}'s acquisition premium of {target_premium:.1f}% is "
-                    f"{position} relative to {len(comp_premiums)} comparable deals with premium data "
-                    f"(median: {p50:.1f}%, mean: {mean_prem:.1f}%). "
-                    f"The target's premium ranks at approximately the {pct_below:.0f}th percentile."
-                )
-
-                analysis = {
-                    'premium_comparison': {
-                        'target': target_premium,
-                        'median': p50,
-                        'mean': mean_prem,
-                        'percentile': pct_below,
-                        'p25': p25,
-                        'p75': p75,
-                        'min': min_prem,
-                        'max': max_prem,
-                    },
-                    'target_deal': {
-                        'deal_id': target.deal_id,
-                        'target_name': target.target_name,
-                        'premium': target_premium,
-                    },
-                    'target_position': position,
-                    'above_median': bool(target_premium > p50),
-                    'num_comparables': len(comp_premiums),
-                    'insight': insight,
-                }
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result, default=str))
-
-        elif command == "payment_analysis":
-            # Frontend expects:
-            #   { distribution: {all_cash: count, all_stock: count, mixed: count},
-            #     stats_by_type: {all_cash: {avg_premium, avg_value, count}, ...} }
-            if len(sys.argv) < 3:
-                raise ValueError("Deals data required")
-
-            deals_data = json.loads(sys.argv[2])
-            deals = _parse_deals(deals_data)
-
-            # Categorize each deal
-            # Deals with unknown consideration mix are not classified
-            known = [d for d in deals if d.payment_cash_pct is not None and d.payment_stock_pct is not None]
-            all_cash_deals = [d for d in known if d.payment_cash_pct >= 100]
-            all_stock_deals = [d for d in known if d.payment_stock_pct >= 100]
-            mixed_deals = [d for d in known if d.payment_cash_pct < 100 and d.payment_stock_pct < 100]
-
-            def _type_stats(group):
-                if not group:
-                    return None
-                premiums = [d.premium_1day for d in group]
-                values = [d.deal_value for d in group]
-                return {
-                    'count': len(group),
-                    'avg_premium': _mean(premiums),
-                    'avg_value': _mean(values),
-                }
-
-            # Build stats_by_type only for non-empty categories
-            stats_by_type = {}
-            s = _type_stats(all_cash_deals)
-            if s:
-                stats_by_type['all_cash'] = s
-            s = _type_stats(all_stock_deals)
-            if s:
-                stats_by_type['all_stock'] = s
-            s = _type_stats(mixed_deals)
-            if s:
-                stats_by_type['mixed'] = s
-
-            analysis = {
-                'total_deals': len(deals),
-                'distribution': {
-                    'all_cash': len(all_cash_deals),
-                    'all_stock': len(all_stock_deals),
-                    'mixed': len(mixed_deals),
-                },
-                'stats_by_type': stats_by_type,
-                'unclassified_deals': len(deals) - len(known),
-                'average_cash_pct': _mean([d.payment_cash_pct for d in deals]),
-                'average_stock_pct': _mean([d.payment_stock_pct for d in deals]),
-            }
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result, default=str))
-
-        elif command == "industry_analysis":
-            # Frontend expects:
-            #   { by_industry: {IndustryName: {count, avg_premium, avg_ev_revenue, avg_ev_ebitda, total_value}} }
-            if len(sys.argv) < 3:
-                raise ValueError("Deals data required")
-
-            deals_data = json.loads(sys.argv[2])
-            deals = _parse_deals(deals_data)
-
-            # Group by industry
-            industry_groups: dict = {}
-            for d in deals:
-                ind = d.industry or 'Unknown'
-                if ind not in industry_groups:
-                    industry_groups[ind] = []
-                industry_groups[ind].append(d)
-
-            by_industry = {}
-            for ind, group in industry_groups.items():
-                premiums = [d.premium_1day for d in group]
-                deal_vals = [d.deal_value for d in group]
-                ev_revenues = [d.ev_revenue for d in group if d.ev_revenue is not None]
-                ev_ebitdas = [d.ev_ebitda for d in group if d.ev_ebitda is not None]
-
-                by_industry[ind] = {
-                    'count': len(group),
-                    'avg_premium': _mean(premiums),
-                    'median_premium': _median(premiums),
-                    'total_value': float(sum(_known(deal_vals))) if _known(deal_vals) else None,
-                    'avg_deal_value': _mean(deal_vals),
-                    'avg_ev_revenue': float(np.mean(ev_revenues)) if ev_revenues else None,
-                    'avg_ev_ebitda': float(np.mean(ev_ebitdas)) if ev_ebitdas else None,
-                }
-
-            analysis = {
-                'by_industry': by_industry,
-                'industries': list(industry_groups.keys()),
-                'total_deals': len(deals),
-            }
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result, default=str))
-
-        elif command == "valuation_multiples":
-            # Host sends: "valuation_multiples" deals_json multiple_type
-            if len(sys.argv) < 3:
-                raise ValueError("Deals data required")
-
-            deals_data = json.loads(sys.argv[2])
-            multiple_type = sys.argv[3] if len(sys.argv) > 3 else 'ev_ebitda'
-            deals = _parse_deals(deals_data)
-            comparator = DealComparator()
-
-            analysis = comparator.valuation_multiple_comparison(deals, multiple_type=multiple_type)
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result, default=str))
-
-        elif command == "synergy_analysis":
-            # Host sends: "synergy_analysis" deals_json
-            if len(sys.argv) < 3:
-                raise ValueError("Deals data required")
-
-            deals_data = json.loads(sys.argv[2])
-            deals = _parse_deals(deals_data)
-            comparator = DealComparator()
-
-            analysis = comparator.synergy_analysis(deals)
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result, default=str))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}. Available: compare, rank, benchmark, payment_analysis, industry_analysis, valuation_multiples, synergy_analysis"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

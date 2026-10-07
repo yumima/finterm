@@ -113,9 +113,9 @@ RiskMetricsWidget::RiskMetricsWidget(QWidget* parent) : BaseWidget("RISK METRICS
         vl->addWidget(row);
     };
 
-    make_spread_row("SPY vs QQQ spread", spy_qqq_spread_);
-    make_spread_row("SPY vs IWM spread", spy_iwm_spread_);
-    make_spread_row("Equity/Bond (SPY-TLT)", equity_bond_lbl_);
+    make_spread_row("SPY vs QQQ (1D chg)", spy_qqq_spread_);
+    make_spread_row("SPY vs IWM (1D chg)", spy_iwm_spread_);
+    make_spread_row("Equity/Bond SPY-TLT (1D chg)", equity_bond_lbl_);
 
     vl->addStretch();
 
@@ -314,14 +314,22 @@ void RiskMetricsWidget::populate(const QVector<services::QuoteData>& quotes) {
             QString("color: %1; font-weight: bold; background: transparent;").arg(chg_col));
 
         // Hi/Lo as range: H/L
+        // Price precision: whole-dollar rounding hid most of the range on
+        // sub-$100 names (e.g. H24 L24 for a 23.6–24.4 day).
         if (q.high > 0 && q.low > 0) {
-            stock_rows_[i].hi_lo->setText(QString("H%1 L%2").arg(q.high, 0, 'f', 0).arg(q.low, 0, 'f', 0));
+            stock_rows_[i].hi_lo->setText(QString("H%1 L%2").arg(q.high, 0, 'f', 2).arg(q.low, 0, 'f', 2));
+        } else {
+            stock_rows_[i].hi_lo->setText(ui::formatting::placeholder());
         }
     }
 
-    // Spread proxies
+    // Spread proxies: differences of two daily % changes are percentage
+    // POINTS, not percent.
     auto spread_str = [](double a, double b) -> QString {
-        return ui::formatting::format_percent(a - b, 2, true);  // NaN leg → "—"
+        const double d = a - b;
+        if (!std::isfinite(d))
+            return ui::formatting::placeholder(); // NaN leg → "—"
+        return (d >= 0.0 ? QStringLiteral("+") : QString()) + QString::number(d, 'f', 2) + QStringLiteral(" pp");
     };
     auto spread_color = [](double a, double b) -> QString {
         double diff = a - b;

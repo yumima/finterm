@@ -112,6 +112,59 @@ def get_trade(commodity: str = "Total", partner: str = "All countries", start_da
     return _make_request(url, params=params)
 
 
+# ── Headline vectors used by the Economics ▸ StatCan panel ──────────────────
+# The !downloadTbl endpoint returns a zip/CSV, not JSON. The Web Data Service
+# (WDS) serves single vectors as JSON.
+WDS_BASE = "https://www150.statcan.gc.ca/t1/wds/rest"
+STATCAN_VECTORS = {
+    # command: (vectorId, label)
+    "gdp":          (65201210, "Real GDP at basic prices, all industries (chained 2017 $, SAAR, $ millions, monthly)"),
+    "cpi":          (41690973, "CPI all-items, Canada (2002=100, NSA, monthly)"),
+    "unemployment": (2062815,  "Unemployment rate, 15+, SA (%, monthly)"),
+    "employment":   (2062817,  "Employment rate, 15+, SA (%, monthly)"),
+    "population":   (466668,   "Population estimate, Canada (persons, annual, July 1)"),
+    "housing":      (52300157, "Housing starts, Canada (SAAR, thousands of units, monthly)"),
+}
+
+
+def get_vector_series(command: str, latest_n: int = 120) -> Dict[str, Any]:
+    if command not in STATCAN_VECTORS:
+        return {"error": f"Unknown series: {command}", "available": list(STATCAN_VECTORS)}
+    vector_id, label = STATCAN_VECTORS[command]
+    try:
+        r = session.post(f"{WDS_BASE}/getDataFromVectorsAndLatestNPeriods",
+                         json=[{"vectorId": vector_id, "latestN": int(latest_n)}], timeout=30)
+        r.raise_for_status()
+        payload = r.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Request failed: {e}"}
+    except ValueError as e:
+        return {"error": f"JSON decode error: {e}"}
+
+    entry = payload[0] if isinstance(payload, list) and payload else {}
+    if entry.get("status") != "SUCCESS":
+        return {"error": f"StatCan WDS returned {entry.get('status') or 'no data'} for vector v{vector_id}"}
+    data = []
+    for pt in (entry.get("object") or {}).get("vectorDataPoint", []):
+        value = pt.get("value")
+        ref = pt.get("refPer")
+        if value is None or not ref:
+            continue  # suppressed / unavailable
+        try:
+            data.append({"date": ref, "value": float(value)})
+        except (TypeError, ValueError):
+            continue
+    data.sort(key=lambda x: x["date"])
+    return {
+        "success": True,
+        "series": command,
+        "vector_id": vector_id,
+        "label": label,
+        "count": len(data),
+        "data": data,
+    }
+
+
 def main(args=None):
     if args is None:
         args = sys.argv[1:]
@@ -120,7 +173,11 @@ def main(args=None):
         return
     command = args[0]
     result = {"error": f"Unknown command: {command}"}
-    if command == "dataset":
+    if command in STATCAN_VECTORS and len(args) <= 2:
+        # Panel form: <command> [latestN]. Longer arg lists fall through to
+        # the legacy table-download commands below.
+        result = get_vector_series(command, int(args[1]) if len(args) > 1 and args[1].isdigit() else 120)
+    elif command == "dataset":
         pid = args[1] if len(args) > 1 else GDP_TABLE_ID
         start_date = args[2] if len(args) > 2 else None
         end_date = args[3] if len(args) > 3 else None

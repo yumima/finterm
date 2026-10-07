@@ -254,71 +254,104 @@ class PaymentStructureAnalyzer:
             'effective_tax_rate': (current_tax / total_consideration * 100) if total_consideration > 0 else 0
         }
 
+# ── JSON contract (MAAnalyticsService "analyze") ─────────────────────────────
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from corporateFinance._cli import is_json_call, run_json, num, opt_num, has, InputError, pct  # noqa: E402
+
+
+def _alias(p: Dict[str, Any], *keys: str) -> Optional[str]:
+    for k in keys:
+        if has(p, k):
+            return k
+    return None
+
+
+def json_analyze(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Cash/stock mix: funding of the cash leg and dilution from the stock leg.
+
+    Inputs: purchase_price (alias deal_value); cash_pct (decimal; or stock_pct);
+    acquirer_share_price + acquirer_shares_outstanding (required when any stock
+    is issued); optional cash_on_hand (alias acquirer_cash), new_debt (alias
+    debt_capacity), target_shares_outstanding.
+    """
+    k = _alias(p, 'purchase_price', 'deal_value', 'total_consideration')
+    if not k:
+        raise InputError("Missing required input: purchase_price (or deal_value)")
+    price = num(p, k, gt=0)
+    if has(p, 'cash_pct'):
+        cash_frac = num(p, 'cash_pct', label='cash_pct (decimal 0-1)', min=0, max=1)
+        if has(p, 'stock_pct'):
+            s = num(p, 'stock_pct', label='stock_pct (decimal 0-1)', min=0, max=1)
+            if abs(cash_frac + s - 1) > 1e-6:
+                raise InputError(f"cash_pct + stock_pct must equal 1 (got {cash_frac + s:g})")
+    elif has(p, 'stock_pct'):
+        cash_frac = 1 - num(p, 'stock_pct', label='stock_pct (decimal 0-1)', min=0, max=1)
+    else:
+        raise InputError("Missing required input: cash_pct (decimal 0-1)")
+
+    cash_leg = price * cash_frac
+    stock_leg = price - cash_leg
+    out: Dict[str, Any] = {
+        'purchase_price': price,
+        'cash_consideration': cash_leg,
+        'stock_consideration': stock_leg,
+        'cash_pct': pct(cash_frac),
+        'stock_pct': pct(1 - cash_frac),
+    }
+
+    acq_px_key = _alias(p, 'acquirer_share_price', 'acquirer_price')
+    acq_sh_key = _alias(p, 'acquirer_shares_outstanding', 'acquirer_shares')
+    if stock_leg > 0:
+        if not acq_px_key or not acq_sh_key:
+            raise InputError("A stock component needs acquirer_share_price and acquirer_shares_outstanding")
+    new_shares = None
+    if acq_px_key and acq_sh_key:
+        acq_px = num(p, acq_px_key, gt=0)
+        acq_sh = num(p, acq_sh_key, gt=0)
+        new_shares = stock_leg / acq_px
+        post = acq_sh + new_shares
+        out.update({
+            'new_shares_issued': new_shares,
+            'post_deal_shares_outstanding': post,
+            'share_issuance_vs_existing_pct': new_shares / acq_sh * 100,
+            'acquirer_ownership_pct': acq_sh / post * 100,
+            'target_holders_ownership_pct': new_shares / post * 100,
+        })
+
+    tgt_key = _alias(p, 'target_shares_outstanding', 'target_shares')
+    if tgt_key:
+        tgt_sh = num(p, tgt_key, gt=0)
+        out['offer_value_per_target_share'] = price / tgt_sh
+        out['cash_per_target_share'] = cash_leg / tgt_sh
+        out['exchange_ratio'] = (new_shares / tgt_sh) if new_shares is not None else None
+
+    cash_key = _alias(p, 'cash_on_hand', 'acquirer_cash')
+    debt_key = _alias(p, 'new_debt', 'debt_capacity')
+    if cash_key:
+        cash = num(p, cash_key, min=0)
+        out['cash_on_hand_used'] = min(cash, cash_leg)
+        out['debt_needed_for_cash_leg'] = max(0.0, cash_leg - cash)
+        if debt_key:
+            debt = num(p, debt_key, min=0)
+            out['new_debt_available'] = debt
+            out['funding_gap'] = max(0.0, cash_leg - cash - debt)
+            out['cash_leg_fully_funded'] = cash + debt >= cash_leg
+    elif debt_key:
+        out['new_debt_available'] = num(p, debt_key, min=0)
+    return out
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({"analyze": json_analyze})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "payment":
-            if len(sys.argv) < 3:
-                raise ValueError("Payment parameters required")
-
-            # Accept either JSON dict or positional args
-            try:
-                params = json.loads(sys.argv[2])
-                total = float(params.get('total_consideration', params.get('purchase_price', 0)))
-                cash_pct = float(params.get('cash_pct', params.get('cash_percentage', 50))) / 100.0 if params.get('cash_pct', params.get('cash_percentage', 50)) > 1 else float(params.get('cash_pct', params.get('cash_percentage', 0.5)))
-                acquirer_cash = float(params.get('acquirer_cash', total * cash_pct))
-                debt_capacity = float(params.get('debt_capacity', total * 0.5))
-                acq_shares = float(params.get('acquirer_shares_outstanding', 100_000_000))
-                acq_price = float(params.get('acquirer_share_price', 50.0))
-                tgt_shares = float(params.get('target_shares_outstanding', 20_000_000))
-                tgt_price = float(params.get('target_share_price', 30.0))
-            except (json.JSONDecodeError, TypeError, AttributeError):
-                if len(sys.argv) < 6:
-                    raise ValueError("Purchase price, cash percentage, acquirer cash, and debt capacity required")
-                total = float(sys.argv[2])
-                cash_pct = float(sys.argv[3])
-                acquirer_cash = float(sys.argv[4])
-                debt_capacity = float(sys.argv[5])
-                acq_shares = 100_000_000
-                acq_price = 50.0
-                tgt_shares = 20_000_000
-                tgt_price = 30.0
-
-            analyzer = PaymentStructureAnalyzer(
-                acquirer_shares_outstanding=acq_shares,
-                acquirer_share_price=acq_price,
-                target_shares_outstanding=tgt_shares,
-                target_share_price=tgt_price
-            )
-
-            analysis = analyzer.analyze_mixed_payment(
-                purchase_price=total,
-                cash_percentage=cash_pct,
-                acquirer_cash=acquirer_cash,
-                debt_capacity=debt_capacity
-            )
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

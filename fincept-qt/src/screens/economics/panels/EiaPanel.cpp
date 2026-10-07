@@ -183,6 +183,7 @@ void EiaPanel::on_result(const QString& request_id, const services::EconomicsRes
     // The base display() auto-detects date→col0, value→col1, rest follows.
 
     const QString title = "EIA: " + category_combo_->currentText();
+    // Long format mixing many symbols (cross-sectional): no single series value.
     display(rows, title);
 
     LOG_INFO("EiaPanel", QString("Displayed %1 rows — %2").arg(rows.size()).arg(request_id));

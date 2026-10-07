@@ -111,8 +111,9 @@ std::vector<ToolDef> get_quant_narrator_tools() {
                 "<= 180 words.  Identify the strongest one or two findings "
                 "and the most concerning weakness.  Be concrete about "
                 "magnitudes — cite Sharpe, drawdown, win rate, turnover "
-                "where they appear in the data.  Avoid hedging language "
-                "without numbers behind it.";
+                "where they appear in the data, and never state a metric "
+                "that is not in the data.  Avoid hedging language without "
+                "numbers behind it.";
             if (!focus.isEmpty())
                 system += "  Focus the commentary on: " + focus + ".";
 
@@ -215,7 +216,11 @@ std::vector<ToolDef> get_quant_narrator_tools() {
                 "Write <= 120 words.  State whether the trade was "
                 "consistent with the strategy's stated signal, how it sits "
                 "against the current position (if provided), and one "
-                "specific thing to watch next.  No hedging without numbers.";
+                "specific thing to watch next.  Use ONLY the values in the "
+                "trade and position JSON below: do not introduce prices, "
+                "P&L, signal levels, market moves or any other figure that "
+                "is not in that input, and if something needed for a "
+                "judgement is missing, say it is not provided.";
 
             QString user = "Trade:\n```json\n" + json_to_string(trade) + "\n```";
             if (!pos.isEmpty())

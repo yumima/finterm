@@ -18,6 +18,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonObject>
+#include <QLocale>
 #include <QLineSeries>
 #include <QPushButton>
 #include <QRegularExpression>
@@ -45,6 +46,20 @@ static const QString kBlue = "#3b82f6";
 static const QString kPurple = "#a855f7";
 static const QString kOrange = "#f97316";
 static const QString kYellow = "#eab308";
+
+/// Axis label for a fiscal period identified only by its end date
+/// ("yyyy-MM-dd…"). The feed carries no fiscal-year label, and companies
+/// whose year ends in January (retailers, NVIDIA) name that year
+/// inconsistently — so a December year-end shows the plain year and any other
+/// year-end shows the period-end month ("Jan '25"), never a guessed FY number.
+QString fiscal_period_label(const QString& period) {
+    const QDate end = QDate::fromString(period.left(10), Qt::ISODate);
+    if (!end.isValid())
+        return period.left(4);
+    if (end.month() == 12)
+        return QString::number(end.year());
+    return QLocale(QLocale::English).toString(end, QStringLiteral("MMM ''yy"));
+}
 
 // "Not reported / not computable". Propagates through arithmetic and renders
 // as the shared placeholder via format_compact / format_percent / fmt_ratio.
@@ -972,7 +987,7 @@ void EquityFinancialsTab::rebuild_revenue_chart(const services::equity::Financia
     QVector<double> revenue_v, gross_v, net_v;
 
     for (int i = n - 1; i >= 0; --i) {
-        cats << d.income_statement[i].first.left(4);
+        cats << fiscal_period_label(d.income_statement[i].first);
         revenue_v << get_val(d.income_statement[i].second, {"Total Revenue", "Revenue"}) / 1e9;
         gross_v << get_val(d.income_statement[i].second, {"Gross Profit"}) / 1e9;
         net_v << get_val(d.income_statement[i].second, {"Net Income", "Net Income Common Stockholders"}) / 1e9;
@@ -1039,7 +1054,7 @@ void EquityFinancialsTab::rebuild_margin_chart(const services::equity::Financial
         // no margin; skip it rather than invent one.
         if (!(rev > 0.0)) // also skips absent (NaN) revenue
             continue;
-        cats << d.income_statement[i].first.left(4);
+        cats << fiscal_period_label(d.income_statement[i].first);
         gross_v << get_val(stmt, {"Gross Profit"}) / rev * 100.0;
         op_v << get_val(stmt, {"Operating Income", "Operating Profit"}) / rev * 100.0;
         net_v << get_val(stmt, {"Net Income", "Net Income Common Stockholders"}) / rev * 100.0;
@@ -1102,7 +1117,7 @@ void EquityFinancialsTab::rebuild_balance_chart(const services::equity::Financia
     equity_set->setColor(QColor(kGreen));
 
     for (int i = n - 1; i >= 0; --i) {
-        cats << d.balance_sheet[i].first.left(4);
+        cats << fiscal_period_label(d.balance_sheet[i].first);
         const auto& b = d.balance_sheet[i].second;
         *assets_set << bar_or_empty(get_val(b, {"Total Assets"}) / 1e9);
         *liab_set << bar_or_empty(get_val(b, {"Total Liabilities Net Minority Interest", "Total Liabilities"}) / 1e9);
@@ -1149,7 +1164,7 @@ void EquityFinancialsTab::rebuild_cashflow_chart(const services::equity::Financi
     fcf_series->setPen(QPen(QColor(kCyan), 2));
 
     for (int i = n - 1; i >= 0; --i) {
-        cats << d.cash_flow[i].first.left(4);
+        cats << fiscal_period_label(d.cash_flow[i].first);
         const auto& cf = d.cash_flow[i].second;
         double op = get_val(cf, {"Operating Cash Flow", "Total Cash From Operating Activities"});
         double inv = get_val(cf, {"Investing Cash Flow", "Total Cash From Investing Activities"});
@@ -1233,7 +1248,7 @@ void EquityFinancialsTab::rebuild_return_chart(const services::equity::Financial
 
     for (int i = n - 1; i >= 0; --i) {
         const QString period = matched[i].first.left(10);
-        cats << period.left(4);
+        cats << fiscal_period_label(period);
         const QJsonObject& bal = bal_by_period.value(period);
         double net = get_val(matched[i].second, {"Net Income", "Net Income Common Stockholders"});
         double assets = get_val(bal, {"Total Assets"});

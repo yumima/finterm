@@ -23,7 +23,9 @@ class EurostatPanel : public EconPanelBase {
 
   private:
     /// Flatten Eurostat SDMX-JSON indexed response into [{period, value}] rows.
-    static QJsonArray flatten_sdmx(const QJsonObject& response);
+    /// Flatten JSON-stat to [{period, value[, <dim>…]}]. *series_count gets the
+    /// number of distinct non-time series in the response.
+    static QJsonArray flatten_sdmx(const QJsonObject& response, int* series_count = nullptr);
 
     QComboBox* dataset_combo_ = nullptr;
     QComboBox* country_combo_ = nullptr;

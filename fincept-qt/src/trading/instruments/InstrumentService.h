@@ -9,6 +9,7 @@
 #include <QString>
 #include <QVector>
 
+#include <atomic>
 #include <functional>
 #include <optional>
 
@@ -104,6 +105,11 @@ class InstrumentService : public QObject {
     /// Whether instruments are loaded for this broker.
     bool is_loaded(const QString& broker_id) const;
 
+    /// Bumped every time any broker's instrument cache is (re)built. Lets
+    /// callers memoise derived lookups (e.g. expiry lists) and recompute only
+    /// when the underlying instruments actually changed. Lock-free.
+    quint64 cache_generation() const { return generation_.load(std::memory_order_acquire); }
+
   signals:
     void refresh_started(const QString& broker_id);
     void refresh_done(const QString& broker_id, int count);
@@ -127,6 +133,7 @@ class InstrumentService : public QObject {
     QMap<QString, Cache> caches_; // keyed by broker_id
     QSet<QString> refreshing_;    // brokers currently mid-download (prevents double-refresh)
     mutable QMutex mutex_;        // guards caches_ + refreshing_
+    std::atomic<quint64> generation_{0}; // see cache_generation()
 
     void build_cache(const QString& broker_id, const QVector<Instrument>& instruments);
     void do_refresh(const QString& broker_id, const BrokerCredentials& creds);

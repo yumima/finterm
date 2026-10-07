@@ -380,7 +380,7 @@ from .indicators import (
     ExponentialMovingAverage, SimpleMovingAverage,
     MovingAverageConvergenceDivergence, RelativeStrengthIndex,
     BollingerBands, AverageTrueRange, Stochastic,
-    RateOfChange, Momentum, WilliamsPercentR,
+    RateOfChange, MomentumPercent, Momentum, WilliamsPercentR,
     CommodityChannelIndex, AverageDirectionalIndex
 )
 

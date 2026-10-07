@@ -145,7 +145,8 @@ void IlostatPanel::on_result(const QString& request_id, const services::Economic
     const QString country = country_edit_->text().trimmed().toUpper();
     const QString title = "ILO: " + (label.isEmpty() ? cmd : label) + (country.isEmpty() ? "" : " — " + country);
 
-    display(rows, title);
+    // SDMX-CSV rows; several countries ("CAN+USA") repeat TIME_PERIOD, which blanks LATEST/CHANGE.
+    display(rows, title, QStringLiteral("OBS_VALUE"), QStringLiteral("TIME_PERIOD"));
     LOG_INFO("IlostatPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 

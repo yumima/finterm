@@ -494,8 +494,9 @@ class IBondAnalyzer(AlternativeInvestmentBase):
         """
         Calculate I Bond composite rate
 
-        Formula: Fixed + (2 Ã— Inflation) + (Fixed Ã— Inflation)
-        Floor at 0% for deflation protection
+        Formula: Fixed + (2 x Semiannual inflation) + (Fixed x Semiannual inflation)
+        `inflation_rate` must be the SEMIANNUAL CPI-U rate TreasuryDirect
+        publishes (not the annual rate). Floor at 0% for deflation protection
         """
         composite = self.fixed_rate + (Decimal('2') * self.inflation_rate) + (self.fixed_rate * self.inflation_rate)
         return max(Decimal('0'), composite)

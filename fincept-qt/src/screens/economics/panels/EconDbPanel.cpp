@@ -140,7 +140,7 @@ void EconDbPanel::on_result(const QString& request_id, const services::Economics
                               ? "EconDB: " + indicator_combo_->currentText() + " — " + country_combo_->currentText()
                               : "EconDB: " + desc + (freq.isEmpty() ? "" : " (" + freq + ")");
 
-    display(obs, title);
+    display(obs, title, QStringLiteral("value"), QStringLiteral("date"));
     LOG_INFO("EconDbPanel", QString("Displayed %1 observations: %2").arg(obs.size()).arg(title));
 }
 

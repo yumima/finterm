@@ -39,6 +39,27 @@ from datetime import datetime, timedelta, date
 import time
 
 
+def _json_safe(obj):
+    """Recursively replace NaN/±inf (python or numpy floats) with None."""
+    import math
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_json_safe(v) for v in obj]
+    try:
+        import numpy as _np
+        if isinstance(obj, _np.floating):
+            f = float(obj)
+            return f if math.isfinite(f) else None
+        if isinstance(obj, _np.integer):
+            return int(obj)
+    except ImportError:
+        pass
+    return obj
+
+
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, (datetime, date)):
@@ -72,12 +93,14 @@ class ChinaEconomicsWrapper:
         self.retry_delay = 2
 
     def _convert_dataframe_to_json_safe(self, df: pd.DataFrame) -> List[Dict[str, Any]]:
-        """Convert DataFrame to JSON-safe format"""
+        """Convert DataFrame to JSON-safe format: NaN/NaT/±inf become None
+        (JSON null) — json.dumps would otherwise emit bare NaN, which is not
+        valid JSON and makes the whole payload unparseable for Qt."""
         df_copy = df.copy()
         for col in df_copy.columns:
             if pd.api.types.is_datetime64_any_dtype(df_copy[col]):
-                df_copy[col] = df_copy[col].astype(str)
-        return df_copy.to_dict('records')
+                df_copy[col] = df_copy[col].astype(str).where(df_copy[col].notna(), None)
+        return _json_safe(df_copy.to_dict('records'))
 
     def _safe_call_with_retry(self, func, *args, max_retries: int = 3, **kwargs) -> Dict[str, Any]:
         """Safely call AKShare function with retry logic"""
@@ -500,7 +523,7 @@ if __name__ == "__main__":
             result = wrapper.get_all_endpoints()
         else:
             result = {"success": False, "error": "Endpoint list not available"}
-        print(json.dumps(result, ensure_ascii=True))
+        print(json.dumps(_json_safe(result), ensure_ascii=True, allow_nan=False))
         sys.exit(0)
 
     # Dynamic method resolution
@@ -510,7 +533,7 @@ if __name__ == "__main__":
         method = getattr(wrapper, method_name)
         try:
             result = method(*args) if args else method()
-            print(json.dumps(result, ensure_ascii=True, cls=DateTimeEncoder))
+            print(json.dumps(_json_safe(result), ensure_ascii=True, cls=DateTimeEncoder, allow_nan=False))
         except Exception as e:
             print(json.dumps({"success": False, "error": str(e), "endpoint": endpoint}))
     else:

@@ -224,12 +224,53 @@ struct ComputedMetrics {
     std::optional<double> cvar_95;            // 1-day CVaR (expected shortfall) in currency
     std::optional<double> risk_score;         // 0-100 composite
     std::optional<double> concentration_top3; // sum of top 3 weights %
-    int return_days = 0;                      // observations behind the series-based metrics
+    // Observations behind the per-day statistics (volatility, Sharpe,
+    // Sortino, VaR, beta): ONE-SESSION flow-adjusted returns on the trading
+    // calendar (weekend rows merged, multi-session gaps excluded — see
+    // portfolio::trading_day_returns). Max drawdown chains every segment.
+    int return_days = 0;
+    // Date span (YYYY-MM-DD) of the snapshot series those statistics cover —
+    // the window every series metric is measured over, so a label can state
+    // it instead of claiming a fixed one ("VOL 30D" over a year of data).
+    QString window_start;
+    QString window_end;
+    // Ticker beta/alpha regress against: the book's base-currency benchmark
+    // when its history is loaded, else SPY. Set only with beta.
+    QString beta_benchmark;
     // The risk-free hurdle behind sharpe/sortino: the ^TNX value used (annual
     // decimal) and when it was fetched. Set only when those ratios are.
     std::optional<double> rf_rate;
     QDateTime rf_as_of;
 };
+
+/// Historical-simulation VaR needs enough returns to resolve its quantile:
+/// below 20 the 5th percentile lies beyond the worst observation, and "VaR"
+/// would just be the single worst day. Fewer → VaR/CVaR are unavailable.
+inline constexpr int kMinVarSample = 20;
+
+/// Calendar span of the metrics window as a short label: "1Y", "7M", "23D".
+inline QString metrics_window_label(const ComputedMetrics& m) {
+    const QDate a = QDate::fromString(m.window_start, Qt::ISODate);
+    const QDate b = QDate::fromString(m.window_end, Qt::ISODate);
+    if (!a.isValid() || !b.isValid() || b < a)
+        return QString();
+    const qint64 days = a.daysTo(b);
+    if (days >= 350)
+        return QStringLiteral("%1Y").arg(qMax<qint64>(1, (days + 30) / 365));
+    if (days >= 28)
+        return QStringLiteral("%1M").arg(qMax<qint64>(1, qRound64(days / 30.44)));
+    return QStringLiteral("%1D").arg(days);
+}
+
+/// Tooltip line naming the window and sample size behind the series metrics.
+inline QString metrics_window_note(const ComputedMetrics& m) {
+    if (m.window_start.isEmpty())
+        return QStringLiteral("No NAV history yet.");
+    return QStringLiteral("Window: %1 → %2 (%3 one-session returns; weekend rows merged, "
+                          "multi-day gaps excluded).")
+        .arg(m.window_start, m.window_end)
+        .arg(m.return_days);
+}
 
 /// True when the risk-free rate behind Sharpe/Sortino is older than a day —
 /// the last successful fetch, carried because today's failed.

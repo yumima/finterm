@@ -460,7 +460,10 @@ class GovernmentUSWrapper:
                 "date": target_date or prices_result.get("date"),
                 "total_securities": len(data),
                 "security_types": {},
-                "yield_summary": {},
+                # TreasuryDirect's price file carries the coupon rate, not a
+                # yield; bills (discount securities) have no coupon and are
+                # excluded so they don't drag the stats to 0.
+                "coupon_summary": {},
                 "price_summary": {},
                 "timestamp": int(datetime.now().timestamp())
             }
@@ -475,7 +478,7 @@ class GovernmentUSWrapper:
                 security_counts[sec_type] = security_counts.get(sec_type, 0) + 1
 
                 rate = item.get('rate')
-                if rate is not None:
+                if rate is not None and 'BILL' not in str(sec_type).upper():
                     all_rates.append(rate)
 
                 price = item.get('eod_price')
@@ -484,13 +487,14 @@ class GovernmentUSWrapper:
 
             summary["security_types"] = security_counts
 
-            # Calculate yield statistics
+            # Coupon-rate statistics (coupon-bearing securities only)
             if all_rates:
-                summary["yield_summary"] = {
-                    "min_rate": min(all_rates),
-                    "max_rate": max(all_rates),
-                    "avg_rate": sum(all_rates) / len(all_rates),
-                    "total_with_rates": len(all_rates)
+                summary["coupon_summary"] = {
+                    "min_coupon_pct": min(all_rates),
+                    "max_coupon_pct": max(all_rates),
+                    "avg_coupon_pct": sum(all_rates) / len(all_rates),
+                    "total_with_coupon": len(all_rates),
+                    "excludes": "bills (no coupon)"
                 }
 
             # Calculate price statistics

@@ -291,7 +291,7 @@ void BeaPanel::on_result(const QString& request_id, const services::EconomicsRes
     const QString ind_name = meta["indicator_name"].toString(
         indicator_list_->currentItem() ? indicator_list_->currentItem()->text().split("  [").first() : "Indicator");
 
-    display(rows, "BEA: " + ind_name);
+    display(rows, "BEA: " + ind_name, QStringLiteral("value"), QStringLiteral("date"));
     LOG_INFO("BeaPanel", QString("Displayed %1 data points for %2").arg(rows.size()).arg(request_id));
 }
 

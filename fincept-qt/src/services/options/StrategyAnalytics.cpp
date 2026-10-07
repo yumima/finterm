@@ -23,7 +23,7 @@ constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 /// expiry yields nullopt: the time to expiry is unknown, and inventing one
 /// (this used to return 1 day) would price a fabricated horizon.
 std::optional<int> days_to_expiry(const QString& expiry) {
-    QDate exp = QDate::fromString(expiry, "dd-MMM-yy");
+    QDate exp = QDate::fromString(expiry, QStringLiteral("dd-MMM-yy"), 2000); // yy → 20yy, not 19yy
     if (!exp.isValid())
         exp = QDate::fromString(expiry, "yyyy-MM-dd");
     if (!exp.isValid())

@@ -99,6 +99,7 @@ void UnComtradePanel::on_result(const QString& request_id, const services::Econo
         const QJsonArray arr = result.data["data"].toArray();
         const QString title =
             reporter_combo_->currentText() + " — " + flow_combo_->currentText() + " " + period_combo_->currentText();
+        // One row per partner (cross-sectional): no single series value.
         display(arr, title);
         LOG_INFO("UnComtradePanel", QString("Displayed %1 rows").arg(arr.size()));
     }

@@ -127,6 +127,7 @@ void CensusPanel::on_result(const QString& request_id, const services::Economics
     const int idx = dataset_combo_->currentIndex();
     const QString title =
         "Census: " + (idx >= 0 && idx < kCensusDatasets.size() ? kCensusDatasets[idx].label : request_id.mid(7));
+    // One row per state (cross-sectional): no single series value → stat cards "—".
     display(rows, title);
     LOG_INFO("CensusPanel", QString("Displayed %1 rows for %2").arg(rows.size()).arg(title));
 }

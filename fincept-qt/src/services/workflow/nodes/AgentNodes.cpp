@@ -91,6 +91,9 @@ void register_agent_nodes(NodeRegistry& registry) {
                     if (res.is_ok()) {
                         auto cfg_json = QJsonDocument::fromJson(res.value().config_json.toUtf8()).object();
                         instructions = cfg_json.value("instructions").toString();
+                        // Seeded named agents (v026/v028) store their prompt as system_prompt.
+                        if (instructions.trimmed().isEmpty())
+                            instructions = cfg_json.value("system_prompt").toString();
                         tools = cfg_json.value("tools").toArray();
                     }
                 }

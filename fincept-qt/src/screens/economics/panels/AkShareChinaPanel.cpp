@@ -26,13 +26,26 @@ struct AkCnSeries {
     QString label;
     QString command;
     QString description;
+    // akshare column feeding the stat cards (named in the title so the
+    // reader knows which measure LATEST/CHANGE describe) and the period
+    // column it is ordered by. akshare returns these newest-first.
+    QString value_key;
+    QString date_key;
+    QString stats_label;
 };
 
+// GDP periods are cumulative-quarter strings ("2025年第1-2季度", "2025年第1季度")
+// that do not sort chronologically as text, so GDP gets no date key: MIN/MAX/AVG
+// only, LATEST/CHANGE "—".
 static const QList<AkCnSeries> kAkShareSeries = {
-    {"CPI (Consumer Price Index)", "cpi", "Monthly CPI year-on-year & month-on-month"},
-    {"PPI (Producer Price Index)", "ppi", "Monthly PPI change rates"},
-    {"GDP (Gross Domestic Product)", "gdp", "Quarterly GDP by expenditure approach"},
-    {"PMI (Manufacturing & Services)", "pmi", "Monthly PMI — official NBS data"},
+    {"CPI (Consumer Price Index)", "cpi", "Monthly CPI year-on-year & month-on-month", QString::fromUtf8("全国-同比增长"),
+     QString::fromUtf8("月份"), "national YoY %"},
+    {"PPI (Producer Price Index)", "ppi", "Monthly PPI change rates", QString::fromUtf8("当月同比增长"),
+     QString::fromUtf8("月份"), "YoY %"},
+    {"GDP (Gross Domestic Product)", "gdp", "Quarterly GDP by expenditure approach",
+     QString::fromUtf8("国内生产总值-同比增长"), QString(), "GDP YoY %"},
+    {"PMI (Manufacturing & Services)", "pmi", "Monthly PMI — official NBS data", QString::fromUtf8("制造业-指数"),
+     QString::fromUtf8("月份"), "manufacturing index"},
 };
 
 AkShareChinaPanel::AkShareChinaPanel(QWidget* parent)
@@ -91,11 +104,20 @@ void AkShareChinaPanel::on_result(const QString& request_id, const services::Eco
         return;
     }
 
-    const int idx = series_combo_->currentIndex();
-    const QString title =
-        "AkShare China: " + (idx >= 0 && idx < kAkShareSeries.size() ? kAkShareSeries[idx].label : request_id.mid(6));
+    // request_id is "akcn_<command>": resolve the series from it, not from the
+    // combo, so a selection change during the fetch can't mislabel the stats.
+    const QString cmd = request_id.mid(5);
+    const AkCnSeries* series = nullptr;
+    for (const auto& s : kAkShareSeries)
+        if (s.command == cmd)
+            series = &s;
+    if (!series) {
+        display(rows, "AkShare China: " + cmd);
+        return;
+    }
+    const QString title = "AkShare China: " + series->label + " — stats: " + series->stats_label;
 
-    display(rows, title);
+    display(rows, title, series->value_key, series->date_key);
     LOG_INFO("AkShareChinaPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 

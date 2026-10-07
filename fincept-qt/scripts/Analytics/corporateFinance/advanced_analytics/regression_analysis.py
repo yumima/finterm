@@ -255,140 +255,171 @@ class MARegression:
             }
         }
 
+# ── JSON contract (MAAnalyticsService "run" / ma_regression MCP tool) ────────
+#
+#   regression_analysis.py run '<params JSON>'
+#
+# Comparable-company valuation regression on data the caller supplies (no
+# sample/synthetic training set exists in this module):
+#   comparables  [{name?, ev, revenue, ebitda, growth}, ...]   required
+#                ev / revenue / ebitda: amounts in one consistent unit;
+#                growth: decimal (0.14 == 14 %)
+#   subject      {revenue, ebitda, growth}                     required
+#                (only the features of the chosen specification)
+#   type         "ols"      -> EV = a + b * EBITDA
+#                "multiple" -> EV = a + b1 Revenue + b2 EBITDA + b3 Growth
+#   features     optional explicit list overriding `type`
+#   confidence   optional prediction-interval level (decimal, default 0.95)
+# Needs at least k + 2 comparables (k = number of features) so the residual
+# variance has degrees of freedom. The prediction interval is the exact OLS
+# one: yhat +/- t_{n-k-1} * sqrt(s^2 (1 + x0' (X'X)^-1 x0)).
+#
+# Raw (y_values, x_values) form, used by the MCP tool:
+#   y_values     [y_1..y_n]
+#   x_values     [x_1..x_n] (one regressor) or [[x_11..x_1n], ...] (one
+#                list per regressor) -- or row-major [[x_11, x_21], ...]
+#   variable_names optional
+
+import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parent.parent.parent))
+from corporateFinance._cli import (InputError, has, is_json_call, num, obj,  # noqa: E402
+                                   obj_list, run_json, text)
+
+_SPECS = {'ols': ['ebitda'], 'multiple': ['revenue', 'ebitda', 'growth']}
+
+
+def _ols(X, y, names, confidence):
+    """OLS with intercept. Returns fit statistics and a predictor."""
+    from scipy import stats
+    n, k = X.shape
+    dof = n - k - 1
+    if dof < 1:
+        raise InputError(f"Need at least {k + 2} observations for {k} regressor(s) (got {n})")
+    Xi = np.column_stack([np.ones(n), X])
+    xtx = Xi.T @ Xi
+    if np.linalg.matrix_rank(xtx) < k + 1:
+        raise InputError("Regressors are collinear (or constant); the regression is not identified")
+    xtx_inv = np.linalg.inv(xtx)
+    beta = xtx_inv @ Xi.T @ y
+    resid = y - Xi @ beta
+    sse = float(resid @ resid)
+    sst = float(((y - y.mean()) ** 2).sum())
+    s2 = sse / dof
+    se = np.sqrt(np.diag(s2 * xtx_inv))
+    with np.errstate(divide='ignore', invalid='ignore'):
+        t = np.where(se > 0, beta / se, np.nan)
+    p = 2 * stats.t.sf(np.abs(t), dof)
+    r2 = 1 - sse / sst if sst > 0 else None
+    adj = 1 - (1 - r2) * (n - 1) / dof if r2 is not None else None
+    tcrit = float(stats.t.ppf(0.5 + confidence / 2, dof))
+
+    def predict(x0):
+        xv = np.concatenate([[1.0], x0])
+        yhat = float(xv @ beta)
+        half = tcrit * float(np.sqrt(s2 * (1 + xv @ xtx_inv @ xv)))
+        return yhat, yhat - half, yhat + half
+
+    coeffs = [{'variable': 'intercept', 'coefficient': float(beta[0]), 'std_error': float(se[0]),
+               't_stat': float(t[0]), 'p_value': float(p[0])}]
+    for i, nm in enumerate(names):
+        coeffs.append({'variable': nm, 'coefficient': float(beta[i + 1]), 'std_error': float(se[i + 1]),
+                       't_stat': float(t[i + 1]), 'p_value': float(p[i + 1])})
+    fit = {
+        'r_squared': r2,
+        'adj_r_squared': adj,
+        'residual_std_error': float(np.sqrt(s2)),
+        'num_observations': n,
+        'degrees_of_freedom': dof,
+        'confidence_level_pct': confidence * 100,
+    }
+    return fit, coeffs, predict
+
+
+def _confidence(p):
+    c = num(p, 'confidence', min=0.5, max=0.999) if has(p, 'confidence') else 0.95
+    return c
+
+
+def _run_raw(p):
+    y = np.array([float(v) for v in p['y_values']], dtype=float)
+    xs = p.get('x_values')
+    if not isinstance(xs, list) or not xs:
+        raise InputError("Missing required input: x_values")
+    X = np.array([[float(v) for v in row] for row in xs] if isinstance(xs[0], list)
+                 else [float(v) for v in xs], dtype=float)
+    if X.ndim == 1:
+        X = X.reshape(-1, 1)
+    elif X.shape[0] != len(y) and X.shape[1] == len(y):
+        X = X.T                      # one list per regressor -> column matrix
+    if X.shape[0] != len(y):
+        raise InputError(f"x_values has {X.shape[0]} observations but y_values has {len(y)}")
+    names = p.get('variable_names') or [f'x{i + 1}' for i in range(X.shape[1])]
+    if len(names) != X.shape[1]:
+        raise InputError("variable_names length must match the number of regressors")
+    fit, coeffs, _ = _ols(X, y, [str(n) for n in names], _confidence(p))
+    return {**fit, 'coefficients': coeffs}
+
+
+def cmd_run(p):
+    if p.get('y_values') is not None:
+        return _run_raw(p)
+    comps = obj_list(p, 'comparables', label='comparables (list of {ev, revenue, ebitda, growth})')
+    subject = obj(p, 'subject')
+    if isinstance(p.get('features'), list) and p['features']:
+        features = [str(f) for f in p['features']]
+        spec = 'custom'
+    else:
+        spec = text(p, 'type', choices=list(_SPECS)) if has(p, 'type') else None
+        if spec is None:
+            raise InputError("Missing required input: type (ols | multiple)")
+        features = _SPECS[spec.lower()]
+    rows, names = [], []
+    for i, c in enumerate(comps):
+        if not has(c, 'ev'):
+            raise InputError(f"comparables[{i}] is missing ev")
+        for f in features:
+            if not has(c, f):
+                raise InputError(f"comparables[{i}] is missing {f}")
+        rows.append([float(c[f]) for f in features] + [float(c['ev'])])
+        names.append(str(c.get('name') or c.get('ticker') or f'comp {i + 1}'))
+    for f in features:
+        if not has(subject, f):
+            raise InputError(f"subject is missing {f}")
+    data = np.array(rows, dtype=float)
+    X, y = data[:, :-1], data[:, -1]
+    fit, coeffs, predict = _ols(X, y, features, _confidence(p))
+    x0 = np.array([float(subject[f]) for f in features])
+    yhat, lo, hi = predict(x0)
+    fitted = X @ np.array([c['coefficient'] for c in coeffs[1:]]) + coeffs[0]['coefficient']
+    out = {
+        'specification': spec,
+        'model': 'EV = a + ' + ' + '.join(f'b_{f}*{f}' for f in features),
+        'implied_ev': yhat,
+        'prediction_low': lo,
+        'prediction_high': hi,
+        **fit,
+    }
+    rev, ebitda = subject.get('revenue'), subject.get('ebitda')
+    out['implied_ev_revenue_x'] = yhat / float(rev) if has(subject, 'revenue') and float(rev) > 0 else None
+    out['implied_ev_ebitda_x'] = yhat / float(ebitda) if has(subject, 'ebitda') and float(ebitda) > 0 else None
+    out['coefficients'] = coeffs
+    out['fitted'] = [{'name': nm, 'ev': float(a), 'fitted_ev': float(b), 'residual': float(a - b)}
+                     for nm, a, b in zip(names, y, fitted)]
+    return out
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'run': cmd_run, 'regression': cmd_run})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "regression":
-            if len(sys.argv) < 3:
-                raise ValueError("Regression parameters required")
-
-            # Accept either a single JSON dict with all params, or positional args
-            try:
-                params = json.loads(sys.argv[2])
-            except (json.JSONDecodeError, TypeError):
-                params = {}
-
-            # Check if params is a wrapper dict with comp_data, subject_metrics, type keys
-            if isinstance(params, dict) and ('comp_data' in params or 'dependent' in params):
-                if 'dependent' in params:
-                    # Simple regression input format
-                    dependent = params['dependent']
-                    independent = params['independent']
-                    analyzer = MARegression()
-                    y = np.array(dependent)
-                    X = np.array(independent).T if len(np.array(independent).shape) > 1 else np.array(independent).reshape(-1, 1)
-                    result_data = analyzer.linear_regression(X, y)
-                    analysis = {
-                        'r_squared': result_data.r_squared,
-                        'adjusted_r_squared': result_data.adjusted_r_squared,
-                        'coefficients': result_data.coefficients.tolist(),
-                        'intercept': result_data.intercept,
-                        'p_values': result_data.p_values.tolist(),
-                        'std_errors': result_data.std_errors.tolist()
-                    }
-                else:
-                    comp_data = params.get('comp_data', [])
-                    subject_metrics = params.get('subject_metrics', {})
-                    regression_type = params.get('type', params.get('regression_type', 'premium'))
-                    analyzer = MARegression()
-                    if regression_type == "premium":
-                        analysis = analyzer.premium_regression(comp_data)
-                    elif regression_type == "multiple":
-                        analysis = analyzer.multiple_regression(comp_data, subject_metrics)
-                    else:
-                        analysis = analyzer.premium_regression(comp_data)
-            else:
-                # Positional args: comp_data subject_metrics regression_type
-                comp_data = params if isinstance(params, list) else json.loads(sys.argv[2])
-                subject_metrics = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
-                regression_type = sys.argv[4] if len(sys.argv) > 4 else "multiple"
-
-                analyzer = MARegression()
-                # Both 'ols' and 'multiple' use multiple_regression_valuation with frontend data format
-                # (comp_data has 'ev', 'revenue', 'ebitda', 'growth' keys)
-                # Only route to premium_regression if comp_data has 'premium' key
-                has_premium_key = comp_data and 'premium' in comp_data[0]
-                if has_premium_key and regression_type == "premium":
-                    analysis = analyzer.premium_regression(comp_data)
-                else:
-                    # Filter out non-numeric keys (like 'name') from comp_data for regression
-                    numeric_keys = [k for k in comp_data[0].keys() if k != 'name'] if comp_data else []
-                    filtered_comp = [{k: v for k, v in row.items() if k in numeric_keys} for row in comp_data]
-                    # Also filter subject_metrics to only include keys that are features (not 'ev', not 'name')
-                    feature_keys = [k for k in numeric_keys if k != 'ev']
-                    filtered_subject = {k: v for k, v in subject_metrics.items() if k in feature_keys}
-                    analysis_raw = analyzer.multiple_regression_valuation(filtered_comp, filtered_subject)
-
-                    # Normalize output to what the frontend expects:
-                    # result.implied_ev, result.r_squared, result.adj_r_squared,
-                    # result.coefficients (key → plain number), result.implied_multiples
-                    rs = analysis_raw.get('regression_statistics', {})
-                    raw_coeffs = analysis_raw.get('coefficients', {})
-                    predicted_ev = analysis_raw.get('predicted_value', 0)
-
-                    # coefficients: flatten to {feature: coefficient_value}
-                    flat_coeffs = {
-                        feat: coeff_info['coefficient']
-                        for feat, coeff_info in raw_coeffs.items()
-                    }
-
-                    # implied_multiples: compute EV / metric for subject company
-                    implied_multiples = {}
-                    if filtered_subject.get('revenue', 0) > 0:
-                        implied_multiples['ev_revenue'] = predicted_ev / filtered_subject['revenue']
-                    if filtered_subject.get('ebitda', 0) > 0:
-                        implied_multiples['ev_ebitda'] = predicted_ev / filtered_subject['ebitda']
-
-                    # prediction_interval
-                    pi = analysis_raw.get('prediction_interval', {})
-
-                    analysis = {
-                        'implied_ev': predicted_ev,
-                        'prediction_interval_low': pi.get('lower', 0),
-                        'prediction_interval_high': pi.get('upper', 0),
-                        'r_squared': rs.get('r_squared', 0),
-                        'adj_r_squared': rs.get('adjusted_r_squared', 0),
-                        'intercept': rs.get('intercept', 0),
-                        'coefficients': flat_coeffs,
-                        'implied_multiples': implied_multiples,
-                        'num_comparables': analysis_raw.get('num_comparables', len(comp_data)),
-                        'regression_type': regression_type,
-                        'raw_coefficients': raw_coeffs,  # keep full detail for raw view
-                    }
-
-            result = {"success": True, "data": analysis}
-
-            def safe_json(o):
-                if isinstance(o, np.bool_):
-                    return bool(o)
-                if isinstance(o, (np.floating, np.integer)):
-                    v = float(o)
-                    if v != v or v == float('inf') or v == float('-inf'):  # nan or inf
-                        return None
-                    return v
-                return str(o)
-
-            print(json.dumps(result, default=safe_json))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

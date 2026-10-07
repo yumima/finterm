@@ -282,7 +282,7 @@ def main():
                 },
                 "categories": {
                     "momentum": "RSI, Stochastic, Williams %R, KAMA, ROC, TSI, Ultimate Oscillator, PPO, PVO",
-                    "volume": "ADI, OBV, CMF, Force Index, EoM, VPT, NVI, VWAP, MFI",
+                    "volume": "ADI, OBV, CMF, Force Index, EoM, VPT, NVI, VWAP (14-bar rolling), MFI",
                     "volatility": "ATR, Bollinger Bands, Keltner Channel, Donchian Channel, Ulcer Index",
                     "trend": "SMA, EMA, WMA, MACD, TRIX, Mass Index, Ichimoku, KST, DPO, CCI, ADX, Vortex, PSAR, STC, Aroon",
                     "others": "Daily Return, Daily Log Return, Cumulative Return"

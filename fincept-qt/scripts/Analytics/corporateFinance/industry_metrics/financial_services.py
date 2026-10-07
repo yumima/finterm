@@ -1,4 +1,10 @@
 """Financial Services Industry M&A Metrics"""
+import sys as _sys
+from pathlib import Path as _Path
+
+_ANALYTICS = str(_Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in _sys.path:
+    _sys.path.insert(0, _ANALYTICS)
 from typing import Dict, Any, List, Optional
 
 class FinancialServicesMetrics:
@@ -447,116 +453,118 @@ def _build_financial_standard_output(analysis: dict, sector: str) -> dict:
     }
 
 
-def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import sys
-    import json
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
 
-    command = sys.argv[1]
+def _div(a, b):
+    """a / b, or None when either side is missing or b is zero."""
+    if a is None or b is None or b == 0:
+        return None
+    return a / b
 
-    try:
-        if command == "financial":
-            if len(sys.argv) < 4:
-                raise ValueError("Sector and institution data required")
+# ── JSON contract (MAAnalyticsService "calculate") ──────────────────────────
+# Only ratios the inputs determine. No benchmark P/TBV or deposit-premium tables.
 
-            sector = sys.argv[2]
-            institution_data = json.loads(sys.argv[3])
+def financial_services_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """{sector: banking|insurance|asset_management, ...}  rates are decimals.
 
-            analyzer = FinancialServicesMetrics()
+    banking          : total_assets, deposits; optional equity, tangible_equity,
+                       net_income | roe, gross_loans, nim, efficiency_ratio,
+                       cet1_ratio, npl_ratio, market_cap
+    insurance        : net_premiums_earned, losses_incurred, underwriting_expenses;
+                       optional equity, net_income, market_cap
+    asset_management : aum, revenue; optional net_flows, ebitda, enterprise_value
+    """
+    from corporateFinance._cli import num, opt_num, pct, text
+    q = dict(p)
+    if q.get('sector') is None and q.get('sub_sector') is not None:
+        q['sector'] = str(q['sub_sector']).lower()
+    if q.get('equity') is None and q.get('book_value') is not None:
+        q['equity'] = q['book_value']
+    sector = text(q, 'sector', choices=['banking', 'insurance', 'asset_management'])
+    out: Dict[str, Any] = {'sector': sector}
 
-            # Map common alternative key names
-            key_aliases = {
-                'total_deposits': 'deposits', 'total_loans': 'loans',
-                'net_interest_income': 'net_interest_margin',
-                'tier1_capital': 'tier1_capital_ratio',
-                'cet1_ratio': 'tier1_capital_ratio',   # frontend sends cet1_ratio
-                'loan_loss_provision_rate': 'npa_ratio',
-                'npl_ratio': 'npa_ratio',
-                'return_on_equity': 'roe',
-                'gross_premiums': 'gross_written_premium',  # frontend sends gross_premiums
-            }
-            for old_key, new_key in key_aliases.items():
-                if old_key in institution_data and new_key not in institution_data:
-                    institution_data[new_key] = institution_data.pop(old_key)
-
-            import inspect
-            sector_key = sector.lower()
-
-            # Route to appropriate calculation based on sector
-            if 'bank' in sector.lower():
-                # Provide defaults for required bank params
-                institution_data.setdefault('loans', institution_data.get('deposits', 0) * 0.75)
-                institution_data.setdefault('npa_ratio', 1.0)
-                institution_data.setdefault('roe', 10.0)
-                institution_data.setdefault('tier1_capital_ratio', 12.0)
-                # Drop unknown keys
-                valid_params = set(inspect.signature(analyzer.calculate_bank_metrics).parameters.keys())
-                filtered = {k: v for k, v in institution_data.items() if k in valid_params}
-                analysis = analyzer.calculate_bank_metrics(**filtered)
-                sector_key = 'banking'
-
-            elif 'asset' in sector.lower() or 'asset_management' in sector.lower():
-                # Frontend sends: aum, net_flows, fee_rate (bps), operating_margin, active_vs_passive, alpha_generation
-                # Python expects: aum, net_flows, advisory_fee_rate (fraction), client_retention, advisor_productivity, operating_margin
-                if 'fee_rate' in institution_data and 'advisory_fee_rate' not in institution_data:
-                    # Convert bps to fraction (45 bps = 0.0045)
-                    institution_data['advisory_fee_rate'] = institution_data.pop('fee_rate') / 10000.0
-                institution_data.setdefault('client_retention', 92.0)
-                institution_data.setdefault('advisor_productivity', 80_000_000.0)
-                # Drop frontend-only keys
-                for drop_key in ('active_vs_passive', 'alpha_generation'):
-                    institution_data.pop(drop_key, None)
-                valid_params = set(inspect.signature(analyzer.calculate_wealth_management_metrics).parameters.keys())
-                filtered = {k: v for k, v in institution_data.items() if k in valid_params}
-                analysis = analyzer.calculate_wealth_management_metrics(**filtered)
-                sector_key = 'asset_management'
-
-            elif 'wealth' in sector.lower():
-                valid_params = set(inspect.signature(analyzer.calculate_wealth_management_metrics).parameters.keys())
-                filtered = {k: v for k, v in institution_data.items() if k in valid_params}
-                analysis = analyzer.calculate_wealth_management_metrics(**filtered)
-                sector_key = 'asset_management'
-
-            elif 'insurance' in sector.lower():
-                valid_params = set(inspect.signature(analyzer.calculate_insurance_metrics).parameters.keys())
-                filtered = {k: v for k, v in institution_data.items() if k in valid_params}
-                analysis = analyzer.calculate_insurance_metrics(**filtered)
-                sector_key = 'insurance'
-
-            elif 'fintech' in sector.lower():
-                valid_params = set(inspect.signature(analyzer.calculate_fintech_metrics).parameters.keys())
-                filtered = {k: v for k, v in institution_data.items() if k in valid_params}
-                analysis = analyzer.calculate_fintech_metrics(**filtered)
-                sector_key = 'fintech'
-
-            else:
-                # Default to bank metrics
-                institution_data.setdefault('loans', institution_data.get('deposits', 0) * 0.75)
-                institution_data.setdefault('npa_ratio', 1.0)
-                institution_data.setdefault('tier1_capital_ratio', 12.0)
-                valid_params = set(inspect.signature(analyzer.calculate_bank_metrics).parameters.keys())
-                filtered = {k: v for k, v in institution_data.items() if k in valid_params}
-                analysis = analyzer.calculate_bank_metrics(**filtered)
-                sector_key = 'banking'
-
-            analysis_with_standard = _build_financial_standard_output(analysis, sector_key)
-            result = {"success": True, "data": analysis_with_standard}
-            print(json.dumps(result))
-
+    if sector == 'banking':
+        assets = num(q, 'total_assets', label='Total assets', gt=0)
+        deposits = num(q, 'deposits', label='Deposits', min=0)
+        equity = opt_num(q, 'equity', None, label='Shareholders equity', gt=0)
+        tbv = opt_num(q, 'tangible_equity', None, label='Tangible equity', gt=0)
+        ni = opt_num(q, 'net_income', None, label='Net income')
+        roe_in = opt_num(q, 'roe', None, label='ROE (decimal)')
+        loans = opt_num(q, 'gross_loans', None, label='Gross loans', min=0)
+        mcap = opt_num(q, 'market_cap', None, label='Market cap', gt=0)
+        if ni is not None and equity is not None:
+            roe, roe_source = ni / equity, 'computed (net income / equity)'
+        elif roe_in is not None:
+            roe, roe_source = roe_in, 'input'
+            if ni is None and equity is not None:
+                ni = roe_in * equity
         else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
+            roe, roe_source = None, None
+        out.update({
+            'total_assets': assets,
+            'deposits': deposits,
+            'deposits_to_assets_pct': pct(deposits / assets),
+            'loans_to_deposits_pct': pct(_div(loans, deposits)),
+            'equity_to_assets_pct': pct(_div(equity, assets)),
+            'roe_pct': pct(roe),
+            'roe_source': roe_source,
+            'roa_pct': pct(_div(ni, assets)),
+            'nim_pct': pct(opt_num(q, 'nim', None, label='NIM (decimal)')),
+            'efficiency_ratio_pct': pct(opt_num(q, 'efficiency_ratio', None, label='Efficiency ratio (decimal)')),
+            'cet1_ratio_pct': pct(opt_num(q, 'cet1_ratio', None, label='CET1 ratio (decimal)')),
+            'npl_ratio_pct': pct(opt_num(q, 'npl_ratio', None, label='NPL ratio (decimal)')),
+            'price_to_book_x': _div(mcap, equity),
+            'price_to_tangible_book_x': _div(mcap, tbv),
+            'price_to_earnings_x': _div(mcap, ni) if ni and ni > 0 else None,
+        })
+    elif sector == 'insurance':
+        npe = num(q, 'net_premiums_earned', label='Net premiums earned', gt=0)
+        losses = num(q, 'losses_incurred', label='Losses & LAE incurred', min=0)
+        uw_exp = num(q, 'underwriting_expenses', label='Underwriting expenses', min=0)
+        equity = opt_num(q, 'equity', None, label='Shareholders equity', gt=0)
+        ni = opt_num(q, 'net_income', None, label='Net income')
+        mcap = opt_num(q, 'market_cap', None, label='Market cap', gt=0)
+        combined = (losses + uw_exp) / npe
+        out.update({
+            'net_premiums_earned': npe,
+            'loss_ratio_pct': pct(losses / npe),
+            'expense_ratio_pct': pct(uw_exp / npe),
+            'combined_ratio_pct': pct(combined),
+            'underwriting_profit': npe - losses - uw_exp,
+            'underwriting_profitable': combined < 1.0,
+            'roe_pct': pct(_div(ni, equity)),
+            'price_to_book_x': _div(mcap, equity),
+            'price_to_earnings_x': _div(mcap, ni) if ni and ni > 0 else None,
+        })
+    else:
+        aum = num(q, 'aum', label='AUM', gt=0)
+        rev = num(q, 'revenue', label='Revenue', min=0)
+        flows = opt_num(q, 'net_flows', None, label='Net flows')
+        ebitda = opt_num(q, 'ebitda', None, label='EBITDA')
+        ev = opt_num(q, 'enterprise_value', None, label='Enterprise value', gt=0)
+        out.update({
+            'aum': aum,
+            'revenue': rev,
+            'fee_rate_bps': rev / aum * 1e4,
+            'organic_growth_pct': pct(_div(flows, aum)),
+            'ebitda_margin_pct': pct(_div(ebitda, rev)),
+            'ev_aum_pct': pct(_div(ev, aum)),
+            'ev_revenue_x': _div(ev, rev),
+            'ev_ebitda_x': _div(ev, ebitda) if ebitda and ebitda > 0 else None,
+        })
+    return out
 
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
+
+def main():
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'calculate': financial_services_json})
+
 
 if __name__ == '__main__':
     main()

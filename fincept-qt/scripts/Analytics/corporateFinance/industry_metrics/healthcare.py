@@ -1,4 +1,10 @@
 """Healthcare Industry-Specific M&A Metrics"""
+import sys as _sys
+from pathlib import Path as _Path
+
+_ANALYTICS = str(_Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in _sys.path:
+    _sys.path.insert(0, _ANALYTICS)
 from typing import Dict, Any, List, Optional
 from enum import Enum
 
@@ -506,129 +512,72 @@ def _build_healthcare_standard_output(analysis: dict, sector: str) -> dict:
     }
 
 
+
+
+def _div(a, b):
+    """a / b, or None when either side is missing or b is zero."""
+    if a is None or b is None or b == 0:
+        return None
+    return a / b
+
+# ── JSON contract (MAAnalyticsService "calculate") ──────────────────────────
+# Only metrics the inputs determine. Pipeline value is the caller's own
+# risk-adjusted NPV; no phase success rates or benchmark multiples are invented.
+
+def healthcare_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """{sector: pharma|biotech|devices|services, revenue, ebitda_margin,
+        rd_spend?, pipeline_npv?, phase3_candidates?, patent_expiry_revenue?,
+        enterprise_value?}
+    patent_expiry_revenue = share of revenue losing exclusivity (decimal).
+    """
+    from corporateFinance._cli import num, opt_num, pct, text
+    q = dict(p)
+    if q.get('sector') is None and q.get('sub_sector') is not None:
+        q['sector'] = str(q['sub_sector']).lower()
+    if q.get('pipeline_npv') is None and q.get('pipeline_value') is not None:
+        q['pipeline_npv'] = q['pipeline_value']
+    sector = text(q, 'sector', choices=['pharma', 'biotech', 'devices', 'services'])
+    rev = num(q, 'revenue', label='Revenue', min=0)
+    if q.get('ebitda_margin') is None and q.get('ebitda') is not None:
+        ebitda = num(q, 'ebitda', label='EBITDA')
+        margin = _div(ebitda, rev)
+    else:
+        margin = num(q, 'ebitda_margin', label='EBITDA margin (decimal)', min=-50, max=1)
+        ebitda = rev * margin
+    rd = opt_num(q, 'rd_spend', None, label='R&D spend', min=0)
+    pipeline = opt_num(q, 'pipeline_npv', None, label='Pipeline rNPV', min=0)
+    p3 = opt_num(q, 'phase3_candidates', None, label='Phase 3 candidates', min=0, integer=True)
+    loe = opt_num(q, 'patent_expiry_revenue', None, label='Revenue facing loss of exclusivity (decimal)', min=0, max=1)
+    ev = opt_num(q, 'enterprise_value', None, label='Enterprise value', gt=0)
+    return {
+        'sector': sector,
+        'revenue': rev,
+        'ebitda': ebitda,
+        'ebitda_margin_pct': pct(margin),
+        'rd_spend': rd,
+        'rd_intensity_pct': pct(_div(rd, rev)),
+        'pipeline_npv': pipeline,
+        'pipeline_to_revenue_x': _div(pipeline, rev),
+        'phase3_candidates': p3,
+        'pipeline_npv_per_phase3': _div(pipeline, p3),
+        'revenue_at_risk': rev * loe if loe is not None else None,
+        'revenue_at_risk_pct': pct(loe),
+        'ev_revenue_x': _div(ev, rev),
+        'ev_ebitda_x': _div(ev, ebitda) if ebitda and ebitda > 0 else None,
+        'pipeline_share_of_ev_pct': pct(_div(pipeline, ev)),
+    }
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'calculate': healthcare_json})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "healthcare":
-            if len(sys.argv) < 4:
-                raise ValueError("Sector and company data required")
-
-            sector = sys.argv[2]
-            company_data = json.loads(sys.argv[3])
-
-            # Determine segment from sector
-            if 'pharma' in sector.lower():
-                segment = HealthcareSegment.PHARMA
-            elif 'biotech' in sector.lower():
-                segment = HealthcareSegment.BIOTECH
-            elif 'device' in sector.lower():
-                segment = HealthcareSegment.MEDICAL_DEVICES
-            elif 'service' in sector.lower():
-                segment = HealthcareSegment.HEALTHCARE_SERVICES
-            elif 'healthtech' in sector.lower() or 'tech' in sector.lower():
-                segment = HealthcareSegment.HEALTHTECH
-            else:
-                segment = HealthcareSegment.PHARMA  # default
-
-            analyzer = HealthcareMetrics(segment)
-            sector_key = sector.lower()
-
-            import inspect
-
-            if segment == HealthcareSegment.PHARMA:
-                # Frontend sends company-level data — use company-level calculation
-                analysis = _calculate_pharma_company_metrics(company_data)
-
-            elif segment == HealthcareSegment.BIOTECH:
-                # Frontend sends company-level biotech data — use company-level calculation
-                analysis = _calculate_biotech_company_metrics(company_data)
-                sector_key = 'biotech'
-
-            elif segment == HealthcareSegment.MEDICAL_DEVICES:
-                # Map frontend keys to Python parameter names
-                # fda_clearances (int) → regulatory_approvals (List[str])
-                if 'fda_clearances' in company_data:
-                    n = int(company_data.pop('fda_clearances'))
-                    approvals = ['FDA'] if n >= 1 else []
-                    if n >= 2:
-                        approvals.append('CE_Mark')
-                    company_data.setdefault('regulatory_approvals', approvals)
-
-                # gross_margin: normalize to fraction if given as percentage
-                if 'gross_margin' in company_data and company_data['gross_margin'] > 1:
-                    company_data['gross_margin'] = company_data['gross_margin'] / 100.0
-
-                # recurring_revenue_pct: normalize to fraction
-                if 'recurring_revenue_pct' in company_data and company_data['recurring_revenue_pct'] > 1:
-                    company_data['recurring_revenue_pct'] = company_data['recurring_revenue_pct'] / 100.0
-
-                # Provide defaults for required params not in frontend form
-                company_data.setdefault('regulatory_approvals', ['FDA'])
-                company_data.setdefault('clinical_evidence_strength', 60)
-                company_data.setdefault('reimbursement_coverage', 70.0)
-
-                # Drop unknown keys
-                valid_params = set(inspect.signature(analyzer.calculate_medical_device_metrics).parameters.keys())
-                filtered = {k: v for k, v in company_data.items() if k in valid_params}
-                analysis = analyzer.calculate_medical_device_metrics(**filtered)
-                sector_key = 'devices'
-
-            elif segment == HealthcareSegment.HEALTHCARE_SERVICES:
-                # Map frontend keys to Python parameter names
-                revenue = float(company_data.get('revenue', 0))
-                ebitda_margin_pct = float(company_data.get('ebitda_margin', 0))
-                ebitda = revenue * ebitda_margin_pct / 100.0
-                same_store_growth = float(company_data.get('same_store_growth', 0))
-                commercial_pct = float(company_data.get('payor_mix_commercial', 55)) / 100.0
-                # Remaining split between medicare and medicaid
-                remaining = max(0.0, 1.0 - commercial_pct)
-                payor_mix = {
-                    'commercial': commercial_pct,
-                    'medicare': remaining * 0.6,
-                    'medicaid': remaining * 0.4,
-                }
-                quality_scores = {'patient_satisfaction': 4.0, 'clinical_quality': 4.0}
-                regulatory_compliance_score = 85
-
-                analysis = analyzer.calculate_healthcare_services_metrics(
-                    revenue=revenue,
-                    ebitda=ebitda,
-                    same_store_growth=same_store_growth,
-                    payor_mix=payor_mix,
-                    quality_scores=quality_scores,
-                    regulatory_compliance_score=regulatory_compliance_score,
-                )
-                sector_key = 'services'
-
-            elif segment == HealthcareSegment.HEALTHTECH:
-                valid_params = set(inspect.signature(analyzer.calculate_healthtech_metrics).parameters.keys())
-                filtered = {k: v for k, v in company_data.items() if k in valid_params}
-                analysis = analyzer.calculate_healthtech_metrics(**filtered)
-                sector_key = 'healthtech'
-
-            analysis_with_standard = _build_healthcare_standard_output(analysis, sector_key)
-            result = {"success": True, "data": analysis_with_standard}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

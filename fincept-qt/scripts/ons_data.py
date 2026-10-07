@@ -61,24 +61,86 @@ def get_timeseries(dataset_id: str, timeseries_id: str, start_year: str = None, 
     return _make_request(endpoint, params=params)
 
 
-def get_gdp(frequency: str = "quarterly", start: str = "2020", end: str = "2024") -> Any:
-    ts = ONS_TIMESERIES["gdp_quarterly"]
-    return get_timeseries(ts["dataset"], ts["timeseries"], start, end)
+# ── Headline series used by the Economics ▸ ONS panel ───────────────────────
+# The old api.ons.gov.uk/v1 timeseries endpoint is retired (404). The ONS
+# website serves the same series as JSON at <uri>/data, keyed by CDID.
+ONS_SITE = "https://www.ons.gov.uk"
+ONS_SERIES = {
+    "gdp":           ("/economy/grossdomesticproductgdp/timeseries/abmi/qna",
+                      "GDP: chained volume measures, SA (£m)"),
+    "cpi":           ("/economy/inflationandpriceindices/timeseries/d7g7/mm23",
+                      "CPI annual rate: all items (%)"),
+    "cpih":          ("/economy/inflationandpriceindices/timeseries/l55o/mm23",
+                      "CPIH annual rate: all items (%)"),
+    "rpi":           ("/economy/inflationandpriceindices/timeseries/czbh/mm23",
+                      "RPI: % change over 12 months"),
+    "unemployment":  ("/employmentandlabourmarket/peoplenotinwork/unemployment/timeseries/mgsx/lms",
+                      "Unemployment rate, 16+, SA (%)"),
+    "employment":    ("/employmentandlabourmarket/peopleinwork/employmentandemployeetypes/timeseries/lf24/lms",
+                      "Employment rate, 16-64, SA (%)"),
+    "trade_balance": ("/economy/nationalaccounts/balanceofpayments/timeseries/ikbj/pnbp",
+                      "Total trade balance, BoP, CP, SA (£m)"),
+    "avg_earnings":  ("/employmentandlabourmarket/peopleinwork/earningsandworkinghours/timeseries/kab9/lms",
+                      "AWE: whole economy total pay, SA (£/week)"),
+    "public_debt":   ("/economy/governmentpublicsectorandtaxes/publicsectorfinance/timeseries/hf6x/pusf",
+                      "PSND ex public sector banks (% of GDP, NSA)"),
+}
+
+_MONTHS = {m: i + 1 for i, m in enumerate(
+    ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"])}
 
 
-def get_cpi(category: str = "all_items", start: str = "2020", end: str = "2024") -> Any:
-    ts = ONS_TIMESERIES["cpi_all_items"]
-    return get_timeseries(ts["dataset"], ts["timeseries"], start, end)
+def _iso_period(label: str) -> Optional[str]:
+    """'2026 AUG' -> '2026-08', '2026 Q2' -> '2026-Q2', '2026' -> '2026'."""
+    parts = label.strip().upper().split()
+    if len(parts) == 1 and parts[0].isdigit():
+        return parts[0]
+    if len(parts) == 2 and parts[0].isdigit():
+        if parts[1] in _MONTHS:
+            return f"{parts[0]}-{_MONTHS[parts[1]]:02d}"
+        if parts[1] in ("Q1", "Q2", "Q3", "Q4"):
+            return f"{parts[0]}-{parts[1]}"
+    return None
 
 
-def get_unemployment(measure: str = "rate", start: str = "2020", end: str = "2024") -> Any:
-    ts = ONS_TIMESERIES["unemployment_rate"]
-    return get_timeseries(ts["dataset"], ts["timeseries"], start, end)
+def get_series(key: str, start_year: Optional[str] = None) -> Dict[str, Any]:
+    if key not in ONS_SERIES:
+        return {"error": f"Unknown series: {key}", "available": list(ONS_SERIES)}
+    uri, label = ONS_SERIES[key]
+    try:
+        r = session.get(f"{ONS_SITE}{uri}/data", timeout=30,
+                        headers={"User-Agent": "Mozilla/5.0 (finterm economics)"})
+        r.raise_for_status()
+        raw = r.json()
+    except requests.exceptions.RequestException as e:
+        return {"error": f"Request failed: {e}"}
+    except ValueError as e:
+        return {"error": f"JSON decode error: {e}"}
 
-
-def search(query: str) -> Any:
-    params = {"q": query}
-    return _make_request("search", params=params)
+    # Use the finest frequency the series has; never mix frequencies.
+    obs = raw.get("months") or raw.get("quarters") or raw.get("years") or []
+    data = []
+    for o in obs:
+        date = _iso_period(o.get("date", ""))
+        try:
+            value = float(o.get("value"))
+        except (TypeError, ValueError):
+            continue  # blank / non-numeric = unavailable, skip
+        if not date or (start_year and date[:4] < str(start_year)):
+            continue
+        data.append({"date": date, "value": value})
+    data.sort(key=lambda x: x["date"])
+    desc = raw.get("description", {})
+    return {
+        "success": True,
+        "series": desc.get("cdid", key),
+        "label": label,
+        "title": desc.get("title"),
+        "unit": desc.get("unit"),
+        "release_date": desc.get("releaseDate"),
+        "count": len(data),
+        "data": data,
+    }
 
 
 def main(args=None):
@@ -98,21 +160,9 @@ def main(args=None):
         start_year = args[3] if len(args) > 3 else None
         end_year = args[4] if len(args) > 4 else None
         result = get_timeseries(dataset_id, timeseries_id, start_year, end_year)
-    elif command == "gdp":
-        frequency = args[1] if len(args) > 1 else "quarterly"
-        start = args[2] if len(args) > 2 else "2020"
-        end = args[3] if len(args) > 3 else "2024"
-        result = get_gdp(frequency, start, end)
-    elif command == "cpi":
-        category = args[1] if len(args) > 1 else "all_items"
-        start = args[2] if len(args) > 2 else "2020"
-        end = args[3] if len(args) > 3 else "2024"
-        result = get_cpi(category, start, end)
-    elif command == "unemployment":
-        measure = args[1] if len(args) > 1 else "rate"
-        start = args[2] if len(args) > 2 else "2020"
-        end = args[3] if len(args) > 3 else "2024"
-        result = get_unemployment(measure, start, end)
+    elif command in ONS_SERIES:
+        start_year = args[1] if len(args) > 1 and args[1].isdigit() else None
+        result = get_series(command, start_year)
     elif command == "search":
         query = args[1] if len(args) > 1 else "GDP"
         result = search(query)

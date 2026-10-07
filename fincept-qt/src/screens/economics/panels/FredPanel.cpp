@@ -109,22 +109,29 @@ void FredPanel::on_result(const QString& request_id, const services::EconomicsRe
         if (obs.isEmpty())
             obs = result.data["data"].toArray();
 
-        // Convert string values to numbers where possible
+        // fred_data.py emits JSON numbers; the raw FRED passthrough (metadata
+        // fetch failed) emits strings with "." for missing. Accept both and
+        // drop anything that isn't a real number.
         QJsonArray clean;
         for (const auto& v : obs) {
             auto obj = v.toObject();
-            const QString val_str = obj["value"].toString();
-            if (val_str == "." || val_str.isEmpty())
-                continue;
+            const QJsonValue jv = obj["value"];
             bool ok = false;
-            double d = val_str.toDouble(&ok);
-            if (ok)
-                obj["value"] = d;
+            double d = 0.0;
+            if (jv.isDouble()) {
+                d = jv.toDouble();
+                ok = true;
+            } else if (jv.isString()) {
+                d = jv.toString().toDouble(&ok); // "." / "" fail to parse
+            }
+            if (!ok)
+                continue;
+            obj["value"] = d;
             clean.append(obj);
         }
 
         const QString series = request_id.mid(5); // strip "fred_"
-        display(clean, "FRED: " + series);
+        display(clean, "FRED: " + series, QStringLiteral("value"), QStringLiteral("date"));
         LOG_INFO("FredPanel", QString("Displayed %1 observations").arg(clean.size()));
     }
 }

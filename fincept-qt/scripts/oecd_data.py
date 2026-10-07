@@ -187,6 +187,30 @@ EXPENDITURE_DICT = {
     "electricity_gas_other_fuels": "CP045",
 }
 
+# ISO 3166 alpha-2 → OECD REF_AREA (alpha-3), so callers such as the
+# Economics panel can pass "US"/"DE" as well as "united_states"/"USA".
+ISO2_TO_ISO3 = {
+    "US": "USA", "DE": "DEU", "JP": "JPN", "FR": "FRA", "GB": "GBR", "UK": "GBR",
+    "CA": "CAN", "AU": "AUS", "KR": "KOR", "IT": "ITA", "ES": "ESP", "CN": "CHN",
+    "IN": "IND", "BR": "BRA", "MX": "MEX", "NL": "NLD", "CH": "CHE", "SE": "SWE",
+    "NO": "NOR", "DK": "DNK", "BE": "BEL", "AT": "AUT", "IE": "IRL", "PL": "POL",
+    "PT": "PRT", "NZ": "NZL", "TR": "TUR", "ZA": "ZAF", "FI": "FIN", "GR": "GRC",
+}
+
+_FREQ_ALIASES = {
+    "a": "annual", "annual": "annual", "y": "annual", "yearly": "annual",
+    "q": "quarter", "quarter": "quarter", "quarterly": "quarter",
+    "m": "monthly", "monthly": "monthly", "month": "monthly",
+}
+
+
+def _norm_freq(value: Optional[str], default: str) -> str:
+    """Accept SDMX codes (A/Q/M) as well as annual/quarter/monthly."""
+    if value is None:
+        return default
+    return _FREQ_ALIASES.get(str(value).strip().lower(), str(value))
+
+
 class OECDError:
     """Error handling wrapper for OECD API responses"""
     def __init__(self, endpoint: str, error: str, status_code: Optional[int] = None):
@@ -344,7 +368,32 @@ class OECDWrapper:
         if countries == "all":
             return ""
         country_list = countries.split(",")
-        return "+".join([country_mapping.get(country.lower(), country) for country in country_list])
+        return "+".join([country_mapping.get(country.lower(), ISO2_TO_ISO3.get(country.upper(), country))
+                         for country in country_list])
+
+    # The dataflow keys previously used here (DF_QNA 1.0, AES@DF_AES,
+    # DSD_EO@DF_EO 1.0, VALUE column parsing) no longer exist on the OECD
+    # SDMX service, so every call failed. The keys below were checked against
+    # sdmx.oecd.org; each returns one series per country.
+
+    def _series_response(self, endpoint: str, df: Any, description: str,
+                         params: Dict[str, Any]) -> Dict[str, Any]:
+        if isinstance(df, dict):
+            return df
+        df = df.rename(columns={"REF_AREA": "country", "TIME_PERIOD": "date", "OBS_VALUE": "value"})
+        df = df.sort_values(by=["country", "date"])
+        data = df[["country", "date", "value"]].replace({np.nan: None}).to_dict(orient="records")
+        if not data:
+            return OECDError(endpoint, 'No data found for the given parameters').to_dict()
+        return {
+            "success": True,
+            "endpoint": endpoint,
+            "description": description,
+            "parameters": params,
+            "total_records": len(data),
+            "data": data,
+            "timestamp": int(datetime.now().timestamp())
+        }
 
     # ===== GDP REAL ENDPOINT =====
 
@@ -352,105 +401,22 @@ class OECDWrapper:
                      frequency: str = "quarter",
                      start_date: Optional[str] = None,
                      end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get real GDP data"""
+        """Real GDP, chained-volume (reference year 2020), USD PPP millions,
+        seasonally adjusted (quarterly values annualised) — DSD_NAMAIN1@DF_QNA."""
         try:
             if frequency not in ["quarter", "annual"]:
                 return OECDError('gdp_real', f'Invalid frequency: {frequency}. Must be quarter or annual').to_dict()
-
-            # Set default dates
-            if not start_date:
-                start_date = "2020-01-01" if countries == "all" else "1947-01-01"
-            if not end_date:
-                end_date = f"{date.today().year}-12-31"
-
             freq_code = "Q" if frequency == "quarter" else "A"
             country_codes = self._country_string(countries, COUNTRY_TO_CODE_GDP)
-            if not country_codes:
-                country_codes = "*"  # SDMX v2 uses * for all
-
-            # Try SDMX v2 first with proper GDP dataflow
-            url_v2 = (
-                f"{SDMX_V2_BASE}data/dataflow/OECD.SDD.NAD/DSD_NAMAIN1@DF_QNA/1.0/"
-                f"{country_codes}.{freq_code}..S1..B1GQ.VOBP...EUR+_T+GBP+USD+JPY.XDC"
-            )
-
-            params_v2 = {
-                "c[TIME_PERIOD]": f"ge:{start_date}+le:{end_date}",
-                "attributes": "dsd",
-                "measures": "all"
-            }
-
-            result = self._make_request(url_v2, format_type='csv', api_version='v2', params=params_v2)
-
-            if "error" in result:
-                # Fallback to SDMX v1 with correct structure
-                filter_expr = f"{freq_code}..{country_codes}.S1..B1GQ.VOBP...XDC"
-                url_v1 = (
-                    f"{SDMX_V1_BASE}data/OECD.SDD.NAD,DSD_NAMAIN1@DF_QNA,1.0/"
-                    f"{filter_expr}"
-                )
-
-                params_v1 = {
-                    "startPeriod": start_date,
-                    "endPeriod": end_date,
-                    "dimensionAtObservation": "TIME_PERIOD",
-                    "detail": "dataonly",
-                    "format": "csvfile"
-                }
-
-                result = self._make_request(url_v1, format_type='csv', api_version='v1', params=params_v1)
-
-            if "error" in result:
-                return OECDError('gdp_real', result['error'], result.get('status_code')).to_dict()
-
-            try:
-                df = pd.read_csv(StringIO(result['data'])).get(["REF_AREA", "TIME_PERIOD", "OBS_VALUE"])
-
-                if df.empty:
-                    return OECDError('gdp_real', 'No data found for the given parameters').to_dict()
-
-                df = df.rename(columns={
-                    "REF_AREA": "country",
-                    "TIME_PERIOD": "date",
-                    "OBS_VALUE": "value"
-                })
-
-                def apply_country_map(x):
-                    v = CODE_TO_COUNTRY_GDP.get(x, x)
-                    v = v.replace("_", " ").title()
-                    return v.replace("Oecd", "OECD")
-
-                df["country"] = df["country"].apply(apply_country_map)
-                df["date"] = df["date"].apply(self._oecd_date_to_python_date)
-                df = df[(df["date"] <= datetime.strptime(end_date, '%Y-%m-%d').date()) &
-                        (df["date"] >= datetime.strptime(start_date, '%Y-%m-%d').date())]
-                df["value"] = (df["value"].astype(float) * 1_000_000).astype("int64")
-
-                df = df.sort_values(by=["date", "value"], ascending=[True, False])
-
-                # Convert date objects to strings for JSON serialization
-                df["date"] = df["date"].astype(str)
-
-                # Convert to list of dictionaries
-                result_data = df.replace({np.nan: None}).to_dict(orient="records")
-
-                return {
-                    "success": True,
-                    "endpoint": "gdp_real",
-                    "parameters": {
-                        "countries": countries,
-                        "frequency": frequency,
-                        "start_date": start_date,
-                        "end_date": end_date
-                    },
-                    "total_records": len(result_data),
-                    "data": result_data,
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-            except Exception as e:
-                return OECDError('gdp_real', f'Failed to process data: {str(e)}').to_dict()
-
+            start_p, end_p = self._period_bounds(frequency, start_date or "1990-01-01", end_date)
+            # FREQ.ADJUSTMENT.REF_AREA.SECTOR.COUNTERPART_SECTOR.TRANSACTION.INSTR_ASSET.ACTIVITY.
+            # EXPENDITURE.UNIT_MEASURE.PRICE_BASE.TRANSFORMATION.TABLE_IDENTIFIER
+            url = (f"{SDMX_V1_BASE}data/OECD.SDD.NAD,DSD_NAMAIN1@DF_QNA,1.1/"
+                   f"{freq_code}.Y.{country_codes}.S1..B1GQ._Z...USD_PPP.LR.LA.T0102")
+            df = self._sdmx_series('gdp_real', url, start_p, end_p, [])
+            return self._series_response(
+                'gdp_real', df, "Real GDP, chained volume (2020 prices), USD PPP millions, SA, annualised",
+                {"countries": countries, "frequency": frequency, "start_date": start_p, "end_date": end_p})
         except Exception as e:
             return OECDError('gdp_real', str(e)).to_dict()
 
@@ -463,138 +429,28 @@ class OECDWrapper:
                                  harmonized: bool = False,
                                  start_date: Optional[str] = None,
                                  end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get Consumer Price Index data"""
+        """CPI (index level, YoY % or MoM %) — DSD_PRICES@DF_PRICES_ALL."""
         try:
-            # Validate parameters
             if frequency not in ["monthly", "quarter", "annual"]:
                 return OECDError('cpi', f'Invalid frequency: {frequency}').to_dict()
-
             if units not in ["index", "yoy", "mom"]:
                 return OECDError('cpi', f'Invalid units: {units}').to_dict()
-
-            # Set default dates
-            if not start_date:
-                start_date = "1950-01-01"
-            if not end_date:
-                end_date = f"{date.today().year}-12-31"
-
+            exp_code = EXPENDITURE_DICT.get(expenditure, expenditure)
+            freq_code = {"monthly": "M", "quarter": "Q", "annual": "A"}[frequency]
+            unit_code, transform = {"index": ("IX", "_Z"), "yoy": ("PA", "GY"), "mom": ("PA", "G1")}[units]
             methodology = "HICP" if harmonized else "N"
-            freq_code = "M" if frequency == "monthly" else ("Q" if frequency == "quarter" else "A")
-            unit_code = {"index": "IX", "yoy": "PA", "mom": "PC"}[units]
-            expenditure_code = "" if expenditure == "all" else EXPENDITURE_DICT.get(expenditure, "")
-
-            country_codes = self._country_string(countries, COUNTRY_TO_CODE_CPI)
-            if not country_codes:
-                country_codes = "*"  # SDMX v2 uses * for all
-
-            # Try SDMX v2 first with proper CPI dataflow
-            url_v2 = (
-                f"{SDMX_V2_BASE}data/dataflow/OECD.SDD.TPS/DSD_PRICES@DF_PRICES_ALL/1.0/"
-                f"{country_codes}.{freq_code}.{methodology}.CPI.{unit_code}.{expenditure_code}.N"
-            )
-
-            params_v2 = {
-                "c[TIME_PERIOD]": f"ge:{start_date}+le:{end_date}",
-                "attributes": "dsd",
-                "measures": "all"
-            }
-
-            result = self._make_request(url_v2, format_type='csv', api_version='v2', params=params_v2)
-
-            if "error" in result:
-                # Fallback to SDMX v1 with correct structure
-                filter_expr = f"{country_codes}.{freq_code}.{methodology}.CPI.{unit_code}.{expenditure_code}.N"
-                url_v1 = (
-                    f"{SDMX_V1_BASE}data/OECD.SDD.TPS,DSD_PRICES@DF_PRICES_ALL,1.0/"
-                    f"{filter_expr}"
-                )
-
-                params_v1 = {
-                    "startPeriod": start_date,
-                    "endPeriod": end_date,
-                    "dimensionAtObservation": "TIME_PERIOD",
-                    "detail": "dataonly",
-                    "format": "csvfile"
-                }
-
-                result = self._make_request(url_v1, format_type='csv', api_version='v1', params=params_v1)
-
-            if "error" in result:
-                return OECDError('cpi', result['error'], result.get('status_code')).to_dict()
-
-            try:
-                if result['format'] == 'xml':
-                    data = self._parse_xml_to_dataframe(result['data'])
-                else:
-                    # Try to parse as CSV
-                    data = pd.read_csv(StringIO(result['data']))
-
-                # Filter data based on query parameters
-                query_filter = f"METHODOLOGY=='{methodology}' & UNIT_MEASURE=='{unit_code}' & FREQ=='{freq_code}'"
-
-                if country_codes:
-                    if "+" in country_codes:
-                        country_list = country_codes.split("+")
-                        country_conditions = " or ".join([f"REF_AREA=='{c}'" for c in country_list])
-                        query_filter += f" & ({country_conditions})"
-                    else:
-                        query_filter += f" & REF_AREA=='{country_codes}'"
-
-                if expenditure_code:
-                    query_filter += f" & EXPENDITURE=='{expenditure_code}'"
-
-                if hasattr(data, 'query'):
-                    data = data.query(query_filter).reset_index(drop=True)
-
-                # Rename columns
-                if hasattr(data, 'rename'):
-                    data = data[["REF_AREA", "TIME_PERIOD", "VALUE", "EXPENDITURE"]].rename(columns={
-                        "REF_AREA": "country",
-                        "TIME_PERIOD": "date",
-                        "VALUE": "value",
-                        "EXPENDITURE": "expenditure"
-                    })
-
-                # Apply transformations
-                data["country"] = data["country"].map(CODE_TO_COUNTRY_CPI)
-                if expenditure_code:
-                    reverse_expenditure = {v: k for k, v in EXPENDITURE_DICT.items()}
-                    data["expenditure"] = data["expenditure"].map(reverse_expenditure)
-
-                data["date"] = data["date"].apply(self._oecd_date_to_python_date)
-                data = data[(data["date"] <= datetime.strptime(end_date, '%Y-%m-%d').date()) &
-                        (data["date"] >= datetime.strptime(start_date, '%Y-%m-%d').date())]
-
-                # Convert date objects to strings for JSON serialization
-                data["date"] = data["date"].astype(str)
-
-                # Normalize percent values
-                if units in ("yoy", "mom"):
-                    data["value"] = data["value"].astype(float) / 100
-
-                # Convert to list of dictionaries
-                result_data = data.fillna("N/A").replace("N/A", None).to_dict(orient="records")
-
-                return {
-                    "success": True,
-                    "endpoint": "consumer_price_index",
-                    "parameters": {
-                        "countries": countries,
-                        "expenditure": expenditure,
-                        "frequency": frequency,
-                        "units": units,
-                        "harmonized": harmonized,
-                        "start_date": start_date,
-                        "end_date": end_date
-                    },
-                    "total_records": len(result_data),
-                    "data": result_data,
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-            except Exception as e:
-                return OECDError('cpi', f'Failed to process data: {str(e)}').to_dict()
-
+            country_codes = self._country_string(countries, COUNTRY_TO_CODE_GDP)
+            start_p, end_p = self._period_bounds(frequency, start_date or "1990-01-01", end_date)
+            # REF_AREA.FREQ.METHODOLOGY.MEASURE.UNIT_MEASURE.EXPENDITURE.ADJUSTMENT.TRANSFORMATION
+            url = (f"{SDMX_V1_BASE}data/OECD.SDD.TPS,DSD_PRICES@DF_PRICES_ALL,1.0/"
+                   f"{country_codes}.{freq_code}.{methodology}.CPI.{unit_code}.{exp_code}.N.{transform}")
+            df = self._sdmx_series('cpi', url, start_p, end_p, [])
+            label = {"index": "CPI index level", "yoy": "CPI inflation, % year-on-year",
+                     "mom": "CPI inflation, % month-on-month"}[units]
+            return self._series_response(
+                'cpi', df, f"{label} ({'HICP' if harmonized else 'national'}, {expenditure}, NSA)",
+                {"countries": countries, "expenditure": expenditure, "frequency": frequency,
+                 "units": units, "start_date": start_p, "end_date": end_p})
         except Exception as e:
             return OECDError('cpi', str(e)).to_dict()
 
@@ -603,275 +459,44 @@ class OECDWrapper:
     def get_gdp_forecast(self, countries: str = "united_states",
                           start_date: Optional[str] = None,
                           end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get GDP forecast data from OECD - Economic Outlook forecasts"""
+        """Real GDP growth, % y/y, from the latest OECD Economic Outlook
+        (history plus the Outlook's projection years) — DSD_EO@DF_EO."""
         try:
-            # Set default dates
             current_year = date.today().year
-            if not start_date:
-                start_date = f"{current_year - 1}-01-01"
-            if not end_date:
-                end_date = f"{current_year + 2}-12-31"
-
+            start_p = (start_date or f"{current_year - 5}")[:4]
+            end_p = (end_date or f"{current_year + 2}")[:4]
             country_codes = self._country_string(countries, COUNTRY_TO_CODE_GDP)
-            if not country_codes:
-                country_codes = "*"  # SDMX v2 uses * for all
-
-            # Try SDMX v2 with Economic Outlook forecast dataflow
-            url_v2 = (
-                f"{SDMX_V2_BASE}data/dataflow/OECD.SDD.STD/AEO/DSD_EO@DF_EO/1.0/"
-                f"FORECAST.{country_codes}.AUSGRO.SRWGPAGDP._Z._T.XDC"
-            )
-
-            params_v2 = {
-                "c[TIME_PERIOD]": f"ge:{start_date}+le:{end_date}",
-                "attributes": "dsd",
-                "measures": "all"
-            }
-
-            result = self._make_request(url_v2, format_type='csv', api_version='v2', params=params_v2)
-
-            if "error" in result:
-                # Fallback to SDMX v1 with Economic Outlook
-                filter_expr = f"FORECAST.{country_codes}.AUSGRO.SRWGPAGDP._Z._T.XDC"
-                url_v1 = (
-                    f"{SDMX_V1_BASE}data/OECD.SDD.STD,AEO,DSD_EO@DF_EO,1.0/"
-                    f"{filter_expr}"
-                )
-
-                params_v1 = {
-                    "startPeriod": start_date,
-                    "endPeriod": end_date,
-                    "dimensionAtObservation": "TIME_PERIOD",
-                    "detail": "dataonly",
-                    "format": "csvfile"
-                }
-
-                result = self._make_request(url_v1, format_type='csv', api_version='v1', params=params_v1)
-
-            if "error" in result:
-                # Try alternative forecast structure
-                url_v2_alt = (
-                    f"{SDMX_V2_BASE}data/dataflow/OECD.SDD.STD/AEO/DSD_EO@DF_EO/1.0/"
-                    f"{country_codes}.STP.AUSGRO.SRWGPAGDP._Z._T.XDC"
-                )
-
-                result = self._make_request(url_v2_alt, format_type='csv', api_version='v2', params=params_v2)
-
-            if "error" in result:
-                # Return a helpful error message explaining the forecast API limitation
-                return {
-                    "success": False,
-                    "endpoint": "gdp_forecast",
-                    "error": f"OECD forecast API structure has changed or endpoint unavailable. "
-                             f"Original error: {result['error']}. "
-                             f"Note: GDP forecast data may require a different API endpoint or is no longer publicly available.",
-                    "parameters": {
-                        "countries": countries,
-                        "start_date": start_date,
-                        "end_date": end_date,
-                        "note": "Forecast functionality is currently unavailable due to OECD API changes"
-                    },
-                    "suggestion": "Consider using historical GDP data and external forecast sources",
-                    "status_code": result.get('status_code'),
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-            try:
-                df = pd.read_csv(StringIO(result['data']))
-
-                if df.empty:
-                    return OECDError('gdp_forecast', 'No forecast data available').to_dict()
-
-                # Process the forecast data if available
-                if "OBS_VALUE" in df.columns:
-                    df = df[["REF_AREA", "TIME_PERIOD", "OBS_VALUE"]].rename(columns={
-                        "REF_AREA": "country",
-                        "TIME_PERIOD": "date",
-                        "OBS_VALUE": "value"
-                    })
-
-                    def apply_country_map(x):
-                        v = CODE_TO_COUNTRY_GDP.get(x, x)
-                        return v.replace("_", " ").title() if v else x
-
-                    df["country"] = df["country"].apply(apply_country_map)
-                    df["date"] = df["date"].apply(self._oecd_date_to_python_date)
-                    df = df[(df["date"] <= datetime.strptime(end_date, '%Y-%m-%d').date()) &
-                            (df["date"] >= datetime.strptime(start_date, '%Y-%m-%d').date())]
-
-                    # Convert date objects to strings for JSON serialization
-                    df["date"] = df["date"].astype(str)
-
-                    # Convert to millions (OECD typically reports in millions)
-                    df["value"] = df["value"].astype(float) * 1_000_000
-
-                    df = df.sort_values(by=["date", "country"])
-
-                    # Convert to list of dictionaries
-                    result_data = df.replace({np.nan: None}).to_dict(orient="records")
-                else:
-                    result_data = []
-
-                return {
-                    "success": True,
-                    "endpoint": "gdp_forecast",
-                    "source": "OECD",
-                    "parameters": {
-                        "countries": countries,
-                        "start_date": start_date,
-                        "end_date": end_date
-                    },
-                    "total_records": len(result_data),
-                    "data": result_data,
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-            except Exception as e:
-                return OECDError('gdp_forecast', f'Failed to process forecast data: {str(e)}').to_dict()
-
+            url = f"{SDMX_V1_BASE}data/OECD.ECO.MAD,DSD_EO@DF_EO,/{country_codes}.GDPV_ANNPCT.A"
+            df = self._sdmx_series('gdp_forecast', url, start_p, end_p, [])
+            return self._series_response(
+                'gdp_forecast', df,
+                "Real GDP growth, % y/y — latest OECD Economic Outlook (recent years are projections)",
+                {"countries": countries, "start_date": start_p, "end_date": end_p})
         except Exception as e:
             return OECDError('gdp_forecast', str(e)).to_dict()
 
     # ===== UNEMPLOYMENT ENDPOINT =====
 
     def get_unemployment(self, countries: str = "united_states",
-                        frequency: str = "quarter",
+                        frequency: str = "monthly",
                         start_date: Optional[str] = None,
                         end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get unemployment rate data from OECD"""
+        """Harmonised unemployment rate, 15+, SA, % of labour force — DSD_LFS@DF_IALFS_UNE_M."""
         try:
             if frequency not in ["quarter", "annual", "monthly"]:
                 return OECDError('unemployment', f'Invalid frequency: {frequency}').to_dict()
-
-            # Set default dates
-            if not start_date:
-                start_date = "2000-01-01"
-            if not end_date:
-                end_date = f"{date.today().year}-12-31"
-
             freq_code = {"monthly": "M", "quarter": "Q", "annual": "A"}[frequency]
             country_codes = self._country_string(countries, COUNTRY_TO_CODE_GDP)
-            if not country_codes:
-                country_codes = "*"  # SDMX v2 uses * for all
-
-            # Try SDMX v2 first with proper unemployment dataflow
-            url_v2 = (
-                f"{SDMX_V2_BASE}data/dataflow/OECD.SDD.STD/AES@DF_AES/1.0/"
-                f"{country_codes}.{freq_code}.LRUN64TT.ST.A.SA"
-            )
-
-            params_v2 = {
-                "c[TIME_PERIOD]": f"ge:{start_date}+le:{end_date}",
-                "attributes": "dsd",
-                "measures": "all"
-            }
-
-            result = self._make_request(url_v2, format_type='csv', api_version='v2', params=params_v2)
-
-            if "error" in result:
-                # Fallback to SDMX v1 with unemployment dataflow
-                filter_expr1 = f"{country_codes}.{freq_code}.LRUN64TT.ST.A.SA"
-                url_v1_1 = (
-                    f"{SDMX_V1_BASE}data/OECD.SDD.STD,AES,AES@DF_AES,1.0/"
-                    f"{filter_expr1}"
-                )
-
-                params_v1 = {
-                    "startPeriod": start_date,
-                    "endPeriod": end_date,
-                    "dimensionAtObservation": "TIME_PERIOD",
-                    "detail": "dataonly",
-                    "format": "csvfile"
-                }
-
-                result = self._make_request(url_v1_1, format_type='csv', api_version='v1', params=params_v1)
-
-            if "error" in result:
-                # Try alternative unemployment indicator
-                url_v2_alt = (
-                    f"{SDMX_V2_BASE}data/dataflow/OECD.SDD.STD/AES@DF_AES/1.0/"
-                    f"{country_codes}.{freq_code}.LRUNTTTT.ST.A.SA"
-                )
-
-                result = self._make_request(url_v2_alt, format_type='csv', api_version='v2', params=params_v2)
-
-            if "error" in result:
-                # Return a helpful error message explaining the unemployment API limitation
-                return {
-                    "success": False,
-                    "endpoint": "unemployment",
-                    "error": f"OECD unemployment API structure has changed or endpoint unavailable. "
-                             f"Original error: {result['error']}. "
-                             f"Note: Unemployment data may require a different API endpoint or is no longer publicly available.",
-                    "parameters": {
-                        "countries": countries,
-                        "frequency": frequency,
-                        "start_date": start_date,
-                        "end_date": end_date,
-                        "note": "Unemployment functionality is currently unavailable due to OECD API changes"
-                    },
-                    "suggestion": "Consider using alternative sources for unemployment data (e.g., World Bank, FRED)",
-                    "status_code": result.get('status_code'),
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-            try:
-                df = pd.read_csv(StringIO(result['data']))
-
-                if df.empty:
-                    return OECDError('unemployment', 'No unemployment data available').to_dict()
-
-                if "OBS_VALUE" in df.columns:
-                    df = df[["REF_AREA", "TIME_PERIOD", "OBS_VALUE"]].rename(columns={
-                        "REF_AREA": "country",
-                        "TIME_PERIOD": "date",
-                        "OBS_VALUE": "value"
-                    })
-
-                    def apply_country_map(x):
-                        v = CODE_TO_COUNTRY_GDP.get(x, x)
-                        return v.replace("_", " ").title() if v else x
-
-                    df["country"] = df["country"].apply(apply_country_map)
-                    df["date"] = df["date"].apply(self._oecd_date_to_python_date)
-                    df = df[(df["date"] <= datetime.strptime(end_date, '%Y-%m-%d').date()) &
-                            (df["date"] >= datetime.strptime(start_date, '%Y-%m-%d').date())]
-
-                    # Convert date objects to strings for JSON serialization
-                    df["date"] = df["date"].astype(str)
-
-                    # Convert unemployment rate to percentage
-                    df["value"] = df["value"].astype(float)
-
-                    df = df.sort_values(by=["date", "country"])
-
-                    # Convert to list of dictionaries
-                    result_data = df.replace({np.nan: None}).to_dict(orient="records")
-                else:
-                    result_data = []
-
-                return {
-                    "success": True,
-                    "endpoint": "unemployment",
-                    "source": "OECD",
-                    "parameters": {
-                        "countries": countries,
-                        "frequency": frequency,
-                        "start_date": start_date,
-                        "end_date": end_date
-                    },
-                    "total_records": len(result_data),
-                    "data": result_data,
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-            except Exception as e:
-                return OECDError('unemployment', f'Failed to process unemployment data: {str(e)}').to_dict()
-
+            start_p, end_p = self._period_bounds(frequency, start_date, end_date)
+            # REF_AREA.MEASURE.UNIT_MEASURE.TRANSFORMATION.ADJUSTMENT.SEX.AGE.ACTIVITY.FREQ
+            url = (f"{SDMX_V1_BASE}data/OECD.SDD.TPS,DSD_LFS@DF_IALFS_UNE_M,1.0/"
+                   f"{country_codes}..._Z.Y._T.Y_GE15..{freq_code}")
+            df = self._sdmx_series('unemployment', url, start_p, end_p, [])
+            return self._series_response(
+                'unemployment', df, "Unemployment rate, 15+, SA, % of labour force",
+                {"countries": countries, "frequency": frequency, "start_date": start_p, "end_date": end_p})
         except Exception as e:
             return OECDError('unemployment', str(e)).to_dict()
-
-    # ===== COMPOSITE METHODS =====
 
     def get_economic_summary(self, country: str = "united_states",
                             start_date: Optional[str] = None,
@@ -941,70 +566,75 @@ class OECDWrapper:
 
     # ===== ADDITIONAL OECD DATA ENDPOINTS =====
 
+    def _sdmx_series(self, endpoint: str, url: str, start_period: str, end_period: str,
+                     group_cols: List[str]) -> Any:
+        """Fetch an SDMX v1 CSV and return a DataFrame with REF_AREA, TIME_PERIOD,
+        OBS_VALUE plus group_cols, or an OECDError dict."""
+        params = {
+            "startPeriod": start_period,
+            "endPeriod": end_period,
+            "dimensionAtObservation": "AllDimensions",
+            "format": "csvfile",
+        }
+        result = self._make_request(url, format_type='csvfile', api_version='v1', params=params)
+        if "error" in result:
+            return OECDError(endpoint, result['error'], result.get('status_code')).to_dict()
+        text = result.get('data') or ''
+        if not text.strip() or text.strip() == "NoResultsFound":
+            return OECDError(endpoint, 'No data found for the given parameters').to_dict()
+        try:
+            df = pd.read_csv(StringIO(text))
+        except Exception as e:
+            return OECDError(endpoint, f'Failed to parse data: {e}').to_dict()
+        needed = ["REF_AREA", "TIME_PERIOD", "OBS_VALUE"] + group_cols
+        if any(c not in df.columns for c in needed):
+            return OECDError(endpoint, 'Unexpected response layout').to_dict()
+        df = df[needed].copy()
+        df["OBS_VALUE"] = pd.to_numeric(df["OBS_VALUE"], errors="coerce")
+        return df.dropna(subset=["OBS_VALUE"])
+
+    @staticmethod
+    def _period_bounds(frequency: str, start_date: Optional[str], end_date: Optional[str]):
+        start = start_date or "2000-01-01"
+        end = end_date or f"{date.today().year}-12-31"
+        if frequency == "annual":
+            return start[:4], end[:4]
+        if frequency == "quarter":
+            def q(d):
+                return f"{d[:4]}-Q{(int(d[5:7]) - 1) // 3 + 1}"
+            return q(start), q(end)
+        return start[:7], end[:7]
+
     def get_interest_rates(self, countries: str = "united_states",
                           frequency: str = "monthly",
                           start_date: Optional[str] = None,
                           end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get short-term interest rates data from OECD"""
+        """Short-term (3-month) interest rates, % p.a. — DSD_STES@DF_FINMARK."""
         try:
             if frequency not in ["monthly", "quarter", "annual"]:
                 return OECDError('interest_rates', f'Invalid frequency: {frequency}').to_dict()
-
-            # Set default dates
-            if not start_date:
-                start_date = "2000-01-01"
-            if not end_date:
-                end_date = f"{date.today().year}-12-31"
-
             freq_code = {"monthly": "M", "quarter": "Q", "annual": "A"}[frequency]
             country_codes = self._country_string(countries, COUNTRY_TO_CODE_GDP)
-            if not country_codes:
-                country_codes = "*"
-
-            # Try SDMX v2 with interest rates dataflow
-            url_v2 = (
-                f"{SDMX_V2_BASE}data/dataflow/OECD.SDD.STD/MEI/DP_LIVE/1.0/"
-                f"{country_codes}.{freq_code}.IR3TIB.ST.A"
-            )
-
-            params_v2 = {
-                "c[TIME_PERIOD]": f"ge:{start_date}+le:{end_date}",
-                "attributes": "dsd",
-                "measures": "all"
+            start_p, end_p = self._period_bounds(frequency, start_date, end_date)
+            # REF_AREA.FREQ.MEASURE.UNIT_MEASURE.ACTIVITY.ADJUSTMENT.TRANSFORMATION.TIME_HORIZ.METHODOLOGY
+            url = (f"{SDMX_V1_BASE}data/OECD.SDD.STES,DSD_STES@DF_FINMARK,4.0/"
+                   f"{country_codes}.{freq_code}.IR3TIB.PA.....")
+            df = self._sdmx_series('interest_rates', url, start_p, end_p, [])
+            if isinstance(df, dict):
+                return df
+            df = df.rename(columns={"REF_AREA": "country", "TIME_PERIOD": "date", "OBS_VALUE": "value"})
+            df = df.sort_values(by=["country", "date"])
+            data = df.replace({np.nan: None}).to_dict(orient="records")
+            return {
+                "success": True,
+                "endpoint": "interest_rates",
+                "description": "Short-term interest rate (3-month), % per annum",
+                "parameters": {"countries": countries, "frequency": frequency,
+                               "start_date": start_p, "end_date": end_p},
+                "total_records": len(data),
+                "data": data,
+                "timestamp": int(datetime.now().timestamp())
             }
-
-            result = self._make_request(url_v2, format_type='csv', api_version='v2', params=params_v2)
-
-            if "error" in result:
-                return OECDError('interest_rates', result['error'], result.get('status_code')).to_dict()
-
-            # Process data (similar to other endpoints)
-            try:
-                if result['format'] == 'xml':
-                    data = self._parse_xml_to_dataframe(result['data'])
-                else:
-                    data = pd.read_csv(StringIO(result['data']))
-
-                # Filter and process data...
-                result_data = []  # Placeholder for processed data
-
-                return {
-                    "success": True,
-                    "endpoint": "interest_rates",
-                    "parameters": {
-                        "countries": countries,
-                        "frequency": frequency,
-                        "start_date": start_date,
-                        "end_date": end_date
-                    },
-                    "total_records": len(result_data),
-                    "data": result_data,
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-            except Exception as e:
-                return OECDError('interest_rates', f'Failed to process data: {str(e)}').to_dict()
-
         except Exception as e:
             return OECDError('interest_rates', str(e)).to_dict()
 
@@ -1012,66 +642,40 @@ class OECDWrapper:
                          frequency: str = "quarter",
                          start_date: Optional[str] = None,
                          end_date: Optional[str] = None) -> Dict[str, Any]:
-        """Get trade balance data from OECD"""
+        """Goods & services balance (BPM6: goods balance + services balance),
+        seasonally adjusted, USD millions — DSD_BOP@DF_BOP."""
         try:
-            if frequency not in ["monthly", "quarter", "annual"]:
-                return OECDError('trade_balance', f'Invalid frequency: {frequency}').to_dict()
-
-            # Set default dates
-            if not start_date:
-                start_date = "2000-01-01"
-            if not end_date:
-                end_date = f"{date.today().year}-12-31"
-
-            freq_code = {"monthly": "M", "quarter": "Q", "annual": "A"}[frequency]
+            if frequency not in ["quarter", "annual"]:
+                return OECDError('trade_balance', f'Invalid frequency: {frequency}. BoP is quarter or annual').to_dict()
+            freq_code = {"quarter": "Q", "annual": "A"}[frequency]
             country_codes = self._country_string(countries, COUNTRY_TO_CODE_GDP)
-            if not country_codes:
-                country_codes = "*"
-
-            # Try SDMX v2 with trade balance dataflow
-            url_v2 = (
-                f"{SDMX_V2_BASE}data/dataflow/OECD.SDD.STD/BOP/DSD_BOP6@DF_BAL,1.0/"
-                f"{country_codes}.{freq_code}.B6_GI.NMBK_SV.DD._T._T._T._T.XDC"
-            )
-
-            params_v2 = {
-                "c[TIME_PERIOD]": f"ge:{start_date}+le:{end_date}",
-                "attributes": "dsd",
-                "measures": "all"
+            start_p, end_p = self._period_bounds(frequency, start_date, end_date)
+            # REF_AREA.COUNTERPART_AREA.MEASURE.ACCOUNTING_ENTRY.FS_ENTRY.FREQ.UNIT_MEASURE.ADJUSTMENT
+            url = (f"{SDMX_V1_BASE}data/OECD.SDD.TPS,DSD_BOP@DF_BOP,1.0/"
+                   f"{country_codes}.WXD.G+S.B.T.{freq_code}.USD_EXC.Y")
+            df = self._sdmx_series('trade_balance', url, start_p, end_p, ["MEASURE"])
+            if isinstance(df, dict):
+                return df
+            wide = df.pivot_table(index=["REF_AREA", "TIME_PERIOD"], columns="MEASURE",
+                                  values="OBS_VALUE", aggfunc="first").reset_index()
+            # Only periods where both legs are published; never half a balance.
+            if "G" not in wide.columns or "S" not in wide.columns:
+                return OECDError('trade_balance', 'Goods or services balance missing from response').to_dict()
+            wide = wide.dropna(subset=["G", "S"])
+            data = [{"country": r.REF_AREA, "date": r.TIME_PERIOD,
+                     "value": float(r.G) + float(r.S),
+                     "goods_balance": float(r.G), "services_balance": float(r.S)}
+                    for r in wide.sort_values(by=["REF_AREA", "TIME_PERIOD"]).itertuples()]
+            return {
+                "success": True,
+                "endpoint": "trade_balance",
+                "description": "Goods & services balance (BoP), SA, USD millions",
+                "parameters": {"countries": countries, "frequency": frequency,
+                               "start_date": start_p, "end_date": end_p},
+                "total_records": len(data),
+                "data": data,
+                "timestamp": int(datetime.now().timestamp())
             }
-
-            result = self._make_request(url_v2, format_type='csv', api_version='v2', params=params_v2)
-
-            if "error" in result:
-                return OECDError('trade_balance', result['error'], result.get('status_code')).to_dict()
-
-            # Process data (similar to other endpoints)
-            try:
-                if result['format'] == 'xml':
-                    data = self._parse_xml_to_dataframe(result['data'])
-                else:
-                    data = pd.read_csv(StringIO(result['data']))
-
-                # Filter and process data...
-                result_data = []  # Placeholder for processed data
-
-                return {
-                    "success": True,
-                    "endpoint": "trade_balance",
-                    "parameters": {
-                        "countries": countries,
-                        "frequency": frequency,
-                        "start_date": start_date,
-                        "end_date": end_date
-                    },
-                    "total_records": len(result_data),
-                    "data": result_data,
-                    "timestamp": int(datetime.now().timestamp())
-                }
-
-            except Exception as e:
-                return OECDError('trade_balance', f'Failed to process data: {str(e)}').to_dict()
-
         except Exception as e:
             return OECDError('trade_balance', str(e)).to_dict()
 
@@ -1117,7 +721,7 @@ def main(args=None):
     try:
         if command == "gdp_real":
             countries = args[1] if len(args) + 1 > 2 else "united_states"
-            frequency = args[2] if len(args) + 1 > 3 else "quarter"
+            frequency = _norm_freq(args[2] if len(args) + 1 > 3 else None, "quarter")
             start_date = args[3] if len(args) + 1 > 4 else None
             end_date = args[4] if len(args) + 1 > 5 else None
 
@@ -1132,7 +736,7 @@ def main(args=None):
         elif command == "cpi":
             countries = args[1] if len(args) + 1 > 2 else "united_states"
             expenditure = args[2] if len(args) + 1 > 3 else "total"
-            frequency = args[3] if len(args) + 1 > 4 else "monthly"
+            frequency = _norm_freq(args[3] if len(args) + 1 > 4 else None, "monthly")
             units = args[4] if len(args) + 1 > 5 else "index"
             harmonized = sys.argv[6].lower() == "true" if len(args) + 1 > 6 else False
             start_date = sys.argv[7] if len(args) + 1 > 7 else None
@@ -1163,7 +767,7 @@ def main(args=None):
 
         elif command == "unemployment":
             countries = args[1] if len(args) + 1 > 2 else "united_states"
-            frequency = args[2] if len(args) + 1 > 3 else "quarter"
+            frequency = _norm_freq(args[2] if len(args) + 1 > 3 else None, "quarter")
             start_date = args[3] if len(args) + 1 > 4 else None
             end_date = args[4] if len(args) + 1 > 5 else None
 
@@ -1189,7 +793,7 @@ def main(args=None):
 
         elif command == "interest_rates":
             countries = args[1] if len(args) + 1 > 2 else "united_states"
-            frequency = args[2] if len(args) + 1 > 3 else "monthly"
+            frequency = _norm_freq(args[2] if len(args) + 1 > 3 else None, "monthly")
             start_date = args[3] if len(args) + 1 > 4 else None
             end_date = args[4] if len(args) + 1 > 5 else None
 
@@ -1203,7 +807,7 @@ def main(args=None):
 
         elif command == "trade_balance":
             countries = args[1] if len(args) + 1 > 2 else "united_states"
-            frequency = args[2] if len(args) + 1 > 3 else "quarter"
+            frequency = _norm_freq(args[2] if len(args) + 1 > 3 else None, "quarter")
             start_date = args[3] if len(args) + 1 > 4 else None
             end_date = args[4] if len(args) + 1 > 5 else None
 

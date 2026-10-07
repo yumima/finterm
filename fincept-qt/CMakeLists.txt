@@ -752,6 +752,8 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v050_llm_assignment_dedupe.cpp
     src/storage/sqlite/migrations/v051_hearth_provider_rename.cpp
     src/storage/sqlite/migrations/v052_earnings_outlook.cpp
+    src/storage/sqlite/migrations/v053_agent_instructions_backfill.cpp
+    src/storage/sqlite/migrations/v054_iv_history_expiry_kind.cpp
 )
 
 # Python runner
@@ -909,6 +911,7 @@ set(SERVICE_SOURCES
     src/services/portfolio/PortfolioReturns.cpp
     src/services/portfolio/PortfolioService.cpp
     src/services/portfolio/PortfolioAnalyticsService.cpp
+    src/services/app_context/AppContextService.cpp
     src/services/quantlib/QuantLibClient.cpp
     src/services/options/OISnapshotter.cpp
     src/services/options/OptionChainService.cpp

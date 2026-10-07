@@ -1,7 +1,12 @@
 """Risk Factor Summation Method"""
+from pathlib import Path
 from typing import Dict, Any
 from enum import Enum
 import sys
+
+_ANALYTICS = str(Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in sys.path:
+    sys.path.insert(0, _ANALYTICS)
 
 class RiskFactor(Enum):
     """12 standard risk factors"""
@@ -178,77 +183,84 @@ class RiskFactorSummation:
             'base_valuation': self.base_valuation
         }
 
+RFS_LABELS = ['Management', 'Stage of Business', 'Legislation/Political', 'Manufacturing',
+              'Sales & Marketing', 'Funding/Capital', 'Competition', 'Technology',
+              'Litigation', 'International', 'Reputation', 'Lucrative Exit']
+_RFS_ALIASES = [
+    ('management', 'management_risk'),
+    ('stage', 'stage_of_business', 'stage_risk'),
+    ('legislation', 'legislation_political'),
+    ('manufacturing',),
+    ('sales', 'sales_marketing', 'sales_risk', 'market_risk', 'marketing'),
+    ('funding', 'funding_capital', 'funding_risk'),
+    ('competition', 'competition_risk'),
+    ('technology', 'technology_risk'),
+    ('litigation',),
+    ('international',),
+    ('reputation',),
+    ('exit', 'lucrative_exit'),
+]
+
+
+def risk_factor_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON contract:
+    {base_valuation, adjustment_per_step, assessments: [12 ints -2..+2] | {factor: score}}
+    Valuation = base + adjustment_per_step x sum(scores).
+    """
+    from corporateFinance._cli import InputError, num, pct
+    bp = dict(p)
+    if bp.get('base_valuation') is None and bp.get('base_value') is not None:
+        bp['base_valuation'] = bp['base_value']
+    base = num(bp, 'base_valuation', label='Base valuation ($)', gt=0)
+    step = num(bp, 'adjustment_per_step', label='Adjustment per risk step ($)', gt=0)
+
+    raw = p.get('assessments', p.get('risk_scores'))
+    if isinstance(raw, list):
+        if len(raw) != 12:
+            raise InputError("assessments must list 12 risk scores")
+        scores = raw
+    elif isinstance(raw, dict):
+        scores = []
+        for label, aliases in zip(RFS_LABELS, _RFS_ALIASES):
+            v = next((raw[a] for a in aliases if raw.get(a) is not None), None)
+            if v is None:
+                raise InputError(f"Missing required input: risk score for {label}")
+            scores.append(v)
+    else:
+        raise InputError("Missing required input: assessments (12 risk scores, -2..+2)")
+    rows = []
+    total_steps = 0
+    for label, v in zip(RFS_LABELS, scores):
+        f = float(v)
+        if f != int(f) or not -2 <= f <= 2:
+            raise InputError(f"{label} risk score must be an integer from -2 to +2 (got {v})")
+        total_steps += int(f)
+        rows.append({'factor': label, 'score': int(f), 'adjustment': int(f) * step})
+    adjustment = total_steps * step
+    final = base + adjustment
+    return {
+        'method': 'Risk Factor Summation',
+        'base_valuation': base,
+        'adjustment_per_step': step,
+        'net_steps': total_steps,
+        'total_adjustment': adjustment,
+        'pre_money_valuation': final if final > 0 else None,
+        'adjustment_vs_base_pct': pct(adjustment / base),
+        'note': None if final > 0 else 'Risk adjustments exceed the base valuation; no positive value implied',
+        'factors': rows,
+    }
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'calculate': risk_factor_json})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "risk_factor":
-            if len(sys.argv) < 4:
-                raise ValueError("Base valuation and risk assessments required")
-            base_valuation = float(sys.argv[2])
-            risk_assessments = json.loads(sys.argv[3])
-
-            rfs = RiskFactorSummation(base_valuation=base_valuation)
-            # Map all frontend key variants to RiskFactor enum values
-            enum_key_map = {
-                # management
-                'management': RiskFactor.MANAGEMENT, 'management_risk': RiskFactor.MANAGEMENT,
-                # stage
-                'stage': RiskFactor.STAGE_OF_BUSINESS, 'stage_of_business': RiskFactor.STAGE_OF_BUSINESS,
-                'stage_risk': RiskFactor.STAGE_OF_BUSINESS,
-                # legislation/political
-                'legislation': RiskFactor.LEGISLATION_POLITICAL,
-                'legislation_political': RiskFactor.LEGISLATION_POLITICAL,
-                # manufacturing
-                'manufacturing': RiskFactor.MANUFACTURING,
-                # sales/marketing
-                'sales_marketing': RiskFactor.SALES_MARKETING, 'sales_risk': RiskFactor.SALES_MARKETING,
-                'market_risk': RiskFactor.SALES_MARKETING, 'marketing': RiskFactor.SALES_MARKETING,
-                # funding
-                'funding': RiskFactor.FUNDING_CAPITAL, 'funding_risk': RiskFactor.FUNDING_CAPITAL,
-                'funding_capital': RiskFactor.FUNDING_CAPITAL,
-                # competition
-                'competition': RiskFactor.COMPETITION, 'competition_risk': RiskFactor.COMPETITION,
-                # technology
-                'technology': RiskFactor.TECHNOLOGY, 'technology_risk': RiskFactor.TECHNOLOGY,
-                # litigation
-                'litigation': RiskFactor.LITIGATION,
-                # international
-                'international': RiskFactor.INTERNATIONAL,
-                # reputation
-                'reputation': RiskFactor.REPUTATION,
-                # exit
-                'exit': RiskFactor.LUCRATIVE_EXIT, 'lucrative_exit': RiskFactor.LUCRATIVE_EXIT,
-            }
-            enum_assessments = {}
-            for k, v in risk_assessments.items():
-                rf = enum_key_map.get(k)
-                if rf:
-                    enum_assessments[rf] = int(v)
-            # Fill missing with 0 (average)
-            for rf in RiskFactor:
-                if rf not in enum_assessments:
-                    enum_assessments[rf] = 0
-            valuation = rfs.calculate_valuation(enum_assessments)
-
-            result = {"success": True, "data": valuation}
-            print(json.dumps(result))
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

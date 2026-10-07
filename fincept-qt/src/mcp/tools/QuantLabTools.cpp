@@ -1,6 +1,6 @@
 // QuantLabTools.cpp — Tools that drive the AI Quant Lab screen.
 //
-// 24 modules × bespoke commands → 96 module/command-specific tools plus three
+// 21 of the 24 modules × bespoke commands → module/command-specific tools plus three
 // generic discovery/dispatch tools. All execution paths bottom out at
 // AIQuantLabService::run_module, which spawns the module's Python script and
 // emits result_ready / error_occurred when it finishes. We bridge those
@@ -204,46 +204,12 @@ static const CatalogEntry kCatalog[] = {
      "Granger causality test."},
     {"statsmodels", "descriptive", "quant_statsmodels_descriptive",
      "Descriptive statistics."},
-    {"functime", "check_status", "quant_functime_status",
-     "Functime service status."},
-    {"functime", "forecast", "quant_functime_forecast",
-     "Functime time-series forecast."},
-    {"functime", "anomaly_detection", "quant_functime_anomaly",
-     "Functime anomaly detection."},
-    {"functime", "seasonality", "quant_functime_seasonality",
-     "Functime seasonality decomposition."},
-    {"functime", "metrics", "quant_functime_metrics",
-     "Functime forecast metrics."},
-    {"functime", "confidence_intervals", "quant_functime_intervals",
-     "Functime forecast confidence intervals."},
-    {"functime", "stationarity", "quant_functime_stationarity",
-     "Functime stationarity tests."},
-    {"fortitudo", "check_status", "quant_fortitudo_status",
-     "Fortitudo service status."},
-    {"fortitudo", "portfolio_metrics", "quant_fortitudo_portfolio_metrics",
-     "Fortitudo portfolio metrics."},
-    {"fortitudo", "covariance_matrix", "quant_fortitudo_covariance",
-     "Fortitudo covariance matrix."},
-    {"fortitudo", "mean_variance_optimize", "quant_fortitudo_mv_opt",
-     "Mean-variance portfolio optimization."},
-    {"fortitudo", "mean_cvar_optimize", "quant_fortitudo_mcvar_opt",
-     "Mean-CVaR portfolio optimization."},
-    {"fortitudo", "efficient_frontier", "quant_fortitudo_efficient_frontier",
-     "Compute the efficient frontier."},
-    {"fortitudo", "exp_decay_probabilities", "quant_fortitudo_exp_decay",
-     "Exponential-decay observation weights."},
-    {"gluonts", "check_status", "quant_gluonts_status",
-     "GluonTS service status."},
-    {"gluonts", "probabilistic_forecast", "quant_gluonts_prob_forecast",
-     "GluonTS probabilistic forecast."},
-    {"gluonts", "quantile_forecast", "quant_gluonts_quantile_forecast",
-     "GluonTS quantile forecast."},
-    {"gluonts", "distribution_fit", "quant_gluonts_distribution_fit",
-     "Fit a parametric distribution to a series."},
-    {"gluonts", "evaluate_forecast", "quant_gluonts_evaluate",
-     "Evaluate a forecast against actuals."},
-    {"gluonts", "seasonal_naive", "quant_gluonts_seasonal_naive",
-     "Seasonal-naive baseline forecast."},
+    // functime / gluonts / fortitudo have no dedicated rows: the old rows
+    // named commands of the wrong scripts. The service now maps them to their
+    // real wrappers (Analytics/{functime,gluonts,fortitudo_tech}_wrapper/
+    // *_service.py), so they are reachable through run_quant_module with the
+    // wrappers' own command names (e.g. functime "forecast", gluonts
+    // "forecast_deepar", fortitudo "portfolio_metrics").
 };
 
 constexpr std::size_t kCatalogSize = sizeof(kCatalog) / sizeof(kCatalog[0]);
@@ -331,7 +297,7 @@ std::vector<ToolDef> get_quant_lab_tools() {
     {
         ToolDef t;
         t.name = "list_quant_modules";
-        t.description = "List all 24 AI Quant Lab modules (id, category, description, script).";
+        t.description = "List the AI Quant Lab modules available to tools (id, category, description, script).";
         t.category = "quant-lab";
         t.handler = [](const QJsonObject&) -> ToolResult {
             QJsonArray arr;

@@ -3,6 +3,7 @@
 
 #include "core/logging/Logger.h"
 
+#include <QDate>
 #include <QDateTime>
 #include <QUuid>
 
@@ -313,13 +314,18 @@ Result<int> PortfolioRepository::save_backfill_snapshot(const QString& portfolio
 
 Result<QVector<portfolio::PortfolioSnapshot>> PortfolioRepository::get_snapshots(const QString& portfolio_id,
                                                                                  int days) {
+    // snapshot_date is a LOCAL calendar date (build_summary writes
+    // QDate::currentDate()); SQLite's date('now') is UTC, which put the
+    // window edge a day off for every user east or west of Greenwich for part
+    // of each day. The cutoff is computed locally instead.
+    const QString cutoff = QDate::currentDate().addDays(-days).toString(Qt::ISODate);
     return query_list_as<portfolio::PortfolioSnapshot>(
         "SELECT id, portfolio_id, total_value, total_cost_basis, total_pnl, "
         "total_pnl_percent, snapshot_date, source "
         "FROM portfolio_snapshots WHERE portfolio_id = ? "
-        "AND snapshot_date >= date('now', '-' || ? || ' days') "
+        "AND snapshot_date >= ? "
         "ORDER BY snapshot_date ASC",
-        {portfolio_id, days}, map_snapshot);
+        {portfolio_id, cutoff}, map_snapshot);
 }
 
 } // namespace fincept

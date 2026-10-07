@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioTxnPanel.cpp
 #include "screens/portfolio/PortfolioTxnPanel.h"
 
+#include "services/portfolio/PortfolioDates.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
@@ -102,7 +103,8 @@ void PortfolioTxnPanel::populate() {
         table_->insertRow(row);
 
         // Date (ISO → display)
-        auto* date_item = new QTableWidgetItem(t.transaction_date.left(10));
+        // Local trade date — UTC stamps would show tomorrow for an evening trade.
+        auto* date_item = new QTableWidgetItem(portfolio::transaction_local_date(t));
         date_item->setForeground(QColor(ui::colors::TEXT_SECONDARY()));
         table_->setItem(row, 0, date_item);
 

@@ -256,7 +256,8 @@ def execute_command(command: str, args: list) -> Dict[str, Any]:
     elif command == "calc_multiples":
         ticker_or_cik = args[0] if args else None
         deal_value = float(args[1]) if len(args) > 1 else 0.0
-        return base.calc_multiples(ticker_or_cik, deal_value)
+        equity_value = float(args[2]) if len(args) > 2 and args[2] else None
+        return base.calc_multiples(ticker_or_cik, deal_value, equity_value)
 
     # Unknown command
     else:

@@ -324,10 +324,14 @@ void CftcPanel::on_result(const QString& request_id, const services::EconomicsRe
                 obj["noncomm_short_all"].isUndefined() ? obj["noncomm_positions_short_all"] : obj["noncomm_short_all"];
             clean.append(row);
         }
+        // Multi-column, possibly several markets per date: no single series.
         display(clean, "CFTC COT: " + market_combo_->currentText() + " (" + report_type_combo_->currentText() + ")");
     } else {
         // Historical trend — rows already have clean keys
-        display(rows, "CFTC Historical Trend: " + market_combo_->currentText());
+        // Stat cards track open interest (named in the title); repeated dates
+        // from several matched markets blank LATEST/CHANGE in the base.
+        display(rows, "CFTC Historical Trend: " + market_combo_->currentText() + " — stats: open interest",
+                QStringLiteral("open_interest"), QStringLiteral("date"));
     }
 
     LOG_INFO("CftcPanel", QString("Displayed %1 rows for %2").arg(rows.size()).arg(request_id));
@@ -396,6 +400,7 @@ void CftcPanel::show_sentiment(const QJsonObject& s) {
     row["noncomm_bias"] = noncomm_bias;
     row["oi_trend"] = oi_trend;
     rows.append(row);
+    // Single summary row, no series → stat cards "—".
     display(rows, "CFTC Sentiment: " + market_combo_->currentText());
 
     LOG_INFO("CftcPanel", "Displayed sentiment for " + market_combo_->currentText());

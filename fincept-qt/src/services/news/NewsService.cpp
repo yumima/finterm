@@ -60,7 +60,10 @@ constexpr const char* kBriefModelRole = "fast_chat";
 // 4: two prompts instead of one, written from ranked story blocks with article
 // bodies rather than from the newest 35 headlines, with the breakdown's
 // headings fixed by the selection instead of chosen by the model.
-constexpr int kBriefPromptVersion = 4;
+// 5: the "Top stories" sample sentence (a concrete company/quarter that small
+// models copied into briefs) replaced by a template, and every request now
+// carries the current date and grounding rules in its system prompt.
+constexpr int kBriefPromptVersion = 5;
 // Only retry a collapsed brief when the first attempt came back inside this.
 // Slower than this and a second pass risks outliving the user's patience and
 // the caller's own timeout; the error is the better answer. See
@@ -529,6 +532,10 @@ void NewsService::analyze_article(const QString& url, AnalysisCallback cb) {
                                  cb(false, {});
                                  return;
                              }
+                             analysis.model_used = resp.model_used;
+                             analysis.provider_used = resp.provider_used;
+                             analysis.requested_model = resp.requested_model;
+                             analysis.fell_back = resp.fell_back;
                              cb(true, analysis);
                              emit this->analysis_ready(analysis);
                          });
@@ -947,6 +954,19 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                         QString breakdown;
                         bool top_ok = false;
                         int pending = 0;
+                        // Set when a quota fallback wrote either half on a
+                        // model other than the configured one.
+                        QString fallback_note;
+                    };
+                    // Appended to the brief (and cached with it, since that
+                    // brief really was written by that model).
+                    const auto note_fallback = [](const std::shared_ptr<Job>& j, const ai_chat::LlmResponse& r) {
+                        if (r.success && r.fell_back && !r.model_used.isEmpty() && j->fallback_note.isEmpty())
+                            j->fallback_note =
+                                QStringLiteral("*Answered by %1 (%2) — fell back from %3 after a quota limit.*")
+                                    .arg(r.model_used, r.provider_used,
+                                         r.requested_model.isEmpty() ? QStringLiteral("the configured model")
+                                                                     : r.requested_model);
                     };
                     auto job = std::make_shared<Job>();
                     job->pending = breakdown_prompt.isEmpty() ? 1 : 2;
@@ -966,6 +986,8 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                         // failed — split() handles a brief with no marker, and
                         // half a brief beats "AI brief unavailable".
                         QString out = job->top;
+                        if (!job->fallback_note.isEmpty())
+                            out += QStringLiteral("\n\n") + job->fallback_note;
                         const bool complete = job->breakdown.isEmpty() == wanted_breakdown.isEmpty();
                         if (!job->breakdown.isEmpty())
                             out += QStringLiteral("\n\n")
@@ -1018,9 +1040,10 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                     top_scope.max_tokens = 1800;
                     auto* top_watcher = new QFutureWatcher<ai_chat::LlmResponse>(this);
                     QObject::connect(top_watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
-                                     [top_watcher, job, finish]() {
+                                     [top_watcher, job, finish, note_fallback]() {
                                          const auto resp = top_watcher->result();
                                          top_watcher->deleteLater();
+                                         note_fallback(job, resp);
                                          const QString text = resp.content.trimmed();
                                          if (!resp.success || text.isEmpty()) {
                                              // An empty message on a SUCCESSFUL
@@ -1068,9 +1091,10 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                     cat_scope.max_tokens = 2400;
                     auto* cat_watcher = new QFutureWatcher<ai_chat::LlmResponse>(this);
                     QObject::connect(cat_watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
-                                     [cat_watcher, job, finish]() {
+                                     [cat_watcher, job, finish, note_fallback]() {
                                          const auto resp = cat_watcher->result();
                                          cat_watcher->deleteLater();
+                                         note_fallback(job, resp);
                                          const QString text = resp.content.trimmed();
                                          if (!resp.success || text.isEmpty()) {
                                              LOG_WARN("NewsService",
@@ -1356,13 +1380,57 @@ void NewsService::enrich_article(NewsArticle& article) {
     const QString combined = article.headline + " " + article.summary;
     const QString text = combined.toLower();
 
-    // Priority
-    if (text.contains("breaking") || text.contains("alert"))
+    // Whole-word keyword matching. Plain substring tests misfire badly:
+    // "ban" ∈ "bank", "gain" ∈ "again", "rise" ∈ "enterprise", "war" ∈ "award".
+    // Each keyword becomes \b<word><inflection>?\b, built and optimised once.
+    // A keyword ending in '*' is a stem ("devastat*") matching any word that
+    // starts with it. Use a stem wherever the derived forms carry the same
+    // signal but fall outside the fixed suffix set below (fail→failure,
+    // volatil→volatility, uncertain→uncertainty, disrupt→disruption,
+    // suspen→suspension, inflation→inflationary, approv→approval/approve).
+    // Short words stay whole-word on purpose, because as stems they swallow
+    // unrelated words: ban→bank, win→winter, miss→missile, coup→coupon, and
+    // likewise gain, rise, fall, kill, sell, strong.
+    auto keyword_re = [](QString w) {
+        QString pat;
+        if (w.endsWith(QLatin1Char('*'))) {
+            w.chop(1);
+            pat = QStringLiteral("\\b") + QRegularExpression::escape(w) + QStringLiteral("\\w*");
+        } else if (w.endsWith(QLatin1Char('e'))) {
+            // rise → rises/rised/rising/riser
+            pat = QStringLiteral("\\b") + QRegularExpression::escape(w.left(w.size() - 1)) +
+                  QStringLiteral("(?:e|es|ed|ing|er|ers|ement|ements)\\b");
+        } else if (w.endsWith(QLatin1Char('y')) && w.size() > 3) {
+            // rally → rallies/rallied/rallying
+            pat = QStringLiteral("\\b") + QRegularExpression::escape(w.left(w.size() - 1)) +
+                  QStringLiteral("(?:y|ies|ied|ying)\\b");
+        } else {
+            // gain → gains/gained/gaining/gainer; drop → dropped/dropping;
+            // recover → recovery; beat → beaten
+            const QString last = QRegularExpression::escape(w.right(1));
+            pat = QStringLiteral("\\b") + QRegularExpression::escape(w) + QStringLiteral("(?:s|es|ed|ing|er|ers|en|y|ies|ment|ments|") +
+                  last + QStringLiteral("ed|") + last + QStringLiteral("ing)?\\b");
+        }
+        QRegularExpression re(pat, QRegularExpression::CaseInsensitiveOption | QRegularExpression::UseUnicodePropertiesOption);
+        re.optimize();
+        return re;
+    };
+    auto matches_any = [](const QString& t, const QVector<QRegularExpression>& res) {
+        for (const auto& re : res)
+            if (re.match(t).hasMatch())
+                return true;
+        return false;
+    };
+
+    // Priority. "report"/"announce" used to promote almost every article to
+    // BREAKING (nearly all news "reports"); only explicit flash/urgent wording
+    // sets a priority now.
+    static const QVector<QRegularExpression> flash_res = {keyword_re("breaking"), keyword_re("alert")};
+    static const QVector<QRegularExpression> urgent_res = {keyword_re("urgent"), keyword_re("emergency")};
+    if (matches_any(text, flash_res))
         article.priority = Priority::FLASH;
-    else if (text.contains("urgent") || text.contains("emergency"))
+    else if (matches_any(text, urgent_res))
         article.priority = Priority::URGENT;
-    else if (text.contains("announce") || text.contains("report"))
-        article.priority = Priority::BREAKING;
 
     // Weighted sentiment
     struct WordWeight {
@@ -1374,36 +1442,46 @@ void NewsService::enrich_article(NewsArticle& article) {
         {"surge", 3},       {"soar", 3},       {"skyrocket", 3}, {"breakthrough", 3}, {"boom", 3},
         {"record high", 3}, {"rally", 2},      {"gain", 2},      {"rise", 2},         {"jump", 2},
         {"climb", 2},       {"spike", 2},      {"rebound", 2},   {"boost", 2},        {"beat", 2},
-        {"exceed", 2},      {"upgrade", 2},    {"profit", 2},    {"growth", 2},       {"expand", 2},
+        {"exceed", 2},      {"upgrade", 2},    {"profit*", 2},    {"growth", 2},       {"expan*", 2},
         {"recover", 2},     {"victory", 2},    {"ceasefire", 2}, {"treaty", 2},       {"reform", 2},
-        {"optimism", 2},    {"milestone", 2},  {"strong", 1},    {"robust", 1},       {"stellar", 1},
-        {"buy", 1},         {"positive", 1},   {"success", 1},   {"win", 1},          {"approval", 1},
-        {"deal", 1},        {"confidence", 1}, {"dividend", 1},  {"progress", 1},     {"improve", 1},
+        {"optimis*", 2},    {"milestone", 2},  {"strong", 1},    {"robust", 1},       {"stellar", 1},
+        {"buy", 1},         {"positive", 1},   {"success*", 1},   {"win", 1},          {"approv*", 1},
+        {"deal", 1},        {"confiden*", 1}, {"dividend", 1},  {"progress", 1},     {"improve", 1},
         {"hope", 1},        {"support", 1},    {"bolster", 1},   {"outperform", 1},   {"bullish", 1},
         {"upside", 1},      {"favorable", 1},  {"momentum", 1},  {"launch", 1},       {"unveil", 1},
     };
 
     static const WordWeight negatives[] = {
-        {"crash", 3},      {"plunge", 3},    {"collapse", 3},   {"devastat", 3},  {"catastroph", 3}, {"invasion", 3},
-        {"war crime", 3},  {"nuclear", 3},   {"bankruptcy", 3}, {"meltdown", 3},  {"fall", 2},       {"drop", 2},
-        {"decline", 2},    {"tumble", 2},    {"slide", 2},      {"slump", 2},     {"miss", 2},       {"disappoint", 2},
-        {"fail", 2},       {"recession", 2}, {"crisis", 2},     {"conflict", 2},  {"attack", 2},     {"kill", 2},
-        {"sanction", 2},   {"tariff", 2},    {"escalat", 2},    {"layoff", 2},    {"downgrade", 2},  {"default", 2},
-        {"fraud", 2},      {"scandal", 2},   {"coup", 2},       {"protest", 2},   {"disaster", 2},   {"worst", 1},
-        {"weak", 1},       {"loss", 1},      {"deficit", 1},    {"fear", 1},      {"risk", 1},       {"threat", 1},
-        {"warning", 1},    {"sell", 1},      {"debt", 1},       {"inflation", 1}, {"slowdown", 1},   {"bearish", 1},
-        {"negative", 1},   {"volatile", 1},  {"uncertain", 1},  {"reject", 1},    {"ban", 1},        {"suspend", 1},
-        {"investigat", 1}, {"probe", 1},     {"hack", 1},       {"leak", 1},      {"shortage", 1},   {"disrupt", 1},
+        {"crash", 3},      {"plunge", 3},    {"collapse", 3},   {"devastat*", 3},  {"catastroph*", 3}, {"invasion", 3},
+        {"war crime", 3},  {"nuclear", 3},   {"bankrupt*", 3}, {"meltdown", 3},  {"fall", 2},       {"drop", 2},
+        {"decline", 2},    {"tumble", 2},    {"slide", 2},      {"slump", 2},     {"miss", 2},       {"disappoint*", 2},
+        {"fail*", 2},       {"recession*", 2}, {"crisis", 2},     {"conflict", 2},  {"attack", 2},     {"kill", 2},
+        {"sanction", 2},   {"tariff", 2},    {"escalat*", 2},    {"layoff", 2},    {"downgrade", 2},  {"default", 2},
+        {"fraud*", 2},      {"scandal", 2},   {"coup", 2},       {"protest", 2},   {"disast*", 2},   {"worst", 1},
+        {"weak*", 1},       {"loss", 1},      {"deficit", 1},    {"fear*", 1},      {"risk", 1},       {"threat*", 1},
+        {"warning", 1},    {"sell", 1},      {"debt", 1},       {"inflation*", 1}, {"slowdown", 1},   {"bearish", 1},
+        {"negative", 1},   {"volatil*", 1},  {"uncertain*", 1},  {"reject*", 1},    {"ban", 1},        {"suspen*", 1},
+        {"investigat*", 1}, {"probe", 1},     {"hack", 1},       {"leak", 1},      {"shortage", 1},   {"disrupt*", 1},
         {"shrink", 1},
     };
 
+    using WeightedRes = QVector<std::pair<QRegularExpression, int>>;
+    auto build = [&keyword_re](const auto& table) {
+        WeightedRes out;
+        for (const auto& [w, wt] : table)
+            out.push_back({keyword_re(QString::fromLatin1(w)), wt});
+        return out;
+    };
+    static const WeightedRes positive_res = build(positives);
+    static const WeightedRes negative_res = build(negatives);
+
     int pos = 0, neg = 0;
-    for (const auto& [w, wt] : positives) {
-        if (text.contains(w))
+    for (const auto& [re, wt] : positive_res) {
+        if (re.match(text).hasMatch())
             pos += wt;
     }
-    for (const auto& [w, wt] : negatives) {
-        if (text.contains(w))
+    for (const auto& [re, wt] : negative_res) {
+        if (re.match(text).hasMatch())
             neg += wt;
     }
 

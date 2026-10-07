@@ -391,6 +391,53 @@ def get_interest_expense(start_date: str = None, end_date: str = None,
         return result
 
 
+def get_rates_of_exchange(start_date: str = None, end_date: str = None,
+                          currency: str = None, limit: int = None) -> Dict[str, Any]:
+    """
+    Treasury Reporting Rates of Exchange (quarterly; foreign currency units
+    per 1 USD) — v1/accounting/od/rates_of_exchange.
+    """
+    params = {
+        'fields': 'record_date,country_currency_desc,exchange_rate,effective_date',
+        'sort': '-record_date,country_currency_desc',
+    }
+    filters = []
+    if start_date:
+        filters.append(f"record_date:gte:{start_date}")
+    if end_date:
+        filters.append(f"record_date:lte:{end_date}")
+    if currency:
+        filters.append(f"country_currency_desc:eq:{currency}")
+    if filters:
+        params['filter'] = ','.join(filters)
+    params['page[size]'] = str(min(limit or 1000, 1000))
+    return _make_request('v1/accounting/od/rates_of_exchange', params)
+
+
+def get_record_setting_auction() -> Dict[str, Any]:
+    """
+    Record-Setting Auction data (v2/accounting/od/record_setting_auction):
+    the record low/high rate, largest offering and highest bid-to-cover per
+    security type/term. Each record_date is a full snapshot, so return only
+    the most recent one.
+    """
+    params = {
+        'fields': 'record_date,security_type,security_term,low_rate_pct,first_auc_date_low_rate,'
+                  'high_rate_pct,first_auc_date_high_rate,high_offer_amt,first_auc_date_high_offer,'
+                  'high_bid_cover_ratio,first_auc_date_high_bid_cover',
+        'sort': '-record_date',
+        'page[size]': '200',
+    }
+    result = _make_request('v2/accounting/od/record_setting_auction', params)
+    rows = result.get('data') or []
+    if rows:
+        latest = rows[0].get('record_date')
+        result['data'] = [r for r in rows if r.get('record_date') == latest]
+        if result.get('metadata'):
+            result['metadata']['total_count'] = len(result['data'])
+    return result
+
+
 def get_datasets() -> Dict[str, Any]:
     """
     Get available datasets from FiscalData (working endpoints only)
@@ -422,11 +469,18 @@ def get_datasets() -> Dict[str, Any]:
             "status": "working"
         },
         {
-            "endpoint": "v2/accounting/od/rates_of_exchange",
-            "name": "Exchange Rates",
-            "description": "Daily currency exchange rates",
-            "function": "get_exchange_rates",
-            "status": "not_available"
+            "endpoint": "v1/accounting/od/rates_of_exchange",
+            "name": "Treasury Reporting Rates of Exchange",
+            "description": "Quarterly foreign currency units per 1 USD",
+            "function": "get_rates_of_exchange",
+            "status": "working"
+        },
+        {
+            "endpoint": "v2/accounting/od/record_setting_auction",
+            "name": "Record-Setting Auction",
+            "description": "Record auction rates, offering sizes and bid-to-cover by security",
+            "function": "get_record_setting_auction",
+            "status": "working"
         },
         {
             "endpoint": "v2/debt/to_the_summary",
@@ -510,6 +564,13 @@ def fetch(indicator_id: str, start_date: str = None, end_date: str = None) -> Di
             "name": "Intragovernmental Holdings",
         },
         # Average Interest Rates
+        "avg_rate_total": {
+            "endpoint": "v2/accounting/od/avg_interest_rates",
+            "fields": "record_date,avg_interest_rate_amt",
+            "value_field": "avg_interest_rate_amt",
+            "extra_filter": "security_desc:eq:Total Interest-bearing Debt",
+            "name": "Avg Interest Rate - Total Interest-bearing Debt",
+        },
         "avg_rate_tbills": {
             "endpoint": "v2/accounting/od/avg_interest_rates",
             "fields": "record_date,avg_interest_rate_amt",
@@ -659,6 +720,11 @@ def fetch(indicator_id: str, start_date: str = None, end_date: str = None) -> Di
                     date_sums[date] = date_sums.get(date, 0) + v
                 except (ValueError, TypeError):
                     pass
+        # The request is one page sorted newest-first; when the page is full
+        # the oldest date may be cut off mid-way, so its sum would be partial.
+        # Drop it rather than show an understated total.
+        if len(records) >= int(params["page[size]"]) and date_sums:
+            date_sums.pop(min(date_sums), None)
         data_points = [{"date": d, "value": v} for d, v in date_sums.items()]
     else:
         data_points = []
@@ -695,6 +761,9 @@ def main():
                 "debt-to-penny [--fields=field1,field2] [--start-date=YYYY-MM-DD] [--end-date=YYYY-MM-DD] [--limit=N] [--all]",
                 "avg-interest-rates [--start-date=YYYY-MM-DD] [--end-date=YYYY-MM-DD] [--security-type=type] [--limit=N] [--all]",
                 "interest-expense [--start-date=YYYY-MM-DD] [--end-date=YYYY-MM-DD] [--expense-category=category] [--limit=N] [--all]",
+                "exchange-rates [--start-date=YYYY-MM-DD] [--end-date=YYYY-MM-DD] [--currency=Country-Currency] [--limit=N]",
+                "record-auctions",
+                "fetch <indicator_id> [start_date] [end_date]",
                 "datasets"
             ]
         }))
@@ -776,6 +845,25 @@ def main():
 
         result = get_interest_expense(start_date, end_date, expense_category, limit, all_pages)
 
+    elif command == "exchange-rates":
+        start_date = None
+        end_date = None
+        currency = None
+        limit = None
+        for arg in sys.argv[2:]:
+            if arg.startswith("--start-date="):
+                start_date = _parse_date_range(arg.split("=", 1)[1])
+            elif arg.startswith("--end-date="):
+                end_date = _parse_date_range(arg.split("=", 1)[1])
+            elif arg.startswith("--currency="):
+                currency = arg.split("=", 1)[1]
+            elif arg.startswith("--limit="):
+                limit = int(arg.split("=", 1)[1])
+        result = get_rates_of_exchange(start_date, end_date, currency, limit)
+
+    elif command == "record-auctions":
+        result = get_record_setting_auction()
+
     elif command == "datasets":
         result = get_datasets()
 
@@ -783,7 +871,8 @@ def main():
         print(json.dumps({
             "error": f"Unknown command: {command}",
             "available_commands": [
-                "debt-to-penny", "avg-interest-rates", "interest-expense", "datasets"
+                "debt-to-penny", "avg-interest-rates", "interest-expense",
+                "exchange-rates", "record-auctions", "fetch", "datasets"
             ]
         }))
         sys.exit(1)

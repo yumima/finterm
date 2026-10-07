@@ -18,6 +18,8 @@
 #include <QJsonValue>
 #include <QMetaObject>
 #include <QPointer>
+#include <QTime>
+#include <QTimeZone>
 #include <QtConcurrent/QtConcurrent>
 
 #include <algorithm>
@@ -154,6 +156,65 @@ QStringList OptionChainService::list_underlyings(const QString& broker_id) const
 
 QStringList OptionChainService::list_expiries(const QString& broker_id, const QString& underlying) const {
     return InstrumentService::instance().list_expiries(broker_id, underlying, QStringLiteral("NFO"));
+}
+
+QStringList OptionChainService::iv_history_kinds(const QString& broker_id, const QString& underlying,
+                                                 const QString& expiry) const {
+    const quint64 gen = InstrumentService::instance().cache_generation();
+    const qint64 day = QDate::currentDate().toJulianDay();
+    const QString key = broker_id + QLatin1Char(':') + underlying + QLatin1Char(':') + expiry;
+    auto it = iv_kinds_cache_.find(key);
+    if (it != iv_kinds_cache_.end() && it->generation == gen && it->day == day)
+        return it->kinds;
+    // Miss: drop every stale entry (instrument cache rebuilt or date rolled)
+    // so the memo can't accumulate dead keys.
+    for (auto e = iv_kinds_cache_.begin(); e != iv_kinds_cache_.end();) {
+        if (e->generation != gen || e->day != day)
+            e = iv_kinds_cache_.erase(e);
+        else
+            ++e;
+    }
+    QStringList kinds = compute_iv_history_kinds(broker_id, underlying, expiry);
+    iv_kinds_cache_.insert(key, IvKindsEntry{gen, day, kinds});
+    return kinds;
+}
+
+QStringList OptionChainService::compute_iv_history_kinds(const QString& broker_id, const QString& underlying,
+                                                         const QString& expiry) const {
+    auto parse = [](const QString& e) {
+        QDate d = QDate::fromString(e, QStringLiteral("dd-MMM-yy"), 2000); // yy → 20yy
+        if (!d.isValid())
+            d = QDate::fromString(e, "yyyy-MM-dd");
+        return d;
+    };
+    const QDate target = parse(expiry);
+    if (!target.isValid())
+        return {};
+    const QDate today = QDate::currentDate();
+    QVector<QDate> live;
+    for (const QString& e : list_expiries(broker_id, underlying)) {
+        const QDate d = parse(e);
+        if (d.isValid() && d >= today)
+            live.append(d);
+    }
+    std::sort(live.begin(), live.end());
+    if (live.isEmpty())
+        return {};
+
+    QStringList kinds;
+    if (target == live.first())
+        kinds << QStringLiteral("front");
+    // Nearest month-end expiry: first expiry with no later expiry in its month.
+    for (int i = 0; i < live.size(); ++i) {
+        const bool last_of_month = (i + 1 == live.size()) || live[i + 1].month() != live[i].month() ||
+                                   live[i + 1].year() != live[i].year();
+        if (last_of_month) {
+            if (target == live[i])
+                kinds << QStringLiteral("monthly");
+            break;
+        }
+    }
+    return kinds;
 }
 
 bool OptionChainService::parse_chain_topic(const QString& topic, QString& broker, QString& underlying,
@@ -394,16 +455,20 @@ double OptionChainService::risk_free_rate() {
 }
 
 double OptionChainService::compute_t_years(const QString& expiry) {
-    QDate exp = QDate::fromString(expiry, "dd-MMM-yy");
+    // baseYear 2000: without it Qt maps "yy" to 19yy, which put every expiry
+    // in the past and pinned t at the floor.
+    QDate exp = QDate::fromString(expiry, QStringLiteral("dd-MMM-yy"), 2000);
     if (!exp.isValid())
         exp = QDate::fromString(expiry, "yyyy-MM-dd");
     if (!exp.isValid())
-        return 1.0 / 365.0;
-    const QDate today = QDate::currentDate();
-    const int days = today.daysTo(exp);
-    if (days <= 0)
-        return 1.0 / 365.0;  // expiry day or past — clamp to one day
-    return double(days) / 365.0;
+        return std::numeric_limits<double>::quiet_NaN();
+    // F&O contracts here are NSE-listed: they expire at the 15:30 IST close.
+    static const QTimeZone kExchangeTz(QByteArrayLiteral("Asia/Kolkata"));
+    const QDateTime close(exp, QTime(15, 30), kExchangeTz);
+    constexpr double kSecondsPerYear = 365.0 * 86400.0;
+    constexpr qint64 kMinSeconds = 60;  // div-by-zero guard only
+    const qint64 secs = std::max(kMinSeconds, QDateTime::currentDateTimeUtc().secsTo(close));
+    return double(secs) / kSecondsPerYear;
 }
 
 void OptionChainService::publish_per_leg_ticks(const OptionChain& chain) {
@@ -447,14 +512,18 @@ void OptionChainService::publish_atm_iv(const OptionChain& chain) {
     fincept::datahub::DataHub::instance().publish(iv_topic, QVariant::fromValue(atm_iv));
 
     // Persist the latest ATM IV for the day — IV percentile pill reads
-    // back the trailing 90-day window from this table. Idempotent UPSERT
-    // keyed on (underlying, today) so the last refresh of the day wins.
+    // back the trailing 90-day window from this table. Keyed on
+    // (underlying, expiry kind, today) so a weekly's IV is never ranked
+    // against a monthly's; later expiries aren't recorded.
     if (atm_iv > 0) {
         const QString today = QDate::currentDate().toString(Qt::ISODate);
-        auto r = fincept::IvHistoryRepository::instance().upsert(chain.underlying, today, atm_iv);
-        if (r.is_err()) {
-            LOG_DEBUG("OptionChain", QString("iv_history upsert failed: %1")
-                                          .arg(QString::fromStdString(r.error())));
+        for (const QString& kind : iv_history_kinds(chain.broker_id, chain.underlying, chain.expiry)) {
+            auto r = fincept::IvHistoryRepository::instance().upsert(chain.underlying, kind, today, chain.expiry,
+                                                                     atm_iv);
+            if (r.is_err()) {
+                LOG_DEBUG("OptionChain", QString("iv_history upsert failed: %1")
+                                              .arg(QString::fromStdString(r.error())));
+            }
         }
     }
 
@@ -474,6 +543,8 @@ void OptionChainService::enrich_with_greeks(const OptionChain& chain, const QStr
     if (!std::isfinite(r))
         return; // rate unknown — leave IV/Greeks unset rather than guess
     const double t = compute_t_years(chain.expiry);
+    if (!std::isfinite(t))
+        return; // unparseable expiry — leave IV/Greeks unset rather than guess
     // q=0 for indices and stocks v1 (no per-stock dividend lookup yet).
     const double q = 0.0;
     const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();

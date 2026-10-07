@@ -3,10 +3,13 @@
 #include "mcp/tools/SystemTools.h"
 
 #include "auth/AuthManager.h"
+#include "core/config/AppIdentity.h"
 #include "core/logging/Logger.h"
 #include "mcp/McpProvider.h"
 #include "python/PythonRunner.h"
 #include "storage/cache/CacheManager.h"
+
+#include <QCoreApplication>
 
 namespace fincept::mcp::tools {
 
@@ -69,7 +72,11 @@ std::vector<ToolDef> get_system_tools() {
         t.category = "system";
         t.handler = [](const QJsonObject&) -> ToolResult {
             return ToolResult::ok_data(
-                QJsonObject{{"version", "4.0.0"},
+                // Was a hardcoded "4.0.0" that matched no release. The build's
+                // version is set on the QApplication from FINCEPT_VERSION_STRING.
+                QJsonObject{{"name", QString::fromLatin1(AppIdentity::kDisplayName)},
+                            {"version", QCoreApplication::applicationVersion()},
+                            {"qt_version", QString::fromLatin1(qVersion())},
                             {"platform",
 #ifdef _WIN32
                              "windows"

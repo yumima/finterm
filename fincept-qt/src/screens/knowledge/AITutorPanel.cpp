@@ -289,7 +289,32 @@ void AITutorPanel::send_user_message(const QString& text) {
                 },
                 Qt::QueuedConnection);
         },
-        /*use_tools=*/false);
+        /*use_tools=*/false, persona,
+        // Per-call completion: show failures (the stream delivers no text on
+        // error, which used to leave an empty AI turn) and name the model that
+        // actually answered when a quota fallback switched it.
+        [guard](ai_chat::LlmResponse resp) {
+            if (!guard)
+                return;
+            QString note;
+            if (!resp.success)
+                note = QStringLiteral("Error: %1").arg(resp.error.isEmpty()
+                                                           ? QStringLiteral("the model returned no answer.")
+                                                           : resp.error);
+            else if (resp.fell_back && !resp.model_used.isEmpty())
+                note = QStringLiteral("(Answered by %1 via %2 — fell back after a quota limit.)")
+                           .arg(resp.model_used, resp.provider_used);
+            if (!note.isEmpty()) {
+                if (guard->thread_.isEmpty() || guard->thread_.last().role != "assistant")
+                    guard->thread_.push_back({"assistant", note});
+                else if (guard->thread_.last().content.trimmed().isEmpty())
+                    guard->thread_.last().content = note;
+                else
+                    guard->thread_.last().content += QStringLiteral("\n\n") + note;
+                guard->redraw_thread();
+            }
+            guard->set_busy(false);
+        });
 }
 
 void AITutorPanel::append_message(const QString& role, const QString& content) {

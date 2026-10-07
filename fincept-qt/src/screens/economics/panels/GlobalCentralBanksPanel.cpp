@@ -31,6 +31,9 @@ static constexpr const char* kGlobalCentralBanksColor = "#6366F1"; // indigo
 struct CbSeries {
     QString label;
     QString command;
+    // Column holding the headline series for the stat cards. Empty for wide
+    // multi-series tables (FX baskets, yield curves): no single value → "—".
+    QString value_key = {};
 };
 
 struct CbBank {
@@ -45,8 +48,8 @@ static const QList<CbBank> kBanks = {
      "boe_data.py",
      "boe",
      {
-         {"Bank Rate", "bank_rate"},
-         {"SONIA Overnight Rate", "sonia"},
+         {"Bank Rate", "bank_rate", "IUDBEDR"},
+         {"SONIA Overnight Rate", "sonia", "IUDSOIA"},
          {"Exchange Rates (GBP)", "exchange_rates"},
          {"Monetary Aggregates (M0/M4)", "monetary_aggregates"},
          {"Quoted Interest Rates", "quoted_rates"},
@@ -55,7 +58,7 @@ static const QList<CbBank> kBanks = {
      "rba_data.py",
      "rba",
      {
-         {"Cash Rate (F1)", "cash_rate"},
+         {"Cash Rate (F1)", "cash_rate", "FIRMMCRTD"},
          {"Bond Yields (F2)", "bond_yields"},
          {"Exchange Rates (F11)", "exchange_rates"},
          {"Inflation / CPI", "inflation"},
@@ -66,18 +69,18 @@ static const QList<CbBank> kBanks = {
      "boc_data.py",
      "boc",
      {
-         {"Overnight Policy Rate", "policy_rate"},
-         {"CORRA", "corra"},
-         {"Prime Rate", "prime"},
-         {"USD/CAD", "usd"},
-         {"EUR/CAD", "eur"},
+         {"Overnight Policy Rate", "policy_rate", "STATIC_ATABLE_V39079"},
+         {"CORRA", "corra", "AVG.INTWO"},
+         {"Prime Rate", "prime", "V122530"},
+         {"USD/CAD", "usd", "FXUSDCAD"},
+         {"EUR/CAD", "eur", "FXEURCAD"},
      }},
     {"Riksbank — Sweden",
      "riksbank_data.py",
      "riksbank",
      {
-         {"Policy Rate", "policy_rate"},
-         {"Policy + Deposit + Lending", "policy_all"},
+         {"Policy Rate", "policy_rate", "value"},
+         {"Policy + Deposit + Lending", "policy_all", "SECBREPOEFF"},
          {"T-Bills (1M-6M)", "tbills"},
          {"Mortgage Bond Yields", "mortgage"},
      }},
@@ -85,7 +88,7 @@ static const QList<CbBank> kBanks = {
      "snb_data.py",
      "snb",
      {
-         {"Policy Rate + SARON", "policy_rate"},
+         {"Policy Rate + SARON", "policy_rate", "LZ"},
          {"Bond Yields (Monthly)", "bond_yields"},
          {"Bond Yields (Daily)", "bond_yields_d"},
          {"CHF Exchange Rates", "exchange_rates"},
@@ -243,7 +246,11 @@ void GlobalCentralBanksPanel::on_result(const QString& request_id, const service
         (matched_bank >= 0 && matched_series >= 0) ? kBanks[matched_bank].series[matched_series].label : request_id;
     const QString title = bank_name + ": " + series_name;
 
-    display(rows, title);
+    // Dates are "date" in every bank script (BoE/RBA day-first formats are
+    // normalised by the base before sorting).
+    const QString value_key =
+        (matched_bank >= 0 && matched_series >= 0) ? kBanks[matched_bank].series[matched_series].value_key : QString();
+    display(rows, title, value_key, QStringLiteral("date"));
     LOG_INFO("GlobalCentralBanksPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 

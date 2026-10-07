@@ -8,6 +8,7 @@
 
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 
 #include <QDateTime>
 #include <QElapsedTimer>
@@ -18,26 +19,95 @@
 #include <QTimer>
 #include <QVariantList>
 
+#include <cmath>
+
 namespace fincept::mcp::tools {
 
 static constexpr const char* TAG = "DataHubTools";
 
 
-static QJsonValue variant_to_json(const QVariant& v) {
-    // Try the direct QVariant -> QJsonValue path first; falls back to
-    // string representation for types Qt can't natively serialise
-    // (custom structs registered via Q_DECLARE_METATYPE with no JSON
-    // converter). Bounded to avoid unbounded LLM context bloat.
-    auto j = QJsonValue::fromVariant(v);
-    if (j.isNull() && v.isValid()) {
-        const QString s = v.toString();
-        return s.left(4096);
-    }
+static QJsonValue dh_num(double v) {
+    return std::isfinite(v) ? QJsonValue(v) : QJsonValue();
+}
+
+static QJsonValue dh_truncate(QJsonValue j) {
     if (j.isString()) {
         const QString s = j.toString();
         if (s.size() > 4096) return QJsonValue(s.left(4096) + "...[truncated]");
     }
     return j;
+}
+
+/// Serialise the struct payloads the hub actually carries. QJsonValue::
+/// fromVariant() knows none of them, and QVariant::toString() on a custom
+/// struct is "" — so datahub_peek used to return an empty string for
+/// market:quote:AAPL, its own documented example. Unknown structs now say
+/// what they are instead of looking like an empty value.
+static QJsonValue variant_to_json(const QVariant& v) {
+    using services::QuoteData;
+    using services::InfoData;
+    using services::HistoryPoint;
+    if (v.metaType() == QMetaType::fromType<QuoteData>()) {
+        const auto q = v.value<QuoteData>();
+        return QJsonObject{{"symbol", q.symbol}, {"name", q.name}, {"price", dh_num(q.price)},
+                           {"change", dh_num(q.change)}, {"change_pct", dh_num(q.change_pct)},
+                           {"high", dh_num(q.high)}, {"low", dh_num(q.low)}, {"volume", dh_num(q.volume)},
+                           {"bid", dh_num(q.bid)}, {"ask", dh_num(q.ask)}};
+    }
+    if (v.metaType() == QMetaType::fromType<InfoData>()) {
+        const auto i = v.value<InfoData>();
+        return QJsonObject{{"symbol", i.symbol}, {"name", i.name}, {"sector", i.sector},
+                           {"industry", i.industry}, {"country", i.country}, {"currency", i.currency},
+                           {"market_cap", dh_num(i.market_cap)}, {"pe_ratio", dh_num(i.pe_ratio)},
+                           {"forward_pe", dh_num(i.forward_pe)}, {"price_to_book", dh_num(i.price_to_book)},
+                           {"dividend_yield", dh_num(i.dividend_yield)}, {"beta", dh_num(i.beta)},
+                           {"week52_high", dh_num(i.week52_high)}, {"week52_low", dh_num(i.week52_low)},
+                           {"avg_volume", dh_num(i.avg_volume)}};
+    }
+    if (v.metaType() == QMetaType::fromType<QVector<HistoryPoint>>()) {
+        const auto pts = v.value<QVector<HistoryPoint>>();
+        QJsonArray arr;
+        // Most recent 250 bars bound the context cost.
+        const qsizetype from = pts.size() > 250 ? pts.size() - 250 : 0;
+        for (qsizetype k = from; k < pts.size(); ++k) {
+            const auto& h = pts[k];
+            arr.append(QJsonObject{{"date", h.date().toString(Qt::ISODate)}, {"open", h.open},
+                                   {"high", h.high}, {"low", h.low}, {"close", h.close},
+                                   {"volume", static_cast<double>(h.volume)}});
+        }
+        return QJsonObject{{"bars", arr}, {"total_bars", static_cast<int>(pts.size())},
+                           {"truncated", from > 0}};
+    }
+    if (v.metaType() == QMetaType::fromType<trading::TickerData>()) {
+        const auto t = v.value<trading::TickerData>();
+        return QJsonObject{{"symbol", t.symbol}, {"last", t.last}, {"bid", t.bid}, {"ask", t.ask},
+                           {"high", t.high}, {"low", t.low}, {"open", t.open}, {"close", t.close},
+                           {"change", t.change}, {"change_pct", t.percentage},
+                           {"base_volume", t.base_volume}, {"quote_volume", t.quote_volume},
+                           {"timestamp", static_cast<qint64>(t.timestamp)}};
+    }
+    if (v.metaType() == QMetaType::fromType<trading::Candle>()) {
+        const auto c = v.value<trading::Candle>();
+        return QJsonObject{{"timestamp", static_cast<qint64>(c.timestamp)}, {"open", c.open},
+                           {"high", c.high}, {"low", c.low}, {"close", c.close}, {"volume", c.volume}};
+    }
+    if (v.metaType() == QMetaType::fromType<services::EconomicsResult>()) {
+        const auto e = v.value<services::EconomicsResult>();
+        QJsonObject o{{"success", e.success}, {"source_id", e.source_id}};
+        if (!e.error.isEmpty()) o["error"] = e.error;
+        o["data"] = e.data;
+        return o;
+    }
+
+    // Direct QVariant -> QJsonValue for Qt-native types.
+    auto j = QJsonValue::fromVariant(v);
+    if (!j.isNull() || !v.isValid())
+        return dh_truncate(j);
+    const QString s = v.toString();
+    if (!s.isEmpty())
+        return dh_truncate(QJsonValue(s));
+    return QJsonObject{{"unserialized_type", QString::fromLatin1(v.typeName())},
+                       {"note", "this payload type has no JSON serializer in datahub_peek"}};
 }
 
 

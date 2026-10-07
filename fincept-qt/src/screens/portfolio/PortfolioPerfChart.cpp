@@ -4,6 +4,7 @@
 #include "core/logging/Logger.h"
 #include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioReturns.h"
+#include "services/portfolio/PortfolioService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
@@ -29,6 +30,22 @@
 
 namespace {
 static const QStringList kPeriods = {"1D", "1W", "1M", "3M", "YTD", "1Y", "ALL"};
+
+/// Calendar span as a short label: "1Y", "7M", "3W", "5D".
+QString span_label(qint64 days) {
+    if (days >= 350)
+        return QStringLiteral("%1Y").arg(std::max<qint64>(1, (days + 30) / 365));
+    if (days >= 28)
+        return QStringLiteral("%1M").arg(std::max<qint64>(1, qRound64(days / 30.44)));
+    if (days >= 7)
+        return QStringLiteral("%1W").arg(days / 7);
+    return QStringLiteral("%1D").arg(std::max<qint64>(1, days));
+}
+
+/// A period's baseline is the last snapshot ON OR BEFORE its start date; one
+/// that old (a long weekend plus a missed day or two) still states the
+/// period's opening value. Older than this, the history does not reach.
+constexpr int kAnchorSlackDays = 7;
 
 // Filter ts_ms / vals in-place to NYSE regular-session bars only
 // (Mon–Fri, 09:30–16:00 America/New_York). yfinance already omits
@@ -543,6 +560,14 @@ void PortfolioPerfChart::set_period(const QString& period) {
     update_chart();
 }
 
+QString PortfolioPerfChart::focus_currency() const {
+    // A symbol's prices are in ITS trading currency, not the portfolio's.
+    for (const auto& h : summary_.holdings)
+        if (h.symbol == focus_symbol_ && !h.currency.isEmpty())
+            return h.currency;
+    return services::PortfolioService::cached_symbol_currency(focus_symbol_);
+}
+
 QString PortfolioPerfChart::period_for_yfinance() const {
     // yfinance accepts: 1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max
     const QString& p = current_period_;
@@ -918,7 +943,39 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
 
     const double first = pts.first().y();
     const double last  = pts.last().y();
-    const double pnl_pct = first > 0 ? (last - first) / first * 100.0 : 0.0;
+    // 1D change is measured from the PREVIOUS CLOSE — the base the stats
+    // ribbon's day change uses — not from the session's first 1-minute bar,
+    // which silently dropped the overnight gap and disagreed with the
+    // ribbon. Aggregate: prev-close NAV = live NAV − today's change (only when
+    // every holding's day change is known). Held symbol: price − day change.
+    // Without a known previous close (an unheld ticker, a partial book) the
+    // first bar is the base and the label says so.
+    double base = first;
+    bool base_is_prev_close = false;
+    if (!multi_day) {
+        if (is_aggregate) {
+            if (!summary_.book_incomplete() && summary_.day_change_unknown_symbols.isEmpty() &&
+                std::isfinite(summary_.total_day_change)) {
+                const double prev_nav = summary_.total_market_value - summary_.total_day_change;
+                if (prev_nav > 0) {
+                    base = prev_nav;
+                    base_is_prev_close = true;
+                }
+            }
+        } else {
+            for (const auto& h : summary_.holdings) {
+                if (h.symbol != focus_symbol_)
+                    continue;
+                const double prev = h.current_price - h.day_change;
+                if (h.price_known && std::isfinite(prev) && prev > 0) {
+                    base = prev;
+                    base_is_prev_close = true;
+                }
+                break;
+            }
+        }
+    }
+    const double pnl_pct = base > 0 ? (last - base) / base * 100.0 : 0.0;
 
     auto* line  = new QLineSeries;
     auto* upper = new QLineSeries;
@@ -928,10 +985,12 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     for (const auto& p : pts) {
         line->append(p);
         upper->append(p);
-        lower->append(p.x(), first);
+        lower->append(p.x(), base);
         y_min = std::min(y_min, p.y());
         y_max = std::max(y_max, p.y());
     }
+    y_min = std::min(y_min, base);
+    y_max = std::max(y_max, base);
     const QColor lc = pnl_pct >= 0 ? QColor(ui::colors::POSITIVE())
                                    : QColor(ui::colors::NEGATIVE());
     line->setPen(QPen(lc, 2));
@@ -959,14 +1018,22 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     line->attachAxis(y);
     area->attachAxis(y);
 
-    chart_view_->set_series_data(pts, QStringLiteral("$"), pts_ts_ms);
+    // Aggregate NAV is in the portfolio currency; a symbol's bars are in its
+    // own trading currency.
+    chart_view_->set_series_data(pts, is_aggregate ? currency_ : focus_currency(), pts_ts_ms);
 
     // Info-bar: period change %, current value, and (aggregate only) cost.
     const char* pcol = pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-    period_change_label_->setText(QString("%1  %2%3%")
-                                      .arg(current_period_)
+    const QString base_note = (multi_day || base_is_prev_close) ? QString() : QStringLiteral(" (from first bar)");
+    period_change_label_->setText(QString("%1%2  %3%4%")
+                                      .arg(current_period_, base_note)
                                       .arg(pnl_pct >= 0 ? "+" : "")
                                       .arg(QString::number(pnl_pct, 'f', 2)));
+    period_change_label_->setToolTip(
+        multi_day ? tr("Change over the window, from its first bar.")
+        : base_is_prev_close
+            ? tr("Change since the previous close — the same base as the day change in the stats ribbon.")
+            : tr("Previous close unknown — change measured from the session's first bar."));
     period_change_label_->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:600;").arg(pcol));
 
@@ -1094,8 +1161,7 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
     line->attachAxis(y);
     area->attachAxis(y);
 
-    chart_view_->set_series_data(pts, indexed_mode_ ? QStringLiteral("%") : QStringLiteral("$"),
-                                 seq_ts_ms);
+    chart_view_->set_series_data(pts, indexed_mode_ ? QStringLiteral("%") : focus_currency(), seq_ts_ms);
 
     const char* period_color = pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
     period_change_label_->setText(QString("%1  %2%3%")
@@ -1141,10 +1207,20 @@ void PortfolioPerfChart::update_chart_focus() {
         const char* tot_color = !known          ? ui::colors::TEXT_SECONDARY
                                 : total_pct >= 0 ? ui::colors::POSITIVE
                                                  : ui::colors::NEGATIVE;
+        // Unrealized only (price vs average cost); realized P&L and dividends
+        // are separate figures, named in the tooltip.
         total_return_label_->setText(
-            known ? QString("TOTAL  %1%2%").arg(total_pct >= 0 ? "+" : "")
-                                           .arg(QString::number(total_pct, 'f', 2))
-                  : QStringLiteral("TOTAL  ") + ui::formatting::placeholder());
+            known ? QString("UNREALIZED  %1%2%").arg(total_pct >= 0 ? "+" : "")
+                                                .arg(QString::number(total_pct, 'f', 2))
+                  : QStringLiteral("UNREALIZED  ") + ui::formatting::placeholder());
+        total_return_label_->setToolTip(
+            tr("Unrealized return of the open position vs its average cost.\n"
+               "Realized P&L: %1 %2   Dividends: %1 %3")
+                .arg(currency_)
+                .arg(std::isfinite(held->realized_pnl) ? QString::number(held->realized_pnl, 'f', 2)
+                                                       : ui::formatting::placeholder())
+                .arg(std::isfinite(held->dividend_income) ? QString::number(held->dividend_income, 'f', 2)
+                                                          : ui::formatting::placeholder()));
         total_return_label_->setStyleSheet(
             QString("color:%1; font-size:14px; font-weight:700;").arg(tot_color));
 
@@ -1160,7 +1236,8 @@ void PortfolioPerfChart::update_chart_focus() {
     } else if (have_data && last_price > 0) {
         // Not a held position but chart drew — stand-in price.
         total_return_label_->setText(QString("PRICE %1 %2")
-                                         .arg(currency_).arg(QString::number(last_price, 'f', 2)));
+                                         .arg(focus_currency()).arg(QString::number(last_price, 'f', 2)));
+        total_return_label_->setToolTip(QString());
         total_return_label_->setStyleSheet(
             QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
         nav_label_->clear();
@@ -1239,8 +1316,13 @@ void PortfolioPerfChart::update_chart() {
     const double live_nav = summary_.total_market_value;
     const double cost_basis = summary_.total_cost_basis;
 
-    // ── Determine cutoff date from selected period ────────────────────────────
-    QDate cutoff = QDate::currentDate();
+    // ── Determine the period's start date ─────────────────────────────────────
+    // `cutoff` is the date whose CLOSE is the period's baseline. YTD's
+    // baseline is the last close of the prior year (on or before Dec 31) —
+    // the first snapshot after Jan 1 already contains the new year's first
+    // session and silently dropped it from the return.
+    const QDate today = QDate::currentDate();
+    QDate cutoff = today;
     if (current_period_ == "1D")
         cutoff = cutoff.addDays(-1);
     else if (current_period_ == "1W")
@@ -1250,20 +1332,33 @@ void PortfolioPerfChart::update_chart() {
     else if (current_period_ == "3M")
         cutoff = cutoff.addMonths(-3);
     else if (current_period_ == "YTD")
-        cutoff = QDate(QDate::currentDate().year(), 1, 1);
+        cutoff = QDate(today.year(), 1, 1).addDays(-1);
     else if (current_period_ == "1Y")
         cutoff = cutoff.addYears(-1);
     else if (current_period_ == "5Y")
         cutoff = cutoff.addYears(-5);
     else
         cutoff = cutoff.addYears(-10); // ALL
+    const bool is_all = (current_period_ == QStringLiteral("ALL"));
 
     // ── Filter snapshots (already sorted ascending by set_snapshots) ─────────
+    // The baseline is the LAST snapshot on or before the cutoff (within
+    // kAnchorSlackDays — weekends, holidays, a missed day); then every
+    // snapshot after it.
     QVector<portfolio::PortfolioSnapshot> filtered;
     filtered.reserve(snapshots_.size());
+    const QDate anchor_floor = cutoff.addDays(-kAnchorSlackDays);
+    int anchor_idx = -1;
+    for (int i = 0; i < snapshots_.size(); ++i) {
+        const QDate d = QDate::fromString(snapshots_[i].snapshot_date.left(10), Qt::ISODate);
+        if (d.isValid() && d <= cutoff && d >= anchor_floor)
+            anchor_idx = i;
+    }
+    if (anchor_idx >= 0)
+        filtered.append(snapshots_[anchor_idx]);
     for (const auto& s : snapshots_) {
         const QDate d = QDate::fromString(s.snapshot_date.left(10), Qt::ISODate);
-        if (d.isValid() && d >= cutoff)
+        if (d.isValid() && d > cutoff)
             filtered.append(s);
     }
 
@@ -1271,28 +1366,41 @@ void PortfolioPerfChart::update_chart() {
     // nav_pts:   (sequential_index, NAV) — x used by series + crosshair snap
     // nav_ts_ms: actual UTC ms per point — used by crosshair tooltip
     // nav_dates: calendar dates per point — used for axis label building
-    // date_to_seq: snapshot date → sequential index (for benchmark overlay)
     QVector<QPointF>  nav_pts;
     QVector<qint64>   nav_ts_ms;
     QVector<QDate>    nav_dates;
-    QHash<QDate, int> date_to_seq;
     nav_pts.reserve(filtered.size() + 1);
     nav_ts_ms.reserve(filtered.size() + 1);
     nav_dates.reserve(filtered.size() + 1);
 
-    // TOTAL / NAV / COST info labels — real summary figures, shown whether or
-    // not there is enough history to draw. "≈" when the summary itself is an
-    // estimate (unpriced/stale holdings, incomplete FX).
+    // UNREALIZED / NAV / COST info labels — real summary figures, shown
+    // whether or not there is enough history to draw. "≈" when the summary
+    // itself is an estimate (unpriced/stale holdings, incomplete FX).
     const auto fill_total_labels = [&]() {
         const QString approx = (summary_.fx_incomplete || summary_.valuation_partial())
-                                   ? QStringLiteral("\u2248") : QString();
+                                   ? QStringLiteral("≈") : QString();
         const double total_pnl_pct = summary_.total_unrealized_pnl_percent;
         const char* total_color = total_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-        total_return_label_->setText(QString("TOTAL  %1%2%3%")
+        // Unrealized only: open positions vs their average cost. Realized P&L
+        // (closed lots) and dividends are not in it — the all-in figure is in
+        // the tooltip, labelled as what it is.
+        total_return_label_->setText(QString("UNREALIZED  %1%2%3%")
                                          .arg(approx, total_pnl_pct >= 0 ? "+" : "")
                                          .arg(QString::number(total_pnl_pct, 'f', 2)));
         total_return_label_->setStyleSheet(
             QString("color:%1; font-size:14px; font-weight:700;").arg(total_color));
+        const double total_pnl =
+            summary_.total_unrealized_pnl + summary_.total_realized_pnl + summary_.total_dividend_income;
+        total_return_label_->setToolTip(
+            tr("Unrealized return of open positions vs their average cost.\n\n"
+               "Unrealized P&L: %1 %2\nRealized P&L: %1 %3\nDividends: %1 %4\n"
+               "Total P&L (unrealized + realized + dividends): %1 %5%6")
+                .arg(currency_)
+                .arg(QString::number(summary_.total_unrealized_pnl, 'f', 2))
+                .arg(QString::number(summary_.total_realized_pnl, 'f', 2))
+                .arg(QString::number(summary_.total_dividend_income, 'f', 2))
+                .arg(QString::number(total_pnl, 'f', 2))
+                .arg(approx.isEmpty() ? QString() : tr("\n(approximate — some holdings unpriced or unconverted)")));
 
         nav_label_->setText(QString("NAV %1 %2%3").arg(currency_, approx).arg(QString::number(live_nav, 'f', 2)));
         if (cost_basis_label_) {
@@ -1306,6 +1414,9 @@ void PortfolioPerfChart::update_chart() {
 
     double period_baseline = 0;
     bool baseline_unavailable = false;
+    // The label states the span the history actually covers: "7M (since
+    // first snapshot)" rather than "1Y" over seven months of data.
+    QString period_label = current_period_;
 
     if (filtered.size() >= 2) {
         period_baseline = filtered.first().total_value;
@@ -1315,7 +1426,6 @@ void PortfolioPerfChart::update_chart() {
             nav_pts.append(QPointF(static_cast<double>(i), filtered[i].total_value));
             nav_ts_ms.append(ms);
             nav_dates.append(d);
-            date_to_seq[d] = i;
         }
         // Pin a final point at "now" so the line meets the live NAV — unless
         // the live NAV leaves out unpriced holdings, in which case it is not
@@ -1324,18 +1434,21 @@ void PortfolioPerfChart::update_chart() {
             const qint64 now_ms = QDateTime::currentDateTimeUtc().toMSecsSinceEpoch();
             nav_pts.append(QPointF(static_cast<double>(filtered.size()), live_nav));
             nav_ts_ms.append(now_ms);
-            nav_dates.append(QDate::currentDate());
+            nav_dates.append(today);
         } else {
             baseline_unavailable = true; // period return would use a partial NAV
         }
 
         const QDate first_date = QDate::fromString(
             filtered.first().snapshot_date.left(10), Qt::ISODate);
-        const int window_days = cutoff.daysTo(QDate::currentDate());
-        if (first_date.isValid() && window_days > 0) {
-            const int have_days = first_date.daysTo(QDate::currentDate());
+        if (anchor_idx < 0 && !is_all && first_date.isValid()) {
+            // History starts inside the window.
+            const qint64 window_days = cutoff.daysTo(today);
+            const qint64 have_days = first_date.daysTo(today);
             if (have_days * 2 < window_days)
-                baseline_unavailable = true;
+                baseline_unavailable = true; // too thin to state yet — backfill pending
+            else
+                period_label = tr("%1 (since first snapshot)").arg(span_label(have_days));
         }
     } else {
         // Fewer than two NAV observations in the window: there is no history
@@ -1362,7 +1475,7 @@ void PortfolioPerfChart::update_chart() {
     // ratio only when the TWR is uncomputable (thin history) — the
     // baseline_unavailable branch below already dashes those cases out.
     const auto period_ret = portfolio::compute_period_return(
-        filtered, live_nav, QDate::currentDate().toString(Qt::ISODate), transactions_, fx_);
+        filtered, live_nav, today.toString(Qt::ISODate), transactions_, fx_);
     // A flow with no known FX rate leaves the period return unknown — dash it
     // rather than fall back to the naive ratio (which would count the flow).
     if (period_ret.fx_unknown)
@@ -1372,7 +1485,24 @@ void PortfolioPerfChart::update_chart() {
         period_ret.valid ? period_ret.twr_pct
                          : (period_baseline > 0 ? (live_nav - period_baseline) / period_baseline * 100.0 : 0.0);
 
+    // ── Like-for-like growth index (indexed mode) ─────────────────────────────
+    // Indexed mode promises a like-for-like comparison with the benchmark, so
+    // the portfolio line is the TIME-WEIGHTED index chained from flow-adjusted
+    // returns — raw NAV/baseline rises with every deposit, which no index
+    // does. NaN (unknown-FX flow) points are left undrawn.
+    QVector<portfolio::NavPoint> nav_path;
+    nav_path.reserve(nav_pts.size());
+    for (int i = 0; i < nav_pts.size(); ++i)
+        nav_path.append({nav_dates[i].toString(Qt::ISODate), nav_pts[i].y()});
+    const QVector<double> twr_idx = indexed_mode_ ? portfolio::twr_index(nav_path, transactions_, fx_)
+                                                  : QVector<double>();
+
     // ── Convert series to display space (currency value vs. base-100 indexed) ─
+    auto display_at = [&](int i) -> double {
+        if (!indexed_mode_)
+            return nav_pts[i].y();
+        return twr_idx.value(i, std::numeric_limits<double>::quiet_NaN()) * 100.0;
+    };
     auto to_display = [&](double v) -> double {
         if (!indexed_mode_)
             return v;
@@ -1385,13 +1515,19 @@ void PortfolioPerfChart::update_chart() {
 
     double y_min = std::numeric_limits<double>::max();
     double y_max = std::numeric_limits<double>::lowest();
-    const double area_baseline_disp = to_display(period_baseline);
+    const double area_baseline_disp = indexed_mode_ ? 100.0 : period_baseline;
+    QVector<qint64> drawn_ts_ms;
+    drawn_ts_ms.reserve(nav_pts.size());
 
-    for (const auto& p : nav_pts) {
-        const double y = to_display(p.y());
-        nav_line->append(p.x(), y);
-        area_upper->append(p.x(), y);
-        area_lower->append(p.x(), area_baseline_disp);
+    for (int i = 0; i < nav_pts.size(); ++i) {
+        const double y = display_at(i);
+        if (!std::isfinite(y))
+            continue;
+        const double x = nav_pts[i].x();
+        nav_line->append(x, y);
+        area_upper->append(x, y);
+        area_lower->append(x, area_baseline_disp);
+        drawn_ts_ms.append(nav_ts_ms[i]);
         y_min = std::min(y_min, y);
         y_max = std::max(y_max, y);
     }
@@ -1399,7 +1535,7 @@ void PortfolioPerfChart::update_chart() {
     // Y-axis must always include the cost-basis reference so the user can see
     // the gap between NAV and cost. Skip in indexed mode where 100 is the line.
     const double cost_disp = to_display(cost_basis);
-    if (cost_basis > 0) {
+    if (cost_basis > 0 && !indexed_mode_) {
         y_min = std::min(y_min, cost_disp);
         y_max = std::max(y_max, cost_disp);
     }
@@ -1473,61 +1609,83 @@ void PortfolioPerfChart::update_chart() {
     // nav_line->points() has sequential x + display-transformed y (matches chart)
     chart_view_->set_series_data(nav_line->points(),
                                  indexed_mode_ ? QStringLiteral("idx") : currency_,
-                                 nav_ts_ms);
+                                 drawn_ts_ms);
 
     // ── Benchmark overlay ─────────────────────────────────────────────────────
+    // Like-for-like in both modes. Indexed: benchmark rebased to the
+    // portfolio's TWR index level where both start. Currency: the NAV the
+    // book would have had in the benchmark with the SAME deposits and
+    // withdrawals — H_i = H_{i−1} × B_i/B_{i−1} + F_i — instead of the
+    // baseline grown at the benchmark's rate, which ignored every flow and
+    // set a deposit-inflated NAV against a no-deposit index.
     if (show_benchmark_ && nav_line->count() >= 2) {
         if (spy_dates_.isEmpty() || spy_closes_.isEmpty()) {
             nav_label_->setText(nav_label_->text() +
                                 QString("  |  %1: loading…").arg(benchmark_symbol_));
         } else {
-            const QDate start_date =
-                QDateTime::fromMSecsSinceEpoch(nav_ts_ms.first(), QTimeZone::UTC).date();
-            const QDate end_date =
-                QDateTime::fromMSecsSinceEpoch(nav_ts_ms.last(), QTimeZone::UTC).date();
+            // Benchmark close on or before each NAV date (a weekend/live point
+            // takes the last session's close). Dates are ISO, so string order
+            // is date order.
+            QVector<QPair<QString, double>> bench;
+            bench.reserve(spy_dates_.size());
+            for (int i = 0; i < spy_dates_.size() && i < spy_closes_.size(); ++i)
+                if (spy_closes_[i] > 1e-6)
+                    bench.append({spy_dates_[i].left(10), spy_closes_[i]});
+            std::sort(bench.begin(), bench.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+            const QVector<double> flows =
+                indexed_mode_ ? QVector<double>() : portfolio::segment_flows(nav_path, transactions_, fx_);
 
-            double bench_base = 0.0;
-            int base_idx = -1;
-            for (int i = 0; i < spy_dates_.size(); ++i) {
-                const QDate d = QDate::fromString(spy_dates_[i], Qt::ISODate);
-                if (d >= start_date) {
-                    bench_base = spy_closes_[i];
-                    base_idx = i;
-                    break;
+            auto* bench_line = new QLineSeries;
+            double b_min = std::numeric_limits<double>::max();
+            double b_max = std::numeric_limits<double>::lowest();
+            int bi = -1;           // cursor: last bench index with date ≤ current NAV date
+            double b_prev = 0;     // benchmark close at the previous drawn point
+            double level = 0;      // current overlay value (display space)
+            bool started = false;
+            for (int i = 0; i < nav_path.size(); ++i) {
+                while (bi + 1 < bench.size() && bench[bi + 1].first <= nav_path[i].date)
+                    ++bi;
+                if (bi < 0)
+                    continue; // benchmark history doesn't reach back this far
+                // Never extend the benchmark past its own last bar by more than
+                // the anchor slack — a stale series is not today's market.
+                const QDate bdate = QDate::fromString(bench[bi].first, Qt::ISODate);
+                if (bdate.daysTo(nav_dates[i]) > kAnchorSlackDays)
+                    continue;
+                const double b = bench[bi].second;
+                if (!started) {
+                    const double start = display_at(i);
+                    if (!std::isfinite(start))
+                        continue;
+                    level = start;
+                    started = true;
+                } else if (indexed_mode_) {
+                    level *= b / b_prev;
+                } else {
+                    const double f = flows.value(i, 0.0);
+                    if (!std::isfinite(f))
+                        break; // flow with unknown FX — the hypothetical is unknowable from here
+                    level = level * (b / b_prev) + f;
                 }
+                b_prev = b;
+                bench_line->append(nav_pts[i].x(), level);
+                b_min = std::min(b_min, level);
+                b_max = std::max(b_max, level);
             }
 
-            if (base_idx >= 0 && bench_base > 1e-6) {
-                auto* bench_line = new QLineSeries;
-                double b_min = std::numeric_limits<double>::max();
-                double b_max = std::numeric_limits<double>::lowest();
-                for (int i = base_idx; i < spy_dates_.size(); ++i) {
-                    const QDate d = QDate::fromString(spy_dates_[i], Qt::ISODate);
-                    if (d > end_date) break;
-                    auto it = date_to_seq.find(d);
-                    if (it == date_to_seq.end()) continue; // no matching snapshot
-                    const double bench_disp = indexed_mode_
-                        ? (spy_closes_[i] / bench_base) * 100.0
-                        : period_baseline * (spy_closes_[i] / bench_base);
-                    bench_line->append(static_cast<double>(it.value()), bench_disp);
-                    b_min = std::min(b_min, bench_disp);
-                    b_max = std::max(b_max, bench_disp);
-                }
-
-                if (bench_line->count() >= 2) {
-                    QPen bp(QColor(ui::colors::CYAN()), 1, Qt::DashLine);
-                    bench_line->setPen(bp);
-                    bench_line->setName(benchmark_symbol_);
-                    chart->addSeries(bench_line);
-                    bench_line->attachAxis(x_axis);
-                    bench_line->attachAxis(y_axis);
-                    const double new_min = std::min(y_min, b_min);
-                    const double new_max = std::max(y_max, b_max);
-                    const double new_pad = std::max((new_max - new_min) * 0.08, std::abs(new_max) * 0.01);
-                    y_axis->setRange(new_min - new_pad, new_max + new_pad);
-                } else {
-                    delete bench_line;
-                }
+            if (bench_line->count() >= 2) {
+                QPen bp(QColor(ui::colors::CYAN()), 1, Qt::DashLine);
+                bench_line->setPen(bp);
+                bench_line->setName(benchmark_symbol_);
+                chart->addSeries(bench_line);
+                bench_line->attachAxis(x_axis);
+                bench_line->attachAxis(y_axis);
+                const double new_min = std::min(y_min, b_min);
+                const double new_max = std::max(y_max, b_max);
+                const double new_pad = std::max((new_max - new_min) * 0.08, std::abs(new_max) * 0.01);
+                y_axis->setRange(new_min - new_pad, new_max + new_pad);
+            } else {
+                delete bench_line;
             }
         }
     }
@@ -1550,8 +1708,8 @@ void PortfolioPerfChart::update_chart() {
         // A degraded window (zero/dust-valued segments were skipped) is an
         // approximation and says so, instead of wearing the exact-TWR tooltip.
         period_change_label_->setText(QString("%1  %2%3%4%")
-                                          .arg(current_period_)
-                                          .arg(period_ret.degraded ? QStringLiteral("\u2248") : QString())
+                                          .arg(period_label)
+                                          .arg(period_ret.degraded ? QStringLiteral("≈") : QString())
                                           .arg(period_pnl_pct >= 0 ? "+" : "")
                                           .arg(QString::number(period_pnl_pct, 'f', 2)));
         period_change_label_->setStyleSheet(
@@ -1562,8 +1720,9 @@ void PortfolioPerfChart::update_chart() {
         // flows) — so it goes in the tooltip beside the return it explains.
         period_change_label_->setToolTip(
             (period_ret.valid
-                ? tr("Time-weighted return over the period.\nDeposits and withdrawals change the "
-                     "portfolio's size, not this number%1")
+                ? tr("Time-weighted return from %1 to now.\nDeposits and withdrawals change the "
+                     "portfolio's size, not this number%2")
+                      .arg(filtered.first().snapshot_date.left(10))
                       .arg(period_ret.net_external_flow != 0.0
                                ? tr(" (net external flow this period: %1 %2).")
                                      .arg(currency_)

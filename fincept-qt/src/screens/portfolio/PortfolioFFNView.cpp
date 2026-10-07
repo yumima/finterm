@@ -268,7 +268,7 @@ void PortfolioFFNView::build_ui() {
         stats_hdr->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
         tvl->addWidget(stats_hdr);
 
-        opt_stats_table_ = make_table(5, {"STRATEGY", "TOTAL RETURN", "VOLATILITY", "SHARPE", "MAX DRAWDOWN"});
+        opt_stats_table_ = make_table(5, {"STRATEGY", "TOTAL RETURN", "VOLATILITY", "SHARPE (GEO)", "MAX DRAWDOWN"});
         opt_stats_table_->setColumnWidth(0, 120);
         tvl->addWidget(opt_stats_table_);
 
@@ -444,7 +444,7 @@ void PortfolioFFNView::update_overview() {
         rows = {
             {"Annualized Return", pct_str(total_ann_ret), "--", sign_color(total_ann_ret)},
             {"Annualized Volatility", pct_str(total_ann_vol), "--", ui::colors::CYAN},
-            {"Sharpe Ratio", fmt(total_sharpe), "--", sign_color(total_sharpe)},
+            {"Sharpe Ratio (geo)", fmt(total_sharpe), "--", sign_color(total_sharpe)},
             {"Max Drawdown", pct_str(total_max_dd), "--", ui::colors::NEGATIVE},
             {"Best Day (any)", pct_str(total_best_day), "--", ui::colors::POSITIVE},
             {"Worst Day (any)", pct_str(total_worst_day), "--", ui::colors::NEGATIVE},
@@ -469,7 +469,7 @@ void PortfolioFFNView::update_overview() {
             {"Total Return (unrealized)", pct_str(pnl_pct / 100.0), "--",
              pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE},
             {"Annualized Volatility", ui::formatting::placeholder(), "--", ui::colors::TEXT_SECONDARY},
-            {"Sharpe Ratio", ui::formatting::placeholder(), "--", ui::colors::TEXT_SECONDARY},
+            {"Sharpe Ratio (geo)", ui::formatting::placeholder(), "--", ui::colors::TEXT_SECONDARY},
             {"Win Rate", fmt(win_rate) + "%", "--", ui::colors::CYAN},
             {"Positions", QString::number(summary_.total_positions), "--", ui::colors::CYAN},
             {"Total Value", currency_ + " " + fmt(summary_.total_market_value), "--", ui::colors::WARNING},
@@ -514,12 +514,12 @@ void PortfolioFFNView::update_benchmark() {
 
         rows = {
             {"Total Return", pct_str(total_ret)}, {"CAGR", pct_str(cagr)},           {"Volatility", pct_str(vol)},
-            {"Sharpe Ratio", fmt(sharpe)},        {"Max Drawdown", pct_str(max_dd)},
+            {"Sharpe Ratio (geo)", fmt(sharpe)},        {"Max Drawdown", pct_str(max_dd)},
         };
     } else {
         rows = {
             {"Total Return", "--"}, {"CAGR", "--"},         {"Volatility", "--"},
-            {"Sharpe Ratio", "--"}, {"Max Drawdown", "--"},
+            {"Sharpe Ratio (geo)", "--"}, {"Max Drawdown", "--"},
         };
     }
 

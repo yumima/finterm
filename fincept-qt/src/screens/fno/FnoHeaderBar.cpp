@@ -1,5 +1,6 @@
 #include "screens/fno/FnoHeaderBar.h"
 
+#include "services/options/OptionChainService.h"
 #include "storage/repositories/IvHistoryRepository.h"
 #include "ui/theme/Theme.h"
 
@@ -215,9 +216,17 @@ void FnoHeaderBar::update_from_chain(const OptionChain& chain) {
                 atm_iv = row.pe_iv;
             break;
         }
-        if (atm_iv > 0 && !chain.underlying.isEmpty()) {
+        // Rank against the same expiry series only (front vs monthly) —
+        // a weekly's IV is not comparable to a monthly's.
+        const QStringList kinds = fincept::services::options::OptionChainService::instance().iv_history_kinds(
+            chain.broker_id, chain.underlying, chain.expiry);
+        if (atm_iv > 0 && !chain.underlying.isEmpty() && kinds.isEmpty()) {
+            lbl_iv_pctile_->setText("—");
+            lbl_iv_pctile_->setToolTip("IV percentile is tracked for the nearest and front-month expiries only.");
+        } else if (atm_iv > 0 && !chain.underlying.isEmpty()) {
+            const QString& kind = kinds.first();
             const QString since = QDate::currentDate().addDays(-90).toString(Qt::ISODate);
-            auto r = fincept::IvHistoryRepository::instance().get_window(chain.underlying, since);
+            auto r = fincept::IvHistoryRepository::instance().get_window(chain.underlying, kind, since);
             if (r.is_ok()) {
                 const auto& hist = r.value();
                 if (hist.size() >= 30) {
@@ -227,10 +236,13 @@ void FnoHeaderBar::update_from_chain(const OptionChain& chain) {
                             ++below;
                     const double pctile = 100.0 * double(below) / double(hist.size());
                     lbl_iv_pctile_->setText(QString::number(pctile, 'f', 0) + "%");
-                    lbl_iv_pctile_->setToolTip(QString("Current ATM IV %1 ranks at %2th percentile of %3 days of history.")
-                                                   .arg(atm_iv * 100.0, 0, 'f', 1)
-                                                   .arg(pctile, 0, 'f', 0)
-                                                   .arg(hist.size()));
+                    lbl_iv_pctile_->setToolTip(
+                        QString("Current ATM IV %1 ranks at %2th percentile of %3 days of %4-expiry history.")
+                            .arg(atm_iv * 100.0, 0, 'f', 1)
+                            .arg(pctile, 0, 'f', 0)
+                            .arg(hist.size())
+                            .arg(kind == QLatin1String("front") ? QStringLiteral("nearest")
+                                                                : QStringLiteral("monthly")));
                 } else {
                     lbl_iv_pctile_->setText("—");
                     lbl_iv_pctile_->setToolTip(QString("Needs ≥30 days of data — have %1.").arg(hist.size()));

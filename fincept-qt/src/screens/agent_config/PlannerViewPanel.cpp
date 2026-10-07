@@ -326,6 +326,13 @@ void PlannerViewPanel::setup_connections() {
         populate_plan(plan);
         execute_btn_->setEnabled(true);
         save_plan_to_history();
+        if (!plan.warnings.isEmpty()) {
+            result_display_->setPlainText("Planner warnings:\n- " + plan.warnings.join("\n- "));
+            plan_status_->setText("READY (WARNINGS)");
+            plan_status_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;padding:1px 6px;border-radius:2px;")
+                                            .arg(ui::colors::WARNING(), ui::colors::BG_RAISED()));
+            return;
+        }
         plan_status_->setText("READY");
         plan_status_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;padding:1px 6px;border-radius:2px;")
                                         .arg(ui::colors::POSITIVE(), ui::colors::BG_RAISED()));

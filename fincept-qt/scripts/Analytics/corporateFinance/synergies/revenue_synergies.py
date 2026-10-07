@@ -338,103 +338,75 @@ class RevenueSynergyAnalyzer:
             'haircut_amount': base_synergy_pv - risk_adjusted_pv
         }
 
+# ── JSON contract (MAAnalyticsService "calculate") ───────────────────────────
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from corporateFinance._cli import is_json_call, run_json, num, opt_num, text, has, pct  # noqa: E402
+from corporateFinance.synergies.synergy_valuation import (  # noqa: E402
+    project_synergies, projection_inputs)
+
+
+def _run_rate_revenue_synergy(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Steady-state annual revenue synergy for the chosen method; every driver
+    is a caller input."""
+    kind = text(p, 'type', choices=('simple', 'cross_sell', 'market_expansion', 'pricing_power')) \
+        if has(p, 'type') else 'simple'
+    if kind == 'simple':
+        base = num(p, 'combined_revenue', min=0)
+        frac = num(p, 'synergy_pct', label='synergy_pct (decimal share of combined revenue)', min=0, max=1)
+        return {'type': kind, 'run_rate': base * frac, 'combined_revenue': base, 'synergy_pct': pct(frac)}
+    if kind == 'cross_sell':
+        acq_c = num(p, 'acquirer_customers', min=0)
+        tgt_c = num(p, 'target_customers', min=0)
+        acq_arpu = num(p, 'acquirer_arpu', min=0)
+        tgt_arpu = num(p, 'target_arpu', min=0)
+        rate = num(p, 'cross_sell_rate', label='cross_sell_rate (decimal)', min=0, max=1)
+        a2t = tgt_c * rate * acq_arpu   # acquirer products sold to target customers
+        t2a = acq_c * rate * tgt_arpu   # target products sold to acquirer customers
+        return {'type': kind, 'run_rate': a2t + t2a,
+                'acquirer_to_target_synergy': a2t, 'target_to_acquirer_synergy': t2a,
+                'cross_sell_rate_pct': pct(rate)}
+    if kind == 'market_expansion':
+        rev = num(p, 'target_revenue_new_markets', min=0)
+        pen = num(p, 'acquirer_product_penetration', label='acquirer_product_penetration (decimal)', min=0, max=1)
+        gain = num(p, 'market_share_gain', label='market_share_gain (decimal)', min=0, max=1)
+        addressable = rev * pen
+        return {'type': kind, 'run_rate': addressable * gain, 'addressable_revenue': addressable}
+    # pricing_power: exact revenue effect of a price rise with a constant
+    # volume elasticity: R * ((1 + dp) * (1 - e * dp) - 1)
+    base = num(p, 'combined_revenue', min=0)
+    dp = num(p, 'price_increase', label='price_increase (decimal)', min=0, max=1)
+    e = num(p, 'volume_elasticity', label='volume_elasticity (volume % lost per 1% price)', min=0)
+    vol = -e * dp
+    return {'type': kind, 'run_rate': base * ((1 + dp) * (1 + vol) - 1),
+            'combined_revenue': base, 'price_increase_pct': pct(dp), 'volume_change_pct': pct(vol)}
+
+
+def json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Revenue synergy run-rate + DCF. Requires revenue_synergy_margin,
+    tax_rate, discount_rate, ramp_years, projection_years; optional
+    terminal_growth, integration_cost, integration_cost_years."""
+    rr = _run_rate_revenue_synergy(p)
+    margin = num(p, 'revenue_synergy_margin',
+                 label='revenue_synergy_margin (decimal EBITDA margin on synergy revenue)', min=0, max=1)
+    t = projection_inputs(p)
+    val = project_synergies(rr['run_rate'], margin, 0.0, opt_num(p, 'integration_cost', 0.0, min=0), **t)
+    out = {'synergy_type': rr['type'], 'run_rate_revenue_synergy': rr['run_rate']}
+    out.update({k: v for k, v in rr.items() if k not in ('type', 'run_rate')})
+    out.update({k: v for k, v in val.items() if k not in ('run_rate_cost_synergy',)})
+    return out
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({"calculate": json_calculate})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "revenue":
-            # Host sends: "revenue" synergy_type synergy_params_json
-            if len(sys.argv) < 4:
-                raise ValueError("Synergy type and params required")
-
-            synergy_type = sys.argv[2]
-            params = json.loads(sys.argv[3])
-
-            analyzer = RevenueSynergyAnalyzer(
-                tax_rate=params.get('tax_rate', 0.25),
-                synergy_discount_rate=params.get('discount_rate', 0.15)
-            )
-
-            if synergy_type == "cross_sell":
-                analysis = analyzer.calculate_cross_sell_synergy(
-                    acquirer_customers=params.get('acquirer_customers', 0),
-                    target_customers=params.get('target_customers', 0),
-                    acquirer_arpu=params.get('acquirer_arpu', 0),
-                    target_arpu=params.get('target_arpu', 0),
-                    cross_sell_rate=params.get('cross_sell_rate', 0.1),
-                    ramp_years=params.get('ramp_years', 3)
-                )
-            elif synergy_type == "pricing_power":
-                analysis = analyzer.calculate_pricing_power_synergy(
-                    combined_revenue=params.get('combined_revenue', 0),
-                    price_increase=params.get('price_increase', params.get('price_increase_pct', 0.02)),
-                    volume_elasticity=params.get('volume_elasticity', params.get('volume_loss_pct', 0.5)),
-                    market_share=params.get('market_share', 0.3),
-                    ramp_years=params.get('ramp_years', 2)
-                )
-            elif synergy_type == "market_expansion":
-                analysis = analyzer.calculate_market_expansion_synergy(
-                    target_revenue_new_markets=params.get('target_revenue_new_markets', params.get('target_revenue', 0)),
-                    acquirer_product_penetration=params.get('acquirer_product_penetration', params.get('new_market_penetration', 0.1)),
-                    market_share_gain=params.get('market_share_gain', 0.05),
-                    ramp_years=params.get('ramp_years', 4)
-                )
-            else:
-                analysis = analyzer.calculate_cross_sell_synergy(
-                    acquirer_customers=params.get('acquirer_customers', 0),
-                    target_customers=params.get('target_customers', 0),
-                    acquirer_arpu=params.get('acquirer_arpu', 0),
-                    target_arpu=params.get('target_arpu', 0),
-                    cross_sell_rate=params.get('cross_sell_rate', 0.1),
-                    ramp_years=params.get('ramp_years', 3)
-                )
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        elif command == "revenue_synergy":
-            if len(sys.argv) < 7:
-                raise ValueError("Acquirer customers, target customers, acquirer ARPU, target ARPU, cross-sell rate, and ramp years required")
-
-            acquirer_customers = int(sys.argv[2])
-            target_customers = int(sys.argv[3])
-            acquirer_arpu = float(sys.argv[4])
-            target_arpu = float(sys.argv[5])
-            cross_sell_rate = float(sys.argv[6])
-            ramp_years = int(sys.argv[7]) if len(sys.argv) > 7 else 3
-
-            analyzer = RevenueSynergyAnalyzer(tax_rate=0.25, synergy_discount_rate=0.15)
-
-            analysis = analyzer.calculate_cross_sell_synergy(
-                acquirer_customers=acquirer_customers,
-                target_customers=target_customers,
-                acquirer_arpu=acquirer_arpu,
-                target_arpu=target_arpu,
-                cross_sell_rate=cross_sell_rate,
-                ramp_years=ramp_years
-            )
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}. Available: revenue, revenue_synergy"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

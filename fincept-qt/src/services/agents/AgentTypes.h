@@ -45,11 +45,28 @@ struct RoutingResult {
     bool success = false;
     QString agent_id;
     QString intent;
-    double confidence = 0.0;
+    /// Routing match score — NOT a calibrated confidence.  `score_basis`
+    /// says what it is: "keyword_match" (0.3 per keyword + 0.5 per pattern,
+    /// capped at 1) or "llm_self_reported" (the router model's own number).
+    /// has_match_score is false when no score exists (e.g. LLM gave none).
+    double match_score = 0.0;
+    bool has_match_score = false;
+    QString score_basis;
     QStringList matched_keywords;
     QJsonObject config;
     QString request_id; // matches the run_agent call that triggered this routing
 };
+
+/// Human label for a routing score, e.g. "keyword match score 0.60" or
+/// "router's self-rated score 0.80".  Never rendered as a "confidence %".
+inline QString routing_score_label(const RoutingResult& r) {
+    if (!r.has_match_score)
+        return QStringLiteral("no match score");
+    const QString n = QString::number(r.match_score, 'f', 2);
+    if (r.score_basis == QLatin1String("llm_self_reported"))
+        return QStringLiteral("router's self-rated score %1").arg(n);
+    return QStringLiteral("keyword match score %1").arg(n);
+}
 
 // ── System info ─────────────────────────────────────────────────────────────
 
@@ -117,6 +134,9 @@ struct ExecutionPlan {
     bool is_complete = false;
     bool has_failed = false;
     QString request_id;
+    /// Planner notices, e.g. tools the LLM named that don't exist and were
+    /// dropped from a step.  Shown to the user, never silently discarded.
+    QStringList warnings;
 };
 
 } // namespace fincept::services

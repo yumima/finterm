@@ -231,7 +231,7 @@ std::vector<Prompt> get_notes_prompts() {
         Prompt p;
         p.name = QStringLiteral("daily_brief");
         p.description = QStringLiteral(
-            "Draft a morning brief: portfolio summary, watchlist moves, "
+            "Draft a morning brief: portfolio summary, watchlist moves (via get_quote), "
             "headline news digest, and a one-paragraph synthesis of the "
             "user's active thesis notes.");
         p.arguments = {
@@ -259,6 +259,13 @@ std::vector<Prompt> get_notes_prompts() {
                 "  - finterm://watchlist/all        watched symbols\n"
                 "  - finterm://news/digest          last 24h news\n"
                 "  - finterm://notes/active_thesis  the user's thinking\n"
+                "The watchlist resource lists symbols only — it carries no "
+                "prices.  For watchlist moves, call get_quote with the "
+                "watched symbols (comma-separated) and report only the "
+                "change_pct values it returns; if the quote call fails or "
+                "is unavailable, list the symbols and say prices are "
+                "unavailable.  Never state a price, move or figure that did "
+                "not come from a resource or tool result.\n"
                 "Write four short sections (Portfolio / Watchlist / News / "
                 "Thesis synthesis), <= 60 words each.  Cite sources from "
                 "the news digest where claims rest on a specific article.");

@@ -630,9 +630,12 @@ QWidget* AiChatScreen::build_welcome() {
         {"Markets", col::CYAN(), "Show me today's top market movers"},
         {"News", col::AMBER(), "Summarize the latest financial news"},
         {"Portfolio", col::POSITIVE(), "Analyze my portfolio performance"},
-        {"Analytics", col::AMBER(), "Calculate valuation for AAPL"},
-        {"Economics", col::CYAN(), "Current GDP and inflation data"},
-        {"Research", col::POSITIVE(), "Tech sector market trends"},
+        // Every starter must be answerable with the General persona's tools
+        // (ChatPersonas.h) — a starter the persona can't ground invites an
+        // answer from memory.
+        {"Analytics", col::AMBER(), "Valuation multiples for AAPL from its SEC filings"},
+        {"Economics", col::CYAN(), "Latest US GDP growth and CPI inflation from DBnomics"},
+        {"Research", col::POSITIVE(), "NVDA price trend over the last 3 months and recent news"},
     };
 
     for (int i = 0; i < 6; ++i) {
@@ -1212,13 +1215,31 @@ void AiChatScreen::on_streaming_done(ai_chat::LlmResponse response) {
 
     set_input_enabled(true);
 
+    // A quota fallback answers on a different model than the one configured;
+    // say which one actually answered (shown under the reply, not stored in the
+    // conversation history the model sees).
+    const QString used_note =
+        response.fell_back && !response.model_used.isEmpty()
+            ? QStringLiteral("\n\n*Answered by %1 (%2) — fell back from %3 after a quota limit.*")
+                  .arg(response.model_used, response.provider_used,
+                       response.requested_model.isEmpty() ? QStringLiteral("the configured model")
+                                                          : response.requested_model)
+            : QString();
+
     if (!response.success) {
+        // Always show the failure — a non-streaming reply has no bubble yet,
+        // and dropping the error left the chat silently empty.
+        if (!streaming_bubble_)
+            streaming_bubble_ = add_streaming_bubble();
         if (streaming_bubble_) {
-            const QString err = "Error: " + response.error;
+            const QString err = "Error: " + (response.error.isEmpty() ? QStringLiteral("the model returned no answer.")
+                                                                     : response.error) +
+                                used_note;
             streaming_bubble_->setProperty("acc", err);
             streaming_bubble_->setText(err);
         }
         streaming_bubble_ = nullptr;
+        scroll_to_bottom();
         return;
     }
 
@@ -1232,7 +1253,7 @@ void AiChatScreen::on_streaming_done(ai_chat::LlmResponse response) {
         // Switching format on QLabel re-parses; no manual measurement needed.
         if (!final_text.isEmpty()) {
             streaming_bubble_->setTextFormat(Qt::MarkdownText);
-            streaming_bubble_->setText(final_text);
+            streaming_bubble_->setText(final_text + used_note);
             streaming_bubble_->setProperty("acc", final_text);
         }
 
@@ -1249,9 +1270,14 @@ void AiChatScreen::on_streaming_done(ai_chat::LlmResponse response) {
         total_messages_++;
         total_tokens_ += response.total_tokens;
         update_stats();
-        ChatRepository::instance().add_message(active_session_id_, "assistant", content,
-                                               ai_chat::LlmService::instance().active_provider(),
-                                               ai_chat::LlmService::instance().active_model(), response.total_tokens);
+        // Record the model that actually answered (role binding / quota
+        // fallback can differ from the configured default).
+        ChatRepository::instance().add_message(
+            active_session_id_, "assistant", content,
+            response.provider_used.isEmpty() ? ai_chat::LlmService::instance().active_provider()
+                                             : response.provider_used,
+            response.model_used.isEmpty() ? ai_chat::LlmService::instance().active_model() : response.model_used,
+            response.total_tokens);
     }
     scroll_to_bottom();
     input_box_->setFocus();

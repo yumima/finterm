@@ -125,6 +125,7 @@ void EconomicCalendarPanel::on_result(const QString& request_id, const services:
     const int total = result.data["events_count"].toInt(events.size());
     const QString title = QString("Economic Calendar — %1  (%2 events)").arg(date_str).arg(total);
 
+    // One row per event (cross-sectional): no single series value.
     display(events, title);
     LOG_INFO("EconomicCalendarPanel", QString("Displayed %1 events for %2").arg(events.size()).arg(date_str));
 }

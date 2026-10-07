@@ -249,6 +249,11 @@ class BLSDataAPI:
 
         # Process data
         processed_data = []
+        # Annual averages (M13, and S03/Q05 for semi-annual/quarterly series)
+        # are a different frequency from the sub-annual points; mixing them in
+        # yields bogus "YYYY-13-01" dates and corrupts monthly stats. Keep them
+        # in a separate, clearly-labelled list.
+        annual_averages = []
         metadata = {}
 
         for series in series_data:
@@ -265,7 +270,9 @@ class BLSDataAPI:
             data_points = series.get("data", [])
             for point in data_points:
                 year = point.get("year", "")
-                period = point.get("period", "").replace("M", "")
+                raw_period = point.get("period", "")
+                is_annual_average = raw_period in ("M13", "S03", "Q05")
+                period = raw_period.replace("M", "")
 
                 # Parse date
                 if period.startswith("A") or period in ("S01", "Q01"):
@@ -341,9 +348,14 @@ class BLSDataAPI:
                         "change_percent_12M": float(pct_changes.get("12")) if pct_changes.get("12") else None,
                     })
 
-                processed_data.append(record)
+                if is_annual_average:
+                    record["date"] = str(year)
+                    record["period"] = "annual_average"
+                    annual_averages.append(record)
+                else:
+                    processed_data.append(record)
 
-        if not processed_data:
+        if not processed_data and not annual_averages:
             error_msg = "; ".join(messages) if messages else "No data found"
             return BLSError("bls_timeseries", error_msg).to_dict()
 
@@ -351,6 +363,7 @@ class BLSDataAPI:
             "success": True,
             "data": {
                 "series_data": processed_data,
+                "annual_averages": annual_averages,
                 "metadata": metadata,
                 "messages": messages
             }

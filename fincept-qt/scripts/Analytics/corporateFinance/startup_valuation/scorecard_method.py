@@ -1,6 +1,11 @@
 """Scorecard Valuation Method"""
-from typing import Dict, Any
+from pathlib import Path
+from typing import Dict, Any, List
 import sys
+
+_ANALYTICS = str(Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in sys.path:
+    sys.path.insert(0, _ANALYTICS)
 
 class ScorecardMethod:
     """Scorecard (or Payne) Method for startup valuation"""
@@ -152,79 +157,99 @@ class ScorecardMethod:
             'baseline_valuation': self.get_baseline_valuation(stage)
         }
 
+# Payne scorecard: factor order and the method's standard weights. The weights
+# are a published method convention (Bill Payne), not company data; a caller
+# may override them with `weights`.
+SCORECARD_FACTORS = ['management_team', 'size_of_opportunity', 'product_technology',
+                     'competitive_environment', 'marketing_sales_channels',
+                     'need_for_additional_investment', 'other_factors']
+SCORECARD_LABELS = ['Management Team', 'Size of Opportunity', 'Product/Technology',
+                    'Competitive Environment', 'Marketing/Sales Channels',
+                    'Need for Additional Funding', 'Other']
+PAYNE_WEIGHTS = [0.30, 0.25, 0.15, 0.10, 0.10, 0.05, 0.05]
+_SCORECARD_ALIASES = {
+    'management_team': ('management_team', 'team', 'team_score'),
+    'size_of_opportunity': ('size_of_opportunity', 'market_size', 'opportunity_score'),
+    'product_technology': ('product_technology', 'product', 'product_score'),
+    'competitive_environment': ('competitive_environment', 'competition', 'competition_score'),
+    'marketing_sales_channels': ('marketing_sales_channels', 'marketing', 'marketing_score'),
+    'need_for_additional_investment': ('need_for_additional_investment', 'need_for_funding', 'funding_score'),
+    'other_factors': ('other_factors', 'other', 'other_score'),
+}
+
+
+def scorecard_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON contract:
+    {benchmark_pre_money, assessments: [7 ratios] | {factor: ratio}, weights?: [7], stage?}
+    Each ratio compares the startup with the average comparable deal
+    (1.0 = average, 1.25 = 125%). Valuation = benchmark x sum(w_i x ratio_i).
+    """
+    from corporateFinance._cli import InputError, num, pct
+    bp = dict(p)
+    if bp.get('benchmark_pre_money') is None and bp.get('median_pre_money') is not None:
+        bp['benchmark_pre_money'] = bp['median_pre_money']
+    benchmark = num(bp, 'benchmark_pre_money',
+                    label='Benchmark pre-money (average of comparable deals, $)', gt=0)
+
+    raw = p.get('assessments')
+    if isinstance(raw, list):
+        if len(raw) != 7:
+            raise InputError(f"assessments must list 7 ratios ({', '.join(SCORECARD_LABELS)})")
+        missing = [lab for lab, x in zip(SCORECARD_LABELS, raw) if x is None]
+        if missing:
+            raise InputError(f"Missing required input: scorecard ratio for {', '.join(missing)}")
+        ratios = [float(x) for x in raw]
+    else:
+        src = raw if isinstance(raw, dict) else p
+        ratios = []
+        for key, label in zip(SCORECARD_FACTORS, SCORECARD_LABELS):
+            v = next((src[a] for a in _SCORECARD_ALIASES[key] if src.get(a) is not None), None)
+            if v is None:
+                raise InputError(f"Missing required input: scorecard ratio for {label}")
+            ratios.append(float(v))
+    for label, r in zip(SCORECARD_LABELS, ratios):
+        if not 0.0 <= r <= 3.0:
+            raise InputError(f"{label} ratio must be between 0 and 3 (1.0 = average), got {r}")
+
+    if p.get('weights') is not None:
+        weights = [float(w) for w in p['weights']]
+        if len(weights) != 7 or any(w < 0 for w in weights):
+            raise InputError("weights must be 7 non-negative numbers")
+        if abs(sum(weights) - 1.0) > 1e-6:
+            raise InputError(f"weights must sum to 1 (got {sum(weights):.4f})")
+        weights_source = 'user'
+    else:
+        weights = PAYNE_WEIGHTS
+        weights_source = 'Payne scorecard standard weights (30/25/15/10/10/5/5)'
+
+    rows = []
+    total_factor = 0.0
+    for label, w, r in zip(SCORECARD_LABELS, weights, ratios):
+        f = w * r
+        total_factor += f
+        rows.append({'factor': label, 'weight_pct': pct(w), 'ratio_x': r, 'weighted_factor': f})
+    return {
+        'method': 'Scorecard Method',
+        'stage': p.get('stage'),
+        'benchmark_pre_money': benchmark,
+        'sum_of_factors_x': total_factor,
+        'pre_money_valuation': benchmark * total_factor,
+        'adjustment_vs_benchmark_pct': pct(total_factor - 1.0),
+        'weights_source': weights_source,
+        'factors': rows,
+    }
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'calculate': scorecard_json})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "scorecard":
-            if len(sys.argv) < 5:
-                raise ValueError("Stage, region, and factor assessments required")
-            stage = sys.argv[2]
-            region = sys.argv[3]
-            factor_assessments = json.loads(sys.argv[4])
-
-            scorecard = ScorecardMethod(region=region.capitalize() if region.lower() in ('us','europe','asia') else 'US')
-            # Map all frontend key variants to internal scorecard factor names
-            key_map = {
-                # management team
-                'team': 'management_team', 'management_team': 'management_team',
-                'quality_team': 'management_team', 'team_strength': 'management_team',
-                # market size
-                'market_size': 'size_of_opportunity', 'market_opportunity': 'size_of_opportunity',
-                'size_of_opportunity': 'size_of_opportunity',
-                # product
-                'product': 'product_technology', 'product_technology': 'product_technology',
-                'product_strength': 'product_technology',
-                # competitive
-                'competitive': 'competitive_environment', 'competitive_environment': 'competitive_environment',
-                'competition': 'competitive_environment',
-                # marketing
-                'marketing': 'marketing_sales_channels', 'marketing_channels': 'marketing_sales_channels',
-                'sales_channels': 'marketing_sales_channels', 'marketing_sales_channels': 'marketing_sales_channels',
-                # need for investment
-                'need_for_funding': 'need_for_additional_investment',
-                'need_for_investment': 'need_for_additional_investment',
-                'need_for_additional_investment': 'need_for_additional_investment',
-                # other
-                'other': 'other_factors', 'other_factors': 'other_factors',
-            }
-            mapped = {}
-            for k, v in factor_assessments.items():
-                internal_key = key_map.get(k)
-                if internal_key:
-                    # Frontend sends multipliers (0.5-1.5); convert to comparison scores (-0.5 to +0.5)
-                    # If value > 1.1 or < 0.9 it's clearly a multiplier, otherwise treat as comparison score
-                    val = float(v)
-                    if val > 1.1 or val < 0.4:
-                        # It's a multiplier (e.g. 1.2 = 20% above avg) → comparison score = (val - 1.0) * 0.5 / 0.5 → clamped
-                        mapped[internal_key] = max(-0.5, min(0.5, (val - 1.0)))
-                    else:
-                        # Already a comparison score (-0.5 to +0.5)
-                        mapped[internal_key] = val
-            # Fill any missing required factors with 0 (average)
-            for factor in scorecard.factor_weights:
-                if factor not in mapped:
-                    mapped[factor] = 0.0
-            valuation = scorecard.calculate_valuation(stage=stage, factor_assessments=mapped)
-
-            result = {"success": True, "data": valuation}
-            print(json.dumps(result))
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

@@ -4,6 +4,7 @@
 #include "screens/portfolio/PortfolioTypes.h"
 #include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioFx.h"
+#include "core/result/Result.h"
 #include "services/portfolio/PortfolioLedger.h"
 
 #include <QDateTime>
@@ -171,6 +172,17 @@ class PortfolioService : public QObject {
     // multi-symbol 5-year fetch on every period toggle.
     void load_snapshots(const QString& portfolio_id, int days = 3650);
 
+    /// Snapshots the return/metric/chart math may use: get_snapshots minus
+    /// reconstructed rows dated before a migration-dated opening BUY (see
+    /// portfolio::usable_snapshots — excluded at read time, never deleted).
+    /// The one read path for the UI and the MCP tools alike.
+    Result<QVector<portfolio::PortfolioSnapshot>> usable_snapshots(const QString& portfolio_id, int days = 365);
+
+    /// The metrics compute_metrics last published for this portfolio (what
+    /// the UI is showing), or nullopt if none has been computed this session.
+    /// Thread-safe.
+    std::optional<portfolio::ComputedMetrics> last_metrics(const QString& portfolio_id);
+
     /// Reconstruct daily NAV from yfinance OHLC for the current holdings and
     /// upsert one row per trading day into portfolio_snapshots. This is what
     /// gives Beta and MDD a real time series on a freshly imported portfolio
@@ -245,9 +257,9 @@ class PortfolioService : public QObject {
     /// Values in [-1, 1]. Diagonal (self-correlation) = 1.0.
     void correlation_computed(QHash<QString, double> matrix);
 
-    /// SPY daily close history: parallel vectors of ISO date strings and prices.
-    /// Kept for back-compat — also fired whenever benchmark_history_loaded fires
-    /// with symbol == "SPY" so existing consumers don't break.
+    /// A beta benchmark's daily closes loaded (SPY or a currency-default
+    /// index — see default_benchmark_for_currency). Name kept for back-compat;
+    /// consumers use it as "beta inputs changed, recompute metrics".
     void spy_history_loaded(QStringList dates, QVector<double> closes);
 
     /// Generalised benchmark history: includes the symbol so chart consumers
@@ -340,11 +352,15 @@ class PortfolioService : public QObject {
     QMutex cache_mutex_;
     static constexpr int kCacheTtlSec = 300; // 5 minutes
 
-    // ── SPY cache (for OLS beta in compute_metrics) ──────────────────────────
-    // Beta is always computed against SPY regardless of which benchmark is
-    // shown on the chart, so the cache keys to "SPY" specifically.
-    QStringList spy_dates_cache_;
-    QVector<double> spy_closes_cache_;
+    // ── Beta benchmark cache (for OLS beta in compute_metrics) ───────────────
+    // symbol → (dates, closes). Beta regresses against the book's
+    // base-currency benchmark when loaded, else SPY; the dates also serve as
+    // the trading calendar for the return series.
+    QHash<QString, QPair<QStringList, QVector<double>>> benchmark_cache_;
+
+    // Last ComputedMetrics per portfolio (guarded by cache_mutex_).
+    QHash<QString, portfolio::ComputedMetrics> last_metrics_;
+    void publish_metrics(const QString& portfolio_id, const portfolio::ComputedMetrics& m);
 
     // Last correlation_computed() payload (see last_correlation()).
     QHash<QString, double> last_correlation_;

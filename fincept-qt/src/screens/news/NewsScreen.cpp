@@ -789,8 +789,17 @@ void NewsScreen::on_analyze_requested(const QString& url) {
         if (!self)
             return;
         self->analyze_in_flight_ = false;
-        if (ok)
+        if (ok) {
+            // Name the model that actually wrote it when a quota fallback
+            // switched away from the configured one (display only).
+            if (analysis.fell_back && !analysis.model_used.isEmpty())
+                analysis.summary += QStringLiteral("\n\n(Answered by %1 via %2 — fell back from %3 after a quota limit.)")
+                                        .arg(analysis.model_used, analysis.provider_used,
+                                             analysis.requested_model.isEmpty()
+                                                 ? QStringLiteral("the configured model")
+                                                 : analysis.requested_model);
             self->detail_panel_->show_analysis(analysis);
+        }
         else
             self->detail_panel_->show_analysis_error("AI analysis is unavailable right now.");
     });
@@ -1349,27 +1358,26 @@ void NewsScreen::update_monitors() {
 }
 
 void NewsScreen::compute_deviations() {
-    int64_t now = QDateTime::currentSecsSinceEpoch();
-    int64_t hour_ago = now - 3600;
+    // Volume z-scores per category: trailing-hour article count vs. a rolling
+    // baseline of hourly counts. Both use the UNFILTERED feed — the user's
+    // search/filter must not move the baseline or the score.
+    const int64_t now = QDateTime::currentSecsSinceEpoch();
+    const int64_t hour_ago = now - 3600;
+    const int64_t bucket = now / 3600;
 
     QMap<QString, int> current_counts;
-    for (const auto& a : filtered_articles_) {
-        if (a.sort_ts >= hour_ago)
+    for (const auto& a : all_articles_) {
+        if (a.sort_ts >= hour_ago && a.sort_ts <= now)
             current_counts[a.category]++;
     }
 
-    QVector<QPair<QString, double>> deviations;
-
-    for (auto it = current_counts.begin(); it != current_counts.end(); ++it) {
-        auto& baseline = baselines_[it.key()];
-        baseline.hourly_counts.append(it.value());
-
-        while (baseline.hourly_counts.size() > 168)
-            baseline.hourly_counts.removeFirst();
-
-        if (baseline.hourly_counts.size() < 24)
-            continue;
-
+    // Recompute mean/stddev from a baseline's hourly samples.
+    auto refresh_stats = [](CategoryBaseline& baseline) {
+        if (baseline.hourly_counts.isEmpty()) {
+            baseline.mean_count = 0;
+            baseline.stddev = 0;
+            return;
+        }
         double sum = 0;
         for (int c : baseline.hourly_counts)
             sum += c;
@@ -1377,17 +1385,93 @@ void NewsScreen::compute_deviations() {
 
         double var_sum = 0;
         for (int c : baseline.hourly_counts) {
-            double diff = c - baseline.mean_count;
+            const double diff = c - baseline.mean_count;
             var_sum += diff * diff;
         }
         baseline.stddev = std::sqrt(var_sum / baseline.hourly_counts.size());
+    };
 
-        if (baseline.stddev < 0.5)
+    static constexpr int kMaxBaselineHours = 168;
+
+    // Seed once from what is already loaded: the completed hour buckets of
+    // the dated articles (undated items have sort_ts 0 and are skipped), with
+    // a zero for every known category in an hour it had no articles. The
+    // oldest bucket is dropped because it is only partially covered. After
+    // this the per-hour live sampling below takes over.
+    if (!baseline_seeded_) {
+        int64_t oldest = 0;
+        for (const auto& a : all_articles_) {
+            if (a.sort_ts > 0 && a.sort_ts <= now && (oldest == 0 || a.sort_ts < oldest))
+                oldest = a.sort_ts;
+        }
+        if (oldest > 0) {
+            const int64_t first = std::max(oldest / 3600 + 1, bucket - kMaxBaselineHours);
+            const int64_t last = bucket - 1; // most recent completed hour
+            const int hours = last >= first ? int(last - first + 1) : 0;
+            QMap<QString, QVector<int>> seeded;
+            for (const auto& a : all_articles_) {
+                if (a.sort_ts <= 0 || a.sort_ts > now)
+                    continue;
+                auto& counts = seeded[a.category]; // every dated category is known
+                if (counts.isEmpty())
+                    counts.fill(0, hours);
+                const int64_t b = a.sort_ts / 3600;
+                if (b >= first && b <= last)
+                    counts[int(b - first)]++;
+            }
+            for (auto it = baselines_.cbegin(); it != baselines_.cend(); ++it)
+                if (!seeded.contains(it.key()))
+                    seeded[it.key()].fill(0, hours);
+            baselines_.clear();
+            for (auto it = seeded.begin(); it != seeded.end(); ++it) {
+                auto& baseline = baselines_[it.key()];
+                baseline.hourly_counts = std::move(it.value());
+                refresh_stats(baseline);
+            }
+            baseline_seeded_ = true;
+            last_baseline_bucket_ = bucket; // bucket-1 is already sampled
+        }
+    }
+
+    QVector<QPair<QString, double>> deviations;
+
+    // Score against the baseline as it stood before this hour's sample.
+    for (auto it = current_counts.begin(); it != current_counts.end(); ++it) {
+        const auto bit = baselines_.constFind(it.key());
+        if (bit == baselines_.constEnd())
             continue;
-
-        double z_score = (it.value() - baseline.mean_count) / baseline.stddev;
+        const auto& baseline = bit.value();
+        if (baseline.hourly_counts.size() < 24 || baseline.stddev < 0.5)
+            continue;
+        const double z_score = (it.value() - baseline.mean_count) / baseline.stddev;
         if (z_score >= 3.0)
             deviations.append({it.key(), z_score});
+    }
+
+    // One baseline sample per hour bucket: the article count of the hour that
+    // just completed, for every known category — including 0-count ones, so a
+    // quiet hour pulls the mean down instead of being skipped.
+    if (bucket != last_baseline_bucket_) {
+        last_baseline_bucket_ = bucket;
+        const int64_t prev_start = (bucket - 1) * 3600;
+        const int64_t prev_end = bucket * 3600;
+        QMap<QString, int> prev_counts;
+        for (const auto& a : all_articles_) {
+            if (a.sort_ts >= prev_start && a.sort_ts < prev_end)
+                prev_counts[a.category]++;
+        }
+        for (auto it = prev_counts.cbegin(); it != prev_counts.cend(); ++it)
+            baselines_[it.key()]; // register newly seen categories
+        for (auto it = current_counts.cbegin(); it != current_counts.cend(); ++it)
+            baselines_[it.key()];
+
+        for (auto it = baselines_.begin(); it != baselines_.end(); ++it) {
+            auto& baseline = it.value();
+            baseline.hourly_counts.append(prev_counts.value(it.key(), 0));
+            while (baseline.hourly_counts.size() > kMaxBaselineHours)
+                baseline.hourly_counts.removeFirst();
+            refresh_stats(baseline);
+        }
     }
 
     std::sort(deviations.begin(), deviations.end(), [](const auto& a, const auto& b) { return a.second > b.second; });

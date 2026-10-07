@@ -49,19 +49,47 @@ def max_streak(series):
     return max_s
 
 
+
+def aligned_returns(close):
+    """Per-symbol daily returns, aligned across symbols.
+
+    close.pct_change().dropna() on the joint frame dropped EVERY row where any
+    one ticker had no bar (a London or Tokyo holiday, a late listing), and the
+    next day's return of the symbols that did trade was then lost with it.
+    Here each symbol's returns come from its own consecutive closes, so a
+    return after a market holiday spans the gap correctly. After alignment,
+    a symbol with no bar on a date simply did not move that day (0 return,
+    its next return carries the move) — but only from the first date every
+    symbol has history; before that the earlier listings are not padded with
+    an invented flat history.
+    """
+    import pandas as pd
+    per_symbol = {}
+    for col in close.columns:
+        r = close[col].dropna().pct_change().dropna()
+        if not r.empty:
+            per_symbol[col] = r
+    if not per_symbol:
+        return pd.DataFrame()
+    rets = pd.concat(per_symbol, axis=1).sort_index()
+    start = max(r.index.min() for r in per_symbol.values())
+    return rets[rets.index >= start].fillna(0.0)
+
 def portfolio_stats(close_df, weights_arr, symbols):
     """Compute blended portfolio stats from a close DataFrame and weight array."""
     import pandas as pd
     w = np.array(weights_arr)
     w = w / w.sum()
-    port_returns = (close_df.pct_change().dropna() * w).sum(axis=1)
+    rets = aligned_returns(close_df)[list(close_df.columns)]
+    port_returns = (rets * w).sum(axis=1)
     total_ret = float((1 + port_returns).prod() - 1)
     n = len(port_returns)
     cagr = float((1 + total_ret) ** (252.0 / max(n, 1)) - 1)
     vol = float(port_returns.std() * np.sqrt(252))
     sharpe = float((cagr - _RF) / vol) if (_RF is not None and vol > 0) else None
     cum = (1 + port_returns).cumprod()
-    peak = cum.expanding().max()
+    # Peak includes the 1.0 starting value, so a loss from day one counts.
+    peak = cum.expanding().max().clip(lower=1.0)
     dd = (cum - peak) / peak
     max_dd = float(dd.min())
     return {
@@ -238,7 +266,7 @@ def compute_ffn(symbols, weights, period="1y"):
     rolling_out = {}
     try:
         if len(valid_syms) >= 2:
-            ret_df = valid_close[valid_syms].pct_change().dropna()
+            ret_df = aligned_returns(valid_close[valid_syms])[valid_syms]
             WINDOW = 60
             # rolling().corr() returns a MultiIndex series: (date, sym) -> corr_with_sym
             rolling_corr = ret_df.rolling(WINDOW).corr()
@@ -265,7 +293,7 @@ def compute_ffn(symbols, weights, period="1y"):
     opt_out = {}
     try:
         if len(valid_syms) >= 2:
-            ret_df = valid_close[valid_syms].pct_change().dropna()
+            ret_df = aligned_returns(valid_close[valid_syms])[valid_syms]
             n = len(valid_syms)
 
             if len(ret_df) >= 30:
@@ -323,7 +351,7 @@ def compute_ffn(symbols, weights, period="1y"):
                         stats[name] = {"error": "weights unavailable"}
                         continue
                     try:
-                        stats[name] = portfolio_stats(valid_close[valid_syms].dropna(),
+                        stats[name] = portfolio_stats(valid_close[valid_syms],
                                                        w_arr(wd), valid_syms)
                     except Exception as exc:
                         # An error, not a row of zeros that reads as a flat

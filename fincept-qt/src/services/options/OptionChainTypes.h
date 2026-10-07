@@ -40,8 +40,8 @@ struct OptionGreeks {
     double delta = 0;   // dV/dS                       — [-1, 1]
     double gamma = 0;   // d²V/dS²                     — typically [0, 0.01]
     double theta = 0;   // dV/dt (per day, NOT per yr) — typically negative for longs
-    double vega  = 0;   // dV/dσ (per 1.00 σ — divide by 100 for per-1%-vol)
-    double rho   = 0;   // dV/dr (per 1.00 r — divide by 100 for per-1%-rate)
+    double vega  = 0;   // dV/dσ per 1 vol point (σ +0.01) — market convention
+    double rho   = 0;   // dV/dr per 1% rate move (r +0.01)
     bool valid   = false;
 };
 

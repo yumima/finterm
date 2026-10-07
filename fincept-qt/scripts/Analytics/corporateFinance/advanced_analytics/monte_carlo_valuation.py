@@ -277,101 +277,134 @@ class MonteCarloValuation:
             'potential_loss_pct': ((deal_value - var_value) / deal_value * 100) if deal_value > 0 else 0
         }
 
+# ── JSON contract (MAAnalyticsService "run" / ma_monte_carlo MCP tool) ───────
+#
+#   monte_carlo_valuation.py run '<params JSON>'
+#
+# Revenue-driven DCF enterprise-value simulation. Every input is required
+# except `seed`; rates are decimals (0.10 == 10 %).
+#   base_revenue        current (year-0) revenue, amount
+#   rev_growth_mean     mean annual revenue growth      (decimal)
+#   rev_growth_std      std dev of annual growth        (decimal, >= 0)
+#   margin_mean         mean unlevered FCF margin = FCF / revenue (decimal)
+#   margin_std          std dev of FCF margin           (decimal, >= 0)
+#   discount_rate       WACC used to discount FCF       (decimal)
+#   terminal_growth     Gordon terminal growth          (decimal, < discount_rate)
+#   projection_years    explicit forecast years         (integer, 1-30)
+#   simulations         number of paths                 (integer, 100-200000)
+#   seed                optional RNG seed for a reproducible run
+#
+# Each path draws an independent normal growth rate and FCF margin for every
+# projection year: Rev_t = Rev_{t-1} (1+g_t); FCF_t = Rev_t m_t;
+# TV = FCF_N (1+tg) / (r - tg); EV = sum FCF_t/(1+r)^t + TV/(1+r)^N
+# (end-of-year discounting). With both std devs at 0 every path equals the
+# deterministic DCF, which is reported alongside for reference.
+
+import sys
+from pathlib import Path as _Path
+
+sys.path.insert(0, str(_Path(__file__).resolve().parent.parent.parent))
+from corporateFinance._cli import InputError, has, is_json_call, num, run_json  # noqa: E402
+
+
+def _alias(p, key, *aliases):
+    """Copy the first present alias into `key` (keys only, no value defaults)."""
+    if not has(p, key):
+        for a in aliases:
+            if has(p, a):
+                p[key] = p[a]
+                break
+    return p
+
+
+def simulate_revenue_dcf(base_revenue, rev_growth_mean, rev_growth_std, margin_mean, margin_std,
+                         discount_rate, terminal_growth, projection_years, simulations, seed=None):
+    rng = np.random.default_rng(seed)
+    n, N = int(simulations), int(projection_years)
+    growth = rng.normal(rev_growth_mean, rev_growth_std, size=(n, N))
+    margin = rng.normal(margin_mean, margin_std, size=(n, N))
+    revenue = base_revenue * np.cumprod(1.0 + growth, axis=1)
+    fcf = revenue * margin
+    disc = (1.0 + discount_rate) ** -np.arange(1, N + 1)
+    pv_fcf = fcf @ disc
+    tv = fcf[:, -1] * (1.0 + terminal_growth) / (discount_rate - terminal_growth)
+    pv_tv = tv * disc[-1]
+    ev = pv_fcf + pv_tv
+
+    # Deterministic DCF at the mean inputs (what a zero-volatility run returns).
+    rev_det = base_revenue * (1.0 + rev_growth_mean) ** np.arange(1, N + 1)
+    fcf_det = rev_det * margin_mean
+    tv_det = fcf_det[-1] * (1.0 + terminal_growth) / (discount_rate - terminal_growth)
+    ev_det = float(fcf_det @ disc + tv_det * disc[-1])
+
+    pct = [1, 5, 10, 25, 50, 75, 90, 95, 99]
+    pv = np.percentile(ev, pct)
+    with np.errstate(divide='ignore', invalid='ignore'):
+        tv_share = np.where(ev != 0, pv_tv / ev, np.nan)
+    return {
+        'method': f'Monte Carlo simulation ({n:,} paths, {N}-year revenue-driven DCF)',
+        'is_simulation': True,
+        'mean_ev': float(ev.mean()),
+        'median_ev': float(np.median(ev)),
+        'std_ev': float(ev.std(ddof=1)) if n > 1 else None,
+        'p5_ev': float(pv[1]),
+        'p95_ev': float(pv[7]),
+        'min_ev': float(ev.min()),
+        'max_ev': float(ev.max()),
+        'deterministic_ev': ev_det,
+        'prob_ev_below_deterministic_pct': float(np.mean(ev < ev_det) * 100),
+        'prob_negative_ev_pct': float(np.mean(ev < 0) * 100),
+        'mean_terminal_value_share_pct': float(np.nanmean(tv_share) * 100),
+        'simulations': n,
+        'seed': seed,
+        'percentiles': [{'percentile': p, 'enterprise_value': float(v)} for p, v in zip(pct, pv)],
+        'assumptions': {
+            'base_revenue': base_revenue,
+            'rev_growth_mean_pct': rev_growth_mean * 100,
+            'rev_growth_std_pct': rev_growth_std * 100,
+            'fcf_margin_mean_pct': margin_mean * 100,
+            'fcf_margin_std_pct': margin_std * 100,
+            'discount_rate_pct': discount_rate * 100,
+            'terminal_growth_pct': terminal_growth * 100,
+            'projection_years': N,
+        },
+    }
+
+
+def cmd_run(p):
+    p = dict(p)
+    _alias(p, 'rev_growth_mean', 'revenue_growth_mean', 'growth_mean')
+    _alias(p, 'rev_growth_std', 'revenue_growth_std', 'growth_std')
+    _alias(p, 'discount_rate', 'wacc', 'wacc_mean')
+    _alias(p, 'simulations', 'num_simulations')
+    if not has(p, 'base_revenue') and (has(p, 'base_valuation') or has(p, 'base_value')):
+        raise InputError("base_revenue is required: the simulation projects revenue x FCF margin; "
+                         "a base valuation cannot stand in for revenue")
+    base_revenue = num(p, 'base_revenue', label='base_revenue', gt=0)
+    g_mu = num(p, 'rev_growth_mean', label='rev_growth_mean (decimal)', min=-0.99, max=5)
+    g_sd = num(p, 'rev_growth_std', label='rev_growth_std (decimal)', min=0, max=5)
+    m_mu = num(p, 'margin_mean', label='margin_mean (FCF margin, decimal)', min=-5, max=1)
+    m_sd = num(p, 'margin_std', label='margin_std (decimal)', min=0, max=5)
+    r = num(p, 'discount_rate', label='discount_rate (decimal)', gt=0, max=1)
+    tg = num(p, 'terminal_growth', label='terminal_growth (decimal)', min=-0.5)
+    if tg >= r:
+        raise InputError(f"terminal_growth ({tg:.4f}) must be below discount_rate ({r:.4f})")
+    years = num(p, 'projection_years', label='projection_years', min=1, max=30, integer=True)
+    sims = num(p, 'simulations', label='simulations', min=100, max=200000, integer=True)
+    seed = num(p, 'seed', integer=True, min=0) if has(p, 'seed') else None
+    return simulate_revenue_dcf(base_revenue, g_mu, g_sd, m_mu, m_sd, r, tg, years, sims, seed)
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'run': cmd_run, 'monte_carlo': cmd_run})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "monte_carlo":
-            if len(sys.argv) < 3:
-                raise ValueError("Monte Carlo parameters required")
-
-            # Accept either JSON dict or positional args
-            try:
-                params = json.loads(sys.argv[2])
-                base_valuation = float(params.get('base_valuation', params.get('base_value', 1000000000)))
-                revenue_growth_mean = float(params.get('revenue_growth_mean', params.get('growth_mean', 0.05)))
-                revenue_growth_std = float(params.get('revenue_growth_std', params.get('growth_std', params.get('volatility', 0.15))))
-                margin_mean = float(params.get('margin_mean', 0.15))
-                margin_std = float(params.get('margin_std', 0.05))
-                discount_rate = float(params.get('discount_rate', 0.10))
-                simulations = int(params.get('num_simulations', params.get('simulations', 1000)))
-            except (json.JSONDecodeError, TypeError, AttributeError):
-                if len(sys.argv) < 9:
-                    raise ValueError("All parameters required: base_valuation, revenue_growth_mean, revenue_growth_std, margin_mean, margin_std, discount_rate, simulations")
-                base_valuation = float(sys.argv[2])
-                revenue_growth_mean = float(sys.argv[3])
-                revenue_growth_std = float(sys.argv[4])
-                margin_mean = float(sys.argv[5])
-                margin_std = float(sys.argv[6])
-                discount_rate = float(sys.argv[7])
-                simulations = int(sys.argv[8])
-
-            # Normalize: frontend sends percentages (15, 5), Python needs fractions (0.15, 0.05)
-            if revenue_growth_mean > 1:
-                revenue_growth_mean = revenue_growth_mean / 100.0
-            if revenue_growth_std > 1:
-                revenue_growth_std = revenue_growth_std / 100.0
-            if margin_mean > 1:
-                margin_mean = margin_mean / 100.0
-            if margin_std > 1:
-                margin_std = margin_std / 100.0
-            if discount_rate > 1:
-                discount_rate = discount_rate / 100.0
-
-            mc = MonteCarloValuation(num_simulations=simulations)
-
-            # Use DCF-based Monte Carlo: simulate enterprise value distribution
-            # Build base FCF from base_valuation * margin_mean, grow at revenue_growth_mean
-            base_fcf = [base_valuation * margin_mean * ((1 + revenue_growth_mean) ** i) for i in range(5)]
-            analysis_dcf = mc.simulate_dcf_valuation(
-                base_fcf=base_fcf,
-                fcf_growth_mean=revenue_growth_mean,
-                fcf_growth_std=revenue_growth_std,
-                terminal_growth_mean=min(revenue_growth_mean * 0.3, 0.03),
-                terminal_growth_std=revenue_growth_std * 0.5,
-                wacc_mean=discount_rate,
-                wacc_std=discount_rate * 0.1,
-            )
-
-            vs = analysis_dcf.get('valuation_statistics', {})
-
-            # Normalize to flat structure that frontend expects
-            analysis = {
-                'mean': vs.get('mean', 0),
-                'median': vs.get('median', 0),
-                'std': vs.get('std', 0),
-                'p5': vs.get('percentile_5', 0),
-                'p25': vs.get('percentile_25', 0),
-                'p75': vs.get('percentile_75', 0),
-                'p95': vs.get('percentile_95', 0),
-                'probability_positive': 100.0,  # DCF values are positive
-                'num_simulations': simulations,
-                'input_assumptions': analysis_dcf.get('input_assumptions', {}),
-                'base_valuation': base_valuation,
-                'discount_rate_pct': discount_rate * 100,
-            }
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

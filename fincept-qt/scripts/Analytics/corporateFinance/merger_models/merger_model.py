@@ -8,344 +8,177 @@ analytics_path = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(analytics_path))
 
 # Use absolute imports instead of relative imports
-from corporateFinance.merger_models.sources_uses import SourcesUsesBuilder
-from corporateFinance.merger_models.pro_forma_builder import ProFormaBuilder, CompanyFinancials
-from corporateFinance.merger_models.contribution_analysis import ContributionAnalyzer
-from corporateFinance.merger_models.sensitivity_analysis import SensitivityAnalyzer
 
-class MergerModel:
-    """Complete M&A merger model with accretion/dilution analysis"""
+# ── JSON contract (MAAnalyticsService / ma_accretion_dilution, ma_merger_model,
+#    ma_pro_forma) ─────────────────────────────────────────────────────────────
 
-    def __init__(self, acquirer_data: Dict[str, Any], target_data: Dict[str, Any],
-                 deal_terms: Dict[str, Any]):
+def _ad_inputs(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Accretion/dilution inputs. Acquirer / target may be nested objects
+    (UI) or flat acquirer_* / target_* keys (MCP). Every financing assumption
+    is required when the part of the deal it prices exists."""
+    from corporateFinance._cli import num, opt_num, has, InputError
+    a = p.get('acquirer') if isinstance(p.get('acquirer'), dict) else {}
+    t = p.get('target') if isinstance(p.get('target'), dict) else {}
+    def pick(src, key, flat):
+        return src.get(key) if src.get(key) is not None else p.get(flat)
+    q = {
+        'acq_ni': pick(a, 'net_income', 'acquirer_net_income'),
+        'acq_shares': pick(a, 'shares', 'acquirer_shares'),
+        'acq_price': pick(a, 'share_price', 'acquirer_share_price'),
+        'acq_revenue': pick(a, 'revenue', 'acquirer_revenue'),
+        'tgt_ni': pick(t, 'net_income', 'target_net_income'),
+        'tgt_revenue': pick(t, 'revenue', 'target_revenue'),
+    }
+    i: Dict[str, Any] = {}
+    i['acq_shares'] = num(q, 'acq_shares', label='acquirer shares outstanding (diluted)', gt=0)
+    if q['acq_ni'] is None and has(p, 'acquirer_eps'):
+        q['acq_ni'] = num(p, 'acquirer_eps') * i['acq_shares']
+    i['acq_ni'] = num(q, 'acq_ni', label='acquirer net income')
+    i['tgt_ni'] = num(q, 'tgt_ni', label='target net income')
+    i['acq_revenue'] = q['acq_revenue']
+    i['tgt_revenue'] = q['tgt_revenue']
+    i['price'] = num(p, 'deal_value', label='deal_value (equity purchase price for the target)', gt=0)
+    i['cash_pct'] = num(p, 'cash_pct', label='cash_pct (cash share of consideration)', min=0, max=1)
+    cash_consid = i['price'] * i['cash_pct']
+    stock_consid = i['price'] - cash_consid
+    i['cash_consid'], i['stock_consid'] = cash_consid, stock_consid
+    i['tax_rate'] = num(p, 'tax_rate', min=0, max=0.6)
+    if stock_consid > 0:
+        i['acq_price'] = num(q, 'acq_price', label='acquirer share price (for the stock issued)', gt=0)
+    else:
+        i['acq_price'] = opt_num(q, 'acq_price', gt=0)
+    i['cash_used'] = 0.0
+    i['new_debt'] = 0.0
+    if cash_consid > 0:
+        i['cash_used'] = num(p, 'cash_from_balance_sheet', label='cash_from_balance_sheet (acquirer cash used)', min=0)
+        if i['cash_used'] > cash_consid:
+            raise InputError("cash_from_balance_sheet exceeds the cash consideration")
+        i['new_debt'] = cash_consid - i['cash_used']
+    i['debt_rate'] = num(p, 'debt_rate', label='debt_rate (pre-tax rate on new acquisition debt)', min=0, max=1) if i['new_debt'] > 0 else 0.0
+    i['cash_yield'] = num(p, 'cash_yield', label='cash_yield (pre-tax interest forgone on cash used)', min=0, max=1) if i['cash_used'] > 0 else 0.0
+    # Optional items whose absence means exactly zero.
+    i['synergies'] = opt_num(p, 'synergies', 0.0)                    # pre-tax run-rate
+    i['synergy_phase'] = opt_num(p, 'synergy_phase_in', 1.0, min=0, max=1)  # share realized this year
+    i['integration_costs'] = opt_num(p, 'integration_costs', 0.0, min=0)    # pre-tax, this year
+    i['new_amortization'] = opt_num(p, 'new_amortization', 0.0, min=0)     # pre-tax D&A on step-ups
+    if has(p, 'synergies_after_tax'):   # MCP spelling: after-tax synergies
+        i['synergies'] = num(p, 'synergies_after_tax') / (1 - i['tax_rate']) if i['tax_rate'] < 1 else 0.0
+    return i
 
-        self.acquirer_data = acquirer_data
-        self.target_data = target_data
-        self.deal_terms = deal_terms
 
-        self.acquirer_financials = self._build_company_financials(acquirer_data)
-        self.target_financials = self._build_company_financials(target_data)
+def _ad_compute(i: Dict[str, Any], acq_ni: float, tgt_ni: float, phase: float) -> Dict[str, Any]:
+    t = i['tax_rate']
+    interest = i['new_debt'] * i['debt_rate']
+    forgone = i['cash_used'] * i['cash_yield']
+    syn = i['synergies'] * phase
+    pretax_adj = syn - i['integration_costs'] - i['new_amortization'] - interest - forgone
+    new_shares = i['stock_consid'] / i['acq_price'] if i['stock_consid'] > 0 else 0.0
+    pf_shares = i['acq_shares'] + new_shares
+    pf_ni = acq_ni + tgt_ni + pretax_adj * (1 - t)
+    eps_sa = acq_ni / i['acq_shares']
+    eps_pf = pf_ni / pf_shares
+    accretion = (eps_pf / eps_sa - 1) if eps_sa > 0 else None
+    # Pre-tax synergies (realized this year) for EPS neutrality.
+    other = i['integration_costs'] + i['new_amortization'] + interest + forgone
+    breakeven = ((eps_sa * pf_shares - acq_ni - tgt_ni) / (1 - t) + other) if t < 1 else None
+    return {'interest': interest, 'forgone': forgone, 'syn': syn, 'pretax_adj': pretax_adj,
+            'new_shares': new_shares, 'pf_shares': pf_shares, 'pf_ni': pf_ni,
+            'eps_sa': eps_sa, 'eps_pf': eps_pf, 'accretion': accretion,
+            'breakeven': max(0.0, breakeven) if breakeven is not None else None}
 
-        self.sources_uses = None
-        self.pro_forma_builder = None
-        self.contribution_analyzer = None
-        self.sensitivity_analyzer = None
 
-    def _build_company_financials(self, data: Dict[str, Any]) -> CompanyFinancials:
-        """Build CompanyFinancials from dict"""
+def _json_accretion_dilution(p: Dict[str, Any]) -> Dict[str, Any]:
+    i = _ad_inputs(p)
+    r = _ad_compute(i, i['acq_ni'], i['tgt_ni'], i['synergy_phase'])
+    t = i['tax_rate']
+    out = {
+        'standalone_eps': r['eps_sa'],
+        'pro_forma_eps': r['eps_pf'],
+        'accretion_dilution_pct': r['accretion'] * 100 if r['accretion'] is not None else None,
+        'status': ('accretive' if r['eps_pf'] > r['eps_sa'] else 'dilutive' if r['eps_pf'] < r['eps_sa'] else 'neutral'),
+        'eps_change': r['eps_pf'] - r['eps_sa'],
+        'pro_forma_net_income': r['pf_ni'],
+        'new_shares_issued': r['new_shares'],
+        'pro_forma_shares': r['pf_shares'],
+        'target_holders_ownership_pct': r['new_shares'] / r['pf_shares'] * 100,
+        'breakeven_pretax_synergies': r['breakeven'],
+        'purchase_pe_x': i['price'] / i['tgt_ni'] if i['tgt_ni'] > 0 else None,
+        'net_income_bridge': [
+            {'item': 'acquirer net income', 'amount': i['acq_ni']},
+            {'item': 'target net income', 'amount': i['tgt_ni']},
+            {'item': 'synergies realized (after tax)', 'amount': r['syn'] * (1 - t)},
+            {'item': 'integration costs (after tax)', 'amount': -i['integration_costs'] * (1 - t)},
+            {'item': 'new D&A / amortization (after tax)', 'amount': -i['new_amortization'] * (1 - t)},
+            {'item': 'interest on new debt (after tax)', 'amount': -r['interest'] * (1 - t)},
+            {'item': 'interest forgone on cash (after tax)', 'amount': -r['forgone'] * (1 - t)},
+            {'item': 'pro forma net income', 'amount': r['pf_ni']},
+        ],
+        'consideration': {
+            'deal_value': i['price'], 'cash_consideration': i['cash_consid'],
+            'stock_consideration': i['stock_consid'], 'acquirer_cash_used': i['cash_used'],
+            'new_debt': i['new_debt'],
+        },
+    }
+    if i['acq_price']:
+        out['acquirer_pe_x'] = i['acq_price'] * i['acq_shares'] / i['acq_ni'] if i['acq_ni'] > 0 else None
+    return out
 
-        return CompanyFinancials(
-            revenue=data.get('revenue', 0),
-            cogs=data.get('cogs', data.get('revenue', 0) * 0.6),
-            gross_profit=data.get('gross_profit', data.get('revenue', 0) * 0.4),
-            sg_a=data.get('sg_a', data.get('revenue', 0) * 0.2),
-            r_d=data.get('r_d', 0),
-            depreciation=data.get('depreciation', data.get('revenue', 0) * 0.03),
-            ebitda=data.get('ebitda', 0),
-            ebit=data.get('ebit', 0),
-            interest_expense=data.get('interest_expense', 0),
-            ebt=data.get('ebt', 0),
-            taxes=data.get('taxes', 0),
-            net_income=data.get('net_income', 0),
-            shares_outstanding=data.get('shares_outstanding', 0),
-            eps=data.get('eps', 0),
-            total_assets=data.get('total_assets', 0),
-            total_liabilities=data.get('total_liabilities', 0),
-            shareholders_equity=data.get('shareholders_equity', 0),
-            cash=data.get('cash', 0),
-            debt=data.get('debt', 0)
-        )
 
-    def build_complete_model(self) -> Dict[str, Any]:
-        """Build complete merger model"""
+def _json_pro_forma(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Multi-year accretion/dilution: standalone net incomes grow at
+    acquirer_ni_growth / target_ni_growth, synergies phase in per
+    synergy_phase_in_by_year (list, fraction of run-rate per year), and
+    integration_costs_by_year (list, pre-tax). Acquisition debt is held
+    constant (no paydown modelled)."""
+    from corporateFinance._cli import num, num_list, has, InputError
+    i = _ad_inputs(p)
+    n = num(p, 'years', min=1, max=10, integer=True)
+    ga = num(p, 'acquirer_ni_growth', label='acquirer_ni_growth (standalone net income growth)', min=-0.99)
+    gt = num(p, 'target_ni_growth', label='target_ni_growth (standalone net income growth)', min=-0.99)
+    phases = num_list(p, 'synergy_phase_in_by_year', min_len=n) if has(p, 'synergy_phase_in_by_year') else None
+    if i['synergies'] and phases is None:
+        raise InputError("Missing required input: synergy_phase_in_by_year (one fraction per year)")
+    integ = num_list(p, 'integration_costs_by_year', min_len=n) if has(p, 'integration_costs_by_year') else [0.0] * n
+    rg = p.get('revenue_growth')
+    rows = []
+    for y in range(1, n + 1):
+        acq_ni = i['acq_ni'] * (1 + ga) ** y
+        tgt_ni = i['tgt_ni'] * (1 + gt) ** y
+        i['integration_costs'] = integ[y - 1]
+        r = _ad_compute(i, acq_ni, tgt_ni, phases[y - 1] if phases else 0.0)
+        row = {'year': y, 'acquirer_net_income': acq_ni, 'target_net_income': tgt_ni,
+               'pro_forma_net_income': r['pf_ni'], 'standalone_eps': r['eps_sa'], 'pro_forma_eps': r['eps_pf'],
+               'accretion_dilution_pct': r['accretion'] * 100 if r['accretion'] is not None else None}
+        if rg is not None and i['acq_revenue'] is not None and i['tgt_revenue'] is not None:
+            row['combined_revenue'] = (float(i['acq_revenue']) + float(i['tgt_revenue'])) * (1 + float(rg)) ** y
+        rows.append(row)
+    return {
+        'years': n,
+        'year1_accretion_dilution_pct': rows[0]['accretion_dilution_pct'],
+        'final_year_accretion_dilution_pct': rows[-1]['accretion_dilution_pct'],
+        'projections': rows,
+        'method': 'Standalone net incomes grown at the stated rates; after-tax synergies (phased), integration '
+                  'costs, new amortization and financing costs added; acquisition debt held constant.',
+    }
 
-        purchase_price = self.deal_terms.get('purchase_price', 0)
-        cash_consideration = self.deal_terms.get('cash_consideration', 0)
-        stock_consideration = self.deal_terms.get('stock_consideration', 0)
-        acquirer_stock_price = self.deal_terms.get('acquirer_stock_price', 0)
 
-        cash_from_balance_sheet = min(cash_consideration, self.acquirer_financials.cash)
-        new_debt_needed = max(0, cash_consideration - cash_from_balance_sheet)
+JSON_COMMANDS = {
+    'accretion_dilution': _json_accretion_dilution,
+    'build': _json_accretion_dilution,
+    'pro_forma': _json_pro_forma,
+}
 
-        self.sources_uses = SourcesUsesBuilder(
-            purchase_price=purchase_price,
-            target_debt_refinanced=self.target_financials.debt,
-            acquirer_cash=cash_from_balance_sheet,
-            new_debt=new_debt_needed,
-            new_equity=stock_consideration
-        )
-
-        self.sources_uses.estimate_transaction_fees(purchase_price)
-        self.sources_uses.estimate_financing_fees(new_debt_needed)
-
-        sources_uses_table = self.sources_uses.auto_balance()
-
-        # Support both combined 'synergies' key and separate 'cost_synergies'/'revenue_synergies' keys
-        total_synergies = (
-            self.deal_terms.get('synergies') or
-            (self.deal_terms.get('cost_synergies', 0) + self.deal_terms.get('revenue_synergies', 0))
-        )
-
-        deal_structure = {
-            'new_debt': new_debt_needed,
-            'synergies': total_synergies,
-            'integration_costs': self.deal_terms.get('integration_costs', 0),
-            'tax_rate': self.deal_terms.get('tax_rate', 0.21),
-            'acquirer_stock_price': acquirer_stock_price,
-            'stock_consideration': stock_consideration,
-            'debt_interest_rate': self.deal_terms.get('debt_interest_rate', 0.05),
-            'synergy_schedule': self.deal_terms.get('synergy_schedule', {
-                1: 0.25, 2: 0.50, 3: 0.75, 4: 1.00, 5: 1.00
-            })
-        }
-
-        self.pro_forma_builder = ProFormaBuilder(
-            self.acquirer_financials,
-            self.target_financials,
-            deal_structure
-        )
-
-        new_shares = self.pro_forma_builder.calculate_new_shares_issued(
-            stock_consideration,
-            acquirer_stock_price
-        )
-
-        goodwill = self.pro_forma_builder.calculate_goodwill(
-            purchase_price,
-            self.target_financials.shareholders_equity
-        )
-
-        accretion_dilution = self.pro_forma_builder.calculate_accretion_dilution()
-
-        pf_year1 = self.pro_forma_builder.build_pro_forma_income_statement(year=1)
-        pf_balance_sheet = self.pro_forma_builder.build_pro_forma_balance_sheet()
-
-        multi_year_projections = self.pro_forma_builder.build_multi_year_projections(years=5)
-
-        standalone_vs_pf = self.pro_forma_builder.compare_standalone_vs_proforma()
-
-        breakeven_synergies = self.pro_forma_builder.calculate_breakeven_synergies()
-
-        self.contribution_analyzer = ContributionAnalyzer(
-            self.acquirer_financials,
-            self.target_financials
-        )
-
-        contribution_analysis = self.contribution_analyzer.analyze_contributions(
-            self.acquirer_financials.shares_outstanding,
-            new_shares
-        )
-
-        self.sensitivity_analyzer = SensitivityAnalyzer(self.pro_forma_builder)
-
-        synergy_sensitivity = self.sensitivity_analyzer.synergy_sensitivity(
-            min_synergies=0,
-            max_synergies=total_synergies * 2,
-            steps=11
-        )
-
-        price_sensitivity = self.sensitivity_analyzer.purchase_price_sensitivity(
-            base_price=purchase_price,
-            price_range_pct=0.20,
-            steps=11
-        )
-
-        return {
-            'deal_overview': {
-                'acquirer': self.acquirer_data.get('company_name', 'Acquirer'),
-                'target': self.target_data.get('company_name', 'Target'),
-                'purchase_price': purchase_price,
-                'cash_consideration': cash_consideration,
-                'stock_consideration': stock_consideration,
-                'payment_mix': {
-                    'cash_pct': (cash_consideration / purchase_price * 100) if purchase_price else 0,
-                    'stock_pct': (stock_consideration / purchase_price * 100) if purchase_price else 0
-                }
-            },
-            'sources_uses': sources_uses_table,
-            'new_shares_issued': new_shares,
-            'goodwill': goodwill,
-            'accretion_dilution': accretion_dilution,
-            'pro_forma_year1': pf_year1,
-            'pro_forma_balance_sheet': pf_balance_sheet,
-            'multi_year_projections': multi_year_projections,
-            'standalone_vs_proforma': standalone_vs_pf,
-            'breakeven_synergies': breakeven_synergies,
-            'contribution_analysis': contribution_analysis,
-            'sensitivity_analysis': {
-                'synergies': synergy_sensitivity,
-                'purchase_price': price_sensitivity
-            }
-        }
-
-    def generate_executive_summary(self) -> Dict[str, Any]:
-        """Generate executive summary of merger model"""
-
-        model_results = self.build_complete_model()
-
-        ad = model_results['accretion_dilution']
-        pf_y1 = model_results['pro_forma_year1']
-
-        summary = {
-            'deal_snapshot': {
-                'acquirer': model_results['deal_overview']['acquirer'],
-                'target': model_results['deal_overview']['target'],
-                'purchase_price': model_results['deal_overview']['purchase_price'],
-                'payment_structure': model_results['deal_overview']['payment_mix']
-            },
-            'financial_impact': {
-                'eps_impact': f"{ad['accretion_dilution_pct']:.1f}% {ad['status']}",
-                'standalone_eps': ad['standalone_eps'],
-                'pro_forma_eps': ad['pro_forma_eps'],
-                'pro_forma_revenue': pf_y1['revenue'],
-                'pro_forma_ebitda': pf_y1['ebitda'],
-                'pro_forma_net_income': pf_y1['net_income']
-            },
-            'key_assumptions': {
-                'synergies': (
-                    self.deal_terms.get('synergies') or
-                    (self.deal_terms.get('cost_synergies', 0) + self.deal_terms.get('revenue_synergies', 0))
-                ),
-                'integration_costs': self.deal_terms.get('integration_costs', 0),
-                'new_debt': model_results['sources_uses']['sources']['sources_breakdown']['new_debt']['amount'],
-                'new_shares_issued': model_results['new_shares_issued']
-            },
-            'breakeven_analysis': {
-                'breakeven_synergies': model_results['breakeven_synergies'],
-                'synergies_cushion': (
-                    self.deal_terms.get('synergies') or
-                    (self.deal_terms.get('cost_synergies', 0) + self.deal_terms.get('revenue_synergies', 0))
-                ) - model_results['breakeven_synergies']
-            }
-        }
-
-        return summary
 
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json(JSON_COMMANDS)
 
-    if len(sys.argv) < 2:
-        result = {
-            "success": False,
-            "error": "No command specified. Usage: merger_model.py <command> [args...]"
-        }
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "build":
-            # build_merger_model(acquirer_data, target_data, deal_terms)
-            if len(sys.argv) < 5:
-                raise ValueError("Acquirer data, target data, and deal terms required")
-
-            acquirer = json.loads(sys.argv[2])
-            target = json.loads(sys.argv[3])
-            deal_terms = json.loads(sys.argv[4])
-
-            # Convert percentage-based payment to absolute amounts if needed
-            pp = deal_terms.get('purchase_price', 0)
-            if 'cash_consideration' not in deal_terms and pp:
-                cash_pct = deal_terms.get('payment_cash_pct', deal_terms.get('cash_pct', 50)) / 100
-                stock_pct = deal_terms.get('payment_stock_pct', deal_terms.get('stock_pct', 50)) / 100
-                deal_terms['cash_consideration'] = pp * cash_pct
-                deal_terms['stock_consideration'] = pp * stock_pct
-            if 'acquirer_stock_price' not in deal_terms:
-                deal_terms['acquirer_stock_price'] = acquirer.get('stock_price',
-                    acquirer.get('eps', 1) * 15 if acquirer.get('eps') else 50)
-
-            model = MergerModel(acquirer, target, deal_terms)
-            results = model.build_complete_model()
-
-            result = {
-                "success": True,
-                "data": results
-            }
-            print(json.dumps(result))
-
-        elif command == "accretion_dilution":
-            # Host sends: "accretion_dilution" merger_model_data_json
-            if len(sys.argv) < 3:
-                raise ValueError("Merger model data required")
-
-            model_data = json.loads(sys.argv[2])
-            acquirer = model_data.get('acquirer_data', {})
-            target = model_data.get('target_data', {})
-            deal_terms = model_data.get('deal_terms', {})
-
-            model = MergerModel(acquirer, target, deal_terms)
-            results = model.build_complete_model()
-
-            result = {
-                "success": True,
-                "data": {
-                    "accretion_dilution": results.get('accretion_dilution', {}),
-                    "breakeven_synergies": results.get('breakeven_synergies', 0),
-                    "deal_overview": results.get('deal_overview', {})
-                }
-            }
-            print(json.dumps(result))
-
-        elif command == "pro_forma":
-            # Host sends: "pro_forma" acquirer_data target_data year
-            if len(sys.argv) < 5:
-                raise ValueError("Acquirer data, target data, and year required")
-
-            acquirer = json.loads(sys.argv[2])
-            target = json.loads(sys.argv[3])
-            year = int(sys.argv[4])
-
-            # Derive purchase price from available data; fall back to 2x target EBITDA or 1x revenue
-            target_ev = target.get('enterprise_value', target.get('market_cap', 0))
-            if not target_ev:
-                target_ebitda = target.get('ebitda', 0)
-                target_revenue = target.get('revenue', 0)
-                target_ev = target_ebitda * 8 if target_ebitda else target_revenue * 1.5
-
-            deal_terms = {
-                'purchase_price': target_ev,
-                'cash_consideration': target_ev * 0.5,
-                'stock_consideration': target_ev * 0.5,
-                'acquirer_stock_price': acquirer.get('stock_price', 100),
-                'synergies': acquirer.get('synergies', 0),
-                'integration_costs': acquirer.get('integration_costs', 0),
-                'tax_rate': acquirer.get('tax_rate', 0.21),
-            }
-
-            model = MergerModel(acquirer, target, deal_terms)
-            results = model.build_complete_model()
-
-            pro_forma_data = results.get('multi_year_projections', {})
-            year_data = pro_forma_data.get(str(year), results.get('pro_forma_year1', {}))
-
-            result = {
-                "success": True,
-                "data": {
-                    "pro_forma": year_data,
-                    "year": year,
-                    "standalone_vs_proforma": results.get('standalone_vs_proforma', {})
-                }
-            }
-            print(json.dumps(result))
-
-        else:
-            result = {
-                "success": False,
-                "error": f"Unknown command: {command}. Available: build, accretion_dilution, pro_forma"
-            }
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {
-            "success": False,
-            "error": str(e),
-            "command": command
-        }
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

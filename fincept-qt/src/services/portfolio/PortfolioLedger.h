@@ -35,6 +35,7 @@
 
 #include "screens/portfolio/PortfolioTypes.h"
 
+#include <QPair>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -46,7 +47,15 @@ struct LedgerPosition {
     double avg_cost = 0;        // average cost per share of those shares
     double realized_pnl = 0;    // proceeds minus average-cost basis over all SELLs
     double dividend_income = 0; // cash dividends received
-    QString first_buy_date;     // date of the earliest BUY (entry anchor)
+    // Stamp of the earliest BUY of the CURRENT holding period (entry anchor
+    // for peak-since-entry). Cleared when the position is fully closed, so a
+    // re-opened position anchors on its new first BUY.
+    QString first_buy_date;
+    // Per-event amounts in the INSTRUMENT currency, keyed by local trade date
+    // (YYYY-MM-DD), so callers can convert each at its own trade-date FX rate
+    // rather than at today's. Sum to realized_pnl / dividend_income.
+    QVector<QPair<QString, double>> realized_events;
+    QVector<QPair<QString, double>> dividend_events;
     QStringList warnings;       // inconsistencies found during replay (oversell, bad split)
 
     bool is_open(double epsilon = 1e-9) const { return quantity > epsilon; }
@@ -68,7 +77,7 @@ class LedgerCursor {
     /// with the same tie-break as replay_transactions).
     explicit LedgerCursor(QVector<Transaction> txns);
 
-    /// Apply every transaction dated on or before `date` (YYYY-MM-DD) that has
+    /// Apply every transaction whose LOCAL trade date is on or before `date` (YYYY-MM-DD) that has
     /// not been applied yet. Dates must be fed in non-decreasing order.
     void advance_to(const QString& date);
 
@@ -76,6 +85,7 @@ class LedgerCursor {
 
   private:
     QVector<Transaction> txns_;
+    QStringList local_dates_; // local trade date of txns_[i]
     int next_ = 0;
     LedgerPosition pos_;
 };

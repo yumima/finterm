@@ -116,6 +116,7 @@ class DerivativesScreen : public QWidget, public IStatefulScreen {
     QDoubleSpinBox* cds_recovery_ = nullptr;
     QDoubleSpinBox* cds_spread_ = nullptr;
     QDoubleSpinBox* cds_notional_ = nullptr;
+    QDoubleSpinBox* cds_discount_ = nullptr;
 };
 
 } // namespace fincept::screens

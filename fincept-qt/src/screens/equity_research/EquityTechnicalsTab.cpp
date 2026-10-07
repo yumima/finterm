@@ -310,9 +310,9 @@ QString EquityTechnicalsTab::col_key_for(const QString& name) {
         return "bb_lband";
     if (name == "Awesome Osc")
         return "ao";
-    // Displayed as "Rolling VWAP" because it is `ta`'s rolling volume-weighted
-    // price, not the session VWAP the bare label implied.
-    if (name == "Rolling VWAP")
+    // Displayed as "VWAP (14-bar rolling)" because it is `ta`'s rolling
+    // volume-weighted price, not the session VWAP the bare label implied.
+    if (name == "VWAP (14-bar rolling)")
         return "vwap";
     QString key = name.toLower();
     key.replace(QLatin1Char(' '), QLatin1Char('_'));
@@ -428,7 +428,7 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
                "fetched, so it moves with the PERIOD selection. Only the slope carries meaning, "
                "and that is what the rating scores.";
     if (col_key == "vwap")
-        return "Rolling VWAP (14-period)\n\n"
+        return "VWAP (14-bar rolling)\n\n"
                "The average traded price weighted by volume over the last 14 bars. This is a "
                "rolling average, not the single-session VWAP institutions benchmark execution "
                "against \xe2\x80\x94 it does not reset each day. Price above it means buyers have "

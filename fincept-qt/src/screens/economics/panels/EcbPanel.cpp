@@ -73,7 +73,8 @@ void EcbPanel::on_fetch() {
 
     show_loading("Fetching ECB data: " + series.label + "…");
 
-    QStringList args = {series.command};
+    // EconomicsService already puts the command first in argv.
+    QStringList args;
     if (!series.arg.isEmpty())
         args << series.arg;
 
@@ -124,7 +125,7 @@ void EcbPanel::on_result(const QString& request_id, const services::EconomicsRes
         return;
     }
 
-    display(obs, "ECB: " + series.label);
+    display(obs, "ECB: " + series.label, QStringLiteral("value"), QStringLiteral("period"));
     LOG_INFO("EcbPanel", QString("Displayed %1 observations for %2").arg(obs.size()).arg(series.label));
 }
 

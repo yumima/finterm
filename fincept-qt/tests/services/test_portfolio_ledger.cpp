@@ -50,6 +50,7 @@ class TestPortfolioLedger : public QObject {
     void same_day_ties_replay_in_recorded_order();
     void bad_rows_warn_and_do_not_corrupt();
     void first_buy_date_anchors_entry();
+    void full_close_resets_entry_anchor();
     void cursor_states_position_per_date();
     void cursor_applies_split_on_its_date();
 };
@@ -210,6 +211,37 @@ void TestPortfolioLedger::first_buy_date_anchors_entry() {
         txn("BUY", 5, 10.0, "2026-01-05"),
     });
     QCOMPARE(pos.first_buy_date, QStringLiteral("2026-01-05"));
+}
+
+void TestPortfolioLedger::full_close_resets_entry_anchor() {
+    // Bought in January, fully sold in March, bought again in June. The peak-
+    // since-entry lookup anchors on first_buy_date; left at January it would
+    // measure the new position's drawdown against highs from a holding period
+    // that ended months before it was opened.
+    const auto closed = replay_transactions({
+        txn("BUY", 10, 100.0, "2026-01-05"),
+        txn("SELL", 10, 120.0, "2026-03-02"),
+    });
+    QVERIFY(!closed.is_open());
+    QVERIFY(closed.first_buy_date.isEmpty());
+
+    const auto reopened = replay_transactions({
+        txn("BUY", 10, 100.0, "2026-01-05"),
+        txn("SELL", 10, 120.0, "2026-03-02"),
+        txn("BUY", 4, 90.0, "2026-06-10"),
+        txn("BUY", 1, 95.0, "2026-06-20"),
+    });
+    QCOMPARE(reopened.first_buy_date, QStringLiteral("2026-06-10"));
+    // A partial sell keeps the anchor — the holding period never ended.
+    const auto partial = replay_transactions({
+        txn("BUY", 10, 100.0, "2026-01-05"),
+        txn("SELL", 4, 120.0, "2026-03-02"),
+    });
+    QCOMPARE(partial.first_buy_date, QStringLiteral("2026-01-05"));
+    // Realized events carry their sale date for trade-date FX conversion.
+    QCOMPARE(closed.realized_events.size(), 1);
+    QCOMPARE(closed.realized_events[0].first, QStringLiteral("2026-03-02"));
+    QCOMPARE(closed.realized_events[0].second, 200.0);
 }
 
 void TestPortfolioLedger::cursor_states_position_per_date() {

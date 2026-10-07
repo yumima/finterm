@@ -18,14 +18,18 @@ static constexpr const char* kOecdSourceId = "oecd";
 static constexpr const char* kOecdColor = "#F59E0B"; // amber
 
 static const QList<QPair<QString, QString>> kOecdDatasets = {
-    {"GDP (Real)", "gdp_real"},       {"CPI / Inflation", "cpi"},           {"GDP Forecast", "gdp_forecast"},
-    {"Unemployment", "unemployment"}, {"Interest Rates", "interest_rates"}, {"Trade Balance", "trade_balance"},
+    {"GDP (Real)", "gdp_real"},
+    {"CPI Inflation (YoY %)", "cpi"},
+    {"GDP Growth (Economic Outlook, incl. projections)", "gdp_forecast"},
+    {"Unemployment Rate", "unemployment"},
+    {"Short-term Interest Rate (3M)", "interest_rates"},
+    {"Trade Balance (Goods & Services, BoP)", "trade_balance"},
 };
 
 static const QList<QPair<QString, QString>> kOecdCountries = {
     {"United States", "US"},  {"Germany", "DE"}, {"Japan", "JP"},     {"France", "FR"},
     {"United Kingdom", "GB"}, {"Canada", "CA"},  {"Australia", "AU"}, {"South Korea", "KR"},
-    {"Italy", "IT"},          {"Spain", "ES"},   {"G7", "G-7"},       {"OECD Total", "OECD"},
+    {"Italy", "IT"},          {"Spain", "ES"},   {"G7", "G7"},       {"OECD Total", "OECD"},
 };
 
 } // namespace
@@ -77,8 +81,17 @@ void OecdPanel::on_fetch() {
     const QString freq = frequency_combo_->currentData().toString();
 
     show_loading("Fetching OECD data…");
-    services::EconomicsService::instance().execute(kOecdSourceId, kOecdScript, cmd, {country, freq},
-                                                   "oecd_" + cmd + "_" + country);
+    // oecd_data.py argument order differs per command (cpi takes an
+    // expenditure before the frequency; the forecast has no frequency).
+    QStringList args;
+    if (cmd == "cpi")
+        args = {country, "total", freq, "yoy"};
+    else if (cmd == "gdp_forecast")
+        args = {country};
+    else
+        args = {country, freq};
+    services::EconomicsService::instance().execute(kOecdSourceId, kOecdScript, cmd, args,
+                                                   "oecd_" + cmd + "_" + country + "_" + freq);
 }
 
 void OecdPanel::on_result(const QString& request_id, const services::EconomicsResult& result) {
@@ -90,8 +103,11 @@ void OecdPanel::on_result(const QString& request_id, const services::EconomicsRe
     }
     if (request_id.startsWith("oecd_")) {
         const QJsonArray arr = result.data["data"].toArray();
-        const QString title = dataset_combo_->currentText() + " — " + country_combo_->currentText();
-        display(arr, title);
+        // The script's description names the measure and unit of what was fetched.
+        const QString desc = result.data["description"].toString();
+        const QString title = (desc.isEmpty() ? dataset_combo_->currentText() : desc) + " — " +
+                              country_combo_->currentText();
+        display(arr, title, QStringLiteral("value"), QStringLiteral("date"));
         LOG_INFO("OecdPanel", QString("Displayed %1 rows").arg(arr.size()));
     }
 }

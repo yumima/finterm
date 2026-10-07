@@ -130,7 +130,7 @@ void GovDataTreasuryPanel::build_ui() {
     // ── Page 0: Prices table ──
     prices_table_ = new QTableWidget;
     prices_table_->setColumnCount(7);
-    prices_table_->setHorizontalHeaderLabels({"CUSIP", "TYPE", "RATE %", "MATURITY", "BID", "OFFER", "EOD PRICE"});
+    prices_table_->setHorizontalHeaderLabels({"CUSIP", "TYPE", "COUPON %", "MATURITY", "BID", "OFFER", "EOD PRICE"});
     prices_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     configure_table(prices_table_);
     content_stack_->addWidget(prices_table_);
@@ -139,7 +139,7 @@ void GovDataTreasuryPanel::build_ui() {
     auctions_table_ = new QTableWidget;
     auctions_table_->setColumnCount(8);
     auctions_table_->setHorizontalHeaderLabels(
-        {"CUSIP", "TYPE", "TERM", "AUCTION DATE", "HIGH RATE", "HIGH PRICE", "BID/COVER", "OFFERING"});
+        {"CUSIP", "TYPE", "TERM", "AUCTION DATE", "HIGH YIELD %", "HIGH PRICE", "BID/COVER", "OFFERING"});
     auctions_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     configure_table(auctions_table_);
     content_stack_->addWidget(auctions_table_);
@@ -179,9 +179,11 @@ void GovDataTreasuryPanel::build_ui() {
     };
 
     make_card("TOTAL SECURITIES", total_securities_label_);
-    make_card("MIN RATE", min_rate_label_, "yield %");
-    make_card("MAX RATE", max_rate_label_, "yield %");
-    make_card("AVG RATE", avg_rate_label_, "yield %");
+    // TreasuryDirect's price file has coupon rates, not yields; bills carry
+    // no coupon and are excluded by the script.
+    make_card("MIN COUPON", min_rate_label_, "coupon %, ex-bills");
+    make_card("MAX COUPON", max_rate_label_, "coupon %, ex-bills");
+    make_card("AVG COUPON", avg_rate_label_, "coupon %, ex-bills");
     make_card("MIN PRICE", min_price_label_, "per $100");
     make_card("MAX PRICE", max_price_label_, "per $100");
     make_card("AVG PRICE", avg_price_label_, "per $100");
@@ -446,8 +448,20 @@ void GovDataTreasuryPanel::populate_auctions(const QJsonObject& json) {
         QString adate = r["auctionDate"].toString();
         auctions_table_->setItem(i, 3, new QTableWidgetItem(adate.isEmpty() ? "—" : adate));
 
-        for (int c : {4, 5, 6}) {
-            auto key = c == 4 ? "highDiscountRate" : c == 5 ? "highPrice" : "bidToCoverRatio";
+        // The script normalises *Rate/*Yield fields to fractions (÷100); show
+        // them back in percent. Notes/bonds/TIPS report highYield; bills report
+        // highInvestmentRate (bond-equivalent yield) instead.
+        {
+            QJsonValue y = r["highYield"];
+            if (!y.isDouble())
+                y = r["highInvestmentRate"];
+            auto* it = new QTableWidgetItem(y.isDouble() ? QString::number(y.toDouble() * 100.0, 'f', 3)
+                                                         : fincept::ui::formatting::placeholder());
+            it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            auctions_table_->setItem(i, 4, it);
+        }
+        for (int c : {5, 6}) {
+            auto key = c == 5 ? "highPrice" : "bidToCoverRatio";
             auto* it = new QTableWidgetItem(fmt(r[key]));
             it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             auctions_table_->setItem(i, c, it);
@@ -472,10 +486,10 @@ void GovDataTreasuryPanel::populate_summary(const QJsonObject& json) {
         return QString::number(v.toDouble(), 'f', dp) + suffix;
     };
 
-    auto yield = json["yield_summary"].toObject();
-    min_rate_label_->setText(num_or_dash(yield, "min_rate", 3, "%"));
-    max_rate_label_->setText(num_or_dash(yield, "max_rate", 3, "%"));
-    avg_rate_label_->setText(num_or_dash(yield, "avg_rate", 3, "%"));
+    auto coupon = json["coupon_summary"].toObject();
+    min_rate_label_->setText(num_or_dash(coupon, "min_coupon_pct", 3, "%"));
+    max_rate_label_->setText(num_or_dash(coupon, "max_coupon_pct", 3, "%"));
+    avg_rate_label_->setText(num_or_dash(coupon, "avg_coupon_pct", 3, "%"));
 
     auto price = json["price_summary"].toObject();
     min_price_label_->setText(num_or_dash(price, "min_price", 2, QString()));

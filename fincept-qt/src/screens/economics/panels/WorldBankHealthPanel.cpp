@@ -149,7 +149,7 @@ void WorldBankHealthPanel::on_result(const QString& request_id, const services::
     const QString title =
         "WB Health: " + indicator_combo_->currentText() + unit + " — " + country_combo_->currentText();
 
-    display(rows, title);
+    display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
     LOG_INFO("WorldBankHealthPanel", QString("Displayed %1 records: %2").arg(rows.size()).arg(title));
 }
 

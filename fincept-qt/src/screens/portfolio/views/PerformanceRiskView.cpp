@@ -91,11 +91,15 @@ void PerformanceRiskView::build_ui() {
     cards_layout->setContentsMargins(12, 8, 12, 8);
     cards_layout->setSpacing(8);
 
-    sharpe_card_ = add_metric_card(cards_layout, "SHARPE RATIO", "Risk-adjusted return (annualised)", ui::colors::CYAN);
+    sharpe_card_ = add_metric_card(cards_layout, "SHARPE RATIO (ARITH)",
+                                   "Mean daily excess return / sd × √252", ui::colors::CYAN);
     sortino_card_ = add_metric_card(cards_layout, "SORTINO RATIO", "Downside risk-adjusted return", ui::colors::CYAN);
-    beta_card_ = add_metric_card(cards_layout, "BETA", "OLS regression vs SPY daily returns", ui::colors::WARNING);
-    alpha_card_ = add_metric_card(cards_layout, "ALPHA", "Annualised OLS alpha vs SPY", ui::colors::POSITIVE);
-    vol_card_ = add_metric_card(cards_layout, "VOLATILITY", "Annualised from daily returns", ui::colors::AMBER);
+    // The benchmark is named once known (set in update_metrics): the book's
+    // base-currency index when loaded, else SPY.
+    beta_card_ = add_metric_card(cards_layout, "BETA", "OLS regression vs benchmark daily returns",
+                                 ui::colors::WARNING);
+    alpha_card_ = add_metric_card(cards_layout, "ALPHA", "Annualised OLS alpha vs benchmark", ui::colors::POSITIVE);
+    vol_card_ = add_metric_card(cards_layout, "VOLATILITY", "Annualised from one-session returns", ui::colors::AMBER);
     drawdown_card_ =
         add_metric_card(cards_layout, "MAX DRAWDOWN", "Peak-to-trough from snapshots", ui::colors::NEGATIVE);
     var_card_ = add_metric_card(cards_layout, "VALUE AT RISK (95%)", "1-day historical VaR", ui::colors::NEGATIVE);
@@ -350,6 +354,24 @@ void PerformanceRiskView::update_metrics() {
     set_card(cvar_card_, m.cvar_95,
              m.cvar_95 ? QString("%1 %2").arg(currency_, fmt(*m.cvar_95)) : QString(),
              ui::colors::NEGATIVE);
+    // Historical VaR needs enough returns to resolve its 5% tail. set_card()
+    // above already reset each tooltip (empty with a value, need_history
+    // without), so this only refines a dash — gated per card so the reason
+    // never sits next to a real value.
+    if (m.return_days >= 2 && m.return_days < portfolio::kMinVarSample) {
+        const QString why = tr("Insufficient history (n=%1; VaR needs %2 one-session returns).")
+                                .arg(m.return_days)
+                                .arg(portfolio::kMinVarSample);
+        if (!m.var_95)
+            var_card_.value->setToolTip(why);
+        if (!m.cvar_95)
+            cvar_card_.value->setToolTip(why);
+    }
+    const QString bench = m.beta_benchmark.isEmpty() ? QStringLiteral("benchmark") : m.beta_benchmark;
+    beta_card_.desc->setText(tr("OLS regression vs %1 daily returns").arg(bench));
+    alpha_card_.desc->setText(tr("Annualised OLS alpha vs %1").arg(bench));
+    if (m.volatility)
+        vol_card_.value->setToolTip(portfolio::metrics_window_note(m));
 }
 
 } // namespace fincept::screens

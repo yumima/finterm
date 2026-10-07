@@ -247,7 +247,7 @@ void PortfolioHeatmap::build_ui() {
     layout->addWidget(top_loser_);
 
     // Quick stats
-    auto add_stat = [&](QLabel*& lbl, const QString& prefix) {
+    auto add_stat = [&](QLabel*& lbl, const QString& prefix) -> QLabel* {
         auto* row = new QHBoxLayout;
         auto* lab = new QLabel(prefix);
         lab->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
@@ -257,11 +257,12 @@ void PortfolioHeatmap::build_ui() {
         lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
         row->addWidget(lbl);
         layout->addLayout(row);
+        return lab;
     };
 
     add_stat(stat_holdings_, "HOLDINGS");
     add_stat(stat_conc_, "CONC. TOP3");
-    add_stat(stat_vol_, "VOL 30D");
+    stat_vol_label_ = add_stat(stat_vol_, "VOL");
 }
 
 void PortfolioHeatmap::set_holdings(const QVector<portfolio::HoldingWithQuote>& holdings) {
@@ -310,6 +311,12 @@ void PortfolioHeatmap::set_metrics(const portfolio::ComputedMetrics& metrics) {
                             : "--");
     stat_vol_->setText(metrics.volatility.has_value() ? QString("%1%").arg(QString::number(*metrics.volatility, 'f', 1))
                                                       : "--");
+    // Measured over the snapshot window, not a fixed 30 days — label it so.
+    if (stat_vol_label_) {
+        const QString span = portfolio::metrics_window_label(metrics);
+        stat_vol_label_->setText(span.isEmpty() ? QStringLiteral("VOL") : QStringLiteral("VOL %1").arg(span));
+    }
+    stat_vol_->setToolTip(portfolio::metrics_window_note(metrics));
 }
 
 void PortfolioHeatmap::set_selected_symbol(const QString& symbol) {
@@ -635,12 +642,15 @@ void PortfolioHeatmap::update_detail() {
 void PortfolioHeatmap::update_portfolio_detail() {
     portfolio_panel_->setVisible(true);
 
-    auto fmt_nav = [](double v) -> QString {
+    // Target NAVs are Σ market value × target/price — portfolio currency, so
+    // they carry its code (a hardcoded "$" mislabelled every non-USD book).
+    const QString ccy = currency_.isEmpty() ? QString() : currency_ + QLatin1Char(' ');
+    auto fmt_nav = [&ccy](double v) -> QString {
         if (v <= 0) return QStringLiteral("--");
-        if (v >= 1e9) return QString("$%1B").arg(QString::number(v / 1e9, 'f', 2));
-        if (v >= 1e6) return QString("$%1M").arg(QString::number(v / 1e6, 'f', 2));
-        if (v >= 1e3) return QString("$%1K").arg(QString::number(v / 1e3, 'f', 1));
-        return QString("$%1").arg(QString::number(v, 'f', 2));
+        if (v >= 1e9) return QString("%1%2B").arg(ccy, QString::number(v / 1e9, 'f', 2));
+        if (v >= 1e6) return QString("%1%2M").arg(ccy, QString::number(v / 1e6, 'f', 2));
+        if (v >= 1e3) return QString("%1%2K").arg(ccy, QString::number(v / 1e3, 'f', 1));
+        return QString("%1%2").arg(ccy, QString::number(v, 'f', 2));
     };
 
     const auto& f = fundamentals_;
@@ -691,6 +701,7 @@ void PortfolioHeatmap::update_portfolio_detail() {
         const double b = *metrics_.beta;
         const char* b_col = b > 1.2 ? ui::colors::NEGATIVE : b < 0.8 ? ui::colors::POSITIVE : ui::colors::WARNING;
         pfund_beta_->setText(QString::number(b, 'f', 2));
+        pfund_beta_->setToolTip(QStringLiteral("Beta vs %1").arg(metrics_.beta_benchmark));
         pfund_beta_->setStyleSheet(
             QString("color:%1; font-size:12px; font-weight:700;").arg(b_col));
     } else {

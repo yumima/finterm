@@ -62,6 +62,17 @@ class OptionChainService : public QObject, public fincept::datahub::Producer {
     QStringList list_underlyings(const QString& broker_id) const;
     QStringList list_expiries(const QString& broker_id, const QString& underlying) const;
 
+    /// IV-history series this expiry belongs to: "front" when it is the
+    /// nearest unexpired listed expiry, "monthly" when it is the nearest
+    /// month-end expiry (last listed expiry of its month). Both when the front
+    /// expiry is the monthly one; empty for any other (later) expiry.
+    /// Memoised per (broker, underlying, expiry): the instrument-cache scan
+    /// behind list_expiries() reruns only when InstrumentService rebuilds its
+    /// cache or the date rolls over, so publish_atm_iv and FnoHeaderBar can
+    /// both call this on every chain refresh without rescanning.
+    QStringList iv_history_kinds(const QString& broker_id, const QString& underlying,
+                                 const QString& expiry) const;
+
   signals:
     /// Emitted alongside the hub publish so callers can connect via Qt
     /// signals if they prefer that to subscribing on the hub.
@@ -111,8 +122,9 @@ class OptionChainService : public QObject, public fincept::datahub::Producer {
     /// `option:atm_iv:<broker>:<underlying>` (decimal IV).
     void publish_atm_iv(const fincept::services::options::OptionChain& chain);
 
-    /// Time to expiry in years, actual/365. Floors at one calendar day so
-    /// expiry-day options don't blow up the BSM model.
+    /// Time to expiry in years (actual/365, to the second) measured to the
+    /// exchange close on expiry day — NSE 15:30 Asia/Kolkata. Floors at one
+    /// minute only to avoid division by zero. NaN when expiry is unparseable.
     static double compute_t_years(const QString& expiry);
 
     bool hub_registered_ = false;
@@ -128,6 +140,17 @@ class OptionChainService : public QObject, public fincept::datahub::Producer {
     QHash<qint64, double> iv_cache_;
     /// Per-token Greeks cache — reused when throttle skips compute.
     QHash<qint64, fincept::services::options::OptionGreeks> greeks_cache_;
+    /// iv_history_kinds() memo, keyed "broker:underlying:expiry". Valid while
+    /// `generation` matches InstrumentService::cache_generation() and `day`
+    /// is today (expired expiries drop out of the live list at midnight).
+    struct IvKindsEntry {
+        quint64 generation = 0;
+        qint64 day = 0;
+        QStringList kinds;
+    };
+    mutable QHash<QString, IvKindsEntry> iv_kinds_cache_;
+    QStringList compute_iv_history_kinds(const QString& broker_id, const QString& underlying,
+                                         const QString& expiry) const;
     /// Cached risk-free rate; populated on first refresh.
     double risk_free_rate_ = 0.0;
     bool risk_free_rate_loaded_ = false;

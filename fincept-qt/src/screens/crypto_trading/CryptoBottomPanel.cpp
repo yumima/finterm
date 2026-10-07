@@ -325,7 +325,8 @@ void CryptoBottomPanel::set_stats(const trading::PtStats& stats) {
     stat_values_[0]->style()->unpolish(stat_values_[0]);
     stat_values_[0]->style()->polish(stat_values_[0]);
 
-    stat_values_[1]->setText(QString("%1%").arg(stats.win_rate, 0, 'f', 1));
+    // win_rate is a FRACTION (pt_get_stats: winning / closed round trips).
+    stat_values_[1]->setText(QString("%1%").arg(stats.win_rate * 100.0, 0, 'f', 1));
     stat_values_[2]->setText(
         QString("%1 (W:%2 L:%3)").arg(stats.total_trades).arg(stats.winning_trades).arg(stats.losing_trades));
 

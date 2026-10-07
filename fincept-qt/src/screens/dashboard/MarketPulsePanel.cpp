@@ -16,6 +16,7 @@
 #include <QPalette>
 #include <QPointer>
 #include <QShowEvent>
+#include <QTimeZone>
 
 #include <algorithm>
 
@@ -726,6 +727,48 @@ QWidget* MarketPulsePanel::build_global_snapshot_section() {
 
 // ── Market Hours ─────────────────────────────────────────────────────────────
 
+// Regular sessions in each exchange's own IANA time zone, so DST and
+// half-hour opens are exact. Times are local HHMM; a second session models
+// the Asian lunch break. Exchange holiday calendars are NOT consulted.
+namespace {
+struct ExchangeSession {
+    const char* region;
+    const char* tz;
+    int pre_open; // -1 = no pre-market shown
+    int open1, close1;
+    int open2, close2; // -1 = single session
+};
+constexpr ExchangeSession kExchangeSessions[] = {
+    {"US", "America/New_York", 400, 930, 1600, -1, -1},  // NYSE/NASDAQ; pre-market from 04:00
+    {"UK", "Europe/London", 750, 800, 1630, -1, -1},     // LSE; opening auction 07:50
+    {"DE", "Europe/Berlin", -1, 900, 1730, -1, -1},      // XETRA
+    {"JP", "Asia/Tokyo", -1, 900, 1130, 1230, 1530},     // TSE (close 15:30 since Nov 2024)
+    {"CN", "Asia/Shanghai", 915, 930, 1130, 1300, 1500}, // SSE; call auction from 09:15
+};
+
+const ExchangeSession* session_for(const QString& region) {
+    for (const auto& s : kExchangeSessions)
+        if (region == QLatin1String(s.region))
+            return &s;
+    return nullptr;
+}
+
+QString hhmm(int t) {
+    return QStringLiteral("%1:%2").arg(t / 100, 2, 10, QLatin1Char('0')).arg(t % 100, 2, 10, QLatin1Char('0'));
+}
+
+QString session_tooltip(const ExchangeSession& s) {
+    QString hours = hhmm(s.open1) + "–" + hhmm(s.close1);
+    if (s.open2 >= 0)
+        hours += ", " + hhmm(s.open2) + "–" + hhmm(s.close2);
+    QString tip = QStringLiteral("Regular session %1 (%2), Mon–Fri").arg(hours, QString::fromLatin1(s.tz));
+    if (s.pre_open >= 0)
+        tip += QStringLiteral("\nPRE from %1").arg(hhmm(s.pre_open));
+    tip += QStringLiteral("\nExchange holidays are not checked.");
+    return tip;
+}
+} // namespace
+
 QWidget* MarketPulsePanel::build_market_hours_section() {
     auto* w = new QWidget(this);
     auto* vl = new QVBoxLayout(w);
@@ -767,6 +810,8 @@ QWidget* MarketPulsePanel::build_market_hours_section() {
 
         hr.status = new QLabel;
         rl->addWidget(hr.status);
+        if (const auto* sess = session_for(hr.region))
+            row->setToolTip(session_tooltip(*sess));
         // All styling applied by refresh_theme() + refresh_market_hours()
 
         hours_rows_.append(hr);
@@ -780,34 +825,23 @@ QWidget* MarketPulsePanel::build_market_hours_section() {
 // ── Market status helper ─────────────────────────────────────────────────────
 
 QString MarketPulsePanel::market_status(const QString& region) {
-    auto now = QDateTime::currentDateTimeUtc();
-    int hour = now.time().hour();
-    int day = now.date().dayOfWeek(); // 1=Mon, 7=Sun
-
-    if (day >= 6)
+    const ExchangeSession* s = session_for(region);
+    if (!s)
+        return "CLOSED";
+    const QTimeZone tz(QByteArray(s->tz));
+    if (!tz.isValid())
+        return "N/A"; // no tz database entry: don't guess
+    const QDateTime local = QDateTime::currentDateTimeUtc().toTimeZone(tz);
+    if (local.date().dayOfWeek() >= 6) // Sat/Sun in the exchange's own time zone
         return "CLOSED";
 
-    if (region == "US") {
-        if (hour >= 13 && hour < 14)
-            return "PRE";
-        if (hour >= 14 && hour < 21)
-            return "OPEN";
-    } else if (region == "UK") {
-        if (hour >= 7 && hour < 8)
-            return "PRE";
-        if (hour >= 8 && hour < 17)
-            return "OPEN";
-    } else if (region == "JP") {
-        if (hour >= 0 && hour < 6)
-            return "OPEN";
-    } else if (region == "CN") {
-        if (hour >= 1 && hour < 7)
-            return "OPEN";
-    } else if (region == "DE") {
-        // XETRA 09:00–17:30 CET ≈ 08:00–16:30 UTC (hour-bucket: open through 16:xx)
-        if (hour >= 8 && hour < 17)
-            return "OPEN";
-    }
+    const int t = local.time().hour() * 100 + local.time().minute();
+    if ((t >= s->open1 && t < s->close1) || (s->open2 >= 0 && t >= s->open2 && t < s->close2))
+        return "OPEN";
+    if (s->open2 >= 0 && t >= s->close1 && t < s->open2)
+        return "BREAK"; // lunch break between sessions
+    if (s->pre_open >= 0 && t >= s->pre_open && t < s->open1)
+        return "PRE";
     return "CLOSED";
 }
 
@@ -816,9 +850,9 @@ QString MarketPulsePanel::market_status(const QString& region) {
 void MarketPulsePanel::refresh_market_hours() {
     for (auto& hr : hours_rows_) {
         QString status = market_status(hr.region);
-        QString color = (status == "OPEN")  ? ui::colors::POSITIVE()
-                        : (status == "PRE") ? ui::colors::WARNING()
-                                            : ui::colors::NEGATIVE();
+        QString color = (status == "OPEN")                      ? ui::colors::POSITIVE()
+                        : (status == "PRE" || status == "BREAK") ? ui::colors::WARNING()
+                                                                 : ui::colors::NEGATIVE();
         hr.dot->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(color));
         hr.status->setText(status);
         hr.status->setStyleSheet(

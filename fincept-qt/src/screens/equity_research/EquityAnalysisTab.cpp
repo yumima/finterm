@@ -139,7 +139,7 @@ void EquityAnalysisTab::build_ui() {
     ev_grid->addWidget(make_card("ENTERPRISE VALUE", ev_val_, "#eab308"), 0, 0);
     ev_grid->addWidget(make_card("EV/REVENUE", ev_rev_val_, "#22d3ee"), 0, 1);
     ev_grid->addWidget(make_card("EV/EBITDA", ev_ebitda_val_, "#22d3ee"), 1, 0);
-    ev_grid->addWidget(make_card("BOOK VALUE", book_val_, ui::colors::TEXT_PRIMARY), 1, 1);
+    ev_grid->addWidget(make_card("BOOK VALUE/SHARE", book_val_, ui::colors::TEXT_PRIMARY), 1, 1);
     ev_vl->addLayout(ev_grid);
     ev_vl->addStretch();
 
@@ -214,11 +214,14 @@ void EquityAnalysisTab::apply_info_state(const services::query::QueryStore::Stat
     ev_val_->setText(fmt_large(info.enterprise_value));
     ev_rev_val_->setText(fmt(info.ev_to_revenue));
     ev_ebitda_val_->setText(fmt(info.ev_to_ebitda, 1));
-    book_val_->setText(info.book_value > 0 ? QString("$%1").arg(info.book_value, 0, 'f', 2) : "—");
+    // Per-share figures are in the REPORTING currency, which the feed doesn't
+    // carry (an ADR reports in TWD/EUR/… while trading in USD) — so no symbol.
+    // Negative book value is real (deficit equity), so gate on NaN only.
+    book_val_->setText(fmt(info.book_value));
 
     // Revenue & Profits
     rev_val_->setText(fmt_large(info.total_revenue));
-    rev_share_val_->setText(info.revenue_per_share > 0 ? QString("$%1").arg(info.revenue_per_share, 0, 'f', 2) : "—");
+    rev_share_val_->setText(fmt(info.revenue_per_share));
     gp_val_->setText(fmt_large(info.gross_profits));
     ebitda_m_val_->setText(fmt_pct(info.ebitda_margins));
 

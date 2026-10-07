@@ -1,7 +1,13 @@
 """M&A Process Quality Assessment"""
+import sys
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from enum import Enum
 from dataclasses import dataclass
+
+_ANALYTICS = str(Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in sys.path:
+    sys.path.insert(0, _ANALYTICS)
 
 class ProcessType(Enum):
     BROAD_AUCTION = "broad_auction"
@@ -346,127 +352,98 @@ class ProcessQualityAssessment:
 
         return weaknesses
 
+PQ_FACTORS = ['Board Independence', 'Special Committee', 'Independent Advisor', 'Market Check',
+              'Negotiation Process', 'Due Diligence', 'Disclosure Quality', 'Timing Adequacy']
+_PQ_KEYS = ['board_independence', 'special_committee', 'independent_advisor', 'market_check',
+            'negotiation_process', 'due_diligence', 'disclosure_quality', 'timing_adequacy']
+# Rating bands on the 1-5 average: a labelled scale convention, not data.
+_PQ_BANDS = [(4.5, 'excellent'), (3.5, 'good'), (2.5, 'adequate'), (0.0, 'deficient')]
+
+
+def _pq_scored(p: Dict[str, Any]) -> Dict[str, Any]:
+    from corporateFinance._cli import InputError
+    raw = p['factors']
+    if isinstance(raw, dict):
+        vals = []
+        for k, label in zip(_PQ_KEYS, PQ_FACTORS):
+            if raw.get(k) is None:
+                raise InputError(f"Missing required input: score for {label}")
+            vals.append(raw[k])
+    elif isinstance(raw, list) and len(raw) == len(PQ_FACTORS):
+        vals = raw
+    else:
+        raise InputError(f"factors must be {len(PQ_FACTORS)} scores (1-5): {', '.join(PQ_FACTORS)}")
+    scores = []
+    for label, v in zip(PQ_FACTORS, vals):
+        f = float(v)
+        if not 1 <= f <= 5:
+            raise InputError(f"{label} score must be between 1 and 5 (got {v})")
+        scores.append(f)
+    avg = sum(scores) / len(scores)
+    rating = next(name for floor, name in _PQ_BANDS if avg >= floor)
+    low = min(scores)
+    return {
+        'mode': 'scored (user 1-5 ratings)',
+        'average_score': avg,
+        'rating': rating,
+        'rating_scale': 'average >= 4.5 excellent, >= 3.5 good, >= 2.5 adequate, else deficient',
+        'weakest_factors': ', '.join(l for l, s_ in zip(PQ_FACTORS, scores) if s_ == low),
+        'factors_rated_2_or_below': sum(1 for s_ in scores if s_ <= 2),
+        'factors': [{'factor': l, 'score': s_} for l, s_ in zip(PQ_FACTORS, scores)],
+    }
+
+
+def _pq_factual(p: Dict[str, Any]) -> Dict[str, Any]:
+    from corporateFinance._cli import InputError, has, num
+    contacted = num(p, 'num_bidders_contacted', label='Parties contacted', min=0, integer=True)
+    if not isinstance(p.get('market_check_conducted'), bool):
+        raise InputError("Missing required input: market_check_conducted (true/false)")
+    checks = [{'criterion': 'Market check conducted', 'met': p['market_check_conducted'],
+               'detail': f"{contacted} parties contacted"}]
+    if has(p, 'num_bidders_participated'):
+        bids = num(p, 'num_bidders_participated', label='Bids received', min=0, integer=True)
+        checks.append({'criterion': 'Competing bids (2 or more)', 'met': bids >= 2,
+                       'detail': f"{bids} bids received"})
+    if has(p, 'go_shop_period'):
+        days = num(p, 'go_shop_period', label='Go-shop period (days)', min=0)
+        checks.append({'criterion': 'Post-signing go-shop window', 'met': days > 0,
+                       'detail': f"{days:g} days" if days else 'none'})
+    for key, label in [('independent_committee', 'Independent special committee'),
+                       ('financial_advisor_engaged', 'Independent financial advisor')]:
+        if isinstance(p.get(key), bool):
+            checks.append({'criterion': label, 'met': p[key], 'detail': None})
+    met = sum(1 for c in checks if c['met'])
+    return {
+        'mode': 'factual checklist',
+        'parties_contacted': contacted,
+        'criteria_met': met,
+        'criteria_assessed': len(checks),
+        'gaps': ', '.join(c['criterion'] for c in checks if not c['met']) or None,
+        'checklist': checks,
+    }
+
+
+def process_quality_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON contract (either form):
+    scored : {factors: [8 x 1-5] | {board_independence, ...}}
+    factual: {num_bidders_contacted, market_check_conducted, num_bidders_participated?,
+              go_shop_period?, independent_committee?, financial_advisor_engaged?}
+    """
+    if p.get('factors') is not None:
+        return _pq_scored(p)
+    return _pq_factual(p)
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'assess': process_quality_json})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "process":
-            if len(sys.argv) < 3:
-                raise ValueError("Process factors required")
-
-            process_factors = json.loads(sys.argv[2])
-
-            # Detect flat format: {board_independence:4, special_committee:5, ...} sent from frontend
-            # vs nested format: {market_check:{}, board_process:{}, timing:{}}
-            FLAT_KEYS = {'board_independence', 'special_committee', 'independent_advisor',
-                         'market_check', 'negotiation_process', 'due_diligence', 'disclosure', 'timing'}
-
-            is_flat = any(k in FLAT_KEYS and not isinstance(process_factors.get(k), dict)
-                          for k in process_factors)
-
-            if is_flat:
-                # Convert flat 1-5 scores to a synthetic comprehensive result directly
-                def score_to_quality(s):
-                    s = float(s)
-                    if s >= 4.5: return 'excellent'
-                    if s >= 3.5: return 'good'
-                    if s >= 2.5: return 'adequate'
-                    return 'deficient'
-
-                factor_scores = {k: float(v) for k, v in process_factors.items() if k != 'process_type'}
-                overall_score = sum(factor_scores.values()) / len(factor_scores) if factor_scores else 0
-                quality = score_to_quality(overall_score)
-
-                result_data = {
-                    'factor_scores': factor_scores,
-                    'overall_score': overall_score,
-                    'quality_rating': quality,
-                    'supports_fairness_conclusion': overall_score >= 3.0,
-                }
-                result = {"success": True, "data": result_data}
-                print(json.dumps(result))
-                return
-
-            # Nested format handling
-            process_type_str = process_factors.get('process_type', 'targeted_auction').upper().replace('-', '_').replace(' ', '_')
-            process_type = ProcessType[process_type_str] if process_type_str in ProcessType.__members__ else ProcessType.TARGETED_AUCTION
-
-            assessment = ProcessQualityAssessment(process_type)
-
-            result_data = {}
-
-            # Market check analysis
-            mc = process_factors.get('market_check', {})
-            if mc and isinstance(mc, dict):
-                result_data['market_check'] = assessment.evaluate_market_check(
-                    parties_contacted=mc.get('parties_contacted', 0),
-                    ndas_executed=mc.get('ndas_executed', 0),
-                    management_presentations=mc.get('management_presentations', 0),
-                    bids_received=mc.get('bids_received', 0),
-                    go_shop_period_days=mc.get('go_shop_period_days')
-                )
-
-            # Board process analysis
-            bp = process_factors.get('board_process', {})
-            if bp and isinstance(bp, dict):
-                result_data['board_process'] = assessment.evaluate_board_process(
-                    board_meetings=bp.get('board_meetings', 0),
-                    special_committee=bp.get('special_committee', False),
-                    independent_financial_advisor=bp.get('independent_financial_advisor', False),
-                    independent_legal_counsel=bp.get('independent_legal_counsel', False),
-                    management_conflicts=bp.get('management_conflicts', False),
-                    fairness_opinion_obtained=bp.get('fairness_opinion_obtained', False)
-                )
-
-            # Timing analysis
-            tp = process_factors.get('timing', {})
-            if tp and isinstance(tp, dict):
-                result_data['timing_analysis'] = assessment.timing_pressure_analysis(
-                    process_duration_days=tp.get('process_duration_days', 90),
-                    termination_fee_pct=tp.get('termination_fee_pct', 3.0),
-                    go_shop_allowed=tp.get('go_shop_allowed', False),
-                    no_shop_period=tp.get('no_shop_period', True),
-                    financing_contingency=tp.get('financing_contingency', False)
-                )
-
-            # Comprehensive evaluation if we have enough data
-            if 'market_check' in result_data and 'board_process' in result_data and 'timing_analysis' in result_data:
-                comp = assessment.comprehensive_process_evaluation(
-                    market_check=result_data['market_check'],
-                    competitive_tension={'competitive_tension': process_factors.get('competitive_tension', 'moderate')},
-                    board_process=result_data['board_process'],
-                    timing_analysis=result_data['timing_analysis']
-                )
-                result_data['comprehensive'] = comp
-                # Add top-level fields for frontend convenience
-                result_data['overall_score'] = comp.get('overall_process_score', 0) / 20  # convert 0-100 to 0-5
-                result_data['quality_rating'] = comp.get('process_quality_rating', 'N/A')
-                result_data['factor_scores'] = {
-                    k: round(v / 20, 1) for k, v in comp.get('component_scores', {}).items()
-                }
-                result_data['supports_fairness_conclusion'] = comp.get('supports_fairness_conclusion', False)
-
-            result = {"success": True, "data": result_data}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

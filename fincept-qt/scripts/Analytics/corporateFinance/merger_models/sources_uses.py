@@ -212,81 +212,66 @@ class DetailedSourcesUses(SourcesUsesBuilder):
 
         return base_table
 
+# ── JSON contract (MAAnalyticsService "calculate" / ma_sources_uses) ─────────
+
+def _json_calculate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Sources & uses as entered -- no plug, no estimated fees. An imbalance
+    is reported as a funding shortfall / surplus.
+
+    Uses:    purchase_price (equity purchase price; alias deal_value),
+             target_debt_refinanced, transaction_fees, financing_fees
+    Sources: acquirer_cash (alias cash / cash_on_hand), new_debt,
+             new_equity (alias stock_issuance / equity_offered)
+    """
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import num, opt_num, has
+    def first(*keys):
+        for k in keys:
+            if has(p, k):
+                return k
+        return keys[0]
+    price = num(p, first('purchase_price', 'deal_value'), label='purchase_price (equity purchase price)', gt=0)
+    uses = [
+        ('purchase of target equity', price),
+        ('target debt refinanced', opt_num(p, first('target_debt_refinanced', 'target_debt_assumed'), 0.0, min=0)),
+        ('transaction fees', opt_num(p, 'transaction_fees', 0.0, min=0)),
+        ('financing fees', opt_num(p, 'financing_fees', 0.0, min=0)),
+    ]
+    sources = [
+        ('acquirer cash', opt_num(p, first('acquirer_cash', 'cash', 'cash_on_hand', 'cash_offered'), 0.0, min=0)),
+        ('new debt', opt_num(p, first('new_debt', 'debt_raised'), 0.0, min=0)),
+        ('new equity issued', opt_num(p, first('new_equity', 'stock_issuance', 'equity_offered'), 0.0, min=0)),
+    ]
+    tu = sum(v for _, v in uses)
+    ts = sum(v for _, v in sources)
+    gap = ts - tu
+    return {
+        'total_uses': tu,
+        'total_sources': ts,
+        'balanced': abs(gap) < 1e-6 * max(tu, 1.0),
+        'surplus_or_shortfall': gap,
+        'status': 'balanced' if abs(gap) < 1e-6 * max(tu, 1.0) else ('funding shortfall' if gap < 0 else 'excess sources'),
+        'debt_share_of_sources_pct': sources[1][1] / ts * 100 if ts else None,
+        'equity_share_of_sources_pct': sources[2][1] / ts * 100 if ts else None,
+        'uses': [{'item': k, 'amount': v, 'share_pct': v / tu * 100 if tu else None} for k, v in uses],
+        'sources': [{'item': k, 'amount': v, 'share_pct': v / ts * 100 if ts else None} for k, v in sources],
+    }
+
+
+JSON_COMMANDS = {'calculate': _json_calculate}
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json(JSON_COMMANDS)
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified. Usage: sources_uses.py <command> [args...]"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "sources_uses":
-            if len(sys.argv) < 4:
-                raise ValueError("Deal structure and financing structure required")
-            deal_structure = json.loads(sys.argv[2])
-            financing_structure = json.loads(sys.argv[3])
-
-            # Handle frontend field name aliases
-            builder = SourcesUsesBuilder(
-                purchase_price=deal_structure.get('purchase_price', 0),
-                target_debt_refinanced=deal_structure.get('target_debt_refinanced', deal_structure.get('target_debt', 0)),
-                acquirer_cash=financing_structure.get('acquirer_cash', financing_structure.get('cash_on_hand', 0)),
-                new_debt=financing_structure.get('new_debt', 0),
-                new_equity=financing_structure.get('new_equity', financing_structure.get('stock_issuance', 0))
-            )
-
-            if 'transaction_fees' in deal_structure:
-                builder.transaction_fees = deal_structure['transaction_fees']
-            else:
-                builder.estimate_transaction_fees(deal_structure.get('purchase_price', 0))
-
-            if 'financing_fees' in deal_structure:
-                builder.financing_fees = deal_structure['financing_fees']
-            elif 'financing_fees' in financing_structure:
-                builder.financing_fees = financing_structure['financing_fees']
-            else:
-                builder.estimate_financing_fees(financing_structure.get('new_debt', 0))
-
-            table = builder.auto_balance()
-            financing_mix = builder.calculate_financing_mix()
-
-            # Flatten output for frontend: {sources: {key: amount}, uses: {key: amount}, total_sources, total_uses, ...}
-            sources_flat = {
-                k: v['amount']
-                for k, v in table.get('sources', {}).get('sources_breakdown', {}).items()
-                if v.get('amount', 0) > 0
-            }
-            uses_flat = {
-                k: v['amount']
-                for k, v in table.get('uses', {}).get('uses_breakdown', {}).items()
-                if v.get('amount', 0) > 0
-            }
-
-            result = {"success": True, "data": {
-                "sources": sources_flat,
-                "uses": uses_flat,
-                "total_sources": table.get('sources', {}).get('total_sources', 0),
-                "total_uses": table.get('uses', {}).get('total_uses', 0),
-                "balanced": table.get('balanced', False),
-                "imbalance": table.get('imbalance', 0),
-                "financing_mix": financing_mix,
-                "table": table,  # Keep raw table for detailed view
-            }}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}. Available: sources_uses"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e), "command": command}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

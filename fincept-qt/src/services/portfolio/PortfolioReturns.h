@@ -32,6 +32,7 @@
 #include "services/portfolio/PortfolioFx.h"
 
 #include <QHash>
+#include <QSet>
 #include <QString>
 #include <QVector>
 
@@ -83,5 +84,64 @@ PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double 
 /// is enough to dominate volatility, Sharpe, VaR and the beta regression.
 QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, const QVector<Transaction>& txns,
                                       const FxRates& fx = {});
+
+/// One flow-adjusted return over a run of TRADING sessions.
+struct SegmentReturn {
+    QString start_date;    // snapshot the segment starts from (YYYY-MM-DD)
+    QString end_date;      // snapshot the segment ends at
+    double pct = 0;        // flow-adjusted return over the segment, %; NaN = uncomputable
+    int trading_days = 0;  // trading sessions inside (start_date, end_date], ≥ 1
+};
+
+/// Flow-adjusted returns rebuilt on a TRADING-DAY calendar.
+///
+/// Snapshots are written on whatever calendar day the app runs, weekends
+/// included, and the app is not run every day. Read as consecutive "daily"
+/// returns, a Saturday row adds a ~0% day (understating volatility) and a
+/// Tuesday→Friday gap adds a three-session move as one "day" (overstating
+/// it) — both then annualised with √252. Instead:
+///
+///   - A segment with NO trading session inside (prev, curr] (Fri→Sat,
+///     Sat→Sun) is merged into the next segment by CHAINING the growth, so a
+///     weekend snapshot is effectively skipped while any flow dated on it
+///     still lands exactly where the NAV reflects it. TWR chaining is exact
+///     under merging: Π(1+r) over the pieces is the merged segment's growth.
+///     Trailing zero-session pieces fold into the last emitted segment.
+///   - Every emitted segment states how many sessions it spans. The caller
+///     decides: per-day statistics (volatility, Sharpe/Sortino, VaR, beta)
+///     use only 1-session segments — a k-session return is NOT a daily
+///     observation, and rescaling it by √k would assume the very i.i.d.
+///     random walk the statistics are trying to measure; chained quantities
+///     (drawdown, cumulative growth) use every segment, gaps included, so the
+///     growth index is never broken.
+///
+/// `calendar` (YYYY-MM-DD set, e.g. a benchmark's bar dates) names the
+/// trading sessions where it reaches; outside its first..last span, and when
+/// it is empty, Monday–Friday are sessions (exchange holidays then count as
+/// sessions, which can only cause a holiday-spanning return to be treated as
+/// a gap and left out of the per-day statistics — never the reverse).
+QVector<SegmentReturn> trading_day_returns(QVector<PortfolioSnapshot> snapshots, const QVector<Transaction>& txns,
+                                           const FxRates& fx = {}, const QSet<QString>& calendar = {});
+
+/// Point on a NAV path: date (YYYY-MM-DD) and value. Duplicate dates allowed.
+struct NavPoint {
+    QString date;
+    double value = 0;
+};
+
+/// Net external flow per path point: out[i] = Σ BUY−SELL cash dated in
+/// (date[i−1], date[i]] (local trade date, converted at its own trade-date
+/// rate); out[0] = 0. `path` must be sorted by date. NaN when a flow in that
+/// segment has no known FX rate.
+QVector<double> segment_flows(const QVector<NavPoint>& path, const QVector<Transaction>& txns,
+                              const FxRates& fx = {});
+
+/// Time-weighted growth index over `path` (sorted by date): 1.0 at the first
+/// point, then chained by each segment's flow-adjusted return — the series a
+/// "like-for-like" comparison against a benchmark must use, because raw NAV
+/// rises with every deposit. A zero/dust-base segment carries the level
+/// flat (it states no growth); from an unknown-FX flow onwards every value is
+/// NaN.
+QVector<double> twr_index(const QVector<NavPoint>& path, const QVector<Transaction>& txns, const FxRates& fx = {});
 
 } // namespace fincept::portfolio

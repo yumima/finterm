@@ -631,13 +631,17 @@ def holder_tier(manager, stock_count):
 def holders(ticker=None, cusip=None, limit=60, quarter=None,
             min_book=MIN_BOOK_VALUE, min_positions=MIN_BOOK_POSITIONS,
             max_positions=None, sort="value"):
-    """Every filer holding this security.
+    """Filers holding this security whose 13F book passes the floors.
 
+    Only filers with an equity book of at least `min_book` dollars and at
+    least `min_positions` stock positions (and, when set, at most
+    `max_positions`) are counted — see MIN_BOOK_VALUE / MIN_BOOK_POSITIONS.
     `sort` is "value" — position size, the HDS default — or "weight", the
     position as a share of the filer's own book, which answers a different
-    question and carries a book-size floor so the answer is Berkshire rather
-    than a shell. Totals, counts and concentration are computed over EVERY
-    holder before the display limit is applied.
+    question and raises the book-size floor so the answer is Berkshire rather
+    than a shell. Totals, counts and concentration are computed over every
+    holder that passes those floors, before the display limit is applied.
+    The floors are returned with the result so the UI can state them.
     """
     con = connect()
     try:
@@ -787,9 +791,10 @@ def holders(ticker=None, cusip=None, limit=60, quarter=None,
         buyers = sum(1 for r in stock if r.get("action") == "added")
         new = sum(1 for r in stock if r.get("action") == "new")
         sellers = sum(1 for r in stock if r.get("action") == "trimmed")
-        # Totals across EVERY filer, not just the rows returned. This is what
-        # makes an institutional-ownership percentage computable from the
-        # filings themselves rather than taken from a vendor aggregate.
+        # Totals across every filer that passes the book-size / position-count
+        # floors, not just the rows returned. This is what makes an
+        # institutional-ownership percentage computable from the filings
+        # themselves; filers below the floors are excluded, so it is a floor.
         total_shares = sum(r["shares"] or 0 for r in stock)
         total_value = sum(r["value"] or 0 for r in stock)
         return {"ticker": (ticker or "").upper(), "cusip": cusip, "company": name,

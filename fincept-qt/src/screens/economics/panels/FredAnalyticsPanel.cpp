@@ -154,7 +154,7 @@ void FredAnalyticsPanel::on_result(const QString& request_id, const services::Ec
         "FRED Analytics: " +
         (idx >= 0 && idx < kFredAnalDatasets.size() ? kFredAnalDatasets[idx].label : request_id.mid(7));
 
-    display(rows, title);
+    display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
     LOG_INFO("FredAnalyticsPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 

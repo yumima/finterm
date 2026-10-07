@@ -50,9 +50,10 @@ def extract_performance(
         std_ret = float(np.std(daily_returns, ddof=1)) if n_days > 1 else 1e-8
         sharpe = (mean_ret * 252) / (std_ret * np.sqrt(252)) if std_ret > 1e-8 else 0.0
 
-        # Sortino ratio
-        downside = daily_returns[daily_returns < 0]
-        downside_std = float(np.std(downside, ddof=1) * np.sqrt(252)) if len(downside) > 1 else 1e-8
+        # Sortino ratio — downside deviation over ALL periods (target 0):
+        # sqrt(mean(min(r - target, 0)^2)), not the std of the down days only.
+        downside = np.minimum(np.asarray(daily_returns, dtype=float), 0.0)
+        downside_std = float(np.sqrt(np.mean(downside ** 2)) * np.sqrt(252)) if n_days > 0 else 0.0
         sortino = (mean_ret * 252) / downside_std if downside_std > 1e-8 else 0.0
 
         # Max drawdown

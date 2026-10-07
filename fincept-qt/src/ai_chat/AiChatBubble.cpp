@@ -608,17 +608,26 @@ void AiChatBubble::on_streaming_done(ai_chat::LlmResponse response) {
         // Convert streamed plain text to rendered markdown
         const QString final_text = streaming_bubble_->toPlainText();
         if (!final_text.isEmpty()) {
+            // Name the model that actually answered when a quota fallback
+            // switched it (display only — not part of the stored history).
+            const QString used_note =
+                response.fell_back && !response.model_used.isEmpty()
+                    ? QStringLiteral("\n\n*Answered by %1 (%2) — fell back after a quota limit.*")
+                          .arg(response.model_used, response.provider_used)
+                    : QString();
             streaming_bubble_->document()->setDefaultStyleSheet(bubble_panel_md_css(col::TEXT_PRIMARY()));
-            streaming_bubble_->setMarkdown(final_text);
+            streaming_bubble_->setMarkdown(final_text + used_note);
         }
         streaming_bubble_->setReadOnly(true);
         streaming_bubble_ = nullptr;
     }
 
     history_.push_back({"assistant", content});
-    ChatRepository::instance().add_message(active_session_id_, "assistant", content,
-                                           ai_chat::LlmService::instance().active_provider(),
-                                           ai_chat::LlmService::instance().active_model(), response.total_tokens);
+    ChatRepository::instance().add_message(
+        active_session_id_, "assistant", content,
+        response.provider_used.isEmpty() ? ai_chat::LlmService::instance().active_provider() : response.provider_used,
+        response.model_used.isEmpty() ? ai_chat::LlmService::instance().active_model() : response.model_used,
+        response.total_tokens);
 
     if (!is_open_)
         update_unread(1);

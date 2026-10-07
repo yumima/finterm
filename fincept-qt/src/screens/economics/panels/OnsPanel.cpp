@@ -1,5 +1,5 @@
 // src/screens/economics/panels/OnsPanel.cpp
-// UK Office for National Statistics — GDP, CPI, unemployment, trade, housing.
+// UK Office for National Statistics — GDP, inflation, labour market, trade, public debt.
 // Script: ons_data.py  |  No API key required.
 //
 // Response shape: { success, series, label, unit, count, data:[{date, value}] }
@@ -26,12 +26,13 @@ struct OnsSeries {
     QString command;
 };
 
+// Commands must match ONS_SERIES in ons_data.py (one CDID each).
 static const QList<OnsSeries> kOnsSeries = {
-    {"GDP (Chained Volume, SA)", "gdp"},      {"CPI All Items", "cpi"},
-    {"CPIH (incl. Housing Costs)", "cpih"},   {"RPI", "rpi"},
-    {"Unemployment Rate", "unemployment"},    {"Employment Rate", "employment"},
-    {"Trade Balance (BoP)", "trade_balance"}, {"House Prices (HPI)", "house_prices"},
-    {"Average Earnings", "avg_earnings"},     {"Public Sector Net Debt", "public_debt"},
+    {"GDP (Chained Volume, SA)", "gdp"},       {"CPI Annual Rate", "cpi"},
+    {"CPIH Annual Rate", "cpih"},              {"RPI Annual Rate", "rpi"},
+    {"Unemployment Rate", "unemployment"},     {"Employment Rate (16-64)", "employment"},
+    {"Trade Balance (BoP, quarterly)", "trade_balance"}, {"Average Weekly Earnings", "avg_earnings"},
+    {"Public Sector Net Debt (% GDP)", "public_debt"},
 };
 
 OnsPanel::OnsPanel(QWidget* parent) : EconPanelBase(kOnsSourceId, kOnsColor, parent) {
@@ -43,7 +44,7 @@ OnsPanel::OnsPanel(QWidget* parent) : EconPanelBase(kOnsSourceId, kOnsColor, par
 void OnsPanel::activate() {
     show_empty("Select a series and click FETCH\n"
                "Source: UK Office for National Statistics (no API key required)\n"
-               "Data via api.beta.ons.gov.uk — GDP, CPI, labour market, housing");
+               "Data via ons.gov.uk time series — GDP, inflation, labour market, public finances");
 }
 
 void OnsPanel::build_controls(QHBoxLayout* thl) {
@@ -95,15 +96,13 @@ void OnsPanel::on_result(const QString& request_id, const services::EconomicsRes
     }
 
     const QString label = result.data["label"].toString();
-    const QString unit = result.data["unit"].toString();
     const QString title =
         "ONS: " +
         (label.isEmpty() ? (series_combo_->currentIndex() >= 0 ? kOnsSeries[series_combo_->currentIndex()].label
                                                                : request_id.mid(4))
-                         : label) +
-        (unit.isEmpty() ? "" : " (" + unit + ")");
+                         : label); // the script's label already carries the unit
 
-    display(rows, title);
+    display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
     LOG_INFO("OnsPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 

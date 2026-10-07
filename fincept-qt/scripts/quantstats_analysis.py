@@ -46,6 +46,32 @@ def convert_numpy(obj):
     return obj
 
 
+
+def aligned_returns(close):
+    """Per-symbol daily returns, aligned across symbols.
+
+    close.pct_change().dropna() on the joint frame dropped EVERY row where any
+    one ticker had no bar (a London or Tokyo holiday, a late listing), and the
+    next day's return of the symbols that did trade was then lost with it.
+    Here each symbol's returns come from its own consecutive closes, so a
+    return after a market holiday spans the gap correctly. After alignment,
+    a symbol with no bar on a date simply did not move that day (0 return,
+    its next return carries the move) — but only from the first date every
+    symbol has history; before that the earlier listings are not padded with
+    an invented flat history.
+    """
+    import pandas as pd
+    per_symbol = {}
+    for col in close.columns:
+        r = close[col].dropna().pct_change().dropna()
+        if not r.empty:
+            per_symbol[col] = r
+    if not per_symbol:
+        return pd.DataFrame()
+    rets = pd.concat(per_symbol, axis=1).sort_index()
+    start = max(r.index.min() for r in per_symbol.values())
+    return rets[rets.index >= start].fillna(0.0)
+
 def compute_stats(symbols, weights_by_symbol, risk_free=None, period="1y"):
     import yfinance as yf
 
@@ -66,7 +92,7 @@ def compute_stats(symbols, weights_by_symbol, risk_free=None, period="1y"):
     if close.shape[1] == 0:
         return {"error": "No symbol returned price data", "dropped_symbols": dropped}
 
-    returns = close.pct_change().dropna()
+    returns = aligned_returns(close)
     # Weights aligned BY SYMBOL to the columns that actually arrived, then
     # renormalised over the survivors.
     if returns.empty:

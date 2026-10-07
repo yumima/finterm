@@ -146,6 +146,12 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
         QVector<int> hourly_counts;
     };
     QMap<QString, CategoryBaseline> baselines_;
+    // Hour bucket (epoch secs / 3600) of the last baseline sample; the
+    // baseline takes one sample per hour, not one per filter/refresh call.
+    int64_t last_baseline_bucket_ = -1;
+    // Set once the baseline has been seeded from the hourly buckets of the
+    // articles already loaded, so alerts don't wait 24h of uptime.
+    bool baseline_seeded_ = false;
 
     // Notification dedup
     QSet<QString> notified_breaking_;

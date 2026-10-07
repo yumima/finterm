@@ -430,31 +430,66 @@ class Stochastic(IndicatorBase):
         return self.current.value
 
 
-class RateOfChange(IndicatorBase):
-    """Rate of Change indicator."""
+class _LaggedWindowIndicator(IndicatorBase):
+    """Base for LEAN window indicators that compare against the value `period`
+    bars back (MOM / ROC / MOMP). The window holds period + 1 samples so that,
+    after the base class appends the new value, window[0] is exactly `period`
+    bars old; ready once samples > period (LEAN: WarmUpPeriod = period + 1)."""
+
+    def __init__(self, name, period: int = None):
+        super().__init__(name, period)
+        self._window = deque(maxlen=self.period + 1)
+        self.warm_up_period = self.period + 1
+
+    @property
+    def is_ready(self) -> bool:
+        return self._is_ready_override or self._samples > self.period
+
+    @is_ready.setter
+    def is_ready(self, value: bool):
+        self._is_ready_override = value
+
+    def _lagged(self):
+        """Value `period` bars back, or None while warming up."""
+        if len(self._window) <= self.period:
+            return None
+        return self._window[0]
+
+
+class RateOfChange(_LaggedWindowIndicator):
+    """Rate of Change — LEAN ROC: (value - value_n) / value_n as a FRACTION."""
 
     def __init__(self, name: str = "ROC", period: int = 14):
         super().__init__(name, period)
 
     def _compute(self, value: float) -> float:
-        if len(self._window) < self.period:
+        old_value = self._lagged()
+        if old_value is None or old_value == 0:
             return 0
-        old_value = self._window[0]
-        if old_value == 0:
-            return 0
-        return ((value - old_value) / old_value) * 100
+        return (value - old_value) / old_value
 
 
-class Momentum(IndicatorBase):
-    """Momentum indicator."""
+class MomentumPercent(RateOfChange):
+    """Momentum Percent — LEAN MOMP/ROCP: ROC expressed in percent."""
+
+    def __init__(self, name: str = "MOMP", period: int = 14):
+        super().__init__(name, period)
+
+    def _compute(self, value: float) -> float:
+        return super()._compute(value) * 100.0
+
+
+class Momentum(_LaggedWindowIndicator):
+    """Momentum indicator — LEAN MOM: value - value_n."""
 
     def __init__(self, name: str = "MOM", period: int = 14):
         super().__init__(name, period)
 
     def _compute(self, value: float) -> float:
-        if len(self._window) < self.period:
+        old_value = self._lagged()
+        if old_value is None:
             return 0
-        return value - self._window[0]
+        return value - old_value
 
 
 class WilliamsPercentR(IndicatorBase):

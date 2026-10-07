@@ -542,9 +542,8 @@ void AgentChatPanel::setup_connections() {
         if (r.request_id != pending_request_id_)
             return;
         if (r.success) {
-            add_system_bubble(QString("Routed to: %1 (intent: %2, confidence: %3%)")
-                                  .arg(r.agent_id, r.intent)
-                                  .arg(static_cast<int>(r.confidence * 100)));
+            add_system_bubble(QString("Routed to: %1 (intent: %2, %3)")
+                                  .arg(r.agent_id, r.intent, services::routing_score_label(r)));
             pending_request_id_ = services::AgentService::instance().run_agent_streaming(last_query_, r.config);
         } else {
             add_system_bubble("Auto-routing failed — using default agent.");

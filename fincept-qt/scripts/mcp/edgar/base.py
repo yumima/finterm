@@ -414,8 +414,13 @@ def get_filing_documents(ticker_or_cik: str, form: str = "10-K") -> Dict[str, An
         return {"error": EdgarError("get_filing_documents", str(e), traceback.format_exc()).to_dict()}
 
 
-def calc_multiples(ticker_or_cik: str, deal_value: float) -> Dict[str, Any]:
-    """Calculate EV/Revenue, EV/EBITDA, implied P/E given a deal value and company."""
+def calc_multiples(ticker_or_cik: str, deal_value: float,
+                   equity_value: Optional[float] = None) -> Dict[str, Any]:
+    """EV/Revenue and EV/Net income for an enterprise (deal) value, from the
+    latest ANNUAL 10-K income statement (not TTM). A P/E is equity value / net
+    income, so it is only computed when `equity_value` (price x shares, or the
+    equity purchase price) is supplied — EV / net income is NOT a P/E. EBITDA
+    is not available from this statement, so no EV/EBITDA is produced."""
     try:
         check_edgar_available()
         company = Company(ticker_or_cik)
@@ -423,7 +428,15 @@ def calc_multiples(ticker_or_cik: str, deal_value: float) -> Dict[str, Any]:
         inc = fins.income_statement()
         bs = fins.balance_sheet()
 
-        result: Dict[str, Any] = {"success": True, "company": company.name, "deal_value": deal_value}
+        result: Dict[str, Any] = {
+            "success": True,
+            "company": company.name,
+            "deal_value": deal_value,
+            "deal_value_basis": "enterprise value (as supplied)",
+            "financials_basis": "latest annual 10-K income statement (not TTM)",
+        }
+        if equity_value:
+            result["equity_value"] = equity_value
 
         # Try to extract revenue and net income from income statement
         inc_df = inc.to_dataframe() if hasattr(inc, 'to_dataframe') else None
@@ -442,9 +455,13 @@ def calc_multiples(ticker_or_cik: str, deal_value: float) -> Dict[str, Any]:
                 row = inc_df[inc_df.index.str.contains(label, case=False, na=False)]
                 if not row.empty:
                     ni = float(row.iloc[0, 0])
+                    result["net_income"] = ni
                     if ni > 0:
-                        result["implied_pe"] = round(deal_value / ni, 2)
-                        result["net_income"] = ni
+                        result["ev_to_net_income"] = round(deal_value / ni, 2)
+                        if equity_value:
+                            result["implied_pe"] = round(equity_value / ni, 2)
+                    else:
+                        result["note"] = "net income <= 0: earnings multiples not meaningful"
                     break
 
         return result

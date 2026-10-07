@@ -608,7 +608,10 @@ std::vector<ToolDef> get_portfolio_tools() {
                 return ToolResult::fail("Missing 'portfolio_id'");
 
             int days = args["days"].toInt(365);
-            auto r = PortfolioRepository::instance().get_snapshots(id, days);
+            // The same read path the UI's chart and metrics use: reconstructed
+            // rows before a migration-dated opening BUY are excluded there, so
+            // they are excluded here too.
+            auto r = services::PortfolioService::instance().usable_snapshots(id, days);
             if (r.is_err())
                 return ToolResult::fail("Failed to load snapshots: " + QString::fromStdString(r.error()));
 
@@ -627,6 +630,69 @@ std::vector<ToolDef> get_portfolio_tools() {
                                        {"source", s.source}});
             }
             return ToolResult::ok_data(arr);
+        };
+        tools.push_back(std::move(t));
+    }
+
+    // ── get_portfolio_risk_metrics ──────────────────────────────────────
+    // The engine's own figures (PortfolioService::compute_metrics), exactly as
+    // the stats ribbon and risk views show them — not a second computation
+    // over get_portfolio_snapshots that would annualise weekend rows, deposit
+    // days and multi-day gaps differently from the UI.
+    {
+        ToolDef t;
+        t.name = "get_portfolio_risk_metrics";
+        t.description =
+            "Get the portfolio's risk/return metrics exactly as the app computes and displays them: annualised "
+            "volatility, arithmetic Sharpe, Sortino, max drawdown, beta/alpha (with the benchmark used), 1-day "
+            "historical VaR/CVaR 95%, concentration and risk score, plus the window and sample size they cover. "
+            "Built from flow-adjusted one-session NAV returns on a trading calendar. A null metric is unavailable "
+            "(see 'notes'), never zero.";
+        t.category = "portfolio";
+        t.input_schema.properties =
+            QJsonObject{{"portfolio_id", QJsonObject{{"type", "string"}, {"description", "Portfolio ID"}}}};
+        t.input_schema.required = {"portfolio_id"};
+        t.handler = [](const QJsonObject& args) -> ToolResult {
+            const QString id = args["portfolio_id"].toString().trimmed();
+            if (id.isEmpty())
+                return ToolResult::fail("Missing 'portfolio_id'");
+            const auto m = services::PortfolioService::instance().last_metrics(id);
+            if (!m)
+                return ToolResult::fail("Metrics have not been computed for this portfolio yet in this session — "
+                                        "they are computed when the portfolio is opened in the Portfolio screen.");
+            const auto opt = [](const std::optional<double>& v) -> QJsonValue {
+                return v ? QJsonValue(*v) : QJsonValue(QJsonValue::Null);
+            };
+            QJsonArray notes;
+            if (!m->var_95 && m->return_days < portfolio::kMinVarSample)
+                notes.append(QString("VaR/CVaR: insufficient history (n=%1; needs %2 one-session returns)")
+                                 .arg(m->return_days)
+                                 .arg(portfolio::kMinVarSample));
+            if (!m->rf_rate)
+                notes.append(QStringLiteral("Sharpe/Sortino: no risk-free rate fetched"));
+            else if (portfolio::rf_is_stale(*m))
+                notes.append(QStringLiteral("Sharpe/Sortino use a stale risk-free rate (today's fetch failed)"));
+            QJsonObject data{
+                {"window_start", m->window_start},
+                {"window_end", m->window_end},
+                {"one_session_returns", m->return_days},
+                {"volatility_annual_pct", opt(m->volatility)},
+                {"sharpe_arithmetic", opt(m->sharpe)},
+                {"sortino", opt(m->sortino)},
+                {"max_drawdown_pct", opt(m->max_drawdown)},
+                {"beta", opt(m->beta)},
+                {"alpha_annual_pct", opt(m->alpha)},
+                {"beta_benchmark", m->beta_benchmark.isEmpty() ? QJsonValue(QJsonValue::Null)
+                                                              : QJsonValue(m->beta_benchmark)},
+                {"var_95_1d", opt(m->var_95)},
+                {"cvar_95_1d", opt(m->cvar_95)},
+                {"concentration_top3_pct", opt(m->concentration_top3)},
+                {"risk_score", opt(m->risk_score)},
+                {"risk_free_rate", opt(m->rf_rate)},
+                {"risk_free_as_of", m->rf_as_of.isValid() ? QJsonValue(m->rf_as_of.toString(Qt::ISODate))
+                                                          : QJsonValue(QJsonValue::Null)},
+                {"notes", notes}};
+            return ToolResult::ok_data(data);
         };
         tools.push_back(std::move(t));
     }

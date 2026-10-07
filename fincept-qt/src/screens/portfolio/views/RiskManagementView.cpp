@@ -237,6 +237,11 @@ void RiskManagementView::update_overview() {
     };
 
     auto fmt = [](double v, int dp = 2) { return QString::number(v, 'f', dp); };
+    // Why VaR is absent: too few returns to resolve a 95% quantile, or none.
+    const QString var_missing =
+        (metrics_.return_days >= 2 && metrics_.return_days < portfolio::kMinVarSample)
+            ? QStringLiteral("Insufficient history (n=%1)").arg(metrics_.return_days)
+            : QStringLiteral("Needs daily NAV history");
 
     add_card(0, 0, "PORTFOLIO VALUE", QString("%1 %2").arg(currency_, fmt(total_mv)), ui::colors::WARNING,
              "Total market value");
@@ -247,11 +252,11 @@ void RiskManagementView::update_overview() {
     add_card(0, 2, "VALUE AT RISK (95%)",
              have_var ? QString("%1 %2").arg(currency_, fmt(var95)) : QStringLiteral("—"),
              have_var ? ui::colors::NEGATIVE : ui::colors::TEXT_SECONDARY,
-             have_var ? "1-day historical" : "Needs daily NAV history");
+             have_var ? QStringLiteral("1-day historical") : var_missing);
     add_card(0, 3, "CONDITIONAL VaR",
              have_var ? QString("%1 %2").arg(currency_, fmt(cvar95)) : QStringLiteral("—"),
              have_var ? ui::colors::NEGATIVE : ui::colors::TEXT_SECONDARY,
-             have_var ? "Expected shortfall" : "Needs daily NAV history");
+             have_var ? QStringLiteral("Expected shortfall") : var_missing);
 
     add_card(1, 0, "TOP HOLDING CONC.", QString("%1%").arg(fmt(conc_top1, 1)),
              conc_top1 > 30 ? ui::colors::NEGATIVE : ui::colors::POSITIVE, "Largest position");

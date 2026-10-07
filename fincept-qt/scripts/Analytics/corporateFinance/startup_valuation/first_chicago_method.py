@@ -1,7 +1,12 @@
 """First Chicago Method - Scenario-Based Valuation"""
+from pathlib import Path
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 import sys
+
+_ANALYTICS = str(Path(__file__).resolve().parent.parent.parent)
+if _ANALYTICS not in sys.path:
+    sys.path.insert(0, _ANALYTICS)
 
 @dataclass
 class Scenario:
@@ -32,14 +37,14 @@ class FirstChicagoMethod:
                           discount_rate: Optional[float] = None) -> float:
         """Discount future value to present"""
 
-        rate = discount_rate or self.discount_rate
+        rate = self.discount_rate if discount_rate is None else discount_rate
         return future_value / ((1 + rate) ** years)
 
     def calculate_expected_value(self, scenarios: List[Scenario],
                                 discount_rate: Optional[float] = None) -> Dict[str, Any]:
         """Calculate probability-weighted expected value"""
 
-        rate = discount_rate or self.discount_rate
+        rate = self.discount_rate if discount_rate is None else discount_rate
 
         total_probability = sum(s.probability for s in scenarios)
         if abs(total_probability - 1.0) > 0.01:
@@ -186,75 +191,73 @@ class FirstChicagoMethod:
 
         return max(0, min(1, breakeven_prob))
 
+def first_chicago_json(p: Dict[str, Any]) -> Dict[str, Any]:
+    """JSON contract:
+    {scenarios: [{name?, probability, exit_value, exit_year?}], discount_rate, years?}
+    (or flat: success_value/base_value/failure_value + success_prob/base_prob).
+    A scenario without exit_year uses the top-level `years`.
+    Value = sum(p_i x exit_value_i / (1+r)^t_i); probabilities must sum to 1.
+    """
+    from corporateFinance._cli import InputError, num, opt_num, pct
+    r = num(p, 'discount_rate', label='Discount rate (decimal)', gt=-1)
+    default_years = opt_num(p, 'years', None, label='Years to exit', gt=0)
+
+    raw = p.get('scenarios')
+    if raw is None and p.get('success_value') is not None:
+        sp = num(p, 'success_prob', label='Success probability', min=0, max=1)
+        bp = num(p, 'base_prob', label='Base probability', min=0, max=1)
+        raw = [
+            {'name': 'Success', 'probability': sp, 'exit_value': num(p, 'success_value', min=0)},
+            {'name': 'Base', 'probability': bp, 'exit_value': num(p, 'base_value', min=0)},
+            {'name': 'Failure', 'probability': 1.0 - sp - bp, 'exit_value': num(p, 'failure_value', min=0)},
+        ]
+    if not isinstance(raw, list) or not raw:
+        raise InputError("Missing required input: scenarios")
+
+    default_names = ['Bull', 'Base', 'Bear'] if len(raw) == 3 else []
+    rows = []
+    total_prob = 0.0
+    value = 0.0
+    for i, sc in enumerate(raw):
+        if not isinstance(sc, dict):
+            raise InputError("each scenario must be an object")
+        name = sc.get('name') or (default_names[i] if i < len(default_names) else f"Scenario {i + 1}")
+        prob = num(sc, 'probability', label=f"{name} probability", min=0, max=1)
+        exit_value = num(sc, 'exit_value', label=f"{name} exit value", min=0)
+        t = sc.get('exit_year', sc.get('years'))
+        if t is None:
+            t = default_years
+        if t is None:
+            raise InputError(f"Missing required input: years to exit for {name}")
+        t = float(t)
+        if t <= 0:
+            raise InputError(f"{name} years to exit must be > 0")
+        pv = exit_value / (1 + r) ** t
+        total_prob += prob
+        value += prob * pv
+        rows.append({'scenario': name, 'probability_pct': pct(prob), 'exit_value': exit_value,
+                     'years': t, 'present_value': pv, 'weighted_value': prob * pv})
+    if abs(total_prob - 1.0) > 1e-3:
+        raise InputError(f"Scenario probabilities must sum to 100% (got {total_prob * 100:.2f}%)")
+    return {
+        'method': 'First Chicago Method',
+        'valuation': value,
+        'discount_rate_pct': pct(r),
+        'probability_weighted_exit_value': sum(row['exit_value'] * row['probability_pct'] / 100 for row in rows),
+        'scenarios': rows,
+    }
+
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
-    import json
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
+    import sys
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({'calculate': first_chicago_json})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command == "first_chicago":
-            if len(sys.argv) < 3:
-                raise ValueError("Scenarios required")
-            raw = json.loads(sys.argv[2])
-            fc = FirstChicagoMethod()
-
-            # Accept either a flat list [{name, probability, exit_year, exit_value, description}, ...]
-            # or the legacy dict {best_case: {...}, base_case: {...}, worst_case: {...}}
-            if isinstance(raw, list):
-                scenarios = [
-                    Scenario(
-                        name=s.get("name", "Scenario"),
-                        probability=float(s.get("probability", 0.33)),
-                        exit_year=int(s.get("exit_year", s.get("years_to_exit", 5))),
-                        exit_value=float(s.get("exit_value", 0)),
-                        description=s.get("description", ""),
-                    )
-                    for s in raw
-                ]
-                valuation = fc.calculate_expected_value(scenarios)
-            else:
-                # Legacy dict format: {best_case, base_case, worst_case}
-                for key in ("best_case", "base_case", "worst_case"):
-                    sc = raw.get(key, {})
-                    if "exit_year" not in sc:
-                        sc["exit_year"] = sc.get("years_to_exit", sc.get("timeline_years", 5))
-                    raw[key] = sc
-
-                probs = raw.get("probabilities", None)
-                if probs is None:
-                    bc = raw.get("best_case", {})
-                    ba = raw.get("base_case", {})
-                    wc = raw.get("worst_case", {})
-                    if "probability" in bc or "probability" in ba or "probability" in wc:
-                        probs = {
-                            "best": bc.get("probability", 0.20),
-                            "base": ba.get("probability", 0.50),
-                            "worst": wc.get("probability", 0.30)
-                        }
-
-                valuation = fc.three_scenario_valuation(
-                    best_case=raw.get("best_case", {}),
-                    base_case=raw.get("base_case", {}),
-                    worst_case=raw.get("worst_case", {}),
-                    probabilities=probs
-                )
-
-            result = {"success": True, "data": valuation}
-            print(json.dumps(result))
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

@@ -2,6 +2,7 @@
 #include "screens/geopolitics/TradeAnalysisPanel.h"
 
 #include "services/geopolitics/GeopoliticsService.h"
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
 #include <QDoubleSpinBox>
@@ -183,6 +184,16 @@ void TradeAnalysisPanel::build_ui() {
     cons_spin->setStyleSheet(spin_style());
     p0l->addWidget(make_field("TRADED GOODS SHARE", cons_spin, p0, "Share of consumption from tradeable goods"));
 
+    auto* eff_spin = new QDoubleSpinBox;
+    eff_spin->setRange(0, 100);
+    eff_spin->setDecimals(1);
+    eff_spin->setValue(0);
+    eff_spin->setSuffix("%");
+    eff_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    eff_spin->setStyleSheet(spin_style());
+    p0l->addWidget(make_field("ASSUMED EFFICIENCY GAIN", eff_spin, p0,
+                              "Your assumption: % efficiency gain on traded volume (unset = not quantified)"));
+
     p0l->addStretch();
 
     // Store spinboxes for use in run button
@@ -199,9 +210,11 @@ void TradeAnalysisPanel::build_ui() {
             .arg(ui::fonts::SMALL)
             .arg(w.darker(120).name());
     }());
-    connect(run0, &QPushButton::clicked, this, [this, vol_spin, price_spin, cons_spin]() {
+    connect(run0, &QPushButton::clicked, this, [this, vol_spin, price_spin, cons_spin, eff_spin]() {
         status_label_->setText("Analyzing...");
         QJsonObject p;
+        if (eff_spin->value() > 0)
+            p["efficiency_gain_percent"] = eff_spin->value();
         p["trade_volume_gdp"] = vol_spin->value();
         p["price_reduction_percent"] = price_spin->value();
         p["traded_goods_consumption"] = cons_spin->value();
@@ -231,6 +244,36 @@ void TradeAnalysisPanel::build_ui() {
     tariff_spin->setSuffix("%");
     tariff_spin->setStyleSheet(spin_style());
     p1l->addWidget(make_field("TARIFF RATE", tariff_spin, p1, "Import duty rate (e.g. 10% = standard MFN tariff)"));
+
+    // Quantifying the tariff needs the market's import demand elasticity and
+    // pass-through; they start unset ("—") and are only sent when entered.
+    auto* r_elast_spin = new QDoubleSpinBox;
+    r_elast_spin->setRange(0, 20);
+    r_elast_spin->setDecimals(2);
+    r_elast_spin->setValue(0);
+    r_elast_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    r_elast_spin->setStyleSheet(spin_style());
+    p1l->addWidget(make_field("IMPORT DEMAND ELASTICITY", r_elast_spin, p1,
+                              "Magnitude of the import demand price elasticity for this market (your estimate)"));
+
+    auto* r_pt_spin = new QDoubleSpinBox;
+    r_pt_spin->setRange(0, 100);
+    r_pt_spin->setDecimals(0);
+    r_pt_spin->setValue(100);
+    r_pt_spin->setSuffix("%");
+    r_pt_spin->setStyleSheet(spin_style());
+    p1l->addWidget(make_field("TARIFF PASS-THROUGH", r_pt_spin, p1,
+                              "Share of the tariff passed into domestic import prices (100% = small-country case)"));
+
+    auto* r_imp_spin = new QDoubleSpinBox;
+    r_imp_spin->setRange(0, 1e6);
+    r_imp_spin->setDecimals(2);
+    r_imp_spin->setValue(0);
+    r_imp_spin->setSuffix("B USD");
+    r_imp_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    r_imp_spin->setStyleSheet(spin_style());
+    p1l->addWidget(make_field("IMPORT VALUE (OPTIONAL)", r_imp_spin, p1,
+                              "Border value of imports at zero tariff; adds revenue and welfare amounts"));
 
     auto* quota_spin = new QDoubleSpinBox;
     quota_spin->setRange(0, 1000000);
@@ -276,10 +319,17 @@ void TradeAnalysisPanel::build_ui() {
             .arg(w.darker(120).name());
     }());
     connect(run1, &QPushButton::clicked, this,
-            [this, tariff_spin, quota_spin, subsidy_spin, dev_combo, maturity_combo]() {
+            [this, tariff_spin, quota_spin, subsidy_spin, dev_combo, maturity_combo, r_elast_spin, r_pt_spin,
+             r_imp_spin]() {
                 status_label_->setText("Analyzing...");
                 QJsonObject p;
                 p["tariff_rate"] = tariff_spin->value();
+                if (r_elast_spin->value() > 0) {
+                    p["import_demand_elasticity"] = r_elast_spin->value();
+                    p["pass_through_pct"] = r_pt_spin->value();
+                }
+                if (r_imp_spin->value() > 0)
+                    p["import_value"] = r_imp_spin->value();
                 p["quota_volume"] = quota_spin->value();
                 p["subsidy_rate"] = subsidy_spin->value();
                 p["development_level"] = dev_combo->currentData().toString();
@@ -358,7 +408,10 @@ void TradeAnalysisPanel::build_ui() {
     p3l->setContentsMargins(12, 12, 12, 12);
     p3l->setSpacing(10);
 
-    auto* hint3 = new QLabel("Assesses FDI, employment, wage, and GDP impact of removing trade barriers.", p3);
+    auto* hint3 = new QLabel("Cuts an ad valorem tariff from its current level to a new level and computes the "
+                             "import price and volume response (iso-elastic import demand), tariff revenue, "
+                             "consumer surplus and net welfare change. All assumptions are the inputs below.",
+                             p3);
     hint3->setWordWrap(true);
     hint3->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
                              .arg(ui::colors::TEXT_SECONDARY())
@@ -366,27 +419,57 @@ void TradeAnalysisPanel::build_ui() {
                              .arg(ui::fonts::DATA_FAMILY));
     p3l->addWidget(hint3);
 
-    auto* lib_combo = new QComboBox;
-    lib_combo->setStyleSheet(combo_style());
-    lib_combo->addItem("Unilateral Liberalization", "unilateral");
-    lib_combo->addItem("Bilateral Agreement", "bilateral");
-    lib_combo->addItem("Regional Agreement", "regional");
-    lib_combo->addItem("Multilateral (WTO Round)", "multilateral");
-    p3l->addWidget(make_field("LIBERALIZATION SCOPE", lib_combo, p3));
+    auto make_pct_spin = [](double max, double val, bool required) {
+        auto* sp = new QDoubleSpinBox;
+        sp->setRange(0, max);
+        sp->setDecimals(2);
+        sp->setValue(val);
+        sp->setSuffix("%");
+        if (required)
+            sp->setSpecialValueText(fincept::ui::formatting::placeholder());
+        sp->setStyleSheet(spin_style());
+        return sp;
+    };
 
-    auto* tariff_cut_spin = new QDoubleSpinBox;
-    tariff_cut_spin->setRange(0, 100);
-    tariff_cut_spin->setValue(50);
-    tariff_cut_spin->setSuffix("% reduction");
-    tariff_cut_spin->setStyleSheet(spin_style());
-    p3l->addWidget(make_field("TARIFF REDUCTION", tariff_cut_spin, p3, "% cut in existing tariff rates"));
+    auto* cur_tariff_spin = make_pct_spin(500, 0, true);
+    p3l->addWidget(make_field("CURRENT TARIFF LEVEL", cur_tariff_spin, p3, "Ad valorem tariff today (e.g. 20%)"));
+
+    auto* new_tariff_spin = make_pct_spin(500, 0, false);
+    p3l->addWidget(make_field("NEW TARIFF LEVEL", new_tariff_spin, p3,
+                              "Tariff after liberalization (a level, not a % reduction; 0% = full removal)"));
+
+    auto* elast_spin = new QDoubleSpinBox;
+    elast_spin->setRange(0, 20);
+    elast_spin->setDecimals(2);
+    elast_spin->setValue(0);
+    elast_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    elast_spin->setStyleSheet(spin_style());
+    p3l->addWidget(make_field("IMPORT DEMAND ELASTICITY", elast_spin, p3,
+                              "Magnitude of the import demand price elasticity (your estimate for this market)"));
+
+    auto* pt_spin = make_pct_spin(100, 100, false);
+    pt_spin->setDecimals(0);
+    p3l->addWidget(make_field("TARIFF PASS-THROUGH", pt_spin, p3,
+                              "Share of the tariff change reaching domestic import prices; the rest moves the "
+                              "foreign border price (100% = small-country case)"));
+
+    auto* imp_spin = new QDoubleSpinBox;
+    imp_spin->setRange(0, 1e6);
+    imp_spin->setDecimals(2);
+    imp_spin->setValue(0);
+    imp_spin->setSuffix("B USD");
+    imp_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    imp_spin->setStyleSheet(spin_style());
+    p3l->addWidget(make_field("IMPORT VALUE", imp_spin, p3, "Border (pre-tariff) value of affected imports today"));
 
     auto* gdp_spin = new QDoubleSpinBox;
-    gdp_spin->setRange(0, 100000);
-    gdp_spin->setValue(500);
+    gdp_spin->setRange(0, 1e6);
+    gdp_spin->setDecimals(1);
+    gdp_spin->setValue(0);
     gdp_spin->setSuffix("B USD");
+    gdp_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
     gdp_spin->setStyleSheet(spin_style());
-    p3l->addWidget(make_field("ECONOMY SIZE (GDP)", gdp_spin, p3));
+    p3l->addWidget(make_field("GDP (OPTIONAL)", gdp_spin, p3, "Expresses the welfare change as % of GDP"));
 
     p3l->addStretch();
 
@@ -403,17 +486,27 @@ void TradeAnalysisPanel::build_ui() {
             .arg(ui::fonts::SMALL)
             .arg(w.darker(120).name());
     }());
-    connect(run3, &QPushButton::clicked, this, [this, lib_combo, tariff_cut_spin, gdp_spin]() {
-        status_label_->setText("Analyzing...");
-        QJsonObject p;
-        p["liberalization_type"] = lib_combo->currentData().toString();
-        p["tariff_reduction"] = tariff_cut_spin->value();
-        // The restrictions model quantifies tariff effects only from
-        // `tariff_rate`; without it every tariff number came back empty.
-        p["tariff_rate"] = tariff_cut_spin->value();
-        p["gdp_size"] = gdp_spin->value();
-        GeopoliticsService::instance().analyze_trade_restrictions(p);
-    });
+    connect(run3, &QPushButton::clicked, this,
+            [this, cur_tariff_spin, new_tariff_spin, elast_spin, pt_spin, imp_spin, gdp_spin]() {
+                if (cur_tariff_spin->value() <= 0 || elast_spin->value() <= 0 || imp_spin->value() <= 0) {
+                    status_label_->setText("Enter current tariff, import demand elasticity and import value");
+                    return;
+                }
+                if (new_tariff_spin->value() > cur_tariff_spin->value()) {
+                    status_label_->setText("New tariff must not exceed the current tariff");
+                    return;
+                }
+                status_label_->setText("Analyzing...");
+                QJsonObject p;
+                p["current_tariff_pct"] = cur_tariff_spin->value();
+                p["new_tariff_pct"] = new_tariff_spin->value();
+                p["import_demand_elasticity"] = elast_spin->value();
+                p["pass_through_pct"] = pt_spin->value();
+                p["import_value"] = imp_spin->value();
+                if (gdp_spin->value() > 0)
+                    p["gdp"] = gdp_spin->value();
+                GeopoliticsService::instance().analyze_barrier_removal(p);
+            });
     p3l->addWidget(run3);
     tabs_->addTab(p3, "Barrier Removal");
 
@@ -466,12 +559,22 @@ void TradeAnalysisPanel::display_result(const QJsonObject& payload) {
             } else if (it.value().isArray()) {
                 QStringList items;
                 for (const auto& v : it.value().toArray())
-                    items << v.toString();
+                    items << (v.isDouble() ? QString::number(v.toDouble(), 'g', 6) : v.toString());
                 rows.append({key, items.join(", ")});
             } else {
-                QString val = it.value().isDouble() ? QString::number(it.value().toDouble(), 'f', 2)
-                              : it.value().isBool() ? (it.value().toBool() ? "YES" : "NO")
-                                                    : it.value().toString();
+                QString val;
+                if (it.value().isDouble()) {
+                    // *_pct values are already in percent units.
+                    val = it.key().endsWith(QStringLiteral("_pct"))
+                              ? fincept::ui::formatting::format_percent(it.value().toDouble())
+                              : QString::number(it.value().toDouble(), 'f', 2);
+                } else if (it.value().isBool()) {
+                    val = it.value().toBool() ? "YES" : "NO";
+                } else if (it.value().isNull()) {
+                    val = fincept::ui::formatting::placeholder();
+                } else {
+                    val = it.value().toString();
+                }
                 if (!val.isEmpty())
                     rows.append({key, val});
             }
@@ -513,12 +616,14 @@ void TradeAnalysisPanel::display_result(const QJsonObject& payload) {
 }
 
 void TradeAnalysisPanel::on_trade_result(const QString& context, const QJsonObject& payload) {
-    if (context == "trade_benefits" || context == "trade_restrictions" || context == "trade_blocs")
+    if (context == "trade_benefits" || context == "trade_restrictions" || context == "trade_blocs" ||
+        context == "trade_barrier_removal")
         display_result(payload);
 }
 
 void TradeAnalysisPanel::on_error(const QString& context, const QString& message) {
-    if (context != "trade_benefits" && context != "trade_restrictions" && context != "trade_blocs")
+    if (context != "trade_benefits" && context != "trade_restrictions" && context != "trade_blocs" &&
+        context != "trade_barrier_removal")
         return;
     status_label_->setText("Error");
     while (results_layout_->count() > 0) {

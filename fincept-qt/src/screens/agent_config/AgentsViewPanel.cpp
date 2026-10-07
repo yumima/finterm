@@ -492,9 +492,8 @@ void AgentsViewPanel::setup_connections() {
         if (r.request_id != pending_request_id_)
             return;
         if (r.success) {
-            routing_info_label_->setText(QString("Routed → %1 (intent: %2, confidence: %3%)")
-                                             .arg(r.agent_id, r.intent)
-                                             .arg(static_cast<int>(r.confidence * 100)));
+            routing_info_label_->setText(QString("Routed → %1 (intent: %2, %3)")
+                                             .arg(r.agent_id, r.intent, services::routing_score_label(r)));
             routing_info_label_->show();
         }
     });
@@ -667,7 +666,11 @@ void AgentsViewPanel::load_agent_into_editor(const services::AgentInfo& agent) {
     refresh_llm_pill();
 
     const QJsonObject config = agent.config;
-    instructions_edit_->setPlainText(config["instructions"].toString());
+    // Seeded named agents (v026/v028) store their prompt as system_prompt.
+    QString instructions = config["instructions"].toString();
+    if (instructions.trimmed().isEmpty())
+        instructions = config["system_prompt"].toString();
+    instructions_edit_->setPlainText(instructions);
 
     tools_list_->clear();
     const QJsonArray tools = config["tools"].toArray();
@@ -734,6 +737,13 @@ QJsonObject AgentsViewPanel::build_config_from_editor() const {
     config["guardrails"] = guardrails_check_->isChecked();
     config["tracing"] = tracing_check_->isChecked();
     config["agentic_memory"] = agentic_memory_check_->isChecked();
+    // Carry identity + the persisted tool allowlist so the runtime enforces it.
+    if (!agent_id.isEmpty()) {
+        config["agent_id"] = agent_id;
+        const QJsonValue allow = filtered_agents_[selected_agent_idx_].config.value("allow_tools");
+        if (allow.isArray() && !allow.toArray().isEmpty())
+            config["allow_tools"] = allow;
+    }
     return config;
 }
 

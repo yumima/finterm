@@ -1,9 +1,9 @@
 // GeopoliticsTools.cpp — Tools for the Geopolitics screen.
 //
-// 13 tools in category "geopolitics":
+// 15 tools in category "geopolitics":
 //   • Events / reference data (5)
 //   • HDX humanitarian search (5)
-//   • Trade analysis (2)
+//   • Trade analysis (4)
 //   • Geolocations + critical regions (1 each, 2 total)
 // All async, bridged from GeopoliticsService signals.
 
@@ -246,67 +246,81 @@ std::vector<ToolDef> get_geopolitics_tools() {
         [](auto svc, const QJsonObject& a) { svc->search_hdx_advanced(a["query"].toString()); },
         true, "query", "Search query"));
 
-    // 11. analyze_trade_benefits
-    {
+    // 11-14. Trade analysis (trade_geopolitics.py). Each call resolves only on
+    // ITS context's trade_result_ready / error_occurred, so a concurrent run of
+    // another analysis (or a geopolitics error elsewhere) can't answer it.
+    auto make_trade_tool = [](const QString& name, const QString& desc, const QString& context,
+                              const QString& params_desc,
+                              std::function<void(services::geo::GeopoliticsService*, const QJsonObject&)> kick) {
         ToolDef t;
-        t.name = "analyze_trade_benefits";
-        t.description = "Run trade-benefits analysis (welfare gains, consumer surplus, integration impact).";
+        t.name = name;
+        t.description = desc;
         t.category = "geopolitics";
-        t.is_destructive = true;
         t.default_timeout_ms = kGeopoliticsTimeoutMs;
-        t.input_schema = ToolSchemaBuilder()
-            .object("params", "Analysis params (trade_volume_gdp, price_reduction_percent, traded_goods_consumption, "
-                              "integration_type, trade_creation, trade_diversion)").required()
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+        t.input_schema = ToolSchemaBuilder().object("params", params_desc).required().build();
+        t.async_handler = [context, kick](const QJsonObject& args, ToolContext ctx,
+                                          std::shared_ptr<QPromise<ToolResult>> promise) {
             auto* svc = &services::geo::GeopoliticsService::instance();
-            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, args](auto resolve) {
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, args, context, kick](auto resolve) {
                 auto* h = new QObject(svc);
                 QObject::connect(svc, &services::geo::GeopoliticsService::trade_result_ready, h,
-                                  [resolve, h](QString, QJsonObject data) {
+                                  [resolve, h, context](QString c, QJsonObject data) {
+                                      if (c != context) return;
                                       resolve(ToolResult::ok_data(data));
                                       h->deleteLater();
                                   });
                 QObject::connect(svc, &services::geo::GeopoliticsService::error_occurred, h,
-                                  [resolve, h](QString, QString m) { resolve(ToolResult::fail(m)); h->deleteLater(); });
-                svc->analyze_trade_benefits(args["params"].toObject());
-            });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // 12. analyze_trade_restrictions
-    {
-        ToolDef t;
-        t.name = "analyze_trade_restrictions";
-        t.description = "Run trade-restrictions analysis (tariffs, quotas, subsidies, liberalization impact).";
-        t.category = "geopolitics";
-        t.is_destructive = true;
-        t.default_timeout_ms = kGeopoliticsTimeoutMs;
-        t.input_schema = ToolSchemaBuilder()
-            .object("params", "Analysis params (tariff_rate, quota_volume, subsidy_rate, development_level, "
-                              "industry_maturity, liberalization_type, tariff_reduction, gdp_size)").required()
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
-            auto* svc = &services::geo::GeopoliticsService::instance();
-            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, args](auto resolve) {
-                auto* h = new QObject(svc);
-                QObject::connect(svc, &services::geo::GeopoliticsService::trade_result_ready, h,
-                                  [resolve, h](QString, QJsonObject data) {
-                                      resolve(ToolResult::ok_data(data));
+                                  [resolve, h, context](QString c, QString m) {
+                                      if (c != context) return;
+                                      resolve(ToolResult::fail(m.isEmpty() ? QStringLiteral("Trade analysis failed") : m));
                                       h->deleteLater();
                                   });
-                QObject::connect(svc, &services::geo::GeopoliticsService::error_occurred, h,
-                                  [resolve, h](QString, QString m) { resolve(ToolResult::fail(m)); h->deleteLater(); });
-                svc->analyze_trade_restrictions(args["params"].toObject());
+                kick(svc, args["params"].toObject());
             });
         };
-        tools.push_back(std::move(t));
-    }
+        return t;
+    };
 
-    // 13. extract_geolocations_from_headlines
+    tools.push_back(make_trade_tool(
+        "analyze_trade_benefits",
+        "Benefits and costs of trade openness: qualitative framework plus two quantified items -- efficiency gain "
+        "(trade_volume_gdp x efficiency_gain_percent, an explicit assumption) and the consumer-surplus triangle "
+        "(price_reduction_percent x traded_goods_consumption / 200). Items whose inputs are missing are null.",
+        "trade_benefits",
+        "{trade_volume_gdp: trade as % of GDP, price_reduction_percent: % consumer price fall, "
+        "traded_goods_consumption: % of consumption that is tradeable, efficiency_gain_percent: assumed % gain}",
+        [](auto svc, const QJsonObject& p) { svc->analyze_trade_benefits(p); }));
+
+    tools.push_back(make_trade_tool(
+        "analyze_trade_restrictions",
+        "Tariffs, quotas, export subsidies and non-tariff barriers. The tariff is quantified (import price, volume, "
+        "revenue, welfare vs. free trade) only when import_demand_elasticity and pass_through_pct are supplied.",
+        "trade_restrictions",
+        "{tariff_rate: tariff level in %, import_demand_elasticity: magnitude (>0), pass_through_pct: 0-100, "
+        "import_value: border value at zero tariff (optional), quota_volume, subsidy_rate: %, "
+        "development_level: developed|developing|middle, industry_maturity: mature|infant|emerging}",
+        [](auto svc, const QJsonObject& p) { svc->analyze_trade_restrictions(p); }));
+
+    tools.push_back(make_trade_tool(
+        "analyze_trading_blocs",
+        "Regional integration analysis (free trade area, customs union, common market, economic union): net "
+        "trade creation vs. trade diversion for the supplied estimates, plus the integration framework.",
+        "trade_blocs",
+        "{integration_type: fta|customs_union|common_market|economic_union, trade_creation: new intra-bloc trade "
+        "(amount), trade_diversion: trade diverted from non-members (same unit)}",
+        [](auto svc, const QJsonObject& p) { svc->analyze_trading_blocs(p); }));
+
+    tools.push_back(make_trade_tool(
+        "analyze_tariff_barrier_removal",
+        "Quantify cutting an ad valorem tariff from current_tariff_pct to new_tariff_pct (levels): domestic import "
+        "price and volume change (iso-elastic import demand, pass-through), border import value, tariff revenue, "
+        "consumer surplus and net welfare change. All inputs except gdp are required; nothing is assumed.",
+        "trade_barrier_removal",
+        "{current_tariff_pct, new_tariff_pct (<= current), import_demand_elasticity: magnitude (>0), "
+        "pass_through_pct: 0-100, import_value: border value of imports today, gdp: optional, same unit}",
+        [](auto svc, const QJsonObject& p) { svc->analyze_barrier_removal(p); }));
+
+    // 15. extract_geolocations_from_headlines
     {
         ToolDef t;
         t.name = "extract_geolocations_from_headlines";

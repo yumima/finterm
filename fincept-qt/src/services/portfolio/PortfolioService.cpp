@@ -1,6 +1,7 @@
 // src/services/portfolio/PortfolioService.cpp
 #include "services/portfolio/PortfolioService.h"
 #include "services/portfolio/PortfolioReturns.h"
+#include "services/portfolio/PortfolioDates.h"
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
@@ -956,21 +957,15 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 if (!undiscovered.isEmpty())
                     self->ensure_symbol_currencies(undiscovered);
                 QHash<QString, portfolio::LedgerPosition> replayed;
+                QSet<QString> convertible;
                 for (auto it = by_symbol.cbegin(); it != by_symbol.cend(); ++it) {
                     auto pos = portfolio::replay_transactions(it.value());
-                    // Instrument-currency figures converted at the CURRENT
-                    // rate — an approximation for long-closed positions (a
-                    // trade-dated conversion would need historical FX), and
-                    // stated as such here rather than silently mixed. Held
-                    // symbols resolve to the same rate the holdings loop used;
-                    // it is the same function over the same inputs.
                     const auto r = fx_rate_for(it.key());
                     if (r) {
                         // Every log symbol with a known rate, so the return
                         // math can convert the flows of closed positions too.
                         summary.fx_rates.insert(it.key(), *r);
-                        summary.total_realized_pnl += pos.realized_pnl * *r;
-                        summary.total_dividend_income += pos.dividend_income * *r;
+                        convertible.insert(it.key());
                     } else if (pos.realized_pnl != 0.0 || pos.dividend_income != 0.0) {
                         // No conversion: left out of the realized/dividend
                         // totals (flagged ≈) rather than summed at 1.0.
@@ -978,11 +973,43 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                     }
                     replayed.insert(it.key(), std::move(pos));
                 }
+                // Realized P&L and dividends convert at the rate on EACH
+                // event's own date (sale / payment), from the historical FX
+                // series a backfill captured, falling back to today's rate
+                // where no series reaches — the same FxRates the return math
+                // converts flows with. Converting a years-old realized gain at
+                // today's rate restated it by every FX move since.
+                const portfolio::FxRates fx_hist = self->fx_rates_for(portfolio_id, summary);
+                const auto convert_events = [&fx_hist](const QString& sym,
+                                                       const QVector<QPair<QString, double>>& events) {
+                    double total = 0;
+                    for (const auto& e : events)
+                        total += e.second * fx_hist.rate_for(sym, e.first);
+                    return total;
+                };
+                QHash<QString, QPair<double, double>> converted; // symbol → (realized, dividends)
+                for (auto it = replayed.cbegin(); it != replayed.cend(); ++it) {
+                    if (!convertible.contains(it.key()))
+                        continue;
+                    const double realized = convert_events(it.key(), it->realized_events);
+                    const double divs = convert_events(it.key(), it->dividend_events);
+                    if (!std::isfinite(realized) || !std::isfinite(divs)) {
+                        summary.fx_incomplete = true;
+                        continue;
+                    }
+                    converted.insert(it.key(), {realized, divs});
+                    summary.total_realized_pnl += realized;
+                    summary.total_dividend_income += divs;
+                }
                 for (auto& h : summary.holdings) {
-                    const auto it = replayed.constFind(h.symbol.toUpper());
-                    if (it != replayed.constEnd()) {
-                        h.realized_pnl = it->realized_pnl * h.fx_rate;
-                        h.dividend_income = it->dividend_income * h.fx_rate;
+                    const auto it = converted.constFind(h.symbol.toUpper());
+                    if (it != converted.constEnd()) {
+                        h.realized_pnl = it->first;
+                        h.dividend_income = it->second;
+                    } else if (const auto rp = replayed.constFind(h.symbol.toUpper()); rp != replayed.constEnd()) {
+                        // No conversion known: NaN-propagating, as before.
+                        h.realized_pnl = rp->realized_pnl * h.fx_rate;
+                        h.dividend_income = rp->dividend_income * h.fx_rate;
                     }
                 }
             }
@@ -1430,16 +1457,37 @@ print(json.dumps(matrix))
 
 // ── SPY benchmark data ────────────────────────────────────────────────────────
 
+namespace {
+// Single source of truth for base-currency → beta benchmark. Both
+// default_benchmark_for_currency() and the benchmark-cache whitelist in
+// fetch_benchmark_history() read this table, so a currency added here is
+// automatically cached (it can't silently fall back to SPY).
+struct CurrencyBenchmark {
+    const char* currency;
+    const char* symbol;
+};
+constexpr CurrencyBenchmark kCurrencyBenchmarks[] = {
+    {"USD", "SPY"},      {"CAD", "^GSPTSE"}, {"GBP", "^FTSE"}, {"EUR", "^STOXX50E"},
+    {"AUD", "^AXJO"},    {"INR", "^NSEI"},   {"JPY", "^N225"}, {"HKD", "^HSI"},
+};
+constexpr const char* kFallbackBenchmark = "SPY"; // unknown currencies
+
+bool is_beta_benchmark(const QString& sym) {
+    if (sym == QLatin1String(kFallbackBenchmark))
+        return true;
+    for (const auto& cb : kCurrencyBenchmarks)
+        if (sym == QLatin1String(cb.symbol))
+            return true;
+    return false;
+}
+} // namespace
+
 QString PortfolioService::default_benchmark_for_currency(const QString& currency) {
     const QString c = currency.trimmed().toUpper();
-    if (c == "CAD") return QStringLiteral("^GSPTSE");
-    if (c == "GBP") return QStringLiteral("^FTSE");
-    if (c == "EUR") return QStringLiteral("^STOXX50E");
-    if (c == "AUD") return QStringLiteral("^AXJO");
-    if (c == "INR") return QStringLiteral("^NSEI");
-    if (c == "JPY") return QStringLiteral("^N225");
-    if (c == "HKD") return QStringLiteral("^HSI");
-    return QStringLiteral("SPY"); // USD and unknown
+    for (const auto& cb : kCurrencyBenchmarks)
+        if (c == QLatin1String(cb.currency))
+            return QString::fromLatin1(cb.symbol);
+    return QString::fromLatin1(kFallbackBenchmark);
 }
 
 void PortfolioService::fetch_spy_history(const QString& period) {
@@ -1504,13 +1552,20 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
                 LOG_WARN("PortfolioSvc", QString("No %1 history for %2 — reporting unavailable")
                                              .arg(period, sym));
 
-            // Beta computation always regresses against SPY — only update the
-            // cache when that is the symbol being loaded.
+            // Beta regresses against the book's base-currency benchmark (or
+            // SPY), so every currency-default benchmark is kept — not focus
+            // tickers that happen to ride the same fetch path.
+            // Only the beta path's own 1y window is cached: a focus-chart
+            // fetch of the same symbol at a shorter period (e.g. SPY at 1M,
+            // ~21 bars) would otherwise replace the series, shrinking beta to
+            // ~20 sessions and the trading calendar to a weekday fallback
+            // while the labels still describe a 1y window.
             // An empty fetch must not wipe a previously loaded real series
             // (beta would silently vanish) nor be cached as one.
-            if (sym == QStringLiteral("SPY") && !dates.isEmpty()) {
-                self->spy_dates_cache_ = dates;
-                self->spy_closes_cache_ = closes;
+            const bool beta_window = period.compare(QLatin1String("1y"), Qt::CaseInsensitive) == 0;
+            if (beta_window && is_beta_benchmark(sym) && !dates.isEmpty()) {
+                self->benchmark_cache_.insert(sym, {dates, closes});
+                // Recompute metrics now that a beta benchmark is available.
                 emit self->spy_history_loaded(dates, closes);
             }
             emit self->benchmark_history_loaded(sym, dates, closes);
@@ -1848,9 +1903,27 @@ void PortfolioService::fetch_risk_free_rate() {
 
 // ── Metrics computation (async, P8-safe) ─────────────────────────────────────
 
+void PortfolioService::publish_metrics(const QString& portfolio_id, const portfolio::ComputedMetrics& m) {
+    // Kept per portfolio so the MCP tools hand the AI exactly the figures the
+    // UI shows, rather than recomputing them a second (drifting) way.
+    {
+        QMutexLocker lock(&cache_mutex_);
+        last_metrics_.insert(portfolio_id, m);
+    }
+    emit metrics_computed(m);
+}
+
+std::optional<portfolio::ComputedMetrics> PortfolioService::last_metrics(const QString& portfolio_id) {
+    QMutexLocker lock(&cache_mutex_);
+    const auto it = last_metrics_.constFind(portfolio_id);
+    if (it == last_metrics_.constEnd())
+        return std::nullopt;
+    return it.value();
+}
+
 void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summary) {
     if (summary.holdings.isEmpty()) {
-        emit metrics_computed({});
+        publish_metrics(summary.portfolio.id, {});
         return;
     }
 
@@ -1879,7 +1952,9 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
     // (this runs on the calling thread — compute_metrics is always called from
     //  the UI thread after summary_loaded, so we keep computation fast by
     //  loading snapshots from SQLite which is sub-millisecond for <365 rows)
-    auto snap_r = PortfolioRepository::instance().get_snapshots(summary.portfolio.id, 365);
+    // Excludes reconstructed rows before a migration-dated opening BUY
+    // (portfolio::usable_snapshots).
+    auto snap_r = usable_snapshots(summary.portfolio.id, 365);
     if (snap_r.is_err() || snap_r.value().size() < 3) {
         // Trigger an async backfill so the next compute_metrics call has data.
         // This is one-shot per process to avoid hammering yfinance — once we've
@@ -1898,7 +1973,7 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
         // and fed it into Sharpe, VaR and the risk score. The views promise
         // "engine or dash"; the concentration figure is the only thing this
         // situation can honestly state.
-        emit metrics_computed(metrics);
+        publish_metrics(summary.portfolio.id, metrics);
         return;
     }
 
@@ -1910,31 +1985,68 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
 
     // Flow-adjusted: raw NAV differences contain the user's deposits and
     // withdrawals, and a single funding day read as a +100% "return" is
-    // enough to dominate every statistic computed below. adj is index-aligned
-    // with snapshot pairs (adj[i-1] pairs snaps[i-1], snaps[i]) so the beta
-    // regression can keep its date alignment; NaN marks uncomputable segments.
+    // enough to dominate every statistic computed below. Each segment keeps
+    // its start/end dates so the beta regression can align on them; NaN
+    // marks uncomputable segments.
     // A FAILED transaction read is not "no transactions" — computing
     // flow-blind statistics on a DB hiccup would silently reintroduce the
     // deposit-as-return bug, so the series metrics sit this tick out.
     bool txns_ok = false;
     const QVector<portfolio::Transaction> txns = all_transactions(summary.portfolio.id, &txns_ok);
     if (!txns_ok) {
-        emit metrics_computed(metrics);
+        publish_metrics(summary.portfolio.id, metrics);
         return;
     }
+    // ── Beta benchmark ───────────────────────────────────────────────────────
+    // The book's base-currency index (^GSPTSE for CAD, ^FTSE for GBP, …) when
+    // its history is loaded, else SPY — a CAD book's beta against a USD index
+    // mixes the currency into the regression. Its bar dates double as the
+    // trading calendar the return series is rebuilt on.
+    QString beta_sym = default_benchmark_for_currency(summary.portfolio.currency);
+    if (!benchmark_cache_.contains(beta_sym) || benchmark_cache_.value(beta_sym).first.size() < 2)
+        beta_sym = QStringLiteral("SPY");
+    const auto bench_it = benchmark_cache_.constFind(beta_sym);
+    const bool have_bench = bench_it != benchmark_cache_.constEnd() && bench_it->first.size() >= 2 &&
+                            bench_it->first.size() == bench_it->second.size();
+    QSet<QString> calendar;
+    QHash<QString, double> bench_map;
+    if (have_bench) {
+        calendar.reserve(bench_it->first.size());
+        bench_map.reserve(bench_it->first.size());
+        for (int i = 0; i < bench_it->first.size(); ++i) {
+            calendar.insert(bench_it->first[i]);
+            bench_map.insert(bench_it->first[i], bench_it->second[i]);
+        }
+    }
+
+    // ── Flow-adjusted returns on the trading calendar ────────────────────────
     // Historical rates when a backfill has captured them (each flow converts
     // at its own trade date); today's rates are the seeded fallback.
-    const QVector<double> adj =
-        portfolio::flow_adjusted_returns(snaps, txns, fx_rates_for(summary.portfolio.id, summary));
-    QVector<double> port_returns; // daily flow-adjusted returns (%)
-    port_returns.reserve(adj.size());
-    for (const double r : adj) {
-        if (!std::isnan(r))
-            port_returns.append(r);
+    //
+    // Snapshots land on any calendar day the app runs. trading_day_returns
+    // merges weekend/holiday rows into the next session (chaining, so TWR and
+    // flows stay exact) and tags each segment with the sessions it spans.
+    // Choice: the per-day statistics below (vol, Sharpe, Sortino, VaR, beta)
+    // use ONLY one-session segments — a three-session gap is not a daily
+    // observation, and √k rescaling would presume the random walk these
+    // numbers are supposed to measure. Max drawdown chains every segment,
+    // gaps included, so the growth path is never broken.
+    const QVector<portfolio::SegmentReturn> segs =
+        portfolio::trading_day_returns(snaps, txns, fx_rates_for(summary.portfolio.id, summary), calendar);
+    QVector<double> port_returns; // one-session flow-adjusted returns (%)
+    port_returns.reserve(segs.size());
+    for (const auto& sg : segs) {
+        if (sg.trading_days == 1 && std::isfinite(sg.pct))
+            port_returns.append(sg.pct);
+    }
+    if (!segs.isEmpty()) {
+        metrics.window_start = segs.first().start_date;
+        metrics.window_end = segs.last().end_date;
     }
 
     if (port_returns.size() < 2) {
-        emit metrics_computed(metrics);
+        metrics.return_days = port_returns.size();
+        publish_metrics(summary.portfolio.id, metrics);
         return;
     }
 
@@ -1950,7 +2062,10 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
     const double ann_vol = daily_vol * std::sqrt(252.0);
     metrics.volatility = ann_vol; // already in %
 
-    // ── Sharpe ratio (annualised) ─────────────────────────────────────────────
+    // ── Sharpe ratio (annualised, ARITHMETIC) ────────────────────────────────
+    // (mean daily excess return / daily sd) × √252. The QuantStats/FFN views
+    // compute the geometric variant ((CAGR − rf) / annual vol); the UI labels
+    // each one so the two numbers are never read as the same statistic.
     // rf_rate_ = live 10y yield, annual decimal (e.g. 0.043); daily %. With no
     // real rate ever fetched (NaN) both ratios stay absent — a dash, not a
     // ratio against an assumed hurdle.
@@ -1982,13 +2097,16 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
     // ── Max drawdown ──────────────────────────────────────────────────────────
     // Measured on the growth index chained from flow-adjusted returns, not on
     // raw NAV — a withdrawal is not a crash, and a deposit must not paper
-    // over a real one.
+    // over a real one. Every segment, multi-session gaps included: the index
+    // must follow the whole path.
     {
         double index = 1.0;
         double peak = 1.0;
         double max_dd = 0.0;
-        for (const double r : port_returns) {
-            index *= 1.0 + r / 100.0;
+        for (const auto& sg : segs) {
+            if (!std::isfinite(sg.pct))
+                continue;
+            index *= 1.0 + sg.pct / 100.0;
             peak = std::max(peak, index);
             if (peak > 1e-12)
                 max_dd = std::min(max_dd, (index - peak) / peak * 100.0);
@@ -1996,48 +2114,33 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
         metrics.max_drawdown = max_dd; // negative %
     }
 
-    // ── Beta vs SPY (OLS regression on aligned date windows) ─────────────────
-    // Build SPY daily return series from cached closes, aligned to snapshot dates.
-    if (spy_closes_cache_.size() >= 2 && spy_dates_cache_.size() == spy_closes_cache_.size()) {
-        // Build a date→close map for O(1) lookup
-        QHash<QString, double> spy_map;
-        spy_map.reserve(spy_dates_cache_.size());
-        for (int i = 0; i < spy_dates_cache_.size(); ++i)
-            spy_map[spy_dates_cache_[i]] = spy_closes_cache_[i];
-
-        // For each consecutive snapshot pair, find SPY return for the same day
+    // ── Beta vs the benchmark (OLS regression on aligned sessions) ───────────
+    // Only one-session segments, each paired with the benchmark's return over
+    // exactly the same two dates.
+    if (have_bench) {
         QVector<double> spy_aligned;
         QVector<double> port_aligned;
-        spy_aligned.reserve(snaps.size() - 1);
-        port_aligned.reserve(snaps.size() - 1);
+        spy_aligned.reserve(segs.size());
+        port_aligned.reserve(segs.size());
 
-        for (int i = 1; i < snaps.size(); ++i) {
-            const QString date = snaps[i].snapshot_date;
-            if (!spy_map.contains(date))
+        for (const auto& sg : segs) {
+            if (sg.trading_days != 1 || !std::isfinite(sg.pct))
                 continue;
-            // Find previous available SPY close
-            const QString prev_date = snaps[i - 1].snapshot_date;
-            if (!spy_map.contains(prev_date))
+            const auto prev_it = bench_map.constFind(sg.start_date);
+            const auto curr_it = bench_map.constFind(sg.end_date);
+            if (prev_it == bench_map.constEnd() || curr_it == bench_map.constEnd())
                 continue;
-
-            const double spy_prev = spy_map[prev_date];
-            const double spy_curr = spy_map[date];
+            const double spy_prev = prev_it.value();
+            const double spy_curr = curr_it.value();
             if (spy_prev < 1e-6)
                 continue;
-
-            // Same flow-adjusted series the other statistics use — a deposit
-            // day must not enter the regression as portfolio "return".
-            const double port_ret = adj.value(i - 1, std::numeric_limits<double>::quiet_NaN());
-            if (std::isnan(port_ret))
-                continue;
-            const double spy_ret = (spy_curr - spy_prev) / spy_prev * 100.0;
-            spy_aligned.append(spy_ret);
-            port_aligned.append(port_ret);
+            spy_aligned.append((spy_curr - spy_prev) / spy_prev * 100.0);
+            port_aligned.append(sg.pct);
         }
 
         const int m = spy_aligned.size();
         if (m >= 5) {
-            // OLS: beta = cov(port, spy) / var(spy)
+            // OLS: beta = cov(port, bench) / var(bench)
             const double spy_mean = std::accumulate(spy_aligned.begin(), spy_aligned.end(), 0.0) / m;
             const double port_mean = std::accumulate(port_aligned.begin(), port_aligned.end(), 0.0) / m;
             double cov = 0.0, var_spy = 0.0;
@@ -2047,6 +2150,7 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
             }
             if (var_spy > 1e-10) {
                 metrics.beta = cov / var_spy;
+                metrics.beta_benchmark = beta_sym;
                 // Alpha is the OLS intercept, annualised: the average daily
                 // return not explained by the market exposure. It exists only
                 // together with the regression that defines it — the old
@@ -2059,7 +2163,9 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
 
     // ── VaR 95% and CVaR 95% (historical simulation) ─────────────────────────
     // Sort returns ascending; VaR = worst 5th percentile; CVaR = mean of tail.
-    if (book_complete && summary.total_market_value > 0 && !port_returns.isEmpty()) {
+    // Below kMinVarSample the sample cannot resolve a 95% quantile (it would
+    // just be the worst day) — no VaR; the UI says "insufficient history".
+    if (book_complete && summary.total_market_value > 0 && n >= portfolio::kMinVarSample) {
         QVector<double> sorted_rets = port_returns;
         std::sort(sorted_rets.begin(), sorted_rets.end());
         const int tail_count = std::max(1, static_cast<int>(std::floor(sorted_rets.size() * 0.05)));
@@ -2085,7 +2191,7 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
         metrics.risk_score = vol_score + conc_score + dd_score + beta_score;
     }
 
-    emit metrics_computed(metrics);
+    publish_metrics(summary.portfolio.id, metrics);
 }
 
 // ── Import / Export ──────────────────────────────────────────────────────────
@@ -2350,8 +2456,20 @@ void PortfolioService::import_json(const QString& file_path, portfolio::ImportMo
 
 // ── Snapshots ────────────────────────────────────────────────────────────────
 
-void PortfolioService::load_snapshots(const QString& portfolio_id, int days) {
+Result<QVector<portfolio::PortfolioSnapshot>> PortfolioService::usable_snapshots(const QString& portfolio_id,
+                                                                                 int days) {
     auto r = PortfolioRepository::instance().get_snapshots(portfolio_id, days);
+    if (r.is_err())
+        return r;
+    bool txns_ok = false;
+    const auto txns = all_transactions(portfolio_id, &txns_ok);
+    if (!txns_ok)
+        return r; // no log → nothing identifies a migration-dated opening
+    return Result<QVector<portfolio::PortfolioSnapshot>>::ok(portfolio::usable_snapshots(r.value(), txns));
+}
+
+void PortfolioService::load_snapshots(const QString& portfolio_id, int days) {
+    auto r = usable_snapshots(portfolio_id, days);
     if (r.is_ok()) {
         emit snapshots_loaded(portfolio_id, r.value());
     } else {
@@ -2376,9 +2494,17 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
     // reconstruction is built from.
     auto txns_r = repo.get_transactions(portfolio_id, /*limit=*/0);
     QHash<QString, QVector<portfolio::Transaction>> txns_by_symbol;
+    // v049 dated the opening BUY of a holding with no first_purchase_date at
+    // migration time. The return math does not treat that row as a flow (the
+    // live snapshots before it already held the position), so a NAV rebuilt
+    // WITHOUT the position before that date and WITH it after would read the
+    // whole position as one day's gain. The holding's real start is unknown,
+    // so history before the latest such date is not reconstructed at all.
+    QString fabricated_cutoff;
     if (txns_r.is_ok()) {
         for (const auto& t : txns_r.value())
             txns_by_symbol[t.symbol.toUpper()].append(t);
+        fabricated_cutoff = portfolio::fabricated_opening_cutoff(txns_r.value());
     }
 
     // v049 synthesized opening BUYs for every pre-ledger holding, so a held
@@ -2461,7 +2587,7 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
 
     QPointer<PortfolioService> self = this;
     python::PythonWorker::instance().submit("portfolio_closes_history", payload,
-        [self, portfolio_id, txns_by_symbol, fx_of_symbol](bool ok, QJsonObject obj, QString err) {
+        [self, portfolio_id, txns_by_symbol, fx_of_symbol, fabricated_cutoff](bool ok, QJsonObject obj, QString err) {
         if (!self)
             return;
         if (!ok || obj.contains("error")) {
@@ -2561,6 +2687,10 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
             // Today's row belongs to the live path — build_summary values it
             // from actual quotes and writes it as 'live'.
             if (d >= today)
+                continue;
+            // Before a migration-dated opening BUY the book's composition is
+            // unknown (see fabricated_cutoff above).
+            if (!fabricated_cutoff.isEmpty() && d < fabricated_cutoff)
                 continue;
             // Advance FX pair cursors first so every symbol on a pair sees
             // this date's (or the last known) rate.
@@ -2832,7 +2962,9 @@ QString PortfolioService::entry_date_of(const QString& first_purchase_date) {
     // from an ISO timestamp written by add_asset, or from an imported
     // date-only string. All three start with the date, so a left(10) parse
     // covers them; anything else is reported unparseable.
-    const QString head = first_purchase_date.trimmed().left(10);
+    // A zoned (UTC "…Z") stamp converts to the LOCAL date — the calendar the
+    // rest of the portfolio's date math uses (PortfolioDates.h).
+    const QString head = portfolio::local_date_of(first_purchase_date);
     const QDate d = QDate::fromString(head, Qt::ISODate);
     return d.isValid() ? d.toString(Qt::ISODate) : QString();
 }

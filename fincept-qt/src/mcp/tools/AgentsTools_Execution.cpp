@@ -85,7 +85,9 @@ void agents_internal::register_execution_tools(std::vector<ToolDef>& tools) {
     {
         ToolDef t;
         t.name = "route_agent_query";
-        t.description = "Get the routing decision (agent_id, intent, confidence) for a query without executing it.";
+        t.description = "Get the routing decision (agent_id, intent, match_score, score_basis) for a query without executing it. "
+                        "match_score is a keyword-match score or the router model's self-reported number "
+                        "(see score_basis), not a calibrated probability.";
         t.category = "agents";
         t.default_timeout_ms = 60000;
         t.input_schema = ToolSchemaBuilder()
@@ -126,7 +128,8 @@ void agents_internal::register_execution_tools(std::vector<ToolDef>& tools) {
     {
         ToolDef t;
         t.name = "execute_multi_agent_query";
-        t.description = "Run a query across multiple agents in parallel; optionally aggregate the responses.";
+        t.description = "Run a query through each distinct agent its keywords route to (up to 3, run one after another); "
+                        "optionally aggregate the responses. Each response is labelled with the agent that produced it.";
         t.category = "agents";
         t.is_destructive = true;
         t.default_timeout_ms = kDefaultAgentTimeoutMs;
@@ -193,7 +196,7 @@ void agents_internal::register_execution_tools(std::vector<ToolDef>& tools) {
     {
         ToolDef t;
         t.name = "run_stock_analysis_agent";
-        t.description = "Run a full agent-driven stock analysis for a ticker symbol.";
+        t.description = "Run a full agent-driven stock analysis for a ticker symbol. Fails if no market-data tool is available.";
         t.category = "agents";
         t.is_destructive = true;
         t.default_timeout_ms = kDefaultAgentTimeoutMs;
@@ -235,7 +238,9 @@ void agents_internal::register_execution_tools(std::vector<ToolDef>& tools) {
     {
         ToolDef t;
         t.name = "run_risk_assessment_agent";
-        t.description = "Run agent-driven portfolio risk assessment.";
+        t.description = "Run agent-driven portfolio risk assessment. VaR / expected shortfall / volatility are computed in code "
+                        "only when portfolio_data.returns holds >= 20 periodic portfolio returns (decimal fractions); "
+                        "otherwise the report states VaR is unavailable.";
         t.category = "agents";
         t.is_destructive = true;
         t.default_timeout_ms = kDefaultAgentTimeoutMs;

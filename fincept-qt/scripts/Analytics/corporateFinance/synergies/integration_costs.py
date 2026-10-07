@@ -349,64 +349,134 @@ class IntegrationCostAnalyzer:
             'recommended_contingency_pct': (combined_risk_multiplier - 1) * 100
         }
 
+# ── JSON contract (MAAnalyticsService "estimate") ────────────────────────────
+# The analyzer methods above carry hard-coded unit costs ($500K per system,
+# $150 per training hour, ...). The JSON path never uses them: every unit cost
+# and rate is a caller input, and the result is a budget built from those.
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+from corporateFinance._cli import (is_json_call, run_json, num, opt_num, has,  # noqa: E402
+                                   InputError, pct)
+
+
+def _driver_lines(p: Dict[str, Any], deal_value: float) -> List[Dict[str, Any]]:
+    """Cost lines from driver x unit-cost inputs. A driver group is used only
+    when its first input is present; then all of its inputs are required."""
+    lines = []
+    if has(p, 'systems_to_integrate'):
+        n = num(p, 'systems_to_integrate', min=0)
+        c = num(p, 'cost_per_system', min=0)
+        lines.append({'category': 'it_integration', 'basis': f"{n:g} systems x {c:,.0f}", 'amount': n * c})
+    if has(p, 'key_employees'):
+        n = num(p, 'key_employees', min=0)
+        comp = num(p, 'average_compensation', min=0)
+        bonus = num(p, 'retention_bonus_pct', label='retention_bonus_pct (decimal of compensation)', min=0)
+        lines.append({'category': 'employee_retention',
+                      'basis': f"{n:g} employees x {comp:,.0f} x {bonus:.0%}", 'amount': n * comp * bonus})
+    if has(p, 'severance_roles'):
+        n = num(p, 'severance_roles', min=0)
+        cost = num(p, 'severance_cost_per_role', min=0)
+        lines.append({'category': 'severance', 'basis': f"{n:g} roles x {cost:,.0f}", 'amount': n * cost})
+    if has(p, 'training_hours_per_employee'):
+        heads = num(p, 'employees_to_train' if has(p, 'employees_to_train') else 'combined_headcount',
+                    label='employees_to_train (or combined_headcount)', min=0)
+        hours = num(p, 'training_hours_per_employee', min=0)
+        rate = num(p, 'training_cost_per_hour', min=0)
+        lines.append({'category': 'training', 'basis': f"{heads:g} x {hours:g}h x {rate:,.0f}",
+                      'amount': heads * hours * rate})
+    if has(p, 'advisory_fee_pct'):
+        f = num(p, 'advisory_fee_pct', label='advisory_fee_pct (decimal of deal value)', min=0, max=1)
+        lines.append({'category': 'advisory_fees', 'basis': f"{f:.2%} of deal value", 'amount': f * deal_value})
+    for key, cat in (('legal_fees', 'legal'), ('accounting_fees', 'accounting'),
+                     ('rebranding_cost', 'rebranding'), ('facilities_cost', 'facilities'),
+                     ('other_costs', 'other')):
+        if has(p, key):
+            lines.append({'category': cat, 'basis': 'stated amount', 'amount': num(p, key, min=0)})
+    return lines
+
+
+def json_estimate(p: Dict[str, Any]) -> Dict[str, Any]:
+    """Integration budget. Inputs (deal_value required) plus at least one of:
+      cost_items            [{category, amount, year?, capitalized?}]
+      integration_cost_pct  total as a decimal of deal value
+      driver inputs         systems_to_integrate+cost_per_system,
+                            key_employees+average_compensation+retention_bonus_pct,
+                            severance_roles+severance_cost_per_role,
+                            training_hours_per_employee+training_cost_per_hour
+                              (+employees_to_train or combined_headcount),
+                            advisory_fee_pct, legal_fees, accounting_fees,
+                            rebranding_cost, facilities_cost, other_costs
+    Optional: contingency_pct (decimal, added on the subtotal),
+    combined_revenue / combined_headcount (for ratios).
+    """
+    deal_value = num(p, 'deal_value', gt=0)
+    lines: List[Dict[str, Any]] = []
+    items = p.get('cost_items')
+    if items is not None:
+        if not isinstance(items, list):
+            raise InputError("cost_items must be a list of {category, amount, year?, capitalized?}")
+        for i, it in enumerate(items):
+            if not isinstance(it, dict):
+                raise InputError(f"cost_items[{i}] must be an object")
+            amt = num(it, 'amount', label=f'cost_items[{i}].amount', min=0)
+            row = {'category': str(it.get('category') or f'item_{i + 1}'), 'basis': 'stated amount', 'amount': amt}
+            if has(it, 'year'):
+                row['year'] = num(it, 'year', label=f'cost_items[{i}].year', min=0, integer=True)
+            if 'capitalized' in it:
+                row['capitalized'] = bool(it['capitalized'])
+            lines.append(row)
+    if has(p, 'integration_cost_pct'):
+        f = num(p, 'integration_cost_pct', label='integration_cost_pct (decimal of deal value)', min=0, max=1)
+        lines.append({'category': 'integration_total', 'basis': f"{f:.2%} of deal value", 'amount': f * deal_value})
+    lines.extend(_driver_lines(p, deal_value))
+    if not lines:
+        raise InputError("No cost inputs: supply cost_items, integration_cost_pct, or driver inputs "
+                         "(e.g. systems_to_integrate + cost_per_system, key_employees + average_compensation "
+                         "+ retention_bonus_pct, advisory_fee_pct, legal_fees)")
+
+    subtotal = sum(l['amount'] for l in lines)
+    cont_frac = opt_num(p, 'contingency_pct', label='contingency_pct (decimal)', min=0, max=5)
+    contingency = subtotal * cont_frac if cont_frac is not None else 0.0
+    total = subtotal + contingency
+    for l in lines:
+        l['share_pct'] = (l['amount'] / subtotal * 100) if subtotal else None
+
+    out = {
+        'total_integration_cost': total,
+        'subtotal': subtotal,
+        'contingency': contingency if cont_frac is not None else None,
+        'contingency_pct': pct(cont_frac),
+        'deal_value': deal_value,
+        'cost_as_share_of_deal_pct': total / deal_value * 100,
+        'line_items': lines,
+    }
+    if has(p, 'combined_revenue'):
+        rev = num(p, 'combined_revenue', gt=0)
+        out['cost_as_share_of_revenue_pct'] = total / rev * 100
+    if has(p, 'combined_headcount'):
+        heads = num(p, 'combined_headcount', gt=0)
+        out['cost_per_employee'] = total / heads
+    if any('year' in l for l in lines):
+        by_year: Dict[int, float] = {}
+        for l in lines:
+            if 'year' in l:
+                by_year[l['year']] = by_year.get(l['year'], 0.0) + l['amount']
+        out['yearly_schedule'] = [{'year': y, 'cost': c} for y, c in sorted(by_year.items())]
+        unscheduled = sum(l['amount'] for l in lines if 'year' not in l)
+        out['unscheduled_cost'] = unscheduled
+    return out
+
 def main():
-    """CLI entry point - outputs JSON for C++ integration"""
+    """CLI entry point: <command> '<params JSON object>' (contract: corporateFinance/_cli.py)."""
     import sys
-    import json
+    from pathlib import Path
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+    from corporateFinance._cli import run_json, fail
+    if len(sys.argv) != 3:
+        fail("Usage: <script> <command> '<params JSON object>'")
+    run_json({"estimate": json_estimate})
 
-    if len(sys.argv) < 2:
-        result = {"success": False, "error": "No command specified"}
-        print(json.dumps(result))
-        sys.exit(1)
-
-    command = sys.argv[1]
-
-    try:
-        if command in ("integration", "integration_cost"):
-            if len(sys.argv) < 3:
-                raise ValueError("Deal size and complexity level required")
-
-            # Accept either JSON dict or positional args
-            try:
-                params = json.loads(sys.argv[2])
-                deal_value = float(params.get('deal_size', params.get('deal_value', 0)))
-                complexity_level = str(params.get('complexity', params.get('complexity_level', 'medium')))
-                integration_plan = {k: v for k, v in params.items() if k not in ('deal_size', 'deal_value', 'complexity', 'complexity_level')}
-            except (json.JSONDecodeError, TypeError, AttributeError):
-                if len(sys.argv) < 4:
-                    raise ValueError("Deal size and complexity level required")
-                deal_value = float(sys.argv[2])
-                complexity_level = sys.argv[3]
-                integration_plan = json.loads(sys.argv[4]) if len(sys.argv) > 4 else {}
-
-            # Map complexity level string to numeric factor
-            complexity_map = {'low': 0.5, 'medium': 1.0, 'high': 1.5, 'very_high': 2.0}
-            complexity_factor = complexity_map.get(complexity_level, 1.0)
-            if isinstance(complexity_level, (int, float)) or complexity_level.replace('.', '').isdigit():
-                complexity_factor = float(complexity_level)
-
-            systems_to_integrate = integration_plan.get('systems_to_integrate', 5)
-
-            analyzer = IntegrationCostAnalyzer(deal_value=deal_value)
-
-            analysis = analyzer.estimate_it_integration(
-                systems_to_integrate=systems_to_integrate,
-                complexity_factor=complexity_factor,
-                third_party_consulting=integration_plan.get('third_party_consulting', True)
-            )
-
-            result = {"success": True, "data": analysis}
-            print(json.dumps(result))
-
-        else:
-            result = {"success": False, "error": f"Unknown command: {command}"}
-            print(json.dumps(result))
-            sys.exit(1)
-
-    except Exception as e:
-        result = {"success": False, "error": str(e)}
-        print(json.dumps(result))
-        sys.exit(1)
 
 if __name__ == '__main__':
     main()

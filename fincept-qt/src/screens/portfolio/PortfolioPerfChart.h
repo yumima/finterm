@@ -135,6 +135,9 @@ class PortfolioPerfChart : public QWidget {
     static qint64 iso_date_to_ms_utc(const QString& iso_date);
     /// Map the chart's internal period token to a yfinance period string.
     QString period_for_yfinance() const;
+    /// Trading currency of the focus symbol (held row first, else the
+    /// discovered-currency cache); empty when unknown.
+    QString focus_currency() const;
     /// True when the current period is rendered as an epoch-ms intraday
     /// series instead of daily closes. 1D for both views; 1W only when a
     /// symbol is focused (aggregate 1W uses the snapshots path).

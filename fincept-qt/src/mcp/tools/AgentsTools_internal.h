@@ -65,7 +65,8 @@ inline QJsonObject routing_to_json(const services::RoutingResult& r) {
         {"success", r.success},
         {"agent_id", r.agent_id},
         {"intent", r.intent},
-        {"confidence", r.confidence},
+        {"match_score", r.has_match_score ? QJsonValue(r.match_score) : QJsonValue()},
+        {"score_basis", r.score_basis},
         {"matched_keywords", kws},
         {"config", r.config},
         {"request_id", r.request_id},
@@ -98,6 +99,7 @@ inline QJsonObject plan_to_json(const services::ExecutionPlan& p) {
         {"has_failed", p.has_failed},
         {"request_id", p.request_id},
         {"steps", steps},
+        {"warnings", QJsonArray::fromStringList(p.warnings)},
     };
 }
 

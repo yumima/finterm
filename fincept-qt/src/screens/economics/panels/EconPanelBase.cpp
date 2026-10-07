@@ -1,6 +1,7 @@
 // src/screens/economics/panels/EconPanelBase.cpp
 #include "screens/economics/panels/EconPanelBase.h"
 
+#include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -10,8 +11,12 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QListWidget>
+#include <QLocale>
 #include <QTextStream>
 #include <QVBoxLayout>
+
+#include <algorithm>
+#include <cmath>
 
 namespace fincept::screens {
 
@@ -301,7 +306,8 @@ void EconPanelBase::show_table() {
 
 // ── Display ───────────────────────────────────────────────────────────────────
 
-void EconPanelBase::display(const QJsonArray& rows, const QString& title) {
+void EconPanelBase::display(const QJsonArray& rows, const QString& title, const QString& value_key,
+                            const QString& date_key) {
     if (rows.isEmpty()) {
         show_empty("No data returned for this selection");
         return;
@@ -316,7 +322,14 @@ void EconPanelBase::display(const QJsonArray& rows, const QString& title) {
     }
     static const QStringList kDateKeys = {"date",   "period",      "year",        "time",    "Date",
                                           "Period", "TIME_PERIOD", "record_date", "ref_date"};
+    // Declared keys win over the name heuristics for column placement.
+    if (!value_key.isEmpty() && cols.indexOf(value_key) > 0)
+        cols.move(cols.indexOf(value_key), 0);
+    if (!date_key.isEmpty() && cols.indexOf(date_key) > 0)
+        cols.move(cols.indexOf(date_key), 0);
     for (const auto& dk : kDateKeys) {
+        if (!date_key.isEmpty())
+            break;
         int idx = cols.indexOf(dk);
         if (idx > 0) {
             cols.move(idx, 0);
@@ -325,6 +338,8 @@ void EconPanelBase::display(const QJsonArray& rows, const QString& title) {
     }
     static const QStringList kValKeys = {"value", "Value", "val", "OBS_VALUE", "obs_value", "amount", "rate"};
     for (const auto& vk : kValKeys) {
+        if (!value_key.isEmpty())
+            break;
         int idx = cols.indexOf(vk);
         if (idx > 1) {
             cols.move(idx, 1);
@@ -363,55 +378,83 @@ void EconPanelBase::display(const QJsonArray& rows, const QString& title) {
     if (row_count_)
         row_count_->setText(QString::number(rows.size()) + " records");
 
-    update_stats(rows);
+    update_stats(rows, value_key, date_key);
     show_table();
 }
 
-void EconPanelBase::update_stats(const QJsonArray& rows) {
+void EconPanelBase::update_stats(const QJsonArray& rows, const QString& value_key, const QString& date_key) {
+    const QString dash = ui::formatting::placeholder();
+    for (auto* l : {stat_latest_, stat_change_, stat_min_, stat_max_, stat_avg_})
+        if (l)
+            l->setText(dash);
+    if (stat_change_) {
+        stat_change_->setObjectName("econStatVal");
+        stat_change_->style()->unpolish(stat_change_);
+        stat_change_->style()->polish(stat_change_);
+    }
+    if (stat_count_)
+        stat_count_->setText(QString::number(rows.size()));
+
+    // No declared value column → the series value is unknown; never guess one.
+    if (value_key.isEmpty())
+        return;
+
+    auto to_number = [](const QJsonValue& jv, double& out) {
+        if (jv.isDouble()) {
+            out = jv.toDouble();
+            return std::isfinite(out);
+        }
+        if (jv.isString()) {
+            bool ok = false;
+            out = jv.toString().trimmed().toDouble(&ok);
+            return ok && std::isfinite(out);
+        }
+        return false;
+    };
+    // Sort key for the date column: ISO-style strings ("2024-03-01", "2024-03",
+    // "2024-Q1", "2024") order correctly lexically; numeric years are rendered
+    // to text so mixed int/string years still compare.
+    auto to_date_key = [](const QJsonValue& jv) -> QString {
+        if (jv.isDouble())
+            return QString::number(jv.toDouble(), 'f', 0);
+        const QString s = jv.toString().trimmed();
+        // Day-first formats used by BoE ("02 Jan 2025"), RBA ("02-Jan-2025")
+        // and BCB-style "dd/MM/yyyy" do not sort lexically — normalise to ISO.
+        if (!s.isEmpty() && !s.at(0).isDigit())
+            return s;
+        if (s.size() >= 10 && s.at(2) != QLatin1Char('-') && s.at(4) == QLatin1Char('-'))
+            return s; // already ISO-like
+        static const QLocale c_locale = QLocale::c();
+        for (const char* f : {"dd MMM yyyy", "dd-MMM-yyyy", "dd/MM/yyyy", "d MMM yyyy", "d-MMM-yyyy"}) {
+            const QDate d = c_locale.toDate(s, QLatin1String(f));
+            if (d.isValid())
+                return d.toString(Qt::ISODate);
+        }
+        return s;
+    };
+
+    struct Obs {
+        QString date;
+        double value;
+    };
     QVector<double> vals;
+    QVector<Obs> series;
     for (const auto& v : rows) {
         const auto obj = v.toObject();
-        QJsonValue jv = obj["value"];
-        if (jv.isUndefined())
-            jv = obj["Value"];
-        if (jv.isUndefined())
-            jv = obj["OBS_VALUE"];
-        if (jv.isUndefined())
-            jv = obj["obs_value"];
-        if (jv.isUndefined())
-            jv = obj["amount"];
-        if (jv.isUndefined())
-            jv = obj["rate"];
-        if (jv.isUndefined()) {
-            auto keys = obj.keys();
-            if (keys.size() > 1)
-                jv = obj[keys[1]];
+        double d = 0.0;
+        if (!to_number(obj.value(value_key), d))
+            continue;
+        vals << d;
+        if (!date_key.isEmpty()) {
+            const QString dk = to_date_key(obj.value(date_key));
+            if (!dk.isEmpty())
+                series.push_back({dk, d});
         }
-        bool ok = false;
-        double d = jv.toString().toDouble(&ok);
-        if (!ok && jv.isDouble()) {
-            d = jv.toDouble();
-            ok = true;
-        }
-        if (ok)
-            vals << d;
     }
 
-    if (vals.isEmpty()) {
-        for (auto* l : {stat_latest_, stat_change_, stat_min_, stat_max_, stat_avg_, stat_count_})
-            if (l)
-                l->setText("—");
-        if (stat_count_)
-            stat_count_->setText(QString::number(rows.size()));
+    if (vals.isEmpty())
         return;
-    }
 
-    double latest = vals.last();
-    // No prior observation (or a zero base) means the change is undefined —
-    // show "—", not a fabricated 0.00%.
-    const bool has_change = vals.size() > 1 && vals[vals.size() - 2] != 0.0;
-    const double prev = has_change ? vals[vals.size() - 2] : latest;
-    const double change = has_change ? ((latest - prev) / qAbs(prev)) * 100.0 : 0.0;
     double mn = *std::min_element(vals.begin(), vals.end());
     double mx = *std::max_element(vals.begin(), vals.end());
     double sum = 0.0;
@@ -420,24 +463,38 @@ void EconPanelBase::update_stats(const QJsonArray& rows) {
     double avg = sum / vals.size();
 
     auto fmt = [](double v) { return QString::number(v, 'g', 6); };
-
-    if (stat_latest_)
-        stat_latest_->setText(fmt(latest));
-    if (stat_change_) {
-        stat_change_->setText(has_change ? (change >= 0 ? "+" : "") + QString::number(change, 'f', 2) + "%"
-                                         : QStringLiteral("—"));
-        stat_change_->setObjectName(!has_change ? "econStatVal" : change >= 0 ? "econStatPos" : "econStatNeg");
-        stat_change_->style()->unpolish(stat_change_);
-        stat_change_->style()->polish(stat_change_);
-    }
     if (stat_min_)
         stat_min_->setText(fmt(mn));
     if (stat_max_)
         stat_max_->setText(fmt(mx));
     if (stat_avg_)
         stat_avg_->setText(fmt(avg));
-    if (stat_count_)
-        stat_count_->setText(QString::number(rows.size()));
+
+    // LATEST/CHANGE need a time order. Sort oldest→newest by the declared date
+    // key (sources disagree on order). Repeated dates mean the table mixes
+    // several series, so there is no single "latest" — leave "—".
+    if (series.isEmpty())
+        return;
+    std::stable_sort(series.begin(), series.end(), [](const Obs& a, const Obs& b) { return a.date < b.date; });
+    for (int i = 1; i < series.size(); ++i)
+        if (series[i].date == series[i - 1].date)
+            return;
+
+    const double latest = series.last().value;
+    if (stat_latest_)
+        stat_latest_->setText(fmt(latest));
+
+    // No prior observation (or a zero base) means the change is undefined —
+    // show "—", not a fabricated 0.00%.
+    const bool has_change = series.size() > 1 && series[series.size() - 2].value != 0.0;
+    if (stat_change_ && has_change) {
+        const double prev = series[series.size() - 2].value;
+        const double change = ((latest - prev) / qAbs(prev)) * 100.0;
+        stat_change_->setText((change >= 0 ? "+" : "") + QString::number(change, 'f', 2) + "%");
+        stat_change_->setObjectName(change >= 0 ? "econStatPos" : "econStatNeg");
+        stat_change_->style()->unpolish(stat_change_);
+        stat_change_->style()->polish(stat_change_);
+    }
 }
 
 // ── CSV ───────────────────────────────────────────────────────────────────────

@@ -1,6 +1,9 @@
 // src/services/portfolio/PortfolioReturns.cpp
 #include "services/portfolio/PortfolioReturns.h"
 
+#include "services/portfolio/PortfolioDates.h"
+
+#include <QDate>
 #include <QMap>
 
 #include <algorithm>
@@ -27,21 +30,19 @@ constexpr double kMinBaseNav = 0.01;
 // position whose first_purchase_date was EMPTY — v049 dated its opening BUY
 // at migration time, and live pre-v049 snapshots already contained the
 // position's value, so counting that row as a flow fabricates a crash (a
-// 50k "outflow-sized" BUY against an unchanged NAV). Those fabricated dates
-// are precisely detectable: the synthesized note marker plus a transaction
-// date on the same day the row was created. Real opening dates (far before
-// created_at) keep stripping normally.
-bool is_fabricated_opening(const Transaction& t) {
-    return t.notes.contains(QLatin1String("synthesized from the holdings row")) &&
-           t.transaction_date.left(10) == t.created_at.left(10);
-}
-
+// 50k "outflow-sized" BUY against an unchanged NAV). See
+// is_fabricated_opening() (PortfolioDates.h). The NAV backfill agrees: it
+// never reconstructs a date before such a row, so no backfilled NAV lacks
+// the position the return math assumes was already held.
+//
+// Flows are keyed by the LOCAL trade date — the calendar the snapshots are
+// written on (PortfolioDates.h).
 QMap<QString, double> external_flows_by_date(const QVector<Transaction>& txns, const QString& window_start,
                                              const QString& window_end,
                                              const FxRates& fx) {
     QMap<QString, double> flows;
     for (const auto& t : txns) {
-        const QString d = t.transaction_date.left(10);
+        const QString d = transaction_local_date(t);
         if (d <= window_start || d > window_end)
             continue;
         if (is_fabricated_opening(t))
@@ -59,6 +60,42 @@ QMap<QString, double> external_flows_by_date(const QVector<Transaction>& txns, c
     }
     return flows;
 }
+
+// Trading sessions inside (from, to]. See trading_day_returns() for the
+// calendar rule.
+class SessionCalendar {
+  public:
+    explicit SessionCalendar(const QSet<QString>& cal) : cal_(cal) {
+        for (const auto& d : cal) {
+            if (first_.isEmpty() || d < first_)
+                first_ = d;
+            if (last_.isEmpty() || d > last_)
+                last_ = d;
+        }
+    }
+
+    bool is_session(const QDate& d) const {
+        const QString key = d.toString(Qt::ISODate);
+        if (!cal_.isEmpty() && key >= first_ && key <= last_)
+            return cal_.contains(key);
+        return d.dayOfWeek() <= 5;
+    }
+
+    int sessions_between(const QString& from, const QString& to) const {
+        const QDate a = QDate::fromString(from.left(10), Qt::ISODate);
+        const QDate b = QDate::fromString(to.left(10), Qt::ISODate);
+        if (!a.isValid() || !b.isValid() || b <= a)
+            return 0;
+        int n = 0;
+        for (QDate d = a.addDays(1); d <= b; d = d.addDays(1))
+            n += is_session(d) ? 1 : 0;
+        return n;
+    }
+
+  private:
+    const QSet<QString>& cal_;
+    QString first_, last_;
+};
 
 } // namespace
 
@@ -166,6 +203,94 @@ QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, cons
             continue;
         }
         out.append((snapshots[i].total_value - flow - prev) / prev * 100.0);
+    }
+    return out;
+}
+
+QVector<SegmentReturn> trading_day_returns(QVector<PortfolioSnapshot> snapshots, const QVector<Transaction>& txns,
+                                           const FxRates& fx, const QSet<QString>& calendar) {
+    std::sort(snapshots.begin(), snapshots.end(),
+              [](const PortfolioSnapshot& a, const PortfolioSnapshot& b) { return a.snapshot_date < b.snapshot_date; });
+    // The raw consecutive-snapshot returns, flow convention and all, are
+    // exactly flow_adjusted_returns(); only the calendar treatment is new.
+    const QVector<double> raw = flow_adjusted_returns(snapshots, txns, fx);
+    QVector<SegmentReturn> out;
+    if (raw.isEmpty())
+        return out;
+    out.reserve(raw.size());
+
+    const SessionCalendar cal(calendar);
+    constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
+
+    // Pending merge state: growth chained since `start`, and the sessions it
+    // has crossed so far.
+    QString start = snapshots.first().snapshot_date.left(10);
+    double growth = 1.0;
+    bool unknown = false;
+    int sessions = 0;
+    for (int i = 0; i < raw.size(); ++i) {
+        const QString end = snapshots[i + 1].snapshot_date.left(10);
+        if (std::isnan(raw[i]))
+            unknown = true;
+        else
+            growth *= 1.0 + raw[i] / 100.0;
+        sessions += cal.sessions_between(snapshots[i].snapshot_date, end);
+        if (sessions == 0)
+            continue; // no session crossed yet (weekend / holiday row) — keep chaining
+        out.append({start, end, unknown ? kNaN : (growth - 1.0) * 100.0, sessions});
+        start = end;
+        growth = 1.0;
+        unknown = false;
+        sessions = 0;
+    }
+    // Trailing pieces that crossed no session (e.g. a Saturday row after
+    // Friday's): fold into the last emitted segment so the chained growth is
+    // complete. Its session count is unchanged — no session was added.
+    if (!out.isEmpty() && (unknown || std::abs(growth - 1.0) > 0.0)) {
+        SegmentReturn& last = out.last();
+        if (unknown || std::isnan(last.pct))
+            last.pct = kNaN;
+        else
+            last.pct = ((1.0 + last.pct / 100.0) * growth - 1.0) * 100.0;
+        last.end_date = snapshots.last().snapshot_date.left(10);
+    } else if (!out.isEmpty()) {
+        out.last().end_date = snapshots.last().snapshot_date.left(10);
+    }
+    return out;
+}
+
+QVector<double> segment_flows(const QVector<NavPoint>& path, const QVector<Transaction>& txns, const FxRates& fx) {
+    QVector<double> out(path.size(), 0.0);
+    if (path.size() < 2)
+        return out;
+    const QMap<QString, double> flow_by_date =
+        external_flows_by_date(txns, path.first().date.left(10), path.last().date.left(10), fx);
+    auto it = flow_by_date.constBegin();
+    for (int i = 1; i < path.size(); ++i) {
+        double flow = 0;
+        while (it != flow_by_date.constEnd() && it.key() <= path[i].date.left(10)) {
+            flow += it.value();
+            ++it;
+        }
+        out[i] = flow;
+    }
+    return out;
+}
+
+QVector<double> twr_index(const QVector<NavPoint>& path, const QVector<Transaction>& txns, const FxRates& fx) {
+    QVector<double> out(path.size(), std::numeric_limits<double>::quiet_NaN());
+    if (path.isEmpty())
+        return out;
+    const QVector<double> flows = segment_flows(path, txns, fx);
+    double level = 1.0;
+    out[0] = level;
+    for (int i = 1; i < path.size(); ++i) {
+        if (!std::isfinite(flows[i]) || !std::isfinite(level)) {
+            level = std::numeric_limits<double>::quiet_NaN();
+        } else if (path[i - 1].value >= kMinBaseNav) {
+            level *= 1.0 + (path[i].value - flows[i] - path[i - 1].value) / path[i - 1].value;
+        }
+        out[i] = level;
     }
     return out;
 }
