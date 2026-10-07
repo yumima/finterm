@@ -312,11 +312,13 @@ std::vector<ToolDef> get_geopolitics_tools() {
 
     tools.push_back(make_trade_tool(
         "analyze_tariff_barrier_removal",
-        "Quantify cutting an ad valorem tariff from current_tariff_pct to new_tariff_pct (levels): domestic import "
+        "Quantify a tariff cut: tariff_cut_pct is the share of current_tariff_pct removed (50 turns 20% into 10%; "
+        "100 = full removal). Returns the resulting tariff level plus domestic import "
         "price and volume change (iso-elastic import demand, pass-through), border import value, tariff revenue, "
         "consumer surplus and net welfare change. All inputs except gdp are required; nothing is assumed.",
         "trade_barrier_removal",
-        "{current_tariff_pct, new_tariff_pct (<= current), import_demand_elasticity: magnitude (>0), "
+        "{current_tariff_pct: level today, tariff_cut_pct: share of it removed, (0,100], "
+        "import_demand_elasticity: magnitude (>0), "
         "pass_through_pct: 0-100, import_value: border value of imports today, gdp: optional, same unit}",
         [](auto svc, const QJsonObject& p) { svc->analyze_barrier_removal(p); }));
 

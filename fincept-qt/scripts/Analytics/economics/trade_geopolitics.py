@@ -247,31 +247,32 @@ class TradeAnalyzer(EconomicsBase):
         }
 
     def assess_trade_barrier_removal(self, d: Dict[str, Any]) -> Dict[str, Any]:
-        """Quantify cutting an ad valorem tariff from its current level to a
-        new level (both percent levels, not a percent reduction). Required:
-        current_tariff_pct, new_tariff_pct, import_demand_elasticity
-        (magnitude), pass_through_pct (0-100), import_value (border value at
-        the current tariff). Optional: gdp (same unit as import_value) to
-        express the welfare change as % of GDP."""
-        req = ['current_tariff_pct', 'new_tariff_pct', 'import_demand_elasticity',
+        """Quantify a tariff cut. Required: current_tariff_pct (ad valorem
+        level today), tariff_cut_pct (share of the current tariff removed,
+        0-100: 50 turns a 20% tariff into 10%, 100 = full removal),
+        import_demand_elasticity (magnitude), pass_through_pct (0-100),
+        import_value (border value at the current tariff). Optional: gdp (same
+        unit as import_value) to express the welfare change as % of GDP."""
+        req = ['current_tariff_pct', 'tariff_cut_pct', 'import_demand_elasticity',
                'pass_through_pct', 'import_value']
         missing = [k for k in req if d.get(k) is None or d.get(k) == '']
         if missing:
             raise ValidationError('Missing required input(s): ' + ', '.join(missing))
         t0 = float(d['current_tariff_pct'])
-        t1 = float(d['new_tariff_pct'])
-        if t1 > t0:
-            raise ValidationError('new_tariff_pct must not exceed current_tariff_pct (barrier removal)')
+        cut = float(d['tariff_cut_pct'])
+        if not 0 < cut <= 100:
+            raise ValidationError('tariff_cut_pct must be in (0, 100] — the share of the current tariff removed')
+        t1 = t0 * (1.0 - cut / 100.0)
         res = tariff_change_effects(t0 / 100.0, t1 / 100.0, float(d['import_demand_elasticity']),
                                     float(d['pass_through_pct']) / 100.0, float(d['import_value']))
         gdp = d.get('gdp')
         if gdp is not None and float(gdp) > 0:
             res['net_welfare_change_pct_gdp'] = res['net_welfare_change'] / float(gdp) * 100
+        res['new_tariff_pct'] = t1
         res['tariff_cut_pct_points'] = t0 - t1
-        res['tariff_cut_relative_pct'] = (t0 - t1) / t0 * 100 if t0 > 0 else None
         res['assumptions'] = {
             'current_tariff_pct': t0,
-            'new_tariff_pct': t1,
+            'tariff_cut_pct': cut,
             'import_demand_elasticity': float(d['import_demand_elasticity']),
             'pass_through_pct': float(d['pass_through_pct']),
             'import_value': float(d['import_value']),

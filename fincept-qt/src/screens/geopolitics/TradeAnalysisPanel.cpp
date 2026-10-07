@@ -408,7 +408,7 @@ void TradeAnalysisPanel::build_ui() {
     p3l->setContentsMargins(12, 12, 12, 12);
     p3l->setSpacing(10);
 
-    auto* hint3 = new QLabel("Cuts an ad valorem tariff from its current level to a new level and computes the "
+    auto* hint3 = new QLabel("Cuts an ad valorem tariff by the given share of its current level and computes the "
                              "import price and volume response (iso-elastic import demand), tariff revenue, "
                              "consumer surplus and net welfare change. All assumptions are the inputs below.",
                              p3);
@@ -434,9 +434,31 @@ void TradeAnalysisPanel::build_ui() {
     auto* cur_tariff_spin = make_pct_spin(500, 0, true);
     p3l->addWidget(make_field("CURRENT TARIFF LEVEL", cur_tariff_spin, p3, "Ad valorem tariff today (e.g. 20%)"));
 
-    auto* new_tariff_spin = make_pct_spin(500, 0, false);
-    p3l->addWidget(make_field("NEW TARIFF LEVEL", new_tariff_spin, p3,
-                              "Tariff after liberalization (a level, not a % reduction; 0% = full removal)"));
+    auto* cut_spin = make_pct_spin(100, 0, true);
+    p3l->addWidget(make_field("TARIFF CUT", cut_spin, p3,
+                              "Share of the current tariff removed: 50% turns a 20% tariff into 10%; "
+                              "100% = full removal"));
+
+    // Live readout of the tariff level the cut implies, so the input's meaning is never ambiguous.
+    auto* new_level_lbl = new QLabel(p3);
+    new_level_lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
+                                     .arg(ui::colors::TEXT_SECONDARY())
+                                     .arg(ui::fonts::SMALL)
+                                     .arg(ui::fonts::DATA_FAMILY));
+    auto refresh_new_level = [cur_tariff_spin, cut_spin, new_level_lbl]() {
+        if (cur_tariff_spin->value() <= 0 || cut_spin->value() <= 0) {
+            new_level_lbl->setText(QString("New tariff level: %1").arg(fincept::ui::formatting::placeholder()));
+            return;
+        }
+        const double t1 = cur_tariff_spin->value() * (1.0 - cut_spin->value() / 100.0);
+        new_level_lbl->setText(QString("New tariff level: %1% → %2%")
+                                   .arg(cur_tariff_spin->value(), 0, 'f', 2)
+                                   .arg(t1, 0, 'f', 2));
+    };
+    connect(cur_tariff_spin, &QDoubleSpinBox::valueChanged, new_level_lbl, refresh_new_level);
+    connect(cut_spin, &QDoubleSpinBox::valueChanged, new_level_lbl, refresh_new_level);
+    refresh_new_level();
+    p3l->addWidget(new_level_lbl);
 
     auto* elast_spin = new QDoubleSpinBox;
     elast_spin->setRange(0, 20);
@@ -487,19 +509,17 @@ void TradeAnalysisPanel::build_ui() {
             .arg(w.darker(120).name());
     }());
     connect(run3, &QPushButton::clicked, this,
-            [this, cur_tariff_spin, new_tariff_spin, elast_spin, pt_spin, imp_spin, gdp_spin]() {
-                if (cur_tariff_spin->value() <= 0 || elast_spin->value() <= 0 || imp_spin->value() <= 0) {
-                    status_label_->setText("Enter current tariff, import demand elasticity and import value");
-                    return;
-                }
-                if (new_tariff_spin->value() > cur_tariff_spin->value()) {
-                    status_label_->setText("New tariff must not exceed the current tariff");
+            [this, cur_tariff_spin, cut_spin, elast_spin, pt_spin, imp_spin, gdp_spin]() {
+                if (cur_tariff_spin->value() <= 0 || cut_spin->value() <= 0 || elast_spin->value() <= 0 ||
+                    imp_spin->value() <= 0) {
+                    status_label_->setText(
+                        "Enter current tariff, tariff cut, import demand elasticity and import value");
                     return;
                 }
                 status_label_->setText("Analyzing...");
                 QJsonObject p;
                 p["current_tariff_pct"] = cur_tariff_spin->value();
-                p["new_tariff_pct"] = new_tariff_spin->value();
+                p["tariff_cut_pct"] = cut_spin->value();
                 p["import_demand_elasticity"] = elast_spin->value();
                 p["pass_through_pct"] = pt_spin->value();
                 p["import_value"] = imp_spin->value();

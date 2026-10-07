@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`4f5539c45`](https://github.com/yumima/finterm/commit/4f5539c45) calc: fix wrong formulas, units, labels and broken pipelines
 - [`ff3704da2`](https://github.com/yumima/finterm/commit/ff3704da2) data: fail visibly instead of inventing values, everywhere
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

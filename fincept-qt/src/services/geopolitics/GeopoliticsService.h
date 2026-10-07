@@ -50,8 +50,8 @@ class GeopoliticsService : public QObject
     /// trade_geopolitics.py `trading_blocs` — integration_type, trade_creation,
     /// trade_diversion. Emits trade_result_ready("trade_blocs", ...).
     void analyze_trading_blocs(const QJsonObject& params);
-    /// trade_geopolitics.py `barrier_removal` — tariff cut from
-    /// current_tariff_pct to new_tariff_pct with import_demand_elasticity,
+    /// trade_geopolitics.py `barrier_removal` — cuts current_tariff_pct by
+    /// tariff_cut_pct (share removed, 0-100] with import_demand_elasticity,
     /// pass_through_pct, import_value (gdp optional). Emits
     /// trade_result_ready("trade_barrier_removal", ...).
     void analyze_barrier_removal(const QJsonObject& params);
