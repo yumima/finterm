@@ -1855,6 +1855,7 @@ void PortfolioService::fetch_risk_free_rate() {
         if (ts_ok && val_ok && cached_val > 0 && (now_secs - cached_ts) < 86400) {
             // Cache still valid — use stored value
             rf_rate_ = cached_val;
+            // EVENT-STAMP: when the cached risk-free rate was fetched (UTC instant)
             rf_as_of_ = QDateTime::fromSecsSinceEpoch(cached_ts, QTimeZone::UTC);
             emit risk_free_rate_loaded(rf_rate_);
             return;
@@ -1862,7 +1863,8 @@ void PortfolioService::fetch_risk_free_rate() {
     }
     if (std::isnan(rf_rate_)) {
         rf_rate_ = persisted; // older real value beats none while the fetch runs
-        rf_as_of_ = persisted_ts > 0 ? QDateTime::fromSecsSinceEpoch(persisted_ts, QTimeZone::UTC) : QDateTime();
+        rf_as_of_ = persisted_ts > 0  // EVENT-STAMP: persisted fetch instant (UTC)
+                        ? QDateTime::fromSecsSinceEpoch(persisted_ts, QTimeZone::UTC) : QDateTime();
     }
 
     QJsonObject payload;
@@ -1886,6 +1888,7 @@ void PortfolioService::fetch_risk_free_rate() {
                 auto& settings = SettingsRepository::instance();
                 settings.set("portfolio.rf_rate_timestamp", QString::number(now_secs));
                 settings.set("portfolio.rf_rate_value", QString::number(rate, 'f', 6));
+                // EVENT-STAMP: this fetch's own instant (UTC)
                 self->rf_as_of_ = QDateTime::fromSecsSinceEpoch(now_secs, QTimeZone::UTC);
             } else {
                 LOG_WARN("PortfolioSvc", QString("^TNX risk-free fetch unusable (px=%1): %2 — %3")

@@ -1167,7 +1167,7 @@ void NewsService::connect_live_feed(const QString& ws_url) {
         // EVENT-STAMP: a publication instant. A message without a timestamp
         // stays undated (sort_ts 0, empty time) — never stamped with receipt time.
         article.sort_ts = obj["timestamp"].toInteger(0);
-        if (article.sort_ts > 0)
+        if (article.sort_ts > 0)  // EVENT-STAMP: publication instant, shown in the viewer's local time
             article.time = QDateTime::fromSecsSinceEpoch(article.sort_ts).toString("MMM dd, HH:mm");
         article.tier = obj["tier"].toInt(2);
 

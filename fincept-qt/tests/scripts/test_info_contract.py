@@ -103,9 +103,13 @@ def check_dividend_producers():
     relmap = read(RELMAP)
     for m in re.finditer(r'^.*info\.get\(\s*[\'"]dividendYield[\'"].*$', relmap, re.M):
         line_no = relmap.count("\n", 0, m.start()) + 1
-        check("/ 100" in m.group(0),
+        line = m.group(0)
+        # Either spelling of the same conversion: a literal "/ 100", or the
+        # None-preserving _scaled(..., 0.01) that replaced it.
+        converted = "/ 100" in line or ("_scaled(" in line and "0.01" in line)
+        check(converted,
               f"relationship_map.py:{line_no} converts dividendYield",
-              f"raw passthrough: {m.group(0).strip()}")
+              f"raw passthrough: {line.strip()}")
 
     # The conversion must stay scoped to this ONE field. Every other
     # percentage-like field from Yahoo is already a fraction; applying the
