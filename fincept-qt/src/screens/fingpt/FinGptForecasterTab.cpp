@@ -269,6 +269,7 @@ void FinGptForecasterTab::try_assemble() {
 
     const QString user_prompt =
         forecaster_user_prompt(run_symbol_, info_, slices, curday, run_basics_);
+    last_run_day_ = curday;
     last_info_block_ = user_prompt;
     info_view_->setPlainText(user_prompt);
 
@@ -289,6 +290,10 @@ void FinGptForecasterTab::run_llm(const QString& user_prompt) {
     // structured one-shot (same setting as the ER AI Forecast tab).
     ai_chat::PersonaScope scope = ai_chat::LlmService::instance().scope_for_role(QStringLiteral("fingpt"));
     scope.think = false;
+    // The whole pipeline samples news deterministically so a re-run over an
+    // unchanged feed asks an identical question; default-temperature decoding
+    // would reintroduce the rerun variance at the last stage.
+    scope.temperature = 0.0;
 
     const quint64 epoch = epoch_;
     auto acc = std::make_shared<QString>();
@@ -350,7 +355,8 @@ void FinGptForecasterTab::render_answer(const QString& raw) {
         return s.toHtmlEscaped().replace(QStringLiteral("\n"), QStringLiteral("<br>"));
     };
     const QString call = describe_forecast(a);
-    const QDate curday = core::bartime::market_today_et();
+    const QDate curday =
+        last_run_day_.isValid() ? last_run_day_ : core::bartime::market_today_et();
     QString html;
     html += QStringLiteral("<div style='color:%1;font-weight:700;'>[Positive Developments]</div>"
                            "<div style='color:%2;'>%3</div><br>")
@@ -386,6 +392,7 @@ QVariantMap FinGptForecasterTab::save_state() const {
     m.insert(QStringLiteral("basics"), basics_check_ && basics_check_->isChecked());
     m.insert(QStringLiteral("last_answer"), last_raw_answer_);
     m.insert(QStringLiteral("last_info"), last_info_block_);
+    m.insert(QStringLiteral("last_day"), last_run_day_.toString(Qt::ISODate));
     return m;
 }
 
@@ -405,9 +412,14 @@ void FinGptForecasterTab::restore_state(const QVariantMap& state) {
         info_view_->setPlainText(info);
     }
     if (!answer.isEmpty()) {
+        last_run_day_ = QDate::fromString(state.value(QStringLiteral("last_day")).toString(), Qt::ISODate);
         last_raw_answer_ = answer;
         render_answer(answer);
-        status_lbl_->setText(QStringLiteral("Restored the previous run — RUN FORECASTER for a fresh read."));
+        status_lbl_->setText(
+            last_run_day_.isValid()
+                ? QStringLiteral("Restored the %1 run — RUN FORECASTER for a fresh read.")
+                      .arg(last_run_day_.toString(Qt::ISODate))
+                : QStringLiteral("Restored the previous run — RUN FORECASTER for a fresh read."));
     }
 }
 

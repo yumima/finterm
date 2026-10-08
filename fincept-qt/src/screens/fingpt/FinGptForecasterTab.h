@@ -16,6 +16,7 @@
 
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDate>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPushButton>
@@ -78,6 +79,11 @@ class FinGptForecasterTab : public QWidget {
 
     QString last_raw_answer_;   // for save_state
     QString last_info_block_;
+    // The market day the last answer was produced on. The rendered header
+    // names the predicted week from THIS, never from "today": a restored
+    // answer re-dated to the restore day would claim a week the model never
+    // analyzed.
+    QDate last_run_day_;
 };
 
 } // namespace fincept::screens::fingpt

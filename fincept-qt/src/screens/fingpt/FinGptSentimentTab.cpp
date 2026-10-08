@@ -2,6 +2,7 @@
 #include "screens/fingpt/FinGptSentimentTab.h"
 
 #include "ai_chat/LlmService.h"
+#include "core/util/BarTime.h"
 #include "screens/fingpt/FinGptParse.h"
 #include "screens/fingpt/FinGptPrompts.h"
 #include "services/equity/EquityResearchService.h"
@@ -200,7 +201,12 @@ void FinGptSentimentTab::set_headlines(const QVector<NewsArticle>& articles) {
         auto* sent = new QTableWidgetItem(QStringLiteral("—"));
         sent->setForeground(QColor(colors::TEXT_DIM()));
         table_->setItem(i, 0, sent);
-        table_->setItem(i, 1, new QTableWidgetItem(articles_[i].published_date.left(10)));
+        // published_date is an EVENT instant; its UTC prefix dates every
+        // evening headline one day late — show the ET calendar day.
+        const QDateTime pub = QDateTime::fromString(articles_[i].published_date, Qt::ISODate).toUTC();
+        table_->setItem(i, 1, new QTableWidgetItem(
+            pub.isValid() ? core::bartime::market_date_et(pub).toString(Qt::ISODate)
+                          : articles_[i].published_date.left(10)));
         auto* head = new QTableWidgetItem(articles_[i].title);
         head->setToolTip(articles_[i].description);
         table_->setItem(i, 2, head);
@@ -272,8 +278,16 @@ void FinGptSentimentTab::on_classify_all() {
     busy_ = true;
     classify_all_btn_->setEnabled(false);
     fetch_btn_->setEnabled(false);
-    for (int i = 0; i < row_labels_.size(); ++i)
+    for (int i = 0; i < row_labels_.size(); ++i) {
         row_labels_[i].clear();
+        // The painted cells must match the state: after an abort, a previous
+        // run's confident labels over unclassified rows would lie.
+        if (QTableWidgetItem* item = table_->item(i, 0)) {
+            item->setText(QStringLiteral("—"));
+            item->setForeground(QColor(colors::TEXT_DIM()));
+        }
+    }
+    summary_lbl_->clear();
     classify_next_row();
 }
 
@@ -286,6 +300,9 @@ void FinGptSentimentTab::classify_next_row() {
         classify_all_btn_->setEnabled(true);
         fetch_btn_->setEnabled(true);
         update_summary();
+        const int n = static_cast<int>(row_labels_.size());
+        status_lbl_->setText(QStringLiteral("Done — %1 headlines labelled. Net score is "
+                                            "(positive − negative) / total.").arg(n));
         return;
     }
     status_lbl_->setText(QStringLiteral("Classifying %1 / %2…").arg(next + 1).arg(row_labels_.size()));
@@ -327,10 +344,12 @@ void FinGptSentimentTab::update_summary() {
         else if (l == QStringLiteral("negative")) ++neg;
         else if (!l.isEmpty()) ++neu;
     }
+    // Summary label only — the status line belongs to the caller: the abort
+    // path writes its error there, and overwriting it with "Done…" made a
+    // dead backend read as a completed run.
     const int n = pos + neg + neu;
     if (n == 0) {
         summary_lbl_->clear();
-        status_lbl_->setText(QStringLiteral("Nothing classified."));
         return;
     }
     const double net = static_cast<double>(pos - neg) / n;
@@ -341,8 +360,6 @@ void FinGptSentimentTab::update_summary() {
             .arg(QString(colors::POSITIVE()), QString::number(pos), QString(colors::NEGATIVE()),
                  QString::number(neg), QString(colors::TEXT_SECONDARY()), QString::number(neu),
                  QString::number(net, 'f', 2)));
-    status_lbl_->setText(QStringLiteral("Done — %1 headlines labelled. Net score is "
-                                        "(positive − negative) / total.").arg(n));
 }
 
 void FinGptSentimentTab::on_classify_text() {
@@ -361,6 +378,10 @@ void FinGptSentimentTab::on_classify_text() {
     busy_ = true;
     classify_text_btn_->setEnabled(false);
     text_votes_.clear();
+    // Captured once: the box stays editable while the vote runs, and
+    // re-reading it per step would blend votes over two different texts
+    // into one verdict.
+    text_vote_input_ = input;
     if (vote_check_->isChecked()) {
         run_text_step(0);
     } else {
@@ -384,7 +405,7 @@ void FinGptSentimentTab::run_text_step(int step) {
         return;
     }
     text_result_lbl_->setText(QStringLiteral("Vote %1 / %2…").arg(step + 1).arg(instructions.size()));
-    classify(instructions[step], text_edit_->toPlainText().trimmed(),
+    classify(instructions[step], text_vote_input_,
              [this, step](const QString& label, const QString& error) {
                  if (!error.isEmpty()) {
                      abort_run(QStringLiteral("Vote %1 failed: %2").arg(step + 1).arg(error));

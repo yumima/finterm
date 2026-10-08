@@ -81,6 +81,13 @@ class FinGptScreen : public QWidget,
     QPointer<FinGptForecasterTab> forecaster_tab_;
     QPointer<FinGptSentimentTab> sentiment_tab_;
 
+    /// Saved sub-tab states for tabs not yet constructed, applied by
+    /// ensure_tab_built. A layout restore must not build every widget tree at
+    /// startup just to hand each a map — same laziness rule as pending_symbol_.
+    QVariantMap pending_chat_state_;
+    QVariantMap pending_forecaster_state_;
+    QVariantMap pending_sentiment_state_;
+
     /// Last linked-group ticker, applied to a task tab when it is first built.
     /// Link traffic must not defeat the lazy construction — a FinGPT pane
     /// parked on Chat should not build two widget trees per symbol click

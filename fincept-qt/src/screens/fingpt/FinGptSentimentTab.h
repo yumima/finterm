@@ -86,6 +86,7 @@ class FinGptSentimentTab : public QWidget {
     QVector<services::equity::NewsArticle> articles_;
     QStringList row_labels_;      // "" until classified
     QStringList text_votes_;      // per-template labels of the running text vote
+    QString text_vote_input_;     // the text the running vote was started on
 };
 
 } // namespace fincept::screens::fingpt

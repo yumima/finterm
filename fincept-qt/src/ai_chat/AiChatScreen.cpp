@@ -884,7 +884,10 @@ void AiChatScreen::load_sessions() {
                 return;
             }
         }
-        create_new_session();
+        // Creation can fail (locked DB, mid-stream re-entry) — fall back to
+        // the newest existing session rather than leaving nothing selected.
+        if (!create_new_session() && session_list_->count() > 0)
+            session_list_->setCurrentRow(0);
         return;
     }
     if (session_list_->count() > 0)

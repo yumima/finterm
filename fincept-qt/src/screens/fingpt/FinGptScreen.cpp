@@ -11,6 +11,8 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
+#include <utility>
+
 namespace fincept::screens::fingpt {
 
 using namespace fincept::ui;
@@ -127,6 +129,8 @@ void FinGptScreen::ensure_tab_built(SubTab which) {
         auto* chat = new fincept::screens::AiChatScreen(this, QStringLiteral("fingpt"));
         connect(chat, &fincept::screens::AiChatScreen::request_new_pane, this,
                 &FinGptScreen::request_new_chat_pane);
+        if (!pending_chat_state_.isEmpty())
+            chat->restore_state(std::exchange(pending_chat_state_, {}));
         swap_in(TabChat, chat);
         chat_tab_ = chat;
     }
@@ -134,6 +138,8 @@ void FinGptScreen::ensure_tab_built(SubTab which) {
         auto* t = new FinGptForecasterTab(this);
         if (!pending_symbol_.isEmpty())
             t->set_symbol(pending_symbol_);
+        if (!pending_forecaster_state_.isEmpty())
+            t->restore_state(std::exchange(pending_forecaster_state_, {}));
         swap_in(TabForecaster, t);
         forecaster_tab_ = t;
     }
@@ -141,6 +147,8 @@ void FinGptScreen::ensure_tab_built(SubTab which) {
         auto* t = new FinGptSentimentTab(this);
         if (!pending_symbol_.isEmpty())
             t->set_symbol(pending_symbol_);
+        if (!pending_sentiment_state_.isEmpty())
+            t->restore_state(std::exchange(pending_sentiment_state_, {}));
         swap_in(TabSentiment, t);
         sentiment_tab_ = t;
     }
@@ -167,12 +175,21 @@ void FinGptScreen::refresh_tab_button_styles() {
 QVariantMap FinGptScreen::save_state() const {
     QVariantMap m;
     m["active_tab"] = int(active_tab_);
+    // A tab that was never built this session still carries the previous
+    // session's restored-but-pending state — write it back out, or one
+    // save/restore cycle without opening the tab would erase it.
     if (chat_tab_)
         m["chat"] = chat_tab_->save_state();
+    else if (!pending_chat_state_.isEmpty())
+        m["chat"] = pending_chat_state_;
     if (forecaster_tab_)
         m["forecaster"] = forecaster_tab_->save_state();
+    else if (!pending_forecaster_state_.isEmpty())
+        m["forecaster"] = pending_forecaster_state_;
     if (sentiment_tab_)
         m["sentiment"] = sentiment_tab_->save_state();
+    else if (!pending_sentiment_state_.isEmpty())
+        m["sentiment"] = pending_sentiment_state_;
     return m;
 }
 
@@ -187,21 +204,26 @@ void FinGptScreen::restore_state(const QVariantMap& state) {
             refresh_tab_button_styles();
         }
     }
-    if (state.contains("chat")) {
-        ensure_tab_built(TabChat);
-        if (chat_tab_)
-            chat_tab_->restore_state(state.value("chat").toMap());
-    }
-    if (state.contains("forecaster")) {
-        ensure_tab_built(TabForecaster);
-        if (forecaster_tab_)
-            forecaster_tab_->restore_state(state.value("forecaster").toMap());
-    }
-    if (state.contains("sentiment")) {
-        ensure_tab_built(TabSentiment);
-        if (sentiment_tab_)
-            sentiment_tab_->restore_state(state.value("sentiment").toMap());
-    }
+    // Only the active tab's widget exists at this point; the rest keep their
+    // maps pending and restore on first build. Eagerly constructing every
+    // sub-tab with a saved key would rebuild all three widget trees on every
+    // layout restore — the cost the lazy placeholders exist to avoid.
+    const auto hand_off = [this](const char* key, const QVariantMap& state, QWidget* built,
+                                 QVariantMap& pending, auto&& apply) {
+        if (!state.contains(QLatin1String(key)))
+            return;
+        const QVariantMap sub = state.value(QLatin1String(key)).toMap();
+        if (built)
+            apply(sub);
+        else
+            pending = sub;
+    };
+    hand_off("chat", state, chat_tab_, pending_chat_state_,
+             [this](const QVariantMap& m) { chat_tab_->restore_state(m); });
+    hand_off("forecaster", state, forecaster_tab_, pending_forecaster_state_,
+             [this](const QVariantMap& m) { forecaster_tab_->restore_state(m); });
+    hand_off("sentiment", state, sentiment_tab_, pending_sentiment_state_,
+             [this](const QVariantMap& m) { sentiment_tab_->restore_state(m); });
 }
 
 void FinGptScreen::on_group_symbol_changed(const fincept::SymbolRef& ref) {

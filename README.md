@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`a9458d246`](https://github.com/yumima/finterm/commit/a9458d246) fingpt: FinGPT tab — the AI4Finance task suite on finterm's own stack
 - [`cfabeb056`](https://github.com/yumima/finterm/commit/cfabeb056) er: a declined technical rating reads NOT RATED, never NEUTRAL
 - [`482028419`](https://github.com/yumima/finterm/commit/482028419) tests: repair the two ctests the last sweep left failing
 - [`7d89ae501`](https://github.com/yumima/finterm/commit/7d89ae501) data: fall back to yf.Search when Ticker.news returns nothing
