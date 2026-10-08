@@ -3033,6 +3033,39 @@ def get_earnings_analysis(symbol, quarters=12):
     return out
 
 
+def _news_via_search(symbol, count):
+    """Fallback news source: yfinance's Search endpoint.
+
+    Ticker.news returns [] on yfinance 0.2.66 (Yahoo retired the endpoint it
+    scrapes), which silently blanked every news consumer. Search still serves
+    news, in the OLD flat shape (title/link/publisher/providerPublishTime) and
+    without summaries. providerPublishTime is an EVENT instant (unix seconds);
+    it is emitted as ISO-8601 UTC so the C++ side's ISO parse keeps working.
+    """
+    import re
+    from datetime import datetime, timezone
+    items = yf.Search(symbol, news_count=count).news or []
+    articles = []
+    for it in items:
+        title = it.get("title", "")
+        if not title:
+            continue
+        ts = it.get("providerPublishTime")
+        pub_date = (datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+                    if isinstance(ts, (int, float)) and ts > 0 else "")
+        # Same cleaning guarantee as the primary path below: a summary can
+        # carry markup, and this text flows into LLM prompts and tooltips.
+        summary = re.sub(r'<[^>]+>', '', it.get("summary", "") or "")
+        articles.append({
+            "title": title,
+            "description": summary,
+            "url": it.get("link", "") or "",
+            "publisher": (it.get("publisher", "") or ""),
+            "published_date": pub_date,
+        })
+    return articles
+
+
 def get_news(symbol, count=20):
     """Fetch news articles for a symbol using yfinance"""
     try:
@@ -3040,7 +3073,7 @@ def get_news(symbol, count=20):
         ticker = yf.Ticker(symbol)
         raw_news = ticker.news
         if not raw_news:
-            return {"articles": [], "symbol": symbol}
+            return {"articles": _news_via_search(symbol, count), "symbol": symbol}
 
         articles = []
         for item in raw_news[:count]:
