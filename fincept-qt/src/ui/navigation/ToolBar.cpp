@@ -518,6 +518,7 @@ QMenu* ToolBar::build_view_menu() {
     panels->addAction("Economics", this, [this]() { emit action_triggered("panel_economics"); });
     panels->addAction("Geopolitics", this, [this]() { emit action_triggered("panel_geopolitics"); });
     panels->addAction("AI Chat", this, [this]() { emit action_triggered("panel_ai_chat"); });
+    panels->addAction("FinGPT", this, [this]() { emit action_triggered("panel_fingpt"); });
     m->addSeparator();
 
     // Quick Switch — jump to a preset screen layout

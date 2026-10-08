@@ -44,6 +44,7 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"watchlist", "Watchlist"},
         {"news", "News"},
         {"ai_chat", "AI Chat"},
+        {"fingpt", "FinGPT"},
         {"equity_research", "Equity Research"},
         {"economics", "Economics"},
         {"dbnomics", "DBnomics"},

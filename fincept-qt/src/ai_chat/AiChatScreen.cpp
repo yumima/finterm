@@ -149,7 +149,14 @@ static QString display_session_meta(const ChatSession& s) {
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
-AiChatScreen::AiChatScreen(QWidget* parent) : QWidget(parent) {
+AiChatScreen::AiChatScreen(QWidget* parent, const QString& default_persona) : QWidget(parent) {
+    // Resolve before build_ui()/load_sessions(): a fresh install auto-creates
+    // its first session during load_sessions(), and that session must already
+    // carry the embedding screen's persona.
+    if (!default_persona.isEmpty() && ai_chat::find_persona(default_persona)) {
+        default_persona_id_ = default_persona;
+        active_persona_id_ = default_persona;
+    }
     typing_timer_ = new QTimer(this);
     typing_timer_->setInterval(400);
     connect(typing_timer_, &QTimer::timeout, this, &AiChatScreen::on_typing_indicator_tick);
@@ -849,6 +856,7 @@ void AiChatScreen::load_sessions() {
             const QString label = title + (meta.isEmpty() ? "" : "\n" + meta);
             auto* item = new QListWidgetItem(label);
             item->setData(Qt::UserRole, s.id);
+            item->setData(Qt::UserRole + 1, s.persona_id);
             item->setToolTip(title + (meta.isEmpty() ? "" : "\n" + meta));
             item->setSizeHint(QSize(0, 52));
             session_list_->addItem(item);
@@ -864,6 +872,21 @@ void AiChatScreen::load_sessions() {
             }
         }
     }
+    // A screen embedded with its own default persona (the FinGPT tab) opens on
+    // that persona's most recent conversation, or starts one. Without this the
+    // default only applied to a fresh install's very first session, and every
+    // existing install opened on whatever session was newest — the tab
+    // promised an analyst it never delivered.
+    if (default_persona_id_ != QStringLiteral("general")) {
+        for (int i = 0; i < session_list_->count(); ++i) {
+            if (session_list_->item(i)->data(Qt::UserRole + 1).toString() == default_persona_id_) {
+                session_list_->setCurrentRow(i);
+                return;
+            }
+        }
+        create_new_session();
+        return;
+    }
     if (session_list_->count() > 0)
         session_list_->setCurrentRow(0);
     else
@@ -873,17 +896,18 @@ void AiChatScreen::load_sessions() {
 bool AiChatScreen::create_new_session(const QString& persona_id) {
     if (streaming_)
         return false;
+    const QString pid = persona_id.isEmpty() ? default_persona_id_ : persona_id;
     const QString title = generate_session_title();
     auto result = ChatRepository::instance().create_session(title, ai_chat::LlmService::instance().active_provider(),
-                                                            ai_chat::LlmService::instance().active_model(), persona_id);
+                                                            ai_chat::LlmService::instance().active_model(), pid);
     if (result.is_err()) {
         LOG_ERROR(TAG, "create_new_session failed: " + QString::fromStdString(result.error()));
         return false;
     }
     active_session_id_ = result.value().id;
     active_session_title_ = result.value().title;
-    active_persona_id_ = persona_id;
-    sync_persona_combo(persona_id);
+    active_persona_id_ = pid;
+    sync_persona_combo(pid);
     history_.clear();
     total_tokens_ = 0;
     total_messages_ = 0;

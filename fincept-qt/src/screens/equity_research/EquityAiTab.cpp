@@ -6,6 +6,7 @@
 #include "screens/equity_research/AiForecastMath.h"
 
 #include "ai_chat/LlmService.h"
+#include "ai_chat/ThinkTrace.h"
 #include "services/equity/EquityResearchService.h"
 #include "services/query/QueryStore.h"
 #include "services/stt/SpeechService.h"
@@ -86,13 +87,7 @@ QJsonObject extract_forecast_json(const QString& text) {
 // Display prose = the reply minus any <think>…</think> trace (qwen3 emits empty
 // ones under /no_think) and the trailing JSON / ```json fence.
 QString prose_only(const QString& text_in) {
-    QString text = text_in;
-    text.remove(QRegularExpression(QStringLiteral("<think>.*?</think>"),
-                                   QRegularExpression::DotMatchesEverythingOption));
-    // Also drop a dangling/unclosed <think> (truncated stream) so the raw trace
-    // never leaks into the shown or persisted prose.
-    text.remove(QRegularExpression(QStringLiteral("<think>.*"),
-                                   QRegularExpression::DotMatchesEverythingOption));
+    QString text = fincept::ai_chat::strip_think_traces(text_in);
     int cut = text.lastIndexOf(QStringLiteral("```json"));
     if (cut < 0) {
         const QJsonObject o = extract_forecast_json(text);

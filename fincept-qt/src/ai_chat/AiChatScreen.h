@@ -27,7 +27,11 @@ namespace fincept::screens {
 class AiChatScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
   public:
-    explicit AiChatScreen(QWidget* parent = nullptr);
+    /// `default_persona`: persona id used when a session must be created and
+    /// the caller didn't name one (fresh install, "+ New" without a pick).
+    /// Empty / unknown ids fall back to "general". The FinGPT tab embeds this
+    /// screen with "fingpt" so its chat opens as the FinGPT Analyst.
+    explicit AiChatScreen(QWidget* parent = nullptr, const QString& default_persona = QString());
 
     void restore_state(const QVariantMap& state) override;
     QVariantMap save_state() const override;
@@ -130,6 +134,7 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     // ── State ────────────────────────────────────────────────────────────
     QString active_session_id_;
     QString active_session_title_;
+    QString default_persona_id_ = QStringLiteral("general"); // persona for sessions created without a pick
     QString active_persona_id_ = QStringLiteral("general"); // persona bound to the active conversation
     bool programmatic_persona_set_ = false;  // guards combo signal re-entry during restore
     mutable QMutex history_mutex_;
@@ -152,8 +157,9 @@ class AiChatScreen : public QWidget, public IStatefulScreen {
     // ── Data ─────────────────────────────────────────────────────────────
     void load_sessions();
     void load_messages(const QString& session_id);
-    /// Create a new conversation bound to `persona_id`. Returns false on failure.
-    bool create_new_session(const QString& persona_id = QStringLiteral("general"));
+    /// Create a new conversation bound to `persona_id` (empty = this screen's
+    /// default persona). Returns false on failure.
+    bool create_new_session(const QString& persona_id = QString());
     /// Reflect `persona_id` in the header combo without firing the change handler.
     void sync_persona_combo(const QString& persona_id);
     void add_message_bubble(const QString& role, const QString& content, const QString& timestamp = {});

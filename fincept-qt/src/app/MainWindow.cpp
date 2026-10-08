@@ -42,6 +42,7 @@
 #include "screens/equity_research/EquityResearchScreen.h"
 #include "screens/futures/FuturesScreen.h"
 #include "screens/futures/FuturesQuoteCache.h"
+#include "screens/fingpt/FinGptScreen.h"
 #include "screens/fno/FnoScreen.h"
 #include "services/portfolio/PortfolioService.h"
 #include "screens/equity_trading/EquityTradingScreen.h"
@@ -670,6 +671,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 {"panel_economics", {"Economics", "economics"}},
                 {"panel_geopolitics", {"Geopolitics", "geopolitics"}},
                 {"panel_ai_chat", {"AI Chat", "ai_chat"}},
+                {"panel_fingpt", {"FinGPT", "fingpt"}},
             };
             if (panel_map.contains(action)) {
                 const auto [title, route] = panel_map[action];
@@ -1180,6 +1182,14 @@ void MainWindow::setup_dock_screens() {
         auto* chat = new screens::AiChatScreen;
         connect(chat, &screens::AiChatScreen::request_new_pane, this, &MainWindow::open_new_chat_pane);
         return chat;
+    });
+    // FinGPT — supersedes ai_chat in the tab strip; the bare chat id stays
+    // registered for extra panes, the floating bubble and saved layouts.
+    dock_router_->register_factory("fingpt", [this]() {
+        auto* s = new screens::fingpt::FinGptScreen;
+        connect(s, &screens::fingpt::FinGptScreen::request_new_chat_pane, this,
+                &MainWindow::open_new_chat_pane);
+        return s;
     });
     dock_router_->register_factory("backtesting", []() { return new screens::BacktestingScreen; });
     dock_router_->register_factory("algo_trading", []() { return new screens::AlgoTradingScreen; });

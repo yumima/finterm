@@ -20,7 +20,8 @@ constexpr const char* kAppCtxSymbolSource = "equity_research";
 constexpr const char* kAppCtxPortfolioSource = "portfolio";
 
 bool app_ctx_is_chat_surface(const QString& base) {
-    return base == QLatin1String("ai_chat") || base == QLatin1String("agent_config");
+    return base == QLatin1String("ai_chat") || base == QLatin1String("agent_config") ||
+           base == QLatin1String("fingpt");  // embeds AiChatScreen as its Chat sub-tab
 }
 
 QString app_ctx_base_id(const QObject* o) {

@@ -600,6 +600,31 @@ target_link_libraries(test_ai_forecast_math PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_ai_forecast_math PROPERTIES AUTOMOC ON)
 add_test(NAME ai_forecast_math COMMAND test_ai_forecast_math)
 
+# ── FinGPT prompt assembly ───────────────────────────────────────────────────
+# A port of someone else's pipeline drifts invisibly: week anchors read BAR
+# dates, news lands on the ET calendar day of its EVENT instant, the 5-item
+# sample is deterministic where upstream rolled dice, and absent vendor fields
+# must stay out of the prompt (no "nan", no fabricated zero).
+add_executable(test_fingpt_prompts
+    screens/test_fingpt_prompts.cpp
+)
+target_include_directories(test_fingpt_prompts PRIVATE ../src)
+target_link_libraries(test_fingpt_prompts PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_fingpt_prompts PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME fingpt_prompts COMMAND test_fingpt_prompts)
+
+# ── FinGPT answer parsing ────────────────────────────────────────────────────
+# Free text in, "UP by 2-3%" header out — a wrong parse paints a confident
+# direction over an answer that said something else. Pins the canonical shape,
+# marker drift, think-trace stripping, and the honest-failure path.
+add_executable(test_fingpt_parse
+    screens/test_fingpt_parse.cpp
+)
+target_include_directories(test_fingpt_parse PRIVATE ../src)
+target_link_libraries(test_fingpt_parse PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_fingpt_parse PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME fingpt_parse COMMAND test_fingpt_parse)
+
 # ── IPO Watch pure parse/format ──────────────────────────────────────────────
 # Both helpers have shipped a wrong-but-plausible number: a half-parsed price
 # range reported as a confident low side, and a share count run through the

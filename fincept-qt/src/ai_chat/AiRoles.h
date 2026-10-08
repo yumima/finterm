@@ -37,6 +37,9 @@ inline const QVector<AiRole>& ai_roles() {
     static const QVector<AiRole> kRoles = {
         {QStringLiteral("ai_chat"), QStringLiteral("Chat"),
          QStringLiteral("The main AI chat pane — long conversations, tool use.")},
+        {QStringLiteral("fingpt"), QStringLiteral("FinGPT"),
+         QStringLiteral("FinGPT tab one-shots — the weekly forecaster and headline "
+                        "sentiment. Structured outputs; a fast local model does fine.")},
         {QStringLiteral("news"), QStringLiteral("News briefs"),
          QStringLiteral("TL;DR headline summaries. Short structured one-shots; "
                         "favour a fast model over a strong one.")},

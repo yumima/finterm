@@ -20,7 +20,10 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
     QVector<TabDef> tabs = {
         {"dashboard", "DASHBOARD"}, {"markets", "MARKETS"},   {"futures", "FUTURES"},        {"crypto_trading", "CRYPTO"},  {"portfolio", "PORTFOLIO"},
         {"ownership", "OWNERSHIP"}, {"pre_ipo", "IPO WATCH"},
-        {"news", "NEWS"},           {"ai_chat", "AI CHAT"},   {"backtesting", "BACKTEST"},   {"algo_trading", "ALGO"},
+        // "fingpt" replaced "ai_chat" here: the FinGPT screen carries the
+        // same chat as its first sub-tab, plus the forecaster and sentiment
+        // tasks. The ai_chat id itself stays routable (palette, panels menu).
+        {"news", "NEWS"},           {"fingpt", "FINGPT"},     {"backtesting", "BACKTEST"},   {"algo_trading", "ALGO"},
         {"node_editor", "NODES"},   {"code_editor", "CODE"},  {"ai_quant_lab", "QUANT LAB"}, {"quantlib", "QUANTLIB"},
         {"forum", "FORUM"},         {"knowledge", "KNOWLEDGE"},
         // SETTINGS and PROFILE deliberately absent: they merged into one screen
