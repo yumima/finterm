@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`482028419`](https://github.com/yumima/finterm/commit/482028419) tests: repair the two ctests the last sweep left failing
 - [`7d89ae501`](https://github.com/yumima/finterm/commit/7d89ae501) data: fall back to yf.Search when Ticker.news returns nothing
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

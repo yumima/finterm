@@ -376,6 +376,7 @@ class TestTechnicalRating : public QObject {
         QCOMPARE(v.overall, S::Neutral);
         QCOMPARE(v.net, 0.0);
         QVERIFY2(v.basis.contains("Not enough history"), qPrintable(v.basis));
+        QVERIFY2(!v.rated, "declining to rate must be distinguishable from rating Neutral");
     }
 
     /// The counting guard on its own is not enough, and this is the case that
@@ -410,6 +411,9 @@ class TestTechnicalRating : public QObject {
         QCOMPARE(v.overall, S::Neutral);
         QCOMPARE(v.net, 0.0);
         QVERIFY2(v.basis.contains("Not enough history"), qPrintable(v.basis));
+        // A recent IPO (~80 bars) lands here with a bullish tally: the UI shows
+        // NOT RATED off this flag, never a NEUTRAL badge over 17 buy votes.
+        QVERIFY(!v.rated);
     }
 
     /// The structural indicators are what make the trend evidence real, and
@@ -516,6 +520,7 @@ class TestTechnicalRating : public QObject {
         QVERIFY2(neutral >= 4, "fixture should have several demoted oscillators");
 
         const auto v = technical_rating::aggregate(scored, in);
+        QVERIFY(v.rated);
         QCOMPARE(v.overall, S::StrongBuy);
         QVERIFY2(v.net > 0.9, qPrintable(QString::number(v.net)));
     }

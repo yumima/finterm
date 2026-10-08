@@ -64,7 +64,7 @@ QJsonObject quote_to_json(const services::equity::QuoteData& q) {
     // (datetime.now() in yfinance_data.py), not the exchange's last-trade
     // time — labelled as such so a model never reports it as the market time.
     // The daemon does not supply the market time, so none is claimed.
-    const QString fetched_iso =
+    const QString fetched_iso =  // EVENT-STAMP: quote fetch instant, reported as ISO UTC
         q.timestamp > 0 ? QDateTime::fromSecsSinceEpoch(q.timestamp).toUTC().toString(Qt::ISODate) : QString();
     return QJsonObject{
         {"symbol", q.symbol},
@@ -210,11 +210,17 @@ QJsonObject technicals_to_json(const services::equity::TechnicalsData& t) {
         {"momentum", indicators_to_json(t.momentum)},
         {"volatility", indicators_to_json(t.volatility)},
         {"volume", indicators_to_json(t.volume)},
-        {"overall_signal", tech_signal_str(t.overall_signal)},
+        // NOT_RATED, not NEUTRAL, when the scorer declined: a consuming model
+        // summarizes this one field and nothing forces it to cross-read the
+        // `rated` boolean — the claim has to be right at the source.
+        {"overall_signal", t.rated ? tech_signal_str(t.overall_signal) : QStringLiteral("NOT_RATED")},
         // Weighted composite in [-1, +1] the verdict was cut from, and the
         // per-bucket scores behind it — the counts alone do not reconstruct it,
         // since the buckets carry different weights.
         {"net_score", t.net_score},
+        // False = the scorer declined (insufficient history); overall_signal
+        // is then a filler Neutral and must not be read as a flat rating.
+        {"rated", t.rated},
         {"rating_basis", t.rating_basis},
         {"data_warning", t.data_warning},
         {"voting_count", t.voting_count},

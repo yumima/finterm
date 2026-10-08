@@ -211,6 +211,10 @@ struct TechnicalsData {
     QVector<TechIndicator> momentum;
     QVector<TechIndicator> volatility;
     QVector<TechIndicator> volume;
+    /// False when the scorer declined to rate (insufficient history / voters).
+    /// `overall_signal` is then Neutral by default, and rendering it as NEUTRAL
+    /// misreads "cannot rate" as "rated flat" — show "not rated" instead.
+    bool rated = true;
     TechSignal overall_signal = TechSignal::Neutral;
     /// Weighted composite in [-1, +1] behind `overall_signal`; drives the gauge.
     double net_score = 0.0;

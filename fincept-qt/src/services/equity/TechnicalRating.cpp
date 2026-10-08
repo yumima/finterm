@@ -444,6 +444,7 @@ RatingVerdict aggregate(const QVector<TechIndicator>& scored, const RatingInput&
 
     if (!has_sufficient_history(in) || !structure.valid || v.voting < kMinVotingIndicators ||
         trend_voters < kMinTrendVoters) {
+        v.rated = false;
         v.overall = S::Neutral;
         v.net = 0.0;
         v.basis = QStringLiteral("Not enough history to rate — needs the 10/20/50/100/200 "

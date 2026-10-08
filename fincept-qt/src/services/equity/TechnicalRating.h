@@ -98,6 +98,12 @@ struct IndicatorVerdict {
 
 /// The composite read plus everything the UI needs to explain it.
 struct RatingVerdict {
+    /// False when no verdict could be produced (insufficient history / too few
+    /// voters). `overall` is then Neutral only because the enum has no absent
+    /// state — surfaces must render "not rated", NEVER the word NEUTRAL: a
+    /// recent IPO with 80 bars is unrated, not neutral, and the two mean
+    /// different things to someone sizing a position.
+    bool rated = true;
     TechSignal overall = TechSignal::Neutral;
     /// Weighted composite in [-1, +1]. The gauge is drawn straight off this so
     /// the bar and the words can never disagree.

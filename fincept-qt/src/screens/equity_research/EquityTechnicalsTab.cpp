@@ -594,6 +594,11 @@ void EquityTechnicalsTab::build_ui() {
     auto make_btn = [&](const QString& label, QPushButton*& out, const QString& period) {
         out = new QPushButton(label);
         out->setCursor(Qt::PointingHandCursor);
+        // The caption label's tooltip, repeated on every button: the buttons
+        // are what people hover, and "why does 1M rate the same as 1Y" is the
+        // question this answers (a user reasonably read the identical verdicts
+        // as the rating being broken).
+        out->setToolTip(period_lbl->toolTip());
         out->setStyleSheet(period == current_period_ ? period_btn_style_active() : period_btn_style_inactive());
         connect(out, &QPushButton::clicked, this, [this, out, period]() { switch_period(out, period); });
         pb_hl->addWidget(out);
@@ -636,6 +641,7 @@ void EquityTechnicalsTab::build_ui() {
     auto make_interval_btn = [&](const QString& label, QPushButton*& out, const QString& interval) {
         out = new QPushButton(label);
         out->setCursor(Qt::PointingHandCursor);
+        out->setToolTip(bars_lbl->toolTip());
         out->setStyleSheet(interval == current_interval_ ? period_btn_style_active()
                                                           : period_btn_style_inactive());
         connect(out, &QPushButton::clicked, this,
@@ -901,16 +907,38 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
     const int sb = payload.strong_buy, b = payload.buy, n = payload.neutral;
     const int s = payload.sell, ss = payload.strong_sell;
 
-    rating_label_->setText(signal_text(payload.overall_signal));
-    rating_label_->setStyleSheet(
-        QString("color:%1;font-size:22px;font-weight:700;letter-spacing:2px;background:transparent;border:0;")
-            .arg(signal_color(payload.overall_signal)));
-
-    // The gauge is drawn off the same weighted score as the verdict, so the bar
-    // and the words cannot disagree. It used to be bulls/total *including*
-    // neutrals, which pinned it near the bottom of its range and left it
-    // reading bearish next to the word STRONG BUY.
-    gauge_bar_->setValue(static_cast<int>(std::lround(50.0 + 50.0 * payload.net_score)));
+    // "Cannot rate" and "rated flat" are different claims. A recent IPO (SPCX,
+    // ~80 bars: no 100/200-day averages, no MA-fan) used to wear the same
+    // NEUTRAL badge as a genuinely scored neutral while the tally below showed
+    // 17 bullish votes — read together, that looks like a broken aggregator
+    // rather than what it is: not enough history for the verdict's two inputs.
+    if (!payload.rated) {
+        rating_label_->setText(QStringLiteral("NOT RATED"));
+        rating_label_->setStyleSheet(
+            QString("color:%1;font-size:22px;font-weight:700;letter-spacing:2px;background:transparent;border:0;")
+                .arg(ui::colors::TEXT_DIM()));
+        // The gauge must go blank too: net_score is 0 here only as a filler,
+        // and a needle sitting confidently at dead centre is the scored-flat
+        // reading this branch exists to NOT claim.
+        gauge_bar_->setValue(0);
+        gauge_bar_->setStyleSheet(
+            QString("QProgressBar{background:%1;border:1px solid %2;border-radius:0;}")
+                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    } else {
+        rating_label_->setText(signal_text(payload.overall_signal));
+        rating_label_->setStyleSheet(
+            QString("color:%1;font-size:22px;font-weight:700;letter-spacing:2px;background:transparent;border:0;")
+                .arg(signal_color(payload.overall_signal)));
+        gauge_bar_->setStyleSheet(
+            QString("QProgressBar{background:%1;border:1px solid %2;border-radius:0;}"
+                    "QProgressBar::chunk{background:%3;}")
+                .arg(ui::colors::NEGATIVE(), ui::colors::BORDER_DIM(), ui::colors::POSITIVE()));
+        // The gauge is drawn off the same weighted score as the verdict, so the
+        // bar and the words cannot disagree. It used to be bulls/total
+        // *including* neutrals, which pinned it near the bottom of its range
+        // and left it reading bearish next to the word STRONG BUY.
+        gauge_bar_->setValue(static_cast<int>(std::lround(50.0 + 50.0 * payload.net_score)));
+    }
 
     strong_buy_count_->setText(QString::number(sb));
     buy_count_->setText(QString::number(b));

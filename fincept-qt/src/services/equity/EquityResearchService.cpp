@@ -1604,6 +1604,7 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
     all << td.trend << td.momentum << td.volatility << td.volume;
 
     const RatingVerdict verdict = technical_rating::aggregate(all, input);
+    td.rated = verdict.rated;
     td.overall_signal = verdict.overall;
     td.net_score = verdict.net;
     td.rating_basis = verdict.basis;
