@@ -4,6 +4,8 @@
 #include "core/logging/Logger.h"
 #include "screens/fingpt/FinGptForecasterTab.h"
 #include "screens/fingpt/FinGptSentimentTab.h"
+#include "services/app_context/AppContextService.h"
+#include "storage/repositories/PortfolioRepository.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
@@ -11,6 +13,7 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
+#include <cmath>
 #include <utility>
 
 namespace fincept::screens::fingpt {
@@ -140,6 +143,9 @@ void FinGptScreen::ensure_tab_built(SubTab which) {
             t->set_symbol(pending_symbol_);
         if (!pending_forecaster_state_.isEmpty())
             t->restore_state(std::exchange(pending_forecaster_state_, {}));
+        // After link traffic and restore have had their say: a still-blank tab
+        // seeds itself and assembles the evidence pane (no LLM call).
+        t->seed(seed_symbol());
         swap_in(TabForecaster, t);
         forecaster_tab_ = t;
     }
@@ -149,6 +155,7 @@ void FinGptScreen::ensure_tab_built(SubTab which) {
             t->set_symbol(pending_symbol_);
         if (!pending_sentiment_state_.isEmpty())
             t->restore_state(std::exchange(pending_sentiment_state_, {}));
+        t->seed(seed_symbol());
         swap_in(TabSentiment, t);
         sentiment_tab_ = t;
     }
@@ -194,20 +201,16 @@ QVariantMap FinGptScreen::save_state() const {
 }
 
 void FinGptScreen::restore_state(const QVariantMap& state) {
-    if (state.contains("active_tab")) {
-        const int idx = state.value("active_tab").toInt();
-        if (idx >= 0 && idx < TabCount) {
-            active_tab_ = SubTab(idx);
-            ensure_tab_built(active_tab_);
-            if (stack_)
-                stack_->setCurrentIndex(idx);
-            refresh_tab_button_styles();
-        }
-    }
-    // Only the active tab's widget exists at this point; the rest keep their
-    // maps pending and restore on first build. Eagerly constructing every
-    // sub-tab with a saved key would rebuild all three widget trees on every
-    // layout restore — the cost the lazy placeholders exist to avoid.
+    // Sub-states are handed off BEFORE any tab is built: ensure_tab_built
+    // applies the pending map and only seeds what is still blank afterwards.
+    // The old order built-and-seeded the active tab first, so the seed's
+    // evidence run raced the saved state — a restored NVDA answer could end
+    // up over freshly fetched AAPL evidence, and save_state() would then
+    // persist that mixed state to disk.
+    //
+    // Tabs not built here keep their maps pending and restore on first build;
+    // eagerly constructing every sub-tab with a saved key would rebuild all
+    // three widget trees on every layout restore.
     const auto hand_off = [this](const char* key, const QVariantMap& state, QWidget* built,
                                  QVariantMap& pending, auto&& apply) {
         if (!state.contains(QLatin1String(key)))
@@ -224,6 +227,17 @@ void FinGptScreen::restore_state(const QVariantMap& state) {
              [this](const QVariantMap& m) { forecaster_tab_->restore_state(m); });
     hand_off("sentiment", state, sentiment_tab_, pending_sentiment_state_,
              [this](const QVariantMap& m) { sentiment_tab_->restore_state(m); });
+
+    if (state.contains("active_tab")) {
+        const int idx = state.value("active_tab").toInt();
+        if (idx >= 0 && idx < TabCount) {
+            active_tab_ = SubTab(idx);
+            ensure_tab_built(active_tab_);
+            if (stack_)
+                stack_->setCurrentIndex(idx);
+            refresh_tab_button_styles();
+        }
+    }
 }
 
 void FinGptScreen::on_group_symbol_changed(const fincept::SymbolRef& ref) {
@@ -238,6 +252,56 @@ void FinGptScreen::on_group_symbol_changed(const fincept::SymbolRef& ref) {
         forecaster_tab_->set_symbol(pending_symbol_);
     if (sentiment_tab_)
         sentiment_tab_->set_symbol(pending_symbol_);
+}
+
+QString FinGptScreen::seed_symbol() {
+    // A blank pane with an empty field read as "the tab shows nothing" — seed
+    // it with what the user most likely means. Link traffic first: a group-
+    // linked pane must open on the group's ticker, whatever else is in focus.
+    if (!pending_symbol_.isEmpty())
+        return pending_symbol_;
+    const auto snap = fincept::services::AppContextService::instance().snapshot();
+    if (!snap.symbol.isEmpty())
+        return snap.symbol.toUpper();
+
+    if (portfolio_seed_cache_.isEmpty()) {
+        // Largest holding of the active portfolio, else of the first one.
+        // Cost basis in the instrument's own currency — a familiarity guess,
+        // not a valuation (no FX, no live prices; PortfolioService owns the
+        // real figure). |qty × avg price| so a short position still counts as
+        // a holding the user knows.
+        auto& repo = fincept::PortfolioRepository::instance();
+        QString pid = snap.portfolio_id;
+        if (pid.isEmpty()) {
+            const auto ports = repo.list_portfolios();
+            if (ports.is_ok() && !ports.value().isEmpty())
+                pid = ports.value().first().id;
+        }
+        QString best, first_sym;
+        double best_val = 0.0;
+        if (!pid.isEmpty()) {
+            const auto assets = repo.get_assets(pid);
+            if (assets.is_ok()) {
+                for (const auto& a : assets.value()) {
+                    if (a.symbol.isEmpty())
+                        continue;
+                    if (first_sym.isEmpty())
+                        first_sym = a.symbol;
+                    const double v = std::abs(a.quantity * a.avg_buy_price);
+                    if (v > best_val) {
+                        best_val = v;
+                        best = a.symbol;
+                    }
+                }
+            }
+        }
+        // Zero-cost imports leave every |v| at 0 — any real holding still
+        // beats the generic fallback.
+        if (best.isEmpty())
+            best = first_sym;
+        portfolio_seed_cache_ = best.isEmpty() ? QStringLiteral("AAPL") : best.toUpper();
+    }
+    return portfolio_seed_cache_;
 }
 
 fincept::SymbolRef FinGptScreen::current_symbol() const {

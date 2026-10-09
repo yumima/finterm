@@ -142,6 +142,15 @@ void FinGptSentimentTab::set_symbol(const QString& symbol) {
         symbol_edit_->setText(symbol.trimmed().toUpper());
 }
 
+void FinGptSentimentTab::seed(const QString& symbol) {
+    if (busy_ || !articles_.isEmpty())
+        return;
+    if (this->symbol().isEmpty())
+        set_symbol(symbol);
+    if (!this->symbol().isEmpty())
+        on_fetch_headlines();
+}
+
 void FinGptSentimentTab::on_fetch_headlines() {
     const QString sym = symbol();
     if (sym.isEmpty()) {
@@ -445,7 +454,11 @@ QVariantMap FinGptSentimentTab::save_state() const {
 }
 
 void FinGptSentimentTab::restore_state(const QVariantMap& state) {
-    set_symbol(state.value(QStringLiteral("symbol")).toString());
+    // An empty saved symbol must not blank a field that link traffic
+    // already set (the seed would then fetch a different ticker).
+    const QString restored_symbol = state.value(QStringLiteral("symbol")).toString();
+    if (!restored_symbol.isEmpty())
+        set_symbol(restored_symbol);
     if (text_edit_)
         text_edit_->setPlainText(state.value(QStringLiteral("text")).toString());
     if (vote_check_ && state.contains(QStringLiteral("vote")))

@@ -40,6 +40,11 @@ class FinGptSentimentTab : public QWidget {
     void set_symbol(const QString& symbol);
     QString symbol() const;
 
+    /// First-open seeding: a blank, idle tab adopts `symbol` and fetches its
+    /// headlines so the table opens with content. No LLM call — labelling
+    /// still waits for the user.
+    void seed(const QString& symbol);
+
   private slots:
     void on_fetch_headlines();
     void on_classify_all();

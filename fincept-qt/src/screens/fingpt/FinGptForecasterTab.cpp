@@ -148,19 +148,48 @@ void FinGptForecasterTab::fail(const QString& message) {
     status_lbl_->setText(message);
 }
 
-void FinGptForecasterTab::on_run() {
-    if (running_)
+void FinGptForecasterTab::on_run() { start_run(/*ask_model=*/true); }
+
+void FinGptForecasterTab::seed(const QString& symbol) {
+    // A run in flight, a restored answer, or restored evidence outranks the
+    // seed entirely (re-fetching a restored info block on every open would
+    // make the saved state dead weight); a ticker already in the field (link
+    // traffic, restore) outranks the seed SYMBOL but still deserves its
+    // evidence assembled.
+    if (running_ || !last_raw_answer_.isEmpty() || !last_info_block_.isEmpty())
         return;
+    if (this->symbol().isEmpty())
+        set_symbol(symbol);
+    if (!this->symbol().isEmpty())
+        start_run(/*ask_model=*/false);
+}
+
+void FinGptForecasterTab::start_run(bool ask_model) {
+    if (running_) {
+        // The user's own click outranks a background seed gather: silently
+        // dropping it would invite a model call over the seed ticker's
+        // evidence while the field names another. A real model run in
+        // flight still wins.
+        if (ask_model && !ask_model_) {
+            ++epoch_;  // strand the seed's feed deliveries
+            running_ = false;
+        } else {
+            return;
+        }
+    }
     const QString sym = symbol();
     if (sym.isEmpty()) {
-        status_lbl_->setText(QStringLiteral("Enter a ticker first."));
+        if (ask_model)
+            status_lbl_->setText(QStringLiteral("Enter a ticker first."));
         return;
     }
-    if (!ai_chat::LlmService::instance().is_configured()) {
+    // The evidence pane needs no model; only the actual ask does.
+    if (ask_model && !ai_chat::LlmService::instance().is_configured()) {
         status_lbl_->setText(QStringLiteral(
             "No model configured — open Settings → AI Config and point finterm at a model."));
         return;
     }
+    ask_model_ = ask_model;
 
     ++epoch_;
     const quint64 epoch = epoch_;
@@ -233,6 +262,13 @@ void FinGptForecasterTab::try_assemble() {
     assembled_ = true;
 
     if (candles_.isEmpty()) {
+        // A failed SEED stays quiet: an error pane on a tab the user never
+        // touched is worse than the blank one the seed exists to replace.
+        if (!ask_model_) {
+            fail(QStringLiteral("No price history for %1 — enter a ticker to build the "
+                                "FinGPT window.").arg(run_symbol_));
+            return;
+        }
         result_view_->setPlainText(
             QStringLiteral("No tradable price history for %1 — the FinGPT weekly window cannot "
                            "be built. Expected for pre-IPO or untradable tickers.").arg(run_symbol_));
@@ -243,6 +279,11 @@ void FinGptForecasterTab::try_assemble() {
     const QDate curday = core::bartime::market_today_et();
     QVector<WeekSlice> slices = make_week_slices(candles_, curday, run_weeks_);
     if (slices.isEmpty()) {
+        if (!ask_model_) {
+            fail(QStringLiteral("%1's history is too short for a %2-week window — lower the "
+                                "lookback or pick another ticker.").arg(run_symbol_).arg(run_weeks_));
+            return;
+        }
         result_view_->setPlainText(
             QStringLiteral("%1's price history does not cover the requested %2-week window — "
                            "cannot assemble the FinGPT lookback.").arg(run_symbol_).arg(run_weeks_));
@@ -272,6 +313,17 @@ void FinGptForecasterTab::try_assemble() {
     last_run_day_ = curday;
     last_info_block_ = user_prompt;
     info_view_->setPlainText(user_prompt);
+
+    if (!ask_model_) {
+        // Seed run: the evidence is the display; the model waits for a click.
+        running_ = false;
+        run_btn_->setEnabled(true);
+        status_lbl_->setText(
+            QStringLiteral("Evidence assembled for %1 (%2/%3 weeks have news) — "
+                           "RUN FORECASTER to ask the model.")
+                .arg(run_symbol_).arg(weeks_with_news).arg(slices.size()));
+        return;
+    }
 
     QString note = QStringLiteral("Asking the model… (%1/%2 weeks have news coverage)")
                        .arg(weeks_with_news).arg(slices.size());
@@ -397,7 +449,17 @@ QVariantMap FinGptForecasterTab::save_state() const {
 }
 
 void FinGptForecasterTab::restore_state(const QVariantMap& state) {
-    set_symbol(state.value(QStringLiteral("symbol")).toString());
+    // Every other state-mutating entry bumps the epoch; restore must too, or
+    // an in-flight run's feed deliveries and LLM completion keep repainting
+    // the panes the restored state just filled (pane duplication restores
+    // into a live tab).
+    ++epoch_;
+    running_ = false;
+    if (run_btn_)
+        run_btn_->setEnabled(true);
+    const QString restored_symbol = state.value(QStringLiteral("symbol")).toString();
+    if (!restored_symbol.isEmpty())
+        set_symbol(restored_symbol);
     const int weeks = state.value(QStringLiteral("weeks"), 3).toInt();
     if (weeks_combo_) {
         const int idx = weeks_combo_->findData(weeks);

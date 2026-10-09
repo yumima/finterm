@@ -38,11 +38,20 @@ class FinGptForecasterTab : public QWidget {
     void set_symbol(const QString& symbol);
     QString symbol() const;
 
+    /// First-open seeding: when the tab has no ticker and no restored answer,
+    /// adopt `symbol` and assemble the evidence block (prices + news +
+    /// profile) WITHOUT asking the model — the tab shows real data the moment
+    /// it opens, and the LLM spend still waits for the user's click.
+    void seed(const QString& symbol);
+
   private slots:
     void on_run();
 
   private:
     void build_ui();
+    /// Gather feeds and assemble the prompt; `ask_model` false stops after
+    /// the evidence pane is filled (the seed path).
+    void start_run(bool ask_model);
     void unsubscribe_feeds();
     void fail(const QString& message);
     /// All three feeds resolved → assemble the prompt and call the model.
@@ -66,6 +75,7 @@ class FinGptForecasterTab : public QWidget {
     // a new run or symbol change bumps it and strands the old deliveries.
     quint64 epoch_ = 0;
     bool running_ = false;
+    bool ask_model_ = true;  // false = seed run: assemble evidence, skip the LLM
     QString run_symbol_;
     int run_weeks_ = 3;
     bool run_basics_ = true;

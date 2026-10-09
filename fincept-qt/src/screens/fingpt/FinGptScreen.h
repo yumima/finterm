@@ -72,6 +72,10 @@ class FinGptScreen : public QWidget,
     QWidget* build_placeholder(const QString& tab_name, const QString& detail);
     void ensure_tab_built(SubTab which);
     void refresh_tab_button_styles();
+    /// Ticker a freshly built task tab is seeded with: linked-group traffic,
+    /// else the security in focus, else a portfolio holding (cached — it costs
+    /// two synchronous SQLite reads), else AAPL.
+    QString seed_symbol();
 
     SubTab active_tab_ = TabChat;
     QStackedWidget* stack_ = nullptr;
@@ -93,6 +97,10 @@ class FinGptScreen : public QWidget,
     /// parked on Chat should not build two widget trees per symbol click
     /// elsewhere just to store a string.
     QString pending_symbol_;
+
+    /// Memoized portfolio-derived seed, so building the second task tab does
+    /// not re-run the SQLite lookups on the GUI thread.
+    QString portfolio_seed_cache_;
 
     fincept::SymbolGroup link_group_ = fincept::SymbolGroup::None;
 };
