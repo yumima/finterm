@@ -1117,10 +1117,9 @@ set(SCREEN_SOURCES
     src/screens/futures/FuturesDataService.cpp
     src/screens/futures/FuturesPanels.cpp
     src/screens/futures/FuturesQuoteCache.cpp
-    # ── FinGPT (AI4Finance task suite: chat + forecaster + sentiment) ────
+    # ── FinGPT (AI4Finance task suite: chat + merged forecaster/sentiment) ─
     src/screens/fingpt/FinGptScreen.cpp
-    src/screens/fingpt/FinGptForecasterTab.cpp
-    src/screens/fingpt/FinGptSentimentTab.cpp
+    src/screens/fingpt/FinGptAnalysisTab.cpp
     # ── F&O (Sensibull-style options analytics; FII/DII tab dropped) ─────
     src/screens/fno/FnoScreen.cpp
     src/screens/fno/FnoHeaderBar.cpp
@@ -1631,9 +1630,8 @@ set_source_files_properties(
     src/screens/futures/FuturesPanels.cpp
     src/screens/futures/FuturesQuoteCache.cpp
     src/screens/futures/FuturesScreen.cpp
-    src/screens/fingpt/FinGptForecasterTab.cpp
+    src/screens/fingpt/FinGptAnalysisTab.cpp
     src/screens/fingpt/FinGptScreen.cpp
-    src/screens/fingpt/FinGptSentimentTab.cpp
     src/screens/fno/BuilderAnalyticsRibbon.cpp
     src/screens/fno/BuilderSubTab.cpp
     src/screens/fno/ChainSubTab.cpp

@@ -2,18 +2,20 @@
 // FinGptScreen — the FinGPT tab: finterm's port of the AI4Finance FinGPT task
 // suite, plus the terminal's own AI chat as its first function.
 //
-// Three sub-tabs over a QStackedWidget (FnoScreen pattern):
-//   Chat        — the full AiChatScreen, embedded, defaulting to the
-//                 "FinGPT Analyst" persona (ChatPersonas.h).
-//   Forecaster  — the FinGPT-Forecaster weekly pipeline (FinGptForecasterTab).
-//   Sentiment   — FinGPT benchmark-style sentiment classification
-//                 (FinGptSentimentTab).
+// Two sub-tabs over a QStackedWidget (FnoScreen pattern):
+//   Chat      — the full AiChatScreen, embedded, defaulting to the
+//               "FinGPT Analyst" persona (ChatPersonas.h).
+//   Analysis  — the FinGPT-Forecaster weekly pipeline and the benchmark-style
+//               sentiment classification on ONE page (FinGptAnalysisTab), so
+//               the forecast and the news read sit side by side.
 //
 // What was deliberately NOT ported from the FinGPT repo: the LoRA adapter
 // weights (Llama-2-era, unusable by the configured backends without a GGUF
 // merge), the FinNLP scrapers (finterm's news/data layer already covers it)
 // and the multi-agent debate RAG. The algorithms and prompt formats are in
-// FinGptPrompts.h / FinGptParse.h.
+// FinGptPrompts.h / FinGptParse.h. The upstream Gradio demo's UI carries one
+// idea worth keeping — the evidence block shown beside the answer — and the
+// Analysis tab keeps it.
 
 #include "core/symbol/IGroupLinked.h"
 #include "screens/IStatefulScreen.h"
@@ -29,8 +31,7 @@ namespace fincept::screens { class AiChatScreen; }
 
 namespace fincept::screens::fingpt {
 
-class FinGptForecasterTab;
-class FinGptSentimentTab;
+class FinGptAnalysisTab;
 
 class FinGptScreen : public QWidget,
                      public fincept::screens::IStatefulScreen,
@@ -54,8 +55,7 @@ class FinGptScreen : public QWidget,
 
     enum SubTab : int {
         TabChat = 0,
-        TabForecaster = 1,
-        TabSentiment = 2,
+        TabAnalysis = 1,
         TabCount
     };
 
@@ -82,24 +82,22 @@ class FinGptScreen : public QWidget,
     QVector<QPushButton*> tab_btns_;
 
     QPointer<fincept::screens::AiChatScreen> chat_tab_;
-    QPointer<FinGptForecasterTab> forecaster_tab_;
-    QPointer<FinGptSentimentTab> sentiment_tab_;
+    QPointer<FinGptAnalysisTab> analysis_tab_;
 
     /// Saved sub-tab states for tabs not yet constructed, applied by
     /// ensure_tab_built. A layout restore must not build every widget tree at
     /// startup just to hand each a map — same laziness rule as pending_symbol_.
     QVariantMap pending_chat_state_;
-    QVariantMap pending_forecaster_state_;
-    QVariantMap pending_sentiment_state_;
+    QVariantMap pending_analysis_state_;
 
-    /// Last linked-group ticker, applied to a task tab when it is first built.
-    /// Link traffic must not defeat the lazy construction — a FinGPT pane
-    /// parked on Chat should not build two widget trees per symbol click
+    /// Last linked-group ticker, applied to the task tab when it is first
+    /// built. Link traffic must not defeat the lazy construction — a FinGPT
+    /// pane parked on Chat should not build a widget tree per symbol click
     /// elsewhere just to store a string.
     QString pending_symbol_;
 
-    /// Memoized portfolio-derived seed, so building the second task tab does
-    /// not re-run the SQLite lookups on the GUI thread.
+    /// Memoized portfolio-derived seed, so a rebuild does not re-run the
+    /// SQLite lookups on the GUI thread.
     QString portfolio_seed_cache_;
 
     fincept::SymbolGroup link_group_ = fincept::SymbolGroup::None;

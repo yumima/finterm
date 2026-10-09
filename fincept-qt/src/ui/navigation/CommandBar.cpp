@@ -206,7 +206,7 @@ void CommandBar::build_commands() {
         {"ai_chat", "AI Chat", "AI assistant", {"ai", "chat", "assistant", "bot"}, "F10", {"ai", "chat", "assistant"}},
         {"fingpt",
          "FinGPT",
-         "FinGPT — chat, weekly forecaster, sentiment",
+         "FinGPT — chat, forecaster + sentiment analysis",
          {"fingpt", "fin", "forecaster", "sentiment"},
          "",
          {"fingpt", "forecast", "sentiment", "ai", "chat"}},

@@ -2,10 +2,8 @@
 
 #include "ai_chat/AiChatScreen.h"
 #include "core/logging/Logger.h"
-#include "screens/fingpt/FinGptForecasterTab.h"
-#include "screens/fingpt/FinGptSentimentTab.h"
+#include "screens/fingpt/FinGptAnalysisTab.h"
 #include "services/app_context/AppContextService.h"
-#include "storage/repositories/PortfolioRepository.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
@@ -13,7 +11,7 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
-#include <cmath>
+#include <algorithm>
 #include <utility>
 
 namespace fincept::screens::fingpt {
@@ -29,8 +27,7 @@ struct TabDef {
 
 constexpr TabDef kTabDefs[FinGptScreen::TabCount] = {
     {"Chat", "AI chat (FinGPT Analyst persona)"},
-    {"Forecaster", "Weekly news-driven forecast, FinGPT-Forecaster pipeline"},
-    {"Sentiment", "Headline & text sentiment, FinGPT instruction format"},
+    {"Analysis", "FinGPT forecaster + sentiment, side by side on one page"},
 };
 
 } // namespace
@@ -137,27 +134,17 @@ void FinGptScreen::ensure_tab_built(SubTab which) {
         swap_in(TabChat, chat);
         chat_tab_ = chat;
     }
-    if (which == TabForecaster && !forecaster_tab_) {
-        auto* t = new FinGptForecasterTab(this);
+    if (which == TabAnalysis && !analysis_tab_) {
+        auto* t = new FinGptAnalysisTab(this);
         if (!pending_symbol_.isEmpty())
             t->set_symbol(pending_symbol_);
-        if (!pending_forecaster_state_.isEmpty())
-            t->restore_state(std::exchange(pending_forecaster_state_, {}));
+        if (!pending_analysis_state_.isEmpty())
+            t->restore_state(std::exchange(pending_analysis_state_, {}));
         // After link traffic and restore have had their say: a still-blank tab
         // seeds itself and assembles the evidence pane (no LLM call).
         t->seed(seed_symbol());
-        swap_in(TabForecaster, t);
-        forecaster_tab_ = t;
-    }
-    if (which == TabSentiment && !sentiment_tab_) {
-        auto* t = new FinGptSentimentTab(this);
-        if (!pending_symbol_.isEmpty())
-            t->set_symbol(pending_symbol_);
-        if (!pending_sentiment_state_.isEmpty())
-            t->restore_state(std::exchange(pending_sentiment_state_, {}));
-        t->seed(seed_symbol());
-        swap_in(TabSentiment, t);
-        sentiment_tab_ = t;
+        swap_in(TabAnalysis, t);
+        analysis_tab_ = t;
     }
 }
 
@@ -189,14 +176,10 @@ QVariantMap FinGptScreen::save_state() const {
         m["chat"] = chat_tab_->save_state();
     else if (!pending_chat_state_.isEmpty())
         m["chat"] = pending_chat_state_;
-    if (forecaster_tab_)
-        m["forecaster"] = forecaster_tab_->save_state();
-    else if (!pending_forecaster_state_.isEmpty())
-        m["forecaster"] = pending_forecaster_state_;
-    if (sentiment_tab_)
-        m["sentiment"] = sentiment_tab_->save_state();
-    else if (!pending_sentiment_state_.isEmpty())
-        m["sentiment"] = pending_sentiment_state_;
+    if (analysis_tab_)
+        m["analysis"] = analysis_tab_->save_state();
+    else if (!pending_analysis_state_.isEmpty())
+        m["analysis"] = pending_analysis_state_;
     return m;
 }
 
@@ -209,27 +192,42 @@ void FinGptScreen::restore_state(const QVariantMap& state) {
     // persist that mixed state to disk.
     //
     // Tabs not built here keep their maps pending and restore on first build;
-    // eagerly constructing every sub-tab with a saved key would rebuild all
-    // three widget trees on every layout restore.
-    const auto hand_off = [this](const char* key, const QVariantMap& state, QWidget* built,
-                                 QVariantMap& pending, auto&& apply) {
-        if (!state.contains(QLatin1String(key)))
+    // eagerly constructing every sub-tab with a saved key would rebuild both
+    // widget trees on every layout restore.
+    const auto hand_off = [this](const QVariantMap& sub, QWidget* built, QVariantMap& pending,
+                                 auto&& apply) {
+        if (sub.isEmpty())
             return;
-        const QVariantMap sub = state.value(QLatin1String(key)).toMap();
         if (built)
             apply(sub);
         else
             pending = sub;
     };
-    hand_off("chat", state, chat_tab_, pending_chat_state_,
+    hand_off(state.value(QLatin1String("chat")).toMap(), chat_tab_, pending_chat_state_,
              [this](const QVariantMap& m) { chat_tab_->restore_state(m); });
-    hand_off("forecaster", state, forecaster_tab_, pending_forecaster_state_,
-             [this](const QVariantMap& m) { forecaster_tab_->restore_state(m); });
-    hand_off("sentiment", state, sentiment_tab_, pending_sentiment_state_,
-             [this](const QVariantMap& m) { sentiment_tab_->restore_state(m); });
+
+    // Pre-merge saves carried separate "forecaster" and "sentiment" maps;
+    // fold them into the Analysis tab's shape so an upgrade keeps the last
+    // run (the forecaster's symbol wins — it owned the answer being restored).
+    QVariantMap analysis = state.value(QLatin1String("analysis")).toMap();
+    if (analysis.isEmpty()) {
+        const QVariantMap f = state.value(QLatin1String("forecaster")).toMap();
+        const QVariantMap s = state.value(QLatin1String("sentiment")).toMap();
+        analysis = f;
+        if (analysis.value(QLatin1String("symbol")).toString().isEmpty())
+            analysis.insert(QLatin1String("symbol"), s.value(QLatin1String("symbol")));
+        if (s.contains(QLatin1String("text")))
+            analysis.insert(QLatin1String("text"), s.value(QLatin1String("text")));
+        if (s.contains(QLatin1String("vote")))
+            analysis.insert(QLatin1String("vote"), s.value(QLatin1String("vote")));
+    }
+    hand_off(analysis, analysis_tab_, pending_analysis_state_,
+             [this](const QVariantMap& m) { analysis_tab_->restore_state(m); });
 
     if (state.contains("active_tab")) {
-        const int idx = state.value("active_tab").toInt();
+        // Pre-merge indices: 1 = Forecaster, 2 = Sentiment — both now live at
+        // the Analysis slot.
+        const int idx = std::min(state.value("active_tab").toInt(), int(TabAnalysis));
         if (idx >= 0 && idx < TabCount) {
             active_tab_ = SubTab(idx);
             ensure_tab_built(active_tab_);
@@ -241,17 +239,15 @@ void FinGptScreen::restore_state(const QVariantMap& state) {
 }
 
 void FinGptScreen::on_group_symbol_changed(const fincept::SymbolRef& ref) {
-    // Follow the linked group's ticker into the task tabs (field only — a run
+    // Follow the linked group's ticker into the task tab (field only — a run
     // always starts from the user's own click, never from link traffic).
-    // Tabs not built yet just remember it (pending_symbol_): link traffic
-    // must not construct widget trees the user may never open.
+    // A tab not built yet just remembers it (pending_symbol_): link traffic
+    // must not construct a widget tree the user may never open.
     if (ref.symbol.isEmpty())
         return;
     pending_symbol_ = ref.symbol.toUpper();
-    if (forecaster_tab_)
-        forecaster_tab_->set_symbol(pending_symbol_);
-    if (sentiment_tab_)
-        sentiment_tab_->set_symbol(pending_symbol_);
+    if (analysis_tab_)
+        analysis_tab_->set_symbol(pending_symbol_);
 }
 
 QString FinGptScreen::seed_symbol() {
@@ -265,54 +261,19 @@ QString FinGptScreen::seed_symbol() {
         return snap.symbol.toUpper();
 
     if (portfolio_seed_cache_.isEmpty()) {
-        // Largest holding of the active portfolio, else of the first one.
-        // Cost basis in the instrument's own currency — a familiarity guess,
-        // not a valuation (no FX, no live prices; PortfolioService owns the
-        // real figure). |qty × avg price| so a short position still counts as
-        // a holding the user knows.
-        auto& repo = fincept::PortfolioRepository::instance();
-        QString pid = snap.portfolio_id;
-        if (pid.isEmpty()) {
-            const auto ports = repo.list_portfolios();
-            if (ports.is_ok() && !ports.value().isEmpty())
-                pid = ports.value().first().id;
-        }
-        QString best, first_sym;
-        double best_val = 0.0;
-        if (!pid.isEmpty()) {
-            const auto assets = repo.get_assets(pid);
-            if (assets.is_ok()) {
-                for (const auto& a : assets.value()) {
-                    if (a.symbol.isEmpty())
-                        continue;
-                    if (first_sym.isEmpty())
-                        first_sym = a.symbol;
-                    const double v = std::abs(a.quantity * a.avg_buy_price);
-                    if (v > best_val) {
-                        best_val = v;
-                        best = a.symbol;
-                    }
-                }
-            }
-        }
-        // Zero-cost imports leave every |v| at 0 — any real holding still
-        // beats the generic fallback.
-        if (best.isEmpty())
-            best = first_sym;
-        portfolio_seed_cache_ = best.isEmpty() ? QStringLiteral("AAPL") : best.toUpper();
+        // Largest holding of the active portfolio, else of the first one —
+        // the same ranked list the Analysis tab's ticker dropdown shows
+        // (FinGptAnalysisTab::portfolio_symbols owns the ranking rules).
+        const QStringList held = FinGptAnalysisTab::portfolio_symbols();
+        portfolio_seed_cache_ = held.isEmpty() ? QStringLiteral("AAPL") : held.first();
     }
     return portfolio_seed_cache_;
 }
 
 fincept::SymbolRef FinGptScreen::current_symbol() const {
-    // Whichever task tab has a ticker — the forecaster first, then sentiment,
-    // then the remembered link traffic. A symbol typed only into Sentiment is
-    // not second-class for "load group from me".
     QString sym;
-    if (forecaster_tab_ && !forecaster_tab_->symbol().isEmpty())
-        sym = forecaster_tab_->symbol();
-    else if (sentiment_tab_ && !sentiment_tab_->symbol().isEmpty())
-        sym = sentiment_tab_->symbol();
+    if (analysis_tab_ && !analysis_tab_->symbol().isEmpty())
+        sym = analysis_tab_->symbol();
     else
         sym = pending_symbol_;
     if (sym.isEmpty())
