@@ -379,9 +379,10 @@ void EquityResearchScreen::build_ui() {
     // company worth" question narrowed to the next print, and the two are
     // read together.
     tab_widget_->addTab(earnings_tab_, "Earnings");
-    // "AI", not "AI Forecast": the tab now carries both forecast engines, the
-    // headline sentiment and the stock chat — every AI read on this stock.
-    tab_widget_->addTab(ai_tab_, "AI");
+    // "FinGPT" is the brand of the whole per-stock AI suite here — both
+    // forecast engines, headline sentiment and the stock chat — not just the
+    // AI4Finance engine it is named after.
+    tab_widget_->addTab(ai_tab_, "FinGPT");
     tab_widget_->addTab(technicals_tab_, "Technicals");
     tab_widget_->addTab(talipp_tab_, "TALIpp");
     tab_widget_->addTab(peers_tab_, "Peers");

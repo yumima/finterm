@@ -15,7 +15,7 @@
 // a news-driven read agreeing (or not) is itself the signal, and the shared
 // track record is what eventually says which engine deserves trust per stock.
 //
-// The left pane is one viewport with four lenses (QUANT / FINGPT / SENTIMENT /
+// The left pane is one viewport with four lenses (QUANT / FORECAST / SENTIMENT /
 // EVIDENCE) instead of nested tabs; the right pane is the stock chat — a real
 // ChatPane: equity persona, curated tools, voice, and a thread persisted per
 // symbol. This tab absorbed the former top-level FinGPT screen.

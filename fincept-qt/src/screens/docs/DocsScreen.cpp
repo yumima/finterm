@@ -884,7 +884,7 @@ QWidget* DocsScreen::page_ai_chat() {
         {
             {"OVERVIEW", "AI is a lens on whatever you are looking at, not a destination. The floating "
                          "chat bubble (bottom-right) is the global assistant with live data tools; "
-                         "the AI tab in Equity Research carries both per-stock forecast engines, headline "
+                         "the FinGPT tab in Equity Research carries both per-stock forecast engines, headline "
                          "sentiment and a stock-scoped chat; the Portfolio Insights panel answers over "
                          "your real holdings."},
             {"KEY FEATURES", "■  Natural language market queries with live data tools\n"

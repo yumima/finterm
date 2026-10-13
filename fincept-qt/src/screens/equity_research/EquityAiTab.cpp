@@ -542,7 +542,7 @@ void EquityAiTab::build_ui() {
     // ── Control row ───────────────────────────────────────────────────────────
     auto* ctl = new QHBoxLayout;
     ctl->setSpacing(8);
-    auto* title = new QLabel(QStringLiteral("AI"));
+    auto* title = new QLabel(QStringLiteral("FINGPT"));
     title->setStyleSheet(QString("font-size:13px;font-weight:700;letter-spacing:1px;color:%1;")
                              .arg(colors::AMBER()));
     ctl->addWidget(title);
@@ -726,13 +726,12 @@ QWidget* EquityAiTab::build_analysis_pane() {
     // buttons, not nested tabs — this pane already lives inside a tab.
     auto* lens_row = new QHBoxLayout;
     lens_row->setSpacing(2);
-    // "SENTIMENT" names what the lens shows (the per-headline label table,
-    // matching the NEWS SENTIMENT chip); "FINGPT" names the engine — the
-    // AI4Finance port is a thing the user knows by name, and its lens carries
-    // its answer in its own format.
+    // The tab itself is branded FinGPT, so the news engine's lens is plainly
+    // "FORECAST" (the FinGPT-method read); "SENTIMENT" names what its lens
+    // shows (the per-headline label table, matching the NEWS SENTIMENT chip).
     static const struct { const char* label; const char* tip; } kLenses[] = {
         {"QUANT", "The quant engine's prose: position, thesis, risks + its recorded forecast."},
-        {"FINGPT", "The FinGPT news engine's forecast: positive developments, concerns, prediction."},
+        {"FORECAST", "The FinGPT news engine's forecast: positive developments, concerns, prediction."},
         {"SENTIMENT", "Each current headline with its FinGPT sentiment label."},
         {"EVIDENCE", "Exactly what the news engine was shown — weekly price moves and the news in each."},
     };
@@ -766,7 +765,7 @@ QWidget* EquityAiTab::build_analysis_pane() {
     apply_wire_text_style(analysis_view_);
     analysis_view_->setPlainText(QStringLiteral(
         "Click “Run AI Analysis” for both engines' read on this stock — the quant position "
-        "recommendation with thesis and risks here, the FinGPT forecast under FINGPT, and a "
+        "recommendation with thesis and risks here, the FinGPT forecast under FORECAST, and a "
         "sentiment label per headline. Every forecast is recorded immutably so the chart below "
         "shows how each engine has actually done. Ask follow-ups in the chat on the right."));
     lens_stack_->addWidget(analysis_view_);
