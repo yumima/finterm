@@ -131,7 +131,6 @@ Part of **finterm** - a financial intelligence platform built with:
 - **Root CLAUDE.md**: `../../CLAUDE.md`
 - **App CLAUDE.md**: `../../../CLAUDE.md`
 - **Architecture**: `../../../../docs/ARCHITECTURE.md`
-- **Python Contributor Guide**: `../../../../docs/PYTHON_CONTRIBUTOR_GUIDE.md`
 
 ## Performance Notes
 

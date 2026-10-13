@@ -316,7 +316,4 @@ sudo apt install libgl1-mesa-dev libglu1-mesa-dev
 
 ---
 
-**Ready to contribute?**
-- Pick an issue: GitHub Issues on this repo
-- Read the C++ guide: [fincept-qt/CONTRIBUTING.md](../fincept-qt/CONTRIBUTING.md)
-- Read the Python guide: [PYTHON_CONTRIBUTOR_GUIDE.md](./PYTHON_CONTRIBUTOR_GUIDE.md)
+**Where the code lives:** see [ARCHITECTURE.md](./ARCHITECTURE.md).

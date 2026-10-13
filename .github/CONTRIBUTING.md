@@ -2,7 +2,7 @@
 
 This file is the **contribution policy** — the rules every PR must follow. GitHub surfaces it automatically on issues and PRs, so we keep it short and strict.
 
-Looking for **how to build, where code lives, code conventions?** → [`docs/CONTRIBUTING.md`](../docs/CONTRIBUTING.md).
+Looking for **how to build or where code lives?** → [`docs/GETTING_STARTED.md`](../docs/GETTING_STARTED.md) and [`docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md).
 
 Maintainers' operational runbook → [`.github/MAINTAINERS.md`](./MAINTAINERS.md).
 
