@@ -105,3 +105,9 @@ def __getattr__(name: str):  # PEP 562
 
 def __dir__() -> list[str]:
     return sorted(set(globals()) | set(_LAZY_ATTRS))
+
+
+def fnum(x):
+    """float(x), with None passed through — the warm-up placeholder every
+    talipp output list carries. One definition; the modules import it."""
+    return float(x) if x is not None else None

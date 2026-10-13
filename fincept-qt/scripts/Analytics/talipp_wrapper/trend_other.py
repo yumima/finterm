@@ -1,6 +1,7 @@
 from typing import List, Dict
 from talipp.indicators import ADX, Aroon, Ichimoku, ParabolicSAR, SuperTrend
 from talipp.ohlcv import OHLCV
+from talipp_wrapper import fnum
 
 def calculate_adx(ohlcv_data: List[Dict], di_period: int = 14, adx_period: int = 14) -> Dict:
     adx = ADX(di_period, adx_period)
@@ -8,21 +9,17 @@ def calculate_adx(ohlcv_data: List[Dict], di_period: int = 14, adx_period: int =
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         adx.add(ohlcv)
 
-    adx_values = []
-    for val in adx:
-        if val is not None:
-            adx_values.append(float(val.value))
-        else:
-            adx_values.append(None)
-
+    # talipp 2.x: ADXVal fields are adx / plus_di / minus_di.
+    adx_values = [fnum(v.adx) if v is not None else None for v in adx]
     last_val = adx[-1] if len(adx) > 0 and adx[-1] is not None else None
 
     return {
         'values': adx_values,
         'di_period': di_period,
         'adx_period': adx_period,
-        'last': float(last_val.value) if last_val else None
+        'last': fnum(last_val.adx) if last_val else None
     }
+
 
 def calculate_aroon(ohlcv_data: List[Dict], period: int = 25) -> Dict:
     aroon = Aroon(period)
@@ -50,50 +47,46 @@ def calculate_aroon(ohlcv_data: List[Dict], period: int = 25) -> Dict:
         'last_down': float(last_val.down) if last_val else None
     }
 
-def calculate_ichimoku(ohlcv_data: List[Dict]) -> Dict:
-    ichimoku = Ichimoku()
+def calculate_ichimoku(ohlcv_data: List[Dict], tenkan: int = 9, kijun: int = 26, senkou_b: int = 52) -> Dict:
+    # talipp 2.x signature: Ichimoku(kijun_period, tenkan_period,
+    # chikou_lag_period, senkou_slow_period, senkou_lookup_period); the lag and
+    # lookup both conventionally equal the kijun period.
+    ichimoku = Ichimoku(kijun, tenkan, kijun, senkou_b, kijun)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         ichimoku.add(ohlcv)
 
-    tenkan = []
-    kijun = []
-    senkou_a = []
-    senkou_b = []
-
-    for val in ichimoku:
-        if val is not None:
-            tenkan.append(float(val.tenkan_sen))
-            kijun.append(float(val.kijun_sen))
-            senkou_a.append(float(val.senkou_span_a))
-            senkou_b.append(float(val.senkou_span_b))
-        else:
-            tenkan.append(None)
-            kijun.append(None)
-            senkou_a.append(None)
-            senkou_b.append(None)
-
+    # 2.x field names: conversion/base line, cloud leading fast/slow.
+    tenkan_v = [fnum(v.conversion_line) if v is not None else None for v in ichimoku]
+    kijun_v = [fnum(v.base_line) if v is not None else None for v in ichimoku]
+    senkou_a = [fnum(v.cloud_leading_fast_line) if v is not None else None for v in ichimoku]
+    senkou_bv = [fnum(v.cloud_leading_slow_line) if v is not None else None for v in ichimoku]
     last_val = ichimoku[-1] if len(ichimoku) > 0 and ichimoku[-1] is not None else None
 
     return {
-        'tenkan_sen': tenkan,
-        'kijun_sen': kijun,
+        'tenkan_sen': tenkan_v,
+        'kijun_sen': kijun_v,
         'senkou_span_a': senkou_a,
-        'senkou_span_b': senkou_b,
-        'last_tenkan': float(last_val.tenkan_sen) if last_val else None,
-        'last_kijun': float(last_val.kijun_sen) if last_val else None
+        'senkou_span_b': senkou_bv,
+        'last_tenkan': fnum(last_val.conversion_line) if last_val else None,
+        'last_kijun': fnum(last_val.base_line) if last_val else None
     }
 
+
 def calculate_parabolic_sar(ohlcv_data: List[Dict], af_start: float = 0.02, af_max: float = 0.2, af_increment: float = 0.02) -> Dict:
-    psar = ParabolicSAR(af_start, af_max, af_increment)
+    # talipp 2.x: ParabolicSAR(init_accel_factor, accel_factor_inc,
+    # max_accel_factor) and each output is a ParabolicSARVal carrying .value.
+    psar = ParabolicSAR(af_start, af_increment, af_max)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         psar.add(ohlcv)
 
+    values = [fnum(v.value) if v is not None else None for v in psar]
     return {
-        'values': [float(v) if v is not None else None for v in list(psar)],
-        'last': float(psar[-1]) if len(psar) > 0 and psar[-1] is not None else None
+        'values': values,
+        'last': next((v for v in reversed(values) if v is not None), None)
     }
+
 
 def calculate_supertrend(ohlcv_data: List[Dict], period: int = 10, multiplier: float = 3.0) -> Dict:
     supertrend = SuperTrend(period, multiplier)
@@ -101,25 +94,22 @@ def calculate_supertrend(ohlcv_data: List[Dict], period: int = 10, multiplier: f
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         supertrend.add(ohlcv)
 
-    values = []
-    trends = []
-
-    for val in supertrend:
-        if val is not None:
-            values.append(float(val.value))
-            trends.append(int(val.trend))
-        else:
-            values.append(None)
-            trends.append(None)
-
-    last_val = supertrend[-1] if len(supertrend) > 0 and supertrend[-1] is not None else None
+    # talipp 2.x: .trend is a Trend enum with UP=1, DOWN=2 — NOT a sign. Map
+    # to ±1 explicitly so "trend > 0 means up" holds for every consumer.
+    from talipp.indicators.SuperTrend import Trend
+    values = [fnum(v.value) if v is not None else None for v in supertrend]
+    trends = [(1 if v.trend == Trend.UP else -1) if v is not None and v.trend is not None else None
+              for v in supertrend]
+    last_v = next((v for v in reversed(values) if v is not None), None)
+    last_t = next((t for t in reversed(trends) if t is not None), None)
 
     return {
         'values': values,
         'trends': trends,
-        'last_value': float(last_val.value) if last_val else None,
-        'last_trend': int(last_val.trend) if last_val else None
+        'last_value': last_v,
+        'last_trend': last_t
     }
+
 
 def main():
     print("Testing TALIpp Trend/Other Indicators")

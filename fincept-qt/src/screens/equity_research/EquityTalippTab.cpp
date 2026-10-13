@@ -536,6 +536,7 @@ void EquityTalippTab::on_talipp_result(QString indicator, QVector<double> values
         return;
     }
 
+    data_points_lbl_->setText(QString("%1  data points  |  TALIpp Engine").arg(values.size()));
     rebuild_last_values(indicator, values);
     rebuild_chart(indicator, values, timestamps);
 

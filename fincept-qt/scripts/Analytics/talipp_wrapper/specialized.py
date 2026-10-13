@@ -5,6 +5,7 @@ from talipp.indicators import (
     RogersSatchell, SFX, SMMA, SOBV, STC, StdDev, TRIX, TTM, UO, VTX, ZigZag
 )
 from talipp.ohlcv import OHLCV
+from talipp_wrapper import fnum
 
 def calculate_ao(ohlcv_data: List[Dict], fast_period: int = 5, slow_period: int = 34) -> Dict:
     ao = AO(fast_period, slow_period)
@@ -67,15 +68,19 @@ def calculate_dpo(prices: List[float], period: int = 20) -> Dict:
     }
 
 def calculate_emv(ohlcv_data: List[Dict], period: int = 14) -> Dict:
-    emv = EMV(period)
+    # talipp 2.x: EMV(period, volume_div) — 10000 is the classic divisor.
+    emv = EMV(period, 10000)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         emv.add(ohlcv)
+
+    values = [float(v) if v is not None else None for v in emv]
     return {
-        'values': [float(v) if v is not None else None for v in list(emv)],
+        'values': values,
         'period': period,
-        'last': float(emv[-1]) if len(emv) > 0 and emv[-1] is not None else None
+        'last': next((v for v in reversed(values) if v is not None), None)
     }
+
 
 def calculate_fibonacci_retracement(ohlcv_data: List[Dict]) -> Dict:
     fib = FibonacciRetracement()
@@ -121,72 +126,80 @@ def calculate_ibs(ohlcv_data: List[Dict]) -> Dict:
     }
 
 def calculate_kst(prices: List[float]) -> Dict:
-    kst = KST()
+    # talipp 2.x: KST takes the full classic parameter set — ROC periods
+    # (10, 15, 20, 30), their SMA periods (10, 10, 10, 15), signal 9.
+    kst = KST(10, 10, 15, 10, 20, 10, 30, 15, 9)
     for price in prices:
         kst.add(price)
 
-    values = []
-    signals = []
-    for val in kst:
-        if val is not None:
-            values.append(float(val.value))
-            signals.append(float(val.signal))
-        else:
-            values.append(None)
-            signals.append(None)
+    kst_values = [fnum(v.kst) if v is not None else None for v in kst]
+    signal_values = [fnum(v.signal) if v is not None else None for v in kst]
 
-    last_val = kst[-1] if len(kst) > 0 and kst[-1] is not None else None
     return {
-        'kst': values,
-        'signal': signals,
-        'last_kst': float(last_val.value) if last_val else None,
-        'last_signal': float(last_val.signal) if last_val else None
+        'kst': kst_values,
+        'signal': signal_values,
+        'last_kst': next((v for v in reversed(kst_values) if v is not None), None),
+        'last_signal': next((v for v in reversed(signal_values) if v is not None), None)
     }
 
+
 def calculate_kvo(ohlcv_data: List[Dict], fast_period: int = 34, slow_period: int = 55, signal_period: int = 13) -> Dict:
-    kvo = KVO(fast_period, slow_period, signal_period)
+    # talipp 2.x: KVO(fast, slow) emits plain floats and no signal line — the
+    # classic signal (an EMA of KVO) is computed here.
+    from talipp.indicators import EMA
+    kvo = KVO(fast_period, slow_period)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         kvo.add(ohlcv)
 
-    values = []
-    signals = []
-    for val in kvo:
-        if val is not None:
-            values.append(float(val.value))
-            signals.append(float(val.signal))
-        else:
-            values.append(None)
-            signals.append(None)
+    kvo_values = [float(v) if v is not None else None for v in kvo]
+    sig = EMA(signal_period)
+    signal_values = []
+    for v in kvo_values:
+        if v is None:
+            signal_values.append(None)
+            continue
+        sig.add(v)
+        s = sig[-1] if len(sig) > 0 else None
+        signal_values.append(float(s) if s is not None else None)
 
-    last_val = kvo[-1] if len(kvo) > 0 and kvo[-1] is not None else None
     return {
-        'kvo': values,
-        'signal': signals,
-        'last_kvo': float(last_val.value) if last_val else None,
-        'last_signal': float(last_val.signal) if last_val else None
+        'kvo': kvo_values,
+        'signal': signal_values,
+        'last_kvo': next((v for v in reversed(kvo_values) if v is not None), None),
+        'last_signal': next((v for v in reversed(signal_values) if v is not None), None)
     }
 
+
 def calculate_mass_index(ohlcv_data: List[Dict], period: int = 25, ema_period: int = 9) -> Dict:
-    mi = MassIndex(period, ema_period)
+    # talipp 2.x: MassIndex(ma_period, ma_ma_period, ma_ratio_period) — the
+    # classic form smooths twice with the same EMA period.
+    mi = MassIndex(ema_period, ema_period, period)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         mi.add(ohlcv)
+
+    values = [float(v) if v is not None else None for v in mi]
     return {
-        'values': [float(v) if v is not None else None for v in list(mi)],
+        'values': values,
         'period': period,
-        'last': float(mi[-1]) if len(mi) > 0 and mi[-1] is not None else None
+        'last': next((v for v in reversed(values) if v is not None), None)
     }
 
-def calculate_mcginley_dynamic(prices: List[float], period: int = 14, k: float = 0.6) -> Dict:
-    md = McGinleyDynamic(period, k)
+
+def calculate_mcginley_dynamic(prices: List[float], period: int = 14) -> Dict:
+    # talipp 2.x: McGinleyDynamic(period) — the k factor is internal now.
+    md = McGinleyDynamic(period)
     for price in prices:
         md.add(price)
+
+    values = [float(v) if v is not None else None for v in md]
     return {
-        'values': [float(v) if v is not None else None for v in list(md)],
+        'values': values,
         'period': period,
-        'last': float(md[-1]) if len(md) > 0 and md[-1] is not None else None
+        'last': next((v for v in reversed(values) if v is not None), None)
     }
+
 
 def calculate_mean_dev(prices: List[float], period: int = 20) -> Dict:
     md = MeanDev(period)
@@ -275,13 +288,18 @@ def calculate_sobv(ohlcv_data: List[Dict], period: int = 10) -> Dict:
     }
 
 def calculate_stc(prices: List[float], fast_period: int = 23, slow_period: int = 50, cycle: int = 10) -> Dict:
-    stc = STC(fast_period, slow_period, cycle)
+    # talipp 2.x: STC(fast_macd_period, slow_macd_period, stoch_period,
+    # stoch_smoothing_period); 3 is the conventional smoothing.
+    stc = STC(fast_period, slow_period, cycle, 3)
     for price in prices:
         stc.add(price)
+
+    values = [float(v) if v is not None else None for v in stc]
     return {
-        'values': [float(v) if v is not None else None for v in list(stc)],
-        'last': float(stc[-1]) if len(stc) > 0 and stc[-1] is not None else None
+        'values': values,
+        'last': next((v for v in reversed(values) if v is not None), None)
     }
+
 
 def calculate_std_dev(prices: List[float], period: int = 20) -> Dict:
     std = StdDev(period)
@@ -294,37 +312,50 @@ def calculate_std_dev(prices: List[float], period: int = 20) -> Dict:
     }
 
 def calculate_trix(prices: List[float], period: int = 15, signal_period: int = 9) -> Dict:
-    trix = TRIX(period, signal_period)
+    # talipp 2.x: TRIX(period) emits plain floats and no signal line — the
+    # classic signal (an EMA of TRIX) is computed here.
+    from talipp.indicators import EMA
+    trix = TRIX(period)
     for price in prices:
         trix.add(price)
 
-    values = []
-    signals = []
-    for val in trix:
-        if val is not None:
-            values.append(float(val.value))
-            signals.append(float(val.signal))
-        else:
-            values.append(None)
-            signals.append(None)
+    trix_values = [float(v) if v is not None else None for v in trix]
+    sig = EMA(signal_period)
+    signal_values = []
+    for v in trix_values:
+        if v is None:
+            signal_values.append(None)
+            continue
+        sig.add(v)
+        s = sig[-1] if len(sig) > 0 else None
+        signal_values.append(float(s) if s is not None else None)
 
-    last_val = trix[-1] if len(trix) > 0 and trix[-1] is not None else None
     return {
-        'trix': values,
-        'signal': signals,
-        'last_trix': float(last_val.value) if last_val else None,
-        'last_signal': float(last_val.signal) if last_val else None
+        'trix': trix_values,
+        'signal': signal_values,
+        'last_trix': next((v for v in reversed(trix_values) if v is not None), None),
+        'last_signal': next((v for v in reversed(signal_values) if v is not None), None)
     }
 
-def calculate_ttm(ohlcv_data: List[Dict], bb_period: int = 20, kc_period: int = 20) -> Dict:
-    ttm = TTM(bb_period, kc_period)
+
+def calculate_ttm(ohlcv_data: List[Dict], period: int = 20) -> Dict:
+    # talipp 2.x: TTM(period, bb_std_dev_mult, kc_atr_mult) — ONE period drives
+    # both bands, so there is no separate kc_period knob to offer. The
+    # chartable line is the squeeze histogram; the boolean flags ride along.
+    ttm = TTM(period, 2.0, 1.5)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         ttm.add(ohlcv)
+
+    values = [fnum(v.histogram) if v is not None else None for v in ttm]
+    squeeze = [bool(v.squeeze) if v is not None and v.squeeze is not None else None for v in ttm]
+
     return {
-        'values': [float(v) if v is not None else None for v in list(ttm)],
-        'last': float(ttm[-1]) if len(ttm) > 0 and ttm[-1] is not None else None
+        'values': values,
+        'squeeze': squeeze,
+        'last': next((v for v in reversed(values) if v is not None), None)
     }
+
 
 def calculate_uo(ohlcv_data: List[Dict], short_period: int = 7, medium_period: int = 14, long_period: int = 28) -> Dict:
     uo = UO(short_period, medium_period, long_period)
@@ -337,39 +368,53 @@ def calculate_uo(ohlcv_data: List[Dict], short_period: int = 7, medium_period: i
     }
 
 def calculate_vtx(ohlcv_data: List[Dict], period: int = 14) -> Dict:
+    # talipp 2.x: VTXVal fields are plus_vtx / minus_vtx.
     vtx = VTX(period)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         vtx.add(ohlcv)
 
-    plus = []
-    minus = []
-    for val in vtx:
-        if val is not None:
-            plus.append(float(val.plus))
-            minus.append(float(val.minus))
-        else:
-            plus.append(None)
-            minus.append(None)
+    plus = [fnum(v.plus_vtx) if v is not None else None for v in vtx]
+    minus = [fnum(v.minus_vtx) if v is not None else None for v in vtx]
 
-    last_val = vtx[-1] if len(vtx) > 0 and vtx[-1] is not None else None
     return {
         'plus': plus,
         'minus': minus,
-        'last_plus': float(last_val.plus) if last_val else None,
-        'last_minus': float(last_val.minus) if last_val else None
+        'last_plus': next((v for v in reversed(plus) if v is not None), None),
+        'last_minus': next((v for v in reversed(minus) if v is not None), None)
     }
 
+
 def calculate_zigzag(ohlcv_data: List[Dict], change: float = 5.0) -> Dict:
-    zz = ZigZag(change)
+    # talipp 2.x: ZigZag(sensitivity_fraction, min_trend_length) emits one
+    # value PER PIVOT, not per bar — so this returns its OWN timestamps and
+    # the caller must pair against them, not the input bars.
+    zz = ZigZag(change / 100.0, 3)
     for bar in ohlcv_data:
-        ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
+        ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'],
+                      bar.get('volume', 0), bar.get('timestamp'))
         zz.add(ohlcv)
+
+    from talipp.indicators.ZigZag import PivotType
+    values = []
+    times = []
+    for v in zz:
+        if v is None or v.ohlcv is None:
+            continue
+        # A HIGH pivot sits at the bar's high, a LOW pivot at its low.
+        px = v.ohlcv.high if v.type == PivotType.HIGH else v.ohlcv.low
+        if px is None or v.ohlcv.time is None:
+            continue
+        values.append(float(px))
+        times.append(int(v.ohlcv.time))
+
     return {
-        'values': [float(v) if v is not None else None for v in list(zz)],
+        'values': values,
+        'timestamps': times,
         'change': change,
-        'last': float(zz[-1]) if len(zz) > 0 and zz[-1] is not None else None
+        'last': values[-1] if values else None
     }
+
 
 def main():
     print("Testing TALIpp Specialized Indicators")

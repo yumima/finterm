@@ -37,17 +37,53 @@ def calculate_vwma(ohlcv_data: List[Dict], period: int = 20) -> Dict:
     }
 
 def calculate_mfi(ohlcv_data: List[Dict], period: int = 14) -> Dict:
-    from talipp.indicators import MFI
-    mfi = MFI(period)
-    for bar in ohlcv_data:
-        ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
-        mfi.add(ohlcv)
+    # talipp 2.x dropped MFI, so the classic Money Flow Index is computed
+    # directly with rolling sums: typical price * volume flows, positive vs
+    # negative over the window; 100 - 100/(1 + ratio).
+    #
+    # No volume → no money flow → None, never a fabricated reading. An
+    # instrument whose bars carry no volume must chart as unavailable, not as
+    # a flat neutral line that looks like a real measurement.
+    typ = [(b['high'] + b['low'] + b['close']) / 3.0 for b in ohlcv_data]
+    vol = [float(b.get('volume', 0) or 0) for b in ohlcv_data]
+
+    n = len(typ)
+    pos_flow = [0.0] * n   # per-bar signed flows (index i = flow of bar i vs i-1)
+    neg_flow = [0.0] * n
+    for i in range(1, n):
+        flow = typ[i] * vol[i]
+        if typ[i] > typ[i - 1]:
+            pos_flow[i] = flow
+        elif typ[i] < typ[i - 1]:
+            neg_flow[i] = flow
+
+    values = [None] * n
+    pos = neg = win_vol = 0.0
+    for i in range(1, n):
+        pos += pos_flow[i]
+        neg += neg_flow[i]
+        win_vol += vol[i]
+        if i > period:
+            pos -= pos_flow[i - period]
+            neg -= neg_flow[i - period]
+            win_vol -= vol[i - period]
+        if i < period:
+            continue
+        if win_vol <= 0.0:
+            continue   # no volume in the window — MFI is undefined here
+        if neg == 0.0:
+            values[i] = 100.0
+        elif pos == 0.0:
+            values[i] = 0.0
+        else:
+            values[i] = 100.0 - 100.0 / (1.0 + pos / neg)
 
     return {
-        'values': [float(v) if v is not None else None for v in list(mfi)],
+        'values': values,
         'period': period,
-        'last': float(mfi[-1]) if len(mfi) > 0 and mfi[-1] is not None else None
+        'last': next((v for v in reversed(values) if v is not None), None)
     }
+
 
 def calculate_chaikin_osc(ohlcv_data: List[Dict], fast_period: int = 3, slow_period: int = 10) -> Dict:
     chaikin = ChaikinOsc(fast_period, slow_period)

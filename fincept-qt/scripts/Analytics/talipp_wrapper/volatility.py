@@ -1,6 +1,7 @@
 from typing import List, Dict
 from talipp.indicators import ATR, BB, KeltnerChannels, DonchianChannels, ChandeKrollStop, NATR
 from talipp.ohlcv import OHLCV
+from talipp_wrapper import fnum
 
 def calculate_atr(ohlcv_data: List[Dict], period: int = 14) -> Dict:
     atr = ATR(period)
@@ -45,35 +46,27 @@ def calculate_bb(prices: List[float], period: int = 20, std_dev: float = 2.0) ->
     }
 
 def calculate_keltner(ohlcv_data: List[Dict], period: int = 20, atr_period: int = 10, atr_multi: float = 2.0) -> Dict:
-    keltner = KeltnerChannels(period, atr_period, atr_multi)
+    # talipp 2.x: KeltnerChannels(ma_period, atr_period, atr_mult_up,
+    # atr_mult_down) — one multiplier serves both bands here.
+    kc = KeltnerChannels(period, atr_period, atr_multi, atr_multi)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
-        keltner.add(ohlcv)
+        kc.add(ohlcv)
 
-    upper = []
-    middle = []
-    lower = []
-
-    for val in keltner:
-        if val is not None:
-            upper.append(float(val.ub))
-            middle.append(float(val.cb))
-            lower.append(float(val.lb))
-        else:
-            upper.append(None)
-            middle.append(None)
-            lower.append(None)
-
-    last_val = keltner[-1] if len(keltner) > 0 and keltner[-1] is not None else None
+    upper = [fnum(v.ub) if v is not None else None for v in kc]
+    middle = [fnum(v.cb) if v is not None else None for v in kc]
+    lower = [fnum(v.lb) if v is not None else None for v in kc]
+    last_val = kc[-1] if len(kc) > 0 and kc[-1] is not None else None
 
     return {
         'upper': upper,
         'middle': middle,
         'lower': lower,
-        'last_upper': float(last_val.ub) if last_val else None,
-        'last_middle': float(last_val.cb) if last_val else None,
-        'last_lower': float(last_val.lb) if last_val else None
+        'last_upper': fnum(last_val.ub) if last_val else None,
+        'last_middle': fnum(last_val.cb) if last_val else None,
+        'last_lower': fnum(last_val.lb) if last_val else None
     }
+
 
 def calculate_donchian(ohlcv_data: List[Dict], period: int = 20) -> Dict:
     donchian = DonchianChannels(period)
@@ -107,30 +100,23 @@ def calculate_donchian(ohlcv_data: List[Dict], period: int = 20) -> Dict:
     }
 
 def calculate_chandelier_stop(ohlcv_data: List[Dict], period: int = 22, atr_period: int = 22, atr_multi: float = 3.0) -> Dict:
-    chandelier = ChandeKrollStop(period, atr_period, atr_multi)
+    # talipp 2.x signature: ChandeKrollStop(atr_period, atr_mult, period).
+    cks = ChandeKrollStop(atr_period, atr_multi, period)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
-        chandelier.add(ohlcv)
+        cks.add(ohlcv)
 
-    long_stop = []
-    short_stop = []
-
-    for val in chandelier:
-        if val is not None:
-            long_stop.append(float(val.long_stop))
-            short_stop.append(float(val.short_stop))
-        else:
-            long_stop.append(None)
-            short_stop.append(None)
-
-    last_val = chandelier[-1] if len(chandelier) > 0 and chandelier[-1] is not None else None
+    long_stop = [fnum(v.long_stop) if v is not None else None for v in cks]
+    short_stop = [fnum(v.short_stop) if v is not None else None for v in cks]
+    last_val = cks[-1] if len(cks) > 0 and cks[-1] is not None else None
 
     return {
         'long_stop': long_stop,
         'short_stop': short_stop,
-        'last_long_stop': float(last_val.long_stop) if last_val else None,
-        'last_short_stop': float(last_val.short_stop) if last_val else None
+        'last_long_stop': fnum(last_val.long_stop) if last_val else None,
+        'last_short_stop': fnum(last_val.short_stop) if last_val else None
     }
+
 
 def calculate_natr(ohlcv_data: List[Dict], period: int = 14) -> Dict:
     natr = NATR(period)

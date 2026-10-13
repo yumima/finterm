@@ -1,6 +1,7 @@
 from typing import List, Dict
 from talipp.indicators import RSI, MACD, Stoch, StochRSI, CCI, ROC, TSI
 from talipp.ohlcv import OHLCV
+from talipp_wrapper import fnum
 
 def calculate_rsi(prices: List[float], period: int = 14) -> Dict:
     rsi = RSI(period)
@@ -14,34 +15,26 @@ def calculate_rsi(prices: List[float], period: int = 14) -> Dict:
     }
 
 def calculate_macd(prices: List[float], fast_period: int = 12, slow_period: int = 26, signal_period: int = 9) -> Dict:
+    # talipp 2.x: MACDVal fields are macd/signal/histogram (not .value), and
+    # each field can be None on its own during warm-up.
     macd = MACD(fast_period, slow_period, signal_period)
     for price in prices:
         macd.add(price)
 
-    macd_values = []
-    signal_values = []
-    histogram_values = []
-
-    for val in macd:
-        if val is not None:
-            macd_values.append(float(val.value))
-            signal_values.append(float(val.signal))
-            histogram_values.append(float(val.histogram))
-        else:
-            macd_values.append(None)
-            signal_values.append(None)
-            histogram_values.append(None)
-
+    macd_values = [fnum(v.macd) if v is not None else None for v in macd]
+    signal_values = [fnum(v.signal) if v is not None else None for v in macd]
+    histogram_values = [fnum(v.histogram) if v is not None else None for v in macd]
     last_val = macd[-1] if len(macd) > 0 and macd[-1] is not None else None
 
     return {
         'macd': macd_values,
         'signal': signal_values,
         'histogram': histogram_values,
-        'last_macd': float(last_val.value) if last_val else None,
-        'last_signal': float(last_val.signal) if last_val else None,
-        'last_histogram': float(last_val.histogram) if last_val else None
+        'last_macd': fnum(last_val.macd) if last_val else None,
+        'last_signal': fnum(last_val.signal) if last_val else None,
+        'last_histogram': fnum(last_val.histogram) if last_val else None
     }
+
 
 def calculate_stoch(ohlcv_data: List[Dict], period: int = 14, smoothing_period: int = 3) -> Dict:
     stoch = Stoch(period, smoothing_period)
@@ -49,50 +42,35 @@ def calculate_stoch(ohlcv_data: List[Dict], period: int = 14, smoothing_period: 
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         stoch.add(ohlcv)
 
-    k_values = []
-    d_values = []
-
-    for val in stoch:
-        if val is not None:
-            k_values.append(float(val.k))
-            d_values.append(float(val.d))
-        else:
-            k_values.append(None)
-            d_values.append(None)
-
+    # %D warms up later than %K — the fields go None independently.
+    k_values = [fnum(v.k) if v is not None else None for v in stoch]
+    d_values = [fnum(v.d) if v is not None else None for v in stoch]
     last_val = stoch[-1] if len(stoch) > 0 and stoch[-1] is not None else None
 
     return {
         'k': k_values,
         'd': d_values,
-        'last_k': float(last_val.k) if last_val else None,
-        'last_d': float(last_val.d) if last_val else None
+        'last_k': fnum(last_val.k) if last_val else None,
+        'last_d': fnum(last_val.d) if last_val else None
     }
+
 
 def calculate_stoch_rsi(prices: List[float], period: int = 14, stoch_period: int = 14, k_smoothing: int = 3, d_smoothing: int = 3) -> Dict:
     stoch_rsi = StochRSI(period, stoch_period, k_smoothing, d_smoothing)
     for price in prices:
         stoch_rsi.add(price)
 
-    k_values = []
-    d_values = []
-
-    for val in stoch_rsi:
-        if val is not None:
-            k_values.append(float(val.k))
-            d_values.append(float(val.d))
-        else:
-            k_values.append(None)
-            d_values.append(None)
-
+    k_values = [fnum(v.k) if v is not None else None for v in stoch_rsi]
+    d_values = [fnum(v.d) if v is not None else None for v in stoch_rsi]
     last_val = stoch_rsi[-1] if len(stoch_rsi) > 0 and stoch_rsi[-1] is not None else None
 
     return {
         'k': k_values,
         'd': d_values,
-        'last_k': float(last_val.k) if last_val else None,
-        'last_d': float(last_val.d) if last_val else None
+        'last_k': fnum(last_val.k) if last_val else None,
+        'last_d': fnum(last_val.d) if last_val else None
     }
+
 
 def calculate_cci(ohlcv_data: List[Dict], period: int = 20) -> Dict:
     cci = CCI(period)
@@ -118,29 +96,34 @@ def calculate_roc(prices: List[float], period: int = 12) -> Dict:
     }
 
 def calculate_tsi(prices: List[float], long_period: int = 25, short_period: int = 13, signal_period: int = 13) -> Dict:
-    tsi = TSI(long_period, short_period, signal_period)
+    # talipp 2.x: TSI(fast_period, slow_period) emits plain floats and carries
+    # no signal line — the classic signal (an EMA of TSI) is computed here.
+    from talipp.indicators import EMA
+    tsi = TSI(short_period, long_period)
     for price in prices:
         tsi.add(price)
 
-    tsi_values = []
+    tsi_values = [float(v) if v is not None else None for v in tsi]
+    sig = EMA(signal_period)
     signal_values = []
-
-    for val in tsi:
-        if val is not None:
-            tsi_values.append(float(val.value))
-            signal_values.append(float(val.signal))
-        else:
-            tsi_values.append(None)
+    for v in tsi_values:
+        if v is None:
             signal_values.append(None)
+            continue
+        sig.add(v)
+        s = sig[-1] if len(sig) > 0 else None
+        signal_values.append(float(s) if s is not None else None)
 
-    last_val = tsi[-1] if len(tsi) > 0 and tsi[-1] is not None else None
+    last_tsi = next((v for v in reversed(tsi_values) if v is not None), None)
+    last_signal = next((v for v in reversed(signal_values) if v is not None), None)
 
     return {
         'tsi': tsi_values,
         'signal': signal_values,
-        'last_tsi': float(last_val.value) if last_val else None,
-        'last_signal': float(last_val.signal) if last_val else None
+        'last_tsi': last_tsi,
+        'last_signal': last_signal
     }
+
 
 def calculate_williams(ohlcv_data: List[Dict], period: int = 14) -> Dict:
     from talipp.indicators import Williams

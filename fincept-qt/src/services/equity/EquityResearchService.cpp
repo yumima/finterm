@@ -1279,10 +1279,10 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
 void EquityResearchService::compute_talipp(const QString& symbol, const QString& indicator, const QVariantMap& params,
                                            const QString& period) {
     // Takes the array rather than the serialized string so both callers get
-    // the price-less-bar filter. equity_talipp.py builds its series with
-    // float(r.get("open", 0)) — the default only applies to a MISSING key, so
-    // a present null reaches float(None) and raises TypeError, failing the
-    // whole indicator rather than the one bar.
+    // the price-less-bar filter. equity_talipp.py refuses any bar with a
+    // missing or null price field (its field() check) — correctly, since a
+    // zero price would corrupt every downstream value — so the rows must be
+    // filtered to fully-priced bars BEFORE they reach it.
     auto run_talipp = [this, symbol, indicator, params](const QJsonArray& raw) {
         const QString hist_json = QString::fromUtf8(
             QJsonDocument(priced_rows(raw, "talipp " + symbol)).toJson(QJsonDocument::Compact));

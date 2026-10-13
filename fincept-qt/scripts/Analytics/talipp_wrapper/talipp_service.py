@@ -59,7 +59,8 @@ def dispatch(operation, data):
             return calculate_aroon(data["ohlcv"], data.get("period", 25))
         elif operation == "ichimoku":
             from talipp_wrapper.trend_other import calculate_ichimoku
-            return calculate_ichimoku(data["ohlcv"])
+            return calculate_ichimoku(data["ohlcv"], data.get("tenkan", 9),
+                                      data.get("kijun", 26), data.get("senkou_b", 52))
         elif operation == "parabolic_sar":
             from talipp_wrapper.trend_other import calculate_parabolic_sar
             return calculate_parabolic_sar(data["ohlcv"], data.get("af_start", 0.02), data.get("af_max", 0.2), data.get("af_increment", 0.02))
@@ -172,7 +173,7 @@ def dispatch(operation, data):
             return calculate_mass_index(data["ohlcv"], data.get("period", 25), data.get("ema_period", 9))
         elif operation == "mcginley":
             from talipp_wrapper.specialized import calculate_mcginley_dynamic
-            return calculate_mcginley_dynamic(data["prices"], data.get("period", 14), data.get("k", 0.6))
+            return calculate_mcginley_dynamic(data["prices"], data.get("period", 14))
         elif operation == "mean_dev":
             from talipp_wrapper.specialized import calculate_mean_dev
             return calculate_mean_dev(data["prices"], data.get("period", 20))
@@ -202,7 +203,7 @@ def dispatch(operation, data):
             return calculate_trix(data["prices"], data.get("period", 15), data.get("signal_period", 9))
         elif operation == "ttm":
             from talipp_wrapper.specialized import calculate_ttm
-            return calculate_ttm(data["ohlcv"], data.get("bb_period", 20), data.get("kc_period", 20))
+            return calculate_ttm(data["ohlcv"], data.get("period", 20))
         elif operation == "uo":
             from talipp_wrapper.specialized import calculate_uo
             return calculate_uo(data["ohlcv"], data.get("short_period", 7), data.get("medium_period", 14), data.get("long_period", 28))
