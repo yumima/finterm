@@ -710,12 +710,13 @@ QWidget* EquityAiTab::build_analysis_pane() {
     // buttons, not nested tabs — this pane already lives inside a tab.
     auto* lens_row = new QHBoxLayout;
     lens_row->setSpacing(2);
-    // Labels name what the lens SHOWS, not the engine behind it: "SENTIMENT"
-    // is the per-headline label table (it matches the NEWS SENTIMENT chip),
-    // and the FinGPT engine's answer is a forecast, so it says so.
+    // "SENTIMENT" names what the lens shows (the per-headline label table,
+    // matching the NEWS SENTIMENT chip); "FINGPT" names the engine — the
+    // AI4Finance port is a thing the user knows by name, and its lens carries
+    // its answer in its own format.
     static const struct { const char* label; const char* tip; } kLenses[] = {
         {"QUANT", "The quant engine's prose: position, thesis, risks + its recorded forecast."},
-        {"NEWS FORECAST", "The FinGPT news engine's answer: positive developments, concerns, prediction."},
+        {"FINGPT", "The FinGPT news engine's forecast: positive developments, concerns, prediction."},
         {"SENTIMENT", "Each current headline with its FinGPT sentiment label."},
         {"EVIDENCE", "Exactly what the news engine was shown — weekly price moves and the news in each."},
     };
@@ -749,7 +750,7 @@ QWidget* EquityAiTab::build_analysis_pane() {
     apply_wire_text_style(analysis_view_);
     analysis_view_->setPlainText(QStringLiteral(
         "Click “Run AI Analysis” for both engines' read on this stock — the quant position "
-        "recommendation with thesis and risks here, the FinGPT read under NEWS FORECAST, and a "
+        "recommendation with thesis and risks here, the FinGPT forecast under FINGPT, and a "
         "sentiment label per headline. Every forecast is recorded immutably so the chart below "
         "shows how each engine has actually done. Ask follow-ups in the chat on the right."));
     lens_stack_->addWidget(analysis_view_);
