@@ -25,7 +25,6 @@ class ToolBar : public QWidget {
     void action_triggered(const QString& action);
     void logout_clicked();
     void plan_clicked();
-    void chat_mode_toggled();
     void workbench_toggled();
 
   protected:
@@ -45,7 +44,6 @@ class ToolBar : public QWidget {
     QLabel* live_label_ = nullptr;
     QPushButton* settings_btn_ = nullptr;
     QPushButton* plan_btn_ = nullptr;
-    QPushButton* chat_mode_btn_ = nullptr;
     QPushButton* workbench_btn_ = nullptr;
     QPushButton* logout_btn_ = nullptr;
     QPushButton* data_source_btn_ = nullptr;

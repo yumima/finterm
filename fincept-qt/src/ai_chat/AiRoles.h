@@ -36,19 +36,20 @@ struct AiRole {
 inline const QVector<AiRole>& ai_roles() {
     static const QVector<AiRole> kRoles = {
         {QStringLiteral("ai_chat"), QStringLiteral("Chat"),
-         QStringLiteral("The main AI chat pane — long conversations, tool use.")},
-        {QStringLiteral("fingpt"), QStringLiteral("FinGPT"),
-         QStringLiteral("FinGPT tab one-shots — the weekly forecaster and headline "
-                        "sentiment. Structured outputs; a fast local model does fine.")},
+         QStringLiteral("The global chat (floating bubble) — conversations with tool use.")},
+        // "fingpt" retired: the FinGPT forecaster + sentiment moved into the
+        // Equity Research AI tab and run on the equity_research role, so one
+        // binding covers everything that reasons about a single stock. An old
+        // fingpt binding row is simply never consulted again.
         {QStringLiteral("news"), QStringLiteral("News briefs"),
          QStringLiteral("TL;DR headline summaries. Short structured one-shots; "
                         "favour a fast model over a strong one.")},
         {QStringLiteral("equity_research"), QStringLiteral("Equity research"),
-         QStringLiteral("Company analysis in the Equity Research screen. "
-                        "Favours reasoning quality over latency.")},
-        // "portfolio" deliberately absent: PortfolioInsightsPanel makes no LLM
-        // call, so the row would be a control that changes nothing. Add it back
-        // together with a consumer, not before.
+         QStringLiteral("Per-stock AI: the quant + news forecasts, headline sentiment "
+                        "and the stock chat in Equity Research › AI.")},
+        {QStringLiteral("portfolio"), QStringLiteral("Portfolio"),
+         QStringLiteral("The portfolio chat in the Insights panel — questions over "
+                        "real holdings via the portfolio tools.")},
         {QStringLiteral("knowledge"), QStringLiteral("AI tutor"),
          QStringLiteral("Explanations in the Knowledge screen.")},
         {QStringLiteral("ai_quant_lab"), QStringLiteral("Quant lab"),

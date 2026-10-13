@@ -22,6 +22,8 @@
 
 #include <QRegularExpression>
 #include <QString>
+#include <QStringView>
+#include <QVector>
 
 #include <cmath>
 #include <limits>
@@ -161,6 +163,57 @@ inline ForecasterAnswer parse_forecaster_answer(const QString& raw) {
         a.bin_lo = a.bin_hi = m3.captured(1).toDouble();
     }
     return a;
+}
+
+/// Cut a decoding loop off the tail of a model answer.
+///
+/// Greedy decoding (temperature 0) on a small local model can collapse into a
+/// verbatim word-cycle that fills the whole token budget — observed live on
+/// SPCX: the Prediction section degenerated into a ~50-word adverb cycle
+/// ("...witnessed universally acknowledged globally recognized...") repeated
+/// for pages. max_tokens bounds the damage; this removes it from the display.
+///
+/// Word-wise period scan: find the smallest period p (in words) whose cycle
+/// repeats verbatim to the end of the text for at least two full extra cycles
+/// and at least kMinLoopWords words. The cut keeps exactly ONE instance of
+/// the cycle (the loop region's seed) and drops the echoes. Prose does not
+/// repeat 24+ consecutive words verbatim, so legitimate rhetoric ("very very
+/// strong") stays untouched. Returns the (possibly) cut text; *truncated says
+/// whether a cut happened — the caller owns how to present that.
+inline QString truncate_repetition(const QString& text, bool* truncated = nullptr) {
+    if (truncated)
+        *truncated = false;
+    // Tokenize into words, remembering each word's start offset for the cut.
+    QVector<qsizetype> starts;
+    QVector<QStringView> words;
+    const QStringView v(text);
+    qsizetype i = 0;
+    while (i < v.size()) {
+        while (i < v.size() && v[i].isSpace()) ++i;
+        if (i >= v.size()) break;
+        const qsizetype b = i;
+        while (i < v.size() && !v[i].isSpace()) ++i;
+        starts.append(b);
+        words.append(v.mid(b, i - b));
+    }
+    constexpr int kMinLoopWords = 24;  // shortest run that is loop, not rhetoric
+    constexpr int kMaxPeriod = 160;    // longest cycle worth hunting (words)
+    const int n = static_cast<int>(words.size());
+    if (n < kMinLoopWords)
+        return text;
+    for (int p = 1; p <= kMaxPeriod && p * 3 <= n; ++p) {
+        int run = 0;  // trailing words that echo the word one cycle back
+        for (int k = n - 1; k - p >= 0 && words[k] == words[k - p]; --k)
+            ++run;
+        if (run >= 2 * p && run >= kMinLoopWords) {
+            if (truncated)
+                *truncated = true;
+            // [n-run, n) echoes [n-run-p, n-run) — cut at the echoes' start
+            // so the seed cycle survives as the text's legitimate ending.
+            return text.left(starts[n - run]).trimmed();
+        }
+    }
+    return text;
 }
 
 /// Human line for the parsed call: "UP by 2–3% over the next week", or an

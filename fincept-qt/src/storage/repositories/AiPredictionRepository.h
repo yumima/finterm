@@ -11,6 +11,7 @@ struct AiPrediction {
     QString ticker;
     QString created_at;       // ISO-8601 UTC
     QString model;
+    QString source = QStringLiteral("quant"); // engine: "quant" | "fingpt"
     int     horizon_days = 7;
     QString resolve_date;     // YYYY-MM-DD
     double  price_at_pred = 0.0;
@@ -47,9 +48,11 @@ class AiPredictionRepository : public BaseRepository<AiPrediction> {
     /// resolve_date has passed.
     QVector<AiPrediction> unresolved() const;
 
-    /// True if a prediction for `ticker` was already created on calendar day
-    /// `ymd` (YYYY-MM-DD). Used to keep the daily auto-forecast to one/day.
-    bool exists_on_day(const QString& ticker, const QString& ymd) const;
+    /// True if a prediction for `ticker` from `source` was already created on
+    /// calendar day `ymd` (YYYY-MM-DD). Keeps the daily auto-forecast to one
+    /// per day PER ENGINE — the quant and news engines are separate claims.
+    bool exists_on_day(const QString& ticker, const QString& ymd,
+                       const QString& source = QStringLiteral("quant")) const;
 
     /// Record the realized outcome of a prediction. This is the ONLY mutation
     /// of an existing row, and it only touches the resolution columns.

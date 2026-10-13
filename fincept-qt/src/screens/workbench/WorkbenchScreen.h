@@ -3,14 +3,14 @@
 //
 // Consolidates the AI surface (chat / agents / teams / workflows /
 // tools / servers / profiles / system) behind one screen.  The
-// design-doc target is for the existing chat_mode + agent_config +
+// design-doc target is for the existing agent_config +
 // mcp_servers screens to live here as panels; this revision ships
 // the scaffold and embeds the System + Schedule panels (AiSystemSection
 // and SchedulerSection respectively) so the work from Tracks 10, 14
 // is visible end-to-end.  Other sections are placeholders pointing
 // the user at their dedicated screens for now.
 //
-// Lives in MainWindow's master_stack alongside chat_mode and the
+// Lives in MainWindow's master_stack alongside the
 // dock surface; `show_workbench()` on MainWindow flips the stack to
 // this widget.
 

@@ -29,7 +29,7 @@ class LlmConfigSection : public QWidget {
     void reload(); // called when section becomes visible
 
   signals:
-    void config_changed(); // emitted when user saves — AiChatScreen reloads
+    void config_changed(); // emitted when user saves — chat surfaces reload
 
   private slots:
     // Provider tab

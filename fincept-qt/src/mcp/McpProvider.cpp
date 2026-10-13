@@ -285,6 +285,35 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
             return fail_now("Tool '" + name + "' has no handler");
     }
 
+    // Default ToolContext handlers are injected BEFORE the authorization gate,
+    // not after it. The gate's preferred channel is ctx.on_elicit, and most
+    // call sites (the chat tool loop goes through the bare call_tool()) never
+    // thread a per-call context — so with the injection after the gate, a
+    // destructive tool called from chat skipped the typed prompt and ran on an
+    // advisory log line. With the process-wide default (ElicitBridge, wired by
+    // AgentService::initialize) visible to the gate, that call now blocks on a
+    // real named confirmation like every other elicitation.
+    //
+    // Unattended runs FAIL CLOSED by design: a scheduled/background call that
+    // reaches this gate waits out the bridge timeout and is denied, where it
+    // previously mutated state on a log line nobody read. A destructive action
+    // with no one to confirm it should not happen, not happen silently. (Agent
+    // dispatch is unaffected in practice — its TerminalToolBridge drops
+    // destructive tools from the exposed list before the model sees them.)
+    SampleHandler default_sample;
+    ElicitHandler default_elicit;
+    LogHandler default_log;
+    {
+        QMutexLocker lock(&mutex_);
+        default_sample = default_sample_handler_;
+        default_elicit = default_elicit_handler_;
+        default_log = default_log_handler_;
+    }
+    if (!ctx.on_sample && default_sample)
+        ctx.on_sample = default_sample;
+    if (!ctx.on_elicit && default_elicit)
+        ctx.on_elicit = default_elicit;
+
     // Authorization gate.  Two channels, tried in order:
     //
     //   1. MCP-spec elicitation (Track 5 commit J).  If the caller wired
@@ -368,21 +397,8 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
     if (ctx.timeout_ms == 30000) // ToolContext default — not explicitly set
         ctx.timeout_ms = default_timeout_ms;
 
-    // Snapshot the default handlers once (mutex held).  Per-call ctx
-    // fields win; defaults fall through where the caller didn't set
-    // anything.  Production wiring (AgentService::initialize) populates
-    // the defaults so chat-surface tools can sample / elicit without
-    // every caller threading the handlers manually.
-    SampleHandler default_sample;
-    ElicitHandler default_elicit;
-    LogHandler default_log;
-    {
-        QMutexLocker lock(&mutex_);
-        default_sample = default_sample_handler_;
-        default_elicit = default_elicit_handler_;
-        default_log = default_log_handler_;
-    }
-
+    // sample/elicit defaults were injected above, ahead of the auth gate; the
+    // log fan-out below only needs default_log.
     if (!ctx.on_log) {
         const QString tool_name = name;
         // If caller didn't supply a log sink AND there's a process-wide
@@ -414,11 +430,6 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
                 default_log(level, msg);
         };
     }
-
-    if (!ctx.on_sample && default_sample)
-        ctx.on_sample = default_sample;
-    if (!ctx.on_elicit && default_elicit)
-        ctx.on_elicit = default_elicit;
 
     // Async preferred; sync wrapped in a resolved future so call_tool() works
     // uniformly for both shapes.

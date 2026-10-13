@@ -10,8 +10,9 @@ ChatRepository& ChatRepository::instance() {
 }
 
 ChatSession ChatRepository::map_session(QSqlQuery& q) {
-    return {q.value(0).toString(), q.value(1).toString(), q.value(2).toString(), q.value(3).toString(),
-            q.value(4).toInt(),    q.value(5).toString(), q.value(6).toString(), q.value(7).toString()};
+    return {q.value(0).toString(), q.value(1).toString(), q.value(2).toString(),
+            q.value(3).toString(), q.value(4).toInt(),    q.value(5).toString(),
+            q.value(6).toString(), q.value(7).toString(), q.value(8).toString()};
 }
 
 ChatMessage ChatRepository::map_message(QSqlQuery& q) {
@@ -20,25 +21,40 @@ ChatMessage ChatRepository::map_message(QSqlQuery& q) {
 }
 
 Result<ChatSession> ChatRepository::create_session(const QString& title, const QString& provider,
-                                                   const QString& model, const QString& persona_id) {
+                                                   const QString& model, const QString& persona_id,
+                                                   const QString& context_tag) {
     QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    auto r = exec_write("INSERT INTO chat_sessions (id, title, provider, model, persona_id) VALUES (?, ?, ?, ?, ?)",
-                        {id, title, provider, model, persona_id});
+    auto r = exec_write("INSERT INTO chat_sessions (id, title, provider, model, persona_id, context_tag) "
+                        "VALUES (?, ?, ?, ?, ?, ?)",
+                        {id, title, provider, model, persona_id, context_tag});
     if (r.is_err())
         return Result<ChatSession>::err(r.error());
     return get_session(id);
 }
 
+static const char* kSessionCols =
+    "id, title, provider, model, message_count, created_at, updated_at, persona_id, context_tag";
+
 Result<ChatSession> ChatRepository::get_session(const QString& id) {
-    return query_one("SELECT id, title, provider, model, message_count, created_at, updated_at, persona_id "
-                     "FROM chat_sessions WHERE id = ?",
-                     {id}, map_session);
+    return query_one(QStringLiteral("SELECT %1 FROM chat_sessions WHERE id = ?").arg(kSessionCols), {id},
+                     map_session);
+}
+
+Result<std::optional<ChatSession>> ChatRepository::latest_session_for_context(const QString& context_tag) {
+    auto r = query_list(QStringLiteral("SELECT %1 FROM chat_sessions WHERE context_tag = ? "
+                                       "ORDER BY updated_at DESC LIMIT 1")
+                            .arg(kSessionCols),
+                        {context_tag}, map_session);
+    if (r.is_err())
+        return Result<std::optional<ChatSession>>::err(r.error());
+    if (r.value().isEmpty())
+        return Result<std::optional<ChatSession>>::ok(std::nullopt);
+    return Result<std::optional<ChatSession>>::ok(r.value().first());
 }
 
 Result<QVector<ChatSession>> ChatRepository::list_sessions() {
-    return query_list("SELECT id, title, provider, model, message_count, created_at, updated_at, persona_id "
-                      "FROM chat_sessions ORDER BY updated_at DESC",
-                      {}, map_session);
+    return query_list(QStringLiteral("SELECT %1 FROM chat_sessions ORDER BY updated_at DESC").arg(kSessionCols), {},
+                      map_session);
 }
 
 Result<void> ChatRepository::update_session_title(const QString& id, const QString& title) {

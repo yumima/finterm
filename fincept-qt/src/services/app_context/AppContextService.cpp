@@ -20,8 +20,10 @@ constexpr const char* kAppCtxSymbolSource = "equity_research";
 constexpr const char* kAppCtxPortfolioSource = "portfolio";
 
 bool app_ctx_is_chat_surface(const QString& base) {
-    return base == QLatin1String("ai_chat") || base == QLatin1String("agent_config") ||
-           base == QLatin1String("fingpt");  // embeds AiChatScreen as its Chat sub-tab
+    // Screens whose job is TALKING ABOUT the current focus — moving to one
+    // must not clear it. The floating chat bubble is not a dock, so opening
+    // it never fires a Show event and needs no entry here.
+    return base == QLatin1String("agent_config");
 }
 
 QString app_ctx_base_id(const QObject* o) {

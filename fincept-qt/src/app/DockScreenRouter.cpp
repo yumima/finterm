@@ -43,9 +43,12 @@ QString DockScreenRouter::title_for_id(const QString& id) {
         {"portfolio", "Portfolio"},
         {"watchlist", "Watchlist"},
         {"news", "News"},
-        {"ai_chat", "AI Chat"},
-        {"fingpt", "FinGPT"},
         {"equity_research", "Equity Research"},
+        // Legacy ids from saved layouts: the factories redirect them to live
+        // screens (MainWindow), so the tab must carry the live screen's name —
+        // a raw "ai_chat" caption over an Agent Studio reads as a bug.
+        {"ai_chat", "Agent Studio"},
+        {"fingpt", "Equity Research"},
         {"economics", "Economics"},
         {"dbnomics", "DBnomics"},
         {"akshare", "AkShare Data"},

@@ -143,15 +143,6 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
     hl->addWidget(plan_btn_);
     sep();
 
-    chat_mode_btn_ = new QPushButton(QString::fromUtf8("⬡ CHAT"));
-    chat_mode_btn_->setFixedHeight(20);
-    chat_mode_btn_->setCursor(Qt::PointingHandCursor);
-    chat_mode_btn_->setToolTip("Switch to Chat Mode (F9)");
-    chat_mode_btn_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    connect(chat_mode_btn_, &QPushButton::clicked, this, &ToolBar::chat_mode_toggled);
-    hl->addWidget(chat_mode_btn_);
-    sep();
-
     workbench_btn_ = new QPushButton(QString::fromUtf8("⬡ WORK"));
     workbench_btn_->setFixedHeight(20);
     workbench_btn_->setCursor(Qt::PointingHandCursor);
@@ -264,13 +255,6 @@ void ToolBar::refresh_theme() {
                                          "QPushButton:hover{color:%2;}")
                                      .arg(colors::TEXT_PRIMARY())
                                      .arg(colors::AMBER()));
-    if (chat_mode_btn_)
-        chat_mode_btn_->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                                              "padding:0 8px;font-weight:700;}"
-                                              "QPushButton:hover{background:%2;color:%3;border-color:%1;}")
-                                          .arg(colors::AMBER())
-                                          .arg(colors::AMBER_DIM())
-                                          .arg(colors::TEXT_PRIMARY()));
     if (logout_btn_)
         logout_btn_->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
                                            "padding:0 8px;font-weight:700;}"
@@ -296,14 +280,13 @@ void ToolBar::apply_responsive_layout(int w) {
     // >= 1200: everything visible
     // >= 1000: hide subtitle
     //  >= 800: also hide clock, LIVE label
-    //  >= 650: also hide credits, chat button
+    //  >= 650: also hide credits
     //  <  650: minimal — menus + branding + user + plan + logout
 
     bool show_subtitle = (w >= 1200);
     bool show_clock = (w >= 800);
     bool show_live = (w >= 800);
     bool show_credits = (w >= 650);
-    bool show_chat = (w >= 650);
 
     if (subtitle_label_)
         subtitle_label_->setVisible(show_subtitle);
@@ -315,16 +298,10 @@ void ToolBar::apply_responsive_layout(int w) {
         live_label_->setVisible(show_live);
     if (credits_label_)
         credits_label_->setVisible(show_credits);
-    if (chat_mode_btn_)
-        chat_mode_btn_->setVisible(show_chat);
 
-    // Hide separators adjacent to hidden widgets — check each separator's neighbors
-    // Simple approach: hide seps 3 (after credits) and 4 (after plan/before chat)
-    // when their adjacent content is hidden
-    if (separators_.size() >= 5) {
+    // Hide the separator adjacent to a hidden credits label.
+    if (separators_.size() >= 3)
         separators_[2]->setVisible(show_credits); // sep before credits
-        separators_[3]->setVisible(show_chat);    // sep before chat
-    }
 }
 
 void ToolBar::update_clock() {
@@ -517,8 +494,6 @@ QMenu* ToolBar::build_view_menu() {
     panels->addAction("Equity Research", this, [this]() { emit action_triggered("panel_research"); });
     panels->addAction("Economics", this, [this]() { emit action_triggered("panel_economics"); });
     panels->addAction("Geopolitics", this, [this]() { emit action_triggered("panel_geopolitics"); });
-    panels->addAction("AI Chat", this, [this]() { emit action_triggered("panel_ai_chat"); });
-    panels->addAction("FinGPT", this, [this]() { emit action_triggered("panel_fingpt"); });
     m->addSeparator();
 
     // Quick Switch — jump to a preset screen layout
@@ -559,7 +534,7 @@ QMenu* ToolBar::build_view_menu() {
     auto* qs_ai = persp->addMenu("AI && Quant");
     qs_ai->setStyleSheet(popup_ss());
     qs_ai->addAction("Quant Lab", this, [this]() { emit action_triggered("perspective_quant"); });
-    qs_ai->addAction("AI Chat", this, [this]() { emit action_triggered("perspective_ai"); });
+    qs_ai->addAction("Agents + Research", this, [this]() { emit action_triggered("perspective_ai"); });
 
     // Tools
     persp->addAction("Tools View", this, [this]() { emit action_triggered("perspective_tools"); });

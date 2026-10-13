@@ -379,7 +379,9 @@ void EquityResearchScreen::build_ui() {
     // company worth" question narrowed to the next print, and the two are
     // read together.
     tab_widget_->addTab(earnings_tab_, "Earnings");
-    tab_widget_->addTab(ai_tab_, "AI Forecast");
+    // "AI", not "AI Forecast": the tab now carries both forecast engines, the
+    // headline sentiment and the stock chat — every AI read on this stock.
+    tab_widget_->addTab(ai_tab_, "AI");
     tab_widget_->addTab(technicals_tab_, "Technicals");
     tab_widget_->addTab(talipp_tab_, "TALIpp");
     tab_widget_->addTab(peers_tab_, "Peers");

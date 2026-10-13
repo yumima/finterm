@@ -880,15 +880,18 @@ QWidget* DocsScreen::page_quantlib() {
 
 QWidget* DocsScreen::page_ai_chat() {
     return make_page(
-        "AI CHAT", "AI-powered financial assistant",
+        "AI ASSISTANT", "AI-powered financial assistance, everywhere it is needed",
         {
-            {"OVERVIEW", "The AI Chat provides a conversational interface powered by large language models "
-                         "for financial analysis, market insights, and terminal assistance."},
-            {"KEY FEATURES", "■  Natural language market queries\n"
-                             "■  Financial analysis and interpretation\n"
-                             "■  Code generation for trading strategies\n"
-                             "■  Portfolio insights and suggestions\n"
-                             "■  Configurable LLM provider and model"},
+            {"OVERVIEW", "AI is a lens on whatever you are looking at, not a destination. The floating "
+                         "chat bubble (bottom-right) is the global assistant with live data tools; "
+                         "the AI tab in Equity Research carries both per-stock forecast engines, headline "
+                         "sentiment and a stock-scoped chat; the Portfolio Insights panel answers over "
+                         "your real holdings."},
+            {"KEY FEATURES", "■  Natural language market queries with live data tools\n"
+                             "■  Two per-stock forecast engines (quant + FinGPT news) with a scored track record\n"
+                             "■  Per-headline sentiment labels\n"
+                             "■  Stock- and portfolio-scoped chat threads that persist\n"
+                             "■  Configurable model per role (Settings \xe2\x86\x92 AI Config)"},
             {"REAL-WORLD USAGE", "■  Quick analysis: \"What's driving NVDA today?\"\n"
                                  "■  Strategy help: \"Write a mean reversion strategy for crypto\"\n"
                                  "■  Learning: \"Explain how VaR is calculated\"\n"
@@ -1400,7 +1403,7 @@ void DocsScreen::build_sidebar() {
     auto* ai = add_category("AI & QUANTITATIVE");
     add_item(ai, "AI Quant Lab", "ai_quant_lab");
     add_item(ai, "QuantLib Suite", "quantlib");
-    add_item(ai, "AI Chat", "ai_chat");
+    add_item(ai, "AI Assistant", "ai_assistant");
     add_item(ai, "Agent Studio", "agent_config");
     add_item(ai, "Alpha Arena", "alpha_arena");
 
@@ -1484,7 +1487,7 @@ void DocsScreen::build_content_pages() {
     // AI
     add("ai_quant_lab", page_ai_quant_lab());
     add("quantlib", page_quantlib());
-    add("ai_chat", page_ai_chat());
+    add("ai_assistant", page_ai_chat());
     add("agent_config", page_agent_config());
     add("alpha_arena", page_alpha_arena());
 

@@ -175,6 +175,63 @@ class TestFinGptParse : public QObject {
         QVERIFY(std::isnan(a.bin_lo));
         QCOMPARE(describe_forecast(a), QStringLiteral("DOWN"));
     }
+
+    // ── truncate_repetition ──────────────────────────────────────────────
+    // Observed live on SPCX: temperature-0 decoding collapsed the Prediction
+    // section into a ~50-word adverb cycle repeated until the token budget
+    // ran out. The truncator must cut that, keep one instance of the cycle,
+    // and leave honest prose (including short rhetorical repeats) alone.
+
+    void repetition_loop_is_cut_keeping_one_cycle() {
+        const QString cycle = QStringLiteral(
+            "witnessed universally acknowledged globally recognized internationally "
+            "accepted worldwide embraced enthusiastically welcomed warmly received ");
+        QString t = QStringLiteral("Prediction: SPCX is expected to climb, broadly ");
+        for (int i = 0; i < 8; ++i)
+            t += cycle;
+        bool truncated = false;
+        const QString cut = truncate_repetition(t, &truncated);
+        QVERIFY(truncated);
+        // Exactly one instance of the cycle survives.
+        QCOMPARE(cut.count(QStringLiteral("witnessed universally")), 1);
+        QVERIFY(cut.startsWith(QStringLiteral("Prediction: SPCX")));
+    }
+
+    void single_word_stutter_is_cut() {
+        QString t = QStringLiteral("The outlook is");
+        for (int i = 0; i < 40; ++i)
+            t += QStringLiteral(" positive");
+        bool truncated = false;
+        truncate_repetition(t, &truncated);
+        QVERIFY(truncated);
+    }
+
+    void honest_prose_and_rhetorical_repeats_pass_through() {
+        bool truncated = true;
+        QCOMPARE(truncate_repetition(kCanonical, &truncated), kCanonical);
+        QVERIFY(!truncated);
+        // A short emphatic repeat is rhetoric, not degeneration.
+        const QString emphatic = QStringLiteral(
+            "Demand is very very strong, and the quarter was strong too; "
+            "guidance, guidance revisions and buybacks all support the stock "
+            "over the next week according to the assembled headline evidence.");
+        truncated = true;
+        QCOMPARE(truncate_repetition(emphatic, &truncated), emphatic);
+        QVERIFY(!truncated);
+    }
+
+    void structured_lists_are_not_mistaken_for_loops() {
+        // Three similar list items share many words but are not verbatim
+        // cycles; nothing may be cut.
+        const QString t = QStringLiteral(
+            "[Potential Concerns]:\n"
+            "1. Regulatory pressure could weigh on the stock next week.\n"
+            "2. Regulatory pressure could weigh on margins next quarter.\n"
+            "3. Regulatory pressure could weigh on sentiment this year.\n");
+        bool truncated = true;
+        QCOMPARE(truncate_repetition(t, &truncated), t);
+        QVERIFY(!truncated);
+    }
 };
 
 QTEST_MAIN(TestFinGptParse)

@@ -33,12 +33,18 @@ inline const std::vector<ChatPersona>& builtin_personas() {
          "the available market, movers, news, macro (DBnomics), SEC-filing valuation, portfolio, and "
          "watchlist tools directly — call a tool to fetch live data instead of answering from memory. "
          "If none of your tools covers what was asked, say you don't have that data here.",
+         // No navigation tools (navigate_to_tab / load_equity_symbol): General
+         // is the persona of the floating bubble and of persona-less callers
+         // (workflow nodes, MCP sampling) — surfaces that float OVER whatever
+         // the user is doing. A model yanking the terminal to another screen
+         // mid-question is a hijack, not help, and navigation is not
+         // destructive-flagged so no confirmation gate would catch it.
          {"int__get_quote", "int__get_equity_historical", "int__get_candles", "int__get_top_movers",
           "int__get_news", "int__search_news", "int__get_top_news", "int__get_news_summary", "int__search_dbnomics", "int__list_dbnomics_series",
           "int__get_dbnomics_observations", "int__edgar_calc_multiples", "int__edgar_get_financial_metrics",
           "int__get_portfolio*", "int__get_holdings", "int__list_portfolios", "int__get_transactions",
-          "int__get_watchlists", "int__add_to_watchlist", "int__remove_from_watchlist", "int__navigate_to_tab",
-          "int__load_equity_symbol", "int__search_equity_symbols"}},
+          "int__get_watchlists", "int__add_to_watchlist", "int__remove_from_watchlist",
+          "int__search_equity_symbols"}},
         {"portfolio", "Portfolio Advisor",
          "You are a portfolio advisor inside finterm. The user's real holdings live behind the "
          "portfolio tools, which you can call directly. For ANY question about the user's portfolio, "
@@ -52,35 +58,22 @@ inline const std::vector<ChatPersona>& builtin_personas() {
           "int__update_holding", "int__remove_holding", "int__get_transactions", "int__add_transaction",
           "int__get_quote", "int__run_portfolio_analysis_agent", "int__run_portfolio_rebalancing_agent",
           "int__run_risk_assessment_agent"}},
-        {"research", "Research Analyst",
-         "You are an equity research analyst inside finterm. Ground every analysis in primary sources: "
-         "pull SEC filings with the edgar_* tools and fundamentals / peers / sentiment / news with the "
-         "equity tools before drawing conclusions. Be specific and cite the filings you used.",
-         {"int__edgar_*", "int__get_equity_*", "int__get_quote", "int__get_candles", "int__get_news",
-          "int__search_news", "int__fd_*", "int__search_equity_symbols", "int__load_equity_symbol"}},
-        {"fingpt", "FinGPT Analyst",
-         "You are the FinGPT Analyst inside finterm, modelled on the AI4Finance FinGPT task "
-         "suite. Ground every claim in data fetched with your tools (quotes, candles, news, "
-         "fundamentals) — never from memory. For sentiment questions, answer in FinGPT's frame: "
-         "classify each headline or passage as positive / negative / neutral from a financial "
-         "perspective, and lead with the label before any commentary. For outlook questions on a "
-         "ticker, fetch its recent news and prices first, then answer in the FinGPT-Forecaster "
-         "structure: [Positive Developments] (2-4 concise factors), [Potential Concerns] (2-4), "
-         "then [Prediction & Analysis] with a direction and a rough percentage band for the "
-         "coming week, inferred mostly from company-related news. Always say plainly that such a "
-         "prediction is a structured reading of recent news, not financial advice.",
-         {"int__get_quote", "int__get_candles", "int__get_equity_historical", "int__get_equity_*",
-          "int__get_news", "int__search_news", "int__get_top_news", "int__get_news_summary",
-          "int__summarize_news_headlines", "int__get_top_movers", "int__search_equity_symbols",
-          "int__load_equity_symbol"}},
-        {"markets", "Markets",
-         "You are a markets assistant inside finterm. Help with quotes, news, watchlists, and general "
-         "market questions using the market-data and news tools; navigate the terminal when asked.",
-         {"int__get_quote", "int__get_equity_historical", "int__get_candles", "int__get_top_movers",
-          "int__get_news", "int__search_news", "int__get_top_news", "int__get_news_summary",
-          "int__summarize_news_headlines", "int__get_watchlists",
-          "int__add_to_watchlist", "int__remove_from_watchlist", "int__navigate_to_tab",
-          "int__load_equity_symbol"}},
+        {"equity", "Stock Analyst",
+         "You are a sharp equity analyst answering questions about ONE specific stock for a retail "
+         "investor. A DATA block with today's real figures for the ticker leads the conversation — "
+         "answer from it first, and call your tools (quote, candles, fundamentals, news, SEC filings) "
+         "when the question needs something the block doesn't carry. If a figure is in neither, say "
+         "plainly that you don't have it — never guess or invent numbers. (A private / pre-IPO company "
+         "often has no public revenue or fundamentals — say so.) Stay on this stock. Be concrete and "
+         "balanced, quantify when you can, and flag the key risk. Informational, not financial advice.",
+         {"int__get_quote", "int__get_candles", "int__get_equity_*", "int__get_news", "int__search_news",
+          "int__edgar_*", "int__search_equity_symbols"}},
+        // "research", "markets" and "fingpt" were retired with the persona
+        // picker: nothing can select them since the chat screen was removed,
+        // and the FinGPT engine now lives in Equity Research's AI tab with its
+        // real prompts (FinGptPrompts.h) rather than a persona imitation. A
+        // persona here must have a surface that mounts it, or it is prompt
+        // text that silently drifts from the live code it describes.
     };
     return kPersonas;
 }

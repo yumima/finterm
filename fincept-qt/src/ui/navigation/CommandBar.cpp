@@ -203,13 +203,9 @@ void CommandBar::build_commands() {
          {"trade", "trading", "crypto", "kraken"},
          "F9",
          {"trading", "crypto", "exchange"}},
-        {"ai_chat", "AI Chat", "AI assistant", {"ai", "chat", "assistant", "bot"}, "F10", {"ai", "chat", "assistant"}},
-        {"fingpt",
-         "FinGPT",
-         "FinGPT — chat, forecaster + sentiment analysis",
-         {"fingpt", "fin", "forecaster", "sentiment"},
-         "",
-         {"fingpt", "forecast", "sentiment", "ai", "chat"}},
+        // "ai_chat" and "fingpt" retired: the global chat is the floating
+        // bubble, and the per-stock AI (forecaster, sentiment, stock chat)
+        // lives in Equity Research's AI tab — see the Research entry below.
         {"notes", "Notes", "Notes and reports", {"notes", "note"}, "F11", {"notes", "reports", "documents"}},
         {"profile",
          "Profile",
@@ -264,10 +260,10 @@ void CommandBar::build_commands() {
         // Research
         {"equity_research",
          "Equity Research",
-         "Equity research tools",
-         {"rsrch", "research", "equity"},
+         "Equity research tools — fundamentals, technicals, AI forecasts & stock chat",
+         {"rsrch", "research", "equity", "fingpt", "forecaster", "ai"},
          "",
-         {"research", "equity", "fundamental"}},
+         {"research", "equity", "fundamental", "forecast", "ai", "chat"}},
         {"screener",
          "Screener",
          "Stock screener",

@@ -21,8 +21,8 @@ class DockStatusBar;
 class PushpinBar;
 class TabBar;
 } // namespace fincept::ui
-namespace fincept::chat_mode {
-class ChatModeScreen;
+namespace fincept::ai_chat {
+class ElicitPrompter;
 }
 namespace fincept::screens {
 class LockScreen;
@@ -83,7 +83,6 @@ class MainWindow : public QMainWindow {
 
     // View state
     bool focus_mode_ = false;
-    bool chat_mode_ = false;
     bool always_on_top_ = false;
     bool locked_ = false; ///< True while lock/PIN screen is active — blocks navigation.
     bool pin_gate_cleared_ = false; ///< Set once the user has passed the PIN gate this session.
@@ -100,8 +99,10 @@ class MainWindow : public QMainWindow {
     QTimer* dock_layout_save_timer_ = nullptr;
     void schedule_dock_layout_save();
 
-    // Chat mode
-    chat_mode::ChatModeScreen* chat_mode_screen_ = nullptr;
+    // The always-on UI surface for MCP elicitation (tool questions, the
+    // destructive-tool confirmation gate). Owned here so a tool prompt never
+    // depends on any particular screen being open.
+    ai_chat::ElicitPrompter* elicit_prompter_ = nullptr;
 
     // AI Workbench (Track 13)
     screens::WorkbenchScreen* workbench_screen_ = nullptr;
@@ -119,13 +120,8 @@ class MainWindow : public QMainWindow {
     /// on_terminal_unlocked() re-invokes it once the user is in. Runs once
     /// (guarded by boot_prefetched_).
     void try_boot_prefetch();
-    /// Open another AI-chat conversation pane side-by-side (AiChatScreen's
-    /// "New pane" button). Creates a fresh chat, registers it under a unique
-    /// id, and splits it alongside via the dock router.
-    void open_new_chat_pane();
     void setup_navigation();
     void on_auth_state_changed();
-    void toggle_chat_mode();
     void toggle_workbench();
     void show_lock_screen();
     void show_lock_overlay(); // show lock screen as overlay; shell stays at index 1

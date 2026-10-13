@@ -78,10 +78,10 @@ struct ConversationMessage {
 };
 
 // Per-request persona scope. Carried through the chat path so each conversation
-// (and each chat pane) uses its own persona without touching the global
-// active_persona_* singleton state. `valid == false` (the default) means "fall
-// back to the global set_persona() snapshot" — keeps every existing caller
-// (inline completion, news one-shots, agent bridge) working unchanged.
+// (and each chat pane) uses its own persona. `valid == false` (the default)
+// means "no persona named": a tool-less one-shot runs bare, and a tool-attached
+// request falls back to the built-in General persona (ChatPersonas.h) — a
+// deterministic default, not whatever persona some chat surface set last.
 struct PersonaScope {
     QString prompt;          // resolved persona system prompt
     QStringList tool_globs;  // resolved persona tool allow-list (globs)
@@ -178,8 +178,7 @@ class LlmService : public QObject {
 
     // Non-streaming (blocking — call from background thread via QtConcurrent::run)
     // use_tools: when false, disables MCP tool execution for this request
-    //            (use for the floating bubble to prevent unintended navigation)
-    // persona: per-request persona scope (default {} → global set_persona snapshot)
+    // persona: per-request persona scope (default {} → General persona when tools attach)
     LlmResponse chat(const QString& user_message, const std::vector<ConversationMessage>& history,
                      bool use_tools = true, const PersonaScope& persona = {});
 
@@ -218,13 +217,6 @@ class LlmService : public QObject {
     /// Roles are listed in AiRoles.h. An unbound role resolves to the chat
     /// model, so binding one is always an override, never a prerequisite.
     PersonaScope scope_for_role(const QString& role, const QString& local_fallback = {}) const;
-
-    // ── Chat persona ──────────────────────────────────────────────────────────
-    // Scope subsequent chat()/chat_streaming() calls to a persona (focused
-    // system prompt + curated tool allow-list). See ChatPersonas.h. Unknown id
-    // → General (all tools).
-    void set_persona(const QString& persona_id);
-    QString active_persona() const;
 
     // ── Profile-aware resolution ──────────────────────────────────────────────
     // Returns the resolved LLM profile for a given context.
@@ -269,26 +261,14 @@ class LlmService : public QObject {
     mutable bool tools_enabled_ = true;
     mutable bool config_loaded_ = false;
 
-    // Active chat persona — a focused system-prompt addition + a tool allow-list
-    // (glob patterns; empty = all tools / General). Guarded by its OWN mutex,
-    // not mutex_: the streaming / tool-loop build path reads the persona WITHOUT
-    // holding mutex_, so all reads go through the locked snapshot accessors
-    // below (returning by value) to avoid a COW data race with set_persona().
-    mutable QMutex persona_mutex_;
-    QString active_persona_id_;
-    QString active_persona_prompt_;
-    QStringList active_persona_tools_;
-    QStringList persona_tools() const;  // locked snapshot — safe to read off-thread
-    QString persona_prompt() const;     // locked snapshot — safe to read off-thread
-
     void ensure_config() const;
 
     // Per-request system additions: persona instructions + ambient app context
     // (current symbol / active portfolio). Injected after the base system prompt.
     QString ambient_context() const;
-    QString dynamic_system_suffix() const;
-    // Per-request overloads: use the PersonaScope's prompt/globs when valid,
-    // else fall back to the global persona snapshot.
+    // Per-request: the PersonaScope's prompt/globs when valid, else the
+    // built-in General persona's (tool-attached requests always need SOME
+    // curated allow-list — empty would mean "first 48 registered tools").
     QString dynamic_system_suffix(const PersonaScope& persona) const;
     QStringList resolve_tool_globs(const PersonaScope& persona) const;
 
@@ -362,7 +342,7 @@ class LlmService : public QObject {
     QJsonObject build_openai_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                                      bool stream, bool with_tools = true, const PersonaScope& persona = {});
     QJsonObject build_anthropic_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                        bool stream, const PersonaScope& persona = {});
+                                        bool stream, bool with_tools, const PersonaScope& persona = {});
     /// Make a tool's JSON Schema safe to send. Gemini validates
     /// function_declarations strictly and rejects the WHOLE request when any
     /// one is malformed, so a single bad tool takes down every call — which is
@@ -432,7 +412,7 @@ class LlmService : public QObject {
     LlmResponse do_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                            bool use_tools = true, const PersonaScope& persona = {});
     LlmResponse do_streaming_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                     StreamCallback on_chunk, const PersonaScope& persona = {});
+                                     StreamCallback on_chunk, bool use_tools, const PersonaScope& persona = {});
 
     // Tool-call follow-up loop (OpenAI-compatible)
     LlmResponse do_tool_loop(QJsonArray loop_messages, const QString& url, const QMap<QString, QString>& headers,

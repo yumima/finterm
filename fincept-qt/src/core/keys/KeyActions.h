@@ -6,7 +6,6 @@ namespace fincept {
 enum class KeyAction {
     // Global (MainWindow)
     Refresh,
-    ToggleChat,
     FocusMode,
     Fullscreen,
     Screenshot,

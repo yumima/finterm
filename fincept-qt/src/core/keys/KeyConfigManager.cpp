@@ -12,7 +12,6 @@ namespace fincept {
 static QString storage_key(KeyAction a) {
     switch (a) {
         case KeyAction::Refresh:    return "key.refresh";
-        case KeyAction::ToggleChat: return "key.toggle_chat";
         case KeyAction::FocusMode:  return "key.focus_mode";
         case KeyAction::Fullscreen: return "key.fullscreen";
         case KeyAction::Screenshot: return "key.screenshot";
@@ -62,7 +61,6 @@ static QString storage_key(KeyAction a) {
 KeyConfigManager::KeyConfigManager() {
     // Define defaults
     defaults_[KeyAction::Refresh]    = QKeySequence(Qt::Key_F5);
-    defaults_[KeyAction::ToggleChat] = QKeySequence(Qt::Key_F9);
     defaults_[KeyAction::FocusMode]  = QKeySequence(Qt::Key_F10);
     defaults_[KeyAction::Fullscreen] = QKeySequence(Qt::Key_F11);
     defaults_[KeyAction::Screenshot] = QKeySequence(Qt::CTRL | Qt::Key_P);
@@ -172,7 +170,6 @@ QKeySequence KeyConfigManager::default_key(KeyAction a) const {
 QString KeyConfigManager::display_name(KeyAction a) const {
     switch (a) {
         case KeyAction::Refresh:    return "Refresh Screen";
-        case KeyAction::ToggleChat: return "Toggle Chat";
         case KeyAction::FocusMode:  return "Focus Mode";
         case KeyAction::Fullscreen: return "Fullscreen";
         case KeyAction::Screenshot: return "Screenshot";
@@ -222,7 +219,6 @@ QString KeyConfigManager::display_name(KeyAction a) const {
 QString KeyConfigManager::group_name(KeyAction a) const {
     switch (a) {
         case KeyAction::Refresh:
-        case KeyAction::ToggleChat:
         case KeyAction::FocusMode:
         case KeyAction::Fullscreen:
         case KeyAction::Screenshot:
@@ -277,7 +273,7 @@ QString KeyConfigManager::group_name(KeyAction a) const {
 
 QList<KeyAction> KeyConfigManager::all_actions() const {
     return {
-        KeyAction::Refresh, KeyAction::ToggleChat, KeyAction::FocusMode,
+        KeyAction::Refresh, KeyAction::FocusMode,
         KeyAction::Fullscreen, KeyAction::Screenshot,
         KeyAction::NavNext, KeyAction::NavPrev, KeyAction::NavAccept, KeyAction::NavEscape,
         KeyAction::NewsNext, KeyAction::NewsPrev, KeyAction::NewsOpen, KeyAction::NewsClose,

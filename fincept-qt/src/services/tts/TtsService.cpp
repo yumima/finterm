@@ -141,7 +141,7 @@ TtsService::~TtsService() {
 }
 
 bool TtsService::is_available() const {
-    // Called once per chat-message bubble render (AiChatScreen). The probe walks
+    // Called once per chat-message bubble render. The probe walks
     // PATH and scans voice dirs, so cache the result for a short TTL — the inputs
     // (installed binary, provisioned voice, settings) don't change second-to-
     // second, and a 2s TTL still reflects a Settings → Voice change promptly.

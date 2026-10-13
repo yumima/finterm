@@ -40,7 +40,6 @@ static const TabEntry TAB_MAP[] = {
     {"settings", "Settings", 10},
     {"about", "About", 11},
     {"support", "Support", 12},
-    {"ai_chat", "AI Chat", 13},
     {"agent_config", "Agent Studio", 14},
     {"economics", "Economics", 15},
     {"geopolitics", "Geopolitics", 16},
@@ -94,7 +93,7 @@ std::vector<ToolDef> get_navigation_tools() {
         t.description = "Navigate to a specific terminal screen by name. "
                         "Available screens: dashboard, markets, news, watchlist, crypto_trading, "
                         "dbnomics, surface_analytics, notes, report_builder, profile, settings, "
-                        "about, support, ai_chat, agent_config, economics, geopolitics, quantlib, "
+                        "about, support, agent_config, economics, geopolitics, quantlib, "
                         "algo_trading, backtesting, node_editor, code_editor, ma_analytics, data_sources, "
                         "gov_data, forum, docs.";
         t.category = "navigation";

@@ -131,7 +131,7 @@ QString SkillProposalService::resolve_skill_path(const QString& skill_name) cons
 Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace,
                                                     const QString& user_note) const {
     // Pull the skill name out of config_json — written by the slash
-    // dispatcher (AiChatScreen) as config["skill"].
+    // dispatcher as config["skill"].
     const QJsonDocument doc = QJsonDocument::fromJson(trace.config_json.toUtf8());
     if (!doc.isObject())
         return Result<SkillProposal>::err("trace.config_json is not an object — no skill name to resolve");

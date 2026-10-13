@@ -1,7 +1,7 @@
 #include "app/MainWindow.h"
 
 #include "ai_chat/AiChatBubble.h"
-#include "ai_chat/AiChatScreen.h"
+#include "ai_chat/ElicitPrompter.h"
 #include "app/DockScreenRouter.h"
 #include "auth/AuthManager.h"
 #include "auth/InactivityGuard.h"
@@ -28,7 +28,6 @@
 #include "screens/auth/PricingScreen.h"
 #include "screens/auth/RegisterScreen.h"
 #include "screens/backtesting/BacktestingScreen.h"
-#include "screens/chat_mode/ChatModeScreen.h"
 #include "screens/workbench/WorkbenchScreen.h"
 #include "screens/code_editor/CodeEditorScreen.h"
 #include "screens/crypto_trading/CryptoTradingScreen.h"
@@ -42,7 +41,6 @@
 #include "screens/equity_research/EquityResearchScreen.h"
 #include "screens/futures/FuturesScreen.h"
 #include "screens/futures/FuturesQuoteCache.h"
-#include "screens/fingpt/FinGptScreen.h"
 #include "screens/fno/FnoScreen.h"
 #include "services/portfolio/PortfolioService.h"
 #include "screens/equity_trading/EquityTradingScreen.h"
@@ -246,18 +244,13 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     setup_auth_screens();
     master_stack->addWidget(auth_stack_);
 
-    // ── Chat Mode ─────────────────────────────────────────────────────────────
-    chat_mode_screen_ = new chat_mode::ChatModeScreen;
-
     // ── ADS Docking mode ─────────────────────────────────────────────────────
     setup_docking_mode();
     master_stack->addWidget(dock_manager_->parentWidget()); // index 1 — dock_wrapper
-    master_stack->addWidget(chat_mode_screen_);             // index 2
-    connect(chat_mode_screen_, &chat_mode::ChatModeScreen::exit_requested, this, &MainWindow::toggle_chat_mode);
 
     // ── AI Workbench (Track 13) ──────────────────────────────────────────────
     workbench_screen_ = new screens::WorkbenchScreen;
-    master_stack->addWidget(workbench_screen_);             // index 3
+    master_stack->addWidget(workbench_screen_);             // index 2
     connect(workbench_screen_, &screens::WorkbenchScreen::exit_requested,
             this, &MainWindow::toggle_workbench);
 
@@ -351,6 +344,11 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     connect(this, &QObject::destroyed, this, [this]() { WorkspaceManager::instance().remove_window(this); });
 
     // Chat bubble — floats over dock_manager_ content area
+    // Elicitation surface — always mounted, so a tool question (or the
+    // destructive-tool confirmation gate) works from ANY chat surface or agent
+    // run, not only while some particular screen is open.
+    elicit_prompter_ = new ai_chat::ElicitPrompter(this, this);
+
     chat_bubble_ = new AiChatBubble(dock_manager_);
     {
         auto r = SettingsRepository::instance().get("appearance.show_chat_bubble");
@@ -374,7 +372,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         }
     });
 
-    connect(toolbar, &ui::ToolBar::chat_mode_toggled, this, &MainWindow::toggle_chat_mode);
     connect(toolbar, &ui::ToolBar::workbench_toggled, this, &MainWindow::toggle_workbench);
     connect(toolbar, &ui::ToolBar::navigate_to, this, [this](const QString& id) {
         if (locked_) return;
@@ -457,13 +454,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     // ── Keyboard shortcuts via KeyConfigManager ───────────────────────────────
     auto& km = KeyConfigManager::instance();
-
-    auto* act_chat = km.action(KeyAction::ToggleChat);
-    act_chat->setShortcutContext(Qt::WindowShortcut);
-    addAction(act_chat);
-    connect(act_chat, &QAction::triggered, this, [this]() {
-        if (!locked_) toggle_chat_mode();
-    });
 
     auto* act_fs = km.action(KeyAction::Fullscreen);
     act_fs->setShortcutContext(Qt::WindowShortcut);
@@ -670,8 +660,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 {"panel_research", {"Equity Research", "equity_research"}},
                 {"panel_economics", {"Economics", "economics"}},
                 {"panel_geopolitics", {"Geopolitics", "geopolitics"}},
-                {"panel_ai_chat", {"AI Chat", "ai_chat"}},
-                {"panel_fingpt", {"FinGPT", "fingpt"}},
             };
             if (panel_map.contains(action)) {
                 const auto [title, route] = panel_map[action];
@@ -712,7 +700,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 {"perspective_geopolitics", {"geopolitics", "maritime", "relationship_map", "news"}},
                 // AI & Quant
                 {"perspective_quant", {"ai_quant_lab", "quantlib", "backtesting", "markets"}},
-                {"perspective_ai", {"ai_chat", "agent_config"}},
+                {"perspective_ai", {"agent_config", "equity_research"}},
                 // Tools
                 {"perspective_tools", {"code_editor", "node_editor"}},
             };
@@ -965,14 +953,12 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     });
 }
 
-void MainWindow::toggle_chat_mode() {
-    if (locked_) return;
-    chat_mode_ = !chat_mode_;
+void MainWindow::toggle_workbench() {
+    if (locked_)
+        return;
+    workbench_mode_ = !workbench_mode_;
 
-    if (chat_mode_) {
-        // Mirror image of toggle_workbench — modes are mutually
-        // exclusive.
-        workbench_mode_ = false;
+    if (workbench_mode_) {
         if (dock_toolbar_)
             dock_toolbar_->setVisible(false);
         if (dock_status_bar_)
@@ -982,49 +968,6 @@ void MainWindow::toggle_chat_mode() {
         if (chat_bubble_)
             chat_bubble_->setVisible(false);
         stack_->setCurrentIndex(2);
-        LOG_INFO("MainWindow", "Entered Chat Mode");
-    } else {
-        stack_->setCurrentIndex(1);
-        if (dock_toolbar_)
-            dock_toolbar_->setVisible(true);
-        if (dock_status_bar_)
-            dock_status_bar_->setVisible(true);
-        if (pushpin_toolbar_)
-            pushpin_toolbar_->setVisible(true);
-        // Restore chat bubble based on setting
-        if (chat_bubble_) {
-            auto r = SettingsRepository::instance().get("appearance.show_chat_bubble");
-            const bool show = !r.is_ok() || r.value() != "false";
-            chat_bubble_->setVisible(show);
-            if (show) {
-                chat_bubble_->reposition();
-                chat_bubble_->raise();
-            }
-        }
-        LOG_INFO("MainWindow", "Exited Chat Mode");
-    }
-}
-
-void MainWindow::toggle_workbench() {
-    if (locked_)
-        return;
-    workbench_mode_ = !workbench_mode_;
-
-    if (workbench_mode_) {
-        // Chat and Workbench are mutually exclusive fullscreen modes.
-        // Clear chat_mode_ if it was on so a later toggle_chat_mode
-        // doesn't think we're still in chat mode.
-        chat_mode_ = false;
-
-        if (dock_toolbar_)
-            dock_toolbar_->setVisible(false);
-        if (dock_status_bar_)
-            dock_status_bar_->setVisible(false);
-        if (pushpin_toolbar_)
-            pushpin_toolbar_->setVisible(false);
-        if (chat_bubble_)
-            chat_bubble_->setVisible(false);
-        stack_->setCurrentIndex(3);
         LOG_INFO("MainWindow", "Entered AI Workbench");
     } else {
         stack_->setCurrentIndex(1);
@@ -1178,19 +1121,12 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("notes", []() { return new screens::NotesScreen; });
 
     dock_router_->register_factory("portfolio", []() { return new screens::PortfolioScreen; });
-    dock_router_->register_factory("ai_chat", [this]() {
-        auto* chat = new screens::AiChatScreen;
-        connect(chat, &screens::AiChatScreen::request_new_pane, this, &MainWindow::open_new_chat_pane);
-        return chat;
-    });
-    // FinGPT — supersedes ai_chat in the tab strip; the bare chat id stays
-    // registered for extra panes, the floating bubble and saved layouts.
-    dock_router_->register_factory("fingpt", [this]() {
-        auto* s = new screens::fingpt::FinGptScreen;
-        connect(s, &screens::fingpt::FinGptScreen::request_new_chat_pane, this,
-                &MainWindow::open_new_chat_pane);
-        return s;
-    });
+    // "ai_chat" and "fingpt" are retired screen ids: the global chat lives in
+    // the floating bubble, and the FinGPT engines moved into Equity Research's
+    // AI tab. A saved layout naming either resolves to the nearest live home
+    // rather than a dead slot.
+    dock_router_->register_factory("ai_chat", []() { return new screens::AgentConfigScreen; });
+    dock_router_->register_factory("fingpt", []() { return new screens::EquityResearchScreen; });
     dock_router_->register_factory("backtesting", []() { return new screens::BacktestingScreen; });
     dock_router_->register_factory("algo_trading", []() { return new screens::AlgoTradingScreen; });
     dock_router_->register_factory("node_editor", []() { return new workflow::NodeEditorScreen; });
@@ -1297,7 +1233,7 @@ void MainWindow::on_auth_state_changed() {
 
     if (auth.is_authenticated()) {
         // Don't redirect if user is already on the app stack (dashboard/workspace
-        // at index 1, or chat mode at index 2) — UNLESS the PIN gate hasn't been
+        // at index 1, or the workbench at index 2) — UNLESS the PIN gate hasn't been
         // cleared yet (auth completed while loading state showed dashboard early).
         //
         // pin_gate_cleared_ is critical: once the user has entered their PIN this
@@ -1325,9 +1261,8 @@ void MainWindow::on_auth_state_changed() {
                 }
             }
             LOG_DEBUG("MainWindow", QString("on_auth_state_changed: skipping redirect, "
-                                            "stack index=%1, chat_mode=%2, gate_cleared=%3")
+                                            "stack index=%1, gate_cleared=%2")
                                         .arg(stack_->currentIndex())
-                                        .arg(chat_mode_)
                                         .arg(pin_gate_cleared_));
             return;
         }
@@ -1504,22 +1439,6 @@ void MainWindow::try_boot_prefetch() {
     portfolio_svc.load_portfolios();
 }
 
-void MainWindow::open_new_chat_pane() {
-    if (!dock_router_)
-        return;
-    // duplicate_panel() can't be used: the "ai_chat" factory is consumed on
-    // first materialise, and it tabs rather than splits. Instead build a fresh
-    // chat, register it eagerly under a unique id, and split it alongside the
-    // focused area (Right = side-by-side). Each new pane can spawn more.
-    static int pane_seq = 1;
-    const QString id = QStringLiteral("ai_chat#pane%1").arg(++pane_seq);
-    auto* chat = new screens::AiChatScreen;
-    connect(chat, &screens::AiChatScreen::request_new_pane, this, &MainWindow::open_new_chat_pane);
-    dock_router_->register_screen(id, chat);
-    dock_router_->split_alongside(id);  // defaults to RightDockWidgetArea
-    if (auto* dw = dock_router_->find_dock_widget(id))
-        dw->setWindowTitle(QStringLiteral("AI Chat %1").arg(pane_seq));
-}
 
 void MainWindow::show_lock_screen() {
     auto& auth = auth::AuthManager::instance();
@@ -1640,11 +1559,11 @@ void MainWindow::on_terminal_unlocked() {
 
 void MainWindow::set_shell_visible(bool visible) {
     if (dock_toolbar_)
-        dock_toolbar_->setVisible(visible && !focus_mode_ && !chat_mode_);
+        dock_toolbar_->setVisible(visible && !focus_mode_);
     if (dock_status_bar_)
-        dock_status_bar_->setVisible(visible && !focus_mode_ && !chat_mode_);
+        dock_status_bar_->setVisible(visible && !focus_mode_);
     if (pushpin_toolbar_)
-        pushpin_toolbar_->setVisible(visible && !focus_mode_ && !chat_mode_);
+        pushpin_toolbar_->setVisible(visible && !focus_mode_);
     if (!visible) {
         // Reset title to plain app base — no screen suffix while on auth screens
         setWindowTitle(app_title_base());

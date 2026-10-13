@@ -581,36 +581,13 @@ QMap<QString, QString> LlmService::get_headers(const PersonaScope& persona) cons
 // Request builders
 // ============================================================================
 
-void LlmService::set_persona(const QString& persona_id) {
-    QMutexLocker lock(&persona_mutex_);
-    const ChatPersona* p = find_persona(persona_id);
-    if (!p) {
-        active_persona_id_.clear();
-        active_persona_prompt_.clear();
-        active_persona_tools_.clear();
-        return;
-    }
-    active_persona_id_ = p->id;
-    active_persona_prompt_ = p->system_prompt;
-    active_persona_tools_ = p->tool_globs;
-    LOG_INFO(TAG, QString("chat persona → %1 (%2 tool pattern(s))").arg(p->id).arg(p->tool_globs.size()));
-}
-
-QString LlmService::active_persona() const {
-    QMutexLocker lock(&persona_mutex_);
-    return active_persona_id_;
-}
-
-// Locked snapshots — the build_*_request / tool-loop paths read these from a
-// pool thread without holding mutex_, so they must take a copy under the lock.
-QStringList LlmService::persona_tools() const {
-    QMutexLocker lock(&persona_mutex_);
-    return active_persona_tools_;
-}
-
-QString LlmService::persona_prompt() const {
-    QMutexLocker lock(&persona_mutex_);
-    return active_persona_prompt_;
+// The built-in General persona — the deterministic default for a tool-attached
+// request whose caller named no persona. Before this, such calls inherited a
+// process-global persona that only existed while the (now removed) chat screen
+// had set it; with nothing set, an empty allow-list meant "the first 48 tools
+// in registration order", which is no curation at all.
+static const ChatPersona* default_persona() {
+    return find_persona(QStringLiteral("general"));
 }
 
 // Reads the ambient app context (current symbol / active portfolio) the user is
@@ -640,16 +617,16 @@ QString LlmService::ambient_context() const {
                           "name, not as a topic they asked about.");
 }
 
-// Persona instructions + ambient context, appended after the base system prompt.
-QString LlmService::dynamic_system_suffix() const {
-    return dynamic_system_suffix(PersonaScope{});
-}
-
-// Per-request variant: prefer the request's PersonaScope prompt; fall back to
-// the global persona snapshot when the scope is invalid (legacy callers).
+// Persona instructions + ambient context, appended after the base system
+// prompt. The request's own PersonaScope wins; an unnamed persona falls back
+// to the General default (see default_persona()).
 QString LlmService::dynamic_system_suffix(const PersonaScope& persona) const {
     QStringList blocks;
-    const QString pp = persona.valid ? persona.prompt : persona_prompt();
+    QString pp = persona.prompt;
+    if (!persona.valid) {
+        if (const ChatPersona* g = default_persona())
+            pp = g->system_prompt;
+    }
     if (!pp.isEmpty())
         blocks << pp;
     const QString amb = ambient_context();
@@ -658,10 +635,13 @@ QString LlmService::dynamic_system_suffix(const PersonaScope& persona) const {
     return blocks.join(QStringLiteral("\n\n"));
 }
 
-// Per-request tool allow-list: the request's PersonaScope globs when valid, else
-// the global persona snapshot.
+// Per-request tool allow-list: the request's PersonaScope globs when valid,
+// else the General persona's curated defaults.
 QStringList LlmService::resolve_tool_globs(const PersonaScope& persona) const {
-    return persona.valid ? persona.tool_globs : persona_tools();
+    if (persona.valid)
+        return persona.tool_globs;
+    const ChatPersona* g = default_persona();
+    return g ? g->tool_globs : QStringList{};
 }
 
 // "Current date: 2026-10-06 (Tuesday), timezone PDT" — computed per request
@@ -894,7 +874,7 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
 
 QJsonObject LlmService::build_anthropic_request(const QString& user_message,
                                                 const std::vector<ConversationMessage>& history, bool stream,
-                                                const PersonaScope& persona) {
+                                                bool with_tools, const PersonaScope& persona) {
     QJsonArray messages;
     for (const auto& m : history) {
         if (m.role != "system")
@@ -911,9 +891,10 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     if (persona.temperature >= 0.0)
         req["temperature"] = persona.temperature;
     // Only the agentic chat (tools on) gets persona + ambient context — not a
-    // tool-less one-shot call. (Anthropic has no with_tools param; tools_enabled_
-    // carries it.)
-    const QString sys = compose_system_prompt(persona, tools_enabled_, /*with_suffix=*/tools_enabled_);
+    // tool-less one-shot call. with_tools is the caller's per-request choice;
+    // tools_enabled_ is the user's global switch, and both must agree.
+    const bool attaches_tools = with_tools && tools_enabled_;
+    const QString sys = compose_system_prompt(persona, attaches_tools, /*with_suffix=*/attaches_tools);
     if (!sys.isEmpty())
         req["system"] = sys;
     if (stream)
@@ -924,7 +905,7 @@ QJsonObject LlmService::build_anthropic_request(const QString& user_message,
     // streaming and non-streaming requests so the model can request a
     // tool_use even mid-stream — the streaming code path detects this and
     // falls back to do_request to execute and follow up.
-    if (tools_enabled_) {
+    if (attaches_tools) {
         QJsonArray ant_tools;
         auto all_tools = mcp::McpService::instance().list_tools_for_patterns(resolve_tool_globs(persona));
         for (const auto& tool : all_tools) {
@@ -1464,7 +1445,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         url = native_url;
         req_body = build_ollama_native_request(user_message, history, persona);
     } else if (eff_provider(persona) == "anthropic") {
-        req_body = build_anthropic_request(user_message, history, false, persona);
+        req_body = build_anthropic_request(user_message, history, false, use_tools, persona);
     } else if (eff_provider(persona) == "gemini" || eff_provider(persona) == "google") {
         req_body = build_gemini_request(use_tools, user_message, history, persona);
         // Auth goes via x-goog-api-key header (set by get_headers(persona)).
@@ -2245,7 +2226,7 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
 
 LlmResponse LlmService::do_streaming_request(const QString& user_message,
                                              const std::vector<ConversationMessage>& history, StreamCallback on_chunk,
-                                             const PersonaScope& persona) {
+                                             bool use_tools, const PersonaScope& persona) {
     // Not a real stream: every provider runs the non-streaming request so the
     // full tool-call / follow-up loop works regardless of provider, and the
     // finished answer is delivered as one chunk. The old SSE reader that sat
@@ -2253,10 +2234,15 @@ LlmResponse LlmService::do_streaming_request(const QString& user_message,
     // text) was unreachable and has been removed; per-provider SSE with tool
     // calls would have to be written fresh.
     //
-    // Same quota-fallback chain as chat(), so the streaming surfaces (AI chat,
-    // bubble, equity AI tab) also survive a 429 — and report which model
-    // actually answered.
-    auto resp = request_with_fallback(user_message, history, true, persona);
+    // use_tools is the CALLER's per-request flag, threaded through verbatim.
+    // It used to be forced true here while chat_streaming() mutated the shared
+    // tools_enabled_ member around the call — a window in which a concurrent
+    // request built with the wrong tool state. Per-request flag, no global.
+    //
+    // Same quota-fallback chain as chat(), so the streaming surfaces (chat
+    // panes, bubble, equity AI tab) also survive a 429 — and report which
+    // model actually answered.
+    auto resp = request_with_fallback(user_message, history, use_tools, persona);
     if (resp.success && !resp.content.isEmpty())
         on_chunk(resp.content, false);
     on_chunk("", true);
@@ -2597,22 +2583,19 @@ LlmResponse LlmService::request_with_fallback(const QString& user_message,
 void LlmService::chat_streaming(const QString& user_message, const std::vector<ConversationMessage>& history,
                                 StreamCallback on_chunk, bool use_tools, const PersonaScope& persona,
                                 CompletionCallback on_done) {
-    // Snapshot config under lock
-    QString p, k, b, m, sp;
-    double t;
-    int mx;
-    bool saved_tools;
+    // Load config and fail fast when no provider is set. The worker then reads
+    // the config members unlocked, exactly as the chat() path does — see the
+    // ACCEPTED-design block in chat(): the fix for a reload_config() racing a
+    // request mid-flight is the RequestConfig refactor (~70 member reads), and
+    // the old per-call "snapshot and re-apply" here neither prevented that race
+    // (members could still be rewritten after the apply) nor was itself safe
+    // (two concurrent streams re-applied over each other). One documented
+    // policy, not two half-policies.
+    QString p;
     {
         QMutexLocker lock(&mutex_);
         ensure_config();
         p = provider_;
-        k = api_key_;
-        b = base_url_;
-        m = model_;
-        sp = system_prompt_;
-        t = temperature_;
-        mx = max_tokens_;
-        saved_tools = tools_enabled_;
     }
 
     if (p.isEmpty()) {
@@ -2673,35 +2656,15 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
         }
     };
     (void)QtConcurrent::run(
-        [self, p, k, b, m, sp, t, mx, user_message, history_copy, guarded_chunk, use_tools, saved_tools, persona,
-         on_done]() {
+        [self, user_message, history_copy, guarded_chunk, use_tools, persona, on_done]() {
             if (!self)
                 return;
 
-            // Apply the config snapshot under the mutex so do_request /
-            // do_streaming_request see a consistent state and don't race with
-            // reload_config() on the UI thread.
-            {
-                QMutexLocker lock(&self->mutex_);
-                self->provider_ = p;
-                self->api_key_ = k;
-                self->base_url_ = b;
-                self->model_ = m;
-                self->system_prompt_ = sp;
-                self->temperature_ = t;
-                self->max_tokens_ = mx;
-                // Disable tools for this request if caller requested it
-                if (!use_tools)
-                    self->tools_enabled_ = false;
-            }
-
-            auto resp = self->do_streaming_request(user_message, history_copy, guarded_chunk, persona);
-
-            // Restore tools_enabled_ to saved value
-            {
-                QMutexLocker lock(&self->mutex_);
-                self->tools_enabled_ = saved_tools;
-            }
+            // use_tools rides the call, not the shared config. The old code
+            // flipped tools_enabled_ off and back around this request, so a
+            // concurrent tool-using chat built during a no-tools call (the
+            // bubble, a one-shot) silently lost its tools.
+            auto resp = self->do_streaming_request(user_message, history_copy, guarded_chunk, use_tools, persona);
 
             if (self) {
                 QMetaObject::invokeMethod(

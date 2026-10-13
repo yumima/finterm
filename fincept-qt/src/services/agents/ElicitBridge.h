@@ -13,9 +13,9 @@
 //   4. When the UI calls `resolve(token, response)`, unblocks the
 //      worker and returns the response from `request()`.
 //
-// AiChatScreen connects to `request_received` on construction and
-// shows a modal that calls `resolve` with the user's answer (or a
-// "declined" response when the user dismisses).
+// ai_chat::ElicitPrompter (mounted once by MainWindow) connects to
+// `request_received` and shows a modal that calls `resolve` with the
+// user's answer (or a "declined" response when the user dismisses).
 //
 // When no UI is attached, `request()` returns immediately with an
 // error — tools degrade with a clear message instead of hanging.

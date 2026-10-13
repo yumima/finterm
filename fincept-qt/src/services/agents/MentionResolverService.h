@@ -2,7 +2,7 @@
 // MentionResolverService.h — chat-composer @-mention resolution.
 //
 // Recognises a small set of `@<name>` references in user input and
-// resolves each one to an MCP resource read.  AiChatScreen calls
+// resolves each one to an MCP resource read.  A chat surface calls
 // `resolve()` before dispatching the user message; the returned
 // context block is prepended (under a clearly-labelled header) so
 // the agent can read the referenced state without spending a tool
@@ -20,7 +20,7 @@
 // Ticker mentions (@AAPL, @MSFT) would call the `get_quote` tool;
 // they need an async dispatch path so they're a follow-up.
 //
-// Pure resolver — no QObject, no signals.  AiChatScreen calls it
+// Pure resolver — no QObject, no signals.  A chat surface calls it
 // inline on the UI thread; reads complete in microseconds since
 // resources are local SQLite + in-process state.
 

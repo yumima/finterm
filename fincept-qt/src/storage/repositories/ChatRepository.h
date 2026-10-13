@@ -1,6 +1,8 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
+#include <optional>
+
 namespace fincept {
 
 struct ChatSession {
@@ -11,7 +13,9 @@ struct ChatSession {
     int message_count = 0;
     QString created_at;
     QString updated_at;
-    QString persona_id; // chat persona bound to this conversation (ChatPersonas.h); default 'general'
+    QString persona_id;  // chat persona bound to this conversation (ChatPersonas.h); default 'general'
+    QString context_tag; // which embedded pane owns this thread ("symbol:NVDA",
+                         // "portfolio:<id>"); '' = global / untagged
 };
 
 struct ChatMessage {
@@ -31,8 +35,12 @@ class ChatRepository : public BaseRepository<ChatSession> {
 
     // Sessions
     Result<ChatSession> create_session(const QString& title, const QString& provider = {}, const QString& model = {},
-                                       const QString& persona_id = QStringLiteral("general"));
+                                       const QString& persona_id = QStringLiteral("general"),
+                                       const QString& context_tag = {});
     Result<ChatSession> get_session(const QString& id);
+    /// The most recently updated session carrying `context_tag`, if any —
+    /// how an embedded pane (per-stock, per-portfolio) finds its own thread.
+    Result<std::optional<ChatSession>> latest_session_for_context(const QString& context_tag);
     Result<QVector<ChatSession>> list_sessions();
     Result<void> update_session_title(const QString& id, const QString& title);
     Result<void> update_session_persona(const QString& id, const QString& persona_id);

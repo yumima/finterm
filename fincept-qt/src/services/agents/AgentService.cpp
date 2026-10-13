@@ -2210,8 +2210,8 @@ void AgentService::install_default_tool_handlers() {
         });
 
     // on_elicit — routes to ElicitBridge which blocks the worker
-    // thread until AiChatScreen (or another subscriber) shows a modal
-    // and resolves the request.  When no surface is attached the
+    // thread until the ElicitPrompter (mounted by MainWindow) shows a
+    // modal and resolves the request.  When no surface is attached the
     // bridge itself returns the "no surface mounted" error, so we
     // get one code path for both cases.
     mcp::McpProvider::instance().set_default_elicit_handler(

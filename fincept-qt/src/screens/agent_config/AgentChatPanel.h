@@ -16,7 +16,7 @@
 namespace fincept::screens {
 
 /// Rich chat panel — conversational interface for interacting with configured agents.
-/// Matches the AiChatScreen design: proper bubbles, typing indicator, welcome panel,
+/// Matches the terminal chat design: proper bubbles, typing indicator, welcome panel,
 /// LLM config status in header, QTextEdit multi-line input with Shift+Enter support.
 class AgentChatPanel : public QWidget {
     Q_OBJECT

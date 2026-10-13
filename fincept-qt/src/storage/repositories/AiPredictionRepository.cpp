@@ -14,6 +14,9 @@ AiPrediction AiPredictionRepository::map_row(QSqlQuery& q) {
     p.ticker           = q.value(QStringLiteral("ticker")).toString();
     p.created_at       = q.value(QStringLiteral("created_at")).toString();
     p.model            = q.value(QStringLiteral("model")).toString();
+    p.source           = q.value(QStringLiteral("source")).toString();
+    if (p.source.isEmpty())
+        p.source = QStringLiteral("quant"); // pre-v056 rows
     p.horizon_days     = q.value(QStringLiteral("horizon_days")).toInt();
     p.resolve_date     = q.value(QStringLiteral("resolve_date")).toString();
     p.price_at_pred    = q.value(QStringLiteral("price_at_pred")).toDouble();
@@ -35,16 +38,17 @@ AiPrediction AiPredictionRepository::map_row(QSqlQuery& q) {
 qint64 AiPredictionRepository::insert(const AiPrediction& p) {
     auto r = exec_insert(
         "INSERT INTO ai_predictions "
-        "(ticker, created_at, model, horizon_days, resolve_date, price_at_pred, "
+        "(ticker, created_at, model, source, horizon_days, resolve_date, price_at_pred, "
         " direction, target_price, predicted_pct, confidence, recommendation, "
         " rationale, analysis) "
-        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
         // Upper-cased on the way in, because every read path
         // (for_ticker, exists_on_day) queries with toUpper(). A caller that
         // passed a lower-case ticker would have written a row nothing could
         // ever read back — including the duplicate guard, which would then let
         // the auto-forecast write one row per refresh.
-        {p.ticker.toUpper(), p.created_at, p.model, p.horizon_days, p.resolve_date, p.price_at_pred,
+        {p.ticker.toUpper(), p.created_at, p.model, p.source.isEmpty() ? QStringLiteral("quant") : p.source,
+         p.horizon_days, p.resolve_date, p.price_at_pred,
          p.direction, p.target_price, p.predicted_pct, p.confidence, p.recommendation,
          p.rationale, p.analysis});
     return r.is_ok() ? r.value() : 0;
@@ -62,10 +66,12 @@ QVector<AiPrediction> AiPredictionRepository::unresolved() const {
     return r.is_ok() ? r.value() : QVector<AiPrediction>{};
 }
 
-bool AiPredictionRepository::exists_on_day(const QString& ticker, const QString& ymd) const {
+bool AiPredictionRepository::exists_on_day(const QString& ticker, const QString& ymd,
+                                           const QString& source) const {
     auto r = db().execute(
-        "SELECT 1 FROM ai_predictions WHERE ticker = ? AND substr(created_at, 1, 10) = ? LIMIT 1",
-        {ticker.toUpper(), ymd});
+        "SELECT 1 FROM ai_predictions WHERE ticker = ? AND substr(created_at, 1, 10) = ? "
+        "AND source = ? LIMIT 1",
+        {ticker.toUpper(), ymd, source});
     return r.is_ok() && r.value().next();
 }
 

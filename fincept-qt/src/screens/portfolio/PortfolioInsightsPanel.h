@@ -2,6 +2,8 @@
 #pragma once
 #include "screens/portfolio/PortfolioTypes.h"
 
+#include "ai_chat/ChatPane.h"
+
 #include <QHash>
 #include <QWidget>
 
@@ -24,7 +26,7 @@ namespace fincept::screens {
 class PortfolioInsightsPanel : public QWidget {
     Q_OBJECT
   public:
-    enum class Tab { AI, Agent };
+    enum class Tab { AI, Agent, Chat };
 
     explicit PortfolioInsightsPanel(QWidget* parent = nullptr);
 
@@ -49,6 +51,7 @@ class PortfolioInsightsPanel : public QWidget {
     void build_ui();
     QWidget* build_ai_page();
     QWidget* build_agent_page();
+    QWidget* build_chat_page();
     void switch_tab(Tab tab);
     void set_ai_type(const QString& type);
     void run_ai(bool force);
@@ -61,6 +64,7 @@ class PortfolioInsightsPanel : public QWidget {
     // Layout
     QPushButton* tab_ai_btn_ = nullptr;
     QPushButton* tab_agent_btn_ = nullptr;
+    QPushButton* tab_chat_btn_ = nullptr;
     QStackedWidget* pages_ = nullptr;
     QLabel* header_status_ = nullptr;
 
@@ -72,6 +76,10 @@ class PortfolioInsightsPanel : public QWidget {
     QPushButton* ai_run_ = nullptr;
     QLabel* ai_meta_ = nullptr;
     QTextBrowser* ai_content_ = nullptr;
+
+    // Chat page — a real ChatPane: portfolio persona (holdings tools), the
+    // "portfolio" role binding, thread persisted per portfolio.
+    ai_chat::ChatPane* chat_pane_ = nullptr;
 
     // Agent page
     QComboBox* agent_cb_ = nullptr;

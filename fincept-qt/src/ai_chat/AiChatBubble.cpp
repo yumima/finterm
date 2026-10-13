@@ -1,5 +1,6 @@
 #include "ai_chat/AiChatBubble.h"
 
+#include "ai_chat/ChatPersonas.h"
 #include "services/stt/SpeechService.h"
 #include "storage/repositories/ChatRepository.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -519,9 +520,23 @@ void AiChatBubble::on_send() {
     // and inner (UI thread) lambdas — no mutable bool copies across thread boundary.
     QPointer<AiChatBubble> self = this;
     auto first_chunk = std::make_shared<bool>(true);
-    // Pass use_tools=false — the floating bubble should never trigger
-    // navigation or other tool side-effects that would hijack the user's
-    // current screen.
+
+    // The bubble is the terminal's GLOBAL chat surface (the dedicated chat
+    // screen is gone), so it carries the General persona's curated tools and
+    // the "Chat" role binding — a bubble that could not fetch a quote or read
+    // the portfolio was a dumb pipe wearing an assistant's name. Destructive
+    // tools are gated behind a confirmation modal (McpProvider's auth gate →
+    // ElicitPrompter), so tool access here cannot silently mutate state.
+    ai_chat::PersonaScope persona;
+    if (const auto* p = ai_chat::find_persona(QStringLiteral("general")))
+        persona = {p->system_prompt, p->tool_globs, true};
+    {
+        const auto target = ai_chat::LlmService::instance().scope_for_role(QStringLiteral("ai_chat"));
+        persona.provider = target.provider;
+        persona.model = target.model;
+        persona.api_key = target.api_key;
+        persona.base_url = target.base_url;
+    }
     ai_chat::LlmService::instance().chat_streaming(
         text, history_,
         [self, first_chunk](const QString& chunk, bool done) {
@@ -540,8 +555,8 @@ void AiChatBubble::on_send() {
                 },
                 Qt::QueuedConnection);
         },
-        /*use_tools=*/false,
-        /*persona=*/{},
+        /*use_tools=*/true,
+        persona,
         // Finalize via a per-call callback, not the global finished_streaming
         // broadcast: that signal fans out to every consumer, so news/tutor
         // streams could otherwise surface in this bubble (and the bubble's

@@ -754,6 +754,8 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v052_earnings_outlook.cpp
     src/storage/sqlite/migrations/v053_agent_instructions_backfill.cpp
     src/storage/sqlite/migrations/v054_iv_history_expiry_kind.cpp
+    src/storage/sqlite/migrations/v055_chat_session_context.cpp
+    src/storage/sqlite/migrations/v056_ai_prediction_source.cpp
 )
 
 # Python runner
@@ -771,7 +773,8 @@ set(AI_CHAT_SOURCES
     src/ai_chat/HearthService.cpp
     src/ai_chat/HearthSupervisor.cpp
     src/ai_chat/ModelCatalog.cpp
-    src/ai_chat/AiChatScreen.cpp
+    src/ai_chat/ChatPane.cpp
+    src/ai_chat/ElicitPrompter.cpp
     src/ai_chat/AiChatBubble.cpp
 )
 
@@ -1075,13 +1078,7 @@ set(SCREEN_SOURCES
     src/screens/trade_viz/TradeVizScreen.cpp
     src/screens/docs/DocsScreen.cpp
     src/screens/ComingSoonScreen.cpp
-    src/screens/chat_mode/ChatModeService.cpp
-    src/screens/chat_mode/ChatSessionPanel.cpp
-    src/screens/chat_mode/ChatMessagePanel.cpp
-    src/screens/chat_mode/ChatAgentPanel.cpp
-    src/screens/chat_mode/ChatModeScreen.cpp
     src/screens/workbench/WorkbenchScreen.cpp
-    src/screens/chat_mode/TerminalToolBridge.cpp
     src/screens/setup/SetupScreen.cpp
     src/screens/info/ContactScreen.cpp
     src/screens/info/TermsScreen.cpp
@@ -1117,9 +1114,6 @@ set(SCREEN_SOURCES
     src/screens/futures/FuturesDataService.cpp
     src/screens/futures/FuturesPanels.cpp
     src/screens/futures/FuturesQuoteCache.cpp
-    # ── FinGPT (AI4Finance task suite: chat + merged forecaster/sentiment) ─
-    src/screens/fingpt/FinGptScreen.cpp
-    src/screens/fingpt/FinGptAnalysisTab.cpp
     # ── F&O (Sensibull-style options analytics; FII/DII tab dropped) ─────
     src/screens/fno/FnoScreen.cpp
     src/screens/fno/FnoHeaderBar.cpp
@@ -1630,8 +1624,6 @@ set_source_files_properties(
     src/screens/futures/FuturesPanels.cpp
     src/screens/futures/FuturesQuoteCache.cpp
     src/screens/futures/FuturesScreen.cpp
-    src/screens/fingpt/FinGptAnalysisTab.cpp
-    src/screens/fingpt/FinGptScreen.cpp
     src/screens/fno/BuilderAnalyticsRibbon.cpp
     src/screens/fno/BuilderSubTab.cpp
     src/screens/fno/ChainSubTab.cpp
