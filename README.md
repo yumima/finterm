@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`10624dc0f`](https://github.com/yumima/finterm/commit/10624dc0f) er/ai: name the news-engine lens FINGPT
 - [`97025ab6e`](https://github.com/yumima/finterm/commit/97025ab6e) er/ai: rename the NEWS and HEADLINES lenses to what they show
 - [`58bd3394b`](https://github.com/yumima/finterm/commit/58bd3394b) ai: fix the nine findings from the post-merge review
 - [`08adc7e84`](https://github.com/yumima/finterm/commit/08adc7e84) ai: one lens per subject — merge FinGPT into Equity Research, retire the chat screens

@@ -60,14 +60,25 @@ inline const std::vector<ChatPersona>& builtin_personas() {
           "int__run_risk_assessment_agent"}},
         {"equity", "Stock Analyst",
          "You are a sharp equity analyst answering questions about ONE specific stock for a retail "
-         "investor. A DATA block with today's real figures for the ticker leads the conversation — "
-         "answer from it first, and call your tools (quote, candles, fundamentals, news, SEC filings) "
-         "when the question needs something the block doesn't carry. If a figure is in neither, say "
-         "plainly that you don't have it — never guess or invent numbers. (A private / pre-IPO company "
-         "often has no public revenue or fundamentals — say so.) Stay on this stock. Be concrete and "
-         "balanced, quantify when you can, and flag the key risk. Informational, not financial advice.",
+         "investor. A DATA block with today's real figures, recent headlines and the terminal's own "
+         "AI analyses for the ticker leads the conversation; the DATA block's ticker is the subject "
+         "even when the user types it loosely or misspells it. Work in this order: (1) answer from "
+         "the DATA block when it carries the answer; (2) otherwise CALL YOUR TOOLS FIRST and answer "
+         "from their results — get_news / search_news for why the stock moved or anything "
+         "event-driven, edgar_* for filings and fundamentals detail, get_quote / get_candles for "
+         "prices, get_top_movers / get_top_news for market-wide context (sector selloff vs "
+         "company-specific). Never ask permission to use a tool and never end with an offer like "
+         "\"Would you like me to pull those?\" — pull them, then answer. Explaining a daily move "
+         "without having read that day's headlines is a guess; do not present a guess as analysis. "
+         "If a figure or fact is in neither the DATA block nor a tool result, say plainly that you "
+         "don't have it — never guess or invent numbers or explanations. (A private / pre-IPO "
+         "company often has no public revenue or fundamentals — say so.) Stay on this stock: the "
+         "market-wide tools exist to explain ITS moves, not for general market commentary. Be "
+         "concrete and balanced, quantify when you can, and flag the key risk. Informational, not "
+         "financial advice.",
          {"int__get_quote", "int__get_candles", "int__get_equity_*", "int__get_news", "int__search_news",
-          "int__edgar_*", "int__search_equity_symbols"}},
+          "int__get_top_news", "int__get_news_summary", "int__get_top_movers", "int__edgar_*",
+          "int__search_equity_symbols"}},
         // "research", "markets" and "fingpt" were retired with the persona
         // picker: nothing can select them since the chat screen was removed,
         // and the FinGPT engine now lives in Equity Research's AI tab with its

@@ -90,7 +90,12 @@ class EquityAiTab : public QWidget {
     void show_idle_analysis();                   // last stored quant thesis, or the idle prompt
 
     QString build_quant_prompt() const;          // assemble the quant forecast input
-    QString stock_data_block() const;            // the real-data context (forecast + chat)
+    // The real-data context (forecast + chat). The preds overload exists so a
+    // caller that already holds the ticker's predictions (chat_context_block)
+    // doesn't trigger a second synchronous repo scan per send.
+    QString stock_data_block() const;
+    QString stock_data_block(const QVector<AiPrediction>& preds) const;
+    QString chat_context_block() const;          // data block + headlines + both engines' reads
     int     horizon_days() const;                // from the horizon selector
 
     void record_news_prediction(const fingpt::ForecasterAnswer& a, const QString& model_used);
