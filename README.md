@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`2b0b06c38`](https://github.com/yumima/finterm/commit/2b0b06c38) auth+dock: logout keeps the device PIN, Ctrl+K opens beside the focused panel
 - [`034cab185`](https://github.com/yumima/finterm/commit/034cab185) er/talipp: post-merge review hardening — honest volume gates, no argv limit, coverage that runs
 - [`5005e6263`](https://github.com/yumima/finterm/commit/5005e6263) er/talipp: one real implementation — fix the tab that computed almost nothing
 - [`35595b3bd`](https://github.com/yumima/finterm/commit/35595b3bd) github: strip the contribution apparatus

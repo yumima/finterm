@@ -15,6 +15,7 @@
 #include "screens/equity_research/EquityNewsTab.h"
 #include "screens/equity_research/EquityOverviewTab.h"
 #include "screens/equity_research/EquityPeersTab.h"
+#include "screens/equity_research/EquityOptionsTab.h"
 #include "screens/equity_research/EquityTalippTab.h"
 #include "screens/equity_research/EquityTechnicalsTab.h"
 #include "screens/relationship_map/RelationshipMapScreen.h"
@@ -361,6 +362,7 @@ void EquityResearchScreen::build_ui() {
     ai_tab_ = new EquityAiTab;
     technicals_tab_ = new EquityTechnicalsTab;
     talipp_tab_ = new EquityTalippTab;
+    options_tab_ = new EquityOptionsTab;
     peers_tab_ = new EquityPeersTab;
     news_tab_ = new EquityNewsTab;
     // Relationships tab — reuses the full RelationshipMapScreen widget in
@@ -384,6 +386,11 @@ void EquityResearchScreen::build_ui() {
     // AI4Finance engine it is named after.
     tab_widget_->addTab(ai_tab_, "FinGPT");
     tab_widget_->addTab(technicals_tab_, "Technicals");
+    // Options: the implied-volatility surface, smile and term structure for
+    // this stock — the per-stock slice of Surface Analytics, on Yahoo's free
+    // delayed chain, so it needs neither a Databento key nor a live quote.
+    tab_widget_->addTab(options_tab_, "Options");
+    connect(options_tab_, &EquityOptionsTab::loaded, this, [this]() { mark_tab_loaded(options_tab_); });
     tab_widget_->addTab(talipp_tab_, "TALIpp");
     tab_widget_->addTab(peers_tab_, "Peers");
     tab_widget_->addTab(news_tab_, "News");
@@ -739,6 +746,10 @@ void EquityResearchScreen::on_tab_changed(int index) {
         // The tab knows which (period, interval) it is showing; refreshing the
         // daily default here would warm an entry nobody is looking at.
         technicals_tab_->refresh();
+    } else if (tab == options_tab_) {
+        // A chain is one request per expiry: fetched on activation only,
+        // idempotent per ticker.
+        options_tab_->set_symbol(current_symbol_);
     } else if (tab == talipp_tab_) {
         talipp_tab_->set_symbol(current_symbol_);
     } else if (tab == peers_tab_) {
@@ -831,6 +842,8 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
         ai_tab_->set_symbol(symbol);
     if (relationships_tab_ && cur == relationships_tab_)
         relationships_tab_->set_symbol(symbol);
+    if (options_tab_ && cur == options_tab_)
+        options_tab_->set_symbol(symbol, force);
 
     // Prefetch for inactive tabs so whichever tab the user opens next is
     // already populated (or rendering from cache). Overview's own bundle
@@ -1310,6 +1323,8 @@ void EquityResearchScreen::update_freshness_chip() {
         t = technicals_tab_->data_as_of();
     if (earnings_tab_ && tab_widget_->currentWidget() == earnings_tab_)
         t = earnings_tab_->data_as_of();
+    if (options_tab_ && tab_widget_->currentWidget() == options_tab_)
+        t = options_tab_->data_as_of();
     // Every other subscribing tab is covered by construction: the oldest
     // upstream fetch time across the visible tab's QueryStore keys. Without
     // this, eight tabs fell to tab_loaded_at_ — signal-arrival time, which a

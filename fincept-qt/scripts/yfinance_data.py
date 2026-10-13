@@ -3066,6 +3066,148 @@ def _news_via_search(symbol, count):
     return articles
 
 
+_OPT_MONEYNESS_BAND = 0.30   # strikes within ±30% of spot
+_OPT_MAX_EXPIRIES = 12
+
+
+def get_options_surface(symbol, max_expiries=_OPT_MAX_EXPIRIES):
+    """Implied-volatility surface for one listed stock, from Yahoo's chain.
+
+    Every point is a contract Yahoo quoted, with Yahoo's own implied
+    volatility. Nothing is interpolated, smoothed or filled: a strike an
+    expiry does not list is absent, and the caller draws it as a hole.
+
+    The surface uses the out-of-the-money side at each strike — puts below
+    spot, calls at or above — the standard construction, because the
+    in-the-money side is dominated by intrinsic value and its IV is noise.
+
+    A contract is kept only with a two-sided market (bid > 0 and ask > 0).
+    Yahoo reports an IV for no-bid contracts too, but it is a solver artefact
+    (often 1e-5 or a round placeholder), and a surface drawn through those
+    points shows spikes nobody can trade. How many were dropped travels with
+    the result so the screen can say so.
+    """
+    import datetime as _dt
+    sym = (symbol or "").strip().upper()
+    if not sym:
+        return {"error": "no symbol"}
+    t = yf.Ticker(sym)
+    try:
+        expiries = list(t.options or ())
+    except Exception as e:
+        return {"error": f"option expiries unavailable: {e}"}
+    out = {"symbol": sym, "source": "Yahoo Finance (delayed)",
+           "as_of": datetime.now().isoformat(timespec="seconds"),
+           "expiries_listed": len(expiries), "points": [], "atm": []}
+    if not expiries:
+        # yfinance also returns an empty list when the expiry request itself
+        # failed (network, crumb), so this cannot be stated as a fact about
+        # the stock. Saying so — and the "_error" key keeping it out of the
+        # daemon cache — stops a transient blip from reading as "AAPL has no
+        # options" for five minutes.
+        out["reason"] = ("Yahoo returned no option expiries — the stock may have "
+                         "no listed options, or the request failed (REFRESH to retry)")
+        out["listing_error"] = "empty expiry list"
+        return out
+    try:
+        spot = float(t.fast_info["last_price"])
+    except Exception:
+        spot = float("nan")
+    if not (spot > 0 and math.isfinite(spot)):
+        return {"error": "no spot price — cannot place strikes against the money"}
+    out["spot"] = spot
+
+    # Listed options settle on the ET calendar; the host's local date is a
+    # day off for part of every evening west of New York (or morning east).
+    today = pd.Timestamp.now(tz="America/New_York").date()
+    usable = []
+    for e in expiries:
+        try:
+            d = _dt.date.fromisoformat(e)
+        except ValueError:
+            continue
+        dte = (d - today).days
+        # Same-day expiries carry almost no time value; their IV is unstable
+        # enough to dominate the colour scale of the whole surface.
+        if dte >= 1:
+            usable.append((e, dte))
+    # Weeklies crowd the front of the list, so the first N expiries would
+    # all sit inside a few months. Sample N evenly across the listed range
+    # (always keeping the nearest and the farthest) for a real term axis.
+    n_max = max(2, int(max_expiries))
+    if len(usable) > n_max:
+        idx = sorted({round(i * (len(usable) - 1) / (n_max - 1)) for i in range(n_max)})
+        usable = [usable[i] for i in idx]
+
+    lo, hi = spot * (1 - _OPT_MONEYNESS_BAND), spot * (1 + _OPT_MONEYNESS_BAND)
+
+    def _fetch(item):
+        e, dte = item
+        chain = t.option_chain(e)
+        return e, dte, chain.calls, chain.puts
+
+    def _num_col(df, name):
+        if name not in df.columns:
+            return pd.Series(float("nan"), index=df.index)
+        return pd.to_numeric(df[name], errors="coerce")
+
+    dropped = 0   # OTM, in-band contracts left out for lacking a two-sided market or an IV
+    errors = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as ex:
+        results = list(ex.map(lambda it: _safe(_fetch, it), usable))
+    for item, res in zip(usable, results):
+        if isinstance(res, Exception):
+            errors.append(f"{item[0]}: {res}")
+            continue
+        e, dte, calls, puts = res
+        per_strike = {}   # strike -> {"call": iv, "put": iv} (two-sided only)
+        for kind, df in (("call", calls), ("put", puts)):
+            if df is None or df.empty:
+                continue
+            k = _num_col(df, "strike")
+            bid, ask = _num_col(df, "bid"), _num_col(df, "ask")
+            iv, oi = _num_col(df, "impliedVolatility"), _num_col(df, "openInterest")
+            in_band = k.between(lo, hi)
+            quoted = (bid > 0) & (ask > 0) & (iv > 0) & iv.notna()
+            otm = (k < spot) if kind == "put" else (k >= spot)
+            dropped += int((in_band & otm & ~quoted).sum())
+            for kk, vv in zip(k[in_band & quoted], iv[in_band & quoted]):
+                per_strike.setdefault(float(kk), {})[kind] = float(vv)
+            keep = in_band & quoted & otm
+            for kk, b, a, vv, o in zip(k[keep], bid[keep], ask[keep], iv[keep], oi[keep]):
+                out["points"].append({
+                    "expiry": e, "dte": dte, "strike": float(kk), "type": kind,
+                    "iv": float(vv), "bid": float(b), "ask": float(a),
+                    "oi": int(o) if pd.notna(o) else None,
+                })
+        if per_strike:
+            # ATM: the listed strike nearest spot; average call and put there
+            # when both are quoted (put-call parity makes them estimates of
+            # the same number), else whichever side has a market.
+            k_atm = min(per_strike, key=lambda k: abs(k - spot))
+            ivs = list(per_strike[k_atm].values())
+            out["atm"].append({"expiry": e, "dte": dte, "strike": k_atm,
+                               "iv": sum(ivs) / len(ivs)})
+    out["expiries_used"] = len(usable) - len(errors)
+    out["dropped_one_sided"] = dropped
+    if errors:
+        # "*_error" keeps a partially failed chain out of the daemon cache,
+        # so the missing expiries are retried on the next load.
+        out["chain_error"] = "; ".join(errors)
+    if not out["points"] and errors and len(errors) == len(usable):
+        return {"error": "option chains unavailable: " + errors[0]}
+    if not out["points"]:
+        out["reason"] = "no two-sided quotes within ±30% of spot"
+    return out
+
+
+def _safe(fn, *a):
+    try:
+        return fn(*a)
+    except Exception as e:  # surfaced per expiry, never swallowed silently
+        return e
+
+
 def get_news(symbol, count=20):
     """Fetch news articles for a symbol using yfinance"""
     try:
@@ -4104,6 +4246,8 @@ _CACHE_TTL = {
     "earnings_analysis": 900,
     # historical / news / search — medium
     "historical_period": 120, "news": 120, "search": 300,
+    # a full chain is one request per expiry; quotes are delayed anyway
+    "options_surface": 300,
     # batched close history over a date range — long: past daily closes don't
     # change, so a 1h TTL avoids re-downloading wide ranges. No C++ caller
     # since Power Trader was removed; kept as generic multi-symbol history.
@@ -4416,6 +4560,15 @@ def _daemon_dispatch_inner(action, payload):
     if action == "news":
         p = payload or {}
         return get_news(p.get("symbol"), p.get("count", 20))
+    if action == "options_surface":
+        # ER Options tab: IV surface, smile and ATM term structure from
+        # Yahoo's delayed chain (one request per expiry).
+        p = payload or {}
+        try:
+            n = int(p.get("max_expiries") or _OPT_MAX_EXPIRIES)
+        except (TypeError, ValueError):
+            n = _OPT_MAX_EXPIRIES
+        return get_options_surface(p.get("symbol"), min(max(n, 2), 24))
     if action == "portfolio_closes_history":
         p = payload or {}
         return get_portfolio_closes_history(p.get("symbols") or [], p.get("period", "1y"))

@@ -1394,6 +1394,7 @@ set(SCREEN_SOURCES
     src/screens/equity_research/EquityAnalysisTab.cpp
     src/screens/equity_research/EquityEarningsTab.cpp
     src/screens/equity_research/EquityTechnicalsTab.cpp
+    src/screens/equity_research/EquityOptionsTab.cpp
     src/screens/equity_research/EquityTalippTab.cpp
     src/screens/equity_research/EquityPeersTab.cpp
     src/screens/equity_research/EquityNewsTab.cpp
@@ -1609,6 +1610,7 @@ set_source_files_properties(
     src/screens/equity_research/PriceRangeStrip.cpp
     src/screens/equity_research/EquityPeersTab.cpp
     src/screens/equity_research/EquityResearchScreen.cpp
+    src/screens/equity_research/EquityOptionsTab.cpp
     src/screens/equity_research/EquityTalippTab.cpp
     src/screens/equity_research/EquityTechnicalsTab.cpp
     src/screens/excel/ExcelScreen.cpp

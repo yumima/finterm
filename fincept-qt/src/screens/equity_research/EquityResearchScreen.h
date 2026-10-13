@@ -26,6 +26,7 @@ class EquityEarningsTab;
 class EquityAiTab;
 class EquityTechnicalsTab;
 class EquityTalippTab;
+class EquityOptionsTab;
 class EquityPeersTab;
 class EquityNewsTab;
 class RelationshipMapScreen;
@@ -123,6 +124,7 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     EquityAiTab* ai_tab_ = nullptr;
     EquityTechnicalsTab* technicals_tab_ = nullptr;
     EquityTalippTab* talipp_tab_ = nullptr;
+    EquityOptionsTab* options_tab_ = nullptr;
     EquityPeersTab* peers_tab_ = nullptr;
     EquityNewsTab* news_tab_ = nullptr;
     RelationshipMapScreen* relationships_tab_ = nullptr;
