@@ -7,7 +7,6 @@ assignees: ""
 ---
 
 <!--
-Planning to send a PR for this? Please read .github/CONTRIBUTING.md first.
 Single-line typo fixes in README / docs/*.md may be submitted directly as a PR
 (batch multiple typos into one PR). Larger doc changes require a maintainer to
 add `good-first-issue`, `help-wanted`, or `scope:approved` to this issue first.

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`f6e099a5c`](https://github.com/yumima/finterm/commit/f6e099a5c) llm: opt tool-less one-shots out of hearth's automatic web search
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

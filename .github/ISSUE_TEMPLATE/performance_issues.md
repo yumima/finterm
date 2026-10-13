@@ -7,7 +7,6 @@ assignees: ""
 ---
 
 <!--
-Planning to fix this yourself? Please read .github/CONTRIBUTING.md first.
 A maintainer must add `good-first-issue`, `help-wanted`, or `scope:approved`
 to this issue before PRs against it will be accepted.
 -->
