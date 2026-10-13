@@ -605,7 +605,9 @@ void EquityAiTab::build_ui() {
     verdicts->setSpacing(8);
     quant_chip_ = new QLabel;
     quant_chip_->setToolTip(QStringLiteral("The quant engine's latest recorded forecast — "
-                                           "fundamentals + price action."));
+                                           "fundamentals + price action. Leads with the model's own "
+                                           "recommendation (buy / accumulate / hold / reduce / sell), "
+                                           "then direction, target and confidence."));
     verdicts->addWidget(quant_chip_);
     news_chip_ = new QLabel;
     news_chip_->setToolTip(QStringLiteral("The FinGPT news engine's structured reading of the "
@@ -1653,13 +1655,31 @@ void EquityAiTab::reset_chips() {
 void EquityAiTab::update_quant_chip(const AiPrediction& p) {
     const bool up = p.direction == QLatin1String("up");
     const bool down = p.direction == QLatin1String("down");
-    const char* accent = up ? colors::POSITIVE() : down ? colors::NEGATIVE() : colors::TEXT_SECONDARY();
+    // The verdict LEADS the chip: the model's own recommendation word
+    // (buy | accumulate | hold | reduce | sell — asked for and stored since
+    // v044, just never shown), so the strip answers "so what?" without
+    // reading the prose. The accent follows the recommendation when one was
+    // stated, else the direction. No rating is ever derived or invented —
+    // an old row without one falls back to the direction-only chip.
+    const QString rec = p.recommendation.trimmed().toLower();
+    const bool rec_pos = rec == QLatin1String("buy") || rec == QLatin1String("accumulate");
+    const bool rec_neg = rec == QLatin1String("reduce") || rec == QLatin1String("sell");
+    const char* accent = !rec.isEmpty()
+                             ? (rec_pos ? colors::POSITIVE()
+                                        : rec_neg ? colors::NEGATIVE() : colors::AMBER())
+                             : (up ? colors::POSITIVE()
+                                   : down ? colors::NEGATIVE() : colors::TEXT_SECONDARY());
+    const QString verdict =
+        rec.isEmpty() ? QString()
+                      : QStringLiteral("<b style='color:%1;font-size:14px;'>%2</b> ")
+                            .arg(QString(accent), rec.toUpper().toHtmlEscaped());
+    const char* dir_col = up ? colors::POSITIVE() : down ? colors::NEGATIVE() : colors::TEXT_SECONDARY();
     style_chip(quant_chip_, accent);
     quant_chip_->setText(
-        QStringLiteral("<span style='color:%1;font-weight:700;'>QUANT</span> "
-                       "<b style='color:%2;'>%3 %4</b> "
-                       "<span style='color:%5;'>→ %6 · conf %7 · %8</span>")
-            .arg(QString(colors::TEXT_DIM()), QString(accent),
+        QStringLiteral("<span style='color:%1;font-weight:700;'>QUANT</span> %2"
+                       "<b style='color:%3;'>%4 %5</b> "
+                       "<span style='color:%6;'>→ %7 · conf %8 · %9</span>")
+            .arg(QString(colors::TEXT_DIM()), verdict, QString(dir_col),
                  p.direction.toUpper(), pct_str(p.predicted_pct), QString(colors::TEXT_SECONDARY()),
                  fmt::format_money(p.target_price), QString::number(p.confidence),
                  p.horizon_days == 1 ? QStringLiteral("1d")
