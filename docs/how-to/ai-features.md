@@ -49,34 +49,29 @@ If the active runtime is down, finterm tells you in the chat
 surface — it does not fall back to the other runtime.  Switching
 is a one-click change in **Settings → LLM Config**.
 
-## 2. Chat with slash commands
+## 2. Where the AI lives
 
-Open **Chat** from the toolbar.  Type a question to get a
-streaming answer from the active runtime.
+AI is a lens on whatever you're looking at, not a destination —
+there is no standalone chat screen.
 
-For task-shaped queries, use a slash command — finterm resolves
-the command to `(agent, skill, args)` and dispatches via the
-matching named agent.
+| Surface | Where | What it does |
+|---|---|---|
+| **Floating bubble** | bottom-right, any screen | The global assistant. Carries live market/news/portfolio tools; a destructive tool (e.g. `add_holding`) always stops on a confirmation dialog first. Voice in/out. |
+| **FinGPT tab** | Equity Research → FinGPT | Everything AI about ONE stock: one *Run AI Analysis* click drives the **quant engine** (fundamentals + price → recommendation, direction, target, confidence) and the **FinGPT news engine** (weekly news windows → direction + band), labels each headline's sentiment, and records both forecasts to an immutable track record scored against real closes — per-engine hit rate and miss, so history says which engine to trust. The chat beside it knows the data block, the day's headlines and both engines' reads; its thread persists per symbol. |
+| **Portfolio chat** | Portfolio → Insights → CHAT | Questions over your real holdings via the portfolio tools; thread persists per portfolio. |
+| **News → Analyze** | News screen | Local one-shot article analysis (`news` role). |
+| **AI tutor** | Knowledge screen | Explanations over the built-in knowledge base (`knowledge` role). |
 
-| Type | What happens |
-|---|---|
-| `/help` | Lists every available slash command |
-| `/morning-note` | Market-open brief for your watchlist |
-| `/comps AAPL` | Comparable-company table for AAPL |
-| `/dcf AAPL` | DCF model |
-| `/lbo AAPL` | LBO model |
-| `/earnings AAPL Q1-2026` | Quarterly print walk |
-| `/earnings-preview AAPL` | Pre-print analysis |
-| `/initiate AAPL` | Initiating-coverage memo |
-| `/sector tech` | Sector overview |
-| `/ic-memo AAPL` | Investment-committee memo |
-| `/catalysts AAPL` | Upcoming catalysts |
-| `/thesis AAPL` | Track an existing thesis vs reality |
-| `/rebalance` | Portfolio rebalance suggestions |
-| `/client-review` | Client review prep pack |
+### Bind a model per role
 
-Slash exchanges persist alongside your chat history — close and
-reopen the session, they're still there.
+**Settings → AI Config → Roles** maps each surface to its own
+model: chat on the bubble (`ai_chat`), everything per-stock
+(`equity_research`), the portfolio chat (`portfolio`), news briefs
+(`news`), the tutor (`knowledge`), quant lab commentary
+(`ai_quant_lab`), inline completion (`completion`), and agent/team
+defaults.  Unbound roles follow the active provider, so binding is
+always an override, never a prerequisite — e.g. keep news on a fast
+local model while `equity_research` runs on something stronger.
 
 ## 3. Schedule recurring runs
 
@@ -106,9 +101,10 @@ an immediate tick from the same screen.
 
 ## 4. Pick an agent
 
-Slash commands route to named agents (see the table in §2).  You
-can also pick an agent directly via the chat surface or schedule
-it from §3.
+Named agents carry the task recipes (morning note, comps, DCF,
+earnings walk, IC memo, …) as skills.  Dispatch one from **Agent
+Studio** (its chat panel), from the **Workbench**, or on a timer
+from §3.
 
 Ten agents ship with finterm:
 

@@ -1,4 +1,4 @@
-# Commercial License
+# Licensing
 
 **finterm has no separate commercial license.** It is distributed exclusively under **AGPL-3.0-or-later**.
 

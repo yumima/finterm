@@ -292,13 +292,3 @@ No external package manager required — Qt6 provides all core dependencies.
 
 ---
 
-## Contact
-
-- **Email:** (no support email — community open-source project)
-- **GitHub Issues:** GitHub Issues on this repo
-- **Discord:** https://discord.gg/ae87a8ygbN
-
----
-
-**Version**: 4.0.1
-**Last Updated**: March 2026

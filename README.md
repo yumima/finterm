@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`fd229a713`](https://github.com/yumima/finterm/commit/fd229a713) **docs:** drop the contributor guides
 - [`9d8daaf93`](https://github.com/yumima/finterm/commit/9d8daaf93) er/fingpt: a stated FLAT is a verdict; one chart + sortable table for both engines
 - [`2ff4b681c`](https://github.com/yumima/finterm/commit/2ff4b681c) er/fingpt: lead the QUANT chip with the model's own recommendation
 - [`f86811fa1`](https://github.com/yumima/finterm/commit/f86811fa1) er: brand the per-stock AI tab FinGPT; its news lens is FORECAST

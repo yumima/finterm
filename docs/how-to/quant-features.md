@@ -148,7 +148,7 @@ to spot:
 ## 9. Strategy catalogue access
 
 The 47-strategy catalogue lives at
-`fincept-qt/resources/knowledge/quant_strategies/`.  It's
+`fincept-qt/resources/knowledge/quant-strategies/`.  It's
 markdown — readable directly, or surfaced inside the Knowledge
 tab with practice tools attached.
 
