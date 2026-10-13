@@ -2,19 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-10-12)
+## Today's commits (2026-10-13)
 
 Latest first.
 
-- [`fd229a713`](https://github.com/yumima/finterm/commit/fd229a713) **docs:** drop the contributor guides
-- [`9d8daaf93`](https://github.com/yumima/finterm/commit/9d8daaf93) er/fingpt: a stated FLAT is a verdict; one chart + sortable table for both engines
-- [`2ff4b681c`](https://github.com/yumima/finterm/commit/2ff4b681c) er/fingpt: lead the QUANT chip with the model's own recommendation
-- [`f86811fa1`](https://github.com/yumima/finterm/commit/f86811fa1) er: brand the per-stock AI tab FinGPT; its news lens is FORECAST
-- [`524068546`](https://github.com/yumima/finterm/commit/524068546) er/ai: make the stock chat answer from knowledge, not vibes
-- [`10624dc0f`](https://github.com/yumima/finterm/commit/10624dc0f) er/ai: name the news-engine lens FINGPT
-- [`97025ab6e`](https://github.com/yumima/finterm/commit/97025ab6e) er/ai: rename the NEWS and HEADLINES lenses to what they show
-- [`58bd3394b`](https://github.com/yumima/finterm/commit/58bd3394b) ai: fix the nine findings from the post-merge review
-- [`08adc7e84`](https://github.com/yumima/finterm/commit/08adc7e84) ai: one lens per subject — merge FinGPT into Equity Research, retire the chat screens
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

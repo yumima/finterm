@@ -812,6 +812,20 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // with an empty message — see the budgets in NewsService::summarize_headlines.
     if (!persona.think && eff_api_key(persona).isEmpty())
         req["think"] = false;
+    // Opt tool-less one-shots out of hearth's automatic web search. hearth
+    // (search.enabled + search.auto default TRUE) attaches its own web tools to
+    // any /v1 chat that doesn't say otherwise and runs its own tool loop —
+    // right for an open-ended chat, wrong twice for a structured one-shot
+    // whose method is "answer from the material supplied": it breaks the
+    // determinism these calls pin with temperature 0, and when the model goes
+    // hunting for data the prompt deliberately lacks it can exhaust the loop
+    // and return "_(stopped after 6 tool rounds)_" as the whole answer —
+    // observed live on the FinGPT forecast for a pre-IPO ticker. `web_search`
+    // is a hearth extension (popped before passthrough), so it is gated
+    // local-only exactly like `think` below; tool-attached chats keep hearth's
+    // default, where an extra web tool is capability, not contamination.
+    if (!attaches_tools && eff_api_key(persona).isEmpty())
+        req["web_search"] = false;
     // Constrained JSON decoding, gated on local for the same reason as `think`:
     // this is standard OpenAI, but not every cloud provider behind this code
     // path accepts it, and a 400 would be a worse failure than the one it
