@@ -37,7 +37,12 @@ struct ForecasterAnswer {
     QString prediction;   // the "Prediction:" line's text
     QString analysis;     // the "Analysis:" text (or the whole tail)
     bool sections_ok = false;  // all three section markers were found
-    int direction = 0;         // +1 up, -1 down, 0 not stated
+    int direction = 0;         // +1 up, -1 down, 0 = flat if flat_stated, else not stated
+    // The model explicitly called it flat / neutral / sideways. A flat call is
+    // a real verdict ("I expect no material move"), not an absent one — the
+    // two used to be indistinguishable, so MSFT's "Neutral, 0-1%" rendered as
+    // "no direction stated" and was never recorded or scored.
+    bool flat_stated = false;
     // Predicted magnitude band in percent, e.g. 2–3 for "up by 2-3%";
     // "more than 5%" → lo=5, hi=+inf; a single figure → lo==hi; NaN = absent.
     double bin_lo = std::numeric_limits<double>::quiet_NaN();
@@ -122,26 +127,87 @@ inline ForecasterAnswer parse_forecaster_answer(const QString& raw) {
     // up-first check painted UP over exactly that answer.)
     const QString dir_src = a.prediction.isEmpty() ? tail : a.prediction;
     // Upstream's vocabulary plus the synonyms chat models actually emit
-    // ("Modest Gains (2-5%)" was observed reading as no-direction).
-    const QRegularExpression up_re(
+    // ("Modest Gains (2-5%)" was observed reading as no-direction). These are
+    // the STRONG words — unambiguous direction verbs/nouns.
+    static const QRegularExpression up_re(
         QStringLiteral("\\b(up|increase|rise|bullish|gain|gains|higher|rally|climb|upside|"
                        "appreciate|strengthen|advance)\\b"),
         QRegularExpression::CaseInsensitiveOption);
-    const QRegularExpression down_re(
+    static const QRegularExpression down_re(
         QStringLiteral("\\b(down|decrease|decline|fall|bearish|loss|losses|lower|drop|pullback|"
                        "downside|depreciate|weaken|retreat)\\b"),
         QRegularExpression::CaseInsensitiveOption);
-    const qsizetype up_at = dir_src.indexOf(up_re);
-    const qsizetype down_at = dir_src.indexOf(down_re);
-    if (up_at >= 0 && (down_at < 0 || up_at < down_at))
-        a.direction = 1;
-    else if (down_at >= 0)
-        a.direction = -1;
+    // WEAK tier: sentiment adjectives. "Slightly positive (1-2%)" is an up
+    // call — but "Despite positive earnings momentum, expect a decline" is
+    // not, so these are consulted only when NO strong word appears, and only
+    // on an explicit Prediction line (the free tail quotes the [Positive
+    // Developments] prose, where they are section echoes, not calls).
+    static const QRegularExpression weak_up_re(QStringLiteral("\\bpositive\\b"),
+                                               QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression weak_down_re(QStringLiteral("\\bnegative\\b"),
+                                                 QRegularExpression::CaseInsensitiveOption);
+    // An explicit sideways call (plural/variant tolerant — "no significant
+    // changes" is one trailing 's' away from the MSFT failure this exists to
+    // fix). The common case was a megacap with mixed news: "Prediction:
+    // Neutral / flat (0-1%)" carried no up/down word, so a stated verdict
+    // rendered as "no direction stated".
+    static const QRegularExpression flat_re(
+        QStringLiteral("\\b(flat|neutral|sideways|unchanged|range-?bound|stable|"
+                       "little\\s+change[d]?|minimal\\s+(?:change|movement)s?|"
+                       "no\\s+(?:significant|major|material)\\s+(?:change|movement|move)s?)\\b"),
+        QRegularExpression::CaseInsensitiveOption);
+    // Concessive markers introduce a HEDGE, not the call ("flat, though
+    // upside of 3-5% if guidance beats").
+    static const QRegularExpression hedge_re(
+        QStringLiteral("\\b(though|although|but|unless|if|however|barring|absent)\\b"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    qsizetype up_at = dir_src.indexOf(up_re);
+    qsizetype down_at = dir_src.indexOf(down_re);
+    if (up_at < 0 && down_at < 0 && !a.prediction.isEmpty()) {
+        up_at = dir_src.indexOf(weak_up_re);
+        down_at = dir_src.indexOf(weak_down_re);
+    }
+    const qsizetype flat_at = dir_src.indexOf(flat_re);
+    qsizetype dir_at = -1;
+    int dir = 0;
+    if (up_at >= 0 && (down_at < 0 || up_at < down_at)) {
+        dir_at = up_at;
+        dir = 1;
+    } else if (down_at >= 0) {
+        dir_at = down_at;
+        dir = -1;
+    }
+    // Where hedge text begins, when the verdict is flat and a hedged
+    // direction follows (-1 = no hedge). A magnitude band found past this
+    // point belongs to the hedge, not to the flat call.
+    qsizetype hedge_cut = -1;
+    if (flat_at >= 0 && (dir_at < 0 || flat_at < dir_at)) {
+        if (dir_at < 0) {
+            a.flat_stated = true;  // flat with nothing directional anywhere
+        } else {
+            // Flat led, direction follows. A concessive marker between them
+            // makes the direction a hedge and flat the call ("flat, though
+            // upside…"); without one, the direction IS the call — both the
+            // compound ("Neutral-to-Moderate Decline") and the lead-in clause
+            // ("With stable fundamentals, expect the stock to rise 2-3%").
+            const QRegularExpressionMatch hm = hedge_re.match(dir_src, flat_at);
+            const qsizetype hedge_at = hm.hasMatch() ? hm.capturedStart() : -1;
+            if (hedge_at >= 0 && hedge_at < dir_at) {
+                a.flat_stated = true;
+                hedge_cut = hedge_at;
+            } else {
+                a.direction = dir;
+            }
+        }
+    } else {
+        a.direction = dir;  // may stay 0: nothing stated at all
+    }
 
     // Magnitude band (map_bin_label's vocabulary, free-text tolerant).
-    const QRegularExpression range_re(
+    static const QRegularExpression range_re(
         QStringLiteral("(\\d+(?:\\.\\d+)?)\\s*(?:-|–|~|to)\\s*(\\d+(?:\\.\\d+)?)\\s*%"));
-    const QRegularExpression more_re(
+    static const QRegularExpression more_re(
         QStringLiteral("more\\s+than\\s+(\\d+(?:\\.\\d+)?)\\s*%"),
         QRegularExpression::CaseInsensitiveOption);
     // The single-figure fallback requires a move-sized preposition: a bare
@@ -149,18 +215,28 @@ inline ForecasterAnswer parse_forecaster_answer(const QString& raw) {
     // or a probability as the week's move, and a confidently wrong "UP by
     // ~45%" header is the exact failure this file exists to avoid. "up 2%"
     // (no preposition, directly after a direction word) is also accepted.
-    const QRegularExpression single_re(
+    static const QRegularExpression single_re(
         QStringLiteral("\\b(?:by|of|around|about|roughly|approximately|~|up|down|gain|rise|fall|"
                        "decline|appreciate|depreciate)\\s*(\\d+(?:\\.\\d+)?)\\s*%"),
         QRegularExpression::CaseInsensitiveOption);
+    qsizetype band_at = -1;
     if (const auto m = range_re.match(dir_src); m.hasMatch()) {
         a.bin_lo = m.captured(1).toDouble();
         a.bin_hi = m.captured(2).toDouble();
+        band_at = m.capturedStart();
     } else if (const auto m2 = more_re.match(dir_src); m2.hasMatch()) {
         a.bin_lo = m2.captured(1).toDouble();
         a.bin_hi = std::numeric_limits<double>::infinity();
+        band_at = m2.capturedStart();
     } else if (const auto m3 = single_re.match(dir_src); m3.hasMatch()) {
         a.bin_lo = a.bin_hi = m3.captured(1).toDouble();
+        band_at = m3.capturedStart();
+    }
+    // "Flat, though upside of 3-5%": the 3-5% is the hedge's band. Attaching
+    // it to the flat call would advertise a tolerance the model never gave.
+    if (a.flat_stated && hedge_cut >= 0 && band_at >= hedge_cut) {
+        a.bin_lo = std::numeric_limits<double>::quiet_NaN();
+        a.bin_hi = std::numeric_limits<double>::quiet_NaN();
     }
     return a;
 }
@@ -216,11 +292,19 @@ inline QString truncate_repetition(const QString& text, bool* truncated = nullpt
     return text;
 }
 
-/// Human line for the parsed call: "UP by 2–3% over the next week", or an
+/// Human line for the parsed call: "UP by 2–3%", "FLAT (within ~1%)", or an
 /// empty string when no direction was stated (caller shows the raw text).
 inline QString describe_forecast(const ForecasterAnswer& a) {
-    if (a.direction == 0)
-        return {};
+    if (a.direction == 0) {
+        if (!a.flat_stated)
+            return {};
+        QString s = QStringLiteral("FLAT");
+        if (std::isfinite(a.bin_lo)) {
+            const double bound = std::isinf(a.bin_hi) ? a.bin_lo : a.bin_hi;
+            s += QStringLiteral(" (within ~%1%)").arg(QString::number(bound, 'g', 4));
+        }
+        return s;
+    }
     QString s = a.direction > 0 ? QStringLiteral("UP") : QStringLiteral("DOWN");
     if (std::isfinite(a.bin_lo)) {
         if (std::isinf(a.bin_hi))

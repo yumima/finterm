@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`2ff4b681c`](https://github.com/yumima/finterm/commit/2ff4b681c) er/fingpt: lead the QUANT chip with the model's own recommendation
 - [`f86811fa1`](https://github.com/yumima/finterm/commit/f86811fa1) er: brand the per-stock AI tab FinGPT; its news lens is FORECAST
 - [`524068546`](https://github.com/yumima/finterm/commit/524068546) er/ai: make the stock chat answer from knowledge, not vibes
 - [`10624dc0f`](https://github.com/yumima/finterm/commit/10624dc0f) er/ai: name the news-engine lens FINGPT

@@ -223,6 +223,22 @@ QString format_evidence_html(const QString& prompt) {
     return html;
 }
 
+// Track-record cells display formatted text ("$101.00", "+2.5%") but sort by
+// a numeric key stored under Qt::UserRole — a plain QTableWidgetItem sorts
+// its display text, which puts "$101" before "$99" and "10" before "9".
+// Cells without a key (Engine text, pending placeholders) fall back to the
+// text comparison.
+class NumericItem : public QTableWidgetItem {
+  public:
+    using QTableWidgetItem::QTableWidgetItem;
+    bool operator<(const QTableWidgetItem& other) const override {
+        const QVariant a = data(Qt::UserRole), b = other.data(Qt::UserRole);
+        if (a.isValid() && b.isValid())
+            return a.toDouble() < b.toDouble();
+        return QTableWidgetItem::operator<(other);
+    }
+};
+
 // The one-liner that keeps a zero-shot chat model inside FinGPT's completion
 // contract (the fine-tuned adapters needed no reminder; a chat model does).
 QString sentiment_system_prompt() {
@@ -384,11 +400,12 @@ void PredictionChart::paintEvent(QPaintEvent*) {
         const char* col = !pr.resolved ? colors::AMBER()
                         : pr.correct   ? colors::POSITIVE()
                                        : colors::NEGATIVE();
+        // Orthogonal encoding, one chart: LINE STYLE is the engine (quant
+        // solid, news dotted), COLOR is the outcome (green hit, red miss,
+        // amber pending). Two engines over one real price line beats two
+        // half-height charts whose comparison the eye has to do itself.
         QPen pen(QColor(col), 1.6);
-        if (!pr.resolved) pen.setStyle(Qt::DashLine);
-        // The News engine's segments are dotted so the two engines' calls read
-        // apart at a glance; unresolved stays dashed either way.
-        if (pr.source == QLatin1String("fingpt") && pr.resolved) pen.setStyle(Qt::DotLine);
+        if (pr.source == QLatin1String("fingpt")) pen.setStyle(Qt::DotLine);
         p.setPen(pen);
         p.drawLine(a, b);
         p.setBrush(QColor(col));
@@ -436,8 +453,14 @@ void PredictionChart::paintEvent(QPaintEvent*) {
             lx += 17 + p.fontMetrics().horizontalAdvance(label) + 14;
         };
         chip(colors::TEXT_SECONDARY(), Qt::SolidLine, QStringLiteral("Actual price"), false);
-        chip(colors::AMBER(), Qt::DashLine,
-             QStringLiteral("AI prediction (green=hit, red=miss, amber=pending; dotted=News engine)"), false);
+        chip(colors::AMBER(), Qt::SolidLine, QStringLiteral("Quant forecast"), false);
+        chip(colors::AMBER(), Qt::DotLine, QStringLiteral("News (FinGPT)"), false);
+        // The outcome key colors BOTH engines' segments, so it is its own
+        // entry, not a parenthetical on one chip.
+        p.setPen(QColor(colors::TEXT_TERTIARY()));
+        const QString outcome_key = QStringLiteral("green=hit · red=miss · amber=pending");
+        p.drawText(QPointF(lx, ly + 9), outcome_key);
+        lx += p.fontMetrics().horizontalAdvance(outcome_key) + 14;
         chip(colors::TEXT_PRIMARY(), Qt::SolidLine, QStringLiteral("Actual @ horizon"), true);
     }
 
@@ -695,6 +718,17 @@ void EquityAiTab::build_ui() {
     record_table_->verticalHeader()->setVisible(false);
     record_table_->setMinimumHeight(120);
     record_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
+    // One interleaved timeline by default (newest first), one click on a
+    // header to regroup — sorting by Engine IS the per-engine table, without
+    // paying for two half-height tables on screen. ISO dates sort correctly
+    // as text; refresh_track_record suspends sorting while it repopulates.
+    record_table_->setSortingEnabled(true);
+    // Newest first is the default ordering; the Made column's sort key is the
+    // full created_at instant, so same-day rows keep their true order.
+    record_table_->sortByColumn(0, Qt::DescendingOrder);
+    record_table_->setToolTip(QStringLiteral(
+        "Click a column header to sort — sort by Engine to compare the quant "
+        "and news track records side by side."));
     record_table_->setStyleSheet(
         QString("QTableWidget{background:%1;color:%2;border:1px solid %3;font-size:12px;"
                 "font-family:Consolas,monospace;gridline-color:transparent;}"
@@ -1441,7 +1475,9 @@ void EquityAiTab::render_news_answer(const QString& raw, const QString& model_us
         html += QStringLiteral("<div style='color:%1;font-size:14px;font-weight:700;'>%2 "
                                "<span style='color:%3;font-size:11px;font-weight:400;'>next week "
                                "(%4 → %5)</span></div>")
-                    .arg(a.direction > 0 ? QString(colors::POSITIVE()) : QString(colors::NEGATIVE()),
+                    .arg(a.direction > 0   ? QString(colors::POSITIVE())
+                         : a.direction < 0 ? QString(colors::NEGATIVE())
+                                           : QString(colors::TEXT_SECONDARY()),  // stated flat
                          call.toHtmlEscaped(), QString(colors::TEXT_SECONDARY()),
                          curday.toString(Qt::ISODate), curday.addDays(7).toString(Qt::ISODate));
     if (!a.prediction.isEmpty())
@@ -1461,20 +1497,40 @@ void EquityAiTab::render_news_answer(const QString& raw, const QString& model_us
 }
 
 void EquityAiTab::record_news_prediction(const fg::ForecasterAnswer& a, const QString& model_used) {
-    // Only a numeric call joins the track record: a direction with a stated
-    // percentage band. A direction-only answer is shown but not graded —
-    // scoring it would require inventing a magnitude the model never gave.
-    if (a.direction == 0 || !std::isfinite(a.bin_lo)) {
-        status_lbl_->setText(a.direction == 0
-                                 ? QStringLiteral("News engine stated no direction — shown, not recorded.")
-                                 : QStringLiteral("News engine gave no percentage band — shown, not recorded."));
+    // Only a stated call joins the track record. An explicit FLAT is a call
+    // (point estimate 0% — the flat band scores it against the real close); a
+    // directional call additionally needs its percentage band, because scoring
+    // one without it would mean inventing a magnitude the model never gave.
+    if (a.direction == 0 && !a.flat_stated) {
+        status_lbl_->setText(QStringLiteral("News engine stated no direction — shown, not recorded."));
         return;
+    }
+    if (a.direction != 0 && !std::isfinite(a.bin_lo)) {
+        status_lbl_->setText(QStringLiteral("News engine gave no percentage band — shown, not recorded."));
+        return;
+    }
+    if (a.direction == 0 && std::isfinite(a.bin_lo)) {
+        // A flat call is recorded as a 0% point estimate and graded against
+        // the record's fixed ±1% flat band. A model that said "within 0-3%"
+        // made a WIDER claim than that scoring can honour — grading it on ±1%
+        // would invent precision, so it is shown but not recorded.
+        const double bound = std::isinf(a.bin_hi) ? a.bin_lo : a.bin_hi;
+        if (bound > aif::kFlatBandPct) {
+            status_lbl_->setText(QStringLiteral(
+                "News engine called it flat within ±%1% — wider than the ±%2% the record scores "
+                "flat against, so it is shown, not recorded.")
+                                     .arg(QString::number(bound, 'g', 4))
+                                     .arg(QString::number(aif::kFlatBandPct, 'g', 4)));
+            return;
+        }
     }
     if (candles_.isEmpty() || candles_.last().close <= 0)
         return;
     const double price_now = candles_.last().close;
-    // "2-3%" → 2.5; "more than 5%" → 5 (the stated floor, not an invention).
-    const double mag = std::isinf(a.bin_hi) ? a.bin_lo : (a.bin_lo + a.bin_hi) / 2.0;
+    // "2-3%" → 2.5; "more than 5%" → 5 (the stated floor, not an invention);
+    // a stated FLAT is exactly 0.
+    const double mag =
+        a.direction == 0 ? 0.0 : (std::isinf(a.bin_hi) ? a.bin_lo : (a.bin_lo + a.bin_hi) / 2.0);
     const aif::Forecast fc = aif::reconcile(price_now, /*stated_target=*/0.0,
                                             std::optional<double>(a.direction * mag));
     if (fc.empty) {
@@ -1696,7 +1752,9 @@ void EquityAiTab::update_news_chip(const QString& call, int direction) {
                 .arg(QString(colors::TEXT_DIM())));
         return;
     }
-    const char* accent = direction > 0 ? colors::POSITIVE() : colors::NEGATIVE();
+    const char* accent = direction > 0   ? colors::POSITIVE()
+                         : direction < 0 ? colors::NEGATIVE()
+                                         : colors::TEXT_SECONDARY();  // a stated FLAT call
     style_chip(news_chip_, accent);
     news_chip_->setText(
         QStringLiteral("<span style='color:%1;font-weight:700;'>NEWS (FinGPT)</span> "
@@ -2012,38 +2070,60 @@ void EquityAiTab::refresh_track_record() {
 
     if (chart_) chart_->set_data(candles_, preds);
 
+    // Suspend sorting during the rebuild: filling a sort-enabled QTableWidget
+    // re-sorts after every setItem and scatters rows mid-population.
+    const bool was_sorting = record_table_->isSortingEnabled();
+    record_table_->setSortingEnabled(false);
     record_table_->setRowCount(preds.size());
-    auto cell = [&](int r, int c, const QString& t, const char* col, Qt::Alignment a = Qt::AlignLeft | Qt::AlignVCenter) {
-        auto* it = new QTableWidgetItem(t);
+    // `key` is the column's numeric sort value; NaN = sort by text.
+    auto cell = [&](int r, int c, const QString& t, const char* col,
+                    Qt::Alignment a = Qt::AlignLeft | Qt::AlignVCenter,
+                    double key = std::numeric_limits<double>::quiet_NaN()) {
+        auto* it = new NumericItem(t);
         it->setTextAlignment(a);
         it->setForeground(QColor(col ? col : colors::TEXT_PRIMARY()));
+        if (std::isfinite(key))
+            it->setData(Qt::UserRole, key);
         record_table_->setItem(r, c, it);
     };
     for (int r = 0; r < preds.size(); ++r) {
         const AiPrediction& p = preds[r];
         const char* dir_col = p.direction == "up" ? colors::POSITIVE()
                             : p.direction == "down" ? colors::NEGATIVE() : colors::TEXT_SECONDARY();
-        cell(r, 0, p.created_at.left(10), colors::TEXT_SECONDARY());
+        // Made sorts on the full created_at instant so same-day rows keep
+        // their true order under the date's YYYY-MM-DD display.
+        const QDateTime made = QDateTime::fromString(p.created_at, Qt::ISODate);
+        cell(r, 0, p.created_at.left(10), colors::TEXT_SECONDARY(),
+             Qt::AlignLeft | Qt::AlignVCenter,
+             made.isValid() ? double(made.toSecsSinceEpoch())
+                            : std::numeric_limits<double>::quiet_NaN());
         cell(r, 1, source_label(p.source),
              p.source == QLatin1String("fingpt") ? colors::CYAN() : colors::AMBER(), Qt::AlignCenter);
         cell(r, 2, p.horizon_days == 1 ? "1d" : p.horizon_days == 7 ? "1w" : QString("%1d").arg(p.horizon_days),
-             colors::TEXT_SECONDARY(), Qt::AlignCenter);
-        cell(r, 3, QString("%1 %2").arg(p.direction.toUpper(), pct_str(p.predicted_pct)), dir_col, Qt::AlignCenter);
+             colors::TEXT_SECONDARY(), Qt::AlignCenter, double(p.horizon_days));
+        cell(r, 3, QString("%1 %2").arg(p.direction.toUpper(), pct_str(p.predicted_pct)), dir_col,
+             Qt::AlignCenter, p.predicted_pct);
         cell(r, 4, p.target_price > 0 ? fmt::format_money(p.target_price) : fmt::placeholder(),
-             colors::TEXT_PRIMARY(), Qt::AlignRight | Qt::AlignVCenter);
+             colors::TEXT_PRIMARY(), Qt::AlignRight | Qt::AlignVCenter,
+             p.target_price > 0 ? p.target_price : std::numeric_limits<double>::quiet_NaN());
         cell(r, 5, p.confidence > 0 ? QString::number(p.confidence) : fmt::placeholder(),
-             colors::TEXT_SECONDARY(), Qt::AlignCenter);
+             colors::TEXT_SECONDARY(), Qt::AlignCenter,
+             p.confidence > 0 ? double(p.confidence) : std::numeric_limits<double>::quiet_NaN());
         cell(r, 6, p.resolved ? pct_str(p.actual_pct) : fmt::placeholder(),
              p.resolved ? (p.actual_pct >= 0 ? colors::POSITIVE() : colors::NEGATIVE()) : colors::TEXT_TERTIARY(),
-             Qt::AlignRight | Qt::AlignVCenter);
+             Qt::AlignRight | Qt::AlignVCenter,
+             p.resolved ? p.actual_pct : std::numeric_limits<double>::quiet_NaN());
         // Result = direction hit/miss + the magnitude error (|predicted − actual| move).
         cell(r, 7, p.resolved
                        ? QString("%1 %2pp").arg(p.correct ? QStringLiteral("✓") : QStringLiteral("✗"))
                              .arg(std::abs(p.predicted_pct - p.actual_pct), 0, 'f', 1)
                        : QStringLiteral("pending"),
              p.resolved ? (p.correct ? colors::POSITIVE() : colors::NEGATIVE()) : colors::TEXT_TERTIARY(),
-             Qt::AlignCenter);
+             Qt::AlignCenter,
+             p.resolved ? std::abs(p.predicted_pct - p.actual_pct)
+                        : std::numeric_limits<double>::quiet_NaN());
     }
+    record_table_->setSortingEnabled(was_sorting);
 }
 
 } // namespace fincept::screens

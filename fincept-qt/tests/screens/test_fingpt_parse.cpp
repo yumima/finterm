@@ -121,9 +121,85 @@ class TestFinGptParse : public QObject {
             parse_forecaster_answer(QStringLiteral("The stock looks fine, hard to say."));
         QVERIFY(!a.sections_ok);
         QCOMPARE(a.direction, 0);
+        QVERIFY(!a.flat_stated);
         QVERIFY(std::isnan(a.bin_lo));
         QVERIFY(std::isnan(a.bin_hi));
         QVERIFY(describe_forecast(a).isEmpty());
+    }
+
+    void an_explicit_flat_call_is_a_verdict_not_an_absence() {
+        // Observed live on MSFT: a megacap with mixed news gets "Neutral /
+        // flat" — a stated call that used to render "no direction stated".
+        const QString t = kCanonical.section(QStringLiteral("Prediction:"), 0, 0)
+            + QStringLiteral("Prediction: Neutral, expect the stock to stay flat (0-1%)\n"
+                             "Analysis: Positives and concerns offset.");
+        const ForecasterAnswer a = parse_forecaster_answer(t);
+        QVERIFY(a.sections_ok);
+        QCOMPARE(a.direction, 0);
+        QVERIFY(a.flat_stated);
+        QCOMPARE(describe_forecast(a), QStringLiteral("FLAT (within ~1%)"));
+    }
+
+    void slightly_positive_is_an_up_call() {
+        // Weak tier: a sentiment adjective carries the call only when no
+        // strong direction word exists on the Prediction line.
+        const QString t = kCanonical.section(QStringLiteral("Prediction:"), 0, 0)
+            + QStringLiteral("Prediction: Slightly positive, 1-2% expected\nAnalysis: x");
+        const ForecasterAnswer a = parse_forecaster_answer(t);
+        QCOMPARE(a.direction, 1);
+        QVERIFY(!a.flat_stated);
+    }
+
+    void a_sentiment_adjective_never_outranks_a_direction_verb() {
+        // "positive" is a modifier here; the call is the decline.
+        const QString t = kCanonical.section(QStringLiteral("Prediction:"), 0, 0)
+            + QStringLiteral("Prediction: Despite positive earnings momentum, expect a decline "
+                             "of 2-3%\nAnalysis: x");
+        const ForecasterAnswer a = parse_forecaster_answer(t);
+        QCOMPARE(a.direction, -1);
+        QVERIFY(!a.flat_stated);
+    }
+
+    void a_direction_word_before_a_flat_word_wins() {
+        // "...decline toward a stable base" is a decline; the earliest-match
+        // rule applies across all three vocabularies.
+        const QString t = kCanonical.section(QStringLiteral("Prediction:"), 0, 0)
+            + QStringLiteral("Prediction: decline of 2-3% before finding a stable base\nAnalysis: x");
+        const ForecasterAnswer a = parse_forecaster_answer(t);
+        QCOMPARE(a.direction, -1);
+        QVERIFY(!a.flat_stated);
+    }
+
+    void a_flat_leadin_clause_does_not_steal_a_directional_call() {
+        const QString t = kCanonical.section(QStringLiteral("Prediction:"), 0, 0)
+            + QStringLiteral("Prediction: With stable fundamentals, expect the stock to rise "
+                             "2-3%\nAnalysis: x");
+        const ForecasterAnswer a = parse_forecaster_answer(t);
+        QCOMPARE(a.direction, 1);
+        QVERIFY(!a.flat_stated);
+    }
+
+    void a_hedged_upside_does_not_unflat_a_flat_call_or_lend_it_a_band() {
+        // The 3-5% belongs to the hedge; the flat call carries no band.
+        const QString t = kCanonical.section(QStringLiteral("Prediction:"), 0, 0)
+            + QStringLiteral("Prediction: Flat, though upside of 3-5% if guidance beats\n"
+                             "Analysis: x");
+        const ForecasterAnswer a = parse_forecaster_answer(t);
+        QCOMPARE(a.direction, 0);
+        QVERIFY(a.flat_stated);
+        QVERIFY(std::isnan(a.bin_lo));
+        QCOMPARE(describe_forecast(a), QStringLiteral("FLAT"));
+    }
+
+    void plural_flat_phrasings_still_count() {
+        // "No significant changes" is one trailing 's' from the original
+        // MSFT miss — the vocabulary must tolerate it.
+        const QString t = kCanonical.section(QStringLiteral("Prediction:"), 0, 0)
+            + QStringLiteral("Prediction: No significant changes expected (0-1%)\nAnalysis: x");
+        const ForecasterAnswer a = parse_forecaster_answer(t);
+        QCOMPARE(a.direction, 0);
+        QVERIFY(a.flat_stated);
+        QCOMPARE(a.bin_hi, 1.0);
     }
 
     void dangling_think_trace_is_stripped() {
