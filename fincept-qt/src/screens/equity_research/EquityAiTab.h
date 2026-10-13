@@ -15,7 +15,7 @@
 // a news-driven read agreeing (or not) is itself the signal, and the shared
 // track record is what eventually says which engine deserves trust per stock.
 //
-// The left pane is one viewport with four lenses (QUANT / NEWS / HEADLINES /
+// The left pane is one viewport with four lenses (QUANT / NEWS FORECAST / SENTIMENT /
 // EVIDENCE) instead of nested tabs; the right pane is the stock chat — a real
 // ChatPane: equity persona, curated tools, voice, and a thread persisted per
 // symbol. This tab absorbed the former top-level FinGPT screen.
@@ -145,7 +145,7 @@ class EquityAiTab : public QWidget {
     QStackedWidget* lens_stack_    = nullptr;
     QTextEdit*      analysis_view_ = nullptr;  // QUANT: prose + JSON forecast
     QTextEdit*      news_view_     = nullptr;  // NEWS: FinGPT structured answer
-    QTableWidget*   table_         = nullptr;  // HEADLINES: sentiment / date / headline
+    QTableWidget*   table_         = nullptr;  // SENTIMENT: label / date / headline
     QLabel*         summary_lbl_   = nullptr;
     QTextEdit*      evidence_view_ = nullptr;  // EVIDENCE: the FinGPT prompt verbatim
 
