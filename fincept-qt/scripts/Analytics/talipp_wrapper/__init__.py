@@ -111,3 +111,24 @@ def fnum(x):
     """float(x), with None passed through — the warm-up placeholder every
     talipp output list carries. One definition; the modules import it."""
     return float(x) if x is not None else None
+
+
+def last_valid(values):
+    """The last non-None entry, or None — the 'current reading' accessor."""
+    return next((v for v in reversed(values) if v is not None), None)
+
+
+def ema_signal(values, period):
+    """The classic signal line: an EMA over a series whose head is warm-up
+    Nones. The EMA starts at the first real value; Nones pass through."""
+    from talipp.indicators import EMA
+    sig = EMA(period)
+    out = []
+    for v in values:
+        if v is None:
+            out.append(None)
+            continue
+        sig.add(v)
+        s = sig[-1] if len(sig) > 0 else None
+        out.append(float(s) if s is not None else None)
+    return out

@@ -1,7 +1,7 @@
 from typing import List, Dict
 from talipp.indicators import ADX, Aroon, Ichimoku, ParabolicSAR, SuperTrend
 from talipp.ohlcv import OHLCV
-from talipp_wrapper import fnum
+from talipp_wrapper import ema_signal, fnum, last_valid
 
 def calculate_adx(ohlcv_data: List[Dict], di_period: int = 14, adx_period: int = 14) -> Dict:
     adx = ADX(di_period, adx_period)
@@ -84,7 +84,7 @@ def calculate_parabolic_sar(ohlcv_data: List[Dict], af_start: float = 0.02, af_m
     values = [fnum(v.value) if v is not None else None for v in psar]
     return {
         'values': values,
-        'last': next((v for v in reversed(values) if v is not None), None)
+        'last': last_valid(values)
     }
 
 
@@ -100,7 +100,7 @@ def calculate_supertrend(ohlcv_data: List[Dict], period: int = 10, multiplier: f
     values = [fnum(v.value) if v is not None else None for v in supertrend]
     trends = [(1 if v.trend == Trend.UP else -1) if v is not None and v.trend is not None else None
               for v in supertrend]
-    last_v = next((v for v in reversed(values) if v is not None), None)
+    last_v = last_valid(values)
     last_t = next((t for t in reversed(trends) if t is not None), None)
 
     return {

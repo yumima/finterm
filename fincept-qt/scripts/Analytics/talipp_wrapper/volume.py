@@ -1,6 +1,7 @@
 from typing import List, Dict
 from talipp.indicators import OBV, VWAP, VWMA, ChaikinOsc, ForceIndex
 from talipp.ohlcv import OHLCV
+from talipp_wrapper import ema_signal, fnum, last_valid
 
 def calculate_obv(ohlcv_data: List[Dict]) -> Dict:
     obv = OBV()
@@ -81,7 +82,7 @@ def calculate_mfi(ohlcv_data: List[Dict], period: int = 14) -> Dict:
     return {
         'values': values,
         'period': period,
-        'last': next((v for v in reversed(values) if v is not None), None)
+        'last': last_valid(values)
     }
 
 

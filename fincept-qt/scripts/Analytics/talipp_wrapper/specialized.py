@@ -5,7 +5,7 @@ from talipp.indicators import (
     RogersSatchell, SFX, SMMA, SOBV, STC, StdDev, TRIX, TTM, UO, VTX, ZigZag
 )
 from talipp.ohlcv import OHLCV
-from talipp_wrapper import fnum
+from talipp_wrapper import ema_signal, fnum, last_valid
 
 def calculate_ao(ohlcv_data: List[Dict], fast_period: int = 5, slow_period: int = 34) -> Dict:
     ao = AO(fast_period, slow_period)
@@ -78,7 +78,7 @@ def calculate_emv(ohlcv_data: List[Dict], period: int = 14) -> Dict:
     return {
         'values': values,
         'period': period,
-        'last': next((v for v in reversed(values) if v is not None), None)
+        'last': last_valid(values)
     }
 
 
@@ -138,36 +138,27 @@ def calculate_kst(prices: List[float]) -> Dict:
     return {
         'kst': kst_values,
         'signal': signal_values,
-        'last_kst': next((v for v in reversed(kst_values) if v is not None), None),
-        'last_signal': next((v for v in reversed(signal_values) if v is not None), None)
+        'last_kst': last_valid(kst_values),
+        'last_signal': last_valid(signal_values)
     }
 
 
 def calculate_kvo(ohlcv_data: List[Dict], fast_period: int = 34, slow_period: int = 55, signal_period: int = 13) -> Dict:
     # talipp 2.x: KVO(fast, slow) emits plain floats and no signal line — the
     # classic signal (an EMA of KVO) is computed here.
-    from talipp.indicators import EMA
     kvo = KVO(fast_period, slow_period)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'], bar.get('volume', 0))
         kvo.add(ohlcv)
 
     kvo_values = [float(v) if v is not None else None for v in kvo]
-    sig = EMA(signal_period)
-    signal_values = []
-    for v in kvo_values:
-        if v is None:
-            signal_values.append(None)
-            continue
-        sig.add(v)
-        s = sig[-1] if len(sig) > 0 else None
-        signal_values.append(float(s) if s is not None else None)
+    signal_values = ema_signal(kvo_values, signal_period)
 
     return {
         'kvo': kvo_values,
         'signal': signal_values,
-        'last_kvo': next((v for v in reversed(kvo_values) if v is not None), None),
-        'last_signal': next((v for v in reversed(signal_values) if v is not None), None)
+        'last_kvo': last_valid(kvo_values),
+        'last_signal': last_valid(signal_values)
     }
 
 
@@ -183,7 +174,7 @@ def calculate_mass_index(ohlcv_data: List[Dict], period: int = 25, ema_period: i
     return {
         'values': values,
         'period': period,
-        'last': next((v for v in reversed(values) if v is not None), None)
+        'last': last_valid(values)
     }
 
 
@@ -197,7 +188,7 @@ def calculate_mcginley_dynamic(prices: List[float], period: int = 14) -> Dict:
     return {
         'values': values,
         'period': period,
-        'last': next((v for v in reversed(values) if v is not None), None)
+        'last': last_valid(values)
     }
 
 
@@ -297,7 +288,7 @@ def calculate_stc(prices: List[float], fast_period: int = 23, slow_period: int =
     values = [float(v) if v is not None else None for v in stc]
     return {
         'values': values,
-        'last': next((v for v in reversed(values) if v is not None), None)
+        'last': last_valid(values)
     }
 
 
@@ -314,27 +305,18 @@ def calculate_std_dev(prices: List[float], period: int = 20) -> Dict:
 def calculate_trix(prices: List[float], period: int = 15, signal_period: int = 9) -> Dict:
     # talipp 2.x: TRIX(period) emits plain floats and no signal line — the
     # classic signal (an EMA of TRIX) is computed here.
-    from talipp.indicators import EMA
     trix = TRIX(period)
     for price in prices:
         trix.add(price)
 
     trix_values = [float(v) if v is not None else None for v in trix]
-    sig = EMA(signal_period)
-    signal_values = []
-    for v in trix_values:
-        if v is None:
-            signal_values.append(None)
-            continue
-        sig.add(v)
-        s = sig[-1] if len(sig) > 0 else None
-        signal_values.append(float(s) if s is not None else None)
+    signal_values = ema_signal(trix_values, signal_period)
 
     return {
         'trix': trix_values,
         'signal': signal_values,
-        'last_trix': next((v for v in reversed(trix_values) if v is not None), None),
-        'last_signal': next((v for v in reversed(signal_values) if v is not None), None)
+        'last_trix': last_valid(trix_values),
+        'last_signal': last_valid(signal_values)
     }
 
 
@@ -353,7 +335,7 @@ def calculate_ttm(ohlcv_data: List[Dict], period: int = 20) -> Dict:
     return {
         'values': values,
         'squeeze': squeeze,
-        'last': next((v for v in reversed(values) if v is not None), None)
+        'last': last_valid(values)
     }
 
 
@@ -380,8 +362,8 @@ def calculate_vtx(ohlcv_data: List[Dict], period: int = 14) -> Dict:
     return {
         'plus': plus,
         'minus': minus,
-        'last_plus': next((v for v in reversed(plus) if v is not None), None),
-        'last_minus': next((v for v in reversed(minus) if v is not None), None)
+        'last_plus': last_valid(plus),
+        'last_minus': last_valid(minus)
     }
 
 
@@ -389,6 +371,8 @@ def calculate_zigzag(ohlcv_data: List[Dict], change: float = 5.0) -> Dict:
     # talipp 2.x: ZigZag(sensitivity_fraction, min_trend_length) emits one
     # value PER PIVOT, not per bar — so this returns its OWN timestamps and
     # the caller must pair against them, not the input bars.
+    # min_trend_length of 3 bars is the conventional floor for calling a
+    # swing a swing.
     zz = ZigZag(change / 100.0, 3)
     for bar in ohlcv_data:
         ohlcv = OHLCV(bar['open'], bar['high'], bar['low'], bar['close'],
@@ -396,10 +380,16 @@ def calculate_zigzag(ohlcv_data: List[Dict], change: float = 5.0) -> Dict:
         zz.add(ohlcv)
 
     from talipp.indicators.ZigZag import PivotType
+    first_time = ohlcv_data[0].get('timestamp') if ohlcv_data else None
     values = []
     times = []
     for v in zz:
         if v is None or v.ohlcv is None:
+            continue
+        # talipp unconditionally seeds bar 0 as a LOW pivot whatever the
+        # price action — an anchor for its own bookkeeping, not a detected
+        # swing. Charting it would invent a pivot that never happened.
+        if first_time is not None and v.ohlcv.time == first_time:
             continue
         # A HIGH pivot sits at the bar's high, a LOW pivot at its low.
         px = v.ohlcv.high if v.type == PivotType.HIGH else v.ohlcv.low

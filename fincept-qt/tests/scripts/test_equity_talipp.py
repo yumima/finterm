@@ -26,15 +26,14 @@ Self-contained: no pytest, no network. Run directly or via ctest.
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import traceback
 
-if importlib.util.find_spec("talipp") is None:
-    print("SKIP : talipp not importable from this interpreter")
-    sys.exit(77)
-
-SCRIPT = os.path.join(os.path.dirname(__file__), "..", "..", "scripts", "equity_talipp.py")
+ROOT = os.path.join(os.path.dirname(__file__), "..", "..")
+SCRIPT = os.path.join(ROOT, "scripts", "equity_talipp.py")
+HAVE_TALIPP = importlib.util.find_spec("talipp") is not None
 
 FAILURES = []
 
@@ -161,7 +160,61 @@ def test_zigzag_pairs_with_its_own_timestamps():
           f"rc={rc} n={len(out.get('values', []))} err={out.get('error', '')[:80]}")
 
 
+# ── Static drift guard (no talipp needed) ───────────────────────────────────
+
+def static_test_param_names_stay_consumable():
+    """Every spinbox name the tab offers must land, via the shim's PARAM_MAP,
+    on a kwarg talipp_service.dispatch actually consumes — otherwise a renamed
+    or new knob silently computes with library defaults while the UI displays
+    the user's value (the same silent-drift class as the old id mismatch)."""
+    cpp = open(os.path.join(ROOT, "src", "screens", "equity_research",
+                            "EquityTalippTab.cpp"), encoding="utf-8").read()
+    m = re.search(r"param_defs\(\) \{\s*static const QMap.*?= \{(.*?)\n    \};", cpp, re.S)
+    check("param drift: found the tab's param_defs table", bool(m))
+    if not m:
+        return
+    tab = {}
+    for im in re.finditer(r'\{"(\w+)",\s*\{(.*?)\}\},', m.group(1), re.S):
+        tab[im.group(1)] = re.findall(r'\{"(\w+)",', im.group(2))
+
+    svc = open(os.path.join(ROOT, "scripts", "Analytics", "talipp_wrapper",
+                            "talipp_service.py"), encoding="utf-8").read()
+    consumed = {}
+    for chunk in re.split(r'operation == "', svc)[1:]:
+        op = chunk.split('"')[0]
+        consumed[op] = set(re.findall(r'data\.get\("(\w+)"', chunk))
+
+    sys.path.insert(0, os.path.join(ROOT, "scripts"))
+    import equity_talipp as shim
+
+    bad = []
+    for ind, names in tab.items():
+        for n in names:
+            key = shim.PARAM_MAP.get(ind, {}).get(n, n)
+            if key not in consumed.get(ind, set()):
+                bad.append(f"{ind}.{n} -> {key}")
+    check("param drift: every tab knob maps to a kwarg dispatch consumes",
+          not bad, f"unconsumed: {bad}")
+
+
 def main():
+    # Static checks run on any interpreter; the end-to-end tests need talipp.
+    statics = [v for k, v in sorted(globals().items()) if k.startswith("static_test_")]
+    for t in statics:
+        try:
+            t()
+        except Exception:
+            traceback.print_exc()
+            FAILURES.append(t.__name__)
+
+    if not HAVE_TALIPP:
+        if FAILURES:
+            print(f"\n{len(FAILURES)} failure(s): {', '.join(sorted(set(FAILURES)))}")
+            sys.exit(1)
+        print("SKIP : talipp not importable — static checks passed, "
+              "end-to-end tests skipped")
+        sys.exit(77)
+
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
         try:

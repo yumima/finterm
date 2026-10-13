@@ -8,6 +8,7 @@
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -18,6 +19,7 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QRegularExpression>
+#include <QTemporaryFile>
 
 #include <algorithm>
 #include <cmath>
@@ -1284,15 +1286,33 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
     // zero price would corrupt every downstream value — so the rows must be
     // filtered to fully-priced bars BEFORE they reach it.
     auto run_talipp = [this, symbol, indicator, params](const QJsonArray& raw) {
-        const QString hist_json = QString::fromUtf8(
-            QJsonDocument(priced_rows(raw, "talipp " + symbol)).toJson(QJsonDocument::Compact));
+        const QByteArray hist_json =
+            QJsonDocument(priced_rows(raw, "talipp " + symbol)).toJson(QJsonDocument::Compact);
         QJsonObject p_obj;
         for (auto it = params.constBegin(); it != params.constEnd(); ++it)
             p_obj[it.key()] = QJsonValue::fromVariant(it.value());
         QString params_json = QJsonDocument(p_obj).toJson(QJsonDocument::Compact);
 
-        run_python("equity_talipp.py", {indicator, hist_json, params_json},
-                   [this, symbol, indicator](bool ok, const QString& out) {
+        // The history rides in a temp file, not argv: Linux caps a single
+        // argument at 128 KiB, and a long fetch (the MCP tool accepts
+        // "10y"/"max") serializes well past that — execve then fails with
+        // E2BIG before Python ever runs. Even the tab's 2y is ~half the cap.
+        // The shim reads an argument of the form "@<path>"; the shared_ptr
+        // keeps the QTemporaryFile (and so the file) alive until the
+        // callback has run, after which both are destroyed together.
+        auto hist_file = std::make_shared<QTemporaryFile>(
+            QDir::temp().filePath(QStringLiteral("finterm_talipp_XXXXXX.json")));
+        if (!hist_file->open()) {
+            emit error_occurred(symbol, "TALIpp",
+                                "could not stage history: " + hist_file->errorString());
+            return;
+        }
+        hist_file->write(hist_json);
+        hist_file->close();  // release the handle so the child can open it on every platform
+
+        run_python("equity_talipp.py",
+                   {indicator, QStringLiteral("@") + hist_file->fileName(), params_json},
+                   [this, symbol, indicator, hist_file](bool ok, const QString& out) {
                        if (!ok) {
                            emit error_occurred(symbol, "TALIpp", out);
                            return;

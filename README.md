@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`5005e6263`](https://github.com/yumima/finterm/commit/5005e6263) er/talipp: one real implementation — fix the tab that computed almost nothing
 - [`35595b3bd`](https://github.com/yumima/finterm/commit/35595b3bd) github: strip the contribution apparatus
 - [`f6e099a5c`](https://github.com/yumima/finterm/commit/f6e099a5c) llm: opt tool-less one-shots out of hearth's automatic web search
 

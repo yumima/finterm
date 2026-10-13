@@ -1,7 +1,7 @@
 from typing import List, Dict
 from talipp.indicators import RSI, MACD, Stoch, StochRSI, CCI, ROC, TSI
 from talipp.ohlcv import OHLCV
-from talipp_wrapper import fnum
+from talipp_wrapper import ema_signal, fnum, last_valid
 
 def calculate_rsi(prices: List[float], period: int = 14) -> Dict:
     rsi = RSI(period)
@@ -104,18 +104,10 @@ def calculate_tsi(prices: List[float], long_period: int = 25, short_period: int 
         tsi.add(price)
 
     tsi_values = [float(v) if v is not None else None for v in tsi]
-    sig = EMA(signal_period)
-    signal_values = []
-    for v in tsi_values:
-        if v is None:
-            signal_values.append(None)
-            continue
-        sig.add(v)
-        s = sig[-1] if len(sig) > 0 else None
-        signal_values.append(float(s) if s is not None else None)
+    signal_values = ema_signal(tsi_values, signal_period)
 
-    last_tsi = next((v for v in reversed(tsi_values) if v is not None), None)
-    last_signal = next((v for v in reversed(signal_values) if v is not None), None)
+    last_tsi = last_valid(tsi_values)
+    last_signal = last_valid(signal_values)
 
     return {
         'tsi': tsi_values,

@@ -17,7 +17,10 @@ Arguments:
     indicator_id  A talipp_service.dispatch operation id, lowercase — the same
                   id EquityTalippTab stores per indicator (sma, bb, williams,
                   supertrend, zigzag, ...).
-    ohlcv_json    JSON array of bars: {timestamp, open, high, low, close, volume}.
+    ohlcv_json    JSON array of bars {timestamp, open, high, low, close,
+                  volume} — or "@<path>" naming a file holding that JSON
+                  (argv caps one argument at 128 KiB on Linux; a long
+                  history must ride in a file).
     params_json   Optional JSON object of the tab's parameter spinboxes.
 
 Output (stdout):
@@ -78,6 +81,14 @@ FLOAT_PARAMS = {
     "change", "offset", "sigma", "vfactor",
 }
 
+# Indicators whose whole meaning is volume. Bars without volume data make
+# these UNAVAILABLE, never a fabricated series — OBV over all-zero volume is
+# a flat line that looks exactly like a real measurement.
+VOLUME_INDICATORS = {
+    "obv", "vwap", "vwma", "mfi", "chaikin_osc", "force_index", "accu_dist",
+    "emv", "kvo", "sobv",
+}
+
 # The series the tab charts for a multi-output indicator. Single-output
 # indicators return their line under 'values' and need no entry.
 PRIMARY_SERIES = {
@@ -103,8 +114,16 @@ def main() -> None:
         die("Usage: equity_talipp.py <indicator> <ohlcv_json> [params_json]")
 
     indicator = sys.argv[1].lower()
+    ohlcv_raw = sys.argv[2]
+    if ohlcv_raw.startswith("@"):
+        try:
+            with open(ohlcv_raw[1:], "r", encoding="utf-8") as fh:
+                ohlcv_raw = fh.read()
+        except OSError as e:
+            die(f"cannot read OHLCV payload file: {e}")
+            return
     try:
-        rows = json.loads(sys.argv[2])
+        rows = json.loads(ohlcv_raw)
         raw_params = json.loads(sys.argv[3]) if len(sys.argv) > 3 else {}
     except json.JSONDecodeError as e:
         die(f"Bad JSON argument: {e}")
@@ -146,6 +165,13 @@ def main() -> None:
             })
     except (TypeError, ValueError) as e:
         die(str(e))
+        return
+
+    # bars are built above with "volume" always present as a float (absent/null
+    # coerced to 0.0), so the direct index cannot raise.
+    if indicator in VOLUME_INDICATORS and not any(b["volume"] > 0 for b in bars):
+        die(f"'{indicator}' is a volume indicator and these bars carry no volume "
+            f"data — unavailable for this symbol")
         return
 
     # Map the tab's knob names onto the wrapper's kwargs and restore integer
