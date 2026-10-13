@@ -21,9 +21,6 @@ class DockStatusBar;
 class PushpinBar;
 class TabBar;
 } // namespace fincept::ui
-namespace fincept::ai_chat {
-class ElicitPrompter;
-}
 namespace fincept::screens {
 class LockScreen;
 class WorkbenchScreen;
@@ -98,11 +95,6 @@ class MainWindow : public QMainWindow {
     // so a crash or kill loses the user's dock setup.
     QTimer* dock_layout_save_timer_ = nullptr;
     void schedule_dock_layout_save();
-
-    // The always-on UI surface for MCP elicitation (tool questions, the
-    // destructive-tool confirmation gate). Owned here so a tool prompt never
-    // depends on any particular screen being open.
-    ai_chat::ElicitPrompter* elicit_prompter_ = nullptr;
 
     // AI Workbench (Track 13)
     screens::WorkbenchScreen* workbench_screen_ = nullptr;

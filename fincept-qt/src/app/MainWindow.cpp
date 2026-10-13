@@ -344,10 +344,10 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     connect(this, &QObject::destroyed, this, [this]() { WorkspaceManager::instance().remove_window(this); });
 
     // Chat bubble — floats over dock_manager_ content area
-    // Elicitation surface — always mounted, so a tool question (or the
-    // destructive-tool confirmation gate) works from ANY chat surface or agent
-    // run, not only while some particular screen is open.
-    elicit_prompter_ = new ai_chat::ElicitPrompter(this, this);
+    // Elicitation surface — one per process, qApp-owned, so a tool question
+    // (or the destructive-tool confirmation gate) works from ANY chat surface
+    // or agent run, in any window, for the life of the application.
+    ai_chat::ElicitPrompter::ensure_mounted();
 
     chat_bubble_ = new AiChatBubble(dock_manager_);
     {

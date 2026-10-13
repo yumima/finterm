@@ -6,7 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
-- [`97cce168e`](https://github.com/yumima/finterm/commit/97cce168e) ai: one lens per subject — merge FinGPT into Equity Research, retire the chat screens
+- [`08adc7e84`](https://github.com/yumima/finterm/commit/08adc7e84) ai: one lens per subject — merge FinGPT into Equity Research, retire the chat screens
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

@@ -1014,16 +1014,21 @@ void EquityAiTab::run_all(bool automatic) {
     news_run_pending_ = false;
     ++epoch_;
     set_run_busy(true);
-    // Fresh labels for a fresh run; the table rows themselves stay (they are
-    // the current feed) and re-label as the chain walks them.
-    for (auto& l : row_labels_)
-        l.clear();
-    for (int r = 0; r < (table_ ? table_->rowCount() : 0); ++r)
-        if (QTableWidgetItem* it = table_->item(r, 0)) {
-            it->setText(QStringLiteral("—"));
-            it->setForeground(QColor(colors::TEXT_DIM()));
-        }
-    update_sentiment_chip();
+    // Fresh labels for a fresh MANUAL run; the table rows themselves stay
+    // (they are the current feed) and re-label as the chain walks them. The
+    // daily auto-run records forecasts only and never re-classifies, so
+    // wiping here would destroy the user's existing labels and leave the
+    // chip on "unclassified" until the next manual Run.
+    if (!automatic) {
+        for (auto& l : row_labels_)
+            l.clear();
+        for (int r = 0; r < (table_ ? table_->rowCount() : 0); ++r)
+            if (QTableWidgetItem* it = table_->item(r, 0)) {
+                it->setText(QStringLiteral("—"));
+                it->setForeground(QColor(colors::TEXT_DIM()));
+            }
+        update_sentiment_chip();
+    }
     run_quant_forecast(automatic);
 }
 
@@ -1202,14 +1207,21 @@ void EquityAiTab::run_quant_forecast(bool automatic) {
             p.analysis       = shown;
 
             if (AiPredictionRepository::instance().insert(p) > 0) {
-                QString msg = QStringLiteral("Quant forecast recorded — resolves %1.").arg(p.resolve_date);
+                // The incoherence note goes INTO the quant pane, not the status
+                // line: run_news_forecast() rewrites the status synchronously on
+                // the next call, so a status-line note was dead code. The pane
+                // is where the reader is looking at the numbers it qualifies.
                 if (fc.incoherent)
-                    msg += QStringLiteral("  Note: the model's stated %1% did not match its own "
-                                          "%2 target (%3% from here).")
-                               .arg(QString::number(stated_pct.value_or(0.0), 'f', 1),
-                                    fmt::format_money(p.target_price),
-                                    QString::number(p.predicted_pct, 'f', 1));
-                self->status_lbl_->setText(msg);
+                    self->analysis_view_->setPlainText(
+                        self->analysis_view_->toPlainText() +
+                        QStringLiteral("\n\n⚠ The model's stated %1% did not match its own %2 "
+                                       "target; the recorded forecast derives from the target "
+                                       "(%3% from here).")
+                            .arg(QString::number(stated_pct.value_or(0.0), 'f', 1),
+                                 fmt::format_money(p.target_price),
+                                 QString::number(p.predicted_pct, 'f', 1)));
+                self->status_lbl_->setText(
+                    QStringLiteral("Quant forecast recorded — resolves %1.").arg(p.resolve_date));
                 self->update_quant_chip(p);
             }
             self->refresh_track_record();
@@ -1230,10 +1242,23 @@ void EquityAiTab::run_news_forecast(bool automatic) {
     }
 
     // The feed may still be in flight on a fast click; wait for its latch
-    // rather than asking a news-driven model over news we do not have yet.
+    // rather than asking a news-driven model over news we do not have yet —
+    // but never park forever. A wedged feed (loading never flips false)
+    // would otherwise pin running_ and the disabled Run button until a
+    // symbol switch; after the timeout the run completes quant-only.
     if (!news_done_) {
         news_run_pending_ = true;
         status_lbl_->setText(QStringLiteral("Waiting for the news feed before the news engine runs…"));
+        const quint64 epoch = epoch_;
+        QPointer<EquityAiTab> self = this;
+        QTimer::singleShot(30000, this, [self, epoch]() {
+            if (!self || epoch != self->epoch_ || !self->news_run_pending_)
+                return;
+            self->news_run_pending_ = false;
+            self->news_view_->setPlainText(QStringLiteral(
+                "The news feed did not deliver in time — the news engine was not asked."));
+            self->finish_pipeline(QStringLiteral("News feed timed out — quant only this run."));
+        });
         return;
     }
     if (articles_.isEmpty() && !news_error_.isEmpty()) {
@@ -1838,23 +1863,31 @@ void EquityAiTab::refresh_track_record() {
     const QVector<AiPrediction> preds = AiPredictionRepository::instance().for_ticker(current_symbol_);
 
     // Accuracy over resolved predictions, per engine: direction hit-rate AND
-    // magnitude error — blended into one number the comparison would be lost.
+    // magnitude error. Both stay per-engine — an average over two different
+    // methods' errors is a number that grades neither.
     int q_res = 0, q_hit = 0, n_res = 0, n_hit = 0;
-    double err_sum = 0.0;
-    int resolved = 0;
+    double q_err = 0.0, n_err = 0.0;
     for (const auto& p : preds) if (p.resolved) {
-        ++resolved;
-        err_sum += std::abs(p.predicted_pct - p.actual_pct);
-        if (p.source == QLatin1String("fingpt")) { ++n_res; if (p.correct) ++n_hit; }
-        else { ++q_res; if (p.correct) ++q_hit; }
+        if (p.source == QLatin1String("fingpt")) {
+            ++n_res;
+            if (p.correct) ++n_hit;
+            n_err += std::abs(p.predicted_pct - p.actual_pct);
+        } else {
+            ++q_res;
+            if (p.correct) ++q_hit;
+            q_err += std::abs(p.predicted_pct - p.actual_pct);
+        }
     }
-    if (resolved == 0) {
+    if (q_res + n_res == 0) {
         accuracy_lbl_->setText(QStringLiteral("No resolved forecasts yet"));
     } else {
         QStringList parts;
-        if (q_res) parts << QString("Quant %1% (%2/%3)").arg(qRound(100.0 * q_hit / q_res)).arg(q_hit).arg(q_res);
-        if (n_res) parts << QString("News %1% (%2/%3)").arg(qRound(100.0 * n_hit / n_res)).arg(n_hit).arg(n_res);
-        parts << QString("avg miss %1pp").arg(err_sum / resolved, 0, 'f', 1);
+        if (q_res) parts << QString("Quant %1% (%2/%3), miss %4pp")
+                                .arg(qRound(100.0 * q_hit / q_res)).arg(q_hit).arg(q_res)
+                                .arg(q_err / q_res, 0, 'f', 1);
+        if (n_res) parts << QString("News %1% (%2/%3), miss %4pp")
+                                .arg(qRound(100.0 * n_hit / n_res)).arg(n_hit).arg(n_res)
+                                .arg(n_err / n_res, 0, 'f', 1);
         accuracy_lbl_->setText(parts.join(QStringLiteral("  ·  ")));
     }
 

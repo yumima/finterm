@@ -233,7 +233,10 @@ void ChatPane::load_thread() {
     const qsizetype start = std::max<qsizetype>(0, all.size() - kMaxRestoredMessages);
     for (qsizetype i = start; i < all.size(); ++i) {
         const auto& m = all[i];
-        add_bubble(m.role, m.content);
+        // Same formats as live rendering: only assistant text is Markdown. A
+        // restored user message re-parsed as Markdown would turn "#1 pick" into
+        // a heading the user never typed.
+        add_bubble(m.role, m.content, /*markdown=*/m.role == QLatin1String("assistant"));
         if (m.role != QLatin1String("system"))
             history_.push_back({m.role, m.content});
     }
@@ -272,13 +275,16 @@ void ChatPane::on_send() {
                    QStringLiteral("No model configured — Settings → AI Config."), /*markdown=*/false);
         return;
     }
-    if (cfg_.voice && voice_mode_)
-        services::SpeechService::instance().stop_listening(); // pause the mic while we think/speak
     if (!ensure_session()) {
         add_bubble(QStringLiteral("system"), QStringLiteral("Could not create a chat session — try again."),
                    /*markdown=*/false);
         return;
     }
+    // Pause the mic only once the send is definitely going ahead: an early
+    // return above with the mic already stopped would strand hands-free mode
+    // (red button, nothing listening, nothing to restart it).
+    if (cfg_.voice && voice_mode_)
+        services::SpeechService::instance().stop_listening(); // resume on TTS end
 
     input_box_->clear();
     input_box_->setFixedHeight(38);

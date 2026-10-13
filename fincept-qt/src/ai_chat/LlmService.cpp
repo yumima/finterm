@@ -770,7 +770,11 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     // or it derails structured-output prompts — so gate on with_tools. Tool
     // guidance describes only tools this request really attaches.
     const bool attaches_tools = with_tools && tools_enabled_ && !is_ds_reasoner && !groq_no_tools;
-    const QString sys = compose_system_prompt(persona, attaches_tools, /*with_suffix=*/with_tools);
+    // Suffix (persona prompt + ambient context) rides with the TOOLS, not with
+    // the caller's intent: every persona prompt instructs tool use, so pairing
+    // it with "No tools are attached to this request" (global toggle off, or a
+    // model that rejects tools) hands the model contradictory orders.
+    const QString sys = compose_system_prompt(persona, attaches_tools, /*with_suffix=*/attaches_tools);
     if (!sys.isEmpty())
         messages.append(QJsonObject{{"role", "system"}, {"content", sys}});
     for (const auto& m : history)
