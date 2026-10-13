@@ -119,6 +119,10 @@ class MainWindow : public QMainWindow {
     void show_lock_overlay(); // show lock screen as overlay; shell stays at index 1
     void hide_lock_overlay(); // hide overlay; no page switch needed
     void on_terminal_unlocked();
+    /// Ask before signing out. The toolbar LOGOUT button sits directly under
+    /// the window-manager controls, so a stray click used to log the user
+    /// out with no confirmation.
+    void confirm_and_logout();
     void update_window_title();
     /// Show or hide the toolbar/status bar shell (hidden during auth screens).
     void set_shell_visible(bool visible);

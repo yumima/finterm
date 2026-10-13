@@ -276,8 +276,10 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // Lock screen signals
     connect(lock_screen_, &screens::LockScreen::unlocked, this, &MainWindow::on_terminal_unlocked);
     connect(lock_screen_, &screens::LockScreen::reauth_requested, this, []() {
-        // Max PIN attempts exceeded — force full re-login
-        auth::AuthManager::instance().logout();
+        // Max PIN attempts exceeded — force full re-login. This is the
+        // forgotten-PIN recovery path, so the device PIN is wiped here:
+        // after signing back in the user sets a fresh one.
+        auth::AuthManager::instance().logout(/*wipe_device_pin=*/true);
     });
 
     // Inactivity guard → lock screen
@@ -589,7 +591,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         dlg->setAttribute(Qt::WA_DeleteOnClose);
         connect(dlg, &ui::ComponentBrowserDialog::component_chosen, this, [this](const QString& id) {
             if (dock_router_ && !id.isEmpty())
-                dock_router_->navigate(id);
+                dock_router_->open_beside_focused(id);
         });
         dlg->show();
     });
@@ -715,7 +717,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 LOG_INFO("MainWindow", QString("Quick Switch: %1 (%2 panels)").arg(action).arg(screens.size()));
             }
         } else if (action == "logout") {
-            auth::AuthManager::instance().logout();
+            confirm_and_logout();
         } else if (action == "fullscreen") {
             if (isFullScreen())
                 showNormal();
@@ -782,7 +784,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     });
 
     // Toolbar logout
-    connect(toolbar, &ui::ToolBar::logout_clicked, this, []() { auth::AuthManager::instance().logout(); });
+    connect(toolbar, &ui::ToolBar::logout_clicked, this, &MainWindow::confirm_and_logout);
 
     // Plan label is a no-op in the localhost-only fork — all features are
     // locally available; there's nowhere to upgrade.
@@ -1053,6 +1055,10 @@ void MainWindow::setup_docking_mode() {
             ads::CDockManager::FloatingContainerHasWidgetTitle | ads::CDockManager::FloatingContainerHasWidgetIcon |
             ads::CDockManager::EqualSplitOnInsertion       // prevents new panels from spawning tiny slivers
             | ads::CDockManager::DoubleClickUndocksWidget  // double-click tab to float
+            | ads::CDockManager::FocusHighlighting         // track the focused panel so
+                                                           // focusedDockWidget() works —
+                                                           // Ctrl+K placement and
+                                                           // split_alongside anchor on it
         );
         // Disable auto-hide entirely: the pin button converts panels to collapsible
         // sidebars which collapse when another panel is opened beside them.
@@ -1496,6 +1502,16 @@ void MainWindow::show_lock_overlay() {
 
 void MainWindow::hide_lock_overlay() {
     lock_screen_->hide();
+}
+
+void MainWindow::confirm_and_logout() {
+    const auto ans = QMessageBox::question(
+        this, tr("Log out"),
+        tr("Sign out of finterm?\n\nYour device PIN is kept — the next sign-in "
+           "unlocks with it instead of asking you to create a new one."),
+        QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+    if (ans == QMessageBox::Yes)
+        auth::AuthManager::instance().logout();
 }
 
 void MainWindow::on_terminal_unlocked() {

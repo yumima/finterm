@@ -70,8 +70,23 @@ class DockScreenRouter : public QObject {
     /// If `id` is already open in the layout: no new placement — just raise
     /// + focus the existing tab. Preserves the user's current split.
     /// If nothing is open yet: opens `id` as the sole screen.
+    ///
+    /// `anchor` pins the split to a specific dock area; when null, the
+    /// currently-focused area is looked up at placement time. Pass it when
+    /// the anchor was chosen BEFORE materializing the screen — widget
+    /// construction can move focus (e.g. a search field calling setFocus),
+    /// and a post-construction lookup would then split a different area.
     void split_alongside(const QString& id,
-                         ads::DockWidgetArea side = ads::RightDockWidgetArea);
+                         ads::DockWidgetArea side = ads::RightDockWidgetArea,
+                         ads::CDockAreaWidget* anchor = nullptr);
+
+    /// Open `id` next to the panel the user is working in: splits the focused
+    /// dock area along its longer axis (right of a wide panel, below a tall
+    /// one). Falls back to navigate()'s 2x2 grid when nothing has focus yet.
+    /// Used by the Component Browser (Ctrl+K), whose fixed grid used to drop
+    /// the new panel in the lower-left regardless of where the user was.
+    /// If `id` is already open, just raises it.
+    void open_beside_focused(const QString& id);
 
     /// True if `id`'s dock widget is currently part of the visible layout
     /// (exists, not closed, has a dock area). Use this to decide whether

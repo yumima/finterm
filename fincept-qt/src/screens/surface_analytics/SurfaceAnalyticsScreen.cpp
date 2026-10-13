@@ -33,6 +33,7 @@
 #include <QVariant>
 #include <QVBoxLayout>
 
+#include <cmath>
 #include <cstdlib>
 #include <ctime>
 
@@ -1445,11 +1446,11 @@ void SurfaceAnalyticsScreen::dispatch_csv(const QString& path) {
 
 // ── Databento slots ───────────────────────────────────────────────────────────
 void SurfaceAnalyticsScreen::on_vol_surface_received(const fincept::DatabentoVolSurfaceResult& r) {
-    if (data_inspector_)
-        data_inspector_->set_status(r.success ? "Vol surface loaded" : "Vol fetch failed", r.success);
     if (!r.success) {
-        if (data_inspector_)
+        if (data_inspector_) {
+            data_inspector_->set_status("Vol fetch failed", false);
             data_inspector_->set_error(r.error);
+        }
         update_chart();
         return;
     }
@@ -1457,6 +1458,12 @@ void SurfaceAnalyticsScreen::on_vol_surface_received(const fincept::DatabentoVol
     QString sym = current_symbol_or_default();
     std::string sym_std = sym.toStdString();
     float spot = spot_for(sym);
+
+    // "Loaded" is only claimed when at least one grid actually landed — a
+    // successful fetch whose rows all parsed empty used to report "Vol
+    // surface loaded" over an unchanged blank chart.
+    const bool any_loaded = !r.vol.z.empty() || !r.delta.z.empty() || !r.gamma.z.empty() ||
+                            !r.vega.z.empty() || !r.theta.z.empty() || !r.skew.z.empty();
 
     if (!r.vol.z.empty()) {
         vol_data_ = r.vol;
@@ -1495,18 +1502,27 @@ void SurfaceAnalyticsScreen::on_vol_surface_received(const fincept::DatabentoVol
     }
 
     if (data_inspector_) {
-        QStringList headers = {"strike", "expiration", "iv"};
-        QVector<QStringList> rows;
-        for (size_t i = 0; i < vol_data_.strikes.size(); ++i) {
-            for (size_t j = 0; j < vol_data_.expirations.size(); ++j) {
-                if (i < vol_data_.z.size() && j < vol_data_.z[i].size()) {
-                    rows.push_back({QString::number(vol_data_.strikes[i], 'f', 2),
-                                    QString::number(vol_data_.expirations[j]),
-                                    QString::number(vol_data_.z[i][j], 'f', 4)});
+        data_inspector_->set_status(any_loaded ? "Vol surface loaded"
+                                               : "Fetch succeeded but no usable surface points",
+                                    any_loaded);
+
+        // Rebuild the table only when THIS fetch delivered a vol grid —
+        // otherwise the previous fetch's rows would sit under the new status.
+        if (!r.vol.z.empty()) {
+            QStringList headers = {"strike", "expiration", "iv"};
+            QVector<QStringList> rows;
+            // z is rows = expirations, cols = strikes (see parse_vol_surface).
+            for (size_t e = 0; e < vol_data_.expirations.size() && e < vol_data_.z.size(); ++e) {
+                for (size_t s = 0; s < vol_data_.strikes.size() && s < vol_data_.z[e].size(); ++s) {
+                    if (std::isnan(vol_data_.z[e][s]))
+                        continue; // hole in the grid, not a quote
+                    rows.push_back({QString::number(vol_data_.strikes[s], 'f', 2),
+                                    QString::number(vol_data_.expirations[e]),
+                                    QString::number(vol_data_.z[e][s], 'f', 4)});
                 }
             }
+            data_inspector_->show_table("vol_surface", headers, rows);
         }
-        data_inspector_->show_table("vol_surface", headers, rows);
     }
 
     update_chart();

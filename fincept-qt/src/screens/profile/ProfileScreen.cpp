@@ -807,7 +807,9 @@ void ProfileScreen::show_edit_profile_dialog() {
 }
 
 void ProfileScreen::show_logout_confirm() {
-    if (QMessageBox::question(this, "Confirm Logout", "Are you sure you want to logout?",
+    if (QMessageBox::question(this, "Confirm Logout",
+                              "Sign out of finterm?\n\nYour device PIN is kept — the next "
+                              "sign-in unlocks with it instead of asking you to create a new one.",
                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No) == QMessageBox::Yes)
         auth::AuthManager::instance().logout();
 }
@@ -889,7 +891,7 @@ void ProfileScreen::show_delete_account_dialog() {
             if (!self) return;
             if (r.success) {
                 LOG_INFO("Profile", "Account deleted successfully");
-                auth::AuthManager::instance().logout();
+                auth::AuthManager::instance().logout(/*wipe_device_pin=*/true);
             } else {
                 LOG_ERROR("Profile", "Account deletion failed: " + r.error);
                 QMessageBox::critical(self, "Delete Failed",

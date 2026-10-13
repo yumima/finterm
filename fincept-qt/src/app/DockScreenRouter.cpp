@@ -563,7 +563,8 @@ void DockScreenRouter::raise(const QString& id) {
     LOG_INFO("DockRouter", "Raised existing panel: " + id);
 }
 
-void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea side) {
+void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea side,
+                                       ads::CDockAreaWidget* anchor) {
     if (!factories_.contains(id) && !screens_.contains(id)) {
         LOG_WARN("DockRouter", "split_alongside: unknown screen: " + id);
         return;
@@ -591,11 +592,10 @@ void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea si
         return;
     }
 
-    // Anchor the split on the currently-focused dock area; fall back to the
-    // first opened area if nothing has focus yet.
-    ads::CDockAreaWidget* anchor = nullptr;
-    if (auto* focused = manager_->focusedDockWidget())
-        anchor = focused->dockAreaWidget();
+    // Anchor the split on the caller-chosen area, else the currently-focused
+    // dock area; fall back to the first opened area if nothing has focus yet.
+    if (!anchor && manager_->focusedDockWidget())
+        anchor = manager_->focusedDockWidget()->dockAreaWidget();
     if (!anchor) {
         const auto opened = manager_->openedDockAreas();
         if (!opened.isEmpty())
@@ -630,6 +630,31 @@ void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea si
              QString("split_alongside [%1] placed (side=%2, anchor=%3, panel_count=%4)")
                  .arg(id).arg(static_cast<int>(side))
                  .arg(anchor ? "ok" : "none").arg(panel_count_));
+}
+
+void DockScreenRouter::open_beside_focused(const QString& id) {
+    // Resolve the anchor BEFORE any screen materialization: split_alongside
+    // creates the widget first, and construction can move focus.
+    ads::CDockAreaWidget* anchor = nullptr;
+    if (auto* focused = manager_->focusedDockWidget())
+        anchor = focused->dockAreaWidget();
+    if (anchor && (anchor->dockManager() != manager_ || !anchor->isVisible()))
+        anchor = nullptr;
+
+    if (!anchor && !is_open(id)) {
+        // Nothing (of ours) has focus — an empty workspace, or focus left in
+        // a container that is gone. The grid placement is fine there.
+        navigate(id);
+        return;
+    }
+
+    // Split along the anchor's longer axis so the new panel lands beside a
+    // wide panel and under a tall one, instead of a fixed grid slot.
+    // (If `id` is already open, split_alongside just raises it.)
+    const auto side = (anchor && anchor->width() < anchor->height())
+                          ? ads::BottomDockWidgetArea
+                          : ads::RightDockWidgetArea;
+    split_alongside(id, side, anchor);
 }
 
 void DockScreenRouter::add_alongside(const QString& primary, const QString& secondary) {

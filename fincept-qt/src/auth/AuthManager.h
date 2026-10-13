@@ -32,7 +32,12 @@ class AuthManager : public QObject {
     void verify_mfa(const QString& email, const QString& otp);
     void forgot_password(const QString& email);
     void reset_password(const QString& email, const QString& otp, const QString& new_password);
-    void logout();
+    /// Sign out. The device PIN is kept by default so the next login unlocks
+    /// with the existing PIN instead of forcing a new SECURITY SETUP.
+    /// Pass wipe_device_pin = true only when the PIN itself must go: the
+    /// lockout "SIGN IN AGAIN" recovery (user cannot produce the PIN) and
+    /// account deletion.
+    void logout(bool wipe_device_pin = false);
 
     // Session management
     void initialize();
@@ -75,7 +80,7 @@ class AuthManager : public QObject {
     void set_loading(bool v);
     void save_session();
     void load_session();
-    void clear_session();
+    void clear_session(bool wipe_device_pin);
     void validate_saved_session();
     void fetch_user_profile(std::function<void()> on_done = {});
     void fetch_user_subscription(std::function<void()> on_done = {});

@@ -105,7 +105,7 @@ void AuthManager::load_session() {
     session_.authenticated = false;
 }
 
-void AuthManager::clear_session() {
+void AuthManager::clear_session(bool wipe_device_pin) {
     const QString api_key = session_.api_key;
     // Close per-user DB before wiping session state.
     AuthService::instance().close_user_db();
@@ -114,7 +114,11 @@ void AuthManager::clear_session() {
     // Remove session record from auth.db and OS keychain.
     AuthService::instance().remove_session(api_key);
     fincept::SecureStorage::instance().remove("api_key");
-    PinManager::instance().clear_pin();
+    // The device PIN survives an ordinary sign-out: wiping it here is what
+    // used to turn every logout (including a stray toolbar click or an
+    // automatic SessionGuard logout) into a forced PIN re-creation.
+    if (wipe_device_pin)
+        PinManager::instance().clear_pin();
     LlmConfigRepository::instance().delete_provider("fincept");
 }
 
@@ -204,6 +208,24 @@ void AuthManager::complete_auth_flow(std::function<void()> on_done) {
         // open_user_db is idempotent: skips reopen if the correct path is
         // already open (handles both fresh login and session-restore paths).
         AuthService::instance().open_user_db(session_.api_key);
+
+        // The device PIN survives logout, so it is bound to an owner: a PIN
+        // left behind by a different account must not gate (or be able to
+        // unlock) this one. A PIN with no recorded owner (installs that
+        // predate the binding) is adopted by whoever signs in first.
+        const QString identity = !session_.user_info.username.isEmpty()
+                                     ? session_.user_info.username
+                                     : session_.user_info.email;
+        if (!identity.isEmpty()) {
+            auto& store = fincept::SecureStorage::instance();
+            const auto owner = store.retrieve("pin_owner");
+            const QString owner_val = owner.is_ok() ? owner.value() : QString();
+            if (PinManager::instance().has_pin() && !owner_val.isEmpty() && owner_val != identity) {
+                LOG_INFO("Auth", "Device PIN belongs to another account — wiping it for " + identity);
+                PinManager::instance().clear_pin();
+            }
+            store.store("pin_owner", identity);
+        }
     }
     save_session();
     auto_configure_fincept_llm();
@@ -339,6 +361,14 @@ QVector<QJsonObject> AuthManager::list_local_users() const {
 
 void AuthManager::delete_local_user(const QString& username) {
     AuthService::instance().delete_local_user(username, [](ApiResponse) {});
+    // "Reset this user" is the forgotten-credentials recovery path: the
+    // deleted user's device PIN must not gate a future account re-created
+    // under the same name.
+    const auto owner = fincept::SecureStorage::instance().retrieve("pin_owner");
+    if (owner.is_ok() && owner.value() == username.toLower().trimmed()) {
+        PinManager::instance().clear_pin();
+        fincept::SecureStorage::instance().remove("pin_owner");
+    }
 }
 
 // ── OTP verification ─────────────────────────────────────────────────────────
@@ -453,7 +483,7 @@ void AuthManager::reset_password(const QString& email, const QString& otp, const
 
 // ── Logout ───────────────────────────────────────────────────────────────────
 
-void AuthManager::logout() {
+void AuthManager::logout(bool wipe_device_pin) {
     if (is_logging_out_)
         return;
     is_logging_out_ = true;
@@ -462,7 +492,7 @@ void AuthManager::logout() {
         AuthService::instance().logout(session_.api_key, [](ApiResponse) {});
     }
 
-    clear_session();
+    clear_session(wipe_device_pin);
     is_logging_out_ = false;
 
     emit logged_out();
