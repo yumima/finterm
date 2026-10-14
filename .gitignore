@@ -76,6 +76,17 @@ logs/
 .env.*.local
 *.key
 *.pub
+*.pem
+*.conf
+# Personal app data that must stay on this machine: workspaces, crash
+# dumps, agent run logs, and ad-hoc session notes.
+*.fwsp
+crashdumps/
+*.dmp
+session.txt
+.claude/*.lock
+# Runtime socket/marker files (base64 names ending in "=") anywhere in the tree.
+*=
 
 # ── Large data / ML model files ──────────────────────────────
 *.csv

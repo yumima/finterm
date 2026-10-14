@@ -11,7 +11,7 @@ void OpsgenieProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void OpsgenieProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".api_key", api_key_, cat);
+    set_str(r, cat + ".api_key", api_key_, cat);
 }
 
 void OpsgenieProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

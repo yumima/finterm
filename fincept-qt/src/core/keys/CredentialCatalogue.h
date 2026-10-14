@@ -28,7 +28,7 @@ struct CredentialDef {
     const char* label;     ///< human name shown in Settings
 };
 
-// 155 credentials.
+// 157 credentials.
 inline const QVector<CredentialDef>& catalogue() {
     static const QVector<CredentialDef> kAll = {
         {"ACLED_API_KEY", "Acled"},
@@ -79,6 +79,8 @@ inline const QVector<CredentialDef>& catalogue() {
         {"EUROSTAT_API_KEY", "Eurostat"},
         {"FAO_API_KEY", "Fao"},
         {"FDIC_API_KEY", "Fdic"},
+        {"FINANCIAL_DATASETS_API_KEY", "Financial Datasets (financialdatasets.ai)"},
+        {"FINCEPT_CONTACT_EMAIL", "Contact email (declared to SEC, FINRA, OpenStreetMap)"},
         {"FINNHUB_API_KEY", "Finnhub"},
         {"FMP_API_KEY", "Fmp"},
         {"FRED_API_KEY", "FRED (Federal Reserve)"},

@@ -12,7 +12,7 @@ void PagerDutyProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void PagerDutyProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".routing_key", routing_key_, cat);
+    set_str(r, cat + ".routing_key", routing_key_, cat);
 }
 
 void PagerDutyProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

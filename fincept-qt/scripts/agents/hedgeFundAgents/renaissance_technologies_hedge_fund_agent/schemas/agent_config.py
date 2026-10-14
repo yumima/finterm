@@ -326,7 +326,7 @@ class DebugSettings:
     """
     debug_mode: bool = False
     debug_level: DebugLevel = DebugLevel.MINIMAL
-    telemetry: bool = True
+    telemetry: bool = False  # finterm is local-only; never phone home
 
     def to_dict(self) -> Dict[str, Any]:
         return {

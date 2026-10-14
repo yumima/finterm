@@ -1,4 +1,5 @@
 #include "auth/AuthManager.h"
+#include "services/notifications/NotificationFieldStore.h"
 
 #include "auth/AuthService.h"
 #include "auth/PinManager.h"
@@ -360,15 +361,21 @@ QVector<QJsonObject> AuthManager::list_local_users() const {
 }
 
 void AuthManager::delete_local_user(const QString& username) {
-    AuthService::instance().delete_local_user(username, [](ApiResponse) {});
-    // "Reset this user" is the forgotten-credentials recovery path: the
-    // deleted user's device PIN must not gate a future account re-created
-    // under the same name.
-    const auto owner = fincept::SecureStorage::instance().retrieve("pin_owner");
-    if (owner.is_ok() && owner.value() == username.toLower().trimmed()) {
-        PinManager::instance().clear_pin();
-        fincept::SecureStorage::instance().remove("pin_owner");
-    }
+    AuthService::instance().delete_local_user(username, [username](ApiResponse r) {
+        // Only once the user row is really gone: a failed delete leaves a
+        // live user whose channels and device PIN must keep working.
+        if (!r.success)
+            return;
+        notifications::remove_user_secrets(username);
+        // "Reset this user" is the forgotten-credentials recovery path: the
+        // deleted user's device PIN must not gate a future account re-created
+        // under the same name.
+        const auto owner = fincept::SecureStorage::instance().retrieve("pin_owner");
+        if (owner.is_ok() && owner.value() == username.toLower().trimmed()) {
+            PinManager::instance().clear_pin();
+            fincept::SecureStorage::instance().remove("pin_owner");
+        }
+    });
 }
 
 // ── OTP verification ─────────────────────────────────────────────────────────

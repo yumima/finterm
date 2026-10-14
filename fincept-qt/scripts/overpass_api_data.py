@@ -8,6 +8,7 @@ import json
 import os
 import requests
 from typing import Dict, Any, Optional, List
+from finterm_identity import user_agent
 
 BASE_URL = "https://overpass-api.de/api/interpreter"
 
@@ -15,7 +16,7 @@ session = requests.Session()
 adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, max_retries=3)
 session.mount('https://', adapter)
 session.mount('http://', adapter)
-session.headers.update({"User-Agent": "finterm/4.0 (admin@hanlexon.com)"})
+session.headers.update({"User-Agent": user_agent("finterm/4.0")})
 
 
 def _make_request(endpoint: str, params: Dict = None) -> Any:

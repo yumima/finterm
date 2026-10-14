@@ -12,8 +12,8 @@ void TelegramProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void TelegramProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".bot_token", bot_token_, cat);
-    r.set(cat + ".chat_id", chat_id_, cat);
+    set_str(r, cat + ".bot_token", bot_token_, cat);
+    set_str(r, cat + ".chat_id", chat_id_, cat);
 }
 
 void TelegramProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

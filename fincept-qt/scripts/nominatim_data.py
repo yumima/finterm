@@ -8,6 +8,7 @@ import json
 import os
 import requests
 from typing import Dict, Any, Optional, List
+from finterm_identity import user_agent
 
 BASE_URL = "https://nominatim.openstreetmap.org"
 
@@ -16,7 +17,7 @@ adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, ma
 session.mount('https://', adapter)
 session.mount('http://', adapter)
 session.headers.update({
-    "User-Agent": "finterm/4.0 (admin@hanlexon.com)",
+    "User-Agent": user_agent("finterm/4.0"),
     "Accept-Language": "en"
 })
 

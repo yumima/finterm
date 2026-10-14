@@ -167,33 +167,31 @@ DatabentoService::DatabentoService() {
 }
 
 // ── API key ────────────────────────────────────────────────────────────────
-// We accept both the legacy SECURE_KEY ("databento.api_key") and the canonical
-// env-style key ("DATABENTO_API_KEY") used by Settings + PythonRunner env
-// injection. Reads check both; writes mirror to both so the two paths stay
-// in sync regardless of which screen entered the key.
+// DATABENTO_API_KEY is the one key: it is what Settings → Credentials edits and
+// what PythonRunner injects. The legacy SECURE_KEY ("databento.api_key") used
+// to be read FIRST, so a key changed or cleared in Settings was silently
+// overridden by an older one entered from the Futures screen. A legacy value
+// is moved into the canonical key once at startup
+// (SecureStorage::migrate_legacy_ids).
 static constexpr const char* DATABENTO_ENV_KEY = "DATABENTO_API_KEY";
 
+static QString databento_key() {
+    auto r = SecureStorage::instance().retrieve(DATABENTO_ENV_KEY);
+    return r.is_ok() ? r.value() : QString{};
+}
+
 bool DatabentoService::has_api_key() const {
-    auto r = SecureStorage::instance().retrieve(SECURE_KEY);
-    if (r.is_ok() && !r.value().isEmpty())
-        return true;
-    auto r2 = SecureStorage::instance().retrieve(DATABENTO_ENV_KEY);
-    return r2.is_ok() && !r2.value().isEmpty();
+    return !databento_key().isEmpty();
 }
 
 void DatabentoService::set_api_key(const QString& key) {
-    QString trimmed = key.trimmed();
-    SecureStorage::instance().store(SECURE_KEY, trimmed);
-    SecureStorage::instance().store(DATABENTO_ENV_KEY, trimmed);
+    SecureStorage::instance().store(DATABENTO_ENV_KEY, key.trimmed());
+    SecureStorage::instance().remove(SECURE_KEY);
     LOG_INFO("Databento", "API key stored");
 }
 
 QString DatabentoService::api_key() const {
-    auto r = SecureStorage::instance().retrieve(SECURE_KEY);
-    if (r.is_ok() && !r.value().isEmpty())
-        return r.value();
-    auto r2 = SecureStorage::instance().retrieve(DATABENTO_ENV_KEY);
-    return r2.is_ok() ? r2.value() : QString{};
+    return databento_key();
 }
 
 void DatabentoService::clear_api_key() {

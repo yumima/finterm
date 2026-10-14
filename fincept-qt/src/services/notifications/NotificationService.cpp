@@ -1,5 +1,7 @@
 #include "services/notifications/NotificationService.h"
 
+#include "auth/AuthManager.h"
+
 #include "core/logging/Logger.h"
 #include "storage/repositories/SettingsRepository.h"
 
@@ -33,6 +35,13 @@ NotificationService& NotificationService::instance() {
 
 NotificationService::NotificationService() {
     register_providers();
+    // Channel secrets belong to the signed-in local user (NotificationFieldStore),
+    // so the providers must re-read them whenever that user changes — otherwise
+    // user B's alerts would go out on user A's bot token or webhook.
+    connect(&auth::AuthManager::instance(), &auth::AuthManager::auth_state_changed, this,
+            &NotificationService::reload_all_configs);
+    connect(&auth::AuthManager::instance(), &auth::AuthManager::logged_out, this,
+            &NotificationService::reload_all_configs);
 }
 
 void NotificationService::register_providers() {

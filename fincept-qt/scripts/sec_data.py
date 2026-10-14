@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import traceback
 import re
 import time
+from finterm_identity import user_agent
 
 
 class SECError:
@@ -41,7 +42,7 @@ class SECDataWrapper:
 
         # SEC requires specific headers to avoid blocking
         self.session.headers.update({
-            'User-Agent': 'finterm - financial analysis tool (admin@hanlexon.com)',
+            'User-Agent': user_agent(),
             'Accept-Encoding': 'gzip, deflate',
             'Accept': 'application/json'
         })

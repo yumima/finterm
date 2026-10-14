@@ -12,8 +12,8 @@ void PushoverProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void PushoverProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".api_token", api_token_, cat);
-    r.set(cat + ".user_key", user_key_, cat);
+    set_str(r, cat + ".api_token", api_token_, cat);
+    set_str(r, cat + ".user_key", user_key_, cat);
 }
 
 void PushoverProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

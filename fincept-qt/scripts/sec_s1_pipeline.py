@@ -18,6 +18,7 @@ import re
 import sys
 import time
 from datetime import date, timedelta
+from finterm_identity import user_agent
 
 try:
     import requests
@@ -29,7 +30,7 @@ EDGAR_SUBMISSIONS = "https://data.sec.gov/submissions"
 FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
 
 UA = {
-    "User-Agent": "finterm research@hanlexon.com",
+    "User-Agent": user_agent(),
     "Accept-Encoding": "gzip, deflate",
 }
 

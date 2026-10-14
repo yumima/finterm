@@ -13,9 +13,9 @@ void NtfyProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void NtfyProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".server_url", server_url_, cat);
-    r.set(cat + ".topic", topic_, cat);
-    r.set(cat + ".token", token_, cat);
+    set_str(r, cat + ".server_url", server_url_, cat);
+    set_str(r, cat + ".topic", topic_, cat);
+    set_str(r, cat + ".token", token_, cat);
 }
 
 void NtfyProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

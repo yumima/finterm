@@ -1321,7 +1321,7 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
 
     LOG_INFO(TAG, QString("finterm async: submitting to %1 (api_key=%2, prompt_len=%3)")
                       .arg(async_url)
-                      .arg(api_key_.isEmpty() ? "EMPTY" : api_key_.left(12) + "...")
+                      .arg(api_key_.isEmpty() ? "EMPTY" : "set")
                       .arg(prompt.length()));
 
     QByteArray json_data = QJsonDocument(submit_body).toJson(QJsonDocument::Compact);

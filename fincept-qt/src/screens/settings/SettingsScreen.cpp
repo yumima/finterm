@@ -3,6 +3,8 @@
 
 #include "screens/settings/SettingsScreen.h"
 
+#include "services/notifications/NotificationFieldStore.h"
+
 #include "core/keys/CredentialCatalogue.h"
 
 #include "ai_chat/LlmService.h"
@@ -858,6 +860,7 @@ QWidget* SettingsScreen::build_notifications() {
         for (const auto& fd : def.fields) {
             auto* field = new QLineEdit;
             field->setPlaceholderText(fd.placeholder);
+            field->setProperty("defaultPlaceholder", fd.placeholder);
             field->setStyleSheet(input_ss());
             if (fd.is_password)
                 field->setEchoMode(QLineEdit::Password);
@@ -907,7 +910,12 @@ QWidget* SettingsScreen::build_notifications() {
         // ── Test Send wiring ──────────────────────────────────────────────────
         connect(pw.test_btn, &QPushButton::clicked, this, [this, pid, pw]() mutable {
             // Save fields first so provider has latest credentials
-            save_provider_fields(pid, pw);
+            if (!save_provider_fields(pid, pw)) {
+                pw.status_lbl->setText("Could not save a credential to the OS keyring — is it unlocked?");
+                pw.status_lbl->setStyleSheet(
+                    QString("color:%1;background:transparent;").arg(ui::colors::NEGATIVE()));
+                return;
+            }
             NotificationService::instance().reload_all_configs();
 
             pw.status_lbl->setText("Sending...");
@@ -1020,10 +1028,18 @@ QWidget* SettingsScreen::build_notifications() {
         repo.set("notifications.news_flash", b(news_flash_->isChecked()), "notifications");
 
         // Save every provider
+        QStringList failed;
         for (const auto& def : provider_defs())
-            save_provider_fields(def.id, provider_widgets_.value(def.id));
+            if (!save_provider_fields(def.id, provider_widgets_.value(def.id)))
+                failed.append(def.name);
 
         NotificationService::instance().reload_all_configs();
+        if (!failed.isEmpty()) {
+            QMessageBox::warning(this, tr("Notifications"),
+                                 tr("These channels' credentials could not be saved to the OS keyring "
+                                    "(is it locked?):\n\n%1").arg(failed.join(QStringLiteral(", "))));
+            return;
+        }
         LOG_INFO("Settings", "All notification providers saved");
     });
     vl->addWidget(save_btn);
@@ -1088,25 +1104,38 @@ void SettingsScreen::load_notifications() {
         for (const auto& fd : def.fields) {
             if (!pw.fields.contains(fd.key))
                 continue;
-            auto r = repo.get(cat + "." + fd.key);
-            if (r.is_ok() && pw.fields[fd.key])
-                pw.fields[fd.key]->setText(r.value());
+            if (auto* f = pw.fields[fd.key]) {
+                const auto v = notifications::read_field(cat, fd.key);
+                // A secret the keyring cannot hand over right now is shown as
+                // such and excluded from Save — writing the blank field back
+                // would delete the real value.
+                f->setProperty("unreadable", !v.has_value());
+                f->setEnabled(v.has_value());
+                f->setText(v.value_or(QString{}));
+                f->setPlaceholderText(v ? f->property("defaultPlaceholder").toString()
+                                        : tr("Keyring unavailable — unlock it and reopen Settings"));
+            }
         }
     }
 }
 
 // Helper: persist a single provider's fields from its widget set
-void SettingsScreen::save_provider_fields(const QString& provider_id, const ProviderWidgets& pw) {
+bool SettingsScreen::save_provider_fields(const QString& provider_id, const ProviderWidgets& pw) {
     auto& repo = SettingsRepository::instance();
     const QString cat = QString("notif_%1").arg(provider_id);
+    bool ok = true;
 
     if (pw.enabled)
         repo.set(cat + ".enabled", pw.enabled->isChecked() ? "1" : "0", cat);
 
     for (auto it = pw.fields.constBegin(); it != pw.fields.constEnd(); ++it) {
-        if (it.value())
-            repo.set(cat + "." + it.key(), it.value()->text().trimmed(), cat);
+        if (it.value() && !it.value()->property("unreadable").toBool() &&
+            !notifications::write_field(cat, it.key(), it.value()->text().trimmed())) {
+            LOG_ERROR("Settings", "Could not save notification field " + cat + "." + it.key());
+            ok = false;
+        }
     }
+    return ok;
 }
 
 // ── Storage & Cache ───────────────────────────────────────────────────────────

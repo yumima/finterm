@@ -54,6 +54,8 @@ LABELS = {
     "OPENFIGI_API_KEY": "OpenFIGI (13F symbol mapping — optional)",
     "DATABENTO_API_KEY": "Databento",
     "EIA_API_KEY": "EIA (Energy Information Administration)",
+    "FINANCIAL_DATASETS_API_KEY": "Financial Datasets (financialdatasets.ai)",
+    "FINCEPT_CONTACT_EMAIL": "Contact email (declared to SEC, FINRA, OpenStreetMap)",
     "FINNHUB_API_KEY": "Finnhub",
     "FRED_API_KEY": "FRED (Federal Reserve)",
     "NASDAQ_DATA_LINK_API_KEY": "Nasdaq Data Link (Quandl)",
@@ -71,6 +73,8 @@ CPP_ONLY = [
     "BINANCE_API_KEY", "BINANCE_SECRET_KEY",
     "KRAKEN_API_KEY", "KRAKEN_SECRET_KEY",
     "IEX_CLOUD_TOKEN",
+    # MCP financial-datasets tools (FinancialDatasetsTools.cpp).
+    "FINANCIAL_DATASETS_API_KEY",
     "POLYMARKET_API_KEY", "POLYMARKET_SECRET",
     "POLYMARKET_PASSPHRASE", "POLYMARKET_WALLET",
 ]

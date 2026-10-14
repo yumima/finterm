@@ -13,9 +13,9 @@ void MattermostProvider::load_fields(SettingsRepository& r, const QString& cat) 
 }
 
 void MattermostProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".webhook_url", webhook_url_, cat);
-    r.set(cat + ".channel", channel_, cat);
-    r.set(cat + ".username", username_, cat);
+    set_str(r, cat + ".webhook_url", webhook_url_, cat);
+    set_str(r, cat + ".channel", channel_, cat);
+    set_str(r, cat + ".username", username_, cat);
 }
 
 void MattermostProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

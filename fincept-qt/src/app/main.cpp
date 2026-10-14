@@ -9,6 +9,7 @@
 #include "core/config/AppConfig.h"
 #include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
+#include "storage/secure/SecureStorage.h"
 #include "core/config/LayoutMigrations.h"
 #include "core/config/ProfileManager.h"
 #include "core/components/ComponentCatalog.h"
@@ -64,6 +65,7 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QLockFile>
 #include <QPointer>
 #include <QSqlDatabase>
@@ -104,6 +106,22 @@ int main(int argc, char* argv[]) {
     // cookie check failure (STATUS_STACK_BUFFER_OVERRUN — see issue #215).
     // Do it early so a crash in Qt's own startup still produces a dump.
     fincept::crash::install();
+
+    // finterm is local-only: no library it spawns may phone home. Set in our
+    // own environment so EVERY child inherits it — Python scripts, the yfinance
+    // daemon, MCP servers, speech/TTS helpers. Agno (60 agent scripts) posts
+    // usage to os-api.agno.com unless AGNO_TELEMETRY is set, and the env var
+    // overrides even an explicit telemetry=True in an agent config.
+    // A value the user exported deliberately (e.g. LANGCHAIN_TRACING_V2=true
+    // for their own LangSmith runs) is respected; only the unset default is
+    // turned off.
+    for (const char* var : {"AGNO_TELEMETRY", "LITELLM_TELEMETRY", "ANONYMIZED_TELEMETRY",
+                            "GRADIO_ANALYTICS_ENABLED", "LANGCHAIN_TRACING_V2"})
+        if (!qEnvironmentVariableIsSet(var))
+            qputenv(var, "false");
+    for (const char* var : {"DO_NOT_TRACK", "DISABLE_TELEMETRY", "HF_HUB_DISABLE_TELEMETRY", "POSTHOG_DISABLED"})
+        if (!qEnvironmentVariableIsSet(var))
+            qputenv(var, "1");
 
     // Required before QApplication when any dock panel contains an OpenGL widget
     // (Qt Charts, QOpenGLWidget) — prevents black rendering in floating windows.
@@ -499,6 +517,30 @@ int main(int argc, char* argv[]) {
             }
         }
     }
+    // Credentials some services once kept under private ids move to the
+    // names Settings › Credentials edits — once, before anything reads them.
+    fincept::SecureStorage::instance().migrate_legacy_ids();
+
+#ifndef Q_OS_WIN
+    // finterm's own folders are private to this account. Older builds left
+    // them 0755 with auth.db and users/<name>.db 0644, readable by any local
+    // account. A 0700 directory closes everything inside it — files written
+    // later included — without touching the umask, so files the user saves
+    // elsewhere (exports, reports) keep their normal permissions.
+    {
+        const auto owner_only = QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner;
+        const QString config_dir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) +
+                                   QLatin1Char('/') + QLatin1String(fincept::AppIdentity::kOrg);
+        for (const QString& dir_path :
+             {fincept::AppPaths::root(), fincept::AppPaths::data(), fincept::AppPaths::data() + "/users",
+              fincept::AppPaths::logs(), fincept::AppPaths::files(), fincept::AppPaths::cache(),
+              fincept::AppPaths::workspaces(), fincept::AppPaths::crashdumps(), config_dir}) {
+            if (QFileInfo(dir_path).isDir())
+                QFile::setPermissions(dir_path, owner_only);
+        }
+    }
+#endif
+
     fincept::auth::AuthService::instance().initialize();
 
     // Initialize auth: load_session() synchronously opens the per-user DB if a

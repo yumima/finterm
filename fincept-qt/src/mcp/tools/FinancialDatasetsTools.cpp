@@ -39,7 +39,10 @@ namespace {
 
 constexpr const char* TAG = "FinancialDatasetsTools";
 constexpr const char* kBaseUrl = "https://api.financialdatasets.ai";
-constexpr const char* kSecureKey = "mcp.tools.financial-datasets";
+// Edited on Settings → Credentials like every other data key. A key stored
+// under the old id ("mcp.tools.financial-datasets", which had no UI at all)
+// is moved here once at startup by SecureStorage::migrate_legacy_ids.
+constexpr const char* kSecureKey = "FINANCIAL_DATASETS_API_KEY";
 constexpr int kRequestTimeoutMs = 30000;
 
 /// File-local QNAM shared across all tools in this family.  Parented to
@@ -68,8 +71,8 @@ void fd_get(const QString& path,
     const QString api_key = fd_api_key();
     if (api_key.isEmpty()) {
         done(Result<QJsonObject>::err(
-            "financialdatasets.ai API key not configured.  Store the key in "
-            "SecureStorage under id 'mcp.tools.financial-datasets' "
+            "financialdatasets.ai API key not configured.  Add it under "
+            "Settings → Credentials → Financial Datasets "
             "(free tier at financialdatasets.ai)"));
         return;
     }

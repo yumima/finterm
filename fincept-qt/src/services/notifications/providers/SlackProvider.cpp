@@ -12,8 +12,8 @@ void SlackProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void SlackProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".webhook_url", webhook_url_, cat);
-    r.set(cat + ".channel", channel_, cat);
+    set_str(r, cat + ".webhook_url", webhook_url_, cat);
+    set_str(r, cat + ".channel", channel_, cat);
 }
 
 void SlackProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

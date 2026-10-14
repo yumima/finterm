@@ -2,6 +2,7 @@
 #include "core/result/Result.h"
 
 #include <QString>
+#include <QStringList>
 
 namespace fincept {
 
@@ -29,6 +30,25 @@ class SecureStorage {
     Result<void> store(const QString& key, const QString& value);
     Result<QString> retrieve(const QString& key);
     Result<void> remove(const QString& key);
+
+    /// True when `r` failed because the key does not exist — as opposed to
+    /// the keyring being locked or unreachable, which must never be read as
+    /// "unset" (a migration would then overwrite a real value).
+    static bool is_not_found(const Result<QString>& r);
+
+    /// Read `key`; if it is absent and `legacy_key` holds a value, move that
+    /// value to `key`, delete `legacy_key`, and return it. For credentials a
+    /// service once stored under its own id, invisible to Settings.
+    Result<QString> retrieve_migrating(const QString& key, const QString& legacy_key);
+
+    /// Every stored key under the active profile that starts with `prefix`
+    /// (unscoped names, as passed to store()). Values are never returned.
+    /// Linux/libsecret only; other backends cannot enumerate and return {}.
+    QStringList list_keys(const QString& prefix = {});
+
+    /// Run every known legacy-id migration once. Called at startup so
+    /// Settings › Credentials shows the value services actually use.
+    void migrate_legacy_ids();
 
     /// Which backend is actually protecting these secrets on this build and
     /// platform — "Windows Credential Manager", "macOS Keychain",

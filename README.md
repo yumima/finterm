@@ -2,16 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-10-13)
+## Today's commits (2026-10-14)
 
 Latest first.
 
-- [`8a846a8aa`](https://github.com/yumima/finterm/commit/8a846a8aa) er: an Options tab — the stock's IV surface, smile and term structure
-- [`2b0b06c38`](https://github.com/yumima/finterm/commit/2b0b06c38) auth+dock: logout keeps the device PIN, Ctrl+K opens beside the focused panel
-- [`034cab185`](https://github.com/yumima/finterm/commit/034cab185) er/talipp: post-merge review hardening — honest volume gates, no argv limit, coverage that runs
-- [`5005e6263`](https://github.com/yumima/finterm/commit/5005e6263) er/talipp: one real implementation — fix the tab that computed almost nothing
-- [`35595b3bd`](https://github.com/yumima/finterm/commit/35595b3bd) github: strip the contribution apparatus
-- [`f6e099a5c`](https://github.com/yumima/finterm/commit/f6e099a5c) llm: opt tool-less one-shots out of hearth's automatic web search
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

@@ -16,12 +16,12 @@ void EmailProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void EmailProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".smtp_host", smtp_host_, cat);
-    r.set(cat + ".smtp_port", smtp_port_, cat);
-    r.set(cat + ".smtp_user", smtp_user_, cat);
-    r.set(cat + ".smtp_pass", smtp_pass_, cat);
-    r.set(cat + ".to_addr", to_addr_, cat);
-    r.set(cat + ".from_addr", from_addr_, cat);
+    set_str(r, cat + ".smtp_host", smtp_host_, cat);
+    set_str(r, cat + ".smtp_port", smtp_port_, cat);
+    set_str(r, cat + ".smtp_user", smtp_user_, cat);
+    set_str(r, cat + ".smtp_pass", smtp_pass_, cat);
+    set_str(r, cat + ".to_addr", to_addr_, cat);
+    set_str(r, cat + ".from_addr", from_addr_, cat);
 }
 
 void EmailProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

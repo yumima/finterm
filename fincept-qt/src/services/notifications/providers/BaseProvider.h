@@ -1,6 +1,9 @@
 #pragma once
+#include "services/notifications/NotificationFieldStore.h"
 #include "services/notifications/NotificationService.h"
 #include "storage/repositories/SettingsRepository.h"
+
+#include <QSet>
 
 namespace fincept::notifications {
 
@@ -36,11 +39,29 @@ class BaseProvider : public INotificationProvider {
         return res.is_ok() && !res.value().isEmpty() ? (res.value() == "1") : def;
     }
 
-    static QString get_str(SettingsRepository& r, const QString& key) {
-        auto res = r.get(key);
-        return res.is_ok() ? res.value() : QString{};
+    // Fields go through NotificationFieldStore: secrets to the OS keyring,
+    // plain settings to the settings table. `key` is "<category>.<field>".
+    // A secret that cannot be read right now (locked keyring) loads as empty
+    // — the provider is simply unconfigured — and is remembered, so a later
+    // save_config() never writes that blank back over the real value.
+    QString get_str(SettingsRepository&, const QString& key) {
+        const auto v = read_field(key.section(QLatin1Char('.'), 0, -2), key.section(QLatin1Char('.'), -1));
+        if (v)
+            unreadable_.remove(key);
+        else
+            unreadable_.insert(key);
+        return v.value_or(QString{});
+    }
+    void set_str(SettingsRepository&, const QString& key, const QString& value, const QString&) {
+        if (unreadable_.contains(key))
+            return;
+        write_field(key.section(QLatin1Char('.'), 0, -2), key.section(QLatin1Char('.'), -1), value);
     }
 
+  private:
+    QSet<QString> unreadable_;
+
+  protected:
     /// Subclasses load their specific credential fields here.
     virtual void load_fields(SettingsRepository& r, const QString& cat) = 0;
     /// Subclasses persist their specific credential fields here.

@@ -31,13 +31,14 @@ import sys
 import time
 import zipfile
 from datetime import date, timedelta
+from finterm_identity import user_agent
 
 try:
     import requests
 except ImportError:
     requests = None
 
-UA = {"User-Agent": "finterm research@hanlexon.com",
+UA = {"User-Agent": user_agent(),
       "Accept-Encoding": "gzip, deflate"}
 
 # Consolidated NMS file — every tape, one row per symbol per day.

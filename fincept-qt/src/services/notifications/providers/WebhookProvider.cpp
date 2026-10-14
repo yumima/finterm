@@ -14,8 +14,8 @@ void WebhookProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void WebhookProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".url", url_, cat);
-    r.set(cat + ".method", method_, cat);
+    set_str(r, cat + ".url", url_, cat);
+    set_str(r, cat + ".method", method_, cat);
 }
 
 void WebhookProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

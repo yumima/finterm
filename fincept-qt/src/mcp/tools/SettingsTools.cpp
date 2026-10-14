@@ -1,5 +1,6 @@
 // SettingsTools.cpp — Settings and LLM config management (Qt port)
 
+#include "services/notifications/NotificationFieldStore.h"
 #include "mcp/tools/SettingsTools.h"
 
 #include "core/events/EventBus.h"
@@ -12,6 +13,27 @@
 namespace fincept::mcp::tools {
 
 static constexpr const char* TAG = "SettingsTools";
+
+namespace {
+
+// Settings an AI tool may never see or change. Whatever a tool reads can be
+// forwarded to a cloud LLM provider. Secret-shaped names use the same rule as
+// the notification field store, so the two lists cannot drift.
+bool is_secret_setting(const QString& key) {
+    // Every notification channel field except its on/off switch: besides the
+    // obvious tokens, a webhook URL or a private ntfy topic IS the credential.
+    if (key.startsWith(QLatin1String("notif_")) && !key.endsWith(QLatin1String(".enabled")))
+        return true;
+    return notifications::is_secret_field(key.section(QLatin1Char('.'), -1));
+}
+
+// The lock-screen settings are the user's own safeguard; an agent must not
+// be able to switch them off.
+bool is_protected_setting(const QString& key) {
+    return is_secret_setting(key) || key.startsWith(QLatin1String("security."));
+}
+
+} // namespace
 
 std::vector<ToolDef> get_settings_tools() {
     std::vector<ToolDef> tools;
@@ -29,6 +51,8 @@ std::vector<ToolDef> get_settings_tools() {
             QString key = args["key"].toString();
             if (key.isEmpty())
                 return ToolResult::fail("Missing 'key'");
+            if (is_secret_setting(key))
+                return ToolResult::fail("Setting is a credential and is not readable by tools: " + key);
 
             auto result = SettingsRepository::instance().get(key);
             if (result.is_err())
@@ -57,6 +81,8 @@ std::vector<ToolDef> get_settings_tools() {
 
             if (key.isEmpty())
                 return ToolResult::fail("Missing 'key'");
+            if (is_protected_setting(key))
+                return ToolResult::fail("Setting is protected and can only be changed in Settings: " + key);
 
             auto r = SettingsRepository::instance().set(key, value, cat);
             if (r.is_err())
@@ -64,7 +90,7 @@ std::vector<ToolDef> get_settings_tools() {
 
             EventBus::instance().publish("settings.changed", QVariantMap{{"key", key}, {"value", value}});
 
-            LOG_INFO(TAG, "Setting saved: " + key + " = " + value);
+            LOG_INFO(TAG, "Setting saved: " + key);
             return ToolResult::ok("Setting saved: " + key);
         };
         tools.push_back(std::move(t));
@@ -84,6 +110,8 @@ std::vector<ToolDef> get_settings_tools() {
                 auto items = SettingsRepository::instance().get_by_category(cat);
                 if (items.is_ok()) {
                     for (const auto& s : items.value()) {
+                        if (is_secret_setting(s.key))
+                            continue;
                         result.append(QJsonObject{{"key", s.key},
                                                   {"value", s.value},
                                                   {"category", s.category},

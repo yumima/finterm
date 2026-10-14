@@ -138,7 +138,8 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
     void refresh_storage_stats();
 
     // ── Notification helpers ──────────────────────────────────────────────────
-    void save_provider_fields(const QString& provider_id, const ProviderWidgets& pw);
+    /// False when a secret field could not be written to the OS keyring.
+    bool save_provider_fields(const QString& provider_id, const ProviderWidgets& pw);
 };
 
 } // namespace fincept::screens

@@ -873,7 +873,7 @@ void AccountManagementDialog::on_connect_zerodha_manual_paste() {
         if (!extracted.isEmpty())
             token = extracted;
     }
-    LOG_INFO("Zerodha", QString("manual paste extracted token: %1").arg(token));
+    LOG_INFO("Zerodha", QString("manual paste: extracted request token (%1 chars)").arg(token.length()));
     if (token.contains(QLatin1Char('/')) || token.contains(QLatin1Char('?')) || token.contains(QLatin1Char('='))) {
         z_status_->setText("Could not find request_token in pasted text");
         z_status_->setStyleSheet(QString("color:%1;").arg(colors::NEGATIVE()));

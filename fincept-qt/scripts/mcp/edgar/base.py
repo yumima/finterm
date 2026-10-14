@@ -15,6 +15,7 @@ import json
 from typing import Dict, Any, Optional
 from datetime import datetime
 import traceback
+from finterm_identity import user_agent
 
 # EdgarTools imports
 try:
@@ -68,7 +69,7 @@ def initialize_edgar(identity: Optional[str] = None):
         set_identity(identity)
     elif 'EDGAR_IDENTITY' not in os.environ:
         # Default identity for finterm
-        set_identity("finterm admin@hanlexon.com")
+        set_identity(user_agent())
 
 
 # ============================================================================

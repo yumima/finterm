@@ -49,13 +49,14 @@ import sys
 import time
 import urllib.request
 import zipfile
+from finterm_identity import user_agent
 
 try:
     import requests
 except ImportError:
     requests = None
 
-UA = {"User-Agent": "finterm research@hanlexon.com",
+UA = {"User-Agent": user_agent(),
       "Accept-Encoding": "gzip, deflate"}
 
 DATASET_INDEX = "https://www.sec.gov/dera/data/form-13f"

@@ -12,7 +12,7 @@ void DiscordProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void DiscordProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".webhook_url", webhook_url_, cat);
+    set_str(r, cat + ".webhook_url", webhook_url_, cat);
 }
 
 void DiscordProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

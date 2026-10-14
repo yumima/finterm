@@ -3,6 +3,7 @@
 #include "core/config/AppIdentity.h"
 #include "core/config/ProfileManager.h"
 #include "core/logging/Logger.h"
+#include <QSettings>
 
 // ── Platform-specific credential storage ──────────────────────────────────────
 //
@@ -113,6 +114,27 @@ static const SecretSchema* fincept_schema() {
 #    pragma GCC diagnostic pop
 #endif
     return &schema;
+}
+
+static bool default_collection_locked() {
+    GError* err = nullptr;
+    SecretService* service = secret_service_get_sync(SECRET_SERVICE_NONE, nullptr, &err);
+    if (err) {
+        g_error_free(err);
+        return true; // no reachable Secret Service is not "absent" either
+    }
+    SecretCollection* coll =
+        secret_collection_for_alias_sync(service, SECRET_COLLECTION_DEFAULT, SECRET_COLLECTION_NONE, nullptr, &err);
+    bool locked = false;
+    if (err) {
+        g_error_free(err);
+        locked = true;
+    } else if (coll) {
+        locked = secret_collection_get_locked(coll);
+        g_object_unref(coll);
+    }
+    g_object_unref(service);
+    return locked;
 }
 
 #else // XOR fallback helpers
@@ -283,7 +305,11 @@ Result<QString> SecureStorage::retrieve(const QString& key_in) {
     PCREDENTIALW cred = nullptr;
 
     if (!CredReadW(target.c_str(), CRED_TYPE_GENERIC, 0, &cred)) {
-        return Result<QString>::err("Credential not found");
+        // Only a genuinely absent item is "Not found" (see is_not_found);
+        // any other failure must not be mistaken for an unset key.
+        if (GetLastError() == ERROR_NOT_FOUND)
+            return Result<QString>::err("Not found");
+        return Result<QString>::err("Credential Manager read failed");
     }
 
     QString value = QString::fromUtf8(reinterpret_cast<const char*>(cred->CredentialBlob),
@@ -316,8 +342,11 @@ Result<QString> SecureStorage::retrieve(const QString& key_in) {
     CFRelease(account);
     CFRelease(service);
 
+    if (status == errSecItemNotFound)
+        return Result<QString>::err("Not found");
     if (status != errSecSuccess || !result_ref) {
-        return Result<QString>::err("Credential not found in Keychain");
+        // Locked keychain, denied access, … — a failure, not an absence.
+        return Result<QString>::err("Keychain read failed (OSStatus " + std::to_string(status) + ")");
     }
 
     CFDataRef data = static_cast<CFDataRef>(result_ref);
@@ -345,6 +374,12 @@ Result<QString> SecureStorage::retrieve(const QString& key_in) {
         return Result<QString>::err("libsecret lookup failed: " + msg.toStdString());
     }
     if (!password) {
+        // A lookup against a LOCKED collection whose unlock prompt was
+        // dismissed also returns NULL without an error. That is "cannot read
+        // right now", not "absent" — callers that treat absent as empty would
+        // otherwise save a blank over the real secret.
+        if (default_collection_locked())
+            return Result<QString>::err("Keyring locked");
         return Result<QString>::err("Not found");
     }
 
@@ -374,7 +409,7 @@ Result<void> SecureStorage::remove(const QString& key_in) {
     const QString key = scoped_key(key_in);
 #ifdef Q_OS_WIN
     std::wstring target = L"FinceptTerminal/" + key.toStdWString();
-    if (!CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0)) {
+    if (!CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0) && GetLastError() != ERROR_NOT_FOUND) {
         return Result<void>::err("Failed to delete credential");
     }
     return Result<void>::ok();
@@ -396,10 +431,12 @@ Result<void> SecureStorage::remove(const QString& key_in) {
         nullptr, keys, vals, 3,
         &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
-    SecItemDelete(query);
+    const OSStatus del_status = SecItemDelete(query);
     CFRelease(query);
     CFRelease(account);
     CFRelease(service);
+    if (del_status != errSecSuccess && del_status != errSecItemNotFound)
+        return Result<void>::err("Keychain delete failed (OSStatus " + std::to_string(del_status) + ")");
     return Result<void>::ok();
 
 #else
@@ -414,8 +451,14 @@ Result<void> SecureStorage::remove(const QString& key_in) {
         "fincept-key", key_bytes.constData(),
         nullptr);
 
-    if (err)
-        g_error_free(err); // not fatal — item may simply not have existed
+    // An absent item is not an error (clear returns FALSE without setting
+    // err); a set err means the Secret Service itself failed, and a caller
+    // that then drops its plaintext copy would lose track of the secret.
+    if (err) {
+        const std::string msg = err->message;
+        g_error_free(err);
+        return Result<void>::err("libsecret delete failed: " + msg);
+    }
     return Result<void>::ok();
 
 #    else
@@ -424,6 +467,98 @@ Result<void> SecureStorage::remove(const QString& key_in) {
     return Result<void>::ok();
 #    endif
 #endif
+}
+
+
+bool SecureStorage::is_not_found(const Result<QString>& r) {
+    // Every backend returns exactly "Not found" for an absent item and a
+    // different message for any failure.
+    return r.is_err() && r.error() == "Not found";
+}
+
+Result<QString> SecureStorage::retrieve_migrating(const QString& key, const QString& legacy_key) {
+    auto cur = retrieve(key);
+    if (cur.is_err() && !is_not_found(cur))
+        return cur; // keyring unavailable: report it, never migrate over it
+    auto legacy = retrieve(legacy_key);
+    if (legacy.is_err() && !is_not_found(legacy))
+        return legacy; // could not read the old id: not done, retry later
+    const bool have_legacy = legacy.is_ok() && !legacy.value().isEmpty();
+    if (cur.is_ok() && !cur.value().isEmpty()) {
+        // Canonical already set: the old id is a stale, invisible duplicate.
+        if (have_legacy) {
+            auto rm = remove(legacy_key);
+            if (rm.is_err())
+                return Result<QString>::err(rm.error());
+        }
+        return cur;
+    }
+    if (!have_legacy)
+        return cur; // nothing anywhere
+    auto st = store(key, legacy.value());
+    if (st.is_err())
+        return Result<QString>::err(st.error()); // keep the legacy copy; retry later
+    auto rm = remove(legacy_key);
+    if (rm.is_err())
+        return Result<QString>::err(rm.error());
+    return legacy;
+}
+
+void SecureStorage::migrate_legacy_ids() {
+    // Once per profile: after it runs nothing writes the legacy ids again,
+    // so repeating it would only cost keyring round-trips on every launch.
+    QSettings flags(AppIdentity::kOrg, AppIdentity::kApp);
+    const QString flag = QStringLiteral("migration/secure_legacy_ids_v1/") + ProfileManager::instance().active();
+    if (flags.value(flag).toBool())
+        return;
+    static const char* const kLegacy[][2] = {
+        {"DATABENTO_API_KEY", "databento.api_key"},
+        {"FINANCIAL_DATASETS_API_KEY", "mcp.tools.financial-datasets"},
+    };
+    bool all_ok = true;
+    for (const auto& pair : kLegacy) {
+        const auto r = retrieve_migrating(QString::fromLatin1(pair[0]), QString::fromLatin1(pair[1]));
+        if (r.is_err() && !is_not_found(r))
+            all_ok = false; // keyring unavailable — try again next launch
+    }
+    if (all_ok)
+        flags.setValue(flag, true);
+}
+
+QStringList SecureStorage::list_keys(const QString& prefix) {
+    QStringList out;
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+    const QString scope = ProfileManager::instance().secure_key_prefix();
+    GError* err = nullptr;
+    GList* items = secret_password_search_sync(fincept_schema(), SECRET_SEARCH_ALL, nullptr, &err, nullptr);
+    if (err) {
+        LOG_WARN(TAG, QString("libsecret search failed: ") + QString::fromUtf8(err->message));
+        g_error_free(err);
+        return out;
+    }
+    for (GList* l = items; l; l = l->next) {
+        GHashTable* attrs = secret_retrievable_get_attributes(SECRET_RETRIEVABLE(l->data));
+        const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, "fincept-key"));
+        if (raw) {
+            const QString full = QString::fromUtf8(raw);
+            // The default profile has no scope prefix, so its keys must not
+            // swallow other profiles' "profiles/<name>/…" entries.
+            const bool in_scope = scope.isEmpty() ? !full.startsWith(QLatin1String("profiles/"))
+                                                  : full.startsWith(scope);
+            if (in_scope) {
+                const QString key = full.mid(scope.size());
+                if (key.startsWith(prefix))
+                    out.append(key);
+            }
+        }
+        g_hash_table_unref(attrs);
+    }
+    g_list_free_full(items, g_object_unref);
+#else
+    Q_UNUSED(prefix);
+#endif
+    out.sort();
+    return out;
 }
 
 } // namespace fincept

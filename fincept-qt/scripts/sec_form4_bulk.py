@@ -43,6 +43,7 @@ import sys
 import time
 import zipfile
 from datetime import date, datetime, timedelta
+from finterm_identity import user_agent
 
 try:
     import requests
@@ -51,7 +52,7 @@ except ImportError:
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-UA = {"User-Agent": "finterm research@hanlexon.com", "Accept-Encoding": "gzip, deflate"}
+UA = {"User-Agent": user_agent(), "Accept-Encoding": "gzip, deflate"}
 INDEX_URL = "https://www.sec.gov/data-research/sec-markets-data/insider-transactions-data-sets"
 CLUSTER_WINDOW_DAYS = 30
 CLUSTER_MIN_OWNERS = 2

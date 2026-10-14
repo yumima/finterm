@@ -12,8 +12,8 @@ void GotifyProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void GotifyProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".server_url", server_url_, cat);
-    r.set(cat + ".app_token", app_token_, cat);
+    set_str(r, cat + ".server_url", server_url_, cat);
+    set_str(r, cat + ".app_token", app_token_, cat);
 }
 
 void GotifyProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

@@ -15,10 +15,10 @@ void WhatsAppProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void WhatsAppProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".account_sid", account_sid_, cat);
-    r.set(cat + ".auth_token", auth_token_, cat);
-    r.set(cat + ".from_number", from_number_, cat);
-    r.set(cat + ".to_number", to_number_, cat);
+    set_str(r, cat + ".account_sid", account_sid_, cat);
+    set_str(r, cat + ".auth_token", auth_token_, cat);
+    set_str(r, cat + ".from_number", from_number_, cat);
+    set_str(r, cat + ".to_number", to_number_, cat);
 }
 
 void WhatsAppProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

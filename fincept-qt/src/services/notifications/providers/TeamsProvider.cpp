@@ -12,7 +12,7 @@ void TeamsProvider::load_fields(SettingsRepository& r, const QString& cat) {
 }
 
 void TeamsProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".webhook_url", webhook_url_, cat);
+    set_str(r, cat + ".webhook_url", webhook_url_, cat);
 }
 
 void TeamsProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

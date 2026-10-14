@@ -8,9 +8,10 @@ import json
 import os
 import requests
 from typing import Dict, Any, Optional, List
+from finterm_identity import contact_email
 
 API_KEY = os.environ.get('CROSSREF_API_KEY', '')
-POLITE_EMAIL = os.environ.get('CROSSREF_EMAIL', 'admin@hanlexon.com')
+POLITE_EMAIL = os.environ.get('CROSSREF_EMAIL') or contact_email()
 BASE_URL = "https://api.crossref.org"
 
 session = requests.Session()

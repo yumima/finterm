@@ -10,6 +10,7 @@ from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timedelta
 import traceback
 import os
+from finterm_identity import user_agent
 
 
 class CFTCError:
@@ -38,7 +39,7 @@ class CFTCDataWrapper:
         self.app_token = app_token or os.environ.get('CFTC_APP_TOKEN', '')
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'finterm - financial analysis tool (admin@hanlexon.com)',
+            'User-Agent': user_agent(),
             'Accept': 'application/json'
         })
 

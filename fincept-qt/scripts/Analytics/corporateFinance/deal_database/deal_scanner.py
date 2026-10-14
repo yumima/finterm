@@ -28,13 +28,14 @@ sys.path.insert(0, str(analytics_path))
 
 from corporateFinance.config import MA_FILING_FORMS, MATERIAL_EVENT_ITEMS
 from corporateFinance.deal_database.database_schema import MADatabase
+from finterm_identity import user_agent
 
 # ---------------------------------------------------------------------------
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
 _EDGAR_HEADERS = {
-    "User-Agent": "finterm admin@hanlexon.com",   # SEC requires a valid UA
+    "User-Agent": user_agent(),   # SEC requires a valid UA
     "Accept": "application/json",
 }
 

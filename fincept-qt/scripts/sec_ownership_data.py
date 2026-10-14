@@ -35,6 +35,7 @@ import time
 from collections import defaultdict
 from datetime import date, datetime, timedelta
 from xml.etree import ElementTree
+from finterm_identity import user_agent
 
 try:
     import requests
@@ -42,7 +43,7 @@ except ImportError:
     requests = None
 
 UA = {
-    "User-Agent": "finterm research@hanlexon.com",
+    "User-Agent": user_agent(),
     "Accept-Encoding": "gzip, deflate",
 }
 

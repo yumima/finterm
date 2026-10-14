@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QRegularExpression>
 #include <QStandardPaths>
 
 #include <array>
@@ -26,6 +27,58 @@ constexpr int kRotateKeep = 3;
 // reaches disk before the process can die.
 constexpr qint64 kFlushBytesThreshold = 4 * 1024; // 4 KB — typical disk page
 constexpr qint64 kFlushIntervalMs = 500;          // half a second worth of buffered logs
+
+// Every line is scrubbed of credential-shaped values before it is written:
+// URLs carrying ?token= / ?api_key= (the Finnhub and Zerodha WebSockets put
+// the key in the URL, and every connect/disconnect logged it), JSON bodies
+// echoing "access_token", and Authorization headers. Logs are plain files a
+// user may attach to a bug report; a secret must never reach them.
+QString redact_secrets(const QString& msg) {
+    // Cheap gate before any regex: a credential needs a separator AND one of
+    // these words. Both checks are plain substring scans.
+    if (!msg.contains(QLatin1Char('=')) && !msg.contains(QLatin1Char(':')))
+        return msg;
+    static const QLatin1String kWords[] = {QLatin1String("token"), QLatin1String("key"),
+                                           QLatin1String("secret"), QLatin1String("pass"),
+                                           QLatin1String("bearer"), QLatin1String("auth"),
+                                           QLatin1String("sig")};
+    bool maybe = false;
+    for (const auto& w : kWords)
+        if (msg.contains(w, Qt::CaseInsensitive)) { maybe = true; break; }
+    if (!maybe)
+        return msg;
+
+    // URL query / form parameters: ANY name ending in a credential word,
+    // including bare ?key= (Google) and &auth= (ntfy), oauth_token, jKey.
+    static const QRegularExpression kParam(
+        QStringLiteral(R"re(([?&;][A-Za-z0-9_.\-]*(?:token|key|secret|password|passwd|signature|sig|auth))=([^&\s"']+))re"),
+        QRegularExpression::CaseInsensitiveOption);
+    // Free-text name=value: names ENDING in a credential word, so
+    // "oauth_token=" and "x_api_key=" match while "req_token_len=" and a
+    // cache "key=" do not.
+    static const QRegularExpression kAssign(
+        QStringLiteral(R"re(\b([A-Za-z0-9_\-]*(?:token|api[_-]?key|apikey|secret|password|passwd))=([^&\s"']+))re"),
+        QRegularExpression::CaseInsensitiveOption);
+    // JSON and Python-repr dicts: "access_token": "…" / 'api_key': '…' /
+    // "Authorization": "Basic …". The value runs to its matching closing
+    // quote, honouring backslash escapes and the other quote character.
+    static const QRegularExpression kQuoted(
+        QStringLiteral(R"re((["'])((?:[A-Za-z0-9_\-]*(?:token|api[_-]?key|apikey|secret|password|passwd|private_key))|authorization|proxy-authorization)\1\s*:\s*(["'])(?:\\.|(?!\3).)*\3)re"),
+        QRegularExpression::CaseInsensitiveOption);
+    // HTTP headers: Authorization: Bearer|Token|Basic …, X-API-Key: …
+    static const QRegularExpression kHeader(
+        QStringLiteral(R"re(\b(authorization|proxy-authorization|x-api-key|api-key|x-auth-token)\s*:\s*(?:(?:bearer|token|basic)\s+)?[^\s,;"']+)re"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression kBearer(QStringLiteral(R"re(\b(Bearer)\s+[A-Za-z0-9._~+/=-]{8,})re"),
+                                            QRegularExpression::CaseInsensitiveOption);
+    QString out = msg;
+    out.replace(kParam, QStringLiteral("\\1=***"));
+    out.replace(kAssign, QStringLiteral("\\1=***"));
+    out.replace(kQuoted, QStringLiteral("\\1\\2\\1: \\3***\\3"));
+    out.replace(kHeader, QStringLiteral("\\1: ***"));
+    out.replace(kBearer, QStringLiteral("\\1 ***"));
+    return out;
+}
 
 // P1.5 + P1.6 — date + local time + offset suffix.
 // Example: 2026-04-18 03:12:08.123+05:30
@@ -203,10 +256,11 @@ void Logger::warn(const QString& tag, const QString& msg)  { write(LogLevel::War
 void Logger::error(const QString& tag, const QString& msg) { write(LogLevel::Error, tag, msg); }
 void Logger::fatal(const QString& tag, const QString& msg) { write(LogLevel::Fatal, tag, msg); }
 
-void Logger::write(LogLevel level, const QString& tag, const QString& msg) {
+void Logger::write(LogLevel level, const QString& tag, const QString& raw_msg) {
     // Level check is also done by LOG_* macros, but re-check here for direct callers.
     if (!is_enabled(level, tag))
         return;
+    const QString msg = redact_secrets(raw_msg);
 
     const QString ts = format_timestamp();
     const char* level_name = kLevelNames[static_cast<int>(level)];

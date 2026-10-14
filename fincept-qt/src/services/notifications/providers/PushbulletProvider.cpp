@@ -12,8 +12,8 @@ void PushbulletProvider::load_fields(SettingsRepository& r, const QString& cat) 
 }
 
 void PushbulletProvider::save_fields(SettingsRepository& r, const QString& cat) {
-    r.set(cat + ".api_key", api_key_, cat);
-    r.set(cat + ".channel_tag", channel_tag_, cat);
+    set_str(r, cat + ".api_key", api_key_, cat);
+    set_str(r, cat + ".channel_tag", channel_tag_, cat);
 }
 
 void PushbulletProvider::send(const NotificationRequest& req, std::function<void(bool, QString)> cb) {

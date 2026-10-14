@@ -29,6 +29,7 @@ import re
 import sys
 import time
 from xml.etree import ElementTree as ET
+from finterm_identity import user_agent
 
 try:
     import requests
@@ -38,7 +39,7 @@ except ImportError:
 SUBMISSIONS = "https://data.sec.gov/submissions"
 ARCHIVE = "https://www.sec.gov/Archives/edgar/data"
 UA = {
-    "User-Agent": "finterm research@hanlexon.com",
+    "User-Agent": user_agent(),
     "Accept-Encoding": "gzip, deflate",
 }
 

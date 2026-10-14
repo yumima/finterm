@@ -31,6 +31,7 @@ import sys
 import time
 from datetime import date, datetime, timedelta, timezone
 from xml.etree import ElementTree as ET
+from finterm_identity import user_agent
 
 try:
     import requests
@@ -53,7 +54,7 @@ except ImportError:
     KNOWN_PRIVATE_CIKS = ["0001181412", "0001691342"]  # SpaceX, Stripe
 
 UA = {
-    "User-Agent": "finterm research@hanlexon.com",
+    "User-Agent": user_agent(),
     "Accept-Encoding": "gzip, deflate",
     "Host": "efts.sec.gov",
 }
