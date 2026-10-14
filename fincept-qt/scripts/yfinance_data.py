@@ -1540,6 +1540,59 @@ def get_top_movers(count=10):
         return {"error": str(e)}
 
 
+def _ticker_frame(data, symbol):
+    """One symbol's columns out of a yf.download frame, whichever way the
+    MultiIndex is ordered; None when the symbol is absent."""
+    if data is None or data.empty:
+        return None
+    if not isinstance(data.columns, pd.MultiIndex):
+        return data
+    if symbol in data.columns.get_level_values(0):
+        return data[symbol]
+    if symbol in data.columns.get_level_values(1):
+        return data.xs(symbol, axis=1, level=1)
+    return None
+
+
+def _quote_from_intraday(symbol, daily, intra):
+    """Quote for a symbol whose newest daily bar has no Close: the price is
+    the session's last real 1-minute close, the prior close is the previous
+    daily bar's. None — never a guess — when the intraday bars are missing or
+    belong to a different session than the Close-less daily row."""
+    f = _ticker_frame(intra, symbol)
+    if f is None or "Close" not in f:
+        return None
+    closes = pd.to_numeric(f["Close"], errors="coerce").dropna()
+    if closes.empty:
+        return None
+    if closes.index[-1].date() != daily.index[-1].date():
+        return None
+    price = float(closes.iloc[-1])
+    prev = float(daily["Close"].iloc[-2])
+    if not (math.isfinite(price) and math.isfinite(prev) and prev > 0):
+        return None
+    row = daily.iloc[-1]
+
+    def _f(v):
+        return float(v) if v is not None and not pd.isna(v) else None
+
+    chg = price - prev
+    hi, lo, op, vol = _f(row.get("High")), _f(row.get("Low")), _f(row.get("Open")), _f(row.get("Volume"))
+    return {
+        "symbol": symbol,
+        "price": _round_price(price, symbol),
+        "change": _round_price(chg, symbol),
+        "change_percent": round(chg / prev * 100, 2),
+        "volume": int(vol) if vol is not None else None,
+        "high": _round_price(hi) if hi is not None else None,
+        "low": _round_price(lo) if lo is not None else None,
+        "open": _round_price(op) if op is not None else None,
+        "previous_close": _round_price(prev, symbol),
+        "timestamp": int(datetime.now().timestamp()),
+        "exchange": "",
+    }
+
+
 def get_batch_quotes(symbols):
     """Fetch quotes for multiple symbols at once using yfinance batch download"""
     try:
@@ -1565,6 +1618,11 @@ def get_batch_quotes(symbols):
             return []
 
         results = []
+        # Symbols whose newest bar exists but has no Close. Yahoo does this to
+        # the current session's daily bar for a while after the close (Open/
+        # High/Low/Volume filled, Close NaN). Skipping them emptied the whole
+        # refresh and every holding fell back to yesterday's cached print.
+        no_close = {}   # symbol -> its daily frame (newest row Close-less)
         for symbol in symbols:
             try:
                 if not isinstance(data.columns, pd.MultiIndex):
@@ -1589,6 +1647,13 @@ def get_batch_quotes(symbols):
                 hist = hist.dropna(how='all')
                 raw_price = hist['Close'].iloc[-1]
                 if pd.isna(raw_price):
+                    # Never substitute the previous bar's close: that is
+                    # yesterday's price presented as today's. The session's
+                    # last real trade comes from the intraday bars (below);
+                    # the rest of the row — prior close, open/high/low,
+                    # volume — is real and kept.
+                    if len(hist) >= 2:
+                        no_close[symbol] = hist
                     continue
                 current_price = float(raw_price)
                 # Previous trading day's RAW close — the same definition the
@@ -1626,6 +1691,24 @@ def get_batch_quotes(symbols):
                 })
             except Exception:
                 continue
+
+        if no_close:
+            # ONE extra batched request for all of them — never one per
+            # symbol, which turns a 50-holding refresh into tens of seconds.
+            try:
+                with contextlib.redirect_stdout(io.StringIO()):
+                    intra = yf.download(list(no_close), period="1d", interval="1m",
+                                        group_by="ticker", progress=False, threads=True,
+                                        auto_adjust=False, prepost=False)
+            except Exception:
+                intra = None
+            for symbol, hist in no_close.items():
+                try:
+                    q = _quote_from_intraday(symbol, hist, intra)
+                except Exception:
+                    q = None
+                if q is not None:
+                    results.append(q)
 
         # Session-aware fix-up for non-equity instruments (futures, FX, crypto
         # spot). The daily-bar iloc[-2] above gives the wrong denominator for
