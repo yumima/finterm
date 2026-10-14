@@ -1067,6 +1067,8 @@ set(SCREEN_SOURCES
     src/screens/settings/KeybindingsSection.cpp
     src/screens/settings/PythonEnvSection.cpp
     src/screens/settings/VoiceConfigSection.cpp
+    src/screens/settings/CredentialsSection.cpp
+    src/screens/settings/StoredCredentialsSection.cpp
     src/screens/settings/AiSystemSection.cpp
     src/screens/settings/SchedulerSection.cpp
     src/screens/settings/ArtefactsSection.cpp

@@ -39,6 +39,8 @@ NOT_CREDENTIALS = {
     # finterm's own data directory, used by scripts that keep a local index
     # (the 13F SQLite store). A path, not a secret.
     "FINCEPT_DATA_DIR",
+    # Logging switches some scripts read; configuration, not credentials.
+    "LOGURU_AUTOINIT", "LOGURU_LEVEL",
 }
 
 # Human labels for the providers users are most likely to configure. Anything
@@ -70,13 +72,8 @@ LABELS = {
 # the catalogue: the user configures them, and the allow-list must not strip
 # them from an inherited shell environment.
 CPP_ONLY = [
-    "BINANCE_API_KEY", "BINANCE_SECRET_KEY",
-    "KRAKEN_API_KEY", "KRAKEN_SECRET_KEY",
-    "IEX_CLOUD_TOKEN",
     # MCP financial-datasets tools (FinancialDatasetsTools.cpp).
     "FINANCIAL_DATASETS_API_KEY",
-    "POLYMARKET_API_KEY", "POLYMARKET_SECRET",
-    "POLYMARKET_PASSPHRASE", "POLYMARKET_WALLET",
 ]
 
 
@@ -94,6 +91,60 @@ def scan():
             continue
     keys |= set(CPP_ONLY)
     return sorted(k for k in keys if k not in NOT_CREDENTIALS)
+
+
+# Settings › API Keys groups the catalogue so a user can find a provider by
+# what it is for. First matching group wins; anything unmatched falls into
+# "Other data sources". Order here is the display order.
+GROUPS = [
+    ("Your identity", {
+        "FINCEPT_CONTACT_EMAIL", "ACLED_EMAIL", "CROSSREF_EMAIL", "KAGGLE_USERNAME",
+    }),
+    ("Market data", {
+        "ALPHA_SPREAD_API_KEY", "ALPHA_VANTAGE_API_KEY", "CBOE_API_KEY", "CME_API_KEY",
+        "DATABENTO_API_KEY", "EODHD_API_KEY", "FINANCIAL_DATASETS_API_KEY", "FINNHUB_API_KEY",
+        "FMP_API_KEY", "GFD_API_KEY", "GLEIF_API_KEY", "ICE_API_KEY", "IEX_CLOUD_API_KEY",
+        "INTRINIO_API_KEY", "INVESTING_API_KEY", "LME_API_KEY", "MACROTRENDS_API_KEY",
+        "MARKETSTACK_API_KEY", "METALS_DEV_API_KEY", "NASDAQ_API_KEY", "NASDAQ_DATA_LINK_API_KEY",
+        "OPENBB_API_KEY", "OPENEXCHANGERATES_API_KEY", "OPENFIGI_API_KEY", "PLATTS_API_KEY",
+        "POLYGON_API_KEY", "PUBLIC_APIS_FINANCE_KEY", "QUIVER_API_KEY", "SIMFIN_API_KEY",
+        "STOOQ_API_KEY", "TIINGO_API_KEY", "TRADINGVIEW_API_KEY", "TWELVE_DATA_API_KEY",
+        "YH_FINANCE_API_KEY", "OC_API_KEY",
+    }),
+    ("Crypto", {
+        "CMC_API_KEY", "COINCAP_API_KEY", "COINGECKO_API_KEY", "COINGLASS_API_KEY",
+        "CRYPTOCOMPARE_API_KEY", "GLASSNODE_API_KEY", "MESSARI_API_KEY",
+    }),
+    ("Energy, climate & geospatial", {
+        "AISSTREAM_API_KEY", "BALTIC_API_KEY", "CLIMATE_WATCH_API_KEY", "COPERNICUS_API_KEY",
+        "EMBER_API_KEY", "ENTSOE_API_KEY", "ENTSOG_API_KEY", "GFW_API_KEY",
+        "GLOBAL_SOLAR_ATLAS_API_KEY", "GLOBAL_WIND_ATLAS_API_KEY", "MARINETRAFFIC_API_KEY",
+        "N2YO_API_KEY", "NOAA_CDO_TOKEN", "OPENAQ_API_KEY", "OPSD_API_KEY", "PORTCHAIN_API_KEY",
+        "SENTINELHUB_CLIENT_ID", "SENTINELHUB_CLIENT_SECRET", "UNEP_API_KEY", "WAQI_TOKEN",
+        "WORLDPOP_API_KEY", "IEA_API_KEY", "IRENA_API_KEY", "OPEC_API_KEY",
+    }),
+    ("Research & datasets", {
+        "ARXIV_API_KEY", "CROSSREF_API_KEY", "DATA_WORLD_TOKEN", "GITHUB_TOKEN",
+        "HARVARD_DATAVERSE_TOKEN", "KAGGLE_KEY", "SEMANTIC_SCHOLAR_API_KEY", "SSRN_API_KEY",
+        "WIPO_API_KEY", "ZENODO_ACCESS_TOKEN", "WEFORUM_API_KEY", "NBER_API_KEY",
+    }),
+]
+# Everything else is economics / government / international statistics.
+DEFAULT_GROUP = "Economics & government"
+
+# Values that are identifiers or preferences, not secrets: shown in clear.
+NON_SECRET_SUFFIXES = ("_EMAIL", "_USERNAME", "_LANGUAGE", "_CLIENT_ID", "_APP_ID")
+
+
+def group_for(key):
+    for name, members in GROUPS:
+        if key in members:
+            return name
+    return DEFAULT_GROUP
+
+
+def is_secret(key):
+    return not key.endswith(NON_SECRET_SUFFIXES)
 
 
 def label_for(key):
@@ -138,14 +189,23 @@ def render(keys):
         "struct CredentialDef {",
         "    const char* env_name;  ///< e.g. \"FRED_API_KEY\"",
         "    const char* label;     ///< human name shown in Settings",
+        "    const char* group;     ///< Settings › API Keys section",
+        "    bool secret;           ///< false: an id/email/preference, shown in clear",
         "};",
+        "",
+        "/// Section order for Settings › API Keys.",
+        "inline const QStringList& groups() {",
+        f"    static const QStringList kGroups = {{{', '.join(chr(34)+g+chr(34) for g in [n for n, _ in GROUPS] + [DEFAULT_GROUP])}}};",
+        "    return kGroups;",
+        "}",
         "",
         f"// {len(keys)} credentials.",
         "inline const QVector<CredentialDef>& catalogue() {",
         "    static const QVector<CredentialDef> kAll = {",
     ]
     for k in keys:
-        lines.append(f'        {{"{k}", "{label_for(k)}"}},')
+        secret = "true" if is_secret(k) else "false"
+        lines.append(f'        {{"{k}", "{label_for(k)}", "{group_for(k)}", {secret}}},')
     lines += [
         "    };",
         "    return kAll;",

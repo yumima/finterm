@@ -5,6 +5,7 @@
 #include <QComboBox>
 #include <QFrame>
 #include <QHash>
+#include <QList>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
@@ -16,9 +17,13 @@
 
 namespace fincept::screens {
 
-/// Full-featured settings screen.
-/// Sections: Credentials | Appearance | Notifications | Storage & Cache |
-///           Data Sources | LLM Config | MCP Servers | Logging | Security | Profiles
+class CredentialsSection;
+class StoredCredentialsSection;
+
+/// The Settings screen: a nav grouped as Account / Keys & Connections / AI /
+/// App over a stack of sections. Stack indices are persisted by save_state()
+/// and never reused: 0 API Keys … 20 Account, 21 All Credentials; 6 and 14
+/// are retired placeholders (their pages live as tabs in AI Config).
 class SettingsScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
   public:
@@ -34,15 +39,21 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
   private:
     QStackedWidget* sections_ = nullptr;
     QWidget* nav_ = nullptr;
+    CredentialsSection* credentials_ = nullptr;
+    StoredCredentialsSection* stored_credentials_ = nullptr;
+    /// Stack index → its nav button, so every way of changing section
+    /// (click, restore_state, deep link) keeps the highlight in step.
+    QHash<int, QPushButton*> nav_for_index_;
+    void select_section(int index);
+    void reload_current_credentials_page();
+    QList<QLabel*> nav_group_labels_;
 
     // ── Section builders ─────────────────────────────────────────────────────
-    QWidget* build_credentials();
     QWidget* build_appearance();
     QWidget* build_notifications();
     QWidget* build_storage();
     QWidget* build_data_sources();
     QWidget* build_llm_config();
-    QWidget* build_mcp_servers();
     QWidget* build_logging();
     QWidget* build_security();
     QWidget* build_profiles();
@@ -54,10 +65,6 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
     static QWidget* make_row(const QString& label, QWidget* control, const QString& description = {});
     static QFrame* make_sep();
 
-    // ── Credentials state ─────────────────────────────────────────────────────
-    QHash<QString, QWidget*> cred_cards_;    // key → card, for filtering
-    QHash<QString, QLineEdit*> cred_fields_; // key → password field
-    QHash<QString, QLabel*> cred_status_;    // key → status label
 
     // ── Appearance state ──────────────────────────────────────────────────────
     QComboBox* app_density_ = nullptr;
@@ -130,7 +137,6 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
 
     // ── Data loaders (called from showEvent) ──────────────────────────────────
     void refresh_theme();
-    void load_credentials();
     void load_appearance();
     void load_notifications();
     void load_security();

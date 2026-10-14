@@ -41,10 +41,16 @@ class SecureStorage {
     /// service once stored under its own id, invisible to Settings.
     Result<QString> retrieve_migrating(const QString& key, const QString& legacy_key);
 
+    /// Whether this backend can list its entries (list_keys). Only the
+    /// Linux Secret Service can; the Windows/macOS/obfuscated-file backends
+    /// can only be asked for a named key.
+    static bool can_enumerate();
+
     /// Every stored key under the active profile that starts with `prefix`
     /// (unscoped names, as passed to store()). Values are never returned.
-    /// Linux/libsecret only; other backends cannot enumerate and return {}.
-    QStringList list_keys(const QString& prefix = {});
+    /// An error — distinct from an empty list — when the search itself
+    /// failed or the backend cannot enumerate (see can_enumerate()).
+    Result<QStringList> list_keys(const QString& prefix = {});
 
     /// Run every known legacy-id migration once. Called at startup so
     /// Settings › Credentials shows the value services actually use.

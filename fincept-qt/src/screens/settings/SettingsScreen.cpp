@@ -1,11 +1,14 @@
-// SettingsScreen.cpp — full-featured settings (Credentials, Appearance,
-// Notifications, Storage & Cache, Data Sources, LLM Config, MCP Servers)
+// SettingsScreen.cpp — the Settings screen: a grouped nav (Account, Keys &
+// Connections, AI, App) over a stack of sections. API Keys and All
+// Credentials are CredentialsSection / StoredCredentialsSection.
 
 #include "screens/settings/SettingsScreen.h"
+#include "screens/settings/SettingsStyles.h"
+#include "screens/settings/StoredCredentialsSection.h"
+#include "screens/settings/CredentialsSection.h"
 
 #include "services/notifications/NotificationFieldStore.h"
 
-#include "core/keys/CredentialCatalogue.h"
 
 #include "ai_chat/LlmService.h"
 #include "auth/InactivityGuard.h"
@@ -20,7 +23,6 @@
 #include "screens/devtools/DataHubInspector.h"
 #include "screens/profile/ProfileScreen.h"
 #include "screens/settings/AiConfigSection.h"
-#include "screens/settings/AiSystemSection.h"
 #include "screens/settings/ActivityPanelSection.h"
 #include "screens/settings/ArtefactsSection.h"
 #include "screens/settings/ForumConfigSection.h"
@@ -28,7 +30,6 @@
 #include "screens/settings/KeybindingsSection.h"
 #include "screens/settings/SchedulerSection.h"
 #include "screens/settings/LlmConfigSection.h"
-#include "screens/settings/McpServersSection.h"
 #include "screens/settings/PythonEnvSection.h"
 #include "screens/settings/VoiceConfigSection.h"
 #include "services/notifications/NotificationService.h"
@@ -70,89 +71,6 @@
 
 namespace fincept::screens {
 
-// ── Token-based style builders (live — reflect active theme) ─────────────────
-
-// All helpers read live ThemeManager tokens — no font-size overrides (global QSS handles font)
-static QString section_title_ss() {
-    return QString("color:%1;font-weight:bold;letter-spacing:0.5px;background:transparent;").arg(ui::colors::AMBER());
-}
-static QString sub_title_ss() {
-    return QString("color:%1;font-weight:700;letter-spacing:0.5px;background:transparent;")
-        .arg(ui::colors::TEXT_SECONDARY());
-}
-static QString label_ss() {
-    return QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY());
-}
-static QString nav_btn_ss() {
-    return QString("QPushButton{background:transparent;color:%1;border:none;text-align:left;padding:0 12px;}"
-                   "QPushButton:hover{background:%2;color:%3;}"
-                   "QPushButton:checked{color:%4;background:%2;}")
-        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::AMBER());
-}
-static QString input_ss() {
-    return QString("QLineEdit{background:%1;color:%2;border:1px solid %3;padding:6px;}"
-                   "QLineEdit:focus{border:1px solid %4;}")
-        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::colors::AMBER());
-}
-static QString btn_primary_ss() {
-    return QString("QPushButton{background:%1;color:%2;border:none;font-weight:700;padding:0 16px;height:32px;}"
-                   "QPushButton:hover{background:%3;}")
-        .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::AMBER_DIM());
-}
-static QString btn_secondary_ss() {
-    return QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 12px;height:32px;}"
-                   "QPushButton:hover{background:%4;}")
-        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_BRIGHT(), ui::colors::BG_HOVER());
-}
-static QString btn_danger_ss() {
-    return QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:4px 12px;}"
-                   "QPushButton:hover{background:%4;}")
-        .arg(ui::colors::BG_RAISED(), ui::colors::NEGATIVE(), ui::colors::BORDER_DIM(), ui::colors::BG_HOVER());
-}
-static QString combo_ss() {
-    return QString(
-               "QComboBox{background:%1;color:%2;border:1px solid %3;padding:5px 8px;min-width:160px;}"
-               "QComboBox:focus{border:1px solid %4;}"
-               "QComboBox::drop-down{border:none;width:20px;}"
-               "QComboBox QAbstractItemView{background:%1;color:%2;selection-background-color:%5;border:1px solid %3;}")
-        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::colors::AMBER(),
-             ui::colors::BG_HOVER());
-}
-static QString check_ss() {
-    return QString("QCheckBox{color:%1;background:transparent;}"
-                   "QCheckBox::indicator{width:14px;height:14px;}"
-                   "QCheckBox::indicator:unchecked{border:1px solid %2;background:%3;}"
-                   "QCheckBox::indicator:checked{border:1px solid %4;background:%4;}")
-        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_BRIGHT(), ui::colors::BG_RAISED(), ui::colors::AMBER());
-}
-
-// ── Credential key definitions ────────────────────────────────────────────────
-
-using CredDef = QPair<QString, QString>; // {env_key, display_name}
-
-// Data-source API keys finterm actually consumes.  Keys for features
-// that aren't shipped (NewsAPI / IEX Cloud / Quandl / Binance / Kraken /
-// Polymarket auth) used to live here but were dead env-passthroughs —
-// removed to keep the Settings surface honest.
-//
-// What does NOT live in this list:
-//   - LLM provider keys (Anthropic, OpenAI) → Settings → LLM Config
-//   - MCP server / tool keys → Settings → MCP Servers (per-server)
-//   - Voice provider keys (Whisper local, Deepgram opt-in) → Settings → Voice
-// Every credential the app can use, from the generated catalogue — the same
-// source PythonRunner injects and allow-lists from. This was a separate
-// hand-maintained list of 7, so the other 148 keys the app supports had no
-// way to be entered: a user could only set them as shell variables, where
-// the credential strip then deleted them.
-static const QList<CredDef>& cred_keys() {
-    static const QList<CredDef> kAll = [] {
-        QList<CredDef> out;
-        for (const auto& c : keys::catalogue())
-            out.append({QString::fromLatin1(c.env_name), QString::fromLatin1(c.label)});
-        return out;
-    }();
-    return kAll;
-}
 
 // ── Construction ──────────────────────────────────────────────────────────────
 
@@ -171,80 +89,91 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     nvl->setSpacing(2);
 
     auto* title = new QLabel("SETTINGS");
-    title->setStyleSheet(section_title_ss());
+    title->setStyleSheet(settings_style::section_title_ss());
     nvl->addWidget(title);
     nvl->addSpacing(12);
 
-    // Sections (order matters — indices used in showEvent)
+    // Sections. Indices are persisted by save_state(), so a section keeps its
+    // index forever; new ones are appended.
     sections_ = new QStackedWidget;
-    sections_->addWidget(build_credentials());   // 0
-    sections_->addWidget(build_appearance());    // 1
-    sections_->addWidget(build_notifications()); // 2
-    sections_->addWidget(build_storage());       // 3
-    sections_->addWidget(build_data_sources());  // 4
-    sections_->addWidget(build_llm_config());    // 5
-    sections_->addWidget(build_mcp_servers());   // 6
-    sections_->addWidget(build_logging());       // 7
-    sections_->addWidget(build_security());      // 8
-    sections_->addWidget(build_profiles());      // 9
-    sections_->addWidget(build_keybindings());   // 10
-    sections_->addWidget(build_python_env());    // 11
-    sections_->addWidget(build_developer());     // 12
+    credentials_ = new CredentialsSection;
+    stored_credentials_ = new StoredCredentialsSection;
+    sections_->addWidget(credentials_);           // 0  API Keys
+    sections_->addWidget(build_appearance());     // 1
+    sections_->addWidget(build_notifications());  // 2
+    sections_->addWidget(build_storage());        // 3
+    sections_->addWidget(build_data_sources());   // 4
+    sections_->addWidget(build_llm_config());     // 5  AI Config (Models/Roles/Tools/Activity)
+    // 6 and 14 were second, nav-less instances of the MCP Servers and AI
+    // System pages, which live as tabs inside AI Config. Empty placeholders
+    // keep the later indices stable without building those pages twice.
+    sections_->addWidget(new QWidget);            // 6  (retired)
+    sections_->addWidget(build_logging());        // 7
+    sections_->addWidget(build_security());       // 8
+    sections_->addWidget(build_profiles());       // 9  Data Profiles
+    sections_->addWidget(build_keybindings());    // 10
+    sections_->addWidget(build_python_env());     // 11
+    sections_->addWidget(build_developer());      // 12
     sections_->addWidget(new VoiceConfigSection); // 13
-    sections_->addWidget(new AiSystemSection);    // 14
+    sections_->addWidget(new QWidget);            // 14 (retired)
     sections_->addWidget(new SchedulerSection);   // 15
     sections_->addWidget(new ArtefactsSection);   // 16
     sections_->addWidget(new ForumConfigSection); // 17
     sections_->addWidget(new ActivityPanelSection); // 18
     sections_->addWidget(new SkillDiffsSection);  // 19
-    // Profile folded in (20): account identity and settings were two top-level
-    // destinations for one idea — "things about me and my setup". Appended
-    // rather than inserted so every existing section index keeps its meaning.
-    sections_->addWidget(new ProfileScreen);      // 20
+    sections_->addWidget(new ProfileScreen);      // 20 Account
+    sections_->addWidget(stored_credentials_);    // 21 All Credentials
 
-    QList<QPushButton*> nav_btns;
+    auto make_group = [&](const QString& text) {
+        auto* lbl = new QLabel(text);
+        lbl->setStyleSheet(settings_style::sub_title_ss() + "padding:10px 12px 4px 12px;");
+        nvl->addWidget(lbl);
+        nav_group_labels_.append(lbl);
+    };
     auto make_btn = [&](const QString& text, int idx) {
         auto* btn = new QPushButton(text);
-        btn->setFixedHeight(32);
+        btn->setFixedHeight(30);
         btn->setCheckable(true);
-        btn->setStyleSheet(nav_btn_ss());
-        connect(btn, &QPushButton::clicked, this, [this, btn, idx]() {
-            // Uncheck all sibling buttons in the parent layout
-            if (auto* parent = btn->parentWidget()) {
-                for (auto* sibling : parent->findChildren<QPushButton*>()) {
-                    sibling->setChecked(false);
-                }
-            }
-            btn->setChecked(true);
-            sections_->setCurrentIndex(idx);
+        btn->setStyleSheet(settings_style::nav_btn_ss());
+        connect(btn, &QPushButton::clicked, this, [this, idx]() {
+            select_section(idx);
             ScreenStateManager::instance().notify_changed(this);
         });
         nvl->addWidget(btn);
-        nav_btns.append(btn);
+        nav_for_index_.insert(idx, btn);
         return btn;
     };
 
-    auto* first = make_btn("Profile", 20);
-    make_btn("Credentials", 0);
-    make_btn("Appearance", 1);
-    make_btn("Notifications", 2);
-    make_btn("Storage & Cache", 3);
-    make_btn("Data Sources", 4);
-    make_btn("AI Config", 5);   // Models / Roles / Tools / Activity
-    make_btn("Logging", 7);
-    make_btn("Security", 8);
-    make_btn("Profiles", 9);
-    make_btn("Keybindings", 10);
-    make_btn("Python Env", 11);
-    make_btn("Developer", 12);
-    make_btn("Voice", 13);
-    make_btn("Scheduler", 15);
-    make_btn("Artefacts", 16);
-    make_btn("Forum", 17);
-    make_btn("Activity", 18);
-    make_btn("Skill diffs", 19);
+    // Grouped by what the user is managing: who they are, what the app may
+    // connect to with their credentials, the AI, and the app itself.
+    make_group(tr("ACCOUNT"));
+    make_btn(tr("Account"), 20);
+    make_btn(tr("Security & Lock"), 8);
+    make_btn(tr("Data Profiles"), 9);
+    make_group(tr("KEYS & CONNECTIONS"));
+    make_btn(tr("API Keys"), 0);
+    make_btn(tr("All Credentials"), 21);
+    make_btn(tr("Notifications"), 2);
+    make_btn(tr("Data Sources"), 4);
+    make_btn(tr("Voice"), 13);
+    make_group(tr("AI"));
+    make_btn(tr("AI Config"), 5);
+    make_btn(tr("Scheduler"), 15);
+    make_btn(tr("Artefacts"), 16);
+    make_btn(tr("Activity"), 18);
+    make_btn(tr("Skill diffs"), 19);
+    make_group(tr("APP"));
+    make_btn(tr("Appearance"), 1);
+    make_btn(tr("Keybindings"), 10);
+    make_btn(tr("Storage & Data"), 3);
+    make_btn(tr("Logging"), 7);
+    make_btn(tr("Python Env"), 11);
+    make_btn(tr("Forum"), 17);
+    make_btn(tr("Developer"), 12);
 
-    first->setChecked(true);
+    // Open on Account with its button lit. The highlight and the visible
+    // page used to disagree here (Account lit, API Keys shown).
+    select_section(20);
 
     nvl->addStretch();
     root->addWidget(nav);
@@ -277,13 +206,15 @@ void SettingsScreen::refresh_theme() {
     // Re-apply nav button styles
     if (nav_) {
         for (auto* btn : nav_->findChildren<QPushButton*>())
-            btn->setStyleSheet(nav_btn_ss());
+            btn->setStyleSheet(settings_style::nav_btn_ss());
+        for (auto* lbl : nav_group_labels_)
+            lbl->setStyleSheet(settings_style::sub_title_ss() + "padding:10px 12px 4px 12px;");
     }
 }
 
 void SettingsScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
-    load_credentials();
+    reload_current_credentials_page();
     load_appearance();
     load_notifications();
     load_security();
@@ -305,7 +236,7 @@ QWidget* SettingsScreen::make_row(const QString& label, QWidget* control, const 
     auto* hl = new QHBoxLayout;
     hl->setContentsMargins(0, 4, 0, 4);
     auto* lbl = new QLabel(label);
-    lbl->setStyleSheet(label_ss());
+    lbl->setStyleSheet(settings_style::label_ss());
     hl->addWidget(lbl);
     hl->addStretch();
     hl->addWidget(control);
@@ -328,187 +259,6 @@ QFrame* SettingsScreen::make_sep() {
 }
 
 // ── Credentials ───────────────────────────────────────────────────────────────
-
-QWidget* SettingsScreen::build_credentials() {
-    auto* scroll = new QScrollArea;
-    scroll->setWidgetResizable(true);
-    scroll->setStyleSheet(QString("QScrollArea{border:none;background:transparent;}"
-                                  "QScrollBar:vertical{width:6px;background:transparent;}"
-                                  "QScrollBar::handle:vertical{background:%1;border-radius:3px;}"
-                                  "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}")
-                              .arg(ui::colors::BORDER_MED()));
-
-    auto* page = new QWidget(this);
-    auto* vl = new QVBoxLayout(page);
-    vl->setContentsMargins(24, 24, 24, 24);
-    vl->setSpacing(0);
-
-    // Title
-    auto* t = new QLabel("API CREDENTIALS");
-    t->setStyleSheet(section_title_ss());
-    vl->addWidget(t);
-    vl->addSpacing(4);
-
-    auto* info =
-        new QLabel("Data-source API keys.  Stored in the OS keychain — "
-                   "never written to disk in plain text.  "
-                   "LLM provider keys live under <b>LLM Config</b>; "
-                   "MCP server keys are managed per-server in "
-                   "<b>MCP Servers</b>; voice provider keys (Deepgram) "
-                   "live under <b>Voice</b>.");
-    info->setTextFormat(Qt::RichText);
-    info->setWordWrap(true);
-    info->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
-    vl->addWidget(info);
-    vl->addSpacing(16);
-
-    // The catalogue covers every provider the app can talk to (155 of them),
-    // so a flat list is unusable — you cannot scroll to "EIA" by eye. Filter
-    // by provider name or variable name.
-    auto* filter = new QLineEdit;
-    filter->setPlaceholderText(
-        tr("Filter providers — e.g. \"fred\", \"energy\", \"EIA_API_KEY\""));
-    filter->setClearButtonEnabled(true);
-    filter->setStyleSheet(QString("QLineEdit{background:%1;border:1px solid %2;border-radius:3px;"
-                                  "padding:6px 8px;color:%3;}")
-                              .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(),
-                                   ui::colors::TEXT_PRIMARY()));
-    vl->addWidget(filter);
-    connect(filter, &QLineEdit::textChanged, this, [this](const QString& q) {
-        const QString needle = q.trimmed();
-        for (auto it = cred_cards_.cbegin(); it != cred_cards_.cend(); ++it) {
-            QWidget* card = it.value();
-            if (!card)
-                continue;
-            if (needle.isEmpty()) {
-                card->setVisible(true);
-                continue;
-            }
-            // Match the variable name OR the human label, so both "EIA" and
-            // "energy" find the same provider.
-            const QString label = card->property("credLabel").toString();
-            card->setVisible(it.key().contains(needle, Qt::CaseInsensitive) ||
-                             label.contains(needle, Qt::CaseInsensitive));
-        }
-    });
-
-    vl->addSpacing(12);
-    vl->addWidget(make_sep());
-    vl->addSpacing(16);
-
-    // One card per credential
-    for (const auto& def : cred_keys()) {
-        const QString& key = def.first;
-        const QString& name = def.second;
-
-        // Card frame
-        auto* card = new QFrame;
-        card->setStyleSheet(QString("QFrame{background:%1;border:1px solid %2;border-radius:4px;}")
-                                .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-        auto* cvl = new QVBoxLayout(card);
-        cvl->setContentsMargins(0, 0, 0, 0);
-        cvl->setSpacing(0);
-
-        // Card header
-        auto* hdr = new QWidget(this);
-        hdr->setFixedHeight(34);
-        hdr->setStyleSheet(QString("background:%1;border-bottom:1px solid %2;")
-                               .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
-        auto* hhl = new QHBoxLayout(hdr);
-        hhl->setContentsMargins(12, 0, 12, 0);
-        auto* name_lbl = new QLabel(name);
-        name_lbl->setStyleSheet(
-            QString("color:%1;font-weight:600;background:transparent;").arg(ui::colors::TEXT_PRIMARY()));
-        hhl->addWidget(name_lbl);
-        hhl->addStretch();
-
-        // Status label — persisted across load_credentials calls
-        auto* status_lbl = new QLabel("Not set");
-        status_lbl->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
-        hhl->addWidget(status_lbl);
-        cred_status_[key] = status_lbl;
-
-        cvl->addWidget(hdr);
-
-        // Card body: input + save button
-        auto* body = new QWidget(this);
-        body->setStyleSheet("background: transparent;");
-        auto* bhl = new QHBoxLayout(body);
-        bhl->setContentsMargins(12, 10, 12, 10);
-        bhl->setSpacing(8);
-
-        auto* field = new QLineEdit;
-        field->setEchoMode(QLineEdit::Password);
-        field->setPlaceholderText("Not configured");
-        field->setStyleSheet(input_ss());
-        cred_fields_[key] = field;
-        bhl->addWidget(field, 1);
-
-        auto* save_btn = new QPushButton("Save");
-        save_btn->setFixedHeight(30);
-        save_btn->setFixedWidth(70);
-        save_btn->setStyleSheet(btn_primary_ss());
-        bhl->addWidget(save_btn);
-
-        connect(save_btn, &QPushButton::clicked, this, [key, field, status_lbl]() {
-            QString val = field->text().trimmed();
-            if (val.isEmpty()) {
-                SecureStorage::instance().remove(key);
-                field->setPlaceholderText("Not configured");
-                status_lbl->setText("Cleared");
-                status_lbl->setStyleSheet(
-                    QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
-                LOG_INFO("Credentials", "Cleared key: " + key);
-            } else {
-                auto r = SecureStorage::instance().store(key, val);
-                if (r.is_ok()) {
-                    field->clear();
-                    field->setPlaceholderText("•••••••• (saved)");
-                    status_lbl->setText("Saved ✓");
-                    status_lbl->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::POSITIVE()));
-                    LOG_INFO("Credentials", "Stored key: " + key);
-                } else {
-                    status_lbl->setText("Save failed");
-                    status_lbl->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::NEGATIVE()));
-                    LOG_ERROR("Credentials", "Failed to store " + key);
-                }
-            }
-        });
-
-        cvl->addWidget(body);
-        card->setProperty("credLabel", name);
-        cred_cards_.insert(key, card);
-        vl->addWidget(card);
-        vl->addSpacing(8);
-    }
-
-    vl->addStretch();
-    scroll->setWidget(page);
-    return scroll;
-}
-
-void SettingsScreen::load_credentials() {
-    for (const auto& def : cred_keys()) {
-        const QString& key = def.first;
-        auto* field = cred_fields_.value(key, nullptr);
-        auto* status = cred_status_.value(key, nullptr);
-        if (!field || !status)
-            continue;
-
-        auto r = SecureStorage::instance().retrieve(key);
-        if (r.is_ok() && !r.value().isEmpty()) {
-            field->clear();
-            field->setPlaceholderText("•••••••• (saved)");
-            status->setText("Saved ✓");
-            status->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::POSITIVE()));
-        } else {
-            field->clear();
-            field->setPlaceholderText("Not configured");
-            status->setText("Not set");
-            status->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
-        }
-    }
-}
 
 // ── Appearance ────────────────────────────────────────────────────────────────
 
@@ -536,7 +286,7 @@ QWidget* SettingsScreen::build_appearance() {
     // uses its built-in default font (see ThemeManager). Only content density is
     // exposed here.
     auto* t2 = new QLabel("THEME");
-    t2->setStyleSheet(section_title_ss());
+    t2->setStyleSheet(settings_style::section_title_ss());
     vl->addWidget(t2);
     vl->addWidget(make_sep());
     vl->addSpacing(8);
@@ -544,7 +294,7 @@ QWidget* SettingsScreen::build_appearance() {
     app_density_ = new QComboBox;
     app_density_->addItems(fincept::ui::ThemeManager::available_densities());
     app_density_->setCurrentText("Default");
-    app_density_->setStyleSheet(combo_ss());
+    app_density_->setStyleSheet(settings_style::combo_ss());
     vl->addWidget(make_row("Content Density", app_density_, "Controls padding and spacing throughout the UI."));
 
     // Debounced live preview — coalesce rapid density changes into one apply.
@@ -563,24 +313,24 @@ QWidget* SettingsScreen::build_appearance() {
 
     // ── INTERFACE ─────────────────────────────────────────────────────────────
     auto* t3 = new QLabel("INTERFACE");
-    t3->setStyleSheet(sub_title_ss());
+    t3->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(t3);
     vl->addSpacing(4);
 
     chat_bubble_toggle_ = new QCheckBox("Show AI Chat Bubble");
     chat_bubble_toggle_->setChecked(true);
-    chat_bubble_toggle_->setStyleSheet(check_ss());
+    chat_bubble_toggle_->setStyleSheet(settings_style::check_ss());
     vl->addWidget(
         make_row("AI Chat Bubble", chat_bubble_toggle_, "Floating chat assistant in the bottom-right corner."));
 
     ticker_bar_toggle_ = new QCheckBox("Show Ticker Bar");
     ticker_bar_toggle_->setChecked(true);
-    ticker_bar_toggle_->setStyleSheet(check_ss());
+    ticker_bar_toggle_->setStyleSheet(settings_style::check_ss());
     vl->addWidget(make_row("Ticker Bar", ticker_bar_toggle_, "Live price ticker at the bottom of the screen."));
 
     animations_toggle_ = new QCheckBox("Enable Animations");
     animations_toggle_->setChecked(true);
-    animations_toggle_->setStyleSheet(check_ss());
+    animations_toggle_->setStyleSheet(settings_style::check_ss());
     vl->addWidget(make_row("Animations", animations_toggle_, "Fade and transition effects throughout the UI."));
 
     vl->addSpacing(16);
@@ -588,7 +338,7 @@ QWidget* SettingsScreen::build_appearance() {
     // ── SAVE ──────────────────────────────────────────────────────────────────
     auto* apply_btn = new QPushButton("Save Settings");
     apply_btn->setFixedWidth(160);
-    apply_btn->setStyleSheet(btn_primary_ss());
+    apply_btn->setStyleSheet(settings_style::btn_primary_ss());
     connect(apply_btn, &QPushButton::clicked, this, [this]() {
         auto& repo = SettingsRepository::instance();
         auto& tm = fincept::ui::ThemeManager::instance();
@@ -805,7 +555,7 @@ QWidget* SettingsScreen::build_notifications() {
     vl->setSpacing(6);
 
     auto* hdr_lbl = new QLabel("NOTIFICATION PROVIDERS");
-    hdr_lbl->setStyleSheet(section_title_ss());
+    hdr_lbl->setStyleSheet(settings_style::section_title_ss());
     vl->addWidget(hdr_lbl);
     vl->addWidget(make_sep());
     vl->addSpacing(8);
@@ -842,7 +592,7 @@ QWidget* SettingsScreen::build_notifications() {
         hl->addWidget(icon_lbl, 1);
 
         pw.enabled = new QCheckBox;
-        pw.enabled->setStyleSheet(check_ss());
+        pw.enabled->setStyleSheet(settings_style::check_ss());
         hl->addWidget(pw.enabled);
 
         cvl->addWidget(head);
@@ -861,7 +611,7 @@ QWidget* SettingsScreen::build_notifications() {
             auto* field = new QLineEdit;
             field->setPlaceholderText(fd.placeholder);
             field->setProperty("defaultPlaceholder", fd.placeholder);
-            field->setStyleSheet(input_ss());
+            field->setStyleSheet(settings_style::input_ss());
             if (fd.is_password)
                 field->setEchoMode(QLineEdit::Password);
             pw.fields[fd.key] = field;
@@ -877,7 +627,7 @@ QWidget* SettingsScreen::build_notifications() {
 
         pw.test_btn = new QPushButton("Test Send");
         pw.test_btn->setFixedWidth(100);
-        pw.test_btn->setStyleSheet(btn_secondary_ss());
+        pw.test_btn->setStyleSheet(settings_style::btn_secondary_ss());
 
         pw.status_lbl = new QLabel;
         pw.status_lbl->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
@@ -950,20 +700,20 @@ QWidget* SettingsScreen::build_notifications() {
 
     // ── Alert triggers ────────────────────────────────────────────────────────
     auto* trig_hdr = new QLabel("ALERT TRIGGERS");
-    trig_hdr->setStyleSheet(sub_title_ss());
+    trig_hdr->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(trig_hdr);
     vl->addSpacing(4);
 
     trigger_inapp_ = new QCheckBox;
-    trigger_inapp_->setStyleSheet(check_ss());
+    trigger_inapp_->setStyleSheet(settings_style::check_ss());
     trigger_price_ = new QCheckBox;
-    trigger_price_->setStyleSheet(check_ss());
+    trigger_price_->setStyleSheet(settings_style::check_ss());
     trigger_news_ = new QCheckBox;
-    trigger_news_->setStyleSheet(check_ss());
+    trigger_news_->setStyleSheet(settings_style::check_ss());
     trigger_orders_ = new QCheckBox;
-    trigger_orders_->setStyleSheet(check_ss());
+    trigger_orders_->setStyleSheet(settings_style::check_ss());
     trigger_ownership_ = new QCheckBox;
-    trigger_ownership_->setStyleSheet(check_ss());
+    trigger_ownership_->setStyleSheet(settings_style::check_ss());
 
     vl->addWidget(
         make_row("In-App Alerts (toast + bell)", trigger_inapp_, "Show slide-in toasts and update bell badge."));
@@ -984,13 +734,13 @@ QWidget* SettingsScreen::build_notifications() {
     sub_vl->setSpacing(4);
 
     news_breaking_ = new QCheckBox;
-    news_breaking_->setStyleSheet(check_ss());
+    news_breaking_->setStyleSheet(settings_style::check_ss());
     news_monitors_ = new QCheckBox;
-    news_monitors_->setStyleSheet(check_ss());
+    news_monitors_->setStyleSheet(settings_style::check_ss());
     news_deviations_ = new QCheckBox;
-    news_deviations_->setStyleSheet(check_ss());
+    news_deviations_->setStyleSheet(settings_style::check_ss());
     news_flash_ = new QCheckBox;
-    news_flash_->setStyleSheet(check_ss());
+    news_flash_->setStyleSheet(settings_style::check_ss());
 
     sub_vl->addWidget(make_row("Breaking News", news_breaking_, "Notify on FLASH/BREAKING/URGENT priority clusters."));
     sub_vl->addWidget(
@@ -1012,7 +762,7 @@ QWidget* SettingsScreen::build_notifications() {
     // ── Save ──────────────────────────────────────────────────────────────────
     auto* save_btn = new QPushButton("Save All Providers");
     save_btn->setFixedWidth(200);
-    save_btn->setStyleSheet(btn_primary_ss());
+    save_btn->setStyleSheet(settings_style::btn_primary_ss());
     connect(save_btn, &QPushButton::clicked, this, [this]() {
         // Save triggers
         auto& repo = SettingsRepository::instance();
@@ -1299,7 +1049,7 @@ QWidget* SettingsScreen::build_storage() {
 
     // Title
     auto* t = new QLabel("STORAGE & DATA MANAGEMENT");
-    t->setStyleSheet(section_title_ss());
+    t->setStyleSheet(settings_style::section_title_ss());
     vl->addWidget(t);
     vl->addSpacing(4);
 
@@ -1309,6 +1059,31 @@ QWidget* SettingsScreen::build_storage() {
     info->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(info);
     vl->addSpacing(10);
+
+    // Where everything lives. All of it is on this computer, in folders only
+    // this account can read; credentials are in the OS keyring, not here.
+    {
+        auto* where = new QWidget(this);
+        auto* wl = new QHBoxLayout(where);
+        wl->setContentsMargins(0, 0, 0, 0);
+        wl->setSpacing(8);
+        const QString root = AppPaths::root();
+        auto* path_lbl = new QLabel(tr("Your data folder: <b>%1</b> — local only, private to this account. "
+                                       "Credentials are kept separately in the OS keyring.")
+                                        .arg(root.toHtmlEscaped()));
+        path_lbl->setTextFormat(Qt::RichText);
+        path_lbl->setWordWrap(true);
+        path_lbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        path_lbl->setStyleSheet(settings_style::label_ss());
+        wl->addWidget(path_lbl, 1);
+        auto* open_btn = new QPushButton(tr("Open folder"));
+        open_btn->setStyleSheet(settings_style::btn_secondary_ss());
+        connect(open_btn, &QPushButton::clicked, this,
+                [root]() { QDesktopServices::openUrl(QUrl::fromLocalFile(root)); });
+        wl->addWidget(open_btn);
+        vl->addWidget(where);
+        vl->addSpacing(10);
+    }
 
     // ═══════════════════════════════════════════════════════════════════════════
     // SECTION 1: DISK USAGE — stat boxes + data rows
@@ -1623,12 +1398,12 @@ QWidget* SettingsScreen::build_storage() {
         sql_db_selector_->addItem("fincept.db", "main");
         sql_db_selector_->addItem("cache.db", "cache");
         sql_db_selector_->setFixedWidth(110);
-        sql_db_selector_->setStyleSheet(combo_ss());
+        sql_db_selector_->setStyleSheet(settings_style::combo_ss());
         irl->addWidget(sql_db_selector_);
 
         sql_input_ = new QLineEdit;
         sql_input_->setPlaceholderText("SELECT * FROM chat_sessions LIMIT 10");
-        sql_input_->setStyleSheet(input_ss());
+        sql_input_->setStyleSheet(settings_style::input_ss());
         irl->addWidget(sql_input_, 1);
 
         auto* exec_btn = new QPushButton("EXEC");
@@ -2019,7 +1794,7 @@ QWidget* SettingsScreen::build_data_sources() {
     auto* trl = new QHBoxLayout(title_row);
     trl->setContentsMargins(0, 0, 0, 0);
     auto* t = new QLabel("DATA SOURCES");
-    t->setStyleSheet(section_title_ss());
+    t->setStyleSheet(settings_style::section_title_ss());
     trl->addWidget(t);
     trl->addStretch();
 
@@ -2208,7 +1983,7 @@ QWidget* SettingsScreen::build_data_sources() {
                 auto* toggle = new QCheckBox;
                 toggle->setChecked(ds.enabled);
                 toggle->setFixedWidth(30);
-                toggle->setStyleSheet(check_ss());
+                toggle->setStyleSheet(settings_style::check_ss());
                 QString source_id = ds.id;
                 connect(toggle, &QCheckBox::toggled, this, [source_id, name_lbl](bool checked) {
                     DataSourceRepository::instance().set_enabled(source_id, checked);
@@ -2383,10 +2158,6 @@ QWidget* SettingsScreen::build_llm_config() {
     return new AiConfigSection;
 }
 
-QWidget* SettingsScreen::build_mcp_servers() {
-    return new McpServersSection;
-}
-
 // ── Logging ───────────────────────────────────────────────────────────────────
 
 QWidget* SettingsScreen::build_logging() {
@@ -2409,23 +2180,23 @@ QWidget* SettingsScreen::build_logging() {
 
     // Title
     auto* t = new QLabel("LOGGING");
-    t->setStyleSheet(section_title_ss());
+    t->setStyleSheet(settings_style::section_title_ss());
     vl->addWidget(t);
     vl->addWidget(make_sep());
 
     // ── Global level ─────────────────────────────────────────────────────────
     auto* global_lbl = new QLabel("Global Log Level");
-    global_lbl->setStyleSheet(sub_title_ss());
+    global_lbl->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(global_lbl);
 
     auto* global_desc = new QLabel("Minimum level for all tags unless overridden.");
-    global_desc->setStyleSheet(label_ss());
+    global_desc->setStyleSheet(settings_style::label_ss());
     global_desc->setWordWrap(true);
     vl->addWidget(global_desc);
 
     log_global_level_ = new QComboBox;
     log_global_level_->addItems(LEVEL_NAMES);
-    log_global_level_->setStyleSheet(combo_ss());
+    log_global_level_->setStyleSheet(settings_style::combo_ss());
     log_global_level_->setFixedWidth(160);
 
     const QString saved_global = AppConfig::instance().get("log/global_level", "Info").toString();
@@ -2436,12 +2207,12 @@ QWidget* SettingsScreen::build_logging() {
 
     // ── Output format ────────────────────────────────────────────────────────
     auto* fmt_title = new QLabel("Output Format");
-    fmt_title->setStyleSheet(sub_title_ss());
+    fmt_title->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(fmt_title);
 
     auto* fmt_desc = new QLabel(
         "Plain text is human-readable; JSON emits one structured object per line (easier to parse with tooling).");
-    fmt_desc->setStyleSheet(label_ss());
+    fmt_desc->setStyleSheet(settings_style::label_ss());
     fmt_desc->setWordWrap(true);
     vl->addWidget(fmt_desc);
 
@@ -2452,12 +2223,12 @@ QWidget* SettingsScreen::build_logging() {
 
     // ── Log file location ────────────────────────────────────────────────────
     auto* path_title = new QLabel("Log File");
-    path_title->setStyleSheet(sub_title_ss());
+    path_title->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(path_title);
 
     const QString log_path = AppPaths::logs() + "/fincept.log";
     log_path_label_ = new QLabel(QDir::toNativeSeparators(log_path));
-    log_path_label_->setStyleSheet(label_ss());
+    log_path_label_->setStyleSheet(settings_style::label_ss());
     log_path_label_->setTextInteractionFlags(Qt::TextSelectableByMouse);
     log_path_label_->setWordWrap(true);
     vl->addWidget(log_path_label_);
@@ -2468,7 +2239,7 @@ QWidget* SettingsScreen::build_logging() {
     path_rl->setSpacing(8);
 
     auto* open_folder_btn = new QPushButton("Open Log Folder");
-    open_folder_btn->setStyleSheet(btn_secondary_ss());
+    open_folder_btn->setStyleSheet(settings_style::btn_secondary_ss());
     open_folder_btn->setFixedHeight(30);
     open_folder_btn->setFixedWidth(160);
     connect(open_folder_btn, &QPushButton::clicked, this, []() {
@@ -2476,7 +2247,7 @@ QWidget* SettingsScreen::build_logging() {
     });
 
     auto* copy_path_btn = new QPushButton("Copy Path");
-    copy_path_btn->setStyleSheet(btn_secondary_ss());
+    copy_path_btn->setStyleSheet(settings_style::btn_secondary_ss());
     copy_path_btn->setFixedHeight(30);
     copy_path_btn->setFixedWidth(120);
     connect(copy_path_btn, &QPushButton::clicked, this, [this]() {
@@ -2492,11 +2263,11 @@ QWidget* SettingsScreen::build_logging() {
 
     // ── Per-tag overrides ────────────────────────────────────────────────────
     auto* tag_title = new QLabel("Per-Tag Overrides");
-    tag_title->setStyleSheet(sub_title_ss());
+    tag_title->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(tag_title);
 
     auto* tag_desc = new QLabel("Override the log level for a specific tag (e.g. ExchangeService, AgentService).");
-    tag_desc->setStyleSheet(label_ss());
+    tag_desc->setStyleSheet(settings_style::label_ss());
     tag_desc->setWordWrap(true);
     vl->addWidget(tag_desc);
 
@@ -2518,16 +2289,16 @@ QWidget* SettingsScreen::build_logging() {
         auto* tag_edit = new QLineEdit(tag);
         tag_edit->setPlaceholderText("Tag name");
         tag_edit->setFixedWidth(220);
-        tag_edit->setStyleSheet(input_ss());
+        tag_edit->setStyleSheet(settings_style::input_ss());
 
         auto* lvl_combo = new QComboBox;
         lvl_combo->addItems(LEVEL_NAMES);
-        lvl_combo->setStyleSheet(combo_ss());
+        lvl_combo->setStyleSheet(settings_style::combo_ss());
         lvl_combo->setFixedWidth(120);
         lvl_combo->setCurrentIndex(level_to_idx(level));
 
         auto* del_btn = new QPushButton("Remove");
-        del_btn->setStyleSheet(btn_danger_ss());
+        del_btn->setStyleSheet(settings_style::btn_danger_ss());
         del_btn->setFixedHeight(28);
         connect(del_btn, &QPushButton::clicked, this, [row]() { row->deleteLater(); });
 
@@ -2549,7 +2320,7 @@ QWidget* SettingsScreen::build_logging() {
 
     // Add row button
     auto* add_btn = new QPushButton("+ Add Tag Override");
-    add_btn->setStyleSheet(btn_secondary_ss());
+    add_btn->setStyleSheet(settings_style::btn_secondary_ss());
     add_btn->setFixedHeight(30);
     add_btn->setFixedWidth(180);
     connect(add_btn, &QPushButton::clicked, this, [add_tag_row]() mutable { add_tag_row({}, "Info"); });
@@ -2558,7 +2329,7 @@ QWidget* SettingsScreen::build_logging() {
 
     // ── Save button ──────────────────────────────────────────────────────────
     auto* save_btn = new QPushButton("Apply & Save");
-    save_btn->setStyleSheet(btn_primary_ss());
+    save_btn->setStyleSheet(settings_style::btn_primary_ss());
     save_btn->setFixedHeight(34);
     save_btn->setFixedWidth(140);
 
@@ -2626,7 +2397,7 @@ QWidget* SettingsScreen::build_security() {
 
     // ── PIN STATUS ────────────────────────────────────────────────────────────
     auto* t1 = new QLabel("PIN AUTHENTICATION");
-    t1->setStyleSheet(section_title_ss());
+    t1->setStyleSheet(settings_style::section_title_ss());
     vl->addWidget(t1);
     vl->addWidget(make_sep());
     vl->addSpacing(8);
@@ -2646,13 +2417,13 @@ QWidget* SettingsScreen::build_security() {
 
     // ── CHANGE PIN ────────────────────────────────────────────────────────────
     auto* t2 = new QLabel("CHANGE PIN");
-    t2->setStyleSheet(sub_title_ss());
+    t2->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(t2);
     vl->addSpacing(4);
 
     sec_change_pin_btn_ = new QPushButton("Change PIN");
     sec_change_pin_btn_->setFixedWidth(140);
-    sec_change_pin_btn_->setStyleSheet(btn_secondary_ss());
+    sec_change_pin_btn_->setStyleSheet(settings_style::btn_secondary_ss());
     vl->addWidget(sec_change_pin_btn_);
 
     // Expandable change-PIN form (hidden by default)
@@ -2668,7 +2439,7 @@ QWidget* SettingsScreen::build_security() {
         input->setMaxLength(6);
         input->setEchoMode(QLineEdit::Password);
         input->setFixedWidth(200);
-        input->setStyleSheet(input_ss());
+        input->setStyleSheet(settings_style::input_ss());
         return input;
     };
 
@@ -2699,7 +2470,7 @@ QWidget* SettingsScreen::build_security() {
 
     auto* save_pin_btn = new QPushButton("Update PIN");
     save_pin_btn->setFixedWidth(140);
-    save_pin_btn->setStyleSheet(btn_primary_ss());
+    save_pin_btn->setStyleSheet(settings_style::btn_primary_ss());
     cpfl->addWidget(save_pin_btn);
 
     sec_change_pin_form_->hide();
@@ -2772,13 +2543,13 @@ QWidget* SettingsScreen::build_security() {
 
     // ── AUTO-LOCK ─────────────────────────────────────────────────────────────
     auto* t3 = new QLabel("AUTO-LOCK");
-    t3->setStyleSheet(sub_title_ss());
+    t3->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(t3);
     vl->addSpacing(4);
 
     sec_autolock_toggle_ = new QCheckBox("Enable auto-lock on inactivity");
     sec_autolock_toggle_->setChecked(true);
-    sec_autolock_toggle_->setStyleSheet(check_ss());
+    sec_autolock_toggle_->setStyleSheet(settings_style::check_ss());
     vl->addWidget(make_row("Auto-Lock", sec_autolock_toggle_, "Locks the terminal after a period of inactivity."));
 
     sec_lock_timeout_ = new QComboBox;
@@ -2790,7 +2561,7 @@ QWidget* SettingsScreen::build_security() {
     sec_lock_timeout_->addItem("30 min", 30);
     sec_lock_timeout_->addItem("60 min", 60);
     sec_lock_timeout_->setCurrentIndex(3); // default 10 min
-    sec_lock_timeout_->setStyleSheet(combo_ss());
+    sec_lock_timeout_->setStyleSheet(settings_style::combo_ss());
     vl->addWidget(make_row("Lock Timeout", sec_lock_timeout_, "Time of inactivity before the terminal locks."));
 
     // Enable/disable timeout combo based on toggle
@@ -2798,7 +2569,7 @@ QWidget* SettingsScreen::build_security() {
             [this](bool checked) { sec_lock_timeout_->setEnabled(checked); });
 
     sec_lock_on_minimize_ = new QCheckBox("Lock when the window is minimized");
-    sec_lock_on_minimize_->setStyleSheet(check_ss());
+    sec_lock_on_minimize_->setStyleSheet(settings_style::check_ss());
     vl->addWidget(make_row("Lock on Minimize", sec_lock_on_minimize_,
                             "When on, minimizing the terminal immediately shows the PIN screen."));
 
@@ -2807,7 +2578,7 @@ QWidget* SettingsScreen::build_security() {
     // ── SAVE ──────────────────────────────────────────────────────────────────
     auto* save_btn = new QPushButton("Save Security Settings");
     save_btn->setFixedWidth(200);
-    save_btn->setStyleSheet(btn_primary_ss());
+    save_btn->setStyleSheet(settings_style::btn_primary_ss());
     connect(save_btn, &QPushButton::clicked, this, [this]() {
         auto& repo = SettingsRepository::instance();
         auto& guard = auth::InactivityGuard::instance();
@@ -2832,7 +2603,7 @@ QWidget* SettingsScreen::build_security() {
     // ── AUDIT LOG ─────────────────────────────────────────────────────────────
     vl->addSpacing(16);
     auto* t_audit = new QLabel("AUDIT LOG");
-    t_audit->setStyleSheet(sub_title_ss());
+    t_audit->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(t_audit);
     vl->addSpacing(4);
 
@@ -2853,7 +2624,7 @@ QWidget* SettingsScreen::build_security() {
 
     auto* refresh_audit = new QPushButton("Refresh");
     refresh_audit->setFixedWidth(140);
-    refresh_audit->setStyleSheet(btn_secondary_ss());
+    refresh_audit->setStyleSheet(settings_style::btn_secondary_ss());
     connect(refresh_audit, &QPushButton::clicked, this, [this]() { refresh_audit_log(); });
     vl->addWidget(refresh_audit);
 
@@ -2954,26 +2725,26 @@ QWidget* SettingsScreen::build_profiles() {
     vl->setSpacing(16);
 
     auto* title = new QLabel("Profiles");
-    title->setStyleSheet(section_title_ss());
+    title->setStyleSheet(settings_style::section_title_ss());
     vl->addWidget(title);
 
     auto* desc = new QLabel("Each profile has its own isolated database, credentials, logs and workspaces.\n"
                             "Launch the terminal with  --profile <name>  to open a specific profile.\n"
                             "Different profiles can run simultaneously — useful for separate trading accounts.");
     desc->setWordWrap(true);
-    desc->setStyleSheet(label_ss());
+    desc->setStyleSheet(settings_style::label_ss());
     vl->addWidget(desc);
     vl->addWidget(make_sep());
 
     // Active profile display
     auto& pm = ProfileManager::instance();
     auto* active_lbl = new QLabel(QString("Active profile:  <b>%1</b>").arg(pm.active()));
-    active_lbl->setStyleSheet(label_ss());
+    active_lbl->setStyleSheet(settings_style::label_ss());
     vl->addWidget(active_lbl);
 
     // Profile list
     auto* list_title = new QLabel("All profiles");
-    list_title->setStyleSheet(sub_title_ss());
+    list_title->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(list_title);
 
     auto* list_widget = new QWidget(this);
@@ -2989,7 +2760,7 @@ QWidget* SettingsScreen::build_profiles() {
         hl->setSpacing(8);
 
         auto* name_lbl = new QLabel(name);
-        name_lbl->setStyleSheet(label_ss());
+        name_lbl->setStyleSheet(settings_style::label_ss());
         hl->addWidget(name_lbl, 1);
 
         if (name == pm.active()) {
@@ -3002,7 +2773,7 @@ QWidget* SettingsScreen::build_profiles() {
             // "Switch" launches a new process with --profile <name> then quits this one
             auto* switch_btn = new QPushButton("Switch");
             switch_btn->setFixedWidth(72);
-            switch_btn->setStyleSheet(btn_secondary_ss());
+            switch_btn->setStyleSheet(settings_style::btn_secondary_ss());
             connect(switch_btn, &QPushButton::clicked, this, [name]() {
                 const QString exe = QCoreApplication::applicationFilePath();
                 QProcess::startDetached(exe, {"--profile", name});
@@ -3017,7 +2788,7 @@ QWidget* SettingsScreen::build_profiles() {
 
     // Create new profile
     auto* new_title = new QLabel("Create new profile");
-    new_title->setStyleSheet(sub_title_ss());
+    new_title->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(new_title);
 
     auto* new_row = new QWidget(this);
@@ -3027,11 +2798,11 @@ QWidget* SettingsScreen::build_profiles() {
 
     auto* name_input = new QLineEdit;
     name_input->setPlaceholderText("profile-name  (alphanumeric, - and _ only)");
-    name_input->setStyleSheet(input_ss());
+    name_input->setStyleSheet(settings_style::input_ss());
     new_hl->addWidget(name_input, 1);
 
     auto* create_btn = new QPushButton("Create & Switch");
-    create_btn->setStyleSheet(btn_primary_ss());
+    create_btn->setStyleSheet(settings_style::btn_primary_ss());
     connect(create_btn, &QPushButton::clicked, this, [name_input]() {
         const QString name = name_input->text().trimmed().toLower();
         if (name.isEmpty())
@@ -3047,7 +2818,7 @@ QWidget* SettingsScreen::build_profiles() {
     auto* hint = new QLabel("Creating a profile sets up a fresh data directory. "
                             "The app will restart with the new profile active.");
     hint->setWordWrap(true);
-    hint->setStyleSheet(label_ss());
+    hint->setStyleSheet(settings_style::label_ss());
     vl->addWidget(hint);
 
     vl->addStretch();
@@ -3062,9 +2833,35 @@ QVariantMap SettingsScreen::save_state() const {
 void SettingsScreen::restore_state(const QVariantMap& state) {
     if (!sections_)
         return;
-    const int idx = state.value("section", 0).toInt();
-    if (idx >= 0 && idx < sections_->count())
-        sections_->setCurrentIndex(idx);
+    const int idx = state.value("section", 20).toInt();
+    if (nav_for_index_.contains(idx)) // retired indices (6, 14) fall back to Account
+        select_section(idx);
+}
+
+void SettingsScreen::select_section(int index) {
+    if (!sections_ || index < 0 || index >= sections_->count())
+        return;
+    sections_->setCurrentIndex(index);
+    for (auto it = nav_for_index_.cbegin(); it != nav_for_index_.cend(); ++it)
+        it.value()->setChecked(it.key() == index);
+    // A nav click re-reads only where that is one cheap keyring search.
+    // Backends that cannot enumerate need ~150 lookups (and on macOS maybe a
+    // prompt each), so there the page refreshes when Settings is shown.
+    if (SecureStorage::can_enumerate())
+        reload_current_credentials_page();
+}
+
+void SettingsScreen::reload_current_credentials_page() {
+    // Read the keyring only for the credentials page being looked at, and
+    // every time it is opened — so a key removed on one page is gone on the
+    // other, and visiting Appearance costs no keyring round-trips.
+    if (!isVisible())
+        return;
+    QWidget* cur = sections_->currentWidget();
+    if (cur == credentials_)
+        credentials_->reload();
+    else if (cur == stored_credentials_)
+        stored_credentials_->reload();
 }
 
 QWidget* SettingsScreen::build_keybindings() {
@@ -3086,7 +2883,7 @@ QWidget* SettingsScreen::build_developer() {
     vl->setSpacing(12);
 
     auto* title = new QLabel("DataHub Inspector");
-    title->setStyleSheet(section_title_ss());
+    title->setStyleSheet(settings_style::section_title_ss());
     vl->addWidget(title);
 
     auto* desc = new QLabel(

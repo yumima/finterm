@@ -119,9 +119,10 @@ inline void remove_user_secrets(const QString& username) {
     if (auto r = store.retrieve(index_key(prefix)); r.is_ok())
         for (const QString& k : r.value().split(QLatin1Char('\n'), Qt::SkipEmptyParts))
             keys.append(prefix + k);
-    for (const QString& k : store.list_keys(prefix + QStringLiteral("notif_")))
-        if (!keys.contains(k))
-            keys.append(k);
+    if (auto listed = store.list_keys(prefix + QStringLiteral("notif_")); listed.is_ok())
+        for (const QString& k : listed.value())
+            if (!keys.contains(k))
+                keys.append(k);
     for (const QString& k : keys)
         store.remove(k);
     store.remove(index_key(prefix));

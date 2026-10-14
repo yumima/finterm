@@ -525,16 +525,25 @@ void SecureStorage::migrate_legacy_ids() {
         flags.setValue(flag, true);
 }
 
-QStringList SecureStorage::list_keys(const QString& prefix) {
-    QStringList out;
+bool SecureStorage::can_enumerate() {
 #if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+    return true;
+#else
+    return false;
+#endif
+}
+
+Result<QStringList> SecureStorage::list_keys(const QString& prefix) {
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+    QStringList out;
     const QString scope = ProfileManager::instance().secure_key_prefix();
     GError* err = nullptr;
     GList* items = secret_password_search_sync(fincept_schema(), SECRET_SEARCH_ALL, nullptr, &err, nullptr);
     if (err) {
-        LOG_WARN(TAG, QString("libsecret search failed: ") + QString::fromUtf8(err->message));
+        const std::string msg = err->message;
         g_error_free(err);
-        return out;
+        LOG_WARN(TAG, QString("libsecret search failed: ") + QString::fromStdString(msg));
+        return Result<QStringList>::err("libsecret search failed: " + msg);
     }
     for (GList* l = items; l; l = l->next) {
         GHashTable* attrs = secret_retrievable_get_attributes(SECRET_RETRIEVABLE(l->data));
@@ -554,11 +563,12 @@ QStringList SecureStorage::list_keys(const QString& prefix) {
         g_hash_table_unref(attrs);
     }
     g_list_free_full(items, g_object_unref);
+    out.sort();
+    return Result<QStringList>::ok(out);
 #else
     Q_UNUSED(prefix);
+    return Result<QStringList>::err("this keyring backend cannot list its entries");
 #endif
-    out.sort();
-    return out;
 }
 
 } // namespace fincept
