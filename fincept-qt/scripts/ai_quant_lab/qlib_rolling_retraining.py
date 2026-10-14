@@ -7,11 +7,12 @@ import warnings
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, Optional
+from finterm_paths import feature_dir
 
 warnings.filterwarnings("ignore")
 
 # ── Persistence paths ─────────────────────────────────────────────────────────
-FINCEPT_DIR = Path.home() / ".fincept"
+FINCEPT_DIR = feature_dir("qlib_rolling")  # the user's own schedules/configs
 SCHEDULES_FILE = FINCEPT_DIR / "rolling_schedules.json"
 CONFIGS_DIR = FINCEPT_DIR / "configs"
 

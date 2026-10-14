@@ -4,12 +4,13 @@
 //   archival_memory_save(content, type?, metadata?)
 //   archival_memory_search(query, k?, user_id?)
 //
-// Storage: agent_tasks.db sibling to the Python module. FTS5 search with a
+// Storage: user/agents/agent_tasks.db, shared with task_state.py. FTS5 search with a
 // LIKE fallback for builds without FTS5. We open a fresh per-handler
 // connection (tagged by thread id) so MCP's worker-thread invocations don't
 // clash with the Qt main-thread.
 
 #include "mcp/tools/AgenticMemoryTools.h"
+#include "core/config/AppPaths.h"
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
@@ -35,9 +36,13 @@ namespace {
 constexpr const char* kAgenticMemoryTag = "AgenticMemoryTools";
 
 QString db_path() {
-    // Mirrors archival_memory.py:_DEFAULT_DB → <scripts>/agents/agent_tasks.db
-    const QString scripts = python::PythonRunner::instance().scripts_dir();
-    return QDir(scripts).filePath("agents/agent_tasks.db");
+    // The same file Python's task_state.py writes (finterm_paths.agents_dir()
+    // under FINCEPT_USER_DIR == AppPaths::user()). The two used to disagree —
+    // <scripts>/agent_tasks.db vs <scripts>/agents/agent_tasks.db — so the
+    // tools never saw a task the agents had recorded, and both sat in the
+    // source tree.
+    QDir().mkpath(AppPaths::agents());
+    return AppPaths::agents() + "/agent_tasks.db";
 }
 
 QSqlDatabase open_conn() {

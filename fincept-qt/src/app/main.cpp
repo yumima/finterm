@@ -306,9 +306,10 @@ int main(int argc, char* argv[]) {
     db_lock.setStaleLockTime(0); // never auto-expire; we control the lifecycle
     const bool sole_instance = db_lock.tryLock(0);
     if (sole_instance) {
-        QFile::remove(fincept::AppPaths::data() + "/fincept.db-wal");
+        // Only the -shm index (SQLite rebuilds it). A -wal left by a crash
+        // holds COMMITTED transactions that SQLite replays on the next open;
+        // deleting it threw those away.
         QFile::remove(fincept::AppPaths::data() + "/fincept.db-shm");
-        QFile::remove(fincept::AppPaths::data() + "/cache.db-wal");
         QFile::remove(fincept::AppPaths::data() + "/cache.db-shm");
     }
     // db_lock remains held (stack-allocated) until main() returns.
@@ -432,6 +433,7 @@ int main(int argc, char* argv[]) {
     fincept::register_migration_v054();
     fincept::register_migration_v055();
     fincept::register_migration_v056();
+    fincept::register_migration_v057();
 
     // Open cache database (non-fatal if fails)
     QString cache_path = fincept::AppPaths::data() + "/cache.db";
@@ -532,7 +534,9 @@ int main(int argc, char* argv[]) {
         const QString config_dir = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation) +
                                    QLatin1Char('/') + QLatin1String(fincept::AppIdentity::kOrg);
         for (const QString& dir_path :
-             {fincept::AppPaths::root(), fincept::AppPaths::data(), fincept::AppPaths::data() + "/users",
+             {fincept::AppPaths::root(), fincept::AppPaths::user(), fincept::AppPaths::data(),
+              fincept::AppPaths::data() + "/users", fincept::AppPaths::features(), fincept::AppPaths::agents(),
+              fincept::AppPaths::market_data(),
               fincept::AppPaths::logs(), fincept::AppPaths::files(), fincept::AppPaths::cache(),
               fincept::AppPaths::workspaces(), fincept::AppPaths::crashdumps(), config_dir}) {
             if (QFileInfo(dir_path).isDir())

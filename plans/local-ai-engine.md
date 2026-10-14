@@ -1,7 +1,7 @@
 # Local AI Engine — Vision, Requirements, Architecture
 
 **Status:** **In build (M1) as `hearth`** — sibling repo at
-`/home/yma/fin/hearth`.  M1 walking skeleton (FastAPI gateway +
+`../hearth (sibling repo)`.  M1 walking skeleton (FastAPI gateway +
 Ollama adapter + role registry + CLI + hardware probe) implemented
 and unit-tested 2026-06-04.  Not blocking finterm shipping; finterm's
 local-runtime adapter (`finagent_core.runtimes.local_runtime`)

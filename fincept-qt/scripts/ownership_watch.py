@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import sec_13f_bulk  # noqa: E402
 import finra_short_interest as finra  # noqa: E402
 import sec_form4_market as form4  # noqa: E402
+from finterm_paths import market_data_path
 
 try:
     import requests
@@ -301,16 +302,7 @@ def lockup_expiries(today, days_ahead, fetch=None):
 
 
 def _cache_path():
-    root = os.environ.get("FINCEPT_DATA_DIR")
-    if not root:
-        if sys.platform == "darwin":
-            root = os.path.expanduser("~/Library/Application Support/com.fincept.terminal")
-        elif os.name == "nt":
-            root = os.path.join(os.environ.get("LOCALAPPDATA", ""), "com.fincept.terminal")
-        else:
-            root = os.path.join(os.path.expanduser("~"), ".local", "share", "com.fincept.terminal")
-    os.makedirs(root, exist_ok=True)
-    return os.path.join(root, "ownership_watch.sqlite")
+    return market_data_path("ownership_watch.sqlite")
 
 
 def _nasdaq_month(yyyymm):

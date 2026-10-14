@@ -26,11 +26,11 @@ import os
 import time
 
 import pandas as pd
+from finterm_paths import cache_dir
 
 CACHE_DIR = os.environ.get(
     "FACTOR_CACHE_DIR",
-    os.path.join(os.path.expanduser("~"), ".local", "share",
-                 "com.fincept.terminal", "cache", "factor_panel"),
+    str(cache_dir("factor_panel")),
 )
 
 BENCHMARK = "SPY"

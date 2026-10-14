@@ -11,6 +11,7 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 
 from alpha_arena.utils.logging import get_logger
+from finterm_paths import user_root
 
 logger = get_logger("agent_cards")
 
@@ -158,7 +159,7 @@ _CARDS_LOADED = False
 def _get_config_dir() -> Path:
     """Get the configuration directory."""
     # Check for user config first
-    config_dir = Path.home() / ".fincept" / "alpha_arena" / "agent_cards"
+    config_dir = user_root() / "features" / "alpha_arena" / "agent_cards"
     if config_dir.exists():
         return config_dir
 

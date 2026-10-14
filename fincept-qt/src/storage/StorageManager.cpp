@@ -441,17 +441,17 @@ Result<void> StorageManager::clear_category(const QString& category_id) {
 // ── File sizes ───────────────────────────────────────────────────────────────
 
 qint64 StorageManager::main_db_size() const {
-    QFileInfo fi(AppPaths::data() + "/fincept.db");
-    if (!fi.exists())
+    // The signed-in user's database (data/users/<name>.db). This measured the
+    // pre-multi-user fincept.db, which no longer exists, so it always read 0.
+    const QString path = Database::instance().path();
+    if (path.isEmpty())
         return 0;
-    // Include WAL + SHM files
-    qint64 total = fi.size();
-    QFileInfo wal(AppPaths::data() + "/fincept.db-wal");
-    if (wal.exists())
-        total += wal.size();
-    QFileInfo shm(AppPaths::data() + "/fincept.db-shm");
-    if (shm.exists())
-        total += shm.size();
+    qint64 total = 0;
+    for (const QString& f : {path, path + "-wal", path + "-shm"}) {
+        QFileInfo fi(f);
+        if (fi.exists())
+            total += fi.size();
+    }
     return total;
 }
 

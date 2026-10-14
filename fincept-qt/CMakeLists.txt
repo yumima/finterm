@@ -756,6 +756,7 @@ set(STORAGE_SOURCES
     src/storage/sqlite/migrations/v054_iv_history_expiry_kind.cpp
     src/storage/sqlite/migrations/v055_chat_session_context.cpp
     src/storage/sqlite/migrations/v056_ai_prediction_source.cpp
+    src/storage/sqlite/migrations/v057_saved_strategies.cpp
 )
 
 # Python runner

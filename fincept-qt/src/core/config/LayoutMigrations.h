@@ -30,7 +30,7 @@ class LayoutMigrations {
     /// The on-disk layout version this build expects. Bump by one and add a
     /// matching `if (stored < N)` step in run() whenever a release moves where
     /// data lives.
-    static constexpr int kCurrentVersion = 2;
+    static constexpr int kCurrentVersion = 3;
 
     /// Run any pending migrations (stored version < kCurrentVersion), then
     /// stamp the current version. Call once, early in main(), primary instance

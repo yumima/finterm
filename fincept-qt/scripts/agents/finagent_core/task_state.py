@@ -30,10 +30,11 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from finterm_paths import agents_dir
 
 
-# Default DB path — same directory as Agno's storage
-_DEFAULT_DB = str(Path(__file__).parent.parent.parent / "agent_tasks.db")
+# Default DB path — the app's agents folder, never the scripts tree.
+_DEFAULT_DB = str(agents_dir() / "agent_tasks.db")
 
 
 # ─── Schema ──────────────────────────────────────────────────────────────────

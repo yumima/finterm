@@ -16,6 +16,7 @@ warnings.filterwarnings('ignore')
 
 import numpy as np
 import pandas as pd
+from finterm_paths import models_dir
 
 # Qlib online learning imports
 ONLINE_LEARNING_AVAILABLE = False
@@ -50,7 +51,7 @@ class OnlineLearningManager:
     Online Learning Manager for real-time model updates
     Handles incremental training, concept drift detection, and model adaptation
     """
-    CACHE_DIR = Path.home() / '.fincept' / 'online_learning'
+    CACHE_DIR = models_dir("qlib", "online_learning")
 
     def __init__(self):
         self.qlib_initialized = False

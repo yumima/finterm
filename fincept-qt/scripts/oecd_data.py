@@ -28,6 +28,7 @@ from pathlib import Path
 import os
 import re
 from defusedxml.ElementTree import fromstring
+from finterm_paths import cache_dir as cache_dir_for
 
 # OECD API Constants
 BASE_URL = "https://sdmx.oecd.org/public/rest/"
@@ -232,7 +233,7 @@ class OECDWrapper:
     """Modular OECD API wrapper with fault tolerance"""
 
     def __init__(self, cache_dir: Optional[str] = None):
-        self.cache_dir = cache_dir or os.path.join(os.path.expanduser("~"), ".oecd_cache")
+        self.cache_dir = cache_dir or str(cache_dir_for("oecd"))
         Path(self.cache_dir).mkdir(parents=True, exist_ok=True)
         self.session = self._get_legacy_session()
 

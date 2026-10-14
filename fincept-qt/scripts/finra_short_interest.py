@@ -42,6 +42,7 @@ import sys
 import time
 from datetime import date, datetime, timedelta
 from finterm_identity import user_agent
+from finterm_paths import market_data_path
 
 try:
     import requests
@@ -65,17 +66,7 @@ _GAP = 0.25
 
 
 def db_path():
-    root = os.environ.get("FINCEPT_DATA_DIR")
-    if not root:
-        if sys.platform == "darwin":
-            root = os.path.expanduser("~/Library/Application Support/com.fincept.terminal")
-        elif os.name == "nt":
-            root = os.path.join(os.environ.get("LOCALAPPDATA", ""), "com.fincept.terminal")
-        else:
-            root = os.path.join(os.path.expanduser("~"), ".local", "share",
-                                "com.fincept.terminal")
-    os.makedirs(root, exist_ok=True)
-    return os.path.join(root, "short_interest.sqlite")
+    return market_data_path("short_interest.sqlite")
 
 
 def connect():

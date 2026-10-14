@@ -39,9 +39,9 @@ The shader and readback are negligible; **the upload is the floor**.
 ## What Qt is using
 
 ```
-Path:  /home/yma/fin/finterm/.qt/6.8.3/gcc_64/   (local-to-project)
+Path:  <repo>/.qt/6.8.3/gcc_64/   (local-to-project)
 Source: aqtinstall — official Qt Company prebuilt binaries
-FFmpeg: BUNDLED at /home/yma/fin/finterm/.qt/6.8.3/gcc_64/lib/
+FFmpeg: BUNDLED at <repo>/.qt/6.8.3/gcc_64/lib/
         libavcodec.so.61, libavformat.so.61, swscale.so.8, swresample.so.5
         (Qt's plugin links these in preference to system libs)
 ```
@@ -49,7 +49,7 @@ FFmpeg: BUNDLED at /home/yma/fin/finterm/.qt/6.8.3/gcc_64/lib/
 **Proof that bundled FFmpeg has no hwaccel:**
 
 ```bash
-nm -D /home/yma/fin/finterm/.qt/6.8.3/gcc_64/lib/libavcodec.so.61 \
+nm -D <repo>/.qt/6.8.3/gcc_64/lib/libavcodec.so.61 \
   | grep -iE "cuvid|nvdec|nvenc|vaapi|vdpau"
 # (no output)
 ```
@@ -97,12 +97,12 @@ resulting `.so` into the aqtinstall plugin directory.
 git clone --branch v6.8.3 git://code.qt.io/qt/qtmultimedia.git
 cd qtmultimedia
 cmake -B build \
-  -DCMAKE_PREFIX_PATH=/home/yma/fin/finterm/.qt/6.8.3/gcc_64 \
+  -DCMAKE_PREFIX_PATH=<repo>/.qt/6.8.3/gcc_64 \
   -DFFMPEG_DIR=/usr \
   -DBUILD_SHARED_LIBS=ON
 ninja -C build qffmpegmediaplugin   # plugin target name TBD
 cp build/.../libffmpegmediaplugin.so \
-   /home/yma/fin/finterm/.qt/6.8.3/gcc_64/plugins/multimedia/
+   <repo>/.qt/6.8.3/gcc_64/plugins/multimedia/
 ```
 
 **Risk — API delta.** Qt 6.8 plugin source was written against FFmpeg

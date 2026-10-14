@@ -1068,18 +1068,25 @@ QWidget* SettingsScreen::build_storage() {
         wl->setContentsMargins(0, 0, 0, 0);
         wl->setSpacing(8);
         const QString root = AppPaths::root();
-        auto* path_lbl = new QLabel(tr("Your data folder: <b>%1</b> — local only, private to this account. "
-                                       "Credentials are kept separately in the OS keyring.")
-                                        .arg(root.toHtmlEscaped()));
+        const QString user_dir = AppPaths::user();
+        auto* path_lbl = new QLabel(
+            tr("Data folder: <b>%1</b> — on this computer only, private to this account.<br>"
+               "<b>user/</b> is <b>yours</b> and the only personal part: databases (portfolios, "
+               "watchlists, notes, strategies, chats), files (report drafts, Pre-IPO overrides), "
+               "workspaces, feature data (M&amp;A, Alpha Arena) and agent memory — back up or erase "
+               "that one folder. Everything else is the app's own and holds nothing personal: "
+               "cache/ (safe to clear), market_data/ (public SEC/FINRA indexes), models/, logs/, and "
+               "the Python runtime. Credentials are not files: they live in the OS keyring.")
+                .arg(root.toHtmlEscaped()));
         path_lbl->setTextFormat(Qt::RichText);
         path_lbl->setWordWrap(true);
         path_lbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
         path_lbl->setStyleSheet(settings_style::label_ss());
         wl->addWidget(path_lbl, 1);
-        auto* open_btn = new QPushButton(tr("Open folder"));
+        auto* open_btn = new QPushButton(tr("Open my data"));
         open_btn->setStyleSheet(settings_style::btn_secondary_ss());
         connect(open_btn, &QPushButton::clicked, this,
-                [root]() { QDesktopServices::openUrl(QUrl::fromLocalFile(root)); });
+                [user_dir]() { QDesktopServices::openUrl(QUrl::fromLocalFile(user_dir)); });
         wl->addWidget(open_btn);
         vl->addWidget(where);
         vl->addSpacing(10);
@@ -1395,7 +1402,7 @@ QWidget* SettingsScreen::build_storage() {
         irl->setSpacing(6);
 
         sql_db_selector_ = new QComboBox;
-        sql_db_selector_->addItem("fincept.db", "main");
+        sql_db_selector_->addItem(tr("Your database"), "main");
         sql_db_selector_->addItem("cache.db", "cache");
         sql_db_selector_->setFixedWidth(110);
         sql_db_selector_->setStyleSheet(settings_style::combo_ss());

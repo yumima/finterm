@@ -46,6 +46,8 @@ class ProfileManager {
     /// When active == "default", returns AppPaths::root() directly (no migration needed).
     /// Otherwise returns AppPaths::root()/profiles/<name>/.
     QString profile_root() const;
+    /// Root of any profile by name (default → AppPaths::root()).
+    QString profile_root_for(const QString& name) const;
 
     /// QSettings group prefix for the active profile — used by AppConfig
     /// to namespace per-profile settings under a shared Registry key.

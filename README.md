@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`259fb16a4`](https://github.com/yumima/finterm/commit/259fb16a4) settings: one organised place to see and edit everything that is yours
 - [`a7ae23d17`](https://github.com/yumima/finterm/commit/a7ae23d17) privacy: personal data and secrets stay on this machine, in the keyring
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

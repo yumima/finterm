@@ -29,11 +29,11 @@ void ProfileManager::set_active(const QString& name) {
     active_profile_ = clean;
 
     // Ensure the profile directory tree exists
-    QDir().mkpath(profile_root() + "/data");
-    QDir().mkpath(profile_root() + "/logs");
-    QDir().mkpath(profile_root() + "/cache");
-    QDir().mkpath(profile_root() + "/files");
-    QDir().mkpath(profile_root() + "/workspaces");
+    // Only the profile root here: the user/ tree is created by
+    // AppPaths::ensure_all() AFTER LayoutMigrations has moved any old
+    // data/files/workspaces into it (an empty user/data made first would
+    // look like the destination of a move that never happened).
+    QDir().mkpath(profile_root());
 
     // Register in manifest if not already there
     QStringList existing = list_profiles();
@@ -52,9 +52,13 @@ bool ProfileManager::is_custom_profile() const {
 }
 
 QString ProfileManager::profile_root() const {
-    if (active_profile_ == "default")
+    return profile_root_for(active_profile_);
+}
+
+QString ProfileManager::profile_root_for(const QString& name) const {
+    if (name == "default")
         return AppPaths::root();
-    return AppPaths::root() + "/profiles/" + active_profile_;
+    return AppPaths::root() + "/profiles/" + name;
 }
 
 QString ProfileManager::settings_group() const {
@@ -108,11 +112,12 @@ void ProfileManager::create_profile(const QString& name) {
     }
     // Create directory tree eagerly so it's ready for use
     const QString root = AppPaths::root() + "/profiles/" + clean;
-    QDir().mkpath(root + "/data");
+    // Personal folders under user/, the app's beside it (see AppPaths).
+    QDir().mkpath(root + "/user/data");
+    QDir().mkpath(root + "/user/files");
+    QDir().mkpath(root + "/user/workspaces");
     QDir().mkpath(root + "/logs");
     QDir().mkpath(root + "/cache");
-    QDir().mkpath(root + "/files");
-    QDir().mkpath(root + "/workspaces");
 }
 
 void ProfileManager::delete_profile(const QString& name) {

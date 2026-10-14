@@ -1,4 +1,5 @@
 #include "screens/futures/FuturesQuoteCache.h"
+#include "core/config/AppPaths.h"
 
 #include "screens/futures/FuturesContracts.h"
 
@@ -90,8 +91,7 @@ void FuturesQuoteCache::refresh() {
 }
 
 QString FuturesQuoteCache::cache_path() const {
-    const QString root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    const QString dir  = root + "/cache/futures";
+    const QString dir = AppPaths::cache() + "/futures";
     QDir().mkpath(dir);
     return dir + "/quotes.json";
 }

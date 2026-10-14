@@ -21,6 +21,7 @@ from alpha_arena.types.models import (
     LeaderboardEntry,
 )
 from alpha_arena.utils.logging import get_logger
+from finterm_paths import feature_dir
 
 logger = get_logger("database")
 
@@ -51,9 +52,7 @@ class AlphaArenaDatabase:
     def __init__(self, db_path: Optional[str] = None):
         if db_path is None:
             # Default to user's app data directory
-            app_data = Path.home() / ".fincept" / "alpha_arena"
-            app_data.mkdir(parents=True, exist_ok=True)
-            db_path = str(app_data / "alpha_arena.db")
+            db_path = str(feature_dir("alpha_arena") / "alpha_arena.db")
 
         self.db_path = db_path
         self._initialize_db()

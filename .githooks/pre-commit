@@ -11,20 +11,25 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 SCRIPT="$REPO_ROOT/tools/update_todays_commits.py"
 
-if [ ! -x "$SCRIPT" ]; then
-    exit 0
+if [ -x "$SCRIPT" ]; then
+    if ! python3 "$SCRIPT"; then
+        echo "pre-commit: update_todays_commits.py failed" >&2
+        exit 1
+    fi
+    # Stage the README only if it actually changed. If the user staged an
+    # unrelated README edit themselves we leave that alone — `git add` of an
+    # unmodified path is a no-op. (Only when the generator ran: otherwise a
+    # README the user is still editing would be swept into this commit.)
+    if ! git diff --quiet -- "$REPO_ROOT/README.md"; then
+        git add "$REPO_ROOT/README.md"
+    fi
 fi
 
-if ! python3 "$SCRIPT"; then
-    echo "pre-commit: update_todays_commits.py failed" >&2
-    exit 1
-fi
-
-# Stage the README only if it actually changed. If the user staged an
-# unrelated README edit themselves we leave that alone — `git add` of an
-# unmodified path is a no-op.
-if ! git diff --quiet -- "$REPO_ROOT/README.md"; then
-    git add "$REPO_ROOT/README.md"
+# Last, so it also sees the README just staged: personal data and secrets
+# never reach the repository (tools/check_personal_data.py).
+GUARD="$REPO_ROOT/tools/check_personal_data.py"
+if [ -f "$GUARD" ]; then
+    python3 "$GUARD" || exit 1
 fi
 
 exit 0

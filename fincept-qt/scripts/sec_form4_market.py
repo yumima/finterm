@@ -49,6 +49,7 @@ from datetime import date, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from sec_ownership_data import _get, parse_form4  # noqa: E402
+from finterm_paths import market_data_path
 
 BASE = "https://www.sec.gov/Archives"
 # EDGAR asks for <=10 req/s across everything using this User-Agent, and other
@@ -57,12 +58,7 @@ REQ_PAUSE = 0.13
 
 
 def db_path():
-    root = os.environ.get("FINCEPT_DATA_DIR")
-    if not root:
-        root = os.path.join(os.path.expanduser("~"), ".local", "share",
-                            "com.fincept.terminal")
-    os.makedirs(root, exist_ok=True)
-    return os.path.join(root, "form4.sqlite")
+    return market_data_path("form4.sqlite")
 
 
 def connect():

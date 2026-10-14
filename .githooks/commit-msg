@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# Commit messages are pushed with the code: keep personal data out of them too.
+REPO_ROOT="$(git rev-parse --show-toplevel)"
+GUARD="$REPO_ROOT/tools/check_personal_data.py"
+[ -f "$GUARD" ] || exit 0
+exec python3 "$GUARD" --message "$1"

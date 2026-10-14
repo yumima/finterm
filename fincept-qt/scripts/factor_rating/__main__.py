@@ -10,9 +10,9 @@ import json
 import os
 import sqlite3
 import sys
+from finterm_paths import user_data_dir
 
-DEFAULT_DB = os.path.join(os.path.expanduser("~"), ".local", "share",
-                          "com.fincept.terminal", "data", "users")
+DEFAULT_DB = str(user_data_dir() / "users")
 
 # Priced once daily at NAV with no high/low/volume — every indicator here is
 # meaningless on them.

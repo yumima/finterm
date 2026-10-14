@@ -50,6 +50,7 @@ import time
 import urllib.request
 import zipfile
 from finterm_identity import user_agent
+from finterm_paths import market_data_path
 
 try:
     import requests
@@ -72,18 +73,8 @@ _MIN_REQ_GAP = 0.4
 
 
 def db_path():
-    """Where the index lives. Mirrors the app data directory the C++ side uses."""
-    env = os.environ.get("FINCEPT_DATA_DIR")
-    if env:
-        base = env
-    elif sys.platform == "darwin":
-        base = os.path.expanduser("~/Library/Application Support/com.fincept.terminal")
-    elif os.name == "nt":
-        base = os.path.join(os.environ.get("LOCALAPPDATA", ""), "com.fincept.terminal")
-    else:
-        base = os.path.expanduser("~/.local/share/com.fincept.terminal")
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, "form13f.sqlite")
+    """Where the index lives: the app's market_data folder (finterm_paths)."""
+    return market_data_path("form13f.sqlite")
 
 
 def _get(url, timeout=300):

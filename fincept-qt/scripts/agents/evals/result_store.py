@@ -26,6 +26,7 @@ from dataclasses import asdict, is_dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from finterm_paths import agents_dir
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +35,7 @@ def results_path() -> Path:
     override = os.environ.get("FINCEPT_EVAL_RESULTS")
     if override:
         return Path(override)
-    return Path.home() / ".fincept" / "eval_runs.jsonl"
+    return agents_dir() / "eval_runs.jsonl"
 
 
 def _trace_summary(trace: Any) -> dict:

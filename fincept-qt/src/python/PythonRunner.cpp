@@ -1,5 +1,7 @@
 #include "python/PythonRunner.h"
 
+#include "core/config/AppPaths.h"
+
 #include "core/logging/Logger.h"
 #include "python/PythonSetupManager.h"
 #include "storage/secure/SecureStorage.h"
@@ -123,10 +125,20 @@ QProcessEnvironment PythonRunner::build_python_env() const {
     const QString install_dir = PythonSetupManager::instance().install_dir();
     env.insert("FINCEPT_DATA_DIR", install_dir);
 
-    // FINAGENT_DATA_DIR: default to <FINCEPT_DATA_DIR>/finagent. Always overwrite
-    // so we match what resources.py expects regardless of what the user shell
-    // inherited — the app owns its own per-persona storage root.
-    env.insert("FINAGENT_DATA_DIR", install_dir + "/finagent");
+    // FINCEPT_USER_DIR: the active profile's user/ folder — where every
+    // script keeps PERSONAL data (finterm_paths.user_root()). FINCEPT_DATA_DIR
+    // above stays the app root for system data (cache, market_data, models).
+    env.insert("FINCEPT_USER_DIR", fincept::AppPaths::user());
+    // The user's database folder exactly as the app resolves it (old layout
+    // until LayoutMigrations has moved it) — so scripts and app never disagree.
+    env.insert("FINCEPT_USER_DATA_DIR", fincept::AppPaths::data());
+    // The active profile's regenerable cache (finterm_paths.cache_dir()).
+    env.insert("FINCEPT_CACHE_DIR", fincept::AppPaths::cache());
+
+    // FINAGENT_DATA_DIR: per-persona agent memory is personal, so it lives in
+    // user/agents. Always overwrite so we match what resources.py expects
+    // regardless of what the user shell inherited.
+    env.insert("FINAGENT_DATA_DIR", fincept::AppPaths::agents() + "/finagent");
 
     // FINAGENT_RUNTIME_CACHE_SIZE: respect user override if already set; otherwise
     // leave unset so persona_registry.py uses its own default (8).
@@ -258,7 +270,7 @@ void PythonRunner::find_python_async() {
 
 // ── Find Scripts Directory ───────────────────────────────────────────────────
 
-QString PythonRunner::find_scripts_dir() const {
+QString PythonRunner::find_scripts_dir() {
     QString exe_dir = QCoreApplication::applicationDirPath();
 
     // Check relative to exe: scripts/, ../scripts/, etc.

@@ -13,6 +13,7 @@ import json
 import sqlite3
 from pathlib import Path
 import logging
+from finterm_paths import agents_dir
 
 logger = logging.getLogger(__name__)
 
@@ -133,10 +134,8 @@ class SQLiteRepository(Repository[T]):
 
     def __init__(self, db_path: Optional[Path] = None):
         if db_path is None:
-            # Default to user data directory
-            import os
-            app_data = os.getenv('APPDATA', os.path.expanduser('~'))
-            db_path = Path(app_data) / 'fincept-terminal' / 'agents.db'
+            # The app's agents folder (finterm_paths), not $HOME.
+            db_path = agents_dir() / 'agents.db'
 
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

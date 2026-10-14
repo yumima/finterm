@@ -4,7 +4,8 @@ Reuses the daemon's own measurement code so every number matches what the
 ER Earnings tab computes. Adds: market-adjusted (SPY) reaction, longer history.
 """
 import sys, json, time, os, concurrent.futures as cf
-sys.path.insert(0, "/home/yma/fin/finterm/fincept-qt/scripts")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "fincept-qt" / "scripts"))
 import yfinance_data as yd
 import yfinance as yf
 import pandas as pd

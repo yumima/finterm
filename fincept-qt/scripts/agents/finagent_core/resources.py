@@ -29,19 +29,16 @@ def base_dir() -> str:
     """
     Root directory for all finagent persona state.
 
-    Overridable via FINAGENT_DATA_DIR env var. Otherwise defaults to
-    <LOCALAPPDATA>/com.fincept.terminal/finagent on Windows, or
-    $XDG_DATA_HOME/com.fincept.terminal/finagent (~/.local/share fallback)
-    elsewhere.
+    Overridable via FINAGENT_DATA_DIR env var (the app sets it). Otherwise
+    the user's agents folder: <data root>/user/agents/finagent.
     """
     env = os.getenv("FINAGENT_DATA_DIR")
     if env:
         return str(Path(env).expanduser())
-    if os.name == "nt":
-        root = os.getenv("LOCALAPPDATA") or str(Path.home() / "AppData" / "Local")
-        return str(Path(root) / "com.fincept.terminal" / "finagent")
-    xdg = os.getenv("XDG_DATA_HOME") or str(Path.home() / ".local" / "share")
-    return str(Path(xdg) / "com.fincept.terminal" / "finagent")
+    # Agent memory is personal: the user/ folder (finterm_paths), same as the
+    # app sets FINAGENT_DATA_DIR to.
+    from finterm_paths import agents_dir
+    return str(agents_dir("finagent"))
 
 
 def persona_dir(user_id: str, agent_id: str) -> str:

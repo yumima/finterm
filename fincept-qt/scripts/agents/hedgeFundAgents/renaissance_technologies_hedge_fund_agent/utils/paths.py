@@ -4,10 +4,8 @@ Cross-Platform Path Utilities for finterm
 Provides consistent paths across Windows, macOS, and Linux for storing
 RenTech agent data (knowledge base, memory, logs, etc.)
 
-Uses standard application data directories:
-- Windows: %APPDATA%\fincept-terminal\
-- macOS: ~/Library/Application Support/fincept-terminal/
-- Linux: ~/.local/share/fincept-terminal/
+Everything lives under the app's own data folder, in features/renaissance
+(see finterm_paths) — the one place the user manages finterm's data.
 """
 
 import os
@@ -15,6 +13,7 @@ import platform
 from pathlib import Path
 from typing import Optional
 import logging
+from finterm_paths import feature_dir
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ def get_app_data_dir() -> Path:
         # Linux: ~/.local/share/fincept-terminal
         base = Path.home() / ".local" / "share"
 
-    app_dir = base / "fincept-terminal"
+    app_dir = feature_dir("renaissance")
 
     # Create directory if it doesn't exist
     try:

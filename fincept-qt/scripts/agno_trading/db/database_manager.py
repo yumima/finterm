@@ -9,24 +9,15 @@ import os
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime, timedelta
 import sys
+from finterm_paths import feature_dir
 
 class DatabaseManager:
     def __init__(self, db_path: Optional[str] = None):
         """Initialize database manager"""
         if db_path is None:
-            # Use FINCEPT_DATA_DIR env var if set by host, otherwise use platform-specific app data
-            data_dir = os.environ.get("FINCEPT_DATA_DIR")
-            if data_dir:
-                db_dir = os.path.join(data_dir, 'alpha_arena')
-            else:
-                # Fallback to platform-specific user data directory
-                if os.name == "nt":  # Windows
-                    base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~/AppData/Local"))
-                elif hasattr(os, 'uname') and os.uname().sysname == "Darwin":  # macOS
-                    base = os.path.expanduser("~/Library/Application Support")
-                else:  # Linux
-                    base = os.path.expanduser("~/.local/share")
-                db_dir = os.path.join(base, 'fincept-dev', 'alpha_arena')
+            # The app's features folder (finterm_paths) — same place whether
+            # the host set FINCEPT_DATA_DIR or the script runs by hand.
+            db_dir = str(feature_dir("alpha_arena"))
             os.makedirs(db_dir, exist_ok=True)
             db_path = os.path.join(db_dir, 'agno_trading.db')
             print(f"[DatabaseManager] Using database at: {db_path}", file=sys.stderr)

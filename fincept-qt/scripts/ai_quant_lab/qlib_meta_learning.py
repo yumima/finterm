@@ -21,6 +21,7 @@ import pandas as pd
 # own directory is importable regardless of the launching process cwd.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _real_data import build_supervised, RealDataError  # noqa: E402
+from finterm_paths import models_dir
 
 # Default universe / window used when the caller does not pass tickers or dates
 # (the Meta-Learning UI sends only model_ids / param_grid). REAL liquid US
@@ -92,7 +93,7 @@ class MetaLearningManager:
     Meta Learning Manager for AutoML and Model Selection
     Handles model comparison, hyperparameter tuning, and ensemble creation
     """
-    CACHE_DIR = Path.home() / '.fincept' / 'meta_learning'
+    CACHE_DIR = models_dir("qlib", "meta_learning")
 
     def __init__(self):
         self.trained_models = {}

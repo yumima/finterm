@@ -21,6 +21,7 @@ import pandas as pd
 # own directory is importable regardless of the launching process cwd.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _real_data import build_supervised, RealDataError  # noqa: E402
+from finterm_paths import models_dir
 
 # Default universe / window used when the caller does not pass tickers or a
 # date range (the Advanced Models UI sends only model_type + config). These are
@@ -104,7 +105,7 @@ class AdvancedModelsManager:
     Advanced Models Manager for Time-Series Neural Networks
     Handles LSTM, GRU, Transformer, and hybrid architectures
     """
-    CACHE_DIR = Path.home() / '.fincept' / 'advanced_models'
+    CACHE_DIR = models_dir("qlib", "advanced_models")
 
     def __init__(self):
         self.models = {}

@@ -1,4 +1,5 @@
 #include "screens/portfolio/PortfolioFuturesView.h"
+#include "core/config/AppPaths.h"
 
 #include "python/PythonWorker.h"
 #include "screens/futures/FuturesContracts.h"
@@ -411,8 +412,7 @@ void PortfolioFuturesView::refresh_extended_hours() {
 }
 
 QString PortfolioFuturesView::ext_cache_path() const {
-    const QString root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    const QString dir  = root + "/cache/portfolio_ext";
+    const QString dir = AppPaths::cache() + "/portfolio_ext";
     QDir().mkpath(dir);
     return dir + "/quotes.json";
 }

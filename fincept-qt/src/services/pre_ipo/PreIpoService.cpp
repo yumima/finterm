@@ -1,5 +1,6 @@
 // src/services/pre_ipo/PreIpoService.cpp
 #include "services/pre_ipo/PreIpoService.h"
+#include "core/config/AppPaths.h"
 
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
@@ -27,6 +28,16 @@
 #include <limits>
 
 namespace fincept::services {
+
+namespace {
+// The user's own valuation edits for the Pre-IPO screen: personal data, so
+// it lives in the profile's user/files, not in a cache or a QStandardPaths
+// folder outside the app's data root.
+QString valuation_overrides_path() {
+    return AppPaths::files() + "/pre_ipo/valuation_overrides.json";
+}
+} // namespace
+
 
 using namespace fincept::pre_ipo;
 
@@ -332,13 +343,10 @@ QString PreIpoService::add_user_company(const QJsonObject& entry_in) {
     entry[QStringLiteral("id")]   = id;
     entry[QStringLiteral("name")] = name;
 
-    // Override file: same path load_valuation_seed() reads its user overrides
-    // from (FINCEPT_DATA_DIR, else the app data dir).
-    QString data_dir = qEnvironmentVariable("FINCEPT_DATA_DIR");
-    if (data_dir.isEmpty())
-        data_dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    QDir().mkpath(data_dir);
-    const QString path = data_dir + "/pre_ipo_valuation_seed.json";
+    // Override file: the same path load_valuation_seed() reads the user's
+    // overrides from (valuation_overrides_path(), in user/files).
+    const QString path = valuation_overrides_path();
+    QDir().mkpath(QFileInfo(path).absolutePath());
 
     // Load any existing override entries (tolerant of a missing/invalid file).
     QJsonObject root;
@@ -671,10 +679,7 @@ PreIpoService::DossierState PreIpoService::dossier_state(const QString& company_
 void PreIpoService::persist_resolved_cik(const QString& id, const QString& cik) {
     if (id.isEmpty() || cik.isEmpty())
         return;
-    QString data_dir = qEnvironmentVariable("FINCEPT_DATA_DIR");
-    if (data_dir.isEmpty())
-        data_dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    const QString path = data_dir + "/pre_ipo_valuation_seed.json";
+    const QString path = valuation_overrides_path();
     QFile in(path);
     if (!in.open(QIODevice::ReadOnly))
         return;   // no user overrides — nothing of the user's to update
@@ -1787,15 +1792,11 @@ void PreIpoService::load_valuation_seed() {
     seed_ = parse_file(
         python::PythonRunner::instance().scripts_dir() + "/pre_ipo_valuation_seed.json", "bundled");
 
-    // 2) User override (optional): FINCEPT_DATA_DIR/pre_ipo_valuation_seed.json,
-    //    falling back to the app data dir. Lets the user refresh stale
+    // 2) User override (optional): user/files/pre_ipo/valuation_overrides.json.
+    //    Lets the user refresh stale
     //    valuations or add private names WITHOUT a rebuild. Override entries
     //    upsert by id — same id replaces the bundled entry, new ids are added.
-    QString data_dir = qEnvironmentVariable("FINCEPT_DATA_DIR");
-    if (data_dir.isEmpty())
-        data_dir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    const QVector<ValuationSeed> overrides =
-        parse_file(data_dir + "/pre_ipo_valuation_seed.json", "user override");
+    const QVector<ValuationSeed> overrides = parse_file(valuation_overrides_path(), "user override");
     int replaced = 0, added = 0;
     for (const auto& ov : overrides) {
         int idx = -1;
@@ -2031,8 +2032,7 @@ void PreIpoService::schedule_next_daily_refresh() {
 // ── Persistent cache ─────────────────────────────────────────────────────────
 
 QString PreIpoService::cache_dir() const {
-    const QString root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    const QString dir = root + "/cache/pre_ipo";
+    const QString dir = AppPaths::cache() + "/pre_ipo";
     QDir().mkpath(dir);
     return dir;
 }

@@ -8,16 +8,12 @@ import json
 import numpy as np
 import pandas as pd
 from datetime import datetime
+from finterm_paths import models_dir
 
 
 def get_data_dir():
     """Resolve the VisionQuant data directory."""
-    fincept_dir = os.environ.get("FINCEPT_DATA_DIR", "")
-    if fincept_dir:
-        return os.path.join(fincept_dir, "vision_quant")
-    # Fallback: ~/.fincept/vision_quant
-    home = os.path.expanduser("~")
-    return os.path.join(home, ".fincept", "vision_quant")
+    return str(models_dir("vision_quant"))
 
 
 def ensure_dirs():

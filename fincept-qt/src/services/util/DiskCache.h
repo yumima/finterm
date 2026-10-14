@@ -12,6 +12,7 @@
 // Files are written atomically (temp + rename) so a crash mid-write can't
 // leave a half-truncated JSON that fails to parse on next launch.
 #pragma once
+#include "core/config/AppPaths.h"
 
 #include "core/logging/Logger.h"
 
@@ -31,14 +32,14 @@ namespace fincept::services::util {
 
 class DiskCache {
 public:
-    // service_id becomes the subdirectory under <AppData>/cache/. Use short
+    // service_id becomes the subdirectory under AppPaths::cache() — the app's
+    // regenerable-data folder, which Settings › Storage can clear. Use short
     // lowercase identifiers ("pre_ipo", "portfolio", "markets", etc.). The
     // directory is created lazily on first save.
     explicit DiskCache(QString service_id) : service_id_(std::move(service_id)) {}
 
     QString dir() const {
-        const QString root = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-        const QString d = root + QStringLiteral("/cache/") + service_id_;
+        const QString d = AppPaths::cache() + QStringLiteral("/") + service_id_;
         QDir().mkpath(d);
         // Clamp dir perms to 0700 so cached payload filenames (which can
         // leak account/ticker context) aren't world-traversable. Cheap

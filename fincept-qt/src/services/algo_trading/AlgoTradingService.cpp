@@ -5,11 +5,15 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "storage/cache/CacheManager.h"
+#include "storage/sqlite/SqliteFiles.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
 #include <QPointer>
 #include <QUuid>
+#include <QSqlQuery>
+#include <QSqlDatabase>
 
 namespace fincept::services::algo {
 
@@ -19,8 +23,46 @@ static constexpr const char* kStrategiesCacheKey = "algo:strategies:registry";
 static constexpr const char* kDeploymentsCacheKey = "algo:deployments";
 
 // ── DB path helper ────────────────────────────────────────────────────────────
+// True when the SQLite file at `path` holds the app's main tables (users'
+// portfolios, settings) — i.e. it is a user database, never an algo store.
+static bool looks_like_main_db(const QString& path) {
+    const QString conn = QStringLiteral("algo_adopt_probe");
+    bool main = true; // unreadable: treat as not ours
+    {
+        QSqlDatabase db = QSqlDatabase::addDatabase(QStringLiteral("QSQLITE"), conn);
+        db.setDatabaseName(path);
+        db.setConnectOptions(QStringLiteral("QSQLITE_OPEN_READONLY"));
+        if (db.open()) {
+            QSqlQuery q(db);
+            main = !q.exec(QStringLiteral("SELECT 1 FROM sqlite_master WHERE type='table' AND name IN "
+                                          "('portfolios','settings','watchlists') LIMIT 1")) ||
+                   q.next();
+            db.close();
+        }
+    }
+    QSqlDatabase::removeDatabase(conn);
+    return main;
+}
+
 static QString algo_db_path() {
-    return fincept::AppPaths::data() + "/fincept.db";
+    const QString data = fincept::AppPaths::data();
+    const QString path = data + "/algo_trading.db";
+    // The algo scripts used to be handed data/fincept.db. Adopt it under its
+    // own name — but only if it really is theirs: an old single-user main
+    // database can also arrive at that name (main.cpp's legacy-location
+    // migration), and that must never become the algo store.
+    static bool adopted = false;
+    if (!adopted) {
+        adopted = true;
+        const QString legacy = data + "/fincept.db";
+        if (fincept::sqlite_files::unit_free(path) && QFileInfo::exists(legacy) &&
+            QFileInfo::exists(data + "/auth.db") && !looks_like_main_db(legacy)) {
+            const bool ok = fincept::sqlite_files::move_unit(legacy, path);
+            LOG_INFO("AlgoTrading", ok ? QStringLiteral("Adopted data/fincept.db as algo_trading.db")
+                                       : QStringLiteral("Could not rename data/fincept.db to algo_trading.db"));
+        }
+    }
+    return path;
 }
 
 AlgoTradingService& AlgoTradingService::instance() {

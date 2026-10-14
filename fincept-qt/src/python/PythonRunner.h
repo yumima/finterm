@@ -81,11 +81,15 @@ class PythonRunner : public QObject {
     /// Set max concurrent Python processes (default: 3)
     void set_max_concurrent(int n) { max_concurrent_ = n; }
 
+  public:
+    /// Locate the bundled scripts directory (exe-relative, then the dev tree).
+    /// Static so startup migrations can find it without constructing the runner.
+    static QString find_scripts_dir();
+
   private:
     PythonRunner();
     QString find_python_sync() const;
     void find_python_async();
-    QString find_scripts_dir() const;
     void start_next();
 
     QString python_path_;

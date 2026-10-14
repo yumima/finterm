@@ -16,20 +16,17 @@ import sys
 import os
 import argparse
 import sqlite3
+from finterm_paths import user_data_dir
 
 
 def get_db_path(args_db: str) -> str:
-    """Resolve DB path: use provided --db, or fall back to AppData location."""
-    if args_db and os.path.exists(args_db):
+    """The algo-trading database: the path the app passes (created on first
+    use), else the app's data folder. Never a file in the scripts tree."""
+    if args_db:
         return args_db
-    # Windows fallback
-    appdata = os.environ.get('APPDATA', '')
-    if appdata:
-        candidate = os.path.join(appdata, 'Fincept', 'FinceptTerminal', 'fincept.db')
-        if os.path.exists(candidate):
-            return candidate
-    # Last resort: same dir as script
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'fincept.db')
+    path = user_data_dir() / "algo_trading.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 
 def open_db(db_path: str):

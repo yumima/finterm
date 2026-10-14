@@ -1,6 +1,7 @@
 // ReportBuilderService.cpp — see header for design rationale.
 
 #include "services/report_builder/ReportBuilderService.h"
+#include "core/config/AppPaths.h"
 
 #include "core/config/AppIdentity.h"
 #include "core/events/EventBus.h"
@@ -336,8 +337,10 @@ ReportBuilderService::ReportBuilderService() {
         }
     });
 
-    autosave_path_ =
-        QStandardPaths::writableLocation(QStandardPaths::TempLocation) + "/fincept_report_autosave.fincept";
+    // The draft is the user's work: keep it with their files, not in /tmp
+    // (shared, world-readable on some systems, wiped on reboot).
+    QDir().mkpath(AppPaths::files() + "/reports");
+    autosave_path_ = AppPaths::files() + "/reports/autosave.fincept";
 
     // Restore current_file_ from settings so the title bar shows the right
     // path on relaunch. (The doc itself comes from autosave below.)

@@ -25,17 +25,17 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from condition_evaluator import load_candles_from_db, evaluate_condition_group
+from finterm_paths import user_data_dir
 
 
 def get_db_path(arg_db: str) -> str:
-    if arg_db and os.path.exists(arg_db):
+    """The algo-trading database: the path the app passes (created on first
+    use), else the app's data folder. Never a file in the scripts tree."""
+    if arg_db:
         return arg_db
-    appdata = os.environ.get('APPDATA', '')
-    if appdata:
-        candidate = os.path.join(appdata, 'Fincept', 'FinceptTerminal', 'fincept.db')
-        if os.path.exists(candidate):
-            return candidate
-    return arg_db or ''
+    path = user_data_dir() / "algo_trading.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 
 def main():

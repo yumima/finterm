@@ -29,6 +29,7 @@ import math
 import os
 import sqlite3
 import traceback
+from finterm_paths import user_data_dir
 
 # Debug log collector
 DEBUG_LOG = []
@@ -421,15 +422,15 @@ def run_backtest(
 
 
 def get_db_path(arg_db: str) -> str:
-    """Resolve DB path from arg or fallback to AppData location."""
-    if arg_db and os.path.exists(arg_db):
+    """The algo-trading database: the path the app passes (created on first
+    use), else the user's data folder. The old fallback returned '' when the
+    file did not exist yet — SQLite's in-memory database — so a saved
+    strategy silently vanished."""
+    if arg_db:
         return arg_db
-    appdata = os.environ.get('APPDATA', '')
-    if appdata:
-        candidate = os.path.join(appdata, 'Fincept', 'FinceptTerminal', 'fincept.db')
-        if os.path.exists(candidate):
-            return candidate
-    return arg_db or ''
+    path = user_data_dir() / "algo_trading.db"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return str(path)
 
 
 def open_db(db_path: str):
