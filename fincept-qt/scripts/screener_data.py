@@ -90,6 +90,17 @@ TV_COLUMNS = {
     "buyback_yield": ("buyback_yield", 0.01),
     "average_volume_30d_calc": ("avg_volume_30d", None),
     "earnings_release_next_date": ("next_earnings", None),
+    # today's bar, for intraday refreshes without a Yahoo request per name.
+    # TradingView marks it "delayed_streaming_900": 15 minutes behind.
+    "open": ("q_open", None),
+    "high": ("q_high", None),
+    "low": ("q_low", None),
+    "close": ("q_close", None),
+    "volume": ("q_volume", None),
+    "time": ("q_time", None),          # the bar's session open, unix
+    "update_time": ("q_update", None),  # when the (delayed) quote was last SENT, unix — not the price's time
+    "update_mode": ("q_mode", None),
+    "change": ("q_change", 0.01),       # TradingView's own % change vs ITS previous close
 }
 
 # Sectors where EBIT / enterprise value / gross profit do not mean what the
@@ -163,7 +174,7 @@ def parse_universe(rows):
         rec = {}
         for col, v in zip(cols, vals):
             key, scale = TV_COLUMNS[col]
-            if key in ("tv_name", "name", "sector", "industry", "exchange"):
+            if key in ("tv_name", "name", "sector", "industry", "exchange", "q_mode"):
                 rec[key] = v if isinstance(v, str) else None
                 continue
             f = _num(v)
@@ -220,19 +231,13 @@ def in_session(now=None):
     return (now.hour, now.minute) >= (9, 30) and now < now.replace(hour=16, minute=15, second=0, microsecond=0)
 
 
-INTRADAY_TTL = 15 * 60  # a mid-session fetch is current for 15 minutes, not until the close
-
-
 def is_fresh(fetched_ts, now=None):
-    """A cached frame is current if fetched after the last close — and, while
-    the session is open, within the last INTRADAY_TTL: a 10:00 fetch must not
-    be served at 15:30 as the day's prices."""
+    """Yahoo HISTORY is current once fetched after the last close: it changes
+    once a day. During the session today's bar comes from TradingView's quote
+    (apply_live_bars), so a mid-session refresh costs no Yahoo request per
+    name — before, every name was re-downloaded every 15 minutes."""
     now = now or datetime.now(timezone.utc)
-    if fetched_ts < _last_close_utc(now).timestamp():
-        return False
-    if in_session(now) and now.timestamp() - fetched_ts > INTRADAY_TTL:
-        return False
-    return True
+    return fetched_ts >= _last_close_utc(now).timestamp()
 
 
 def _locked(path):
@@ -291,7 +296,7 @@ def _persist(cache, path, state):
         print(f"price cache not written: {e}", file=sys.stderr)
 
 
-def load_prices(symbols, force=False):
+def load_prices(symbols, force=False, now=None):
     """{symbol: DataFrame(Open, High, Low, Close, Volume)} for `symbols` + SPY.
 
     Cached on disk (is_fresh decides); only stale or missing symbols are
@@ -308,10 +313,14 @@ def load_prices(symbols, force=False):
     state = {"mtime": None if force else _mtime(path), "saved": time.time()}
     cache = {"frames": {}, "fetched": {}} if force else _read_cache(path)
     want = list(dict.fromkeys(list(symbols) + [BENCHMARK]))
-    todo = [s for s in want if not is_fresh(cache["fetched"].get(s, 0))]
+    # Once per close (is_fresh). Measured: Yahoo's cost is the request per
+    # name, not the payload — a month of bars took as long as two years (300
+    # names: 6.7 s vs 6.2 s) — so an incremental "append the last month" path
+    # bought nothing and was removed; 100-name chunks beat 300 (5.6 s vs 13.4 s).
+    todo = [s for s in want if not is_fresh(cache["fetched"].get(s, 0), now)]
     total = len(todo)
     dirty = False
-    for n, i in enumerate(range(0, total, CHUNK)):
+    for i in range(0, total, CHUNK):
         chunk = todo[i:i + CHUNK]
         log_progress(i, total, f"Downloading prices {i}/{total}")
         try:
@@ -342,7 +351,7 @@ def load_prices(symbols, force=False):
     got = {s: cache["frames"][s] for s in want if s in cache["frames"]}
     oldest = min((cache["fetched"].get(s, 0) for s in got), default=0)
     # served from cache although not current: their chunk's download failed
-    stale = sum(1 for s in got if not is_fresh(cache["fetched"].get(s, 0)))
+    stale = sum(1 for s in got if not is_fresh(cache["fetched"].get(s, 0), now))
     return got, oldest, stale
 
 
@@ -698,7 +707,125 @@ def _top(series, n=None, frac=None):
     return list(s.index[:n])
 
 
-def compute(fund, frames, extras=None):
+def fetch_quotes(tv_symbols):
+    """TradingView quotes for explicit symbols (SPY is not in the stock
+    universe) -> {yahoo symbol: record}, same fields as parse_universe."""
+    import urllib.request
+    payload = {"symbols": {"tickers": list(tv_symbols)}, "columns": list(TV_COLUMNS)}
+    req = urllib.request.Request(
+        TV_URL, data=json.dumps(payload).encode(),
+        headers={"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"})
+    rows = json.loads(urllib.request.urlopen(req, timeout=30).read()).get("data") or []
+    return parse_universe(rows)  # the one decoder for TradingView rows
+
+
+# A quote is spliced onto the Yahoo history only if OUR change vs Yahoo's
+# previous close agrees with TradingView's OWN change vs its previous close.
+# A real move — a +35% earnings gap — agrees, so it is kept; a split Yahoo has
+# not absorbed yet makes them disagree by >= 33 points (2:1: -50% vs ~0%).
+# History is fetched once per close (the evening before), so its previous
+# close is TradingView's previous close and the two changes agree to rounding.
+# 1.5 points of slack separates even a 20:19 split (5 points) and a 10% stock
+# dividend (9). What it does NOT cover is a history fetched this MORNING on an
+# ex-dividend day (Yahoo re-bases yesterday by the dividend) — such a name falls
+# back to its last close and is counted: truth over coverage. No gap-size
+# rule: the discriminator is consistency, not magnitude.
+LIVE_CHANGE_TOL = 0.015
+
+
+def _delay_minutes(mode):
+    """TradingView's update_mode -> minutes of delay: "delayed_streaming_900"
+    -> 15, "streaming" -> 0, anything unrecognised -> None (unknown)."""
+    if not isinstance(mode, str):
+        return None
+    if mode == "streaming":
+        return 0
+    m = re.search(r"delayed\w*?_(\d+)$", mode)
+    return int(m.group(1)) // 60 if m else None
+
+
+def apply_live_bars(frames, quotes, now=None):
+    """During the session, today's bar from TradingView's quote replaces or
+    appends today's row of each Yahoo history — an intraday refresh then needs
+    no Yahoo request per name. A quote is used only if its bar is TODAY's
+    session, O/H/L/C are present and consistent (low <= open, close <= high),
+    and our change vs the previous close agrees with TradingView's own change
+    (LIVE_CHANGE_TOL) — a split the history has not absorbed makes them
+    disagree; a genuine big move does not.
+
+    Every OTHER name loses today's partial Yahoo row, if it has one: it then
+    shows its last real close, never a bar frozen at whenever Yahoo was last
+    asked. Returns (frames, info) with the counts, the WORST delay among the
+    quotes used, and the time their prices are from (the median quote's update
+    time minus that delay — update_time is when the delayed quote was sent).
+    """
+    now = now or datetime.now(timezone.utc)
+    info = {"applied": 0, "on_last_close": 0, "price_time": None, "delayed_min": None}
+    if not in_session(now):
+        return frames, info
+    today = now.astimezone(_et()).date()
+    # The previous session = the most common last date (before today) across
+    # all histories — holidays included, and robust to any one series being
+    # stale (SPY alone was a single point of failure: its failed chunk made
+    # every current name look stale and let the stale ones through). A history
+    # that does not end there is missing a day; no live bar across the hole.
+    from collections import Counter
+    lasts = Counter()
+    for f in frames.values():
+        if f is None or f.empty:
+            continue
+        before_dates = [d for d in f.index if d.date() < today]
+        if before_dates:
+            lasts[before_dates[-1].date()] += 1
+    prev_session = lasts.most_common(1)[0][0] if lasts else None
+    updates, delays = [], []
+    out = dict(frames)
+    for sym, f in frames.items():
+        if f is None or f.empty:
+            continue
+        idx = f.index
+        day = pd.Timestamp(today)
+        if idx.tz is not None:
+            day = day.tz_localize(idx.tz)
+        before = f[idx < day]
+        q = quotes.get(sym) or {}
+        t = q.get("q_time")
+        o, h, l, c, v = (q.get(k) for k in ("q_open", "q_high", "q_low", "q_close", "q_volume"))
+        tv_change = q.get("q_change")
+        prev = before["Close"].dropna()
+        usable = (
+            t is not None
+            and datetime.fromtimestamp(t, timezone.utc).astimezone(_et()).date() == today
+            and None not in (o, h, l, c) and tv_change is not None
+            and 0 < l <= min(o, c) and max(o, c) <= h
+            and not prev.empty and abs((c / prev.iloc[-1] - 1) - tv_change) <= LIVE_CHANGE_TOL
+            and (prev_session is None or prev.index[-1].date() == prev_session)
+        )
+        if usable:
+            g = before.copy()
+            g.loc[day] = {"Open": o, "High": h, "Low": l, "Close": c,
+                          "Volume": v if v is not None else np.nan}
+            out[sym] = g
+            if sym != BENCHMARK:
+                info["applied"] += 1
+            if q.get("q_update"):
+                updates.append(q["q_update"])
+            delays.append(_delay_minutes(q.get("q_mode")))
+        else:
+            if len(before) < len(f):
+                out[sym] = before  # drop the partial: its last real close stands
+            if sym != BENCHMARK:
+                info["on_last_close"] += 1
+    if delays:
+        info["delayed_min"] = None if any(d is None for d in delays) else max(delays)
+    if updates and info["delayed_min"] is not None:
+        # unknown delay -> unknown price time: the send time is NOT the price time
+        med = float(np.median(updates)) - 60 * info["delayed_min"]
+        info["price_time"] = datetime.fromtimestamp(med, timezone.utc).astimezone(_et()).strftime("%H:%M ET")
+    return out, info
+
+
+def compute(fund, frames, extras=None, now=None):
     """Metrics for every name with prices, and each strategy's ranked list.
 
     `fund` = parse_universe() output, `frames` = load_prices() output.
@@ -800,9 +927,10 @@ def compute(fund, frames, extras=None):
     # universe, on the last COMPLETED session. Mid-session the last bar is
     # still moving — its high (the entry) and low (the stop) change by the
     # minute, and names without today's bar yet would drop out of the rank.
+    now = now or datetime.now(timezone.utc)
     k = -1
-    if len(close.index) > 1 and in_session() and \
-            close.index[-1].strftime("%Y-%m-%d") == datetime.now(timezone.utc).astimezone(_et()).strftime("%Y-%m-%d"):
+    if len(close.index) > 1 and in_session(now) and \
+            close.index[-1].strftime("%Y-%m-%d") == now.astimezone(_et()).strftime("%Y-%m-%d"):
         k = -2
     plan_asof = close.index[k].strftime("%Y-%m-%d") if len(close.index) else None
     one = {n: sig[n].iloc[[k]].reindex(columns=syms) for n in ("r1m", "r3m", "r6m", "dollar_vol50")}
@@ -866,7 +994,7 @@ OUT_FIELDS = ["name", "sector", "industry", "price", "chg_1d", "mcap", "rs", "r1
               "eps_growth_q", "eps_growth_fy", "rev_growth", "pe", "pb", "ps", "ev_ebitda",
               "div_yield", "shareholder_yield", "value_score", "next_earnings",
               "entry", "stop", "risk_pct", "target3", "target5", "group_rs", "group_leaders"]
-CHART_BARS = 180  # closes per listed name, for the sparkline and the price chart
+CHART_BARS = 126  # closes per listed name: the table's 6-month trend line (kSparkBars)
 
 
 def scan(min_mcap=2e9, force=False):
@@ -874,10 +1002,21 @@ def scan(min_mcap=2e9, force=False):
     fund = fetch_universe(min_mcap)
     if not fund:
         return {"error": "TradingView scanner returned no stocks"}
-    frames, fetched_ts, stale = load_prices(sorted(fund), force=force)
+    # ONE clock for the whole scan, taken BEFORE the price load: a scan that
+    # straddles 16:15 must not judge freshness by one clock and live bars by
+    # another (a morning partial bar then went out as the close)
+    now = datetime.now(timezone.utc)
+    frames, fetched_ts, stale = load_prices(sorted(fund), force=force, now=now)
+    quotes = dict(fund)
+    if in_session(now):
+        try:
+            quotes.update(fetch_quotes(["AMEX:SPY"]))
+        except Exception as e:  # the market line falls back to SPY's last close
+            print(f"SPY quote failed: {e}", file=sys.stderr)
+    frames, live = apply_live_bars(frames, quotes, now)
     log_progress(1, 1, "Computing screens")
     extras = {}
-    df, lists, market, asof = compute(fund, frames, extras)
+    df, lists, market, asof = compute(fund, frames, extras, now)
     in_any = sorted({s for v in lists.values() for s in v})
     rows = {s: {k: _clean(df.at[s, k]) for k in OUT_FIELDS if k in df.columns} for s in in_any}
     closes = extras.get("closes")
@@ -892,12 +1031,14 @@ def scan(min_mcap=2e9, force=False):
     doc.update({
         "asof": asof,
         # today's bar is still moving: the label must not say "close"
-        "intraday": bool(in_session()) and asof == datetime.now(timezone.utc).astimezone(_et()).strftime("%Y-%m-%d"),
+        "intraday": bool(in_session(now)) and asof == now.astimezone(_et()).strftime("%Y-%m-%d"),
         # the OLDEST fetch behind the lists, with its date: a failed chunk
         # leaves days-old frames in play, and an undated time implies today
         "prices_fetched": datetime.fromtimestamp(fetched_ts, timezone.utc).astimezone(_et())
         .strftime("%Y-%m-%d %H:%M ET") if fetched_ts else None,
         "stale_prices": int(stale),
+        # today's bar during the session: TradingView's quote, as delayed as it says
+        "live_bar": live,
         "universe": {"n": len(fund), "priced": int(df["price"].notna().sum()),
                      "min_mcap": float(min_mcap)},
         "market": market,

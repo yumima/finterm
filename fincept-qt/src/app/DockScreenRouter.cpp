@@ -617,11 +617,7 @@ void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea si
     }
     dw->raise();
     dw->setAsCurrentTab();
-    apply_ads_theme();
-
-    // Refresh panel-count tracking so subsequent navigate() calls don't
-    // place into a stale grid slot.
-    panel_count_ = manager_->openedDockAreas().size();
+    after_layout_change();
 
     current_id_ = id;
     SessionManager::instance().set_last_screen(id);
@@ -630,6 +626,39 @@ void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea si
              QString("split_alongside [%1] placed (side=%2, anchor=%3, panel_count=%4)")
                  .arg(id).arg(static_cast<int>(side))
                  .arg(anchor ? "ok" : "none").arg(panel_count_));
+}
+
+void DockScreenRouter::after_layout_change() {
+    apply_ads_theme();
+    // Refresh panel-count tracking so subsequent navigate() calls don't
+    // place into a stale grid slot.
+    panel_count_ = manager_->openedDockAreas().size();
+}
+
+void DockScreenRouter::show_beside(const QString& id, const QString& anchor_id) {
+    auto* anchor_dw = find_dock_widget(anchor_id);
+    ads::CDockAreaWidget* anchor = anchor_dw ? anchor_dw->dockAreaWidget() : nullptr;
+    if (!anchor) {
+        split_alongside(id);
+        return;
+    }
+    if (!is_open(id)) {
+        split_alongside(id, ads::RightDockWidgetArea, anchor);
+        return;
+    }
+    auto* dw = find_dock_widget(id);
+    if (dw && dw->dockAreaWidget() == anchor) {
+        // Same area: raising it there would hide the anchor behind it. Move it
+        // out to the right, and keep the anchor the current tab of its area.
+        manager_->addDockWidget(ads::RightDockWidgetArea, dw, anchor);
+        anchor_dw->setAsCurrentTab();
+        after_layout_change();
+    }
+    // raise() for every open case: it materializes a layout-restored lazy
+    // shell synchronously (so the caller's load_symbol publish has a
+    // subscriber), brings a floating container forward, and keeps current_id_
+    // / the session's last screen / screen_changed right.
+    raise(id);
 }
 
 void DockScreenRouter::open_beside_focused(const QString& id) {

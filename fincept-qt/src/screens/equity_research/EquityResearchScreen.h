@@ -67,7 +67,9 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     /// @param force  Bypass the same-symbol early-return. Lets the user
     ///               re-trigger a load by re-submitting the same ticker
     ///               (e.g. for a manual refresh on breaking news).
-    void load_symbol(const QString& symbol, bool force = false);
+    /// propagate=false: show it here only, without re-publishing to the linked
+    /// symbol group (browsing a list must not retarget every linked panel).
+    void load_symbol(const QString& symbol, bool force = false, bool propagate = true);
     /// Clear the quote-bar values to dimmed placeholders while a new symbol
     /// is loading. Stops the header from showing the previous ticker's price
     /// next to the new ticker's name during the cold-load window.

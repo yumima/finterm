@@ -295,6 +295,62 @@ check(all(s_["symbols"] == [] for s_ in m["strategies"]), "meta lists are empty"
 check(len(m["curve_months"]) == len(m["curve_ew"]) > 100, "meta carries the index curve")
 json.dumps(m, allow_nan=False, default=sd._clean)
 
+from datetime import datetime, timezone
+# the live bar (TradingView, delayed) during the session
+sess = datetime(2026, 7, 15, 17, 0, tzinfo=timezone.utc)  # 13:00 EDT, a Wednesday
+didx = pd.bdate_range("2026-06-01", "2026-07-14")
+fr_live = {"AAA": pd.DataFrame({"Open": 50.0, "High": 51.0, "Low": 49.0, "Close": 50.0, "Volume": 1e6}, index=didx)}
+bar_t = datetime(2026, 7, 15, 13, 30, tzinfo=timezone.utc).timestamp()
+q_ok = {"AAA": {"q_open": 50.5, "q_high": 52.0, "q_low": 50.1, "q_close": 51.7, "q_volume": 5e5, "q_change": 0.034,
+                "q_time": bar_t, "q_update": sess.timestamp() - 900, "q_mode": "delayed_streaming_900"}}
+out, info = sd.apply_live_bars(fr_live, q_ok, now=sess)
+check(info["applied"] == 1 and out["AAA"].index[-1] == pd.Timestamp("2026-07-15")
+      and out["AAA"]["Close"].iloc[-1] == 51.7, f"today's bar appended from the quote: {info}")
+# update_time is when the delayed quote was SENT: the prices are 15 min older
+check(info["delayed_min"] == 15 and info["price_time"] == "12:30 ET", f"delay + price time, as reported: {info}")
+for label, q, why in [
+    # 2:1 split Yahoo has not absorbed: ours -49%, TradingView's own +1%
+    ("2:1 split day", dict(q_ok["AAA"], q_open=25.0, q_high=25.6, q_low=24.9, q_close=25.3, q_change=0.012), "split"),
+    ("no TradingView change", dict(q_ok["AAA"], q_change=None), "unverifiable"),
+    ("inconsistent", dict(q_ok["AAA"], q_low=52.5), "ohlc"),
+    ("yesterday's bar", dict(q_ok["AAA"], q_time=bar_t - 86400), "date"),
+]:
+    _, inf = sd.apply_live_bars(fr_live, {"AAA": q}, now=sess)
+    check(inf["applied"] == 0 and inf["on_last_close"] == 1, f"{label}: not used, the name stays on its last close")
+# a REAL +40% earnings gap is consistent with TradingView's own change: kept
+gap = {"AAA": dict(q_ok["AAA"], q_open=66.0, q_high=72.0, q_low=65.0, q_close=70.0, q_change=0.40)}
+og, ig = sd.apply_live_bars(fr_live, gap, now=sess)
+check(ig["applied"] == 1 and og["AAA"]["Close"].iloc[-1] == 70.0, "a genuine big move is not mistaken for a split")
+# a history missing yesterday (its download failed) gets no live bar across the hole
+spy_l = pd.DataFrame({"Open": 1.0, "High": 1.0, "Low": 1.0, "Close": 1.0, "Volume": 1.0}, index=didx)
+holey = {"SPY": spy_l, "BBB": fr_live["AAA"], "CCC": fr_live["AAA"],
+         "AAA": fr_live["AAA"].iloc[:-1]}  # AAA ends the session before yesterday
+oh, ih = sd.apply_live_bars(holey, q_ok, now=sess)
+check(ih["applied"] == 0 and oh["AAA"].index[-1] == pd.Timestamp("2026-07-13"), "no splice across a missing day")
+ok_l = {"SPY": spy_l, "AAA": fr_live["AAA"]}
+_, ik = sd.apply_live_bars(ok_l, q_ok, now=sess)
+check(ik["applied"] == 1, "history ending on the previous session takes the live bar")
+# SPY itself stale must not make every current name look stale
+stale_spy = {"SPY": spy_l.iloc[:-1], "BBB": fr_live["AAA"], "CCC": fr_live["AAA"], "AAA": fr_live["AAA"]}
+_, iss = sd.apply_live_bars(stale_spy, q_ok, now=sess)
+check(iss["applied"] == 1, "a stale SPY does not drag the previous session back a day")
+# an 11:10 split Yahoo has not applied: ours -9%, TradingView's ~0 -> held back
+s1110 = {"AAA": dict(q_ok["AAA"], q_open=45.4, q_high=45.6, q_low=45.2, q_close=45.5, q_change=0.0)}
+_, i1110 = sd.apply_live_bars(fr_live, s1110, now=sess)
+check(i1110["applied"] == 0, "an 11:10 split is not spliced in as a -9% day")
+# a name WITHOUT a usable quote loses today's partial Yahoo bar — never a frozen price
+partial = {"AAA": pd.concat([fr_live["AAA"], pd.DataFrame({"Open": 50.0, "High": 50.2, "Low": 49.9, "Close": 50.1,
+                                                            "Volume": 1e5}, index=[pd.Timestamp("2026-07-15")])])}
+o2, inf2 = sd.apply_live_bars(partial, {}, now=sess)
+check(o2["AAA"].index[-1] == pd.Timestamp("2026-07-14"), "a frozen partial bar is dropped: last real close stands")
+_, inf3 = sd.apply_live_bars(fr_live, {"AAA": dict(q_ok["AAA"], q_mode="delayed_streaming")}, now=sess)
+check(inf3["delayed_min"] is None, "an unrecognised delay mode is 'unknown', not 0 and not a crash")
+check(inf3["price_time"] is None, "unknown delay -> unknown price time (the send time is not the price time)")
+check(sd._delay_minutes("streaming") == 0 and sd._delay_minutes("delayed_streaming_900") == 15,
+      "delay parse")
+_, info5 = sd.apply_live_bars(fr_live, q_ok, now=datetime(2026, 7, 15, 22, 0, tzinfo=timezone.utc))
+check(info5["applied"] == 0, "after the session the Yahoo close is used, not the quote")
+
 # a NaN in the evidence file reads as absent and still serialises
 bad = {"backtests": {"X": {"excess": float("nan"), "t": 1.0, "max_dd": -0.1, "hit": 0.5,
                            "subperiods": [0.1, float("nan"), 0.0, 0.2]}}}
@@ -327,7 +383,10 @@ check(sd.in_session(jan_1530_est), "15:30 EST is in session")
 jul_1000 = datetime(2026, 7, 15, 14, 0, tzinfo=timezone.utc)  # 10:00 EDT
 check(sd.is_fresh(jul_1000.timestamp() - 60, jul_1000), "a fetch a minute ago is fresh mid-session")
 later = datetime(2026, 7, 15, 19, 30, tzinfo=timezone.utc)  # 15:30 EDT
-check(not sd.is_fresh(jul_1000.timestamp(), later), "a 10:00 fetch is NOT the 15:30 price")
+check(sd.is_fresh(jul_1000.timestamp(), later),
+      "history fetched this morning is current all session (today's bar comes from the quote)")
+check(not sd.is_fresh(datetime(2026, 7, 14, 19, 0, tzinfo=timezone.utc).timestamp(), later),
+      "history fetched before yesterday's close is stale")
 evening = datetime(2026, 7, 15, 22, 0, tzinfo=timezone.utc)  # 18:00 EDT
 check(sd.is_fresh(datetime(2026, 7, 15, 20, 30, tzinfo=timezone.utc).timestamp(), evening),
       "a post-close fetch is fresh for the evening")

@@ -64,6 +64,10 @@ struct ScanResult {
     QString prices_fetched; // "YYYY-MM-DD HH:MM ET" of the oldest price fetch used
     int stale_prices = 0;   // names served from an older cache (their download failed)
     QString plan_asof;      // the completed session the pullback plans are drawn from
+    int live_applied = 0;        // names whose today's bar is TradingView's quote
+    int live_on_last_close = 0;  // names without a usable quote: shown at their last real close
+    std::optional<int> live_delay_min; // worst delay among the quotes used; nullopt = unknown
+    QString live_price_time;     // "HH:MM ET" the quoted prices are from (send time minus delay)
     QString basis;
     int universe_n = 0;
     int priced = 0;
@@ -111,6 +115,12 @@ inline ScanResult parse_scan(const QJsonObject& root) {
     r.prices_fetched = root.value(QStringLiteral("prices_fetched")).toString();
     r.stale_prices = root.value(QStringLiteral("stale_prices")).toInt();
     r.plan_asof = root.value(QStringLiteral("plan_asof")).toString();
+    const QJsonObject lb = root.value(QStringLiteral("live_bar")).toObject();
+    r.live_applied = lb.value(QStringLiteral("applied")).toInt();
+    r.live_on_last_close = lb.value(QStringLiteral("on_last_close")).toInt();
+    if (const auto d = num(lb, QStringLiteral("delayed_min")))
+        r.live_delay_min = int(*d);
+    r.live_price_time = lb.value(QStringLiteral("price_time")).toString();
     r.basis = root.value(QStringLiteral("evidence_basis")).toString();
     const QJsonObject u = root.value(QStringLiteral("universe")).toObject();
     r.universe_n = u.value(QStringLiteral("n")).toInt();
@@ -269,24 +279,6 @@ inline QString colour_for(Kind k, const std::optional<double>& v) {
     if (*v < 0)
         return ui::colors::RED();
     return {};
-}
-
-/// Exponential moving average with pandas' adjust=False recursion; NaN until
-/// `span` real values have been seen (gaps carry the last value).
-inline QVector<double> ema(const QVector<double>& x, int span) {
-    QVector<double> out(x.size(), std::nan(""));
-    const double a = 2.0 / (span + 1.0);
-    double e = std::nan("");
-    int seen = 0;
-    for (int i = 0; i < x.size(); ++i) {
-        if (std::isfinite(x[i])) {
-            e = std::isfinite(e) ? a * x[i] + (1 - a) * e : x[i];
-            ++seen;
-        }
-        if (seen >= span)
-            out[i] = e;
-    }
-    return out;
 }
 
 /// Shares for a trade risking `risk_frac` of `account` between entry and stop.

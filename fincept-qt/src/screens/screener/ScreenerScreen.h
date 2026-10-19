@@ -16,6 +16,7 @@ class QSplitter;
 class QStackedWidget;
 class QTableWidget;
 class QTextBrowser;
+class QTimer;
 
 namespace fincept::screens {
 
@@ -25,22 +26,23 @@ class ScreenerChart;
 /// (Minervini, CAN SLIM, Kullamägi, Martin Luk) and the academic literature
 /// (momentum, Magic Formula, Piotroski, Novy-Marx, Trending Value, low vol).
 ///
-///   left    the strategies, with today's counts; OVERVIEW first (names on
+///   rail    the strategies, with today's counts; OVERVIEW first (names on
 ///           two or more screens)
-///   centre  the names a strategy selects today, ranked by its own rule, with
-///           a 6-month trend line; filterable; the Leader Pullback adds a
-///           trade plan sized to the reader's account
-///   right   the rules and the measured record, the record as a growth-of-$1
-///           curve against the index, and the selected stock's chart
+///   band    the selected strategy at a glance: what it is, its measured
+///           record in one line and as a growth-of-$1 curve against the index,
+///           "Rules & evidence" to expand the full card
+///   table   the names it selects today, ranked by its own rule, 6-month trend
+///           lines, filter; the Leader Pullback adds a trade plan sized to the
+///           reader's account
 ///
-/// The record sits beside every list because the measurement found NO screen
+/// Clicking a name opens Equity Research to the RIGHT of the screener — the
+/// list stays in view, the details sit beside it, as in Portfolio. Arrowing
+/// down the list follows in ER once it is open.
+///
+/// The record sits on every strategy because the measurement found NO screen
 /// beating the equal-weighted S&P 500 with significance (2010-2026): a list is
-/// where a method would look, not a forecast. Double-click opens Equity
-/// Research.
-///
-/// Opening it never shows an empty screen: `screener_data.py meta` (well under
-/// a second, no network) paints the strategies and records at once, and the
-/// table area explains the first-run download with a progress bar.
+/// where a method would look, not a forecast. Opening never shows an empty
+/// screen: `screener_data.py meta` paints the strategies and records at once.
 class ScreenerScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
   public:
@@ -49,10 +51,12 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void restore_state(const QVariantMap& state) override;
     QVariantMap save_state() const override;
     QString state_key() const override { return QStringLiteral("screener"); }
-    int state_version() const override { return 2; }
+    int state_version() const override { return 2; } // 'details' is additive: no bump (a bump discards saved state)
 
   signals:
-    void navigate_to_screen(const QString& screen_id, const QString& ticker);
+    /// The reader picked `ticker`. open = a click (show Equity Research beside
+    /// the screener); !open = keyboard browsing (follow only if ER is open).
+    void research_requested(const QString& ticker, bool open);
 
   protected:
     void showEvent(QShowEvent* e) override;
@@ -66,9 +70,8 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void populate_strategies();
     void show_strategy(const QString& id);
     void fill_table();
-    void fill_card();
+    void fill_band();
     void fill_equity_chart();
-    void show_stock(const QString& symbol);
     void apply_filter();
     void set_status(const QString& text, bool error = false);
     void set_progress(int done, int total, const QString& text);
@@ -99,9 +102,17 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     QDoubleSpinBox* account_ = nullptr;
     QComboBox*    risk_ = nullptr;
     QTableWidget* table_ = nullptr;
-    QTextBrowser* card_ = nullptr;
+    // the strategy band
+    QLabel*       band_title_ = nullptr;
+    QLabel*       band_sub_ = nullptr;
+    QLabel*       band_record_ = nullptr;
+    QPushButton*  details_btn_ = nullptr;
+    QTextBrowser* details_ = nullptr; // rules + the full record, collapsed by default
     ScreenerChart* equity_chart_ = nullptr;
-    ScreenerChart* price_chart_ = nullptr;
+    bool          details_open_ = false;
+    bool          filling_ = false;     // programmatic selection: not the reader's pick
+    QTimer* follow_timer_ = nullptr; // keyboard browsing -> ER, debounced
+    QString       last_research_;          // last symbol sent to ER: a re-sort moving rows is not a pick
 
     screener::ScanResult result_;
     QString current_id_ = QStringLiteral("__overview__");

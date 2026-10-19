@@ -88,6 +88,17 @@ class DockScreenRouter : public QObject {
     /// If `id` is already open, just raises it.
     void open_beside_focused(const QString& id);
 
+    /// Show `id` to the RIGHT of `anchor_id`'s panel, keeping `anchor_id` in
+    /// view: opens it there if closed; if it is a tab in the anchor's own
+    /// area (where raising it would cover the anchor), moves it beside; if it
+    /// is already in another area, just raises it there. For list → detail
+    /// screens (Screener → Equity Research).
+    void show_beside(const QString& id, const QString& anchor_id);
+
+    /// Build a layout-restored lazy screen (no raise, no focus change) so its
+    /// EventBus subscriptions exist before something is published to it.
+    void ensure_built(const QString& id) { if (is_open(id)) materialize_screen(id); }
+
     /// True if `id`'s dock widget is currently part of the visible layout
     /// (exists, not closed, has a dock area). Use this to decide whether
     /// a "navigate to X" gesture should preserve the split (raise) or
@@ -206,6 +217,7 @@ class DockScreenRouter : public QObject {
     /// widgets. Called after any addDockWidget() call since those create new
     /// QFrame-derived widgets that the app-level QFrame rule overrides.
     void apply_ads_theme();
+    void after_layout_change(); // theme + panel-count bookkeeping after a dock move
 
   public:
     /// Map a screen id to its human-readable title.

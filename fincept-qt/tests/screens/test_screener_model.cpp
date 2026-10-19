@@ -119,18 +119,6 @@ class TestScreenerModel : public QObject {
         QVERIFY(colour_for(Kind::PctSigned, 0.3).size());
     }
 
-    void ema_matches_pandas_adjust_false() {
-        // pandas: s.ewm(span=3, adjust=False, min_periods=3).mean() on 1..5
-        const QVector<double> e = ema({1, 2, 3, 4, 5}, 3);
-        QVERIFY(std::isnan(e[0]) && std::isnan(e[1]));
-        QCOMPARE(e[2], 2.25);   // 1 -> 1.5 -> 2.25
-        QCOMPARE(e[4], 4.0625); // 3.125 -> 4.0625
-        // a gap carries the last value and does not count as seen
-        const QVector<double> g = ema({1, std::nan(""), 3}, 2);
-        QVERIFY(std::isnan(g[1]));
-        QVERIFY(std::isfinite(g[2]));
-    }
-
     void position_size() {
         // the thread's example: account 100,000, 0.5% risk, buy 200, stop 195 -> 100 shares
         QCOMPARE(*position_shares(100'000, 0.005, 200.0, 195.0), 100.0);

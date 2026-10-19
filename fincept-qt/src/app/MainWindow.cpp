@@ -1212,20 +1212,29 @@ void MainWindow::setup_dock_screens() {
 
     dock_router_->register_factory("screener", [this]() {
         auto* screen = new screens::ScreenerScreen;
-        // Same hand-off as OWNERSHIP: a ranked list of stocks, each opening
-        // Equity Research beside the list so the reader keeps their place.
-        connect(screen, &screens::ScreenerScreen::navigate_to_screen, this,
-                [this](const QString& id, const QString& ticker) {
-                    if (!ticker.isEmpty())
-                        SymbolContext::instance().set_group_symbol(
-                            SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
-                    if (id == QLatin1String("equity_research"))
-                        dock_router_->split_alongside(id);
-                    else
-                        dock_router_->navigate(id);
-                    if (id == QLatin1String("equity_research") && !ticker.isEmpty())
-                        EventBus::instance().publish("equity_research.load_symbol",
-                                                     QVariantMap{{"symbol", ticker}});
+        // List -> detail, as in Portfolio: a click puts Equity Research on the
+        // right of the screener (moved out of the screener's own tab area if
+        // it sits there) and loads the stock; arrowing down the list follows
+        // in ER only once it is open.
+        connect(screen, &screens::ScreenerScreen::research_requested, this,
+                [this](const QString& ticker, bool open) {
+                    if (ticker.isEmpty() || (!open && !dock_router_->is_open("equity_research")))
+                        return;
+                    if (open) {
+                        dock_router_->show_beside("equity_research", "screener");
+                        // a deliberate pick: linked panels follow it too
+                        SymbolContext::instance().set_group_symbol(SymbolGroup::A, SymbolRef::equity(ticker),
+                                                                   nullptr);
+                    } else {
+                        // a restored, never-shown ER has no subscriber yet
+                        dock_router_->ensure_built("equity_research");
+                    }
+                    // ER listens on the EventBus when its tab is unlinked, and only
+                    // once materialised — so publish AFTER opening it. Browsing
+                    // (!open) retargets ER only: ER must not re-publish it to its
+                    // linked group either.
+                    EventBus::instance().publish("equity_research.load_symbol",
+                                                 QVariantMap{{"symbol", ticker}, {"propagate", open}});
                 });
         return screen;
     });

@@ -295,7 +295,7 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     EventBus::instance().subscribe("equity_research.load_symbol", [this](const QVariantMap& payload) {
         const QString symbol = payload.value("symbol").toString();
         if (!symbol.isEmpty())
-            load_symbol(symbol);
+            load_symbol(symbol, false, payload.value("propagate", true).toBool());
     });
 
     // Default symbol
@@ -775,7 +775,7 @@ void EquityResearchScreen::on_tab_changed(int index) {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
+void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, bool propagate) {
     // Defensive sanitize: if a caller passes "/stock AAPL" or similar
     // (CommandBar fallback path, EventBus payload from elsewhere, inline
     // search), strip the slash-command prefix and uppercase. Without this
@@ -867,7 +867,7 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force) {
     services::finnhub::FinnhubLiveTicks::instance().subscribe(symbol);
 
     // Publish to linked group so Watchlist/EquityTrading/News/etc. follow.
-    if (link_group_ != SymbolGroup::None) {
+    if (propagate && link_group_ != SymbolGroup::None) {
         SymbolContext::instance().set_group_symbol(
             link_group_, SymbolRef::equity(symbol), this);
     }
