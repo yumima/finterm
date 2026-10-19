@@ -131,8 +131,68 @@ for sid_, ex_ in ex_extras["examples"].items():
         check(ex_["miss"]["symbol"] not in lists.get(sid_, [])
               and not all(c["ok"] for c in ex_["miss"]["checks"]),
               f"{sid_}: the first miss fails a checked rule: {ex_['miss']}")
-check(any(ex_.get("pick") for ex_ in ex_extras["examples"].values()), "some strategy has a worked example")
+check(set(ex_extras["examples"]) == {st["id"] for st in sd.STRATEGIES},
+      f"every strategy has a worked example (none failed silently): {sorted(ex_extras['examples'])}")
 json.dumps(ex_extras["examples"], allow_nan=False)
+
+# The same on a 60-name market wide enough that the top-25/top-30 cuts, the
+# 95% quantile and the pools all bind, and most strategies have BOTH a pick
+# and a miss: a check that drifts from its screen shows up here.
+rng60 = np.random.default_rng(11)
+n60 = 330
+idx60 = pd.bdate_range("2025-01-01", periods=n60)
+t60 = np.arange(n60)
+fr60, fund60 = {}, {}
+for i in range(60):
+    drift = rng60.uniform(-0.002, 0.006)
+    vol = rng60.uniform(0.005, 0.04)
+    c = 30 * np.exp(drift * t60 + np.cumsum(vol * rng60.standard_normal(n60)))
+    if i % 7 == 0:  # some resting leaders: a strong run, then a shallow, tightening pullback
+        c = 30 * np.exp(0.006 * np.minimum(t60, n60 - 12)) * (1 + 0.004 * rng60.standard_normal(n60))
+    if i % 7 == 1:  # explosive movers: a big, volatile run to new highs (breakout candidates)
+        c = 20 * np.exp(0.009 * t60) * (1 + 0.01 * rng60.standard_normal(n60))
+    rngs = 1 + rng60.uniform(0.005, 0.05, n60)
+    if i % 7 == 1:
+        rngs = 1 + rng60.uniform(0.05, 0.08, n60)  # ADR well above 4%
+    hi, lo = c * np.sqrt(rngs), c / np.sqrt(rngs)
+    sym = f"S{i:02d}"
+    fr60[sym] = pd.DataFrame({"Open": c, "High": hi, "Low": lo, "Close": c,
+                              "Volume": rng60.uniform(2e5, 5e6)}, index=idx60)
+    mc = float(rng60.uniform(2e9, 2e11))
+    fund60[sym] = fund_rec(sym, sector=["Technology Services", "Finance", "Health Technology"][i % 3],
+                           industry=f"I{i % 6}", mcap=mc, ev=mc * rng60.uniform(0.8, 1.3),
+                           ebit=mc * rng60.uniform(-0.02, 0.15), roic=rng60.uniform(-0.1, 0.4),
+                           gross_profit=mc * rng60.uniform(0.05, 0.5), total_assets=mc * rng60.uniform(0.5, 2),
+                           piotroski=int(rng60.integers(3, 10)), pb=rng60.uniform(-1, 8),
+                           eps_growth_q=rng60.uniform(-0.5, 1.0), eps_growth_fy=rng60.uniform(-0.5, 1.0),
+                           roe=rng60.uniform(-0.1, 0.5), net_income=mc * rng60.uniform(-0.02, 0.1),
+                           revenue=mc * rng60.uniform(0.1, 2), ocf=mc * rng60.uniform(-0.02, 0.12),
+                           div_yield=rng60.uniform(0, 0.04), buyback_yield=rng60.uniform(0, 0.03))
+    if i % 7 in (0, 1):  # growth leaders: CAN SLIM's earnings and returns
+        fund60[sym].update(eps_growth_q=0.6, eps_growth_fy=0.5, roe=0.3)
+fr60["SPY"] = frames["SPY"].reindex(idx60).ffill().bfill()
+ex60 = {}
+_, lists60, _, _ = sd.compute(fund60, fr60, ex60)
+both = 0
+for st in sd.STRATEGIES:
+    sid_ = st["id"]
+    ex_ = ex60["examples"].get(sid_)
+    check(ex_ is not None, f"60 names: {sid_} has a worked example")
+    if not ex_:
+        continue
+    if lists60.get(sid_):
+        check(ex_["pick"]["symbol"] == lists60[sid_][0] and all(c["ok"] for c in ex_["pick"]["checks"]),
+              f"60 names: {sid_} pick passes every check: {ex_['pick']}")
+    if "miss" in ex_:
+        check(ex_["miss"]["symbol"] not in lists60.get(sid_, [])
+              and not all(c["ok"] for c in ex_["miss"]["checks"]),
+              f"60 names: {sid_} miss fails a check: {ex_['miss']}")
+    both += bool(ex_.get("pick")) and bool(ex_.get("miss"))
+# all but the Leader Pullback, whose resting-at-support setup a random market
+# does not produce (its pick path was checked on the real 2026-10-19 scan)
+check(both >= 10, f"60 names: strategies with both a pick and a miss: {both} of {len(sd.STRATEGIES)}")
+check("nan" not in json.dumps(ex60["examples"]).lower().replace("finance", ""),
+      "no example value prints a literal nan")
 check("SPY" not in df.index, "the benchmark is not a screen candidate")
 check(lists["magic_formula"][:1] == ["UP"] and "DOWN" not in lists["magic_formula"],
       f"Magic Formula ranks operating companies only: {lists['magic_formula']}")

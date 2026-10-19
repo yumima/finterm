@@ -1238,10 +1238,12 @@ void MainWindow::setup_dock_screens() {
                 });
         // a strategy clicked: its write-up takes the right half back
         connect(screen, &screens::ScreenerScreen::details_requested, this, [this, screen]() {
-            // no ER beside to make room for (a narrow window, or ER the reader
-            // placed elsewhere): the screener shows the write-up in place
-            if (!dock_router_->hide_beside("equity_research", "screener"))
-                screen->show_details_inline();
+            dock_router_->hide_beside("equity_research", "screener");
+            // In place of the list unless the right-hand pane can show it: with
+            // no room for the pane (a narrow window, another screen beside) the
+            // click must still show the write-up. The pane, if the freed room
+            // brings it, takes over (update_details_pane leaves inline).
+            screen->show_details_inline();
         });
         return screen;
     });

@@ -1056,6 +1056,10 @@ def _usd(x):
     return "—" if x is None or not np.isfinite(x) else f"${x:,.2f}"
 
 
+def _m(x):
+    return "—" if x is None or not np.isfinite(x) else f"${x / 1e6:,.0f}M"
+
+
 def _ok(x):
     return bool(x) if x is not None and not (isinstance(x, float) and np.isnan(x)) else False
 
@@ -1126,7 +1130,7 @@ def worked_examples(df, sig, lists, ctx):
               cpb.get(sym, np.nan) >= 0.75),
             C("Up 30%+ over 1, 3 or 6 months", " / ".join(_pc(x, True) for x in r), any(x >= 0.30 for x in r)),
             C("$20M+ average daily dollar volume (50 days)",
-              f"${one['dollar_vol50'].get(sym, np.nan) / 1e6:,.0f}M", one["dollar_vol50"].get(sym, np.nan) >= 20e6),
+              _m(one["dollar_vol50"].get(sym, np.nan)), one["dollar_vol50"].get(sym, np.nan) >= 20e6),
             C("Higher lows: the last 10 sessions' low above the 10 before",
               f"{_usd(at('pb_low10', sym, k))} vs {_usd(at('pb_low10_prev', sym, k))}", at("pb_higher_lows", sym, k)),
             C("Daily ranges contracting (10-day vs 30-day average)",
@@ -1135,7 +1139,7 @@ def worked_examples(df, sig, lists, ctx):
               f"{_usd(at('ema9', sym, k))} / {_usd(at('ema21', sym, k))}", at("pb_above", sym, k)),
             C("21 EMA above the 50 EMA", f"{_usd(at('ema21', sym, k))} vs {_usd(at('ema50', sym, k))}",
               at("pb_trend", sym, k)),
-            C("A low at its day's 21 EMA (within 2%) in the last 3 sessions",
+            C("A low at its day's 21 EMA (within 2%), above its 50 EMA, in the last 3 sessions",
               f"3-session low {_usd(at('pb_low', sym, k))}", at("pb_touched", sym, k)),
             C("Stop no more than 3% under the entry",
               f"entry {_usd(e)}, stop {_usd(st)}: {_pc(1 - st / e) if e else '—'}", at("pb_tight", sym, k)),
@@ -1164,26 +1168,27 @@ def worked_examples(df, sig, lists, ctx):
             C("Within 15% of the 52-week high", _pc(v("off_high", s_), True), v("off_high", s_) >= -0.15),
             C("Close above the 10- and 20-day SMA", f"{_usd(v('price', s_))} vs {_usd(v('sma10', s_))} / "
               f"{_usd(v('sma20', s_))}", v("price", s_) > v("sma10", s_) and v("price", s_) > v("sma20", s_)),
-            C("50-day dollar volume at least $20M", f"${v('dollar_vol50', s_) / 1e6:,.0f}M",
-              v("dollar_vol50", s_) >= 20e6)]),
+            C("50-day dollar volume at least $20M", _m(v("dollar_vol50", s_)), v("dollar_vol50", s_) >= 20e6)]),
         "magic_formula": (magic, lambda s_: [
-            C("Not Finance or Utilities", str(v("sector", s_)), ctx["sector_ok"].get(s_, False)),
+            C("Not Finance or Utilities", v("sector", s_) if isinstance(v("sector", s_), str) else "sector unknown",
+              ctx["sector_ok"].get(s_, False)),
             C("Earnings yield (EBIT / EV)", _pc(v("earnings_yield", s_)), np.isfinite(v("earnings_yield", s_))),
             C("Return on capital (ROIC)", _pc(v("roic", s_)), np.isfinite(v("roic", s_))),
             ranked("Combined rank in the best 30", magic, s_, 30)]),
         "piotroski": ((-df["pb"].where(df["pb"] > 0)), lambda s_: [
             C("F-score at least 8", "—" if not np.isfinite(v("piotroski", s_)) else f"{v('piotroski', s_):.0f} of 9",
               v("piotroski", s_) >= 8),
-            C("Price / book (cheapest first)", f"{v('pb', s_):.2f}" if np.isfinite(v("pb", s_)) else "—",
-              v("pb", s_) > 0)]),
+            C("A positive book value (then cheapest P/B first)",
+              f"P/B {v('pb', s_):.2f}" if np.isfinite(v("pb", s_)) else "no P/B", v("pb", s_) > 0)]),
         "quality_momentum": (mom, lambda s_: [
             C("Gross profit / assets in the top 30%", f"{_pc(v('gpa', s_))}, the cut is {_pc(gpa_cut)}",
               s_ in ctx["gpa_pool"]),
             ranked("Then the top 25 by 12-1 return in that pool", pool_q, s_, 25)]),
         "trending_value": (df["r6m"], lambda s_: [
             C("Value composite in the cheapest 10% (4+ of 6 ratios)",
-              f"percentile {v('value_score', s_) * 100:.0f} from {v('value_n', s_):.0f} ratios, the cut is "
-              f"{val_cut * 100:.0f}" if np.isfinite(v("value_score", s_)) else "fewer than 4 ratios",
+              f"score {v('value_score', s_) * 100:.0f} (the average of its {v('value_n', s_):.0f} ratio "
+              f"percentiles), the cut is {val_cut * 100:.0f}" if np.isfinite(v("value_score", s_))
+              else "fewer than 4 ratios",
               s_ in ctx["cheap"]),
             ranked("Then the top 25 by 6-month return", pool_v, s_, 25)]),
         "luk_pullback": (ctx["combo_pb"], luk),

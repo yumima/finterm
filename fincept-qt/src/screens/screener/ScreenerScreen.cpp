@@ -395,8 +395,19 @@ void ScreenerScreen::build_ui() {
     // A click on a strategy — the current one too — is a request to read
     // about it: its write-up takes the right half again, in place of an
     // Equity Research opened beside. Arrowing through the rail only switches.
-    connect(list_, &QListWidget::itemClicked, this, [this](QListWidgetItem*) { emit details_requested(); });
-    connect(list_, &QListWidget::itemActivated, this, [this](QListWidgetItem*) { emit details_requested(); });
+    // Click and Enter both ask; a style that activates on single click sends
+    // both for one click, so they coalesce into one request.
+    const auto ask = [this](QListWidgetItem*) {
+        if (details_pending_)
+            return;
+        details_pending_ = true;
+        QTimer::singleShot(0, this, [this]() {
+            details_pending_ = false;
+            emit details_requested();
+        });
+    };
+    connect(list_, &QListWidget::itemClicked, this, ask);
+    connect(list_, &QListWidget::itemActivated, this, ask);
     // A click opens the stock in Equity Research beside the list. Arrow keys
     // follow (debounced, so holding ↓ does not load every name) — but only
     // into an ER that is already open; browsing alone never pops one up.
@@ -762,7 +773,7 @@ void ScreenerScreen::show_strategy(const QString& id) {
     render_band(true);
     render_details();
     if (inline_on_)
-        inline_->setHtml(inline_html());
+        render_inline();
     if (!has_lists()) {
         update_empty_label();
         if (!inline_on_)
@@ -780,11 +791,23 @@ QString ScreenerScreen::inline_html() const {
            details_html_;
 }
 
+void ScreenerScreen::render_inline() {
+    const QString html = inline_html();
+    if (html == inline_shown_)
+        return;
+    // the same strategy re-rendered (a finished scan): keep the reader's place
+    const int at = inline_id_ == current_id_ ? inline_->verticalScrollBar()->value() : 0;
+    inline_->setHtml(html);
+    inline_shown_ = html;
+    inline_id_ = current_id_;
+    inline_->verticalScrollBar()->setValue(at);
+}
+
 void ScreenerScreen::show_details_inline() {
     if (details_->isVisible() || details_html_.isEmpty())
         return; // the right-hand pane has it
     inline_on_ = true;
-    inline_->setHtml(inline_html());
+    render_inline();
     centre_->setCurrentIndex(2);
 }
 

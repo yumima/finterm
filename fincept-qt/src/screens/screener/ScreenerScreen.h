@@ -88,6 +88,7 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void update_details_pane();
     void render_details();
     QString inline_html() const;
+    void render_inline();
     void leave_inline();
     double min_mcap() const;
     QString cache_name() const;
@@ -127,6 +128,8 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     QString       details_shown_;
     QTextBrowser* inline_ = nullptr;  // centre page 2: the write-up in place of the list
     bool          inline_on_ = false;
+    QString       inline_shown_, inline_id_;
+    bool          details_pending_ = false; // a click + activation, one request
     QString       details_id_;      // whose write-up is on screen (keeps the scroll on a refresh)
     int           band_width_ = -1; // the width the document was last laid out at
     int           band_cap_ = -1;   // the most height it may take (the pane's 75%)

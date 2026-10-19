@@ -670,7 +670,7 @@ bool DockScreenRouter::hide_beside(const QString& id, const QString& anchor_id) 
     ads::CDockAreaWidget* area = dw->dockAreaWidget();
     ads::CDockAreaWidget* anchor = anchor_dw->dockAreaWidget();
     if (!area || !anchor || area == anchor || area->dockContainer() != anchor->dockContainer() ||
-        area->dockWidgetsCount() != 1)
+        area->openDockWidgetsCount() != 1) // closed screens stay in an area as hidden tabs
         return false;
     // directly right: its left edge at the anchor's right edge (a splitter
     // handle between), overlapping it vertically
