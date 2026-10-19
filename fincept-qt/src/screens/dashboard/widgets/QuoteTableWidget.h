@@ -1,10 +1,12 @@
 #pragma once
 #include "screens/dashboard/widgets/BaseWidget.h"
+#include "services/markets/IndexAfterHours.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/tables/DataTable.h"
 
 #include <QHash>
 #include <QMap>
+#include <QTimer>
 
 #include <functional>
 
@@ -28,6 +30,10 @@ class QuoteTableWidget : public BaseWidget {
 
     void refresh_data();
 
+    /// Add the AFT% column: each index's after-hours move, implied by its
+    /// future (services::IndexAfterHours). Rows without a future show a dash.
+    void enable_after_hours();
+
   protected:
     void on_theme_changed() override;
     void showEvent(QShowEvent* e) override;
@@ -35,7 +41,6 @@ class QuoteTableWidget : public BaseWidget {
 
   private:
     void apply_styles();
-    void populate(const QVector<fincept::services::QuoteData>& quotes);
     /// (Re)create the DataTable. Called from the ctor and again after a
     /// full-batch fetch error replaced it via set_error().
     void build_table();
@@ -61,6 +66,15 @@ class QuoteTableWidget : public BaseWidget {
     /// updates.
     QHash<QString, fincept::services::QuoteData> row_cache_;
     bool hub_active_ = false;
+
+    void fetch_after_hours();
+    void apply_aft_columns();
+    void set_aft_header(const QString& suffix, const QString& extra_tip = {});
+    bool aft_enabled_ = false;
+    QHash<QString, fincept::services::IndexAfterHoursQuote> aft_;
+    QTimer* aft_timer_ = nullptr;
+    bool aft_in_flight_ = false;
+    bool aft_failed_ = false;
 };
 
 } // namespace fincept::screens::widgets

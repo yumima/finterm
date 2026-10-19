@@ -112,7 +112,7 @@ TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) {
 
     pvl->addWidget(section_heading("4", "DATA SOURCES"));
     pvl->addWidget(body_text(
-        "Market data is fetched on your behalf from public APIs (Yahoo Finance, Stooq, akshare, FRED, etc.) "
+        "Market data is fetched on your behalf from public APIs (Yahoo Finance, akshare, FRED, etc.) "
         "subject to those providers' own terms of service. You are responsible for complying with each provider's "
         "rate limits and usage rules."));
 

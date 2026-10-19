@@ -109,7 +109,6 @@ PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
     pvl->addWidget(section_heading("→", "OUTBOUND TRAFFIC"));
     pvl->addWidget(body_text("On your behalf — fetched into the app, never sent out:"));
     pvl->addWidget(bullet("Yahoo Finance — quotes, history, fundamentals (yfinance)"));
-    pvl->addWidget(bullet("Stooq — optional EOD data"));
     pvl->addWidget(bullet("akshare — Chinese exchange data (only when you use the China futures panel)"));
     pvl->addWidget(bullet("FRED, DBnomics, government data sources — when you query them"));
 

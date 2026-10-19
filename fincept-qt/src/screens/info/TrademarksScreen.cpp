@@ -96,7 +96,6 @@ TrademarksScreen::TrademarksScreen(QWidget* parent) : QWidget(parent) {
 
     pvl->addWidget(heading("3", "DATA PROVIDER ACKNOWLEDGMENTS"));
     pvl->addWidget(bullet("Yahoo Finance — yfinance library; quote and history data"));
-    pvl->addWidget(bullet("Stooq — historical EOD data"));
     pvl->addWidget(bullet("akshare — Chinese exchange data"));
     pvl->addWidget(bullet("FRED — economic time series (St. Louis Fed)"));
     pvl->addWidget(bullet("DBnomics — economic data aggregator"));

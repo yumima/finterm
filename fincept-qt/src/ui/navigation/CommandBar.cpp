@@ -427,7 +427,6 @@ void CommandBar::build_asset_types() {
         {"/index", "index", "Index", "Search market indices"},
         {"/forex", "forex", "Forex", "Search forex currency pairs"},
         {"/crypto", "crypto", "Crypto", "Search cryptocurrencies"},
-        {"/futures", "futures", "Futures", "Search futures contracts"},
         {"/bond", "bond", "Bond", "Search bonds and fixed income"},
         {"/economic", "economic", "Economic", "Search economic indicators"},
     };

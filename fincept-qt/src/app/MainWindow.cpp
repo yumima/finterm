@@ -39,8 +39,6 @@
 #include "screens/docs/DocsScreen.h"
 #include "screens/economics/EconomicsScreen.h"
 #include "screens/equity_research/EquityResearchScreen.h"
-#include "screens/futures/FuturesScreen.h"
-#include "screens/futures/FuturesQuoteCache.h"
 #include "screens/fno/FnoScreen.h"
 #include "services/portfolio/PortfolioService.h"
 #include "screens/equity_trading/EquityTradingScreen.h"
@@ -323,7 +321,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     dock_router_ = new DockScreenRouter(dock_manager_, this);
     setup_dock_screens();
 
-    // Boot prefetch — DEFERRED. Warming the FUTURES/PORTFOLIO caches kicks a
+    // Boot prefetch — DEFERRED. Warming the PORTFOLIO caches kicks a
     // yfinance hydration that took ~20s and starved the lock-screen PIN entry
     // when it ran during construction. Kick it after the event loop starts;
     // try_boot_prefetch() no-ops while locked and is re-invoked from
@@ -654,7 +652,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 {"panel_news", {"News Feed", "news"}},
                 {"panel_portfolio", {"Portfolio", "portfolio"}},
                 {"panel_markets", {"Markets", "markets"}},
-                {"panel_futures", {"Futures", "futures"}},
                 {"panel_fno", {"F&O", "fno"}},
                 {"panel_crypto", {"Crypto Trading", "crypto_trading"}},
                 {"panel_equity", {"Equity Trading", "equity_trading"}},
@@ -1109,7 +1106,6 @@ void MainWindow::setup_docking_mode() {
 void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("dashboard", []() { return new screens::DashboardScreen; });
     dock_router_->register_factory("markets", []() { return new screens::MarketsScreen; });
-    dock_router_->register_factory("futures", []() { return new screens::FuturesScreen; });
     dock_router_->register_factory("fno", []() { return new screens::fno::FnoScreen; });
     dock_router_->register_factory("crypto_trading", []() { return new screens::CryptoTradingScreen; });
     dock_router_->register_factory("news", []() { return new screens::NewsScreen; });
@@ -1131,6 +1127,11 @@ void MainWindow::setup_dock_screens() {
     // the floating bubble, and the FinGPT engines moved into Equity Research's
     // AI tab. A saved layout naming either resolves to the nearest live home
     // rather than a dead slot.
+    //
+    // "futures" (the Futures board, removed) deliberately gets no alias: its
+    // nearest home is Markets, and aliasing would restore a layout holding
+    // both as two Markets screens. ADS drops the unknown dock instead, and a
+    // layout left with no open areas resets to the default.
     dock_router_->register_factory("ai_chat", []() { return new screens::AgentConfigScreen; });
     dock_router_->register_factory("fingpt", []() { return new screens::EquityResearchScreen; });
     dock_router_->register_factory("backtesting", []() { return new screens::BacktestingScreen; });
@@ -1427,9 +1428,6 @@ void MainWindow::try_boot_prefetch() {
     if (locked_)
         return;
     boot_prefetched_ = true;
-
-    // Warm the FUTURES cache (FUTURES / PortfolioFuturesView read it synchronously).
-    fincept::screens::futures::FuturesQuoteCache::instance().refresh();
 
     // Warm each portfolio's summary cache so portfolio switches render instantly.
     auto& portfolio_svc = services::PortfolioService::instance();

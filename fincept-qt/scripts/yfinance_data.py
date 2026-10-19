@@ -4317,7 +4317,11 @@ _CACHE_TTL = {
     # duplicate-call pressure the cache targets doesn't apply; caching it would
     # also pin a transient all-zeros (swallowed 429) for the TTL.
     "quote": 8, "batch_quotes": 8, "batch_all": 8,
-    "extended_hours": 8, "batch_sparklines": 30, "top_movers": 30,
+    "extended_hours": 8,
+    # index_after_hours: the futures bars it reads are ~10 min delayed, and a
+    # TTL just under the consumers' 60 s poll makes every tile and chart
+    # dialog share one download a minute instead of one each.
+    "index_after_hours": 55, "batch_sparklines": 30, "top_movers": 30,
     # slow-moving fundamentals / metadata — long (change at most daily)
     "info": 600, "batch_info": 600, "financials": 600, "financial_ratios": 600,
     "multiple_ratios": 600, "ipo_extras": 600,
@@ -4660,6 +4664,8 @@ def _daemon_dispatch_inner(action, payload):
         p = payload or {}
         symbols = p.get("symbols") or []
         return get_extended_hours_quotes(symbols)
+    if action == "index_after_hours":
+        return get_index_after_hours((payload or {}).get("pairs") or [])
     if action == "financial_ratios":
         return get_financial_ratios((payload or {}).get("symbol"))
     if action == "compute_technicals":
@@ -5166,6 +5172,244 @@ def get_extended_hours_quotes(symbols):
             for sym, row in ex.map(_retry_one, targets):
                 if row is not None:
                     rows[at[sym]] = row
+    return rows
+
+
+# ── Index after-hours, implied by the index future ───────────────────────────
+#
+# A cash index is a calculation over its constituents' regular-session prints,
+# so it simply stops at the bell: Yahoo keeps stamping the closing level after
+# 16:00 (a ^GSPC "post-market" print equal to the close, i.e. a fake +0.00%),
+# and for a foreign index the 1m frame's out-of-US-hours bars are just that
+# market's own session. Running indices through extended_hours yields numbers
+# that look real and aren't. What does trade after the close is the index
+# future, so the honest after-hours move is the future's move since the moment
+# the CASH index closed — measured against the future's own price at that
+# instant, which cancels the futures/cash basis.
+
+# Index futures whose individual contracts Yahoo serves as ROOT<month><yy>.<EX>,
+# with the Friday of the expiry month the contract settles on (3rd for the CME
+# E-minis, 2nd for the Nikkei).
+_INDEX_FUTURE_CONTRACTS = {
+    "ES": ("CME", 3), "NQ": ("CME", 3), "RTY": ("CME", 3), "YM": ("CBT", 3),
+    "NIY": ("CME", 2),
+}
+_QUARTER_CODES = {3: "H", 6: "M", 9: "U", 12: "Z"}
+
+
+def _nth_friday(year, month, n):
+    from datetime import date as _date, timedelta as _td
+    d = _date(year, month, 1)
+    d += _td(days=(4 - d.weekday()) % 7)        # first Friday
+    return d + _td(weeks=n - 1)
+
+
+def _index_future_contract(proxy, today):
+    """The specific contract to read an index future from, e.g. ES=F -> ESZ26.CME.
+
+    The continuous ROOT=F series switches contract on the roll, and the switch
+    shows up as a jump the size of the calendar spread. Measuring the close and
+    the latest print on the same series would report that spread as an
+    after-hours move on a flat evening. Pinning ONE contract for both prints
+    makes the roll impossible to see. The front quarter is used until eight days
+    before its expiry (where the volume has moved to the next one), then the
+    next quarter. Unknown roots come back unchanged.
+    """
+    root = proxy[:-2] if proxy.endswith("=F") else proxy
+    spec = _INDEX_FUTURE_CONTRACTS.get(root)
+    if spec is None:
+        return proxy
+    from datetime import timedelta as _td
+    exch, nth = spec
+    y, m = today.year, today.month
+    while True:
+        qm = ((m - 1) // 3 + 1) * 3                 # this quarter's expiry month
+        if today < _nth_friday(y, qm, nth) - _td(days=8):
+            return f"{root}{_QUARTER_CODES[qm]}{y % 100:02d}.{exch}"
+        m = qm + 1
+        if m > 12:
+            m, y = 1, y + 1
+
+
+def _index_after_hours_row(index_close, proxy_close, tz_name, open_hm, close_hm, now_utc,
+                           break_hm=None, early_close_hm=None):
+    """One index's futures-implied after-hours move, from two 1-minute series.
+
+    `index_close` and `proxy_close` are Close series indexed by tz-aware bar
+    START times. The cash close instant is the end of the index's last
+    in-session bar, so the reference is the moment the index actually stopped.
+
+    Whether the cash market is open now is decided by the CLOCK first, and the
+    bars only confirm it. Reading it off bar freshness alone turns a stalled
+    index feed at 11:00 into "closed", and the session's own live move into an
+    "after-hours" one. During scheduled hours:
+      - no bars yet today and within 20 minutes of the open: open (Yahoo lags);
+        no bars well after the open: a holiday, so closed.
+      - bars arriving, or the midday break (`break_hm`, Tokyo's lunch): open.
+      - bars stopped exactly at `early_close_hm` (a US half-day): closed there.
+      - bars stopped anywhere else: the feed stalled. No number — an honest
+        dash beats a mislabelled move.
+
+    While open, the number is the move that led into today's open (previous
+    close → open), frozen, labelled PRE. Once closed, it is close → the
+    future's latest print, POST on the same local day and PRE once the date has
+    rolled toward the next open.
+
+    Returns None when the move can't be measured honestly.
+    """
+    if index_close is None or proxy_close is None or index_close.empty or proxy_close.empty:
+        return None
+    from datetime import datetime as _dt, time as _time
+    from zoneinfo import ZoneInfo
+    tz = ZoneInfo(tz_name)
+    one_min = pd.Timedelta(minutes=1)
+    fresh = pd.Timedelta(minutes=20)
+    now_utc = pd.Timestamp(now_utc).tz_convert("UTC")
+    now_local = now_utc.tz_convert(tz)
+
+    loc = index_close.dropna()
+    loc.index = loc.index.tz_convert(tz)
+    t = loc.index.time
+    o, c = _time(*open_hm), _time(*close_hm)
+    # Yahoo keeps stamping the closing level after the bell; those bars are not
+    # trading and would push the "close" an hour late.
+    sess = loc[(t >= o) & (t < c) & (loc.index.weekday < 5)]
+    if sess.empty:
+        return None
+    days = sorted(set(sess.index.date))
+    today = now_local.date()
+    today_bars = sess[sess.index.date == today]
+    open_instant = pd.Timestamp(_dt.combine(today, o), tz=tz)
+
+    scheduled = now_local.weekday() < 5 and o <= now_local.time() < c
+    if not scheduled:
+        cash_open = False
+    elif today_bars.empty:
+        cash_open = now_local - open_instant <= fresh
+    else:
+        last = today_bars.index[-1]
+        in_break = bool(break_hm) and _time(*break_hm[0]) <= now_local.time() < _time(*break_hm[1])
+        if in_break or now_local - last <= fresh:
+            cash_open = True
+        elif early_close_hm and (last + one_min).time() == _time(*early_close_hm):
+            cash_open = False
+        else:
+            return None   # the index feed stalled mid-session
+
+    if cash_open:
+        prior = [d for d in days if d < today]
+        if not prior:
+            return None
+        ref_instant = sess[sess.index.date == prior[-1]].index[-1] + one_min
+        # The open bar's start; by the clock when no bar has arrived yet.
+        ext_cut = today_bars.index[0] if not today_bars.empty else open_instant
+    else:
+        ref_instant = sess.index[-1] + one_min
+        ext_cut = None
+
+    p = proxy_close.dropna()
+    p.index = p.index.tz_convert("UTC")
+    ref_instant = ref_instant.tz_convert("UTC")
+    before = p[p.index < ref_instant]
+    # The future has to have been trading AT the close for its price there to
+    # be the reference; a bar from hours earlier would fold in the session's
+    # own move.
+    if before.empty or ref_instant - before.index[-1] > pd.Timedelta(minutes=30):
+        return None
+    ref_price = float(before.iloc[-1])
+    after = p[p.index >= ref_instant]
+    if ext_cut is not None:
+        after = after[after.index < ext_cut.tz_convert("UTC")]
+    if after.empty or ref_price <= 0:
+        return None
+    ext_price = float(after.iloc[-1])
+    ext_end = after.index[-1] + one_min
+    if cash_open:
+        session = "PRE"
+    else:
+        session = "POST" if ext_end.tz_convert(tz).date() == ref_instant.tz_convert(tz).date() else "PRE"
+    return {
+        "pct": (ext_price - ref_price) / ref_price * 100.0,
+        "ref_price": ref_price, "ext_price": ext_price,
+        "ref_ts": int(ref_instant.timestamp()), "ext_ts": int(ext_end.timestamp()),
+        "session": session, "cash_open": bool(cash_open),
+    }
+
+
+def get_index_after_hours(pairs):
+    """Futures-implied after-hours moves for cash indices.
+
+    `pairs` is a list of {index, proxy, tz, open: "HH:MM", close: "HH:MM",
+    break: "HH:MM-HH:MM" (optional), early_close: "HH:MM" (optional)}; the
+    mapping lives with the caller, which also needs it to label the column.
+    Every requested index gets a row; `pct` is null when there is no honest
+    number, and the row says why in `reason`.
+    """
+    import io
+    import contextlib
+    from zoneinfo import ZoneInfo
+    pairs = [p for p in (pairs or []) if p.get("index") and p.get("proxy")]
+    if not pairs:
+        return []
+    now_utc = datetime.now(ZoneInfo("UTC"))
+    # Chosen on the exchange's (Chicago's) date; the same contract serves both
+    # prints, so the roll can't land between them.
+    cme_today = now_utc.astimezone(ZoneInfo("America/Chicago")).date()
+    contract = {p["proxy"]: _index_future_contract(p["proxy"], cme_today) for p in pairs}
+    symbols = sorted({p["index"] for p in pairs} | set(contract.values()))
+    with contextlib.redirect_stdout(io.StringIO()):
+        try:
+            # 1m because the reference is an instant (the bell), and 5d so a
+            # long weekend still holds the previous close.
+            data = yf.download(symbols, period="5d", interval="1m", prepost=True,
+                               group_by="ticker", progress=False, threads=True,
+                               auto_adjust=False)
+        except Exception as e:
+            raise RuntimeError(f"index after-hours download failed: {e}") from e
+
+    def _closes(sym):
+        try:
+            if isinstance(data.columns, pd.MultiIndex):
+                if sym not in data.columns.get_level_values(0):
+                    return None
+                s = data[sym]["Close"]
+            elif len(symbols) == 1:
+                s = data["Close"]
+            else:
+                return None
+            s = s.dropna()
+            if s.empty:
+                return None
+            if s.index.tz is None:
+                s.index = s.index.tz_localize("UTC")
+            return s
+        except Exception:
+            return None
+
+    def _hm(v):
+        return tuple(int(x) for x in str(v).split(":"))
+
+    rows = []
+    for p in pairs:
+        fut = contract[p["proxy"]]
+        row = {"symbol": p["index"], "proxy": p["proxy"], "contract": fut, "pct": None, "reason": ""}
+        try:
+            brk = None
+            if p.get("break"):   # "HH:MM-HH:MM"
+                b0, b1 = str(p["break"]).split("-")
+                brk = (_hm(b0), _hm(b1))
+            r = _index_after_hours_row(_closes(p["index"]), _closes(fut),
+                                       p.get("tz") or "America/New_York",
+                                       _hm(p.get("open", "09:30")), _hm(p.get("close", "16:00")),
+                                       now_utc, brk,
+                                       _hm(p["early_close"]) if p.get("early_close") else None)
+            if r is None:
+                row["reason"] = "no sound pairing: no futures prints around the cash close, or the index feed stalled"
+            else:
+                row.update(r)
+        except Exception as e:
+            row["reason"] = str(e)[:120]
+        rows.append(row)
     return rows
 
 

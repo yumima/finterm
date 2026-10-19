@@ -888,6 +888,7 @@ set(SERVICE_SOURCES
     src/services/crypto/TotpService.cpp
     src/services/python_cli/PythonCliService.cpp
     src/services/markets/MarketDataService.cpp
+    src/services/markets/IndexAfterHours.cpp
     src/services/data_normalization/DataNormalizationService.cpp
     src/services/news/NewsService.cpp
     src/services/news/NewsClusterService.cpp
@@ -1113,10 +1114,6 @@ set(SCREEN_SOURCES
     src/screens/markets/MarketPanelStore.cpp
     src/screens/markets/MarketPanelEditor.cpp
     src/screens/markets/MarketChartDialog.cpp
-    src/screens/futures/FuturesScreen.cpp
-    src/screens/futures/FuturesDataService.cpp
-    src/screens/futures/FuturesPanels.cpp
-    src/screens/futures/FuturesQuoteCache.cpp
     # ── F&O (Sensibull-style options analytics; FII/DII tab dropped) ─────
     src/screens/fno/FnoScreen.cpp
     src/screens/fno/FnoHeaderBar.cpp
@@ -1625,10 +1622,6 @@ set_source_files_properties(
     src/screens/forum/ForumScreen.cpp
     src/screens/forum/ForumSidebarPanel.cpp
     src/screens/forum/ForumThreadPanel.cpp
-    src/screens/futures/FuturesDataService.cpp
-    src/screens/futures/FuturesPanels.cpp
-    src/screens/futures/FuturesQuoteCache.cpp
-    src/screens/futures/FuturesScreen.cpp
     src/screens/fno/BuilderAnalyticsRibbon.cpp
     src/screens/fno/BuilderSubTab.cpp
     src/screens/fno/ChainSubTab.cpp

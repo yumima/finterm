@@ -19,6 +19,20 @@ ContentLoader& ContentLoader::instance() {
     return inst;
 }
 
+/// The content names screens by id, and some of those screens are gone or were
+/// renamed. A link to a dead id navigates nowhere; a link to a retired screen
+/// via an alias lands somewhere that doesn't have what the label promises. Map
+/// the renamed ones and return empty for the removed ones, which drops the link.
+static QString live_screen_id(const QString& id) {
+    if (id == QLatin1String("crypto"))
+        return QStringLiteral("crypto_trading");
+    if (id == QLatin1String("fx"))
+        return QStringLiteral("markets");   // the Markets FOREX panel
+    if (id == QLatin1String("futures"))
+        return {};                          // the Futures board was removed
+    return id;
+}
+
 static QString read_file(const QString& path) {
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
@@ -161,7 +175,7 @@ KnowledgeEntry ContentLoader::parse_entry(const QJsonObject& obj, const QString&
     for (const auto& v : obj.value("seen_in").toArray()) {
         const auto o = v.toObject();
         ScreenRef r;
-        r.screen = o.value("screen").toString();
+        r.screen = live_screen_id(o.value("screen").toString());
         r.label = o.value("label").toString();
         if (!r.screen.isEmpty())
             e.seen_in.push_back(r);
@@ -170,7 +184,7 @@ KnowledgeEntry ContentLoader::parse_entry(const QJsonObject& obj, const QString&
         const auto o = v.toObject();
         ActionRef a;
         a.label = o.value("label").toString();
-        a.screen = o.value("screen").toString();
+        a.screen = live_screen_id(o.value("screen").toString());
         a.ticker = o.value("ticker").toString();
         a.hint = o.value("hint").toString();
         if (!a.label.isEmpty() && !a.screen.isEmpty())

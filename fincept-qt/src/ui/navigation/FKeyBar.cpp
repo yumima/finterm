@@ -18,7 +18,7 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
     tab_layout_->setSpacing(2);
 
     QVector<TabDef> tabs = {
-        {"dashboard", "DASHBOARD"}, {"markets", "MARKETS"},   {"futures", "FUTURES"},        {"crypto_trading", "CRYPTO"},  {"portfolio", "PORTFOLIO"},
+        {"dashboard", "DASHBOARD"}, {"markets", "MARKETS"},   {"crypto_trading", "CRYPTO"},  {"portfolio", "PORTFOLIO"},
         {"ownership", "OWNERSHIP"}, {"pre_ipo", "IPO WATCH"},
         // "equity_research" replaced "fingpt" (which had replaced "ai_chat"):
         // the per-stock AI — both forecast engines, headline sentiment and the

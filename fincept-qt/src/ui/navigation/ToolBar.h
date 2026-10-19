@@ -46,18 +46,14 @@ class ToolBar : public QWidget {
     QPushButton* plan_btn_ = nullptr;
     QPushButton* workbench_btn_ = nullptr;
     QPushButton* logout_btn_ = nullptr;
-    QPushButton* data_source_btn_ = nullptr;
     QTimer* clock_timer_ = nullptr;
     QVector<QLabel*> separators_;
     QLabel* fin_label_ = nullptr;
-    QString data_source_ = "yahoo";
 
     CommandBar* command_bar_ = nullptr;
 
     void refresh_theme();
     void apply_responsive_layout(int width);
-    void show_data_source_menu();
-    void apply_data_source(const QString& source, bool persist);
 
     QMenu* build_file_menu();
     QMenu* build_navigate_menu();

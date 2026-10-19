@@ -39,6 +39,8 @@ NOT_CREDENTIALS = {
     # finterm's own data directory, used by scripts that keep a local index
     # (the 13F SQLite store). A path, not a secret.
     "FINCEPT_DATA_DIR",
+    # The per-user data and cache homes (scripts/finterm_paths.py). Paths too.
+    "FINCEPT_USER_DIR", "FINCEPT_USER_DATA_DIR", "FINCEPT_CACHE_DIR",
     # Logging switches some scripts read; configuration, not credentials.
     "LOGURU_AUTOINIT", "LOGURU_LEVEL",
 }
@@ -108,7 +110,7 @@ GROUPS = [
         "MARKETSTACK_API_KEY", "METALS_DEV_API_KEY", "NASDAQ_API_KEY", "NASDAQ_DATA_LINK_API_KEY",
         "OPENBB_API_KEY", "OPENEXCHANGERATES_API_KEY", "OPENFIGI_API_KEY", "PLATTS_API_KEY",
         "POLYGON_API_KEY", "PUBLIC_APIS_FINANCE_KEY", "QUIVER_API_KEY", "SIMFIN_API_KEY",
-        "STOOQ_API_KEY", "TIINGO_API_KEY", "TRADINGVIEW_API_KEY", "TWELVE_DATA_API_KEY",
+        "TIINGO_API_KEY", "TRADINGVIEW_API_KEY", "TWELVE_DATA_API_KEY",
         "YH_FINANCE_API_KEY", "OC_API_KEY",
     }),
     ("Crypto", {

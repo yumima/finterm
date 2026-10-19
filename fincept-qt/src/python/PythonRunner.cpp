@@ -628,7 +628,7 @@ void PythonRunner::start_next() {
         proc->start(python_exe, full_args);
 
         // Hard timeout — kill hanging scripts so they don't hold a concurrency
-        // slot forever (futures_router network calls, yf.download on bad tickers).
+        // slot forever (slow network calls, yf.download on bad tickers).
         // Per-request override (req.timeout_ms) so legitimately long-running
         // scrapers (e.g. Senate eFD with many per-PTR HTTP round-trips) can
         // declare their own ceiling. 0 disables the timeout.

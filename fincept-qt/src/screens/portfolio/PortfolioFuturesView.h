@@ -1,8 +1,11 @@
 #pragma once
 #include "screens/portfolio/PortfolioTypes.h"
+#include "services/markets/MarketDataService.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QHideEvent>
+#include <QSet>
 #include <QLabel>
 #include <QShowEvent>
 #include <QString>
@@ -15,10 +18,10 @@ namespace fincept::screens {
 /// "Futures & Extended Hours" detail view.
 ///
 /// Two stacked tables fed from the current PortfolioSummary:
-///   1. **Futures positions** — holdings whose symbol matches a futures
-///      pattern (yfinance =F suffix, /XX TradingView, or root in the
-///      Futures catalog). Live quotes come from FuturesQuoteCache so we
-///      reuse the work the FuturesScreen already does.
+///   1. **Futures positions** — holdings whose symbol is unambiguously a
+///      future (yfinance =F suffix, /XX TradingView, or a dated contract
+///      code like ESZ6; a bare root is a stock ticker). Live quotes come from the DataHub's
+///      `market:quote:<ROOT>=F` topics while the view is visible.
 ///   2. **Extended hours** — every holding, with regular close + last
 ///      pre/post-market price and the ext-hours move. Sourced from the
 ///      yfinance daemon's `extended_hours` action (preMarketPrice /
@@ -53,7 +56,9 @@ class PortfolioFuturesView : public QWidget {
     void populate_futures();
     void populate_extended();
     void refresh_extended_hours();
-    void on_quote_cache_updated();
+    void resubscribe_futures();
+    /// The feed symbol a futures holding is priced from (ROOT=F).
+    static QString quote_symbol(const QString& symbol);
 
     /// Disk-cache last successful extended-hours batch so the table
     /// paints with real (if stale) values on app startup instead of
@@ -72,6 +77,9 @@ class PortfolioFuturesView : public QWidget {
     QLabel*       futures_status_ = nullptr;
     QLabel*       extended_status_ = nullptr;
 
+    QHash<QString, services::QuoteData> fut_quotes_;   // keyed by quote_symbol()
+    QDateTime                fut_last_update_;
+    QSet<QString>            fut_subscribed_;    // topics currently held on the hub
     QHash<QString, ExtQuote> ext_quotes_;
     quint64                  ext_gen_ = 0;
     // Suppresses timer-driven refresh while one is already in flight.
@@ -83,9 +91,8 @@ class PortfolioFuturesView : public QWidget {
     bool                     ext_in_flight_ = false;
 
     // Periodic refresh of the extended-hours table while the view is
-    // visible. Runs in parallel with FuturesQuoteCache's own 20 s
-    // polling (which only feeds the futures table above). 20 s matches
-    // the futures cadence so both tables tick together; the timer is
+    // visible. The futures table above ticks with the DataHub quote
+    // stream instead; the timer is
     // started in showEvent and stopped in hideEvent so no work happens
     // when the view isn't on screen.
     QTimer*                  ext_refresh_timer_ = nullptr;

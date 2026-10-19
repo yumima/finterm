@@ -1,9 +1,9 @@
 #include "screens/portfolio/PortfolioFuturesView.h"
 #include "core/config/AppPaths.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "python/PythonWorker.h"
-#include "screens/futures/FuturesContracts.h"
-#include "screens/futures/FuturesQuoteCache.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -19,6 +19,7 @@
 #include <QLabel>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QVBoxLayout>
 
@@ -73,6 +74,36 @@ QString table_ss() {
         .arg(colors::BG_RAISED());
 }
 
+// Display names for futures roots. NOT a classifier: most of these roots are
+// also listed stock tickers (HE Hawaiian Electric, CL Colgate, ZM Zoom, ES
+// Eversource, MET MetLife…), so a bare "CL" holding is a stock, and pricing it
+// from CL=F would put crude oil's price on a Colgate position.
+const QHash<QString, QString>& futures_roots() {
+    static const QHash<QString, QString> roots = {
+        {"ES", "E-mini S&P 500"},   {"NQ", "E-mini Nasdaq 100"},  {"YM", "E-mini Dow"},
+        {"RTY", "E-mini Russell 2000"},
+        {"MES", "Micro E-mini S&P 500"}, {"MNQ", "Micro E-mini Nasdaq 100"},
+        {"MYM", "Micro E-mini Dow"}, {"M2K", "Micro E-mini Russell 2000"},
+        {"ZT", "2-Year T-Note"},    {"ZF", "5-Year T-Note"},      {"ZN", "10-Year T-Note"},
+        {"ZB", "30-Year T-Bond"},   {"UB", "Ultra T-Bond"},       {"ZQ", "30-Day Fed Funds"},
+        {"SR3", "3-Month SOFR"},
+        {"CL", "WTI Crude Oil"},    {"BZ", "Brent Crude"},        {"NG", "Henry Hub Nat Gas"},
+        {"RB", "RBOB Gasoline"},    {"HO", "Heating Oil"},
+        {"GC", "Gold"},             {"SI", "Silver"},             {"HG", "Copper"},
+        {"PL", "Platinum"},         {"PA", "Palladium"},
+        {"ZC", "Corn"},             {"ZW", "Wheat"},              {"ZS", "Soybeans"},
+        {"ZL", "Soybean Oil"},      {"ZM", "Soybean Meal"},       {"KC", "Coffee"},
+        {"SB", "Sugar #11"},        {"CC", "Cocoa"},              {"CT", "Cotton"},
+        {"LE", "Live Cattle"},      {"HE", "Lean Hogs"},          {"GF", "Feeder Cattle"},
+        {"6E", "Euro FX"},          {"6J", "Japanese Yen"},       {"6B", "British Pound"},
+        {"6A", "Australian Dollar"}, {"6C", "Canadian Dollar"},
+        {"BTC", "Bitcoin Futures"}, {"MBT", "Micro Bitcoin Futures"}, {"MET", "Micro Ether Futures"},
+        {"NIY", "Nikkei 225 (Yen, CME)"}, {"NKD", "Nikkei 225 (USD, CME)"},
+        {"VX", "VIX Futures"},      {"DX", "US Dollar Index"},
+    };
+    return roots;
+}
+
 } // namespace
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,8 +114,7 @@ bool PortfolioFuturesView::looks_like_future(const QString& symbol) {
     if (symbol.endsWith("=F", Qt::CaseInsensitive)) return true;
     // TradingView style "/ES"
     if (symbol.startsWith('/')) return true;
-    // Catalog root match (ES, NQ, CL, etc.)
-    if (futures::find_contract(symbol.toUpper())) return true;
+    // A bare root ("ES", "CL") is deliberately NOT a future — see futures_roots().
     // CME contract month form: 2-3 letters + month code (FGHJKMNQUVXZ) + 1-2 digits.
     static const QRegularExpression re("^[A-Z0-9]{1,3}[FGHJKMNQUVXZ]\\d{1,2}$");
     if (re.match(symbol.toUpper()).hasMatch()) return true;
@@ -107,7 +137,8 @@ namespace {
 // Failures only land in DEBUG builds (Q_ASSERT is a no-op in release).
 struct SymbolClassificationSelfTest {
     SymbolClassificationSelfTest() {
-        Q_ASSERT(PortfolioFuturesView::looks_like_future("ES"));
+        Q_ASSERT(!PortfolioFuturesView::looks_like_future("ES"));   // Eversource
+        Q_ASSERT(!PortfolioFuturesView::looks_like_future("CL"));   // Colgate
         Q_ASSERT(PortfolioFuturesView::looks_like_future("ES=F"));
         Q_ASSERT(PortfolioFuturesView::looks_like_future("/ES"));
         Q_ASSERT(PortfolioFuturesView::looks_like_future("ESM6"));
@@ -124,16 +155,18 @@ static const SymbolClassificationSelfTest _symbol_test_;
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+QString PortfolioFuturesView::quote_symbol(const QString& symbol) {
+    // A dated contract (ESZ6) is priced off the continuous front month — the
+    // feed has no per-expiry quotes. Close to expiry the two can differ.
+    return futures_root(symbol) + QStringLiteral("=F");
+}
+
 PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
     build_ui();
-    connect(&futures::FuturesQuoteCache::instance(),
-            &futures::FuturesQuoteCache::quotes_updated,
-            this, &PortfolioFuturesView::on_quote_cache_updated);
     // Periodic extended-hours refresh. Without this the table only
     // updated when PortfolioService re-emitted a summary, which is gated
     // by a 5-minute TTL cache — so live pre/post-market prints would
-    // sit stale until the user manually refreshed. 20 s matches the
-    // futures cache cadence so both tables tick together.
+    // sit stale until the user manually refreshed.
     ext_refresh_timer_ = new QTimer(this);
     ext_refresh_timer_->setInterval(kExtRefreshIntervalMs);
     connect(ext_refresh_timer_, &QTimer::timeout, this, [this]() {
@@ -152,10 +185,9 @@ PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
 
 void PortfolioFuturesView::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
-    // Subscribe to live futures quotes only while the view is visible.
-    // The cache reference-counts subscribers so the timer pauses when
-    // every consumer is hidden.
-    futures::FuturesQuoteCache::instance().retain();
+    // Live futures quotes only while the view is visible, so the hub's
+    // subscriber count stays honest.
+    resubscribe_futures();
     // Start the extended-hours refresh tick while visible. set_summary
     // (which runs whenever the parent emits a new summary) still fires
     // an immediate refresh; this timer keeps it ticking even when no
@@ -167,7 +199,8 @@ void PortfolioFuturesView::showEvent(QShowEvent* event) {
 
 void PortfolioFuturesView::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
-    futures::FuturesQuoteCache::instance().release();
+    datahub::DataHub::instance().unsubscribe(this);
+    fut_subscribed_.clear();
     if (ext_refresh_timer_) ext_refresh_timer_->stop();
 }
 
@@ -236,12 +269,36 @@ void PortfolioFuturesView::set_summary(const portfolio::PortfolioSummary& summar
     populate_futures();
     populate_extended();
     refresh_extended_hours();
-    // Kick the futures cache so live quotes for futures positions stay fresh.
-    futures::FuturesQuoteCache::instance().refresh();
+    // The futures holdings may have changed with the summary.
+    if (isVisible())
+        resubscribe_futures();
 }
 
-void PortfolioFuturesView::on_quote_cache_updated() {
-    populate_futures();
+void PortfolioFuturesView::resubscribe_futures() {
+    auto& hub = datahub::DataHub::instance();
+    QSet<QString> wanted;
+    for (const auto& h : summary_.holdings)
+        if (looks_like_future(h.symbol))
+            wanted.insert(quote_symbol(h.symbol));
+    // Diff, don't rebuild: every summary re-emission would otherwise tear
+    // down and re-create each topic, churning the hub's active/idle state.
+    for (const auto& sym : std::as_const(fut_subscribed_))
+        if (!wanted.contains(sym)) {
+            hub.unsubscribe(this, QStringLiteral("market:quote:") + sym);
+            fut_quotes_.remove(sym);
+        }
+    for (const auto& sym : std::as_const(wanted)) {
+        if (fut_subscribed_.contains(sym))
+            continue;
+        hub.subscribe(this, QStringLiteral("market:quote:") + sym, [this, sym](const QVariant& v) {
+            if (!v.canConvert<services::QuoteData>())
+                return;
+            fut_quotes_.insert(sym, v.value<services::QuoteData>());
+            fut_last_update_ = QDateTime::currentDateTime();
+            populate_futures();
+        });
+    }
+    fut_subscribed_ = wanted;
 }
 
 // ── Futures positions ──────────────────────────────────────────────────────
@@ -261,9 +318,8 @@ void PortfolioFuturesView::populate_futures() {
         return;
     }
 
-    auto& cache = futures::FuturesQuoteCache::instance();
-    futures_status_->setText(cache.has_data()
-                                  ? QString("live · %1").arg(cache.last_refresh().toString("HH:mm:ss"))
+    futures_status_->setText(fut_last_update_.isValid()
+                                  ? QString("live · %1").arg(fut_last_update_.toString("HH:mm:ss"))
                                   : "loading quotes…");
 
     futures_table_->setRowCount(futures_holdings.size());
@@ -271,19 +327,18 @@ void PortfolioFuturesView::populate_futures() {
         const auto& h = futures_holdings[i];
         const QString root = futures_root(h.symbol);
 
-        // Live data preference: catalog cache first, fall back to portfolio engine.
+        // Live quote first, fall back to the portfolio engine's price.
         double last = h.current_price;
         double chg_pct = h.day_change_percent;
         double volume = 0;
-        QString display_name = h.symbol;
-        for (const auto& q : cache.all_quotes()) {
-            if (q.symbol == root) {
-                last = q.last;
-                chg_pct = q.change_pct;
-                volume = q.volume;
-                display_name = q.name;
-                break;
-            }
+        QString display_name = futures_roots().value(root, h.symbol);
+        if (const auto it = fut_quotes_.constFind(quote_symbol(h.symbol)); it != fut_quotes_.constEnd()) {
+            if (it->price > 0)
+                last = it->price;
+            chg_pct = it->change_pct;
+            volume = it->volume;
+            if (!futures_roots().contains(root) && !it->name.isEmpty())
+                display_name = it->name;
         }
 
         const double mv = last * h.quantity;
@@ -382,8 +437,8 @@ void PortfolioFuturesView::refresh_extended_hours() {
                                          : result.value("data").toArray();
             // Merge (don't clear): if yfinance dropped a symbol from this
             // round, the previous value stays in ext_quotes_ rather than
-            // disappearing entirely. Matches FuturesQuoteCache::refresh's
-            // pattern and avoids disk-durable data loss on the next save.
+            // disappearing entirely, and the next save doesn't lose it from
+            // disk either.
             for (const auto& v : rows) {
                 const auto o = v.toObject();
                 ExtQuote q;

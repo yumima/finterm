@@ -3,6 +3,7 @@
 
 #include "core/events/EventBus.h"
 #include "screens/equity_research/EquityOverviewTab.h"
+#include "services/markets/IndexAfterHours.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -17,6 +18,7 @@
 #include <QPushButton>
 #include <QScreen>
 #include <QTimeZone>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -56,6 +58,7 @@ struct Prefs {
     bool sma20 = false;
     bool sma50 = false;
     bool sma200 = false;
+    bool aft = false;
 };
 Prefs& prefs() {
     static Prefs p;
@@ -185,6 +188,9 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
     head->addWidget(last_);
     change_ = make_label(ui::colors::TEXT_PRIMARY(), 14, true, true);
     head->addWidget(change_);
+    aft_ = make_label(ui::colors::TEXT_PRIMARY(), 14, true, true);
+    aft_->hide();
+    head->addWidget(aft_);
     head->addStretch(1);
     auto* er_btn = make_button(QStringLiteral("OPEN IN RESEARCH"), ui::colors::AMBER(), false);
     er_btn->setObjectName(QStringLiteral("er"));
@@ -235,6 +241,9 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
         {"sma20", "SMA20", "#3b82f6", "20-bar simple moving average."},
         {"sma50", "SMA50", "#a855f7", "50-bar simple moving average."},
         {"sma200", "SMA200", "#eab308", "200-bar simple moving average."},
+        {"aft", "AFT", "#f97316",
+         "After-hours move, implied by the index's future: its move since the cash close. "
+         "Shown for indices with a future on the feed."},
     };
     for (const auto& t : toggles) {
         const QString key = QString::fromLatin1(t.key);
@@ -247,6 +256,7 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
             else if (key == "sma20") { pr.sma20 = on; canvas_->set_show_sma(20, on); }
             else if (key == "sma50") { pr.sma50 = on; canvas_->set_show_sma(50, on); }
             else if (key == "sma200") { pr.sma200 = on; canvas_->set_show_sma(200, on); }
+            else if (key == "aft") { pr.aft = on; update_aft_visibility(); }
         });
         toggle_btns_.insert(key, b);
         ctl->addWidget(b);
@@ -271,7 +281,68 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
     canvas_->set_show_sma(20, pr.sma20);
     canvas_->set_show_sma(50, pr.sma50);
     canvas_->set_show_sma(200, pr.sma200);
+
+    // The future's bars run ~10 minutes behind; a minute is as fresh as it gets.
+    aft_timer_ = new QTimer(this);
+    aft_timer_->setInterval(60'000);
+    connect(aft_timer_, &QTimer::timeout, this, [this]() { fetch_after_hours(); });
     sync_buttons();
+}
+
+void MarketChartDialog::update_aft_visibility() {
+    const bool has_future = services::index_proxy_for(symbol_) != nullptr;
+    if (auto* b = toggle_btns_.value(QStringLiteral("aft")))
+        b->setVisible(has_future);
+    const bool on = has_future && prefs().aft;
+    if (!on) {
+        aft_timer_->stop();
+        ++aft_seq_;   // drop any reply still in flight
+        aft_->clear();
+        aft_->hide();
+        return;
+    }
+    aft_->show();
+    if (!aft_timer_->isActive())
+        aft_timer_->start();
+    fetch_after_hours();
+}
+
+void MarketChartDialog::fetch_after_hours() {
+    const int seq = ++aft_seq_;
+    const QString sym = symbol_;
+    if (aft_->text().isEmpty()) {
+        aft_->setText(QStringLiteral("AFT …"));
+        aft_->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;font-family:monospace;"
+                                    "background:transparent;")
+                                .arg(ui::colors::TEXT_TERTIARY()));
+    }
+    services::fetch_index_after_hours(
+        {sym}, this, [this, seq, sym](bool ok, QHash<QString, services::IndexAfterHoursQuote> rows, QString err) {
+            if (seq != aft_seq_ || sym != symbol_)
+                return;   // superseded by another symbol or toggle
+            const auto it = rows.constFind(sym);
+            QString color = ui::colors::TEXT_TERTIARY();
+            if (!ok) {
+                // Keep a good number on screen through a failed refresh.
+                if (aft_->toolTip().isEmpty() || aft_->text() == QLatin1String("AFT …")) {
+                    aft_->setText(QStringLiteral("AFT !"));
+                    aft_->setToolTip(QStringLiteral("After-hours fetch failed: %1").arg(err));
+                } else {
+                    return;
+                }
+            } else if (it == rows.constEnd()) {
+                aft_->setText(QStringLiteral("AFT —"));
+                aft_->setToolTip(services::index_after_hours_unavailable_tooltip(sym, label_));
+            } else {
+                aft_->setText(QStringLiteral("AFT %1 %2")
+                                  .arg(ui::formatting::format_percent(it->pct, 2, true), it->session));
+                aft_->setToolTip(services::index_after_hours_tooltip(*it, label_));
+                color = it->pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
+            }
+            aft_->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;font-family:monospace;"
+                                        "background:transparent;")
+                                    .arg(color));
+        });
 }
 
 void MarketChartDialog::sync_buttons() {
@@ -280,8 +351,8 @@ void MarketChartDialog::sync_buttons() {
         it.value()->setChecked(it.key() == pr.period);
     for (auto it = style_btns_.begin(); it != style_btns_.end(); ++it)
         it.value()->setChecked(it.key() == pr.style);
-    const QHash<QString, bool> on{{"log", pr.log}, {"vol", pr.vol}, {"sma20", pr.sma20},
-                                  {"sma50", pr.sma50}, {"sma200", pr.sma200}};
+    const QHash<QString, bool> on{{"log", pr.log},       {"vol", pr.vol},       {"sma20", pr.sma20},
+                                  {"sma50", pr.sma50},   {"sma200", pr.sma200}, {"aft", pr.aft}};
     for (auto it = toggle_btns_.begin(); it != toggle_btns_.end(); ++it) {
         const QSignalBlocker block(it.value());   // state only; the canvas already agrees
         it.value()->setChecked(on.value(it.key()));
@@ -298,8 +369,12 @@ void MarketChartDialog::set_symbol(const QString& symbol, const QString& label) 
                                                            symbol_.toHtmlEscaped()));
     if (auto* er = findChild<QPushButton*>(QStringLiteral("er")))
         er->setVisible(has_research_page(symbol_));
-    if (changed)
+    if (changed) {
+        aft_->clear();
+        aft_->setToolTip({});
         load();
+    }
+    update_aft_visibility();
 }
 
 void MarketChartDialog::load() {

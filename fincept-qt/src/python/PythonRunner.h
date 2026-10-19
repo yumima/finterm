@@ -30,7 +30,7 @@ class PythonRunner : public QObject {
     using StreamCallback = std::function<void(QString line, bool is_stderr)>;
 
     // Default per-process hard timeout. Scripts that make network calls
-    // (futures_router, benchmark fetches, etc.) can hang indefinitely on
+    // (benchmark fetches, etc.) can hang indefinitely on
     // DNS/connection failure. When the deadline fires the process is killed
     // and the callback is called with success=false so callers show an error
     // rather than loading forever. Override per call via run(..., timeout_ms).

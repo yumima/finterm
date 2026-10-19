@@ -36,7 +36,7 @@ inline const QStringList& groups() {
     return kGroups;
 }
 
-// 146 credentials.
+// 145 credentials.
 inline const QVector<CredentialDef>& catalogue() {
     static const QVector<CredentialDef> kAll = {
         {"ACLED_API_KEY", "Acled", "Economics & government", true},
@@ -152,7 +152,6 @@ inline const QVector<CredentialDef>& catalogue() {
         {"SENTINELHUB_CLIENT_SECRET", "Sentinelhub Client", "Energy, climate & geospatial", true},
         {"SIMFIN_API_KEY", "Simfin", "Market data", true},
         {"SSRN_API_KEY", "Ssrn", "Research & datasets", true},
-        {"STOOQ_API_KEY", "Stooq", "Market data", true},
         {"SWISS_GOV_API_KEY", "Swiss Gov", "Economics & government", true},
         {"TIINGO_API_KEY", "Tiingo", "Market data", true},
         {"TRADINGVIEW_API_KEY", "Tradingview", "Market data", true},
