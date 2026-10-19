@@ -9,6 +9,8 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
+class QStackedWidget;
+
 namespace fincept::screens::widgets {
 
 /// Reusable widget container — title bar with accent color, close/refresh/config buttons.
@@ -28,7 +30,15 @@ class BaseWidget : public QFrame {
     QWidget* drag_handle() const { return title_bar_; }
 
     void set_loading(bool loading);
+    /// Show `error` IN PLACE OF the content — without destroying it. The body
+    /// is a two-page stack (content | error); this flips to the error page and
+    /// clear_error() flips back, so every pointer a widget holds into its
+    /// content stays valid across a failure. (It used to delete the content
+    /// layout's widgets, and eight widgets nulled / rebuilt / avoided it.)
     void set_error(const QString& error);
+    /// Back to the content after a failure; call when data arrives again.
+    void clear_error();
+    bool has_error() const;
     void set_title(const QString& title);
 
     /// Current per-instance config. Default: empty — subclasses override to
@@ -46,6 +56,10 @@ class BaseWidget : public QFrame {
     void config_changed(QJsonObject new_config);
 
   protected:
+    /// The title in the widget's header (top-left) — for widgets whose title
+    /// is also a control (LIVE TV: click the channel name to switch).
+    QLabel* title_label() const { return title_label_; }
+
     /// Override in subclasses to re-apply styles when theme/font changes.
     /// Called automatically — no manual connection needed.
     virtual void on_theme_changed() {}
@@ -67,6 +81,7 @@ class BaseWidget : public QFrame {
 
   private:
     void apply_title_bar_style(); // single source of truth for title-bar fonts/colours
+    void refresh_error_style();
     void refresh_base_theme();
     void on_config_clicked();
 
@@ -76,8 +91,10 @@ class BaseWidget : public QFrame {
     QLabel* title_label_ = nullptr;
     QLabel* accent_bar_ = nullptr;
     QLabel* loading_label_ = nullptr;
+    QStackedWidget* body_ = nullptr; // page 0: content_, page 1: error_label_
     QWidget* content_ = nullptr;
     QVBoxLayout* content_layout_ = nullptr;
+    QLabel* error_label_ = nullptr;
     QPushButton* refresh_btn_ = nullptr;
     QPushButton* config_btn_ = nullptr;
     QString accent_color_;

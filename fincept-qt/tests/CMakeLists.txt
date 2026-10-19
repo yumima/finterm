@@ -734,6 +734,20 @@ target_link_libraries(test_ownership_flags PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_ownership_flags PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME ownership_flags COMMAND test_ownership_flags)
 
+# ── Dashboard BaseWidget: an error must not destroy the content ─────────────
+add_executable(test_base_widget_error
+    screens/test_base_widget_error.cpp
+    ../src/screens/dashboard/widgets/BaseWidget.cpp
+    ../src/ui/theme/Theme.cpp
+    ../src/ui/theme/ThemeManager.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_base_widget_error PRIVATE ../src)
+target_link_libraries(test_base_widget_error PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+set_target_properties(test_base_widget_error PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME base_widget_error COMMAND test_base_widget_error)
+set_tests_properties(base_widget_error PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # ── SEC contact identity (C++ half; the Python half is contact_identity) ─────
 add_executable(test_sec_identity
     services/test_sec_identity.cpp

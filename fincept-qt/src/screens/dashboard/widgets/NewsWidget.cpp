@@ -22,7 +22,9 @@ NewsWidget::NewsWidget(QWidget* parent) : BaseWidget("MARKET NEWS", parent, ui::
     // present so the user has visible proof the refresh actually completed
     // (matters when yfinance returns the same headlines after a long idle).
     status_label_ = new QLabel(QStringLiteral("Loading…"));
-    status_label_->setFixedHeight(14);
+    // sized from the font: a fixed 14 px was shorter than the text and the
+    // line overlapped the first headline
+    status_label_->setFixedHeight(status_label_->fontMetrics().height() + 4);
     content_layout()->addWidget(status_label_);
 
     scroll_area_ = new QScrollArea;
@@ -46,6 +48,8 @@ NewsWidget::NewsWidget(QWidget* parent) : BaseWidget("MARKET NEWS", parent, ui::
         ++refresh_token_;
         set_loading(false);
         finalize_refresh(QStringLiteral("timeout"));
+        if (news_layout_->count() <= 1) // nothing on screen: say it on the page, not a hidden line
+            set_error(QStringLiteral("No answer from the data service (timeout) — retry with refresh."));
         LOG_WARN("NewsWidget", "fetch_news watchdog fired — daemon did not respond");
     });
 
@@ -76,29 +80,36 @@ void NewsWidget::on_theme_changed() {
 void NewsWidget::refresh_data() {
     set_loading(true);
     status_label_->setText(QStringLiteral("Refreshing…"));
+    clear_error(); // a retry is not an error: show the status line ("Refreshing…") again
 
     // Token guards against the watchdog firing and a late real callback
     // racing — the late callback will see a mismatched token and bail.
     const qint64 token = ++refresh_token_;
     watchdog_->start(kRefreshTimeoutMs);
 
-    services::MarketDataService::instance().fetch_news("SPY", 10, [this, token](bool ok, QJsonArray articles) {
+    services::MarketDataService::instance().fetch_news("SPY", 10, [this, token](bool ok, QJsonArray articles,
+                                                                                 QString why) {
         if (token != refresh_token_)
             return; // superseded by watchdog or a newer click
         watchdog_->stop();
         set_loading(false);
+        if (ok)
+            clear_error(); // any answer retires the previous failure's message
 
         if (!ok) {
-            finalize_refresh(QStringLiteral("error"));
-            if (news_layout_->count() <= 1)
-                set_error("News fetch failed. Check Python/yfinance.");
-            LOG_WARN("NewsWidget", "fetch_news failed (ok=false)");
+            // say what happened — a refused request is not "no news"
+            const bool have_prior = news_layout_->count() > 1; // rows actually drawn (the stretch is 1)
+            finalize_refresh(why + (have_prior ? QStringLiteral(" · showing the previous headlines") : QString()));
+            if (!have_prior)
+                set_error(why + QStringLiteral(" — the feed will retry on the next refresh."));
+            LOG_WARN("NewsWidget", "fetch_news failed: " + why);
             return;
         }
         if (articles.isEmpty()) {
-            // yfinance occasionally returns an empty list (rate limit, weekend,
-            // session reset). Keep prior articles, just acknowledge the click.
-            finalize_refresh(QStringLiteral("empty response · prior kept"));
+            // A successful answer with no articles (Yahoo had none for SPY just
+            // now). Keep prior articles, just acknowledge the click.
+            finalize_refresh(news_layout_->count() > 1 ? QStringLiteral("no articles returned · prior kept")
+                                                       : QStringLiteral("no articles returned"));
             LOG_INFO("NewsWidget", "fetch_news returned empty array — keeping prior articles");
             return;
         }

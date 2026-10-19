@@ -148,9 +148,6 @@ void ScreenerWidget::style_row(Row& row, bool alt) {
 }
 
 void ScreenerWidget::apply_styles() {
-    // Body may be torn down by set_error() while a fetch failure is showing.
-    if (!filter_bar_)
-        return;
     filter_bar_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     filter_lbl_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
                                    .arg(ui::colors::TEXT_SECONDARY()));
@@ -224,46 +221,31 @@ void ScreenerWidget::hub_subscribe_all() {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
-            // A prior full-batch error may have replaced the body with
-            // set_error()'s label — rebuild before rendering recovered data.
-            if (!list_layout_)
-                build_body();
+            clear_error();
             // Coalesce: cache now, render once when the burst settles.
             coalesce_->start();
         });
     }
-    // Surface a full-batch fetch failure instead of an endless spinner. Error
+    // Surface a fetch failure of its own quotes instead of an endless spinner. Error
     // only while nothing has loaded — once quotes are cached, a single symbol's
     // transient error must not wipe the populated screener.
-    hub.subscribe_pattern_errors(this, QStringLiteral("market:quote:*"),
-                                 [this](const QString&, const QString&) {
-                                     set_loading(false);
-                                     if (row_cache_.isEmpty() && list_layout_) {
-                                         set_error(QStringLiteral("Screener data unavailable"));
-                                         // set_error() deleteLater()'d the body; null the persistent
-                                         // pointers so apply_styles()/render rebuild instead of
-                                         // dereferencing deleted widgets.
-                                         filter_combo_ = nullptr;
-                                         list_layout_ = nullptr;
-                                         filter_bar_ = nullptr;
-                                         filter_lbl_ = nullptr;
-                                         count_lbl_ = nullptr;
-                                         header_ = nullptr;
-                                         header_labels_.clear();
-                                         scroll_ = nullptr;
-                                         // The persistent row pool lived under the
-                                         // (now-deleted) scroll list; drop the dangling
-                                         // pointers so build_rows() recreates them.
-                                         rows_.clear();
-                                     }
-                                 });
+    // Errors for THIS widget's own topics only (a per-topic subscription —
+    // a market:quote:* pattern also delivered every other widget's bad ticker).
+    for (const auto& sym : kScreenerSymbols) {
+        hub.subscribe_errors(this, QStringLiteral("market:quote:") + sym, [this](const QString&) {
+            set_loading(false);
+            if (row_cache_.isEmpty())
+                set_error(QStringLiteral("Screener data unavailable"));
+        });
+    }
     hub_active_ = true;
 }
 
 void ScreenerWidget::hub_unsubscribe_all() {
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
-    hub.unsubscribe_pattern_errors(this, QStringLiteral("market:quote:*"));
+    for (const auto& sym : kScreenerSymbols)
+        hub.unsubscribe_errors(this, QStringLiteral("market:quote:") + sym);
     hub_active_ = false;
 }
 
@@ -324,9 +306,6 @@ void ScreenerWidget::apply_filter() {
 }
 
 void ScreenerWidget::render_rows(const QVector<services::QuoteData>& rows) {
-    if (!list_layout_ || rows_.isEmpty())
-        build_body();
-
     // Update the persistent row pool in place. The slot's symbol changes as the
     // sort order changes, but the widgets are reused — no teardown/recreate.
     const int n = std::min<int>(rows.size(), rows_.size());

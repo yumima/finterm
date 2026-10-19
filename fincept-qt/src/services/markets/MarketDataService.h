@@ -180,7 +180,10 @@ class MarketDataService : public QObject
     /// portfolio selection change) so the user always feels the data is live.
     void invalidate_quotes(const QStringList& symbols = {});
 
-    using NewsCallback = std::function<void(bool, QJsonArray)>;
+    /// ok=false carries why (the daemon reports a refused request — e.g. a
+    /// Yahoo rate limit — as {"error": ..., "articles": []}; read as an empty
+    /// success it showed as "no news").
+    using NewsCallback = std::function<void(bool, QJsonArray, QString)>;
     void fetch_news(const QString& symbol, int count, NewsCallback cb);
 
     /// Live order-book snapshot (bid/ask + sizes) for a single symbol.

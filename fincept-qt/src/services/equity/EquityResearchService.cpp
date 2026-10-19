@@ -1262,6 +1262,13 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
     payload["count"] = count;
     run_daemon("news", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
         release_inflight(inflight_key);
+        // The daemon reports a refused request (e.g. a Yahoo rate limit) in the
+        // payload. Read as an empty success it was CACHED as "no news" for the
+        // whole TTL, outliving the outage.
+        if (ok && !obj.value("error").toString().isEmpty()) {
+            ok = false;
+            err = obj.value("error").toString();
+        }
         if (!ok) {
             emit error_occurred(symbol, "News", "Failed to fetch news for " + symbol + ": " + err);
             return;

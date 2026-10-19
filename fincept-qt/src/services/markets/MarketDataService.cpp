@@ -710,13 +710,21 @@ void MarketDataService::fetch_news(const QString& symbol, int count, NewsCallbac
     payload["count"] = count;
     python::PythonWorker::instance().submit("news", payload,
         [cb](bool ok, QJsonObject result, QString err) {
+            // The daemon's own failure is in the payload: {"error": ..., "articles": []}.
+            if (ok && !result.value("error").toString().isEmpty()) {
+                ok = false;
+                err = result.value("error").toString();
+            }
             if (!ok) {
                 LOG_WARN("MarketData", "News fetch failed: " + err);
-                cb(false, {});
+                const bool limited = err.contains(QLatin1String("Rate limited"), Qt::CaseInsensitive) ||
+                                     err.contains(QLatin1String("Too Many Requests"), Qt::CaseInsensitive);
+                cb(false, {}, limited ? QStringLiteral("Yahoo is rate-limiting this machine")
+                                      : (err.isEmpty() ? QStringLiteral("news fetch failed") : err.left(120)));
                 return;
             }
             // Daemon returns {articles: [...]} for news.
-            cb(true, result.value("articles").toArray());
+            cb(true, result.value("articles").toArray(), QString());
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
 }

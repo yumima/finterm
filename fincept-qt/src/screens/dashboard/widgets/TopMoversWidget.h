@@ -68,7 +68,6 @@ class TopMoversWidget : public BaseWidget {
     // and data ticks. Index i is the i-th rank in whichever list is active.
     static constexpr int kMaxRows = 6;
     QVector<ui::InlineSparkline*> spark_widgets_;
-    bool rows_built_ = false;
 
     services::MarketDataService::TopMovers cached_movers_;
     QHash<QString, QVector<double>>        sparkline_cache_;

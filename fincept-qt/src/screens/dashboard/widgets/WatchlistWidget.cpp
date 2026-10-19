@@ -141,11 +141,11 @@ void WatchlistWidget::hub_resubscribe() {
             set_loading(false);
             coalesce_->start();
         });
-        // Surface a quote fetch failure rather than spinning forever. The input
-        // bar must survive (the user re-enters symbols there), so instead of
-        // set_error() — which would tear the whole body down — show an error row
-        // in the table. Only while nothing has loaded yet; once any symbol
-        // delivers, render_from_cache() overwrites the row with real data.
+        // Surface a quote fetch failure rather than spinning forever — as an
+        // error ROW, not set_error(): the error page covers the whole body,
+        // and the symbol input must stay usable (re-entering symbols is how the
+        // reader fixes a bad list). Only while nothing has loaded yet; once any
+        // symbol delivers, render_from_cache() overwrites the row with data.
         hub.subscribe_errors(this, topic, [this](const QString&) {
             set_loading(false);
             if (row_cache_.isEmpty() && table_) {

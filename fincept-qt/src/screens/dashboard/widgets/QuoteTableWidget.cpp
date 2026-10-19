@@ -240,31 +240,30 @@ void QuoteTableWidget::hub_subscribe_all() {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
-            // A prior full-batch error may have replaced the table with
-            // set_error()'s label. Recreate the table before rendering again.
-            if (!table_)
-                build_table();
+            clear_error();
             render_from_cache();
         });
     }
     // Surface a refresh failure rather than spinning forever. Only error when no
     // quote has arrived for any symbol yet — once the cache holds data a single
     // symbol's transient error must not wipe the populated table.
-    hub.subscribe_pattern_errors(this, QStringLiteral("market:quote:*"),
-                                 [this](const QString&, const QString&) {
-                                     set_loading(false);
-                                     if (row_cache_.isEmpty() && table_) {
-                                         set_error(QStringLiteral("Quotes unavailable"));
-                                         table_ = nullptr; // set_error() deleteLater()'d it
-                                     }
-                                 });
+    // Errors for THIS widget's own topics only (a per-topic subscription —
+    // a market:quote:* pattern also delivered every other widget's bad ticker).
+    for (const auto& sym : symbols_) {
+        hub.subscribe_errors(this, QStringLiteral("market:quote:") + sym, [this](const QString&) {
+            set_loading(false);
+            if (row_cache_.isEmpty())
+                set_error(QStringLiteral("Quotes unavailable"));
+        });
+    }
     hub_active_ = true;
 }
 
 void QuoteTableWidget::hub_unsubscribe_all() {
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
-    hub.unsubscribe_pattern_errors(this, QStringLiteral("market:quote:*"));
+    for (const auto& sym : symbols_)
+        hub.unsubscribe_errors(this, QStringLiteral("market:quote:") + sym);
     hub_active_ = false;
     // Keep row_cache_ so a quick hide/show doesn't flash an empty table —
     // the first hub delivery on re-subscribe will refresh it anyway.

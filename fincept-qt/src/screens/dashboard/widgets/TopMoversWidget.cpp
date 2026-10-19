@@ -78,7 +78,6 @@ void TopMoversWidget::build_body() {
         spark_widgets_.append(spark);
         table_->setRowHidden(i, true);
     }
-    rows_built_ = true;
 }
 
 void TopMoversWidget::apply_styles() {
@@ -115,27 +114,16 @@ void TopMoversWidget::refresh_data() {
                 return;
             if (!ok) {
                 // Genuine fetch failure (daemon/yfinance error). Clear the
-                // spinner so it doesn't hang forever. Only replace the body
-                // with an error label when we have nothing to show yet — a
-                // failed refresh shouldn't blow away movers already on screen.
+                // spinner so it doesn't hang forever; show the error only when
+                // there is nothing to show yet — movers already on screen stay.
                 self->set_loading(false);
-                if (self->cached_movers_.gainers.isEmpty() && self->cached_movers_.losers.isEmpty()) {
+                if (self->cached_movers_.gainers.isEmpty() && self->cached_movers_.losers.isEmpty())
                     self->set_error(QStringLiteral("Couldn't load top movers"));
-                    // set_error() deleteLater()'d the tab bar + table. Null the
-                    // raw pointers now so show_tab()/rebuild_from_cache() treat
-                    // the body as absent and rebuild it on the next success.
-                    // The persistent sparkline widgets lived under the table and
-                    // are now dangling; drop them so build_body() recreates them.
-                    self->table_ = nullptr;
-                    self->gainers_btn_ = nullptr;
-                    self->losers_btn_ = nullptr;
-                    self->spark_widgets_.clear();
-                    self->rows_built_ = false;
-                }
                 return;
             }
             self->cached_movers_ = std::move(tm);
             self->set_loading(false);
+            self->clear_error();
             self->resubscribe_sparklines();
             self->rebuild_from_cache();
         });
@@ -167,20 +155,10 @@ void TopMoversWidget::resubscribe_sparklines() {
 }
 
 void TopMoversWidget::rebuild_from_cache() {
-    // A prior fetch error may have replaced the body with set_error()'s label,
-    // deleting the tab bar and table. Recreate them before rendering data again.
-    if (!table_)
-        build_body();
     show_tab(showing_gainers_);
 }
 
 void TopMoversWidget::show_tab(bool gainers) {
-    // After a fetch error, set_error() tears down the body; the buttons/table
-    // are gone until the next successful refresh rebuilds them. Guard so
-    // apply_styles()/theme-change can't dereference deleted widgets.
-    if (!table_ || !gainers_btn_ || !losers_btn_)
-        return;
-
     showing_gainers_ = gainers;
     style_tabs();
     render_table();
@@ -190,8 +168,6 @@ void TopMoversWidget::show_tab(bool gainers) {
 // runs on tab switch and theme change — not on every data tick (which used to
 // rebuild three stylesheets per refresh).
 void TopMoversWidget::style_tabs() {
-    if (!gainers_btn_ || !losers_btn_)
-        return;
     const auto active_g = QString("QPushButton { background: %1; color: %2; border: none; "
                                   "font-weight: bold; padding: 4px; }")
                               .arg(ui::colors::POSITIVE(), ui::colors::BG_BASE());
@@ -208,9 +184,6 @@ void TopMoversWidget::style_tabs() {
 // Fill the persistent rows from the active list, updating cells + sparklines in
 // place. Unused slots are hidden so the visible row set matches the data count.
 void TopMoversWidget::render_table() {
-    if (!table_ || !rows_built_)
-        return;
-
     const auto& rows = showing_gainers_ ? cached_movers_.gainers : cached_movers_.losers;
     const int count = std::min<int>(rows.size(), kMaxRows);
     for (int i = 0; i < count; ++i) {

@@ -215,31 +215,29 @@ void RiskMetricsWidget::hub_subscribe_all() {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
+            clear_error();
             rebuild_from_cache();
         });
     }
-    // Surface a full-batch fetch failure instead of an endless spinner. The
-    // body is a set of persistent in-place labels, so rather than set_error()
-    // (which would dangle those pointers) we stop the spinner and mark the VIX
-    // regime line as unavailable — overwritten as soon as real quotes arrive.
-    // Only act while nothing has loaded yet.
-    hub.subscribe_pattern_errors(this, QStringLiteral("market:quote:*"),
-                                 [this](const QString&, const QString&) {
-                                     set_loading(false);
-                                     if (row_cache_.isEmpty() && vix_regime_) {
-                                         vix_regime_->setText(QStringLiteral("DATA UNAVAILABLE"));
-                                         vix_regime_->setStyleSheet(
-                                             QString("color: %1; font-weight: bold; background: transparent;")
-                                                 .arg(ui::colors::NEGATIVE()));
-                                     }
-                                 });
+    // Surface a fetch failure of its own quotes instead of an endless spinner — only
+    // while nothing has loaded (loaded metrics stay on a transient error).
+    // Errors for THIS widget's own topics only (a per-topic subscription —
+    // a market:quote:* pattern also delivered every other widget's bad ticker).
+    for (const auto& sym : kRiskSymbols) {
+        hub.subscribe_errors(this, QStringLiteral("market:quote:") + sym, [this](const QString&) {
+            set_loading(false);
+            if (row_cache_.isEmpty())
+                set_error(QStringLiteral("Risk data unavailable"));
+        });
+    }
     hub_active_ = true;
 }
 
 void RiskMetricsWidget::hub_unsubscribe_all() {
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
-    hub.unsubscribe_pattern_errors(this, QStringLiteral("market:quote:*"));
+    for (const auto& sym : kRiskSymbols)
+        hub.unsubscribe_errors(this, QStringLiteral("market:quote:") + sym);
     hub_active_ = false;
 }
 

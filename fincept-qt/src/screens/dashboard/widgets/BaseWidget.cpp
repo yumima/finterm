@@ -1,5 +1,7 @@
 #include "screens/dashboard/widgets/BaseWidget.h"
 
+#include <QStackedWidget>
+
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -124,7 +126,22 @@ BaseWidget::BaseWidget(const QString& title, QWidget* parent, const QString& acc
     content_layout_->setContentsMargins(0, 0, 0, 0);
     content_layout_->setSpacing(0);
 
-    vl->addWidget(content_, 1);
+    // The error is a separate page, never a replacement of the content.
+    error_label_ = new QLabel;
+    error_label_->setAlignment(Qt::AlignCenter);
+    error_label_->setWordWrap(true);
+    body_ = new QStackedWidget(this);
+    body_->setStyleSheet("background: transparent;");
+    body_->addWidget(content_);
+    body_->addWidget(error_label_);
+    refresh_error_style();
+
+    vl->addWidget(body_, 1);
+}
+
+void BaseWidget::refresh_error_style() {
+    error_label_->setStyleSheet(
+        QString("color: %1; font-size: 9px; padding: 16px; background: transparent;").arg(ui::colors::NEGATIVE()));
 }
 
 void BaseWidget::apply_title_bar_style() {
@@ -163,6 +180,7 @@ void BaseWidget::refresh_base_theme() {
     setStyleSheet(QString("#dashboardBaseWidget{background:%1;border:1px solid %2;border-radius:2px;}")
                       .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_BRIGHT()));
     apply_title_bar_style(); // single source of truth — no duplication
+    refresh_error_style();
 }
 
 void BaseWidget::set_loading(bool loading) {
@@ -173,21 +191,16 @@ void BaseWidget::set_loading(bool loading) {
 void BaseWidget::set_error(const QString& error) {
     if (error.isEmpty())
         return;
+    error_label_->setText(error);
+    body_->setCurrentWidget(error_label_);
+}
 
-    // Clear content and show error
-    QLayoutItem* item;
-    while ((item = content_layout_->takeAt(0)) != nullptr) {
-        if (item->widget())
-            item->widget()->deleteLater();
-        delete item;
-    }
+void BaseWidget::clear_error() {
+    body_->setCurrentWidget(content_);
+}
 
-    auto* err_label = new QLabel(error);
-    err_label->setAlignment(Qt::AlignCenter);
-    err_label->setWordWrap(true);
-    err_label->setStyleSheet(
-        QString("color: %1; font-size: 9px; padding: 16px; background: transparent;").arg(ui::colors::NEGATIVE()));
-    content_layout_->addWidget(err_label);
+bool BaseWidget::has_error() const {
+    return body_->currentWidget() == error_label_;
 }
 
 void BaseWidget::set_title(const QString& title) {

@@ -61,14 +61,6 @@ void StockQuoteWidget::build_body() {
     vl->addWidget(sep_);
 
     // ── Stats grid ──
-    // Clear the raw-pointer caches before re-appending: build_body() runs again
-    // after a set_error() teardown (which deleteLater()'d these children), so
-    // stale dangling pointers must not linger in the vectors — apply_styles()
-    // iterates them on every theme change.
-    stat_cells_.clear();
-    stat_labels_.clear();
-    stat_values_.clear();
-
     auto* stats = new QWidget(this);
     auto* gl = new QGridLayout(stats);
     gl->setContentsMargins(0, 0, 0, 0);
@@ -103,10 +95,6 @@ void StockQuoteWidget::build_body() {
 }
 
 void StockQuoteWidget::apply_styles() {
-    // Body may be torn down by set_error() while a fetch failure is showing —
-    // a theme change must not dereference the deleted labels.
-    if (!price_label_)
-        return;
     price_label_->setStyleSheet(QString("color: %1; font-size: 28px; font-weight: bold; background: transparent;")
                                     .arg(ui::colors::TEXT_PRIMARY()));
     arrow_label_->setStyleSheet("background: transparent;");
@@ -145,6 +133,16 @@ void StockQuoteWidget::hideEvent(QHideEvent* e) {
 void StockQuoteWidget::set_symbol(const QString& symbol) {
     symbol_ = symbol.toUpper();
     set_title(QString("QUOTE: %1").arg(symbol_));
+    // A new symbol has no data yet: the previous symbol's numbers must not sit
+    // under the new title (an error then shows instead of being suppressed).
+    has_data_ = false;
+    price_label_->setText(QStringLiteral("--"));
+    change_label_->setText(QStringLiteral("--"));
+    arrow_label_->clear();
+    for (auto* v : stat_values_)
+        v->setText(QStringLiteral("--"));
+    apply_styles(); // neutral colours: no direction for a symbol with no data
+    clear_error();
     // Re-subscribe to the new topic; old sub for previous symbol is
     // dropped wholesale by `unsubscribe(this)` inside hub_resubscribe().
     if (isVisible())
@@ -165,24 +163,17 @@ void StockQuoteWidget::hub_resubscribe() {
         if (!v.canConvert<services::QuoteData>())
             return;
         set_loading(false);
-        // A prior error may have replaced the body with set_error()'s label.
-        // Rebuild the price/stats body before rendering the recovered quote.
-        if (!price_label_)
-            build_body();
+        clear_error();
         populate(v.value<services::QuoteData>());
     });
     // A failed quote refresh would otherwise leave the spinner running forever
     // and the "--" placeholders looking like a (wrong) empty state. Surface the
-    // failure — but only when no quote has loaded yet, so a transient error
-    // after good data doesn't blow the populated card away.
+    // failure — but only when no quote has loaded yet: a transient error after
+    // good data keeps the good data on screen.
     hub.subscribe_errors(this, topic, [this](const QString&) {
         set_loading(false);
-        if (!has_data_) {
+        if (!has_data_)
             set_error(QStringLiteral("Quote unavailable"));
-            // set_error() deleteLater()'d the body labels; null one so the data
-            // slot knows to rebuild before the next populate().
-            price_label_ = nullptr;
-        }
     });
     hub_active_ = true;
 }

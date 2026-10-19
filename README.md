@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`119a37925`](https://github.com/yumima/finterm/commit/119a37925) sec: declare the user's contact to SEC — and to no one else
 - [`6928a8422`](https://github.com/yumima/finterm/commit/6928a8422) screener: opens instantly, evens out, draws curves; Martin Luk's pullback, tested as trades
 - [`8fefc1642`](https://github.com/yumima/finterm/commit/8fefc1642) screener: review fixes — sector-matched evidence, stray rows, cache merge
 - [`8c611167e`](https://github.com/yumima/finterm/commit/8c611167e) screener: a top-level SCREENER tab — ten rule-exact strategies, each beside its measured record

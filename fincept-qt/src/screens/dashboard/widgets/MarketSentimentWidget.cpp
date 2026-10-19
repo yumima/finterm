@@ -202,31 +202,29 @@ void MarketSentimentWidget::hub_subscribe_all() {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
+            clear_error();
             rebuild_from_cache();
         });
     }
-    // Surface a full-batch fetch failure instead of an endless spinner. This
-    // widget updates persistent labels in place, so rather than set_error()
-    // (which would tear the body down and dangle those pointers) we stop the
-    // spinner and flip the verdict banner to an error state — overwritten the
-    // moment real quotes arrive. Only act while nothing has loaded yet.
-    hub.subscribe_pattern_errors(this, QStringLiteral("market:quote:*"),
-                                 [this](const QString&, const QString&) {
-                                     set_loading(false);
-                                     if (row_cache_.isEmpty() && verdict_label_) {
-                                         verdict_label_->setText(QStringLiteral("DATA UNAVAILABLE"));
-                                         verdict_label_->setStyleSheet(
-                                             QString("color: %1; font-weight: bold; background: transparent;")
-                                                 .arg(ui::colors::NEGATIVE()));
-                                     }
-                                 });
+    // Surface a fetch failure of its own quotes instead of an endless spinner — only
+    // while nothing has loaded (a loaded verdict stays on a transient error).
+    // Errors for THIS widget's own topics only (a per-topic subscription —
+    // a market:quote:* pattern also delivered every other widget's bad ticker).
+    for (const auto& sym : kSentimentSymbols) {
+        hub.subscribe_errors(this, QStringLiteral("market:quote:") + sym, [this](const QString&) {
+            set_loading(false);
+            if (row_cache_.isEmpty())
+                set_error(QStringLiteral("Market data unavailable"));
+        });
+    }
     hub_active_ = true;
 }
 
 void MarketSentimentWidget::hub_unsubscribe_all() {
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
-    hub.unsubscribe_pattern_errors(this, QStringLiteral("market:quote:*"));
+    for (const auto& sym : kSentimentSymbols)
+        hub.unsubscribe_errors(this, QStringLiteral("market:quote:") + sym);
     hub_active_ = false;
 }
 
