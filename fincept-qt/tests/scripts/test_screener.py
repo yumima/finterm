@@ -116,6 +116,23 @@ fund = {
     "WILD": fund_rec("WILD", ebit=1e8, ev=2e9, roic=0.1, eps_growth_q=0.6, eps_growth_fy=0.6, roe=None),
 }
 df, lists, market, asof = sd.compute(fund, frames)
+
+# worked examples: the card's rule-by-rule check of the first pick must pass
+# every rule, and the first name that missed must fail at least one — else the
+# example's comparisons have drifted from the screen's
+ex_extras = {}
+sd.compute(fund, frames, ex_extras)
+for sid_, ex_ in ex_extras["examples"].items():
+    if lists.get(sid_):
+        pick_ = ex_.get("pick") or {}
+        check(pick_.get("symbol") == lists[sid_][0] and pick_["checks"] and all(c["ok"] for c in pick_["checks"]),
+              f"{sid_}: the first pick passes every checked rule: {pick_}")
+    if "miss" in ex_:
+        check(ex_["miss"]["symbol"] not in lists.get(sid_, [])
+              and not all(c["ok"] for c in ex_["miss"]["checks"]),
+              f"{sid_}: the first miss fails a checked rule: {ex_['miss']}")
+check(any(ex_.get("pick") for ex_ in ex_extras["examples"].values()), "some strategy has a worked example")
+json.dumps(ex_extras["examples"], allow_nan=False)
 check("SPY" not in df.index, "the benchmark is not a screen candidate")
 check(lists["magic_formula"][:1] == ["UP"] and "DOWN" not in lists["magic_formula"],
       f"Magic Formula ranks operating companies only: {lists['magic_formula']}")
@@ -293,6 +310,12 @@ m = sd.meta()
 check(len(m["strategies"]) == len(sd.STRATEGIES) and "rows" not in m, "meta has every strategy and no rows")
 check(all(s_["symbols"] == [] for s_ in m["strategies"]), "meta lists are empty")
 check(all(s_["rules"] for s_ in m["strategies"]), "meta carries every strategy's rules")
+for s_ in m["strategies"]:
+    check(all(s_.get(k) for k in ("idea", "use", "tested", "practice")) and s_.get("reading"),
+          f"{s_['id']}: the write-up has its idea, use, test, practice and reading")
+by_id = {s_["id"]: s_ for s_ in m["strategies"]}
+check(by_id["rs_leaders"]["rules"][:-1] == by_id["trend_template"]["rules"]
+      and "25" in by_id["rs_leaders"]["rules"][-1], "RS Leaders lists the Trend Template's rules, then the top 25")
 json.dumps(m, allow_nan=False, default=sd._clean)
 
 from datetime import datetime, timezone

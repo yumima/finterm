@@ -95,6 +95,13 @@ class DockScreenRouter : public QObject {
     /// screens (Screener → Equity Research).
     void show_beside(const QString& id, const QString& anchor_id);
 
+    /// Undo show_beside: close `id` if it sits DIRECTLY to the right of
+    /// `anchor_id`'s area, alone in its own area, so the anchor gets the room
+    /// back. Anywhere else (tabbed with other screens, a column further away,
+    /// below, floating, closed) it is left alone: the reader put it there.
+    /// Returns whether it closed it.
+    bool hide_beside(const QString& id, const QString& anchor_id);
+
     /// Build a layout-restored lazy screen (no raise, no focus change) so its
     /// EventBus subscriptions exist before something is published to it.
     void ensure_built(const QString& id) { if (is_open(id)) materialize_screen(id); }

@@ -157,6 +157,27 @@ class TestScreenerModel : public QObject {
         QVERIFY(!parse_scan(sample()).meta_only);
     }
 
+    void write_up_and_example_parse_and_absent_fields_are_empty() {
+        const ScanResult r = parse_scan(QJsonDocument::fromJson(
+            R"({"strategies": [
+                {"id": "x", "name": "X", "idea": "I", "use": "U", "tested": "T", "practice": "P",
+                 "reading": ["R1", "R2"],
+                 "example": {"pick": {"symbol": "AAA", "checks": [{"rule": "r", "value": "v", "ok": true}]},
+                             "miss": {"symbol": "BBB", "checks": [{"rule": "r", "value": "w", "ok": false}]}}},
+                {"id": "old", "name": "Old"}]})").object());
+        QCOMPARE(r.strategies.size(), 2);
+        const auto& x = r.strategies[0];
+        QCOMPARE(x.idea, QStringLiteral("I"));
+        QCOMPARE(x.practice, QStringLiteral("P"));
+        QCOMPARE(x.reading.size(), 2);
+        QCOMPARE(x.pick.symbol, QStringLiteral("AAA"));
+        QVERIFY(x.pick.checks.size() == 1 && x.pick.checks[0].ok);
+        QVERIFY(x.miss.checks.size() == 1 && !x.miss.checks[0].ok);
+        // a scan cached before these fields: empty, so the card skips them
+        const auto& o = r.strategies[1];
+        QVERIFY(o.idea.isEmpty() && o.reading.isEmpty() && o.pick.empty() && o.miss.empty());
+    }
+
     void null_close_is_a_gap_not_zero() {
         const auto v = number_list(QJsonDocument::fromJson("[1, null, 1.2]").array());
         QCOMPARE(v.size(), 3);

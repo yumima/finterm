@@ -509,6 +509,13 @@ def pullback_signals(close, high, low):
     tight_enough = stop >= entry * (1 - PULLBACK_MAX_RISK)
     out["pb_rest"] = higher_lows & contracting & above & trend & touched & tight_enough
     out["pb_entry"], out["pb_stop"] = entry, stop
+    # the parts, for the worked example (the same series, not a re-derivation)
+    out.update({"pb_higher_lows": higher_lows, "pb_contracting": contracting, "pb_above": above,
+                "pb_trend": trend, "pb_touched": touched, "pb_tight": tight_enough, "pb_low": pb_low,
+                "pb_rng10": rng.rolling(10, min_periods=8).mean(),
+                "pb_rng30": rng.rolling(30, min_periods=24).mean(),
+                "pb_low10": low.rolling(10, min_periods=10).min(),
+                "pb_low10_prev": low.shift(10).rolling(10, min_periods=10).min()})
     return out
 
 
@@ -563,7 +570,13 @@ STRATEGIES = [
         "rules": ["Close > 150-day and 200-day SMA", "150-day SMA > 200-day SMA",
                   "200-day SMA rising (vs 21 sessions ago)", "50-day SMA > 150-day and 200-day",
                   "Close > 50-day SMA", "Close ≥ 30% above 52-week low",
-                  "Close within 25% of 52-week high", "RS rating ≥ 70"],
+                  "Close within 25% of 52-week high (52-week high/low on closes)",
+                  "RS rating ≥ 70 (1-99: percentile in this universe of 0.4×3-month + 0.2×6-, 9- and 12-month return)"],
+        "idea": "Big winners almost always start their run from a confirmed uptrend (Weinstein's 'Stage 2'). The template keeps only stocks already in one, so time is never spent on stocks in a downtrend or a base that has not resolved.",
+        "use": "Minervini's first filter, not a buy list: he then waits for a tight, low-volume base (his volatility-contraction pattern) and buys the breakout from it with a small stop. A stock that drops out of the template is no longer a candidate.",
+        "tested": 'Every month-end 2010-01 to 2026-08, all point-in-time S&P 500 members passing the 7 price rules plus RS ≥ 70, equal weight, held one month, 10 bp per side.',
+        "reading": ["Mark Minervini, 'Trade Like a Stock Market Wizard' (2013)", "Stan Weinstein, 'Secrets for Profiting in Bull and Bear Markets' (1988) — the four stages"],
+        "practice": "Each weekend, open the charts of the passers with the highest RS. Note the ones forming a tight base: each pullback shallower than the last, volume drying up. Paper-buy only a breakout above the base's high, with the stop set before entry (Minervini keeps his losses in single digits), and log entry, stop and outcome. After 20 trades compare your average win with your average loss: the method lives on small losses.",
         "rank_by": "RS rating, highest first",
         "columns": ["rs", "off_high", "above_low", "r3m", "r12m", "adr20"],
         "backtest": 'Minervini Trend Template (all passers)',
@@ -573,7 +586,12 @@ STRATEGIES = [
         "id": "rs_leaders", "name": "RS Leaders (Trend Template top 25)", "family": "Practitioner",
         "source": "Minervini / IBD leadership — the strongest names that pass the template",
         "summary": "The 25 highest-RS stocks among Trend Template passers.",
-        "rules": ["Passes all 8 Trend Template criteria", "Top 25 by RS rating"],
+        "rules": None,  # the Trend Template's, then the top 25 (filled in below)
+        "idea": "The template's strongest names: relative strength persists, so the leaders of the market tend to stay leaders for a while (IBD's 'L' and Minervini's focus).",
+        "use": 'A short list to look at first among template passers; the same entry discipline (base, breakout, small stop) applies.',
+        "tested": 'Same test as the Trend Template, holding only the 25 passers with the highest RS rating each month.',
+        "reading": ["Mark Minervini, 'Trade Like a Stock Market Wizard' (2013)", "William O'Neil, 'How to Make Money in Stocks' (4th ed., 2009) — the 'L' in CAN SLIM"],
+        "practice": 'Use it as the first page of your weekend review: the same base-and-breakout routine as the Trend Template, applied to fewer, stronger names. Log every paper trade with its RS at entry to see whether the strongest really did better for you.',
         "rank_by": "RS rating",
         "columns": ["rs", "off_high", "r1m", "r3m", "r12m", "adr20"],
         "backtest": 'Trend Template, top 25 by RS',
@@ -584,6 +602,11 @@ STRATEGIES = [
         "source": "Jegadeesh & Titman (1993); AQR 'Fact, Fiction and Momentum'",
         "summary": "Past 12-month return skipping the latest month — the classic cross-sectional momentum.",
         "rules": ["Return from 12 months ago to 1 month ago", "Top decile of the universe"],
+        "idea": 'Stocks that rose most over the past year keep outperforming for the next 3-12 months; the most cited explanation is that investors under-react to news. The latest month is skipped because one-month returns tend to reverse.',
+        "use": 'The academic form holds the top decile and rebalances monthly; it is a systematic portfolio, not a stock pick. Prone to sharp crashes when beaten-down stocks rebound.',
+        "tested": 'Top decile of point-in-time S&P 500 members by 12-1 return, equal weight, rebalanced monthly, 10 bp per side.',
+        "reading": ["Jegadeesh & Titman (1993), 'Returns to Buying Winners and Selling Losers', Journal of Finance", "Asness, Frazzini, Israel & Moskowitz (2014), 'Fact, Fiction and Momentum Investing', Journal of Portfolio Management", "Daniel & Moskowitz (2016), 'Momentum Crashes', Journal of Financial Economics"],
+        "practice": 'Paper-hold the whole list in equal weights for one month, rebalance on the first trading day of each month, and track it against an equal-weighted S&P 500 fund (RSP). The test is the portfolio over years, not any one stock; expect long stretches behind the index and sharp drops in rebounds.',
         "rank_by": "12-1 return",
         "columns": ["mom12_1", "r1m", "rs", "off_high", "vol252"],
         "backtest": 'Momentum 12-1 (top decile)',
@@ -597,6 +620,11 @@ STRATEGIES = [
                   "N: within 15% of the 52-week high", "L: RS rating ≥ 80",
                   "M: market (SPY) above its 50- and 200-day — shown in the header, not a filter",
                   "S and I not screened (float-turnover and fund-sponsorship data unavailable)"],
+        "idea": "O'Neil studied the biggest stock winners over many decades and listed the traits they shared before their run: strong current and annual earnings growth (C, A), something new (N), supply (S), leadership (L), institutional buying (I), and a rising market (M).",
+        "use": "O'Neil buys a leader as it breaks out of a sound base (often a cup-with-handle) on heavy volume, only in a confirmed uptrend, and cuts every loss at 7-8%.",
+        "tested": 'Not backtested: it needs point-in-time quarterly EPS, which this test did not collect.',
+        "reading": ["William O'Neil, 'How to Make Money in Stocks' (4th ed., 2009)"],
+        "practice": "Watch the list for a stock completing a base. O'Neil's rules: buy no more than 5% past the pivot, on volume well above average, only when the market is in an uptrend, and sell any position 7-8% below cost without exception. Paper-trade it that way and log each rule you were tempted to break.",
         "rank_by": "RS rating",
         "columns": ["eps_growth_q", "eps_growth_fy", "roe", "rs", "off_high"],
         "backtest": None,
@@ -610,6 +638,11 @@ STRATEGIES = [
         "rules": ["Top 5% by combined 1/3/6-month return rank", "ADR% (20-day) ≥ 4%",
                   "Within 15% of the 52-week high", "Close above 10- and 20-day SMA",
                   "50-day average dollar volume ≥ $20M"],
+        "idea": 'Kullamägi trades momentum bursts: the stocks that just made the biggest moves often pause in a tight range near their highs and then break out for another leg.',
+        "use": "He buys the break of the opening range out of the consolidation, with the stop at the day's low, sells part after a few days and trails the rest with the 10- or 20-day average. The list is the watchlist; the trade is the breakout.",
+        "tested": 'Simplified: the top 2% of point-in-time S&P 500 members by combined 1/3/6-month rank, monthly, equal weight, WITHOUT the volatility, near-high, average and volume filters.',
+        "reading": ["Kristjan Kullamägi's own write-ups of his setups at qullamaggie.com (self-published)"],
+        "practice": "Before each open, mark names that have paused for days to weeks after a big move. Paper-buy the break of the opening range, stop at the day's low, and skip trades whose stop is wider than about one ADR. Sell a third to a half after 3-5 days and trail the rest with the 10- or 20-day average. Log results in R (multiples of the risk).",
         "rank_by": "Combined 1/3/6-month rank",
         "columns": ["r1m", "r3m", "r6m", "adr20", "off_high", "dollar_vol50"],
         "backtest": 'Leaders: top 2% by 1/3/6m (Qullamaggie-style)',
@@ -622,6 +655,11 @@ STRATEGIES = [
         "rules": ["Earnings yield = EBIT / enterprise value", "Return on capital ≈ ROIC",
                   "Rank each, add the ranks, take the 30 best",
                   "Excludes Finance and Utilities"],
+        "idea": 'Buy good businesses at bargain prices: a high return on capital says the business is good, a high earnings yield says the price is low. Ranking on both together avoids cheap-but-bad and good-but-expensive.',
+        "use": "Greenblatt's version: buy 20-30 names a few at a time through the year, hold each about a year, replace and repeat, and stick with it for 3-5 years through long losing stretches.",
+        "tested": "Top 30 point-in-time S&P 500 members by the combined rank, Finance and Utilities excluded (SEC SIC codes), fundamentals from SEC filings visible 120 days after period end, held one month. The test's return on capital is EBIT / (net working capital + net PP&E) and its EV uses market cap from the filed public float; the live screen uses TradingView's EBIT/EV and ROIC.",
+        "reading": ["Joel Greenblatt, 'The Little Book That Beats the Market' (2005); updated as 'The Little Book That Still Beats the Market' (2010)"],
+        "practice": "Paper-buy 5-7 names from the list every 2-3 months until you hold 20-30, sell each after about a year, and repeat. Track the paper portfolio against SPY and RSP for at least three years: Greenblatt's point is that it works only for those who stay with it through years when it lags.",
         "rank_by": "Combined rank",
         "columns": ["earnings_yield", "roic", "pe", "ev_ebitda", "r6m"],
         "backtest": 'Magic Formula (top 30)',
@@ -635,6 +673,11 @@ STRATEGIES = [
                   "Leverage/liquidity: leverage down, current ratio up, no new shares",
                   "Efficiency: gross margin up, asset turnover up",
                   "Score ≥ 8 (TradingView's computed TTM score)", "Sorted by price/book, cheapest first"],
+        "idea": 'Among cheap stocks, the ones whose accounts are improving do much better than the ones whose accounts are deteriorating; nine simple yes/no tests from the financial statements separate the two.',
+        "use": 'Piotroski bought high scorers within the cheapest fifth by book/market and held a year. Here it is shown on the whole universe, cheapest first, as a check that a business is getting healthier.',
+        "tested": 'All point-in-time S&P 500 members with a score ≥ 8 computed from SEC filings, equal weight, held one month.',
+        "reading": ["Joseph Piotroski (2000), 'Value Investing: The Use of Historical Financial Statement Information to Separate Winners from Losers', Journal of Accounting Research"],
+        "practice": 'Once a year, after annual reports are out, paper-buy the cheapest high scorers (lowest P/B on the list), hold 12 months, and compare with RSP. Note which ones were cheap for a reason: the score is a health check, not a guarantee.',
         "rank_by": "Price/book, cheapest first",
         "columns": ["piotroski", "pb", "pe", "roe", "r6m"],
         "backtest": 'Piotroski F >= 8 (all)',
@@ -646,6 +689,11 @@ STRATEGIES = [
         "summary": "Most profitable third of the market by gross profit / assets, then the strongest 25 by momentum.",
         "rules": ["Gross profit / total assets in the top 30%", "Then top 25 by 12-1 momentum",
                   "Excludes Finance and Utilities"],
+        "idea": "Gross profit / assets is the cleanest measure of how productive a business is (Novy-Marx): profitable firms earn more even when they look expensive. Taking the strongest-momentum names among them adds the momentum effect. The combination is this terminal's, not a published strategy.",
+        "use": 'A systematic portfolio, rebalanced monthly as tested.',
+        "tested": 'Point-in-time S&P 500 members in the top 30% by gross profit / assets (Finance and Utilities excluded), then the top 25 by 12-1 return, monthly, equal weight.',
+        "reading": ["Robert Novy-Marx (2013), 'The Other Side of Value: The Gross Profitability Premium', Journal of Financial Economics", "Jegadeesh & Titman (1993), 'Returns to Buying Winners and Selling Losers', Journal of Finance"],
+        "practice": 'Paper-hold the list in equal weights, rebalance monthly, and compare with RSP. Watch how much turnover the momentum step causes: costs are part of the result.',
         "rank_by": "12-1 return",
         "columns": ["gpa", "mom12_1", "gross_margin", "roic", "off_high"],
         "backtest": 'Quality+Momentum: GP/A top 30% -> top 25 by 12-1',
@@ -657,6 +705,11 @@ STRATEGIES = [
         "summary": "Cheapest decile on six value ratios, then the 25 with the best 6-month return.",
         "rules": ["Value composite: average percentile of E/P, B/P, S/P, CFO/P, EBIT/EV and "
                   "shareholder yield (needs ≥ 4 of 6; a loss ranks as expensive)", "Cheapest 10%", "Then top 25 by 6-month return"],
+        "idea": 'Cheap stocks beat expensive ones over time, but many cheap stocks are cheap for a reason. Requiring the cheapest to also be rising (6-month return) avoids most value traps.',
+        "use": "O'Shaughnessy holds the 25 for a year and rebalances annually.",
+        "tested": 'The same six-ratio composite from SEC filings, cheapest decile of point-in-time S&P 500 members, then the top 25 by 6-month return, rebalanced monthly (not annually as in the book).',
+        "reading": ["James O'Shaughnessy, 'What Works on Wall Street' (4th ed., 2011)"],
+        "practice": 'Paper-buy all 25 in equal weights, hold a year, rebalance, and compare with RSP. Look up why each name is cheap: a value list holds many unloved businesses, and that is the point.',
         "rank_by": "6-month return",
         "columns": ["value_score", "pe", "pb", "ev_ebitda", "shareholder_yield", "r6m"],
         "backtest": 'Trending Value: value top decile -> top 25 by 6m',
@@ -674,6 +727,11 @@ STRATEGIES = [
                   "Stop: just under the 3-session pullback low (at least 1% away); a setup needing more than 3% is skipped",
                   "Size: shares so the stop costs 0.5% of the account",
                   "Exits: a third at 3R, a third at 5R, the rest trails the 9 EMA"],
+        "idea": 'A market leader that pulls back in an orderly way to its rising 21-day EMA, and holds, usually resumes its trend. Entering at that support allows a very tight stop, so a small loss buys a large potential win.',
+        "use": "Luk enters intraday as the stock dips, turns and breaks the prior candle's high, risks about 0.5% of the account per trade, and sells into strength (3R, 5R), trailing the rest. The columns here are a plan from the last close.",
+        "tested": "As individual trades on daily bars: a buy stop at the setup day's high, filled the next session, the stop and exits above, 0.5% risk, compared with random entries with the same exits; on the S&P 500 2010-26 and on today's stocks ≥ $300M 2022-26.",
+        "reading": ["Martin Luk's own interviews and posts; no book. The rules here follow the playbook summary in the hb_stocks thread on X (2026-10-19)"],
+        "practice": 'Use the plan columns: set your account size and risk, paper-place a buy stop at Entry with the Stop beneath it, and if filled sell a third at 3R, a third at 5R and trail the rest under the 9 EMA. Log every trade in R. Mechanically the record is a losing average, so practise to see whether your own reading of the intraday turn improves on it before any money is at risk.',
         "rank_by": "Combined 1/3/6-month rank",
         "columns": ["entry", "stop", "risk_pct", "target3", "rs", "group_rs", "adr20"],
         "backtest": "Luk pullback (trades, 0.5% risk)",
@@ -689,12 +747,22 @@ STRATEGIES = [
         "source": "Blitz & van Vliet (2007), 'The Volatility Effect'",
         "summary": "The calmest decile by one-year realised volatility — a defensive tilt.",
         "rules": ["Annualised volatility of daily returns, past year", "Lowest 10% of the universe"],
+        "idea": 'Low-risk stocks have historically earned about as much as high-risk ones with far smaller swings — the low-volatility anomaly, which contradicts the textbook trade-off between risk and return.',
+        "use": 'A defensive sleeve held as a diversified portfolio and rebalanced periodically; it gives up return in strong bull markets led by high-beta stocks.',
+        "tested": 'Lowest decile of point-in-time S&P 500 members by one-year volatility, equal weight, rebalanced monthly.',
+        "reading": ["Blitz & van Vliet (2007), 'The Volatility Effect: Lower Risk Without Lower Return', Journal of Portfolio Management", "Baker, Bradley & Wurgler (2011), 'Benchmarks as Limits to Arbitrage: Understanding the Low-Volatility Anomaly', Financial Analysts Journal"],
+        "practice": 'Paper-hold the list, rebalance monthly or quarterly, and compare both the return and the worst drop with RSP: its claim is a smoother ride, not more return.',
         "rank_by": "Volatility, lowest first",
         "columns": ["vol252", "r12m", "div_yield", "pe", "off_high"],
         "backtest": 'Low volatility (lowest decile)',
         "note": 'Lagged in a period led by high-beta tech, with the smallest drawdown of any screen: a risk choice, not a return one.',
     },
 ]
+
+
+_TT = next(st for st in STRATEGIES if st["id"] == "trend_template")
+next(st for st in STRATEGIES if st["id"] == "rs_leaders")["rules"] = (
+    _TT["rules"] + ["Then the 25 with the highest RS rating"])
 
 
 def _top(series, n=None, frac=None):
@@ -932,6 +1000,7 @@ def compute(fund, frames, extras=None, now=None):
     plan_asof = close.index[k].strftime("%Y-%m-%d") if len(close.index) else None
     one = {n: sig[n].iloc[[k]].reindex(columns=syms) for n in ("r1m", "r3m", "r6m", "dollar_vol50")}
     lead, combo_pb = pullback_leaders(one, pd.DataFrame(True, index=one["r1m"].index, columns=syms))
+    pb_trig = pd.Series(False, index=syms)
     rest = sig["pb_rest"].iloc[k].reindex(syms).fillna(False).astype(bool)
     pb = lead.iloc[-1] & rest
     if k == -2:
@@ -941,7 +1010,8 @@ def compute(fund, frames, extras=None, now=None):
         # stop means the setup failed. Neither is a pending plan.
         th, tl = high.iloc[-1].reindex(syms), low.iloc[-1].reindex(syms)
         e_, s_ = sig["pb_entry"].iloc[k].reindex(syms), sig["pb_stop"].iloc[k].reindex(syms)
-        pb &= ~(th >= e_).fillna(False) & ~(tl <= s_).fillna(False)
+        pb_trig = (th >= e_).fillna(False) | (tl <= s_).fillna(False)
+        pb &= ~pb_trig
     df["entry"] = sig["pb_entry"].iloc[k].reindex(syms).where(pb)
     df["stop"] = sig["pb_stop"].iloc[k].reindex(syms).where(pb)
     df["risk_pct"] = 1 - df["stop"] / df["entry"]
@@ -971,7 +1041,170 @@ def compute(fund, frames, extras=None, now=None):
         # NOT df.attrs: pandas deep-copies attrs into every derived frame
         extras["closes"] = close.iloc[-CHART_BARS:]
         extras["plan_asof"] = plan_asof
+        extras["examples"] = worked_examples(df, sig, lists, {
+            "combo": combo, "magic": magic, "gpa_pool": gpa_pool, "cheap": cheap,
+            "combo_pb": combo_pb.iloc[-1], "one": {n: v.iloc[-1] for n, v in one.items()},
+            "k": k, "pb_trig": pb_trig, "sector_ok": operating})
     return df, lists, market, asof
+
+
+def _pc(x, signed=False):
+    return "—" if x is None or not np.isfinite(x) else (f"{x * 100:+.1f}%" if signed else f"{x * 100:.1f}%")
+
+
+def _usd(x):
+    return "—" if x is None or not np.isfinite(x) else f"${x:,.2f}"
+
+
+def _ok(x):
+    return bool(x) if x is not None and not (isinstance(x, float) and np.isnan(x)) else False
+
+
+def worked_examples(df, sig, lists, ctx):
+    """Each strategy's rules checked on two real stocks with the scan's own
+    numbers: today's first pick, and the first name that missed (the best
+    ranked by the strategy's own key that is not on the list). The checks are
+    the SAME comparisons compute() applies, on the same series — a test
+    asserts the pick passes every one and the miss fails at least one."""
+    k = ctx["k"]
+    at = lambda name, sym, i=-1: float(sig[name][sym].iloc[i]) if sym in sig[name].columns else np.nan
+    v = lambda col, sym: df.at[sym, col] if col in df.columns and sym in df.index else np.nan
+    C = lambda rule, value, ok: {"rule": rule, "value": value, "ok": _ok(ok)}
+
+    def pos(series, sym):
+        s = series.dropna().sort_values(ascending=False, kind="stable")
+        return (list(s.index).index(sym) + 1 if sym in s.index else None), len(s)
+
+    def ranked(rule, series, sym, n):
+        p, total = pos(series, sym)
+        return C(rule, f"#{p} of {total}" if p else "not in the ranked pool (a rule above, or no value)",
+                 p is not None and p <= n)
+
+    def template(sym):
+        px, s50, s150, s200 = v("price", sym), at("sma50", sym), at("sma150", sym), at("sma200", sym)
+        prev = at("sma200", sym, -22) if len(sig["sma200"]) > 21 else np.nan
+        lo, hi = at("lo52", sym), at("hi52", sym)
+        return [
+            C("Close above the 150- and 200-day SMA", f"{_usd(px)} vs {_usd(s150)} / {_usd(s200)}",
+              px > s150 and px > s200),
+            C("150-day SMA above the 200-day", f"{_usd(s150)} vs {_usd(s200)}", s150 > s200),
+            C("200-day SMA rising over 21 sessions", f"{_usd(s200)} vs {_usd(prev)}", s200 > prev),
+            C("50-day SMA above the 150- and 200-day", f"{_usd(s50)} vs {_usd(s150)} / {_usd(s200)}",
+              s50 > s150 and s50 > s200),
+            C("Close above the 50-day SMA", f"{_usd(px)} vs {_usd(s50)}", px > s50),
+            C("At least 30% above the 52-week low", f"{_pc(v('above_low', sym), True)} (low {_usd(lo)})",
+              px >= 1.30 * lo),
+            C("Within 25% of the 52-week high", f"{_pc(v('off_high', sym), True)} (high {_usd(hi)})",
+              px >= 0.75 * hi),
+            C("RS rating at least 70", f"{v('rs', sym):.0f}", v("rs", sym) >= 70),
+        ]
+
+    rs = df["rs"]
+    tt = df["tt_core"] & (rs >= 70)  # as compute() builds the Trend Template list
+    mom, combo, magic = df["mom12_1"], ctx["combo"], ctx["magic"]
+    pool_q = df["mom12_1"].reindex(ctx["gpa_pool"])
+    pool_v = df["r6m"].reindex(ctx["cheap"])
+    gpa_cut = df["gpa"].dropna().sort_values(ascending=False).iloc[len(ctx["gpa_pool"]) - 1] \
+        if ctx["gpa_pool"] else np.nan
+    val_cut = df["value_score"].dropna().sort_values(ascending=False).iloc[len(ctx["cheap"]) - 1] \
+        if ctx["cheap"] else np.nan
+
+    def decile(rule, series, sym, frac, fmt):
+        s = series.dropna().sort_values(ascending=False, kind="stable")
+        n = max(1, int(round(len(s) * frac)))
+        p, total = pos(series, sym)
+        cut = s.iloc[n - 1] if len(s) else np.nan
+        return C(rule, f"{fmt(series.get(sym, np.nan))}; #{p} of {total}, the cut is #{n} at {fmt(cut)}"
+                 if p else "no value", p is not None and p <= n)
+
+    def luk(sym):
+        one, cpb = ctx["one"], ctx["combo_pb"]
+        r = [one["r1m"].get(sym, np.nan), one["r3m"].get(sym, np.nan), one["r6m"].get(sym, np.nan)]
+        e, st = at("pb_entry", sym, k), at("pb_stop", sym, k)
+        checks = [
+            C("Leader: top 25% by combined 1/3/6-month rank", f"{_pc(cpb.get(sym, np.nan))} percentile",
+              cpb.get(sym, np.nan) >= 0.75),
+            C("Up 30%+ over 1, 3 or 6 months", " / ".join(_pc(x, True) for x in r), any(x >= 0.30 for x in r)),
+            C("$20M+ average daily dollar volume (50 days)",
+              f"${one['dollar_vol50'].get(sym, np.nan) / 1e6:,.0f}M", one["dollar_vol50"].get(sym, np.nan) >= 20e6),
+            C("Higher lows: the last 10 sessions' low above the 10 before",
+              f"{_usd(at('pb_low10', sym, k))} vs {_usd(at('pb_low10_prev', sym, k))}", at("pb_higher_lows", sym, k)),
+            C("Daily ranges contracting (10-day vs 30-day average)",
+              f"{_pc(at('pb_rng10', sym, k))} vs {_pc(at('pb_rng30', sym, k))}", at("pb_contracting", sym, k)),
+            C("Close above the 9 and 21 EMA",
+              f"{_usd(at('ema9', sym, k))} / {_usd(at('ema21', sym, k))}", at("pb_above", sym, k)),
+            C("21 EMA above the 50 EMA", f"{_usd(at('ema21', sym, k))} vs {_usd(at('ema50', sym, k))}",
+              at("pb_trend", sym, k)),
+            C("A low at its day's 21 EMA (within 2%) in the last 3 sessions",
+              f"3-session low {_usd(at('pb_low', sym, k))}", at("pb_touched", sym, k)),
+            C("Stop no more than 3% under the entry",
+              f"entry {_usd(e)}, stop {_usd(st)}: {_pc(1 - st / e) if e else '—'}", at("pb_tight", sym, k)),
+        ]
+        if ctx["pb_trig"].get(sym, False):
+            checks.append(C("Not already triggered or stopped today", "today's range crossed the entry or stop", False))
+        return checks
+
+    specs = {
+        "trend_template": (rs, template),
+        "rs_leaders": (rs, lambda s_: template(s_) + [ranked("Top 25 by RS among the passers", rs[tt], s_, 25)]),
+        "momentum": (mom, lambda s_: [C("12-1 return", _pc(mom.get(s_), True), np.isfinite(mom.get(s_, np.nan))),
+                                     decile("In the top 10% of the universe", mom, s_, 0.10, lambda x: _pc(x, True))]),
+        "canslim": (rs, lambda s_: [
+            C("C: latest-quarter EPS at least +25% y/y", _pc(v("eps_growth_q", s_), True), v("eps_growth_q", s_) >= 0.25),
+            C("A: fiscal-year EPS at least +25%", _pc(v("eps_growth_fy", s_), True), v("eps_growth_fy", s_) >= 0.25),
+            C("A: ROE at least 17%", _pc(v("roe", s_)), v("roe", s_) >= 0.17),
+            C("N: within 15% of the 52-week high", _pc(v("off_high", s_), True), v("off_high", s_) >= -0.15),
+            C("L: RS rating at least 80", f"{v('rs', s_):.0f}", v("rs", s_) >= 80)]),
+        "breakout": (combo, lambda s_: [
+            C("Top 5% by combined 1/3/6-month rank",
+              f"1M {_pc(v('r1m', s_), True)}, 3M {_pc(v('r3m', s_), True)}, 6M {_pc(v('r6m', s_), True)}; "
+              f"score {combo.get(s_, np.nan):.2f} of 3, the cut is {combo.quantile(0.95):.2f}",
+              combo.get(s_, np.nan) >= combo.quantile(0.95)),
+            C("ADR% (20-day) at least 4%", _pc(v("adr20", s_)), v("adr20", s_) >= 0.04),
+            C("Within 15% of the 52-week high", _pc(v("off_high", s_), True), v("off_high", s_) >= -0.15),
+            C("Close above the 10- and 20-day SMA", f"{_usd(v('price', s_))} vs {_usd(v('sma10', s_))} / "
+              f"{_usd(v('sma20', s_))}", v("price", s_) > v("sma10", s_) and v("price", s_) > v("sma20", s_)),
+            C("50-day dollar volume at least $20M", f"${v('dollar_vol50', s_) / 1e6:,.0f}M",
+              v("dollar_vol50", s_) >= 20e6)]),
+        "magic_formula": (magic, lambda s_: [
+            C("Not Finance or Utilities", str(v("sector", s_)), ctx["sector_ok"].get(s_, False)),
+            C("Earnings yield (EBIT / EV)", _pc(v("earnings_yield", s_)), np.isfinite(v("earnings_yield", s_))),
+            C("Return on capital (ROIC)", _pc(v("roic", s_)), np.isfinite(v("roic", s_))),
+            ranked("Combined rank in the best 30", magic, s_, 30)]),
+        "piotroski": ((-df["pb"].where(df["pb"] > 0)), lambda s_: [
+            C("F-score at least 8", "—" if not np.isfinite(v("piotroski", s_)) else f"{v('piotroski', s_):.0f} of 9",
+              v("piotroski", s_) >= 8),
+            C("Price / book (cheapest first)", f"{v('pb', s_):.2f}" if np.isfinite(v("pb", s_)) else "—",
+              v("pb", s_) > 0)]),
+        "quality_momentum": (mom, lambda s_: [
+            C("Gross profit / assets in the top 30%", f"{_pc(v('gpa', s_))}, the cut is {_pc(gpa_cut)}",
+              s_ in ctx["gpa_pool"]),
+            ranked("Then the top 25 by 12-1 return in that pool", pool_q, s_, 25)]),
+        "trending_value": (df["r6m"], lambda s_: [
+            C("Value composite in the cheapest 10% (4+ of 6 ratios)",
+              f"percentile {v('value_score', s_) * 100:.0f} from {v('value_n', s_):.0f} ratios, the cut is "
+              f"{val_cut * 100:.0f}" if np.isfinite(v("value_score", s_)) else "fewer than 4 ratios",
+              s_ in ctx["cheap"]),
+            ranked("Then the top 25 by 6-month return", pool_v, s_, 25)]),
+        "luk_pullback": (ctx["combo_pb"], luk),
+        "low_vol": (-df["vol252"], lambda s_: [
+            decile("1-year volatility in the lowest 10%", -df["vol252"], s_, 0.10, lambda x: _pc(-x))]),
+    }
+    out = {}
+    for sid, (key, checks) in specs.items():
+        members = lists.get(sid) or []
+        try:
+            ex = {}
+            if members:
+                ex["pick"] = {"symbol": members[0], "checks": checks(members[0])}
+            order = key.dropna().sort_values(ascending=False, kind="stable").index
+            miss = next((m for m in order if m not in set(members)), None)
+            if miss is not None:
+                ex["miss"] = {"symbol": miss, "checks": checks(miss)}
+            out[sid] = ex
+        except Exception as e:  # an example is a teaching aid: never fail the scan for it
+            print(f"worked example {sid}: {type(e).__name__}: {e}", file=sys.stderr)
+    return out
 
 
 def _clean(v):
@@ -1024,7 +1257,7 @@ def scan(min_mcap=2e9, force=False):
                 # 4 significant digits: the chart needs shape, not cents
                 rows[s]["closes"] = [None if not np.isfinite(v) else float(f"{v:.4g}")
                                      for v in tail[s].to_numpy()]
-    doc = meta(lists)
+    doc = meta(lists, extras.get("examples"))
     doc.update({
         "asof": asof,
         # today's bar is still moving: the label must not say "close"
@@ -1045,7 +1278,7 @@ def scan(min_mcap=2e9, force=False):
     return doc
 
 
-def meta(lists=None):
+def meta(lists=None, examples=None):
     """Everything about the strategies that needs no market data — rules
     and evidence. `screener_data.py meta` prints it in well
     under a second, so the tab shows its strategies and their records at once
@@ -1053,10 +1286,12 @@ def meta(lists=None):
     ev_doc = load_evidence()
     strategies = []
     for st in STRATEGIES:
-        out = {k: st[k] for k in ("id", "name", "family", "source", "summary", "rules",
-                                  "rank_by", "columns")}
+        out = {k: st[k] for k in ("id", "name", "family", "source", "summary", "idea", "use",
+                                  "rules", "rank_by", "columns", "tested", "reading", "practice")}
         out["evidence"] = evidence(st, ev_doc)
         out["symbols"] = (lists or {}).get(st["id"], [])
+        if examples and st["id"] in examples:
+            out["example"] = examples[st["id"]]
         strategies.append(out)
     return {
         "evidence_basis": ev_doc.get("basis", ""),

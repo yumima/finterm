@@ -12,6 +12,7 @@
 #include "screens/IStatefulScreen.h"
 #include "ui/widgets/GroupBadge.h"
 
+#include <cstdlib>
 #include <QApplication>
 #include <QClipboard>
 #include <QContextMenuEvent>
@@ -659,6 +660,29 @@ void DockScreenRouter::show_beside(const QString& id, const QString& anchor_id) 
     // subscriber), brings a floating container forward, and keeps current_id_
     // / the session's last screen / screen_changed right.
     raise(id);
+}
+
+bool DockScreenRouter::hide_beside(const QString& id, const QString& anchor_id) {
+    auto* anchor_dw = find_dock_widget(anchor_id);
+    auto* dw = find_dock_widget(id);
+    if (!anchor_dw || !dw || !is_open(id) || dw->isFloating())
+        return false;
+    ads::CDockAreaWidget* area = dw->dockAreaWidget();
+    ads::CDockAreaWidget* anchor = anchor_dw->dockAreaWidget();
+    if (!area || !anchor || area == anchor || area->dockContainer() != anchor->dockContainer() ||
+        area->dockWidgetsCount() != 1)
+        return false;
+    // directly right: its left edge at the anchor's right edge (a splitter
+    // handle between), overlapping it vertically
+    const QRect a(anchor->mapToGlobal(QPoint(0, 0)), anchor->size());
+    const QRect b(area->mapToGlobal(QPoint(0, 0)), area->size());
+    const bool beside = std::abs(b.left() - a.right()) <= 12 && b.top() < a.bottom() && a.top() < b.bottom();
+    if (!beside)
+        return false;
+    dw->toggleView(false); // as its own close button does
+    after_layout_change();
+    raise(anchor_id); // the anchor is the current screen again (nav highlight, last screen)
+    return true;
 }
 
 void DockScreenRouter::open_beside_focused(const QString& id) {

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`c620a70cf`](https://github.com/yumima/finterm/commit/c620a70cf) screener: rules and record always shown above the list; scans no longer crash after a download
 - [`1f229780a`](https://github.com/yumima/finterm/commit/1f229780a) screener: Equity Research beside the list; honest, fast intraday prices
 - [`0667ff30d`](https://github.com/yumima/finterm/commit/0667ff30d) live tv: the channel picker is the title at the top-left
 - [`9c27e8a12`](https://github.com/yumima/finterm/commit/9c27e8a12) dashboard: an error no longer destroys a widget — the root cause, not eight workarounds

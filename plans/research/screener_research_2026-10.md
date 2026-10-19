@@ -110,7 +110,9 @@ median on their own metric, and the card's numbers are exported
 (`export_evidence.py` → `scripts/screener_evidence.json`), never hand-copied.
 
 Market-timing filter (CAN SLIM "M": cash when SPY < 200-day average) made
-every strategy worse — including the plain index (−4.7%/yr, t −1.8): the
+every strategy it was applied to (EW index, Momentum 12-1, Trend Template all
+passers and top 25, RS composite; the fundamental, Kullamägi, low-vol and
+pullback screens were not tried) worse — including the plain index (−4.7%/yr, t −1.8): the
 2010-26 sell-offs recovered faster than a month-end 200-day rule re-enters.
 
 Monthly IC (Spearman vs next-month return), none significant: 12-1 +0.007,

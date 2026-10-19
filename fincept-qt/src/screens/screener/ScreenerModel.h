@@ -50,8 +50,23 @@ struct Evidence {
     std::optional<double> win_rate, avg_R;
 };
 
+/// A strategy's rules checked on one real stock with the scan's own numbers.
+struct Example {
+    struct Check {
+        QString rule, value;
+        bool ok = false;
+    };
+    QString symbol;
+    QVector<Check> checks;
+    bool empty() const { return symbol.isEmpty(); }
+};
+
 struct Strategy {
     QString id, name, family, source, summary, rank_by;
+    QString idea, use, tested; // the thesis, how its author uses it, how the record was measured
+    QString practice;          // a paper-trading routine
+    QStringList reading;       // books and papers
+    Example pick, miss;        // today's first pick, and the first name that missed
     QStringList rules, columns, symbols;
     Evidence evidence;
 };
@@ -140,6 +155,25 @@ inline ScanResult parse_scan(const QJsonObject& root) {
         s.source = so.value(QStringLiteral("source")).toString();
         s.summary = so.value(QStringLiteral("summary")).toString();
         s.rank_by = so.value(QStringLiteral("rank_by")).toString();
+        s.idea = so.value(QStringLiteral("idea")).toString();
+        s.use = so.value(QStringLiteral("use")).toString();
+        s.tested = so.value(QStringLiteral("tested")).toString();
+        s.reading = string_list(so.value(QStringLiteral("reading")));
+        s.practice = so.value(QStringLiteral("practice")).toString();
+        const QJsonObject ex = so.value(QStringLiteral("example")).toObject();
+        const auto example = [](const QJsonObject& o) {
+            Example e;
+            e.symbol = o.value(QStringLiteral("symbol")).toString();
+            for (const auto& cv : o.value(QStringLiteral("checks")).toArray()) {
+                const QJsonObject c = cv.toObject();
+                e.checks.push_back({c.value(QStringLiteral("rule")).toString(),
+                                    c.value(QStringLiteral("value")).toString(),
+                                    c.value(QStringLiteral("ok")).toBool()});
+            }
+            return e;
+        };
+        s.pick = example(ex.value(QStringLiteral("pick")).toObject());
+        s.miss = example(ex.value(QStringLiteral("miss")).toObject());
         s.rules = string_list(so.value(QStringLiteral("rules")));
         s.columns = string_list(so.value(QStringLiteral("columns")));
         s.symbols = string_list(so.value(QStringLiteral("symbols")));

@@ -1236,6 +1236,13 @@ void MainWindow::setup_dock_screens() {
                     EventBus::instance().publish("equity_research.load_symbol",
                                                  QVariantMap{{"symbol", ticker}, {"propagate", open}});
                 });
+        // a strategy clicked: its write-up takes the right half back
+        connect(screen, &screens::ScreenerScreen::details_requested, this, [this, screen]() {
+            // no ER beside to make room for (a narrow window, or ER the reader
+            // placed elsewhere): the screener shows the write-up in place
+            if (!dock_router_->hide_beside("equity_research", "screener"))
+                screen->show_details_inline();
+        });
         return screen;
     });
 

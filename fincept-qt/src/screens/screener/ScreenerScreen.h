@@ -26,15 +26,17 @@ namespace fincept::screens {
 ///
 ///   rail    the strategies, with today's counts; OVERVIEW first (names on
 ///           two or more screens)
-///   card    the selected strategy in full, always open above its list: what
-///           it is, its exact rules, its measured record (on Overview: how to
-///           read the records, and every screen's record side by side)
+///   card    the selected strategy's summary above its list, record in one line
+///   write-up  the right half, by default: the strategy in full — idea, rules,
+///           how its author uses it, the columns, the measured record, how it
+///           was tested, further reading (Overview: how the records were made)
 ///   table   the names it selects today, ranked by its own rule, 6-month trend
 ///           lines, filter; the Leader Pullback adds a trade plan sized to the
 ///           reader's account
 ///
-/// Clicking a name opens Equity Research to the RIGHT of the screener — the
-/// list stays in view, the details sit beside it, as in Portfolio. Arrowing
+/// Clicking a name opens Equity Research in the right half instead — the list
+/// stays in view, the details sit beside it, as in Portfolio; clicking a
+/// strategy puts ER away and brings the write-up back. Arrowing
 /// down the list follows in ER once it is open.
 ///
 /// The record sits on every strategy because the measurement found NO screen
@@ -55,6 +57,14 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     /// The reader picked `ticker`. open = a click (show Equity Research beside
     /// the screener); !open = keyboard browsing (follow only if ER is open).
     void research_requested(const QString& ticker, bool open);
+    /// The reader picked a strategy: show its write-up on the right, putting
+    /// away an Equity Research shown beside the screener.
+    void details_requested();
+
+  public:
+    /// No room for the right-hand pane: show the write-up in place of the
+    /// list, with a link back.
+    void show_details_inline();
 
   protected:
     void showEvent(QShowEvent* e) override;
@@ -75,6 +85,10 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void set_status(const QString& text, bool error = false);
     void set_progress(int done, int total, const QString& text);
     void even_out_panes();
+    void update_details_pane();
+    void render_details();
+    QString inline_html() const;
+    void leave_inline();
     double min_mcap() const;
     QString cache_name() const;
     // A finished scan has lists even when every one is empty ("no stock passes
@@ -102,14 +116,18 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     QComboBox*    risk_ = nullptr;
     QTableWidget* table_ = nullptr;
     // the strategy card: every word shown, nothing behind a toggle
-    // One document, sized to its laid-out height (a word-wrapped QLabel's
-    // height-for-width runs short on rich text and clipped the record).
+    // The summary card: one document sized to its laid-out height (a
+    // word-wrapped QLabel's height-for-width runs short on rich text).
     QTextBrowser* band_ = nullptr;
-    QString       band_head_;    // name, family · source, summary
-    QString       band_rules_;   // rules (Overview: how to read the records)
-    QString       band_record_;  // the measured record (Overview: every screen's)
-    QString       band_basis_;
-    QString       band_html_;       // the document on screen
+    QString       band_html_;       // the summary, from fill_band
+    QString       band_shown_;      // the document on screen (summary + pointer)
+    // The right half: the full write-up, while Equity Research is not beside.
+    QTextBrowser* details_ = nullptr;
+    QString       details_html_;
+    QString       details_shown_;
+    QTextBrowser* inline_ = nullptr;  // centre page 2: the write-up in place of the list
+    bool          inline_on_ = false;
+    QString       details_id_;      // whose write-up is on screen (keeps the scroll on a refresh)
     int           band_width_ = -1; // the width the document was last laid out at
     int           band_cap_ = -1;   // the most height it may take (the pane's 75%)
     bool          filling_ = false;     // programmatic selection: not the reader's pick
