@@ -151,14 +151,16 @@ class TestScreenerModel : public QObject {
 
     void meta_document_has_no_lists() {
         const ScanResult r = parse_scan(QJsonDocument::fromJson(
-            R"({"strategies": [{"id": "x", "name": "X", "evidence": {"tested": true, "curve": [1, null, 1.2]}}],
-                "curve_months": ["2010-01", "2010-02", "2010-03"], "curve_ew": [1, 1.01, 1.02]})").object());
+            R"({"strategies": [{"id": "x", "name": "X", "evidence": {"tested": true}}]})").object());
         QVERIFY(r.meta_only);
         QCOMPARE(r.strategies.size(), 1);
-        QCOMPARE(r.strategies[0].evidence.curve.size(), 3);
-        QVERIFY(std::isnan(r.strategies[0].evidence.curve[1])); // a null point is a gap, not 0
-        QCOMPARE(r.curve_ew.size(), 3);
         QVERIFY(!parse_scan(sample()).meta_only);
+    }
+
+    void null_close_is_a_gap_not_zero() {
+        const auto v = number_list(QJsonDocument::fromJson("[1, null, 1.2]").array());
+        QCOMPARE(v.size(), 3);
+        QVERIFY(std::isnan(v[1])); // the sparkline breaks; it never plots a 0
     }
 
     void every_emitted_column_has_a_definition() {

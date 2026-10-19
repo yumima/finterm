@@ -48,7 +48,6 @@ struct Evidence {
     // trade-simulated strategies only (the Luk pullback)
     std::optional<int> trades;
     std::optional<double> win_rate, avg_R;
-    QVector<double> curve; // growth of $1, monthly; NaN where absent
 };
 
 struct Strategy {
@@ -76,8 +75,6 @@ struct ScanResult {
     bool above50 = false;
     bool above200 = false;
     QStringList subperiods;
-    QStringList curve_months;           // the evidence curves' calendar
-    QVector<double> curve_ew, curve_spy; // the index lines they are drawn against
     bool meta_only = false;             // `meta`: strategies + evidence, no lists yet
     QVector<Strategy> strategies;
     QHash<QString, QJsonObject> rows;
@@ -131,9 +128,6 @@ inline ScanResult parse_scan(const QJsonObject& root) {
     r.above50 = m.value(QStringLiteral("above50")).toBool();
     r.above200 = m.value(QStringLiteral("above200")).toBool();
     r.subperiods = string_list(root.value(QStringLiteral("subperiods")));
-    r.curve_months = string_list(root.value(QStringLiteral("curve_months")));
-    r.curve_ew = number_list(root.value(QStringLiteral("curve_ew")));
-    r.curve_spy = number_list(root.value(QStringLiteral("curve_spy")));
     r.meta_only = !root.contains(QStringLiteral("rows"));
     for (const auto& sv : root.value(QStringLiteral("strategies")).toArray()) {
         const QJsonObject so = sv.toObject();
@@ -164,7 +158,6 @@ inline ScanResult parse_scan(const QJsonObject& root) {
             s.evidence.trades = int(*n);
         s.evidence.win_rate = num(eo, QStringLiteral("win_rate"));
         s.evidence.avg_R = num(eo, QStringLiteral("avg_R"));
-        s.evidence.curve = number_list(eo.value(QStringLiteral("curve")));
         r.strategies << s;
     }
     const QJsonObject rows = root.value(QStringLiteral("rows")).toObject();

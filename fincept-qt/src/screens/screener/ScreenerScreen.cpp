@@ -3,7 +3,6 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "screens/ownership/OwnershipUi.h"
-#include "screens/screener/ScreenerChart.h"
 #include "services/util/DiskCache.h"
 #include "ui/theme/Theme.h"
 
@@ -23,6 +22,8 @@
 #include <QProgressBar>
 #include <QPushButton>
 #include <QResizeEvent>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QShowEvent>
 #include <QSplitter>
 #include <QStackedWidget>
@@ -31,6 +32,8 @@
 #include <QTextBrowser>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 namespace fincept::screens {
 
@@ -170,7 +173,6 @@ void ScreenerScreen::build_ui() {
                   QString("QListWidget{background:%1;color:%2;border:1px solid %3;outline:0;}"
                           "QListWidget::item{padding:7px 8px;border-bottom:1px solid %3;}"
                           "QListWidget::item:selected{background:%4;color:%5;}"
-                          "QTextBrowser{background:%1;color:%2;border:1px solid %3;}"
                           "QComboBox,QLineEdit,QDoubleSpinBox{background:%6;color:%2;border:1px solid %3;"
                           "padding:2px 6px;}"
                           "QPushButton{background:%6;color:%2;border:1px solid %3;padding:3px 12px;"
@@ -260,65 +262,42 @@ void ScreenerScreen::build_ui() {
     mainl->setContentsMargins(0, 0, 0, 0);
     mainl->setSpacing(6);
 
-    // The strategy band: the big picture of the selected strategy in one
-    // glance — what it is, its record in one line and as a curve — with the
-    // full card one click away. Same width as the table it describes.
-    auto* band = new QFrame;
-    band->setObjectName(QStringLiteral("band"));
-    band->setStyleSheet(QString("QFrame#band{background:%1;border:1px solid %2;}")
-                            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
-    auto* bl = new QHBoxLayout(band);
-    bl->setContentsMargins(12, 8, 8, 8);
-    bl->setSpacing(12);
-    auto* btext = new QVBoxLayout;
-    btext->setSpacing(3);
-    band_title_ = new QLabel;
-    band_title_->setTextFormat(Qt::PlainText); // strategy strings are text, never markup
-    band_title_->setStyleSheet(QString("color:%1;font-weight:700;font-size:14px;background:transparent;")
-                                   .arg(ui::colors::AMBER()));
-    band_sub_ = new QLabel;
-    band_sub_->setTextFormat(Qt::PlainText);
-    band_sub_->setWordWrap(true);
-    band_sub_->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
-    band_record_ = new QLabel;
-    band_record_->setTextFormat(Qt::RichText);
-    band_record_->setWordWrap(true);
-    band_record_->setStyleSheet("background:transparent;");
-    details_btn_ = new QPushButton(QStringLiteral("Rules && evidence ▾")); // && : not a mnemonic
-    details_btn_->setCheckable(true);
-    details_btn_->setCursor(Qt::PointingHandCursor);
-    details_btn_->setToolTip(QStringLiteral("The strategy's exact rules and its full measured record"));
-    auto* brow = new QHBoxLayout;
-    brow->addWidget(band_record_, 1);
-    brow->addWidget(details_btn_, 0, Qt::AlignBottom);
-    btext->addWidget(band_title_);
-    btext->addWidget(band_sub_);
-    btext->addStretch(1);
-    btext->addLayout(brow);
-    bl->addLayout(btext, 1);
-    equity_chart_ = new ScreenerChart;
-    equity_chart_->set_log_scale(true);
-    // shrinks with the band (Equity Research beside halves the width) and
-    // hides below 200 px rather than squeezing the text out
-    equity_chart_->setMinimumSize(200, 120);
-    equity_chart_->setMaximumSize(340, 128);
-    equity_chart_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
-    bl->addWidget(equity_chart_);
-    mainl->addWidget(band);
-
-    details_ = new QTextBrowser;
-    details_->setOpenExternalLinks(false);
-    details_->setMaximumHeight(260);
-    details_->hide();
-    mainl->addWidget(details_);
+    // The strategy card, always open above its list: what it is, its exact
+    // rules and its measured record, every word shown (nothing behind a
+    // toggle). Rules and record sit side by side; when Equity Research beside
+    // halves the width they stack. A card taller than 75% of the pane scrolls
+    // inside its frame rather than clip (render_band).
+    band_ = new QTextBrowser;
+    band_->setOpenLinks(false);
+    band_->setFrameShape(QFrame::NoFrame);
+    band_->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    band_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    band_->setStyleSheet(QString("QTextBrowser{background:%1;color:%2;border:1px solid %3;padding:4px 8px;}")
+                             .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
+    band_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed); // its height is its text's
+    mainl->addWidget(band_);
+    // the text area's width decides the layout, the pane's height the cap;
+    // the viewport, not band_: its resize lands after band_'s own event
+    band_->viewport()->installEventFilter(this);
+    main->installEventFilter(this);
 
     centre_ = new QStackedWidget;
     empty_lbl_ = new QLabel;
     empty_lbl_->setWordWrap(true);
     empty_lbl_->setAlignment(Qt::AlignCenter);
     empty_lbl_->setTextFormat(Qt::RichText);
-    empty_lbl_->setStyleSheet(QString("color:%1;padding:40px;").arg(ui::colors::TEXT_SECONDARY()));
-    centre_->addWidget(empty_lbl_);
+    empty_lbl_->setStyleSheet(QString("color:%1;padding:16px 40px;").arg(ui::colors::TEXT_SECONDARY()));
+    // The stack's minimum is its largest page's: this wrapped text must not
+    // set it, or the card above is squeezed into its own words. It scrolls
+    // instead when the pane is short, so its retry advice is never cut off.
+    empty_lbl_->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    auto* empty_scroll = new QScrollArea;
+    empty_scroll->setWidget(empty_lbl_);
+    empty_scroll->setWidgetResizable(true);
+    empty_scroll->setFrameShape(QFrame::NoFrame);
+    empty_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    empty_scroll->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Ignored);
+    centre_->addWidget(empty_scroll);
 
     auto* mid = new QWidget;
     auto* ml = new QVBoxLayout(mid);
@@ -380,14 +359,6 @@ void ScreenerScreen::build_ui() {
             return; // the current STOCK did not change (a sort just moved its row)
         last_research_ = it->text();
         emit research_requested(it->text(), false);
-    });
-    connect(split_, &QSplitter::splitterMoved, this, [this](int, int) {
-        equity_chart_->setVisible(split_->sizes().at(1) >= 720);
-    });
-    connect(details_btn_, &QPushButton::toggled, this, [this](bool on) {
-        details_open_ = on;
-        details_->setVisible(on);
-        details_btn_->setText(on ? QStringLiteral("Rules && evidence ▴") : QStringLiteral("Rules && evidence ▾"));
     });
 
     connect(list_, &QListWidget::currentRowChanged, this, [this](int row) {
@@ -478,10 +449,60 @@ void ScreenerScreen::showEvent(QShowEvent* e) {
 void ScreenerScreen::resizeEvent(QResizeEvent* e) {
     QWidget::resizeEvent(e);
     even_out_panes();
-    // With Equity Research beside, the screener is half the window: the band
-    // keeps its words and drops the curve (the full record is under "Rules").
-    if (equity_chart_ && split_ && split_->sizes().size() == 2)
-        equity_chart_->setVisible(split_->sizes().at(1) >= 720);
+}
+
+bool ScreenerScreen::eventFilter(QObject* o, QEvent* e) {
+    if (band_ && e->type() == QEvent::Resize && (o == band_->viewport() || o == band_->parentWidget()))
+        render_band(); // unchanged width and cap are a no-op there: no loop
+    return QWidget::eventFilter(o, e);
+}
+
+void ScreenerScreen::render_band(bool force) {
+    if (!band_)
+        return;
+    const int w = band_->viewport()->width();
+    // The table keeps at least a quarter of the pane (5+ rows beside Equity
+    // Research at 1080p, where the Overview card fits): a card taller than that
+    // (the Leader Pullback beside Equity Research) scrolls inside its frame
+    // rather than clip its words or push the list off screen.
+    const int cap = std::max(160, int(band_->parentWidget()->height() * 0.75));
+    if (!force && w == band_width_ && cap == band_cap_)
+        return;
+    band_cap_ = cap;
+    band_width_ = w;
+    // Side by side the rules wrap to ~60% of the card; under ~640 px (Equity
+    // Research beside) that is too narrow, so the record goes below.
+    QString body;
+    if (w >= 640)
+        body = QStringLiteral("<table width='100%' cellspacing='0' cellpadding='0'><tr>"
+                              "<td width='58%' valign='top' style='padding-right:18px'>%1</td>"
+                              "<td valign='top'>%2</td></tr></table>")
+                   .arg(band_rules_, band_record_);
+    else
+        body = band_rules_ + QStringLiteral("<div style='margin-top:8px'></div>") + band_record_;
+    const QString html = band_head_ + body + band_basis_;
+    // Re-parse only when the words or their arrangement change: a splitter
+    // drag or a finished scan must not throw a reader of a capped card back
+    // to its top.
+    if (force || html != band_html_) {
+        const int at = force ? 0 : band_->verticalScrollBar()->value();
+        band_html_ = html;
+        band_->setHtml(html);
+        band_->verticalScrollBar()->setValue(at);
+    }
+    // Every word shown: the card is as tall as its document laid out at this
+    // width, so the table below gets the rest and nothing is clipped.
+    auto* doc = band_->document();
+    doc->setTextWidth(w);
+    const int chrome = band_->height() - band_->viewport()->height(); // border + padding
+    int need = int(std::ceil(doc->size().height())) + chrome;
+    // a run that cannot wrap at this width would be cut off on the right: scroll instead
+    const bool too_wide = doc->idealWidth() > w + 1;
+    band_->setHorizontalScrollBarPolicy(too_wide ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+    if (too_wide)
+        need += band_->horizontalScrollBar()->sizeHint().height();
+    band_->setVerticalScrollBarPolicy(need > cap ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+    band_->setFixedHeight(std::min(need, cap));
 }
 
 void ScreenerScreen::even_out_panes() {
@@ -685,7 +706,7 @@ void ScreenerScreen::show_strategy(const QString& id) {
     current_id_ = id;
     plan_box_->setVisible(id == QLatin1String("luk_pullback"));
     fill_band();
-    fill_equity_chart();
+    render_band(true);
     if (!has_lists()) {
         update_empty_label();
         centre_->setCurrentIndex(0);
@@ -701,7 +722,7 @@ void ScreenerScreen::update_empty_label() {
         empty_lbl_->setText(
             QStringLiteral("<div style='font-size:15px;color:%1;font-weight:700'>Couldn't build the lists</div>"
                            "<p style='color:%2'>%3</p><p>Check the connection and press REFRESH. The "
-                           "strategies and their records on the left and right don't need it.</p>")
+                           "strategies and their rules and records above don't need it.</p>")
                 .arg(ui::colors::RED(), ui::colors::TEXT_PRIMARY(), status_->text().toHtmlEscaped()));
         return;
     }
@@ -709,8 +730,8 @@ void ScreenerScreen::update_empty_label() {
         QStringLiteral("<div style='font-size:15px;color:%1;font-weight:700'>Building today's lists…</div>"
                        "<p>The first run downloads two years of daily prices for every stock in the "
                        "universe (about a minute for ~1,700). After that a refresh takes seconds.</p>"
-                       "<p>The strategies are on the left and each one's rules and measured record are on "
-                       "the right already.</p><p style='color:%2'>%3</p>")
+                       "<p>The strategies are on the left and each one's rules and measured record are "
+                       "above already.</p><p style='color:%2'>%3</p>")
             .arg(ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(), progress_lbl_->text().toHtmlEscaped()));
 }
 
@@ -935,132 +956,108 @@ void ScreenerScreen::fill_band() {
     namespace fmtn = ui::formatting;
     const QString dim = ui::colors::TEXT_SECONDARY();
     const QString amber = ui::colors::AMBER();
-    const QString basis = result_.basis.isEmpty()
-                              ? QString()
-                              : QStringLiteral("<p style='color:%1;font-size:11px'>Basis: %2.</p>")
-                                    .arg(dim, result_.basis.toHtmlEscaped());
+    const auto head = [&](const QString& t) {
+        return QStringLiteral("<div style='font-weight:700;color:%1'>%2</div>").arg(amber, t);
+    };
+    // "beat the index" only at |t| >= 2; below that the excess is noise
+    const auto verdict_of = [](const screener::Evidence& ev) -> QString {
+        if (!ev.tested || !ev.t || !ev.excess)
+            return {};
+        if (std::abs(*ev.t) < 2.0)
+            return QStringLiteral("noise");
+        return *ev.excess > 0 ? QStringLiteral("beat the index") : QStringLiteral("reliably WORSE");
+    };
+    const auto t_text = [&](const screener::Evidence& ev) {
+        const QString v = verdict_of(ev);
+        return ev.t ? QString::number(*ev.t, 'f', 2) + (v.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(v))
+                    : fmtn::placeholder();
+    };
+    band_basis_ = result_.basis.isEmpty()
+                      ? QString()
+                      : QStringLiteral("<div style='color:%1;font-size:11px;margin-top:6px'>Basis: %2.</div>")
+                            .arg(dim, result_.basis.toHtmlEscaped());
+    // strategy strings are text, never markup: every one is escaped
+    const auto make_head = [&](const QString& name, const QString& sub, const QString& summary) {
+        return QStringLiteral("<div style='color:%1;font-weight:700;font-size:14px'>%2</div>"
+                              "<div style='color:%3'>%4</div><div style='margin:3px 0 6px 0'>%5</div>")
+            .arg(amber, name.toHtmlEscaped(), dim, sub.toHtmlEscaped(), summary.toHtmlEscaped());
+    };
+
     if (current_id_ == kOverview) {
-        band_title_->setText(QStringLiteral("Overview"));
-        band_sub_->setText(QStringLiteral(
-            "Where independent methods agree today: stocks picked by two or more of the screens. Pick a "
-            "strategy on the left for its own list; click any stock to open it in Equity Research beside "
-            "the list."));
-        band_record_->setText(QStringLiteral(
-            "<span style='color:%1'>RECORD</span> &nbsp;No screen beat the equal-weighted S&amp;P 500 with "
-            "significance, 2010-2026 — the curves bunch around the index.")
-                                  .arg(dim));
-        details_->setHtml(QStringLiteral(
-            "<div style='font-weight:700;color:%1'>HOW TO READ THE RECORDS</div>"
-            "<p>Every screen was backtested on the S&amp;P 500 as it stood on each date, 2010-2026, monthly, "
-            "after costs (the Leader Pullback as individual trades). <b>None beat the equal-weighted index "
-            "with statistical significance</b>: |t| &lt; 2 is indistinguishable from luck. A list here is "
-            "where a method would look, not a forecast.</p><p>RS Leaders is nested in the Trend Template "
-            "and counts once in the overview.</p>")
-                              .arg(amber) + basis);
+        band_head_ = make_head(
+            QStringLiteral("Overview"),
+            QStringLiteral("Names on two or more screens (RS Leaders, nested in the Trend Template, counts once)"),
+            QStringLiteral("Where independent methods agree today. Pick a strategy on the left for its own list "
+                           "and rules; click any stock to open it in Equity Research beside the list."));
+        band_rules_ = (
+            head(QStringLiteral("HOW TO READ THE RECORDS")) +
+            QStringLiteral("<p style='margin-top:2px'>Every screen was backtested on the S&amp;P 500 as it stood "
+                           "on each date, 2010-2026, monthly, after costs (the Leader Pullback as individual "
+                           "trades). <b>None beat the equal-weighted index with statistical significance</b>: "
+                           "|t| &lt; 2 is indistinguishable from luck. A list here is where a method would look, "
+                           "not a forecast.</p>"));
+        // every screen's record side by side: the big picture in one table
+        QString t = head(QStringLiteral("EVERY SCREEN'S RECORD &nbsp;<span style='font-weight:400;color:%1'>"
+                                        "excess / yr vs index &nbsp;·&nbsp; t-stat</span>")
+                             .arg(dim)) +
+                    QStringLiteral("<table cellspacing='0' cellpadding='1'>");
+        for (const auto& st : result_.strategies) {
+            const auto& ev = st.evidence;
+            t += QStringLiteral("<tr><td>%1</td><td align='right'>&nbsp;%2</td><td align='right'>&nbsp;&nbsp;%3</td></tr>")
+                     .arg(st.name.toHtmlEscaped(),
+                          ev.tested ? signed_pct_html(ev.excess) : QStringLiteral("<span style='color:%1'>—</span>").arg(dim),
+                          ev.tested ? t_text(ev).toHtmlEscaped()
+                                    : QStringLiteral("<span style='color:%1'>not backtested</span>").arg(dim));
+        }
+        band_record_ = t + QStringLiteral("</table>");
         return;
     }
     const auto* s = result_.strategy(current_id_);
     if (!s) {
-        band_title_->clear();
-        band_sub_->clear();
-        band_record_->clear();
-        details_->clear();
+        band_head_.clear();
+        band_rules_.clear();
+        band_record_.clear();
         return;
     }
-    band_title_->setText(s->name);
-    band_sub_->setText(QStringLiteral("%1 · %2\n%3").arg(s->family, s->source, s->summary));
+    band_head_ = make_head(s->name, QStringLiteral("%1 · %2").arg(s->family, s->source), s->summary);
 
-    // the record in one line: the big picture without opening anything
-    const auto& ev = s->evidence;
-    QString line = QStringLiteral("<span style='color:%1'>RECORD</span> &nbsp;").arg(dim);
-    QString verdict;
-    if (ev.tested) {
-        const bool significant = ev.t && std::abs(*ev.t) >= 2.0;
-        if (ev.t && ev.excess)
-            verdict = significant ? (*ev.excess > 0 ? QStringLiteral("beat the index")
-                                                    : QStringLiteral("reliably WORSE than the index"))
-                                  : QStringLiteral("noise");
-        line += QStringLiteral("%1 / yr vs index &nbsp;·&nbsp; t %2%3 &nbsp;·&nbsp; max DD %4")
-                    .arg(signed_pct_html(ev.excess),
-                         ev.t ? QString::number(*ev.t, 'f', 2) : fmtn::placeholder(),
-                         verdict.isEmpty() ? QString() : QStringLiteral(" (%1)").arg(verdict.toHtmlEscaped()),
-                         ev.max_dd ? fmtn::format_percent(*ev.max_dd * 100.0, 0) : fmtn::placeholder());
-        if (ev.trades && ev.avg_R)
-            line += QStringLiteral(" &nbsp;·&nbsp; %1R / trade").arg(QString::number(*ev.avg_R, 'f', 2));
-    } else {
-        line += QStringLiteral("<span style='color:%1'>not backtested</span>").arg(dim);
-    }
-    band_record_->setText(line);
-
-    // the full card, one click away
-    QString h;
-    h += QStringLiteral("<div style='font-weight:700;color:%1'>RULES</div><ul style='margin-left:-20px'>").arg(amber);
+    QString h = head(QStringLiteral("RULES")) + QStringLiteral("<ul style='margin-left:-24px;margin-top:2px'>");
     for (const QString& r : s->rules)
         h += QStringLiteral("<li>%1</li>").arg(r.toHtmlEscaped());
     h += QStringLiteral("</ul><div style='color:%1'>Ranked by: %2</div>").arg(dim, s->rank_by.toHtmlEscaped());
-    h += QStringLiteral("<div style='font-weight:700;color:%1;margin-top:10px'>MEASURED RECORD</div>").arg(amber);
+    band_rules_ = h;
+
+    const auto& ev = s->evidence;
+    QString r = head(QStringLiteral("MEASURED RECORD"));
     if (ev.tested) {
-        h += QStringLiteral("<table cellspacing='0' cellpadding='2'>"
-                            "<tr><td style='color:%1'>Excess / yr vs index</td><td align='right'>%2</td></tr>"
-                            "<tr><td style='color:%1'>t-stat</td><td align='right'>%3</td></tr>"
-                            "<tr><td style='color:%1'>Max drawdown</td><td align='right'>%4</td></tr>")
-                 .arg(dim, signed_pct_html(ev.excess),
-                      ev.t ? QString::number(*ev.t, 'f', 2) +
-                                 (verdict.isEmpty() ? QString() : QStringLiteral(" (") + verdict + ")")
-                           : fmtn::placeholder(),
+        r += QStringLiteral("<table cellspacing='0' cellpadding='1'>"
+                            "<tr><td style='color:%1'>Excess / yr vs index</td><td align='right'>&nbsp;%2</td></tr>"
+                            "<tr><td style='color:%1'>t-stat</td><td align='right'>&nbsp;%3</td></tr>"
+                            "<tr><td style='color:%1'>Max drawdown</td><td align='right'>&nbsp;%4</td></tr>")
+                 .arg(dim, signed_pct_html(ev.excess), t_text(ev).toHtmlEscaped(),
                       ev.max_dd ? fmtn::format_percent(*ev.max_dd * 100.0, 1) : fmtn::placeholder());
         if (ev.trades)
-            h += QStringLiteral("<tr><td style='color:%1'>Trades / win rate / avg</td><td align='right'>%2 / %3 / %4R</td></tr>")
+            r += QStringLiteral("<tr><td style='color:%1'>Trades / win rate / avg</td><td align='right'>&nbsp;%2 / %3 / %4R</td></tr>")
                      .arg(dim)
                      .arg(*ev.trades)
                      .arg(ev.win_rate ? fmtn::format_percent(*ev.win_rate * 100.0, 0) : fmtn::placeholder())
                      .arg(ev.avg_R ? QString::number(*ev.avg_R, 'f', 2) : fmtn::placeholder());
         for (int i = 0; i < ev.subperiods.size() && i < result_.subperiods.size(); ++i)
-            h += QStringLiteral("<tr><td style='color:%1'>&nbsp;&nbsp;%2</td><td align='right'>%3</td></tr>")
+            r += QStringLiteral("<tr><td style='color:%1'>&nbsp;&nbsp;%2</td><td align='right'>&nbsp;%3</td></tr>")
                      .arg(dim, result_.subperiods[i].toHtmlEscaped(), signed_pct_html(ev.subperiods[i]));
-        h += QStringLiteral("</table>");
+        r += QStringLiteral("</table>");
     } else {
-        h += QStringLiteral("<div style='color:%1'>Not backtested.</div>").arg(dim);
+        r += QStringLiteral("<div style='color:%1'>Not backtested.</div>").arg(dim);
     }
     if (!ev.note.isEmpty())
-        h += QStringLiteral("<p>%1</p>").arg(ev.note.toHtmlEscaped());
-    details_->setHtml(h + basis);
-}
-
-void ScreenerScreen::fill_equity_chart() {
-    using Series = ScreenerChart::Series;
-    const QStringList& m = result_.curve_months;
-    const QStringList xl = m.isEmpty() ? QStringList{}
-                                       : QStringList{m.first(), m.value(m.size() / 2), m.last()};
-    equity_chart_->set_x_labels(xl);
-    equity_chart_->set_levels({{1.0, ui::colors::BORDER_MED(), QString()}});
-    QVector<Series> series;
-    if (current_id_ == kOverview) {
-        for (const auto& s : result_.strategies)
-            if (!s.evidence.curve.isEmpty())
-                series.push_back({s.evidence.curve, ui::colors::TEXT_TERTIARY(), QString(), 1.0, false});
-        series.push_back({result_.curve_spy, ui::colors::TEXT_SECONDARY(), QStringLiteral("SPY"), 1.4, true});
-        series.push_back({result_.curve_ew, ui::colors::AMBER(), QStringLiteral("Index"), 2.0, false});
-        equity_chart_->set_title(QStringLiteral("$1 grown: screens (grey) vs index"));
-        equity_chart_->set_placeholder(QStringLiteral("Backtest curves unavailable"));
-    } else if (const auto* s = result_.strategy(current_id_); s && !s->evidence.curve.isEmpty()) {
-        series.push_back({result_.curve_spy, ui::colors::TEXT_TERTIARY(), QStringLiteral("SPY"), 1.2, true});
-        series.push_back({result_.curve_ew, ui::colors::TEXT_SECONDARY(), QStringLiteral("Index"), 1.4, false});
-        series.push_back({s->evidence.curve, ui::colors::AMBER(), QStringLiteral("Screen"), 2.0, false});
-        equity_chart_->set_title(QStringLiteral("$1 grown, 2010-26 (log)"));
-        equity_chart_->set_placeholder(QStringLiteral("Backtest curve unavailable"));
-    } else {
-        equity_chart_->set_title(QStringLiteral("Growth of $1"));
-        equity_chart_->set_placeholder(QStringLiteral("Not backtested — no record to draw"));
-    }
-    equity_chart_->set_series(series);
+        r += QStringLiteral("<p style='margin-top:4px'>%1</p>").arg(ev.note.toHtmlEscaped());
+    band_record_ = r;
 }
 
 void ScreenerScreen::restore_state(const QVariantMap& state) {
     const QString id = state.value(QStringLiteral("strategy")).toString();
     if (!id.isEmpty())
         current_id_ = id;
-    details_btn_->setChecked(state.value(QStringLiteral("details")).toBool());
     const double m = state.value(QStringLiteral("min_mcap")).toDouble();
     if (m > 0) {
         const int idx = universe_->findData(m);
@@ -1086,7 +1083,6 @@ void ScreenerScreen::restore_state(const QVariantMap& state) {
 
 QVariantMap ScreenerScreen::save_state() const {
     return {{QStringLiteral("strategy"), current_id_},
-            {QStringLiteral("details"), details_open_},
             {QStringLiteral("min_mcap"), min_mcap()},
             {QStringLiteral("account"), account_value_},
             {QStringLiteral("risk"), risk_frac_}};

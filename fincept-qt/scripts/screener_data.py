@@ -329,14 +329,14 @@ def load_prices(symbols, force=False, now=None):
         except Exception as e:
             print(f"download failed for chunk at {i}: {e}", file=sys.stderr)
             continue
-        now = time.time()
+        fetched_at = time.time()  # not `now`: that is the caller's clock, a datetime
         for s in chunk:
             frame = _ticker_frame(data, s)
             if frame is None:
                 continue
             frame = yd._repair_unadjusted_splits(frame, s)
             cache["frames"][s] = frame[["Open", "High", "Low", "Close", "Volume"]].copy()
-            cache["fetched"][s] = now
+            cache["fetched"][s] = fetched_at
             dirty = True
         # Persist every 90 s, not only at the end: a cold $300M universe can
         # hit the screen's 10-minute timeout, and a kill before a single write
@@ -551,9 +551,6 @@ def evidence(strategy, ev_doc):
         for k in ("trades", "win_rate", "avg_R"):  # trade-simulated strategies only
             if row.get(k) is not None:
                 out[k] = _clean(row[k])
-        curve = (ev_doc.get("curves") or {}).get(col)
-        if curve:
-            out["curve"] = [_clean(x) for x in curve]  # growth of $1, monthly
     elif col:
         out["note"] = "Backtest results unavailable. " + out["note"]
     return out
@@ -1049,12 +1046,11 @@ def scan(min_mcap=2e9, force=False):
 
 
 def meta(lists=None):
-    """Everything about the strategies that needs no market data — rules,
-    evidence, the equity curves. `screener_data.py meta` prints it in well
+    """Everything about the strategies that needs no market data — rules
+    and evidence. `screener_data.py meta` prints it in well
     under a second, so the tab shows its strategies and their records at once
     while the first scan (a minute on a cold cache) downloads."""
     ev_doc = load_evidence()
-    curves = ev_doc.get("curves") or {}
     strategies = []
     for st in STRATEGIES:
         out = {k: st[k] for k in ("id", "name", "family", "source", "summary", "rules",
@@ -1065,10 +1061,6 @@ def meta(lists=None):
     return {
         "evidence_basis": ev_doc.get("basis", ""),
         "subperiods": ev_doc.get("subperiods", []),
-        # the index lines every strategy's curve is drawn against
-        "curve_months": curves.get("months", []),
-        "curve_ew": [_clean(x) for x in curves.get("EW", [])],
-        "curve_spy": [_clean(x) for x in curves.get("SPY", [])],
         "strategies": strategies,
     }
 

@@ -288,11 +288,11 @@ lead_df["dollar_vol50"]["A"] = 1e6
 ld, _ = sd.pullback_leaders(lead_df, pd.DataFrame(True, index=[0], columns=list("ABCD")))
 check(not ld.iloc[0, 0], "a leader that barely trades is removed")
 
-# meta: strategies + evidence + curves, no lists, no network
+# meta: strategies + evidence, no lists, no network
 m = sd.meta()
 check(len(m["strategies"]) == len(sd.STRATEGIES) and "rows" not in m, "meta has every strategy and no rows")
 check(all(s_["symbols"] == [] for s_ in m["strategies"]), "meta lists are empty")
-check(len(m["curve_months"]) == len(m["curve_ew"]) > 100, "meta carries the index curve")
+check(all(s_["rules"] for s_ in m["strategies"]), "meta carries every strategy's rules")
 json.dumps(m, allow_nan=False, default=sd._clean)
 
 from datetime import datetime, timezone
@@ -411,6 +411,36 @@ lc = sd._last_close_utc(sat)
 check(lc.weekday() == 4 and lc < sat, f"last close before a Saturday is Friday's: {lc}")
 mon_morning = datetime(2026, 10, 19, 13, 0, tzinfo=timezone.utc)  # 09:00 ET
 check(sd._last_close_utc(mon_morning).weekday() == 4, "Monday pre-open still trusts Friday's close")
+
+# load_prices through a download, with the scan's clock passed in: the
+# download loop once rebound `now` to a float timestamp, so the stale count
+# after it crashed every scan that fetched anything ('float' object has no
+# attribute 'astimezone') — the first scan after every close.
+import tempfile
+import yfinance as yf
+import yfinance_data  # noqa: F401 — it wraps yf.download in its gate on import; patch after
+_real_download = yf.download
+def _fake_download(tickers, **kw):
+    idx = pd.date_range("2026-05-01", periods=40, freq="B")  # _ticker_frame wants >= 30 closes
+    one = pd.DataFrame({"Open": 10.0, "High": 11.0, "Low": 9.0, "Close": 10.5, "Volume": 1e6,
+                        "Dividends": 0.0, "Stock Splits": 0.0}, index=idx)
+    return pd.concat({t: one for t in tickers}, axis=1)
+_prior_cache_dir = os.environ.get("FINCEPT_CACHE_DIR")
+with tempfile.TemporaryDirectory() as tmp:
+    os.environ["FINCEPT_CACHE_DIR"] = tmp
+    yf.download = _fake_download
+    try:
+        got, oldest, stale = sd.load_prices(["AAA", "BBB"], now=datetime.now(timezone.utc))
+        check(set(got) == {"AAA", "BBB", "SPY"} and stale == 0 and oldest > 0,
+              f"a downloading load_prices returns fresh frames: {sorted(got)} stale={stale}")
+    except Exception as e:
+        check(False, f"load_prices with a download and a clock raised {type(e).__name__}: {e}")
+    finally:
+        yf.download = _real_download
+        if _prior_cache_dir is None:
+            os.environ.pop("FINCEPT_CACHE_DIR", None)
+        else:
+            os.environ["FINCEPT_CACHE_DIR"] = _prior_cache_dir
 
 if failures:
     print(f"{len(failures)} failure(s)")

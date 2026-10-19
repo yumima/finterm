@@ -20,17 +20,15 @@ class QTimer;
 
 namespace fincept::screens {
 
-class ScreenerChart;
-
 /// SCREENER — rule-exact stock screens from investing-competition winners
 /// (Minervini, CAN SLIM, Kullamägi, Martin Luk) and the academic literature
 /// (momentum, Magic Formula, Piotroski, Novy-Marx, Trending Value, low vol).
 ///
 ///   rail    the strategies, with today's counts; OVERVIEW first (names on
 ///           two or more screens)
-///   band    the selected strategy at a glance: what it is, its measured
-///           record in one line and as a growth-of-$1 curve against the index,
-///           "Rules & evidence" to expand the full card
+///   card    the selected strategy in full, always open above its list: what
+///           it is, its exact rules, its measured record (on Overview: how to
+///           read the records, and every screen's record side by side)
 ///   table   the names it selects today, ranked by its own rule, 6-month trend
 ///           lines, filter; the Leader Pullback adds a trade plan sized to the
 ///           reader's account
@@ -51,7 +49,7 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void restore_state(const QVariantMap& state) override;
     QVariantMap save_state() const override;
     QString state_key() const override { return QStringLiteral("screener"); }
-    int state_version() const override { return 2; } // 'details' is additive: no bump (a bump discards saved state)
+    int state_version() const override { return 2; } // a bump discards saved state
 
   signals:
     /// The reader picked `ticker`. open = a click (show Equity Research beside
@@ -61,6 +59,7 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
   protected:
     void showEvent(QShowEvent* e) override;
     void resizeEvent(QResizeEvent* e) override;
+    bool eventFilter(QObject* o, QEvent* e) override;
 
   private:
     void build_ui();
@@ -71,7 +70,7 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void show_strategy(const QString& id);
     void fill_table();
     void fill_band();
-    void fill_equity_chart();
+    void render_band(bool force = false);
     void apply_filter();
     void set_status(const QString& text, bool error = false);
     void set_progress(int done, int total, const QString& text);
@@ -102,14 +101,17 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     QDoubleSpinBox* account_ = nullptr;
     QComboBox*    risk_ = nullptr;
     QTableWidget* table_ = nullptr;
-    // the strategy band
-    QLabel*       band_title_ = nullptr;
-    QLabel*       band_sub_ = nullptr;
-    QLabel*       band_record_ = nullptr;
-    QPushButton*  details_btn_ = nullptr;
-    QTextBrowser* details_ = nullptr; // rules + the full record, collapsed by default
-    ScreenerChart* equity_chart_ = nullptr;
-    bool          details_open_ = false;
+    // the strategy card: every word shown, nothing behind a toggle
+    // One document, sized to its laid-out height (a word-wrapped QLabel's
+    // height-for-width runs short on rich text and clipped the record).
+    QTextBrowser* band_ = nullptr;
+    QString       band_head_;    // name, family · source, summary
+    QString       band_rules_;   // rules (Overview: how to read the records)
+    QString       band_record_;  // the measured record (Overview: every screen's)
+    QString       band_basis_;
+    QString       band_html_;       // the document on screen
+    int           band_width_ = -1; // the width the document was last laid out at
+    int           band_cap_ = -1;   // the most height it may take (the pane's 75%)
     bool          filling_ = false;     // programmatic selection: not the reader's pick
     QTimer* follow_timer_ = nullptr; // keyboard browsing -> ER, debounced
     QString       last_research_;          // last symbol sent to ER: a re-sort moving rows is not a pick

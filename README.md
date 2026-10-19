@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`1f229780a`](https://github.com/yumima/finterm/commit/1f229780a) screener: Equity Research beside the list; honest, fast intraday prices
 - [`0667ff30d`](https://github.com/yumima/finterm/commit/0667ff30d) live tv: the channel picker is the title at the top-left
 - [`9c27e8a12`](https://github.com/yumima/finterm/commit/9c27e8a12) dashboard: an error no longer destroys a widget — the root cause, not eight workarounds
 - [`119a37925`](https://github.com/yumima/finterm/commit/119a37925) sec: declare the user's contact to SEC — and to no one else
