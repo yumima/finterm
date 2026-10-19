@@ -27,6 +27,8 @@
 #include <QJsonObject>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QMenu>
+#include <QPointer>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
@@ -35,10 +37,12 @@
 #include <QTableWidget>
 
 #include <algorithm>
+#include <memory>
 #include <QRegularExpression>
 #include <QScrollArea>
 #include <QSettings>
 #include <QShortcut>
+#include <QTimer>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUrlQuery>
@@ -466,8 +470,19 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         cl->setContentsMargins(8, 0, 8, 0);
         cl->setSpacing(8);
 
-        now_playing_ = new QLabel("—");
-        cl->addWidget(now_playing_, 1);
+        // Channel picker: the now-playing name is the dropdown, so changing
+        // channel is one click here rather than BACK and a pick from the list.
+        // The menu is rebuilt on every open — the config dialog can edit
+        // channels_ at any time.
+        now_playing_ = new QPushButton("—");
+        now_playing_->setCursor(Qt::PointingHandCursor);
+        now_playing_->setFixedHeight(20);
+        now_playing_->setToolTip("Switch channel");
+        channel_menu_ = new QMenu(now_playing_);
+        connect(channel_menu_, &QMenu::aboutToShow, this, &VideoPlayerWidget::rebuild_channel_menu);
+        now_playing_->setMenu(channel_menu_);
+        cl->addWidget(now_playing_);
+        cl->addStretch(1);
 
 #ifdef HAS_QT_MULTIMEDIA
         // Audio output-device selector. Item 0 ("System default") follows the
@@ -1329,7 +1344,7 @@ bool VideoPlayerWidget::fall_back_to_web(const QString& why) {
     set_playback_intent(false);
     suppress_recovery_briefly();
     player_->stop();
-    player_->setSource(QUrl{});
+    release_source_then([] {}); // counted: a GL pick right after waits for it
     stop_hls_proxy();
     status_label_->setText(
         QStringLiteral("The direct stream kept expiring — switched to the embedded player."));
@@ -1414,8 +1429,6 @@ void VideoPlayerWidget::re_resolve_source(const QString& why, bool user_initiate
     // down the other's relay.
     suppress_recovery_briefly();
     player_->stop();
-    player_->setSource(QUrl{});
-    stop_hls_proxy();
     url_before_error_.clear();
     errored_source_.clear();
     status_label_->setText(QStringLiteral("Reconnecting… (%1)").arg(why));
@@ -1433,12 +1446,19 @@ void VideoPlayerWidget::re_resolve_source(const QString& why, bool user_initiate
     // refresh tick from starting a second attempt in the gap.
     current_url_ = url;
     play_in_progress_ = true;
-    QTimer::singleShot(250, this, [this, url, resolved_title]() {
-        // The user picked another channel while we waited — theirs wins.
-        if (current_url_ != url)
+    // The shared helper empties the source and is the ONLY setSource here: a
+    // second, earlier one let its NoMedia arrive after the guard connected and
+    // fire the reopen at once. Counted, so other opens wait on it too.
+    release_source_then([this, url, resolved_title, gen = switch_token_]() {
+        // The user picked another channel while we waited — theirs wins. The
+        // generation catches a re-pick of the SAME channel, which the URL
+        // cannot: that pick already opened it, and this would open it twice.
+        if (gen != switch_token_ || current_url_ != url)
             return;
         play_url(url, resolved_title);
     });
+    // Relay closed after the source is emptied, as before.
+    stop_hls_proxy();
 #else
     Q_UNUSED(why);
 #endif
@@ -1455,6 +1475,7 @@ void VideoPlayerWidget::hard_reload_source() {
         return;
 
     pending_reload_src_ = src;
+    const quint64 rgen = ++reload_gen_; // a newer reload supersedes this one
     // Close the door on refresh_data() for the duration. Between the teardown
     // and the deferred play() the player is Stopped with a non-empty
     // current_url_, which is precisely the state a refresh tick turns into a
@@ -1466,25 +1487,13 @@ void VideoPlayerWidget::hard_reload_source() {
     // the ladder and aborts the very reload that caused it.
     suppress_recovery_briefly();
     player_->stop();
-    player_->setSource(QUrl{});
-
-    // WAIT FOR THE OLD MEDIA TO ACTUALLY BE RELEASED before opening the new
-    // one. Re-setting in the same turn makes the new demuxer open race the old
-    // one's teardown, and FFmpeg aborts it through its interrupt callback with
-    // "Immediate exit requested" — which is unrecoverable: the player is left
-    // holding a source it will never load, so every play() after it returns
-    // silently. Pause still works (it needs no media) and play does nothing.
-    //
-    // NoMedia is the backend saying the teardown is done. It is not safe to
-    // assume that happens within one event-loop turn: the demuxer runs on its
-    // own thread. So this waits for the signal, with a timer as a backstop in
-    // case a backend never emits it — a late reload is recoverable, a wedged
-    // player is not.
-    auto* guard = new QObject(this);
-    auto fire = [this, guard]() {
-        // Whichever of the signal and the backstop arrives first does the work;
-        // the other finds pending_reload_src_ already cleared and returns.
-        guard->deleteLater();
+    release_source_then([this, gen = switch_token_, rgen]() {
+        // teardown_playback() (BACK / a switch) bumps switch_token_ and
+        // clears pending_reload_src_; a newer reload bumps reload_gen_. Any
+        // of them cancels this reopen — it must not reopen a LATER reload's
+        // source before that reload's own release is done.
+        if (gen != switch_token_ || rgen != reload_gen_)
+            return;
         if (!player_ || !pending_reload_src_.isValid())
             return;
         const QUrl s = pending_reload_src_;
@@ -1512,17 +1521,51 @@ void VideoPlayerWidget::hard_reload_source() {
         // parks silently here, and this is what notices and escalates.
         set_playback_intent(true);
         player_->play();
-    };
+    });
+#endif
+}
 
+void VideoPlayerWidget::release_source_then(std::function<void()> next) {
+#ifdef HAS_QT_MULTIMEDIA
+    // WAIT FOR THE OLD MEDIA TO ACTUALLY BE RELEASED before opening the new
+    // one. Re-setting in the same turn makes the new demuxer open race the old
+    // one's teardown, and FFmpeg aborts it through its interrupt callback with
+    // "Immediate exit requested" — which is unrecoverable: the player is left
+    // holding a source it will never load, so every play() after it returns
+    // silently. Pause still works (it needs no media) and play does nothing.
+    //
+    // NoMedia is the backend saying the teardown is done. It is not safe to
+    // assume that happens within one event-loop turn: the demuxer runs on its
+    // own thread. So this waits for the signal, with a timer as a backstop in
+    // case a backend never emits it, or emitted it synchronously from
+    // setSource() — a late reopen is recoverable, a wedged player is not.
+    //
+    // ORDER MATTERS: setSource() BEFORE connecting. A NoMedia the backend
+    // emits synchronously from setSource() must be missed — heard, it would
+    // run `next` inside this call, which is the same-turn reopen this exists
+    // to prevent. The backstop covers that case.
+    ++releases_pending_;
+    player_->setSource(QUrl{});
+    auto* guard = new QObject(this);
+    auto fired = std::make_shared<bool>(false);
+    auto fire = [this, guard, fired, next]() {
+        // Whichever of the signal and the backstop arrives first does the
+        // work; deleting the guard disconnects the other.
+        if (*fired)
+            return;
+        *fired = true;
+        guard->deleteLater();
+        --releases_pending_;
+        next();
+    };
     connect(player_, &QMediaPlayer::mediaStatusChanged, guard,
             [fire](QMediaPlayer::MediaStatus st) {
                 if (st == QMediaPlayer::NoMedia)
                     fire();
             });
-    // Backstop, and the path taken when the backend already reported NoMedia
-    // synchronously from setSource() above — in which case the signal has
-    // already been and gone before this connect ran.
     QTimer::singleShot(250, guard, fire);
+#else
+    next();
 #endif
 }
 
@@ -1718,7 +1761,13 @@ void VideoPlayerWidget::resolve_live_id_and_play_web(const QString& channel_url,
     controls_->show();
     stack_->setCurrentIndex(2);
 
+    kill_resolve(); // a new request supersedes any resolve still running
+    // The web path never holds play_in_progress_; take it over from a native
+    // resolve just killed, or a failed web resolve leaves it stuck forever
+    // (REFRESH dead, PLAY "still opening").
+    play_in_progress_ = false;
     auto* proc = new QProcess(this);
+    resolve_proc_ = proc; // QPointer: nulls itself when the finished proc is deleted
     proc->setProperty("requested_url", channel_url);
     proc->setProperty("requested_title", title);
     connect(proc, &QProcess::finished, this,
@@ -1834,6 +1883,13 @@ void VideoPlayerWidget::play_spotify_embed(const QString& type, const QString& i
 #endif
 
 VideoPlayerWidget::~VideoPlayerWidget() {
+#ifdef HAS_QT_MULTIMEDIA
+    // A pending release_source_then() guard is a child that outlives this
+    // body; player_ (an earlier child) dies first and may emit NoMedia on the
+    // way out, which would run the guard against destroyed members.
+    if (player_)
+        player_->disconnect();
+#endif
     // If we're being destroyed mid-fullscreen, the reparented surface
     // is no longer in Qt's parent-child chain (setParent(nullptr) ran
     // in enter_fullscreen). Without explicit cleanup it leaks; worse,
@@ -1860,6 +1916,9 @@ VideoPlayerWidget::~VideoPlayerWidget() {
 void VideoPlayerWidget::play_preset(int index) {
     if (index < 0 || index >= channels_.size())
         return;
+    // A pick supersedes every deferred open (a play_url() waiting out a
+    // release, a reconnect's re-resolve, a hard reload's reopen).
+    ++switch_token_;
     // A deliberate choice starts the reconnect budget over — play_url() no
     // longer does it, because play_url() is also the recovery path.
     reconnect_attempts_ = 0;
@@ -1881,11 +1940,68 @@ void VideoPlayerWidget::play_preset(int index) {
     play_url(ch.url, ch.name);
 }
 
+void VideoPlayerWidget::rebuild_channel_menu() {
+    channel_menu_->clear();
+    // url_before_error_: a stream that errored cleared current_url_ but is
+    // still the channel on screen.
+    const QString on_air = current_url_.isEmpty() ? url_before_error_ : current_url_;
+    for (int i = 0; i < channels_.size(); ++i) {
+        const auto& ch = channels_[i];
+        QPixmap dot(10, 10);
+        dot.fill(Qt::transparent);
+        {
+            QPainter p(&dot);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(ch.color));
+            p.drawEllipse(1, 1, 8, 8);
+        }
+        // Marked in the text, not with setCheckable(): with an icon present the
+        // style draws no check mark at all (seen live), so it read as unmarked.
+        const bool current = !on_air.isEmpty() && ch.url == on_air;
+        QAction* a = channel_menu_->addAction(QIcon(dot), current ? ch.name + QStringLiteral("  ✓") : ch.name);
+        if (current) {
+            QFont f = a->font();
+            f.setBold(true);
+            a->setFont(f);
+        }
+        connect(a, &QAction::triggered, this, [this, i]() { switch_channel(i); });
+    }
+    if (!channels_.isEmpty())
+        channel_menu_->addSeparator();
+    connect(channel_menu_->addAction(QStringLiteral("All channels / custom URL…")),
+            &QAction::triggered, this, &VideoPlayerWidget::stop_playback);
+}
+
+void VideoPlayerWidget::switch_channel(int index) {
+    if (index < 0 || index >= channels_.size())
+        return;
+#ifdef HAS_QT_WEBENGINE
+    // An iframe does not freeze silently the way the native pipeline can, so
+    // re-picking the WEB channel on screen keeps it rather than blanking a
+    // healthy stream for a 2-3 s re-resolve.
+    if (stack_->currentIndex() == 2 && !current_url_.isEmpty() && channels_[index].url == current_url_)
+        return;
+#endif
+    // Exactly BACK + a pick from the list, minus the list: re-picking the
+    // channel on screen restarts it, as that always did — a live stream can
+    // die without any signal and leave a frozen frame still reporting
+    // PlayingState, so "already playing" cannot be trusted. teardown_playback()
+    // releases the native source; play_url() waits for that release itself,
+    // so this needs no wait of its own (and BACK + pick gets the same safety).
+    teardown_playback();
+    controls_->show();
+    now_playing_->setText(QString(QChar(0x25B6)) + " " + channels_[index].name +
+                          QStringLiteral(" (switching…)"));
+    play_preset(index);
+}
+
 void VideoPlayerWidget::play_custom_url() {
     QString url = url_input_->text().trimmed();
     if (url.isEmpty())
         return;
     reconnect_attempts_ = 0;   // deliberate choice — see play_preset()
+    ++switch_token_;           // and it supersedes deferred opens, likewise
     if (!url.startsWith("http://") && !url.startsWith("https://"))
         url.prepend("https://");
 
@@ -1914,6 +2030,24 @@ void VideoPlayerWidget::play_custom_url() {
 }
 
 void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
+#ifdef HAS_QT_MULTIMEDIA
+    // BACK inside a switch's release, then a pick from the list, lands here
+    // while the old demuxer is still letting go. Opening now is the double-
+    // open that wedges the backend; try again once the release has had its
+    // 250 ms. A teardown in between (another BACK) cancels the retry.
+    if (releases_pending_ > 0) {
+        // Own the stream for the wait: PLAY reads "still opening", a refresh
+        // tick stays out, the channel menu checks it. Teardown clears both.
+        current_url_ = url;
+        current_title_ = title;
+        play_in_progress_ = true;
+        QTimer::singleShot(260, this, [this, url, title, gen = switch_token_]() {
+            if (gen == switch_token_)
+                play_url(url, title);
+        });
+        return;
+    }
+#endif
     // A new selection retires any recovery pending from the previous stream,
     // and re-arms the one-shot fallback to the embedded player.
     url_before_error_.clear();
@@ -1975,6 +2109,12 @@ void VideoPlayerWidget::refresh_data() {
     // surface a confusing "yt-dlp error" status, so short-circuit here.
     if (web_is_spotify_)
         return;
+    // The WEB engine plays YouTube in an iframe; play_url() is the native
+    // pipeline and would switch engines behind the user's choice.
+    if (use_web_engine_ && stack_->currentIndex() == 2 && is_youtube_url(current_url_)) {
+        play_web(current_url_, current_title_);
+        return;
+    }
 #endif
 #ifdef HAS_QT_MULTIMEDIA
     // Live streams play continuously — nothing to refresh while playing.
@@ -2029,7 +2169,9 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
 
     // Tag the process with the requested URL so the finished callback can detect
     // if the user stopped or switched channels before yt-dlp returned.
+    kill_resolve(); // a new request supersedes any resolve still running
     auto* proc = new QProcess(this);
+    resolve_proc_ = proc; // QPointer: nulls itself when the finished proc is deleted
     proc->setProperty("requested_url", youtube_url);
     connect(proc, &QProcess::finished, this, &VideoPlayerWidget::on_ytdlp_finished);
     connect(proc, &QProcess::finished, proc, &QProcess::deleteLater);
@@ -2096,7 +2238,10 @@ void VideoPlayerWidget::on_ytdlp_finished(int exit_code, QProcess::ExitStatus /*
     // Discard if the user stopped or switched channels before yt-dlp returned.
     const QString requested = proc->property("requested_url").toString();
     if (requested != current_url_) {
-        play_in_progress_ = false;
+        // NOT play_in_progress_ = false: the flag now belongs to whatever
+        // replaced this request (a switch's resolve, or nothing after BACK,
+        // which already cleared it). Clearing it here re-opened the door to
+        // a second play_url() while the new channel was still resolving.
         return;
     }
 
@@ -2149,8 +2294,7 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
     // Discard if the user stopped or switched channels before yt-dlp failed.
     const QString requested = proc->property("requested_url").toString();
     if (requested != current_url_) {
-        play_in_progress_ = false;
-        proc->deleteLater();
+        proc->deleteLater(); // flag untouched — see on_ytdlp_finished()
         return;
     }
 
@@ -2478,6 +2622,36 @@ bool VideoPlayerWidget::eventFilter(QObject* obj, QEvent* event) {
 }
 
 void VideoPlayerWidget::stop_playback() {
+    teardown_playback();
+    controls_->hide();
+    stack_->setCurrentIndex(0);
+    set_title("LIVE TV / STREAMS");
+}
+
+void VideoPlayerWidget::kill_resolve() {
+    if (QProcess* proc = resolve_proc_.data()) {
+        resolve_proc_.clear();
+        proc->disconnect(this);
+        // Delete once it has actually exited: deleting a still-running
+        // QProcess blocks the GUI thread in waitForFinished(). (yt-dlp's
+        // node child is not killed with it; it exits on its own.)
+        if (proc->state() == QProcess::NotRunning) {
+            proc->deleteLater(); // never started / already reaped: no finished() coming
+        } else {
+            connect(proc, &QProcess::finished, proc, &QObject::deleteLater);
+            proc->kill();
+        }
+    }
+}
+
+void VideoPlayerWidget::teardown_playback() {
+    ++switch_token_; // cancels a pending switch_channel() / re_resolve_source() open
+    // Kill the yt-dlp resolve in flight. Its reply is matched to the request
+    // by URL, which cannot tell two requests for the same channel apart: left
+    // running, a re-pick of that channel got two replies and opened it twice
+    // (the double-open that wedges the FFmpeg backend), and a fast flip through
+    // channels left one yt-dlp + node extraction running per channel.
+    kill_resolve();
     url_before_error_.clear();
     errored_source_.clear();
     // Leaving the channel must not leave a reconnect armed against the stream
@@ -2497,9 +2671,12 @@ void VideoPlayerWidget::stop_playback() {
     current_url_.clear();
     current_title_.clear();
     play_in_progress_ = false;
+#ifdef HAS_QT_MULTIMEDIA
+    // A hard_reload_source() waiting for NoMedia would otherwise reopen the
+    // stream being left: its backstop only checks pending_reload_src_.
+    pending_reload_src_.clear();
+#endif
 
-    controls_->hide();
-    stack_->setCurrentIndex(0);
 #ifdef HAS_QT_WEBENGINE
     stop_web();
     // stop_web() cleared web_is_spotify_; restore the native-pipeline controls
@@ -2514,6 +2691,12 @@ void VideoPlayerWidget::stop_playback() {
     // and BACK would put the stream back on top of the channel list.
     suppress_recovery_briefly();
     player_->stop();
+    // Release the source, counted, so the next open — a switch's, or a pick
+    // right after BACK — waits for the backend to let go (play_url()).
+    // Leaving a stopped player holding its source let a fast pick open on top
+    // of a demuxer still tearing down.
+    if (player_->source().isValid() || hls_proxy_)
+        release_source_then([] {});
     // Tear down the relay proxy AFTER player_->stop() so QMediaPlayer is
     // no longer pulling from it when we close the listening socket.
     stop_hls_proxy();
@@ -2523,7 +2706,6 @@ void VideoPlayerWidget::stop_playback() {
 #endif
     set_loading(false);
     status_label_->hide();
-    set_title("LIVE TV / STREAMS");
 }
 
 
@@ -2630,7 +2812,19 @@ void VideoPlayerWidget::apply_styles() {
         QString("background: %1; border-top: 1px solid %2;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
 
     now_playing_->setStyleSheet(
-        QString("color: %1; font-size: 9px; font-weight: bold; background: transparent;").arg(ui::colors::AMBER()));
+        QString("QPushButton { color: %1; font-size: 9px; font-weight: bold; background: transparent; "
+                "border: 1px solid transparent; border-radius: 2px; padding: 0 16px 0 6px; text-align: left; }"
+                "QPushButton:hover, QPushButton:pressed { background: %2; border-color: %3; }"
+                "QPushButton::menu-indicator { subcontrol-origin: padding; subcontrol-position: right center; "
+                "right: 2px; }")
+            .arg(ui::colors::AMBER(), ui::colors::BG_HOVER(), ui::colors::BORDER_DIM()));
+    channel_menu_->setStyleSheet(
+        QString("QMenu { background: %1; color: %2; border: 1px solid %3; font-size: 10px; padding: 2px; }"
+                "QMenu::item { padding: 4px 18px 4px 6px; }"
+                "QMenu::item:selected { background: %4; }"
+                "QMenu::separator { height: 1px; background: %3; margin: 2px 4px; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::BG_HOVER()));
 
     // Three control-bar buttons (PAUSE/PLAY, FULLSCREEN, BACK) share
     // one base look — same font size, weight, padding, border, radius —

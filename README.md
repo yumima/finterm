@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`1392dbb8f`](https://github.com/yumima/finterm/commit/1392dbb8f) dashboard: FUT% — the index futures quote, live; futures price in the chart popup
 - [`c59c90279`](https://github.com/yumima/finterm/commit/c59c90279) dashboard: index after-hours from the index future; the Futures tab goes
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

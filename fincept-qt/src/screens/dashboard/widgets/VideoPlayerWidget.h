@@ -2,13 +2,17 @@
 #include "screens/dashboard/widgets/BaseWidget.h"
 
 #include <QDateTime>
+#include <functional>
 #include <QElapsedTimer>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPointer>
 #include <QProcess>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStackedWidget>
+
+class QMenu;
 
 #ifdef HAS_QT_MULTIMEDIA
 #    include "screens/dashboard/widgets/OffscreenVideoScaler.h"
@@ -181,9 +185,14 @@ class VideoPlayerWidget : public BaseWidget {
 
   private slots:
     void play_preset(int index);
+    /// Switch from whatever is playing to channel `index` — BACK + pick, with
+    /// the player page held so the channel list does not flash in between.
+    void switch_channel(int index);
+    void rebuild_channel_menu();
     void play_custom_url();
     void refresh_data();
-    void stop_playback();
+    void stop_playback();     // teardown_playback() + back to the channel list
+    void teardown_playback(); // every pipeline down, UI left where it is
     void on_ytdlp_finished(int exit_code, QProcess::ExitStatus status);
     void on_ytdlp_error(QProcess::ProcessError error);
     void on_player_error();
@@ -436,7 +445,10 @@ class VideoPlayerWidget : public BaseWidget {
     // still falls back to lower resolutions if N isn't available.
     int             max_height_        = 1080;
     QLineEdit*      url_input_    = nullptr;
-    QLabel*         now_playing_  = nullptr;
+    // The current channel's name, and the way to change it: a click opens the
+    // channel list as a dropdown (switch_channel()) instead of BACK + pick.
+    QPushButton*    now_playing_  = nullptr;
+    QMenu*          channel_menu_ = nullptr;
     QLabel*         status_label_ = nullptr;
 
     QString pending_title_;
@@ -444,6 +456,21 @@ class VideoPlayerWidget : public BaseWidget {
     QString current_title_;
     // Blocks refresh_data() from re-entering play_url() during startup.
     bool play_in_progress_ = false;
+    // Playback generation, bumped by teardown_playback() (BACK and every
+    // switch). A deferred open — switch_channel()'s, re_resolve_source()'s —
+    // gives up if it changed while it waited.
+    quint64 switch_token_ = 0;
+    // The yt-dlp resolve in flight; teardown_playback() kills it. QPointer:
+    // the proc deletes itself on finish, and a raw pointer then dangled.
+    QPointer<QProcess> resolve_proc_;
+    void kill_resolve();
+    // Emptied sources still being released (release_source_then()). A count,
+    // not a flag: a reload's release and a switch's can overlap.
+    int releases_pending_ = 0;
+    quint64 reload_gen_ = 0; // hard_reload_source() generation
+    /// setSource(empty), then `next` once the backend reports NoMedia (250 ms
+    /// backstop) — the only safe way to open a new source after an old one.
+    void release_source_then(std::function<void()> next);
 
     // Widgets needing theme-aware restyling
     QScrollArea*         scroll_                   = nullptr;
