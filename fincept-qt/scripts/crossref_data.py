@@ -8,10 +8,12 @@ import json
 import os
 import requests
 from typing import Dict, Any, Optional, List
-from finterm_identity import contact_email
+from finterm_identity import project_user_agent
 
 API_KEY = os.environ.get('CROSSREF_API_KEY', '')
-POLITE_EMAIL = os.environ.get('CROSSREF_EMAIL') or contact_email()
+# Crossref's own polite-pool address only. NOT the general contact email: that
+# setting is declared to SEC, FINRA and OpenStreetMap, and Crossref is none.
+POLITE_EMAIL = os.environ.get('CROSSREF_EMAIL', '').strip()
 BASE_URL = "https://api.crossref.org"
 
 session = requests.Session()
@@ -19,8 +21,8 @@ adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, ma
 session.mount('https://', adapter)
 session.mount('http://', adapter)
 
-if POLITE_EMAIL:
-    session.headers.update({"User-Agent": f"finterm/4.0 (mailto:{POLITE_EMAIL})"})
+session.headers.update({"User-Agent": f"finterm/4.0 (mailto:{POLITE_EMAIL})" if POLITE_EMAIL
+                         else project_user_agent("finterm/4.0")})
 
 
 def _make_request(endpoint: str, params: Dict = None) -> Any:

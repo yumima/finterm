@@ -8,7 +8,7 @@ import json
 import os
 import requests
 from typing import Dict, Any, Optional, List
-from finterm_identity import user_agent
+from finterm_identity import project_user_agent
 
 BASE_URL = "https://wikimedia.org/api/rest_v1/metrics/pageviews"
 LEGACY_URL = "https://wikimedia.org/api/rest_v1/metrics/legacy/pagecounts"
@@ -18,7 +18,7 @@ adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, ma
 session.mount('https://', adapter)
 session.mount('http://', adapter)
 session.headers.update({
-    "User-Agent": user_agent("finterm/4.0") + " python-requests",
+    "User-Agent": project_user_agent("finterm/4.0") + " python-requests",
     "Accept": "application/json",
 })
 

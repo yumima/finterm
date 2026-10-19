@@ -5,6 +5,8 @@
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
 #include "storage/cache/CacheManager.h"
+#include "services/markets/SecIdentity.h"
+#include "storage/secure/SecureStorage.h"
 
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
@@ -1167,12 +1169,94 @@ void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallbac
 // SEC requires a `User-Agent: <organization> <contact>` header. We send a
 // stable identifier so they can throttle us instead of blocking the IP.
 //
-// Unlike the support links this is NOT cosmetic: drop the contact entirely and
-// EDGAR starts returning 403. SEC's documented format asks for an email; a
-// project URL is what open-source clients generally send instead and is
-// accepted in practice. If EDGAR ever begins refusing requests, putting a real
-// reachable contact here is the fix.
-static const char* kSecUserAgent = "finterm https://github.com/yumima/finterm";
+// Unlike the support links this is NOT cosmetic: EDGAR refuses requests
+// without a declared contact. The project URL alone used to be accepted; since
+// 2026-10 EDGAR answers it with 403 "Undeclared Automated Tool" (filings and
+// the ticker map both went dark). The contact is the USER's — Settings ›
+// Credentials › "Contact email", kept in the keyring — sent in the same form
+// as the Python side (scripts/finterm_identity.py). Read per request: the
+// calls are rare and the reader can change the setting at any time.
+namespace {
+
+// The one project identity, for every client that must not carry the user's
+// address (and as the SEC fallback when none is configured). Same string as
+// scripts/finterm_identity.py.
+const char* kProjectUserAgent = "finterm (https://github.com/yumima/finterm)";
+
+struct SecContact {
+    QString email;            // validated, or empty
+    bool unavailable = false; // the keyring could not be read (locked / unreachable) — NOT "unset"
+};
+
+using fincept::services::sec_identity::header_safe_email;
+
+// Read at most once a minute: SecureStorage::retrieve is a blocking libsecret
+// round-trip on the GUI thread (a locked keyring prompts), and nothing signals
+// a change in Settings. A 403 — and only a 403 — clears it, so a contact the
+// reader has just set is used on the next request.
+struct SecContactCache {
+    SecContact contact;
+    qint64 read_at = 0; // 0 = read on next use
+};
+
+SecContactCache& sec_cache() {
+    static SecContactCache c;
+    return c;
+}
+
+SecContact sec_contact() {
+    auto& cache = sec_cache();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    // a contact holds for a minute; "none set" only 10 s, so one the reader
+    // has just saved is picked up by the next request, not a refusal later
+    const qint64 ttl = cache.contact.email.isEmpty() ? 10'000 : 60'000;
+    if (cache.read_at && now - cache.read_at < ttl)
+        return cache.contact;
+    const auto r = fincept::SecureStorage::instance().retrieve(QStringLiteral("FINCEPT_CONTACT_EMAIL"));
+    SecContact c;
+    if (r.is_ok()) {
+        const QString e = r.value().trimmed();
+        if (header_safe_email(e))
+            c.email = e;
+        else if (!e.isEmpty())
+            LOG_WARN("MarketData", "Contact email is not a plain address (local@domain.tld); not sent to SEC");
+    } else {
+        c.unavailable = !fincept::SecureStorage::is_not_found(r);
+    }
+    cache = {c, now};
+    return c;
+}
+
+QByteArray sec_user_agent(const SecContact& c) {
+    return c.email.isEmpty() ? QByteArray(kProjectUserAgent)
+                             : QStringLiteral("finterm (%1)").arg(c.email).toUtf8();
+}
+
+// A refusal that the CONTACT explains (none sent, or the keyring could not be
+// read) re-reads it on the next request: the reader may be fixing it now. A
+// 403 despite a sent contact (rate limiting) must not — every click would then
+// make a blocking keyring read on the GUI thread.
+void sec_refused(const SecContact& sent, const QString& error) {
+    if (error == QLatin1String("HTTP_403") && (sent.email.isEmpty() || sent.unavailable))
+        sec_cache().read_at = 0;
+}
+
+// Why a request failed, from the contact the REQUEST carried (no keyring
+// call) and the real error. Only a 403 is about the identity; anything else
+// (DNS, timeout, 5xx) is logged as itself. No side effects.
+QString sec_failure(const SecContact& sent, const QString& error) {
+    if (error != QLatin1String("HTTP_403"))
+        return QStringLiteral(" (%1)").arg(error);
+    if (sent.unavailable)
+        return QStringLiteral(" (HTTP 403 — the keyring could not be read, so no contact was sent; if one is "
+                              "configured, unlock the keyring)");
+    if (sent.email.isEmpty())
+        return QStringLiteral(" (HTTP 403 — SEC refuses requests without a contact: set Settings › Credentials › "
+                              "Contact email)");
+    return QStringLiteral(" (HTTP 403 although a contact was sent)");
+}
+
+} // namespace
 
 void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallback cb) {
     if (ticker.isEmpty()) { cb(false, {}); return; }
@@ -1222,12 +1306,16 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         const QString url = QString("https://data.sec.gov/submissions/CIK%1.json").arg(cik_padded);
         QPointer<MarketDataService> self_ptr = this;
         QHash<QByteArray, QByteArray> headers;
-        headers["User-Agent"] = kSecUserAgent;
+        const SecContact contact = sec_contact();
+        headers["User-Agent"] = sec_user_agent(contact);
         fincept::HttpClient::instance().get(url, headers,
-            [cb, parse, tkr, self_ptr](Result<QJsonDocument> res) {
+            [cb, parse, tkr, self_ptr, contact](Result<QJsonDocument> res) {
                 if (!self_ptr) return;
                 if (!res.is_ok() || !res.value().isObject()) {
-                    LOG_WARN("MarketData", "SEC submissions fetch failed for " + tkr);
+                    const QString err = res.is_ok() ? QStringLiteral("not a JSON object")
+                                                    : QString::fromStdString(res.error());
+                    sec_refused(contact, err);
+                    LOG_WARN("MarketData", "SEC submissions fetch failed for " + tkr + sec_failure(contact, err));
                     cb(false, {});
                     return;
                 }
@@ -1241,7 +1329,15 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
     };
 
     if (sec_cik_loaded_) { with_cik_map(); return; }
-    sec_cik_waiters_.append([with_cik_map](bool /*loaded*/) { with_cik_map(); });
+    // A failed ticker map is a FAILED fetch, not "this company has no CIK": the
+    // reader must see an error, not an empty filings list read as fact.
+    sec_cik_waiters_.append([with_cik_map, cb](bool loaded) {
+        if (!loaded) {
+            cb(false, {});
+            return;
+        }
+        with_cik_map();
+    });
     if (sec_cik_loading_) return;
     sec_cik_loading_ = true;
 
@@ -1275,14 +1371,18 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         }
     }
     QHash<QByteArray, QByteArray> headers;
-    headers["User-Agent"] = kSecUserAgent;
+    const SecContact contact = sec_contact();
+    headers["User-Agent"] = sec_user_agent(contact);
     QPointer<MarketDataService> self_ptr = this;
     fincept::HttpClient::instance().get(
         "https://www.sec.gov/files/company_tickers.json", headers,
-        [self_ptr, populate_from_json, fire_waiters](Result<QJsonDocument> res) {
+        [self_ptr, populate_from_json, fire_waiters, contact](Result<QJsonDocument> res) {
             if (!self_ptr) return;
             if (!res.is_ok() || !res.value().isObject()) {
-                LOG_WARN("MarketData", "SEC company_tickers.json fetch failed");
+                const QString err = res.is_ok() ? QStringLiteral("not a JSON object")
+                                                : QString::fromStdString(res.error());
+                sec_refused(contact, err);
+                LOG_WARN("MarketData", "SEC company_tickers.json fetch failed" + sec_failure(contact, err));
                 fire_waiters(false);
                 return;
             }
@@ -1318,7 +1418,7 @@ void MarketDataService::fetch_wikipedia_summary(const QString& title_query, Wiki
     const QString url = "https://en.wikipedia.org/api/rest_v1/page/summary/" +
                         QUrl::toPercentEncoding(title);
     QHash<QByteArray, QByteArray> headers;
-    headers["User-Agent"] = kSecUserAgent;  // Wikipedia also asks for a UA
+    headers["User-Agent"] = kProjectUserAgent;  // the tool, never the user's address
     fincept::HttpClient::instance().get(url, headers,
         [cb, parse, cache_key](Result<QJsonDocument> res) {
             if (!res.is_ok() || !res.value().isObject()) {

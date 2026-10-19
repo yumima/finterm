@@ -8,7 +8,7 @@ import json
 import os
 import requests
 from typing import Dict, Any, Optional, List
-from finterm_identity import user_agent
+from finterm_identity import project_user_agent
 
 BASE_URL = "https://api.indexmundi.com"
 
@@ -17,7 +17,7 @@ adapter = requests.adapters.HTTPAdapter(pool_connections=10, pool_maxsize=10, ma
 session.mount('https://', adapter)
 session.mount('http://', adapter)
 session.headers.update({
-    "User-Agent": user_agent("finterm/4.0"),
+    "User-Agent": project_user_agent("finterm/4.0"),
     "Accept": "application/json"
 })
 

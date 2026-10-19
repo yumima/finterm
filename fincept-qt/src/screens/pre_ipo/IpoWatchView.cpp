@@ -24,6 +24,7 @@
 #include <QComboBox>
 #include <QDate>
 #include <QDateTime>
+#include <QTimer>
 #include <QDesktopServices>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -238,6 +239,9 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
                 ipo_extras_inflight_.clear();
                 filings_cache_.clear();
                 filings_inflight_.clear();
+                filings_failed_at_.clear();
+                filings_retry_pending_.clear();
+                ++filings_gen_; // replies and retry timers from before the wake are dropped
                 // S-1 caches must be cleared together with filings_cache_
                 // because fetch_s1_funding_for_detail looks up the S-1 URL
                 // from filings_cache_; if we clear one but not the other,
@@ -1107,16 +1111,48 @@ void IpoWatchView::fetch_ipo_extras_for_detail(const Entry& e) {
 void IpoWatchView::fetch_sec_filings_for_detail(const Entry& e) {
     if (e.ticker.isEmpty()) return;
     if (filings_cache_.contains(e.ticker) || filings_inflight_.contains(e.ticker)) return;
+    // A failure is retried, but not on every re-render (the callback renders,
+    // which comes back here): at most once a minute per ticker.
+    if (const qint64 at = filings_failed_at_.value(e.ticker, 0);
+        at && QDateTime::currentMSecsSinceEpoch() - at < 60'000)
+        return;
     filings_inflight_.insert(e.ticker);
     QPointer<IpoWatchView> self = this;
     const QString sym = e.ticker;
+    const quint64 gen = filings_gen_; // a wake reset makes this reply stale
     services::MarketDataService::instance().fetch_sec_filings(
-        sym, [self, sym](bool ok, QVector<services::MarketDataService::SecFiling> filings) {
-            if (!self) return;
+        sym, [self, sym, gen](bool ok, QVector<services::MarketDataService::SecFiling> filings) {
+            if (!self || gen != self->filings_gen_) return;
             self->filings_inflight_.remove(sym);
-            // We insert even on failure (empty list) so we don't re-issue.
-            // The "no filings yet" placeholder shows in that case.
-            self->filings_cache_.insert(sym, ok ? filings : QVector<services::MarketDataService::SecFiling>{});
+            // Success is cached for the session; a FAILURE is not — caching it
+            // as an empty list meant fixing the cause (e.g. setting the SEC
+            // contact email) never refetched a ticker already viewed. The
+            // placeholder shows meanwhile; retried after a minute.
+            if (ok) {
+                self->filings_cache_.insert(sym, filings);
+                self->filings_failed_at_.remove(sym);
+            } else {
+                self->filings_failed_at_.insert(sym, QDateTime::currentMSecsSinceEpoch());
+                // come back after the throttle so the tab does not sit on the
+                // failure message until the reader clicks the row again — one
+                // pending retry per ticker (only the TIMER is deduplicated;
+                // this reply's render below always happens)
+                if (!self->filings_retry_pending_.contains(sym)) {
+                    self->filings_retry_pending_.insert(sym);
+                    QTimer::singleShot(61'000, self, [self, sym, gen]() {
+                        if (!self || gen != self->filings_gen_)
+                            return;
+                        self->filings_retry_pending_.remove(sym);
+                        if (self->detail_symbol_ != sym)
+                            return;
+                        for (const auto& en : self->entries_)
+                            if (en.ticker == sym) {
+                                self->render_detail(&en);
+                                return;
+                            }
+                    });
+                }
+            }
             if (self->detail_symbol_ == sym) {
                 for (const auto& en : self->entries_) {
                     if (en.ticker == sym) { self->render_detail(&en); return; }
@@ -3663,11 +3699,21 @@ QString IpoWatchView::build_holders_html(const Entry& e) const {
 }
 
 // ── FILINGS tab — recent SEC submissions ─────────────────────────────────────
+bool IpoWatchView::filings_failed(const QString& ticker) const {
+    // failed, and not being retried right now (then it is "Loading…")
+    return filings_failed_at_.contains(ticker) && !filings_inflight_.contains(ticker);
+}
+
 QString IpoWatchView::build_filings_html(const Entry& e) const {
     if (e.ticker.isEmpty())
         return "<div class='muted'>SEC filings appear once the ticker is assigned.</div>";
-    if (!filings_cache_.contains(e.ticker))
+    if (!filings_cache_.contains(e.ticker)) {
+        if (filings_failed(e.ticker))
+            return "<div class='muted'>SEC filings are unavailable right now (network or SEC) — retrying in a "
+                   "minute.<br><br>If SEC keeps refusing, check Settings › Credentials › Contact email: SEC "
+                   "rejects clients that do not declare one.</div>";
         return "<div class='muted'>Loading SEC filings…</div>";
+    }
     const auto& filings = filings_cache_.value(e.ticker);
     if (filings.isEmpty())
         return "<div class='muted'>No SEC filings indexed for this ticker yet.<br><br>"
@@ -3698,7 +3744,10 @@ QString IpoWatchView::build_funding_html(const Entry& e) const {
 
     // SEC filings haven't loaded yet → can't even look for an S-1 URL.
     if (!filings_cache_.contains(e.ticker))
-        return "<div class='muted'>Waiting on SEC filings to locate the latest S-1…</div>";
+        return filings_failed(e.ticker)
+                   ? "<div class='muted'>SEC filings are unavailable right now, so the S-1 cannot be located — "
+                     "retrying in a minute.</div>"
+                   : "<div class='muted'>Waiting on SEC filings to locate the latest S-1…</div>";
 
     if (s1_inflight_.contains(e.ticker))
         return "<div class='muted'>Parsing S-1 prospectus (large file, ~20-40s)…</div>";

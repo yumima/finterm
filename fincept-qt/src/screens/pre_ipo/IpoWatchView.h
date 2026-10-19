@@ -265,6 +265,10 @@ class IpoWatchView : public QWidget {
     QSet<QString>                                          ipo_extras_inflight_;
     QHash<QString, QVector<services::MarketDataService::SecFiling>> filings_cache_;
     QSet<QString>                                          filings_inflight_;
+    QHash<QString, qint64>                                 filings_failed_at_; // retry after a minute
+    QSet<QString>                                          filings_retry_pending_; // one 61 s re-render each
+    quint64                                                filings_gen_ = 0;       // bumped on a wake reset
+    bool filings_failed(const QString& ticker) const;
     QHash<QString, services::MarketDataService::WikipediaSummary> wiki_cache_;
     QSet<QString>                                          wiki_inflight_;
     // "wiki tried but failed" set — keep so we don't repeatedly hit the

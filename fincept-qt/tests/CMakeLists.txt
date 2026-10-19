@@ -734,6 +734,15 @@ target_link_libraries(test_ownership_flags PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_ownership_flags PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME ownership_flags COMMAND test_ownership_flags)
 
+# ── SEC contact identity (C++ half; the Python half is contact_identity) ─────
+add_executable(test_sec_identity
+    services/test_sec_identity.cpp
+)
+target_include_directories(test_sec_identity PRIVATE ../src)
+target_link_libraries(test_sec_identity PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_sec_identity PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME sec_identity COMMAND test_sec_identity)
+
 # ── SCREENER: scan parse + metric formatting ────────────────────────────────
 # A vendor null must reach the table as the placeholder, never as the 0.0
 # QJsonValue::toDouble() reads it as; an untested strategy must not render a
@@ -773,6 +782,12 @@ add_test(NAME palette_contrast COMMAND test_palette_contrast)
 # path. The rest pin the rule that a field absent from the filing stays absent
 # from the output instead of defaulting to a confident zero.
 if(Python3_Interpreter_FOUND)
+    # The contact identity declared to SEC / FINRA / OSM: only a plain,
+    # header-safe address is sent (SEC 403s an undeclared client).
+    add_test(
+        NAME contact_identity
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_identity.py
+    )
     add_test(
         NAME ownership_parse
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_ownership_parse.py

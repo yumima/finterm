@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timedelta
 import traceback
 import os
-from finterm_identity import user_agent
+from finterm_identity import project_user_agent
 
 
 class CFTCError:
@@ -39,7 +39,7 @@ class CFTCDataWrapper:
         self.app_token = app_token or os.environ.get('CFTC_APP_TOKEN', '')
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': user_agent(),
+            'User-Agent': project_user_agent(),
             'Accept': 'application/json'
         })
 

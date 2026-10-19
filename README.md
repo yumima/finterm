@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`6928a8422`](https://github.com/yumima/finterm/commit/6928a8422) screener: opens instantly, evens out, draws curves; Martin Luk's pullback, tested as trades
 - [`8fefc1642`](https://github.com/yumima/finterm/commit/8fefc1642) screener: review fixes — sector-matched evidence, stray rows, cache merge
 - [`8c611167e`](https://github.com/yumima/finterm/commit/8c611167e) screener: a top-level SCREENER tab — ten rule-exact strategies, each beside its measured record
 - [`e2c461918`](https://github.com/yumima/finterm/commit/e2c461918) live tv: switch channel from the now-playing dropdown, not BACK + pick
