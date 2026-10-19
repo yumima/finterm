@@ -117,9 +117,74 @@ Monthly IC (Spearman vs next-month return), none significant: 12-1 +0.007,
 52w-high −0.001, RS +0.004, −vol −0.010, reversal +0.008, Trend Template
 −0.004, GP/A +0.011 (t 1.25), Piotroski +0.006, Magic +0.006, value +0.005.
 
+## Martin Luk's pullback (USIC 2025, +969.8%) — tested as trades
+
+Prompted by a thread on his playbook (hb_stocks, 2026-10-19): leaders (top
+20-30% by 1/3/6-month return, up 30%+, liquid, hot themes) resting at support
+(higher lows, contracting ranges, back above the 9/21 EMA); buy the turn at
+a confluence zone on an intraday break of the prior candle's high; stop
+2.5-3%, risk 0.5% of the account; a third off at 3R and at 5R, the rest
+trails the 9 EMA. Its claimed edge is the TRADE (small, defined losses; let
+winners run), so a month-held list cannot measure it.
+`pullback_backtest.py` simulates it day by day with the shipped signals
+(`screener_data.pullback_signals` / `pullback_leaders`): buy stop at the
+setup day's high, filled next session; stop below the 3-session pullback
+low clamped to 1-3%; the exits above; no leverage; 10 bp per side.
+
+The harness was checked before the result was believed: a FORESIGHT signal
+(knows the next 10 days) makes +389%/yr, and RANDOM entries at the same rate
+lose about their costs (-0.04R per trade on the S&P 500).
+
+| Universe | Variant | CAGR | Max DD | Trades | Win | Avg R | Excess vs EW (t) |
+|---|---|---|---|---|---|---|---|
+| S&P 500 PIT 2010-26 | base, 0.5% risk | −6.5% | −72% | 1,529 | 26% | −0.17 | −19.9% (−5.8) |
+| | pessimistic fills | −7.4% | −77% | 1,591 | 24% | −0.18 | −20.8% (−6.0) |
+| | 1% risk | −6.9% | −75% | 967 | 25% | −0.19 | −20.0% (−5.2) |
+| | leaders only, no rest/zone | −12.2% | −90% | 2,855 | 25% | −0.17 | −24.8% (−6.4) |
+| | **RANDOM entries, same exits** | **+5.3%** | −20% | 1,953 | 32% | **+0.16** | −7.6% (−2.3) |
+| ≥$300M today, 2022-26 (survivors only) | base | −14.9% | −49% | 670 | 26% | −0.21 | −37.1% (−4.7) |
+| | pessimistic fills | −15.6% | −50% | 693 | 24% | −0.23 | −37.6% (−4.5) |
+| | leaders only | −23.0% | −67% | 1,032 | 23% | −0.26 | −46.1% (−4.6) |
+| | **RANDOM entries** | −10.4% | −38% | 690 | 24% | **−0.13** | −31.8% (−4.3) |
+
+**Mechanically, on daily bars, it does WORSE than random entries with the
+same exits** — in large caps and in the small/mid momentum names he trades,
+even with survivorship bias in its favour and a market that rose ~23%/yr
+equal-weighted. Losses run past 1R (stocks gap through a 1-3% stop), a ~26%
+win rate at +2.85R does not cover that, and the rest-at-support filter picks
+worse moments than chance: random entries under the same exits and the same
+3% stop cap lose less (broad, −0.13R) or make a little (S&P in a rising
+market, +0.16R). Whatever his edge is lives
+in what daily bars do not have: the intraday "no turn, no trade" trigger and
+his judgment of themes.
+
+Review corrections behind these numbers (2026-10-19): the leader cut ranked
+the AVERAGE of three percentile ranks at >= 0.75 (far fewer than the stated
+top quarter) — now the combined score is ranked again; the stop was clamped
+UP to 3% when the pullback low was further away, placing it inside the
+pullback — such setups are now skipped and the stop sits just under the low;
+the random control fired at the setup's rate over ALL cells (diluted by names
+outside the universe) — now per in-universe stock-day; mark-to-market used
+the entry price on a missing bar and the delisting check peeked 5 sessions
+ahead — now the last close and the past only; open positions at the end now
+count. The controls now get the setup's own 3% stop cap (they had been
+allowed 5%, and wider stops are gapped through less often), at the setup's
+rate per eligible stock-day; partials are taken on the entry bar too. The
+live plan uses the last COMPLETED session (mid-session the bar's high and low
+still move) and drops a name whose plan today has already triggered or failed.
+
+A bug the live screen surfaced: the zone first compared the 3-session low
+with TODAY's 21 EMA, so a fast riser whose average had climbed up to an old
+low "touched" support it never visited (KOD on 2026-10-19). It is now judged
+against each day's own EMA; the numbers above are after the fix.
+
+Shipped as **Leader Pullback (Martin Luk)**: the candidates, with a trade
+plan per name (entry, stop, risk, shares and position for the reader's
+account and risk, 3R/5R), and this record on its card.
+
 ## What the tab does with this
 
-- Ships **ten screens**, rule-exact, each with its source, its rules, and the
+- Ships **eleven screens** (incl. the Leader Pullback above), rule-exact, each with its source, its rules, and the
   row above as its evidence card. None is labelled "winning".
 - **Minervini / Trend Template is a filter**, not a ranking (its edge, if any,
   is criteria 7-8: nearness to the high and RS — the same family as momentum).

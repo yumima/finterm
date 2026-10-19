@@ -1,0 +1,29 @@
+setups flagged: 11447 stock-days, 65% of sessions have one
+base, 0.5% risk                    CAGR  -6.5%  maxDD -72.1%  exposure 64.2%  trades  1529  win 25.5%  avgR -0.17  avg win +2.85R  avg loss -1.21R  excess/yr vs EW -19.9% (t -5.75)
+pessimistic fills, 0.5% risk       CAGR  -7.4%  maxDD -76.7%  exposure 63.6%  trades  1591  win 24.4%  avgR -0.18  avg win +2.84R  avg loss -1.16R  excess/yr vs EW -20.8% (t -5.98)
+base, 1.0% risk                    CAGR  -6.9%  maxDD -74.6%  exposure 71.0%  trades   967  win 24.8%  avgR -0.19  avg win +2.89R  avg loss -1.20R  excess/yr vs EW -20.0% (t -5.20)
+leaders only (no rest/zone)        CAGR -12.2%  maxDD -89.7%  exposure 87.3%  trades  2855  win 25.3%  avgR -0.17  avg win +2.94R  avg loss -1.22R  excess/yr vs EW -24.8% (t -6.41)
+RANDOM entries (same rate)         CAGR   5.3%  maxDD -19.6%  exposure 88.6%  trades  1953  win 31.8%  avgR +0.16  avg win +3.08R  avg loss -1.21R  excess/yr vs EW -7.6% (t -2.33)
+
+by year (base): trades, win rate, avg R
+      count  <lambda_0>  mean
+year                         
+2010     59        0.39  0.52
+2011     66        0.15 -0.48
+2012     78        0.31  0.00
+2013    111        0.32  0.11
+2014     69        0.33  0.04
+2015     66        0.23 -0.36
+2016     89        0.12 -0.65
+2017    101        0.34  0.24
+2018     79        0.23 -0.43
+2019     85        0.25 -0.23
+2020     91        0.25 -0.11
+2021    117        0.26 -0.07
+2022     64        0.11 -0.75
+2023     94        0.30 -0.04
+2024    137        0.26 -0.19
+2025    123        0.22 -0.33
+2026    100        0.24 -0.28
+
+SPY over the same span: CAGR 14.1%

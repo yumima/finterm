@@ -19,6 +19,7 @@
 #include <QStringList>
 #include <QVector>
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 
@@ -44,6 +45,10 @@ struct Evidence {
     std::optional<double> max_dd;   // fraction, negative
     QVector<std::optional<double>> subperiods;
     QString note;
+    // trade-simulated strategies only (the Luk pullback)
+    std::optional<int> trades;
+    std::optional<double> win_rate, avg_R;
+    QVector<double> curve; // growth of $1, monthly; NaN where absent
 };
 
 struct Strategy {
@@ -58,6 +63,7 @@ struct ScanResult {
     bool intraday = false;  // today's bar is still moving — not a close
     QString prices_fetched; // "YYYY-MM-DD HH:MM ET" of the oldest price fetch used
     int stale_prices = 0;   // names served from an older cache (their download failed)
+    QString plan_asof;      // the completed session the pullback plans are drawn from
     QString basis;
     int universe_n = 0;
     int priced = 0;
@@ -66,6 +72,9 @@ struct ScanResult {
     bool above50 = false;
     bool above200 = false;
     QStringList subperiods;
+    QStringList curve_months;           // the evidence curves' calendar
+    QVector<double> curve_ew, curve_spy; // the index lines they are drawn against
+    bool meta_only = false;             // `meta`: strategies + evidence, no lists yet
     QVector<Strategy> strategies;
     QHash<QString, QJsonObject> rows;
 
@@ -76,6 +85,13 @@ struct ScanResult {
         return nullptr;
     }
 };
+
+inline QVector<double> number_list(const QJsonValue& v) {
+    QVector<double> out;
+    for (const auto& e : v.toArray())
+        out << (e.isDouble() && std::isfinite(e.toDouble()) ? e.toDouble() : std::nan(""));
+    return out;
+}
 
 inline QStringList string_list(const QJsonValue& v) {
     QStringList out;
@@ -94,6 +110,7 @@ inline ScanResult parse_scan(const QJsonObject& root) {
     r.intraday = root.value(QStringLiteral("intraday")).toBool();
     r.prices_fetched = root.value(QStringLiteral("prices_fetched")).toString();
     r.stale_prices = root.value(QStringLiteral("stale_prices")).toInt();
+    r.plan_asof = root.value(QStringLiteral("plan_asof")).toString();
     r.basis = root.value(QStringLiteral("evidence_basis")).toString();
     const QJsonObject u = root.value(QStringLiteral("universe")).toObject();
     r.universe_n = u.value(QStringLiteral("n")).toInt();
@@ -104,6 +121,10 @@ inline ScanResult parse_scan(const QJsonObject& root) {
     r.above50 = m.value(QStringLiteral("above50")).toBool();
     r.above200 = m.value(QStringLiteral("above200")).toBool();
     r.subperiods = string_list(root.value(QStringLiteral("subperiods")));
+    r.curve_months = string_list(root.value(QStringLiteral("curve_months")));
+    r.curve_ew = number_list(root.value(QStringLiteral("curve_ew")));
+    r.curve_spy = number_list(root.value(QStringLiteral("curve_spy")));
+    r.meta_only = !root.contains(QStringLiteral("rows"));
     for (const auto& sv : root.value(QStringLiteral("strategies")).toArray()) {
         const QJsonObject so = sv.toObject();
         Strategy s;
@@ -129,6 +150,11 @@ inline ScanResult parse_scan(const QJsonObject& root) {
                                                                        : std::nullopt);
         }
         s.evidence.note = eo.value(QStringLiteral("note")).toString();
+        if (const auto n = num(eo, QStringLiteral("trades")))
+            s.evidence.trades = int(*n);
+        s.evidence.win_rate = num(eo, QStringLiteral("win_rate"));
+        s.evidence.avg_R = num(eo, QStringLiteral("avg_R"));
+        s.evidence.curve = number_list(eo.value(QStringLiteral("curve")));
         r.strategies << s;
     }
     const QJsonObject rows = root.value(QStringLiteral("rows")).toObject();
@@ -189,6 +215,16 @@ inline const QVector<ColumnDef>& column_defs() {
         {"piotroski", "F-score", Kind::Int, "Piotroski F-score 0-9, trailing twelve months"},
         {"div_yield", "Div yld", Kind::Pct, "Dividend yield"},
         {"shareholder_yield", "Sh. yield", Kind::Pct, "Dividend yield + buyback yield"},
+        {"entry", "Entry", Kind::Money,
+         "Buy stop at the high of the plan's session — the last COMPLETED one (his trigger is intraday)"},
+        {"stop", "Stop", Kind::Money, "Below the 3-session pullback low, 1-3% under the entry"},
+        {"risk_pct", "Risk", Kind::Pct, "Entry-to-stop distance: 1R"},
+        {"target3", "3R", Kind::Money, "First partial: a third at entry + 3R"},
+        {"target5", "5R", Kind::Money, "Second partial: a third at entry + 5R"},
+        {"group_rs", "Group RS", Kind::Int,
+         "Industry strength 1-99: the industry's median RS, ranked across industries (3+ names)"},
+        {"group_leaders", "Grp lead", Kind::Int, "Names in the same industry with RS >= 80 (a 'hot theme')"},
+        {"screens", "Screens", Kind::Int, "How many of the screens pick this stock"},
         {"value_score", "Value pctl", Kind::Percentile,
          "Average percentile of E/P, B/P, S/P, CFO/P, EBIT/EV, shareholder yield (100 = cheapest)"},
     };
@@ -233,6 +269,65 @@ inline QString colour_for(Kind k, const std::optional<double>& v) {
     if (*v < 0)
         return ui::colors::RED();
     return {};
+}
+
+/// Exponential moving average with pandas' adjust=False recursion; NaN until
+/// `span` real values have been seen (gaps carry the last value).
+inline QVector<double> ema(const QVector<double>& x, int span) {
+    QVector<double> out(x.size(), std::nan(""));
+    const double a = 2.0 / (span + 1.0);
+    double e = std::nan("");
+    int seen = 0;
+    for (int i = 0; i < x.size(); ++i) {
+        if (std::isfinite(x[i])) {
+            e = std::isfinite(e) ? a * x[i] + (1 - a) * e : x[i];
+            ++seen;
+        }
+        if (seen >= span)
+            out[i] = e;
+    }
+    return out;
+}
+
+/// Shares for a trade risking `risk_frac` of `account` between entry and stop.
+/// nullopt when the plan is incomplete or the stop is not below the entry.
+inline std::optional<double> position_shares(double account, double risk_frac,
+                                             const std::optional<double>& entry,
+                                             const std::optional<double>& stop) {
+    if (!entry || !stop || !(account > 0) || !(risk_frac > 0) || !(*entry > *stop))
+        return std::nullopt;
+    return std::floor(account * risk_frac / (*entry - *stop));
+}
+
+/// Names picked by several screens, most-picked first. RS Leaders is a subset
+/// of the Trend Template by construction, so a name in both counts once.
+struct OverviewRow {
+    QString symbol;
+    QStringList by; // strategy names
+};
+
+inline QVector<OverviewRow> overview(const ScanResult& r, int min_screens = 2) {
+    QHash<QString, QStringList> by;
+    for (const auto& s : r.strategies) {
+        if (s.id == QLatin1String("rs_leaders"))
+            continue; // nested in trend_template
+        for (const auto& sym : s.symbols)
+            by[sym] << s.name;
+    }
+    QVector<OverviewRow> out;
+    for (auto it = by.begin(); it != by.end(); ++it)
+        if (it.value().size() >= min_screens)
+            out.push_back({it.key(), it.value()});
+    std::sort(out.begin(), out.end(), [&](const OverviewRow& a, const OverviewRow& b) {
+        if (a.by.size() != b.by.size())
+            return a.by.size() > b.by.size();
+        const double ra = num(r.rows.value(a.symbol), QStringLiteral("rs")).value_or(-1);
+        const double rb = num(r.rows.value(b.symbol), QStringLiteral("rs")).value_or(-1);
+        if (ra != rb)
+            return ra > rb;
+        return a.symbol < b.symbol;
+    });
+    return out;
 }
 
 } // namespace fincept::screens::screener

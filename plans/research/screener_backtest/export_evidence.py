@@ -44,8 +44,21 @@ def stats(col):
         "subperiods": [num((res.loc[a:b, col] - res.loc[a:b, "EW"]).mean() * 12, 4)
                        for a, b in PERIODS],
         "median_names": int(res[col + "|n"].median()) if col + "|n" in res else None,
+        **({"trades": int(len(TRADES[col])), "win_rate": num((TRADES[col]["R"] > 0).mean(), 3),
+            "avg_R": num(TRADES[col]["R"].mean(), 2)} if col in TRADES else {}),
     }
 
+
+# Luk pullback: a TRADE simulation (pullback_backtest.py), not a monthly list.
+# Its daily equity becomes monthly returns on the same calendar, so the card
+# compares it with the same index; trade statistics ride along.
+pb = pd.read_pickle(os.path.join(D, "pullback_results.pkl"))
+eq, tr, _ = pb["base, 0.5% risk"]
+pb_m = eq["equity"].resample("ME").last().pct_change()
+months = res.index + pd.offsets.MonthEnd(0) + pd.offsets.MonthEnd(1)   # row t = return over t..t+1
+res["Luk pullback (trades, 0.5% risk)"] = pb_m.reindex(months).to_numpy()
+TRADES = {"Luk pullback (trades, 0.5% risk)": tr}
+broad = pd.read_pickle(os.path.join(D, "pullback_broad.pkl"))
 
 cols = [c for c in res.columns if not c.endswith("|n") and c not in ("EW", "SPY", "n_univ")]
 out = {
@@ -54,6 +67,16 @@ out = {
     "subperiods": ["2010-14", "2015-19", "2020-22", "2023-26"],
     "months": len(res),
     "backtests": {c: stats(c) for c in cols},
+    # growth of $1, month by month, for the card's chart: the strategy against
+    # the equal-weighted index and SPY on the same months
+    "curves": {
+        "months": [f"{m:%Y-%m}" for m in months],
+        **{c: [num(v, 4) for v in (1 + res[c].fillna(0)).cumprod()] for c in cols + ["EW", "SPY"]},
+    },
+    # the same playbook on today's >= $300M universe, 5y: a second read with
+    # survivorship bias in its favour (only names alive today)
+    "pullback_broad": {k: {kk: num(vv, 4) if isinstance(vv, float) else vv for kk, vv in v.items()}
+                       for k, v in broad.items()},
 }
 with open(OUT, "w") as fh:
     json.dump(out, fh, indent=1, sort_keys=True, allow_nan=False)

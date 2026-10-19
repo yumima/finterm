@@ -1,0 +1,10 @@
+broad universe 2994 names, 2022-10-31..2026-10-19; setups 6167 stock-days
+broad: base, 0.5% risk             CAGR -14.9%  maxDD -48.6%  exposure 85.8%  trades   670  win 25.7%  avgR -0.21  avg win +2.84R  avg loss -1.27R  excess/yr vs EW -37.1% (t -4.68)
+                                   R quantiles 5/25/50/75/95%: -1.98 -1.10 -1.07 +0.84 +4.00   losses beyond -1.5R: 9.0%
+broad: pessimistic fills           CAGR -15.6%  maxDD -50.1%  exposure 84.9%  trades   693  win 23.8%  avgR -0.23  avg win +2.85R  avg loss -1.19R  excess/yr vs EW -37.6% (t -4.49)
+                                   R quantiles 5/25/50/75/95%: -1.37 -1.09 -1.07 -1.04 +4.02   losses beyond -1.5R: 4.5%
+broad: leaders only                CAGR -23.0%  maxDD -66.8%  exposure 98.1%  trades  1032  win 23.3%  avgR -0.26  avg win +2.99R  avg loss -1.24R  excess/yr vs EW -46.1% (t -4.61)
+                                   R quantiles 5/25/50/75/95%: -1.83 -1.10 -1.07 -1.05 +4.23   losses beyond -1.5R: 9.3%
+broad: RANDOM control              CAGR -10.4%  maxDD -38.2%  exposure 95.1%  trades   690  win 24.3%  avgR -0.13  avg win +3.13R  avg loss -1.17R  excess/yr vs EW -31.8% (t -4.33)
+                                   R quantiles 5/25/50/75/95%: -1.49 -1.11 -1.08 -1.05 +4.06   losses beyond -1.5R: 4.9%
+SPY 20.4%/yr; EW universe 22.9%/yr over the same span

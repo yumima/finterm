@@ -445,7 +445,62 @@ def price_signals(close, high, low, volume=None):
     s["tt_count"] = sum(c.astype(float) for c in parts)  # 0..7 price criteria
     if volume is not None:
         s["dollar_vol50"] = (close * volume).rolling(50, min_periods=40).mean()
+    s.update(pullback_signals(close, high, low))
     return s
+
+
+# Martin Luk's pullback (US Investing Champion 2025, +969.8%), mechanically, on
+# daily bars. His trigger is intraday (dip, turn, break the prior candle's
+# high on a 1-15 min chart); the daily proxy is a buy stop at today's high,
+# filled when the next session trades through it. Leadership (top 25% by
+# 1/3/6-month return and up 30%+) is cross-sectional, so the CALLER ranks it
+# over its own universe; these are the per-stock parts.
+PULLBACK_MAX_RISK = 0.03   # his stops: "usually within 2.5 to 3%"
+PULLBACK_MIN_RISK = 0.01   # a stop closer than 1% is inside a normal day's noise
+
+
+def pullback_leaders(S, universe):
+    """Step 1, cross-sectional: top 25% of `universe` (a boolean panel) by the
+    combined 1/3/6-month return rank, up 30%+ over one of them, 50-day dollar
+    volume >= $20M. Returns (leader panel, combined rank panel)."""
+    def xrank(df):
+        return df.where(universe).rank(axis=1, pct=True)
+    # rank the COMBINED score again: an average of three uniform ranks bunches
+    # toward 0.5, so ">= 0.75" on the average passed far fewer than a quarter
+    combo = xrank((xrank(S["r1m"]) + xrank(S["r3m"]) + xrank(S["r6m"])) / 3)
+    up30 = (S["r1m"] >= 0.30) | (S["r3m"] >= 0.30) | (S["r6m"] >= 0.30)
+    liquid = S["dollar_vol50"] >= 20e6 if "dollar_vol50" in S else True
+    return (combo >= 0.75) & up30 & liquid & universe, combo
+
+
+def pullback_signals(close, high, low):
+    out = {}
+    ema = {n: close.ewm(span=n, adjust=False, min_periods=n).mean() for n in (9, 21, 50)}
+    out["ema9"], out["ema21"], out["ema50"] = ema[9], ema[21], ema[50]
+    rng = high / low - 1
+    # resting, not falling: each pullback low higher than the last, swings
+    # getting smaller, back above the 9 and 21 EMAs, the trend still up
+    higher_lows = low.rolling(10, min_periods=10).min() > low.shift(10).rolling(10, min_periods=10).min()
+    contracting = rng.rolling(10, min_periods=8).mean() < rng.rolling(30, min_periods=24).mean()
+    above = (close > ema[9]) & (close > ema[21])
+    trend = ema[21] > ema[50]
+    # the zone: on one of the last 3 sessions the low reached THAT day's 21
+    # EMA (within 2%) and held above that day's 50. (Comparing the 3-day low
+    # with TODAY's EMA let a fast riser "touch" support it never visited: the
+    # average had climbed up to an old low — KOD, 2026-10-19.)
+    pb_low = low.rolling(3, min_periods=3).min()
+    touch_day = (low <= ema[21] * 1.02) & (low >= ema[50] * 0.98)
+    touched = touch_day.astype(float).rolling(3, min_periods=3).max() > 0
+    entry = high                                     # buy stop: break today's high
+    # just under the pullback low — never inside the pullback. A low more than
+    # 3% under the entry is not his trade (stop "within 2.5 to 3%"): skipped,
+    # not tightened (a clamp put the stop above the low it is meant to sit
+    # under). Under 1% it is widened to 1%.
+    stop = (pb_low * 0.999).clip(upper=entry * (1 - PULLBACK_MIN_RISK))
+    tight_enough = stop >= entry * (1 - PULLBACK_MAX_RISK)
+    out["pb_rest"] = higher_lows & contracting & above & trend & touched & tight_enough
+    out["pb_entry"], out["pb_stop"] = entry, stop
+    return out
 
 
 def pct_rank(series):
@@ -484,6 +539,12 @@ def evidence(strategy, ev_doc):
         out.update({"tested": True, "excess": _clean(row.get("excess")), "t": _clean(row.get("t")),
                     "max_dd": _clean(row.get("max_dd")), "hit": _clean(row.get("hit")),
                     "subperiods": [_clean(x) for x in (row.get("subperiods") or [])]})
+        for k in ("trades", "win_rate", "avg_R"):  # trade-simulated strategies only
+            if row.get(k) is not None:
+                out[k] = _clean(row[k])
+        curve = (ev_doc.get("curves") or {}).get(col)
+        if curve:
+            out["curve"] = [_clean(x) for x in curve]  # growth of $1, monthly
     elif col:
         out["note"] = "Backtest results unavailable. " + out["note"]
     return out
@@ -596,6 +657,28 @@ STRATEGIES = [
         "note": 'Book claim 21.2%/yr (1964-2009, in-sample, by the author).',
     },
     {
+        "id": "luk_pullback", "name": "Leader Pullback (Martin Luk)", "family": "Practitioner",
+        "source": "Martin Luk — US Investing Champion 2025 (+969.8%), 2024 6th (+283.1%)",
+        "summary": "A strong stock resting at support, ready to turn: buy the break of the prior "
+                   "day's high with a 1-3% stop, risking 0.5% of the account.",
+        "rules": ["Leader: top 25% by 1/3/6-month return, up 30%+, $20M+ daily volume",
+                  "Resting: higher lows, daily ranges contracting, above the 9 and 21 EMA, 21 > 50 EMA",
+                  "Zone: a low in the last 3 sessions at the 21 EMA (within 2%), above the 50",
+                  "Entry: a buy stop at today's high (his trigger is intraday: dip, turn, break the prior candle)",
+                  "Stop: just under the 3-session pullback low (at least 1% away); a setup needing more than 3% is skipped",
+                  "Size: shares so the stop costs 0.5% of the account",
+                  "Exits: a third at 3R, a third at 5R, the rest trails the 9 EMA"],
+        "rank_by": "Combined 1/3/6-month rank",
+        "columns": ["entry", "stop", "risk_pct", "target3", "rs", "group_rs", "adr20"],
+        "backtest": "Luk pullback (trades, 0.5% risk)",
+        "note": "Measured as trades, not a list. Mechanically on daily bars it did WORSE than random "
+                "entries with the same exits, on the S&P 500 and on today's small and mid caps alike: "
+                "losses run past 1R because stocks gap through a 1-3% stop, and the rest-at-support "
+                "filter picked worse moments than chance. Whatever his edge is lives in the intraday "
+                "trigger and theme judgment, which a screen does not have. Use the list for candidates "
+                "and the plan for sizing; the plan is the part with a defined risk.",
+    },
+    {
         "id": "low_vol", "name": "Low Volatility", "family": "Academic",
         "source": "Blitz & van Vliet (2007), 'The Volatility Effect'",
         "summary": "The calmest decile by one-year realised volatility — a defensive tilt.",
@@ -615,7 +698,7 @@ def _top(series, n=None, frac=None):
     return list(s.index[:n])
 
 
-def compute(fund, frames):
+def compute(fund, frames, extras=None):
     """Metrics for every name with prices, and each strategy's ranked list.
 
     `fund` = parse_universe() output, `frames` = load_prices() output.
@@ -713,6 +796,45 @@ def compute(fund, frames):
     lists["trending_value"] = _top(df["r6m"].reindex(cheap), n=25)
     lists["low_vol"] = _top(-df["vol252"], frac=0.10)
 
+    # Leader pullback: the same leader rank the trade backtest uses, over THIS
+    # universe, on the last COMPLETED session. Mid-session the last bar is
+    # still moving — its high (the entry) and low (the stop) change by the
+    # minute, and names without today's bar yet would drop out of the rank.
+    k = -1
+    if len(close.index) > 1 and in_session() and \
+            close.index[-1].strftime("%Y-%m-%d") == datetime.now(timezone.utc).astimezone(_et()).strftime("%Y-%m-%d"):
+        k = -2
+    plan_asof = close.index[k].strftime("%Y-%m-%d") if len(close.index) else None
+    one = {n: sig[n].iloc[[k]].reindex(columns=syms) for n in ("r1m", "r3m", "r6m", "dollar_vol50")}
+    lead, combo_pb = pullback_leaders(one, pd.DataFrame(True, index=one["r1m"].index, columns=syms))
+    rest = sig["pb_rest"].iloc[k].reindex(syms).fillna(False).astype(bool)
+    pb = lead.iloc[-1] & rest
+    if k == -2:
+        # Mid-session the plan is yesterday's — and today may already have
+        # acted on it: a high through the entry means the buy stop fired (a new
+        # order would fill at the market, risk far past 1R), a low through the
+        # stop means the setup failed. Neither is a pending plan.
+        th, tl = high.iloc[-1].reindex(syms), low.iloc[-1].reindex(syms)
+        e_, s_ = sig["pb_entry"].iloc[k].reindex(syms), sig["pb_stop"].iloc[k].reindex(syms)
+        pb &= ~(th >= e_).fillna(False) & ~(tl <= s_).fillna(False)
+    df["entry"] = sig["pb_entry"].iloc[k].reindex(syms).where(pb)
+    df["stop"] = sig["pb_stop"].iloc[k].reindex(syms).where(pb)
+    df["risk_pct"] = 1 - df["stop"] / df["entry"]
+    df["target3"] = df["entry"] + 3 * (df["entry"] - df["stop"])
+    df["target5"] = df["entry"] + 5 * (df["entry"] - df["stop"])
+    lists["luk_pullback"] = _top(combo_pb.iloc[-1][pb])
+
+    # Industry strength ("hot themes": several names in one group running
+    # together): an industry's median RS, as a 1..99 percentile across
+    # industries with >= 3 names, and how many of its names have RS >= 80.
+    if "industry" in df.columns:
+        g = df.groupby("industry")["rs"]
+        med = g.median().where(g.count() >= 3)
+        df["group_rs"] = df["industry"].map((med.rank(pct=True) * 98 + 1).round())
+        # 0 only where the industry is KNOWN; an unknown industry is absent
+        df["group_leaders"] = df["industry"].map(df[df["rs"] >= 80].groupby("industry").size()) \
+            .where(df["industry"].isna(), lambda x: x.fillna(0))
+
     market = {}
     if spy is not None and spy.notna().sum() > 200:
         sp = spy.dropna()
@@ -720,6 +842,10 @@ def compute(fund, frames):
                   "above50": bool(sp.iloc[-1] > sp.rolling(50).mean().iloc[-1]),
                   "above200": bool(sp.iloc[-1] > sp.rolling(200).mean().iloc[-1])}
     asof = close.index[-1].strftime("%Y-%m-%d") if len(close.index) else None
+    if extras is not None:
+        # NOT df.attrs: pandas deep-copies attrs into every derived frame
+        extras["closes"] = close.iloc[-CHART_BARS:]
+        extras["plan_asof"] = plan_asof
     return df, lists, market, asof
 
 
@@ -738,7 +864,9 @@ OUT_FIELDS = ["name", "sector", "industry", "price", "chg_1d", "mcap", "rs", "r1
               "r12m", "mom12_1", "off_high", "above_low", "vol252", "adr20", "dollar_vol50",
               "tt_count", "earnings_yield", "roic", "roe", "gpa", "gross_margin", "piotroski",
               "eps_growth_q", "eps_growth_fy", "rev_growth", "pe", "pb", "ps", "ev_ebitda",
-              "div_yield", "shareholder_yield", "value_score", "next_earnings"]
+              "div_yield", "shareholder_yield", "value_score", "next_earnings",
+              "entry", "stop", "risk_pct", "target3", "target5", "group_rs", "group_leaders"]
+CHART_BARS = 180  # closes per listed name, for the sparkline and the price chart
 
 
 def scan(min_mcap=2e9, force=False):
@@ -748,18 +876,20 @@ def scan(min_mcap=2e9, force=False):
         return {"error": "TradingView scanner returned no stocks"}
     frames, fetched_ts, stale = load_prices(sorted(fund), force=force)
     log_progress(1, 1, "Computing screens")
-    df, lists, market, asof = compute(fund, frames)
+    extras = {}
+    df, lists, market, asof = compute(fund, frames, extras)
     in_any = sorted({s for v in lists.values() for s in v})
     rows = {s: {k: _clean(df.at[s, k]) for k in OUT_FIELDS if k in df.columns} for s in in_any}
-    ev_doc = load_evidence()
-    strategies = []
-    for st in STRATEGIES:
-        out = {k: st[k] for k in ("id", "name", "family", "source", "summary", "rules",
-                                  "rank_by", "columns")}
-        out["evidence"] = evidence(st, ev_doc)
-        out["symbols"] = lists.get(st["id"], [])
-        strategies.append(out)
-    return {
+    closes = extras.get("closes")
+    if closes is not None:
+        tail = closes.iloc[-CHART_BARS:]
+        for s in in_any:
+            if s in tail.columns:
+                # 4 significant digits: the chart needs shape, not cents
+                rows[s]["closes"] = [None if not np.isfinite(v) else float(f"{v:.4g}")
+                                     for v in tail[s].to_numpy()]
+    doc = meta(lists)
+    doc.update({
         "asof": asof,
         # today's bar is still moving: the label must not say "close"
         "intraday": bool(in_session()) and asof == datetime.now(timezone.utc).astimezone(_et()).strftime("%Y-%m-%d"),
@@ -771,16 +901,43 @@ def scan(min_mcap=2e9, force=False):
         "universe": {"n": len(fund), "priced": int(df["price"].notna().sum()),
                      "min_mcap": float(min_mcap)},
         "market": market,
+        "plan_asof": extras.get("plan_asof"),  # the completed session the pullback plans use
+        "rows": rows,
+    })
+    return doc
+
+
+def meta(lists=None):
+    """Everything about the strategies that needs no market data — rules,
+    evidence, the equity curves. `screener_data.py meta` prints it in well
+    under a second, so the tab shows its strategies and their records at once
+    while the first scan (a minute on a cold cache) downloads."""
+    ev_doc = load_evidence()
+    curves = ev_doc.get("curves") or {}
+    strategies = []
+    for st in STRATEGIES:
+        out = {k: st[k] for k in ("id", "name", "family", "source", "summary", "rules",
+                                  "rank_by", "columns")}
+        out["evidence"] = evidence(st, ev_doc)
+        out["symbols"] = (lists or {}).get(st["id"], [])
+        strategies.append(out)
+    return {
         "evidence_basis": ev_doc.get("basis", ""),
         "subperiods": ev_doc.get("subperiods", []),
+        # the index lines every strategy's curve is drawn against
+        "curve_months": curves.get("months", []),
+        "curve_ew": [_clean(x) for x in curves.get("EW", [])],
+        "curve_spy": [_clean(x) for x in curves.get("SPY", [])],
         "strategies": strategies,
-        "rows": rows,
     }
 
 
 def main(argv):
+    if len(argv) >= 2 and argv[1] == "meta":
+        print(json.dumps(meta(), allow_nan=False, default=_clean))
+        return 0
     if len(argv) < 2 or argv[1] != "scan":
-        print(json.dumps({"error": "usage: screener_data.py scan '{json}'"}))
+        print(json.dumps({"error": "usage: screener_data.py meta | scan '{json}'"}))
         return 2
     try:
         args = json.loads(argv[2]) if len(argv) > 2 else {}

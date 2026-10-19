@@ -119,6 +119,60 @@ class TestScreenerModel : public QObject {
         QVERIFY(colour_for(Kind::PctSigned, 0.3).size());
     }
 
+    void ema_matches_pandas_adjust_false() {
+        // pandas: s.ewm(span=3, adjust=False, min_periods=3).mean() on 1..5
+        const QVector<double> e = ema({1, 2, 3, 4, 5}, 3);
+        QVERIFY(std::isnan(e[0]) && std::isnan(e[1]));
+        QCOMPARE(e[2], 2.25);   // 1 -> 1.5 -> 2.25
+        QCOMPARE(e[4], 4.0625); // 3.125 -> 4.0625
+        // a gap carries the last value and does not count as seen
+        const QVector<double> g = ema({1, std::nan(""), 3}, 2);
+        QVERIFY(std::isnan(g[1]));
+        QVERIFY(std::isfinite(g[2]));
+    }
+
+    void position_size() {
+        // the thread's example: account 100,000, 0.5% risk, buy 200, stop 195 -> 100 shares
+        QCOMPARE(*position_shares(100'000, 0.005, 200.0, 195.0), 100.0);
+        QVERIFY(!position_shares(100'000, 0.005, 200.0, 200.0)); // no distance, no size
+        QVERIFY(!position_shares(100'000, 0.005, 195.0, 200.0)); // stop above entry
+        QVERIFY(!position_shares(100'000, 0.005, std::nullopt, 195.0));
+        QVERIFY(!position_shares(0, 0.005, 200.0, 195.0));
+    }
+
+    void overview_counts_independent_screens() {
+        ScanResult r;
+        auto strat = [](const char* id, QStringList syms) {
+            Strategy s;
+            s.id = id;
+            s.name = id;
+            s.symbols = syms;
+            return s;
+        };
+        r.strategies = {strat("trend_template", {"A", "B"}), strat("rs_leaders", {"A"}),
+                        strat("momentum", {"A", "C"}), strat("magic_formula", {"B", "C", "A"})};
+        r.rows.insert("B", QJsonDocument::fromJson(R"({"rs": 90})").object());
+        r.rows.insert("C", QJsonDocument::fromJson(R"({"rs": 50})").object());
+        const auto ov = overview(r);
+        QCOMPARE(ov.size(), 3);
+        QCOMPARE(ov[0].symbol, QStringLiteral("A")); // 3 screens: rs_leaders nested, not counted
+        QCOMPARE(ov[0].by.size(), 3);
+        QCOMPARE(ov[1].symbol, QStringLiteral("B")); // tie on 2, higher RS first
+        QCOMPARE(ov[2].symbol, QStringLiteral("C"));
+    }
+
+    void meta_document_has_no_lists() {
+        const ScanResult r = parse_scan(QJsonDocument::fromJson(
+            R"({"strategies": [{"id": "x", "name": "X", "evidence": {"tested": true, "curve": [1, null, 1.2]}}],
+                "curve_months": ["2010-01", "2010-02", "2010-03"], "curve_ew": [1, 1.01, 1.02]})").object());
+        QVERIFY(r.meta_only);
+        QCOMPARE(r.strategies.size(), 1);
+        QCOMPARE(r.strategies[0].evidence.curve.size(), 3);
+        QVERIFY(std::isnan(r.strategies[0].evidence.curve[1])); // a null point is a gap, not 0
+        QCOMPARE(r.curve_ew.size(), 3);
+        QVERIFY(!parse_scan(sample()).meta_only);
+    }
+
     void every_emitted_column_has_a_definition() {
         // the backend's strategy columns (screener_data.STRATEGIES) — an
         // unknown key is skipped by the screen, so a typo would hide a column
@@ -126,7 +180,8 @@ class TestScreenerModel : public QObject {
                                   "adr20", "vol252", "dollar_vol50", "eps_growth_q", "eps_growth_fy",
                                   "roe", "roic", "gross_margin", "gpa", "earnings_yield", "pe", "pb",
                                   "ev_ebitda", "piotroski", "div_yield", "shareholder_yield",
-                                  "value_score", "price", "chg_1d", "mcap"};
+                                  "value_score", "price", "chg_1d", "mcap", "entry", "stop", "risk_pct",
+                                  "target3", "target5", "group_rs", "group_leaders", "screens"};
         for (const QString& k : keys)
             QVERIFY2(column_def(k), qPrintable("no ColumnDef for " + k));
         QVERIFY(!column_def("no_such_column"));

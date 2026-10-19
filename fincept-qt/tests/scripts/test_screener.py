@@ -235,6 +235,66 @@ with tempfile.TemporaryDirectory() as td:
     with open(cp, "rb") as fh:
         check(_pk.load(fh)["frames"]["MINE"] == "newer", "newest fetch wins the merge")
 
+# Leader pullback: a constructed setup — a 60% run, then a quiet, shallow
+# pullback to the 21 EMA with higher lows and shrinking ranges, turning up
+n2 = 320
+t2 = np.arange(n2)
+base = np.where(t2 < 250, 40 * np.exp(0.0035 * t2), np.nan)
+up = 40 * np.exp(0.0035 * 249)
+tail = np.concatenate([up * (1 + 0.012 * np.sin(np.arange(70) / 3.0) * np.exp(-np.arange(70) / 40)
+                             + 0.0006 * np.arange(70))])
+path = np.where(t2 < 250, base, tail[np.clip(t2 - 250, 0, 69)])
+cp = pd.DataFrame({"PB": path}, index=pd.bdate_range("2025-01-01", periods=n2))
+rng_w = np.linspace(0.03, 0.008, n2)
+hp, lp = cp * (1 + rng_w[:, None] / 2), cp * (1 - rng_w[:, None] / 2)
+ps = sd.price_signals(cp, hp, lp, cp * 0 + 1e6)
+e, st = ps["pb_entry"]["PB"].iloc[-1], ps["pb_stop"]["PB"].iloc[-1]
+check(1 - st / e >= 0.01 - 1e-9, f"stop at least 1% under the entry: {1 - st / e:.4f}")
+check(e == hp["PB"].iloc[-1], "entry = a buy stop at today's high")
+# the stop sits UNDER the pullback low, never inside the pullback; a low more
+# than 3% away is skipped, not tightened
+deep = sd.pullback_signals(cp, hp, lp.mul(0.5))
+d_low = lp.mul(0.5)["PB"].iloc[-3:].min()
+check(deep["pb_stop"]["PB"].iloc[-1] < d_low, "the stop is under the pullback low")
+check(not deep["pb_rest"]["PB"].iloc[-1], "a pullback needing more than a 3% stop is not a setup")
+tight = sd.pullback_signals(cp, hp, hp * 0.9999)
+check(abs(1 - tight["pb_stop"]["PB"].iloc[-1] / tight["pb_entry"]["PB"].iloc[-1] - 0.01) < 1e-9, "tight low -> 1% stop")
+# the leader cut is the top quarter of the COMBINED rank, not >= 0.75 on an average of ranks
+grid = {k: pd.DataFrame([np.linspace(0.31, 1.0, 100) if k != "r6m" else np.linspace(1.0, 0.31, 100)],
+                        columns=[f"S{i}" for i in range(100)]) for k in ("r1m", "r3m", "r6m")}
+grid["dollar_vol50"] = pd.DataFrame([[5e7] * 100], columns=grid["r1m"].columns)
+ld2, _ = sd.pullback_leaders(grid, pd.DataFrame(True, index=[0], columns=grid["r1m"].columns))
+check(20 <= int(ld2.iloc[0].sum()) <= 30, f"about a quarter of an all-up universe leads: {int(ld2.iloc[0].sum())}")
+# the zone is judged against EACH day's EMA: a fast riser whose average climbs
+# up to an old low has not touched support
+# KOD's shape: a long base, a jump, then a dip to a level the RISING average
+# only reaches days later
+kod = np.r_[np.full(200, 20.0), np.linspace(21, 40, 12), [30.0, 37.0, 38.0]]
+riser = pd.DataFrame({"R": kod}, index=pd.bdate_range("2025-01-01", periods=len(kod)))
+rs_ = sd.pullback_signals(riser, riser * 1.005, riser * 0.995)
+lows, e21 = riser["R"] * 0.995, rs_["ema21"]["R"]
+check(lows.iloc[-3:].min() <= e21.iloc[-1] * 1.02, "fixture: the old low is within 2% of TODAY's EMA")
+check(not (lows.iloc[-3:] <= e21.iloc[-3:] * 1.02).any(), "fixture: no day's low reached THAT day's EMA")
+check(not rs_["pb_rest"]["R"].iloc[-1], "support is judged per day: an average climbing to an old low is not a touch")
+# falling knife: below the averages, lower lows -> never a setup
+knife = sd.pullback_signals(close[["DOWN"]], high[["DOWN"]], low[["DOWN"]])
+check(not knife["pb_rest"]["DOWN"].iloc[-60:].any(), "a downtrend is never 'resting'")
+# leaders are cross-sectional within the universe given
+lead_df = {k: pd.DataFrame({"A": [0.5], "B": [0.01], "C": [0.02], "D": [0.03]}) for k in ("r1m", "r3m", "r6m")}
+lead_df["dollar_vol50"] = pd.DataFrame({"A": [5e7], "B": [5e7], "C": [5e7], "D": [5e7]})
+ld, _ = sd.pullback_leaders(lead_df, pd.DataFrame(True, index=[0], columns=list("ABCD")))
+check(ld.iloc[0].tolist() == [True, False, False, False], f"only the top quarter, up 30%+, leads: {ld.iloc[0].tolist()}")
+lead_df["dollar_vol50"]["A"] = 1e6
+ld, _ = sd.pullback_leaders(lead_df, pd.DataFrame(True, index=[0], columns=list("ABCD")))
+check(not ld.iloc[0, 0], "a leader that barely trades is removed")
+
+# meta: strategies + evidence + curves, no lists, no network
+m = sd.meta()
+check(len(m["strategies"]) == len(sd.STRATEGIES) and "rows" not in m, "meta has every strategy and no rows")
+check(all(s_["symbols"] == [] for s_ in m["strategies"]), "meta lists are empty")
+check(len(m["curve_months"]) == len(m["curve_ew"]) > 100, "meta carries the index curve")
+json.dumps(m, allow_nan=False, default=sd._clean)
+
 # a NaN in the evidence file reads as absent and still serialises
 bad = {"backtests": {"X": {"excess": float("nan"), "t": 1.0, "max_dd": -0.1, "hit": 0.5,
                            "subperiods": [0.1, float("nan"), 0.0, 0.2]}}}
