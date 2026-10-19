@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`9c27e8a12`](https://github.com/yumima/finterm/commit/9c27e8a12) dashboard: an error no longer destroys a widget — the root cause, not eight workarounds
 - [`119a37925`](https://github.com/yumima/finterm/commit/119a37925) sec: declare the user's contact to SEC — and to no one else
 - [`6928a8422`](https://github.com/yumima/finterm/commit/6928a8422) screener: opens instantly, evens out, draws curves; Martin Luk's pullback, tested as trades
 - [`8fefc1642`](https://github.com/yumima/finterm/commit/8fefc1642) screener: review fixes — sector-matched evidence, stray rows, cache merge

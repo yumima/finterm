@@ -11,6 +11,7 @@
 #include <QEvent>
 #include <QResizeEvent>
 
+#include <QApplication>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -470,17 +471,17 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         cl->setContentsMargins(8, 0, 8, 0);
         cl->setSpacing(8);
 
-        // Channel picker: the now-playing name is the dropdown, so changing
-        // channel is one click here rather than BACK and a pick from the list.
-        // The menu is rebuilt on every open — the config dialog can edit
-        // channels_ at any time.
-        now_playing_ = new QPushButton("—");
-        now_playing_->setCursor(Qt::PointingHandCursor);
+        // The now-playing name, as plain text. The channel picker is the
+        // widget's TITLE at the top-left ("LIVE TV — CNBC LIVE ▾"): one place
+        // to switch, where the name already is (eventFilter opens the menu).
+        now_playing_ = new QLabel("—");
         now_playing_->setFixedHeight(20);
-        now_playing_->setToolTip("Switch channel");
-        channel_menu_ = new QMenu(now_playing_);
+        channel_menu_ = new QMenu(this);
         connect(channel_menu_, &QMenu::aboutToShow, this, &VideoPlayerWidget::rebuild_channel_menu);
-        now_playing_->setMenu(channel_menu_);
+        if (QLabel* t = title_label()) {
+            t->installEventFilter(this);
+            t->setToolTip(QStringLiteral("Click to switch channel"));
+        }
         cl->addWidget(now_playing_);
         cl->addStretch(1);
 
@@ -1724,7 +1725,7 @@ void VideoPlayerWidget::play_web_video_id(const QString& video_id, const QString
     current_url_   = source_url;
     current_title_ = title;
     now_playing_->setText(QChar(0x25B6) + QString(" ") + title);
-    set_title("LIVE TV — " + title.toUpper());
+    set_channel_title(title);
     status_label_->hide();
     controls_->show();
     stack_->setCurrentIndex(2);
@@ -1757,7 +1758,7 @@ void VideoPlayerWidget::resolve_live_id_and_play_web(const QString& channel_url,
     current_url_   = channel_url;
     current_title_ = title;
     now_playing_->setText(QChar(0x25B6) + QString(" ") + title + " (resolving…)");
-    set_title("LIVE TV — " + title.toUpper());
+    set_channel_title(title);
     controls_->show();
     stack_->setCurrentIndex(2);
 
@@ -1866,7 +1867,7 @@ void VideoPlayerWidget::play_spotify_embed(const QString& type, const QString& i
     current_url_                 = source_url;
     current_title_               = title;
     now_playing_->setText(QChar(0x25B6) + QString(" ") + title);
-    set_title("LIVE TV — " + title.toUpper());
+    set_channel_title(title);
     status_label_->hide();
     controls_->show();
     // Spotify's iframe owns the transport UI — its play/pause is reachable
@@ -1940,6 +1941,13 @@ void VideoPlayerWidget::play_preset(int index) {
     play_url(ch.url, ch.name);
 }
 
+void VideoPlayerWidget::set_channel_title(const QString& channel) {
+    // the ▾ says the title is the channel picker
+    set_title(QStringLiteral("LIVE TV — ") + channel.toUpper() + QStringLiteral("  ▾"));
+    if (QLabel* t = title_label())
+        t->setCursor(Qt::PointingHandCursor);
+}
+
 void VideoPlayerWidget::rebuild_channel_menu() {
     channel_menu_->clear();
     // url_before_error_: a stream that errored cleared current_url_ but is
@@ -1993,6 +2001,7 @@ void VideoPlayerWidget::switch_channel(int index) {
     controls_->show();
     now_playing_->setText(QString(QChar(0x25B6)) + " " + channels_[index].name +
                           QStringLiteral(" (switching…)"));
+    set_channel_title(channels_[index].name);
     play_preset(index);
 }
 
@@ -2064,7 +2073,7 @@ void VideoPlayerWidget::play_url(const QString& url, const QString& title) {
     pending_title_ = title;
     play_in_progress_ = true; // held until PlayingState or error/stop
     now_playing_->setText(QString(QChar(0x25B6)) + " " + title);
-    set_title("LIVE TV — " + title.toUpper());
+    set_channel_title(title);
 
 #ifdef HAS_QT_MULTIMEDIA
     // Sticky flag — read by on_ytdlp_finished() to decide whether to route
@@ -2604,6 +2613,24 @@ bool VideoPlayerWidget::eventFilter(QObject* obj, QEvent* event) {
     if (obj == audio_device_combo_ && event->type() == QEvent::MouseButtonPress)
         populate_audio_devices();
 #endif
+    // The title is the channel picker while a channel is on (not on the list).
+    // It is also the tile's drag handle: open only for a CLICK — press and
+    // release in the same place — never at the end of a drag.
+    if (obj == title_label() && (event->type() == QEvent::MouseButtonPress ||
+                                 event->type() == QEvent::MouseButtonRelease)) {
+        auto* me = static_cast<QMouseEvent*>(event);
+        if (me->button() == Qt::LeftButton) {
+            if (event->type() == QEvent::MouseButtonPress) {
+                title_press_ = me->globalPosition().toPoint();
+            } else if (controls_ && controls_->isVisible() && !title_press_.isNull() &&
+                       (me->globalPosition().toPoint() - title_press_).manhattanLength() <
+                           QApplication::startDragDistance()) {
+                title_press_ = {};
+                channel_menu_->popup(title_label()->mapToGlobal(QPoint(0, title_label()->height() + 2)));
+                return true;
+            }
+        }
+    }
     if (fullscreen_target_ && event->type() == QEvent::KeyPress) {
         auto* ke = static_cast<QKeyEvent*>(event);
         if (ke->key() == Qt::Key_Escape) {
@@ -2626,6 +2653,8 @@ void VideoPlayerWidget::stop_playback() {
     controls_->hide();
     stack_->setCurrentIndex(0);
     set_title("LIVE TV / STREAMS");
+    if (QLabel* t = title_label())
+        t->unsetCursor(); // back to the tile's inherited (drag) cursor: nothing to switch from the list
 }
 
 void VideoPlayerWidget::kill_resolve() {
@@ -2812,12 +2841,8 @@ void VideoPlayerWidget::apply_styles() {
         QString("background: %1; border-top: 1px solid %2;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
 
     now_playing_->setStyleSheet(
-        QString("QPushButton { color: %1; font-size: 9px; font-weight: bold; background: transparent; "
-                "border: 1px solid transparent; border-radius: 2px; padding: 0 16px 0 6px; text-align: left; }"
-                "QPushButton:hover, QPushButton:pressed { background: %2; border-color: %3; }"
-                "QPushButton::menu-indicator { subcontrol-origin: padding; subcontrol-position: right center; "
-                "right: 2px; }")
-            .arg(ui::colors::AMBER(), ui::colors::BG_HOVER(), ui::colors::BORDER_DIM()));
+        QString("color: %1; font-size: 9px; font-weight: bold; background: transparent; padding: 0 6px;")
+            .arg(ui::colors::AMBER()));
     channel_menu_->setStyleSheet(
         QString("QMenu { background: %1; color: %2; border: 1px solid %3; font-size: 10px; padding: 2px; }"
                 "QMenu::item { padding: 4px 18px 4px 6px; }"

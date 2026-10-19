@@ -189,6 +189,7 @@ class VideoPlayerWidget : public BaseWidget {
     /// the player page held so the channel list does not flash in between.
     void switch_channel(int index);
     void rebuild_channel_menu();
+    void set_channel_title(const QString& channel); // "LIVE TV — NAME ▾": the title is the picker
     void play_custom_url();
     void refresh_data();
     void stop_playback();     // teardown_playback() + back to the channel list
@@ -447,7 +448,7 @@ class VideoPlayerWidget : public BaseWidget {
     QLineEdit*      url_input_    = nullptr;
     // The current channel's name, and the way to change it: a click opens the
     // channel list as a dropdown (switch_channel()) instead of BACK + pick.
-    QPushButton*    now_playing_  = nullptr;
+    QLabel*         now_playing_  = nullptr;
     QMenu*          channel_menu_ = nullptr;
     QLabel*         status_label_ = nullptr;
 
@@ -467,6 +468,7 @@ class VideoPlayerWidget : public BaseWidget {
     // Emptied sources still being released (release_source_then()). A count,
     // not a flag: a reload's release and a switch's can overlap.
     int releases_pending_ = 0;
+    QPoint title_press_; // where a left press on the title began (a click, not a drag)
     quint64 reload_gen_ = 0; // hard_reload_source() generation
     /// setSource(empty), then `next` once the backend reports NoMedia (250 ms
     /// backstop) — the only safe way to open a new source after an old one.
