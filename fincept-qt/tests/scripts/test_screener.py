@@ -192,6 +192,49 @@ df4, _, _, _ = sd.compute(fund, fr2)
 check(np.isnan(df4.at["UP", "chg_1d"]), "missing last bar -> 1D change absent")
 check(np.isfinite(df4.at["CALM", "chg_1d"]), "others keep their 1D change")
 
+# one frame with an extra date (a pre-market stub, a holiday bar) must not
+# become "the last session" for everyone
+fr3 = {k: v.copy() for k, v in frames.items()}
+stub = fr3["CALM"].iloc[-1:].copy()
+stub.index = stub.index + pd.Timedelta(days=1)
+stub[["Open", "High", "Low", "Close"]] = np.nan
+fr3["CALM"] = pd.concat([fr3["CALM"], stub])
+df5, _, _, asof5 = sd.compute(fund, fr3)
+check(asof5 == idx[-1].strftime("%Y-%m-%d"), f"a one-frame stray row does not date the scan: {asof5}")
+check(np.isfinite(df5.at["UP", "chg_1d"]), "a one-frame stray row does not blank everyone's 1D change")
+
+# ADR is measured on real bars: a carried bar does not repeat yesterday's range
+ah = close.copy()
+ah.iloc[-5:-2, ah.columns.get_loc("WILD")] = np.nan
+hi_, lo_ = ah * 1.03, ah * 0.99
+hi_.iloc[-6, hi_.columns.get_loc("WILD")] = ah["WILD"].iloc[-6] * 1.5  # one huge range before the gap
+asg = sd.price_signals(ah, hi_, lo_)
+real_bars = (hi_["WILD"].iloc[-20:] / lo_["WILD"].iloc[-20:] - 1).dropna()
+check(len(real_bars) == 17, "fixture: 3 of the last 20 bars missing")
+check(abs(asg["adr20"]["WILD"].iloc[-1] - float(np.mean(real_bars.to_numpy()))) < 1e-12,
+      "ADR = mean range of the REAL bars among the last 20")
+carried = (hi_["WILD"].ffill(limit=5) / lo_["WILD"].ffill(limit=5) - 1).iloc[-20:].mean()
+check(abs(asg["adr20"]["WILD"].iloc[-1] - carried) > 1e-6, "…which differs from counting carried bars")
+
+# the price cache holds every universe: a write must merge, even from a
+# forced run that never read the file (it once replaced it wholesale)
+import tempfile, pickle as _pk, time as _t
+with tempfile.TemporaryDirectory() as td:
+    cp = os.path.join(td, "prices.pkl")
+    with open(cp, "wb") as fh:
+        _pk.dump({"frames": {"OTHER": "o"}, "fetched": {"OTHER": 1.0}}, fh)
+    mine = {"frames": {"MINE": "m"}, "fetched": {"MINE": 2.0}}
+    sd._persist(mine, cp, {"mtime": None, "saved": _t.time()})   # force-style state
+    with open(cp, "rb") as fh:
+        got = _pk.load(fh)
+    check(set(got["frames"]) == {"OTHER", "MINE"}, f"forced write merges with the disk: {sorted(got['frames'])}")
+    # and a newer frame on disk beats ours
+    with open(cp, "wb") as fh:
+        _pk.dump({"frames": {"MINE": "newer"}, "fetched": {"MINE": 9.0}}, fh)
+    sd._persist({"frames": {"MINE": "m"}, "fetched": {"MINE": 2.0}}, cp, {"mtime": None, "saved": 0})
+    with open(cp, "rb") as fh:
+        check(_pk.load(fh)["frames"]["MINE"] == "newer", "newest fetch wins the merge")
+
 # a NaN in the evidence file reads as absent and still serialises
 bad = {"backtests": {"X": {"excess": float("nan"), "t": 1.0, "max_dd": -0.1, "hit": 0.5,
                            "subperiods": [0.1, float("nan"), 0.0, 0.2]}}}

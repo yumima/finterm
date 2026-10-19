@@ -132,7 +132,7 @@ void ScreenerScreen::build_ui() {
     head->addWidget(universe_);
     refresh_btn_ = new QPushButton(QStringLiteral("REFRESH"));
     refresh_btn_->setCursor(Qt::PointingHandCursor);
-    refresh_btn_->setToolTip(QStringLiteral("Re-run every screen (prices are re-downloaded only after a new close)"));
+    refresh_btn_->setToolTip(QStringLiteral("Re-run every screen (prices re-download once stale: after a new close, or after 15 minutes in session)"));
     head->addWidget(refresh_btn_);
     market_ = new QLabel;
     market_->setTextFormat(Qt::RichText);
@@ -184,13 +184,16 @@ void ScreenerScreen::build_ui() {
         if (auto* it = table_->item(row, 1))
             emit navigate_to_screen(QStringLiteral("equity_research"), it->text());
     });
-    connect(refresh_btn_, &QPushButton::clicked, this, [this]() { run_scan(false); });
+    connect(refresh_btn_, &QPushButton::clicked, this, [this]() { run_scan(); });
     connect(universe_, &QComboBox::currentIndexChanged, this, [this](int) {
         // Bring this universe current, showing its last result meanwhile —
         // or nothing: the previous universe's lists must not stay up under
         // this universe's name.
-        run_scan(false);
+        run_scan();
         const QJsonDocument doc = services::util::DiskCache(QStringLiteral("screener")).load(cache_name());
+        // the generation that WROTE this cache, so a later-finishing older scan
+        // cannot replace it
+        displayed_gen_ = saved_gen_.value(cache_name(), -1);
         if (doc.isObject()) {
             apply_result(screener::parse_scan(doc.object()), true);
         } else {
@@ -217,7 +220,7 @@ void ScreenerScreen::showEvent(QShowEvent* e) {
     if (shown_once_)
         return;
     shown_once_ = true;
-    run_scan(false);
+    run_scan();
     const QJsonDocument doc = services::util::DiskCache(QStringLiteral("screener")).load(cache_name());
     if (doc.isObject())
         apply_result(screener::parse_scan(doc.object()), true);
@@ -229,7 +232,7 @@ void ScreenerScreen::set_status(const QString& text, bool error) {
         QString("color:%1;").arg(error ? ui::colors::RED() : ui::colors::TEXT_SECONDARY()));
 }
 
-void ScreenerScreen::run_scan(bool force) {
+void ScreenerScreen::run_scan() {
     const int gen = ++scan_gen_;
     running_ = true;
     refresh_btn_->setEnabled(false);
@@ -237,7 +240,7 @@ void ScreenerScreen::run_scan(bool force) {
     const double mcap = min_mcap();
     const QString name = cache_name();
     const QString payload = QString::fromUtf8(
-        QJsonDocument(QJsonObject{{"min_mcap", mcap}, {"force", force}}).toJson(QJsonDocument::Compact));
+        QJsonDocument(QJsonObject{{"min_mcap", mcap}}).toJson(QJsonDocument::Compact));
     QPointer<ScreenerScreen> self = this;
     python::PythonRunner::instance().run(
         QStringLiteral("screener_data.py"), {QStringLiteral("scan"), payload},
@@ -274,8 +277,14 @@ void ScreenerScreen::run_scan(bool force) {
                 self->saved_gen_.insert(name, gen);
                 services::util::DiskCache(QStringLiteral("screener")).save(name, doc);
             }
-            if (current)
-                self->apply_result(r, false);
+            // Show it if it is this scan, or an older scan for the universe
+            // selected again meanwhile that is newer than what is on screen
+            // (switching A -> B -> A otherwise left a previous session's A up
+            // while a fresh A result sat unshown).
+            if (current || (name == self->cache_name() && gen > self->displayed_gen_)) {
+                self->displayed_gen_ = gen;
+                self->apply_result(r, !current);
+            }
         },
         [self, gen](QString line, bool is_stderr) {
             if (!self || gen != self->scan_gen_ || !is_stderr || !line.startsWith(QLatin1String("PROGRESS ")))

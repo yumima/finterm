@@ -255,24 +255,63 @@ def _read_cache(path):
     return {"frames": {}, "fetched": {}}
 
 
+def _mtime(path):
+    """The file's identity: os.replace installs a new inode on every write, so
+    (inode, mtime, size) changes even when two writes share a coarse mtime."""
+    try:
+        st = os.stat(path)
+        return (st.st_ino, st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
+def _persist(cache, path, state):
+    """Merge into the on-disk cache under the lock (newest fetch per symbol
+    wins — including over ours, when a concurrent scan fetched later) and write
+    atomically. The file is re-read only if another process changed it since
+    we last read or wrote it: it holds every universe's frames, and a second
+    full unpickle per write was most of a warm refresh's I/O."""
+    try:
+        lock = _locked(path)
+        try:
+            if _mtime(path) != state["mtime"]:
+                disk = _read_cache(path)
+                for s, ts in disk["fetched"].items():
+                    if ts > cache["fetched"].get(s, 0) and s in disk["frames"]:
+                        cache["frames"][s], cache["fetched"][s] = disk["frames"][s], ts
+            tmp = f"{path}.{os.getpid()}.tmp"
+            with open(tmp, "wb") as fh:
+                pickle.dump(cache, fh)
+            os.replace(tmp, path)
+            state["mtime"] = _mtime(path)
+            state["saved"] = time.time()
+        finally:
+            lock.close()
+    except Exception as e:
+        print(f"price cache not written: {e}", file=sys.stderr)
+
+
 def load_prices(symbols, force=False):
     """{symbol: DataFrame(Open, High, Low, Close, Volume)} for `symbols` + SPY.
 
     Cached on disk (is_fresh decides); only stale or missing symbols are
     downloaded. The write MERGES under a lock, newest fetch per symbol wins, so
     a concurrent scan's frames are kept rather than overwritten.
-    Returns (frames, oldest fetch timestamp among them).
+    Returns (frames, oldest fetch timestamp among them, count served stale).
     """
     import yfinance as yf
     import yfinance_data as yd
 
     path = _cache_path()
+    # force starts from nothing but must still MERGE on write — the file holds
+    # every universe's frames — so it never claims to have read the disk.
+    state = {"mtime": None if force else _mtime(path), "saved": time.time()}
     cache = {"frames": {}, "fetched": {}} if force else _read_cache(path)
     want = list(dict.fromkeys(list(symbols) + [BENCHMARK]))
     todo = [s for s in want if not is_fresh(cache["fetched"].get(s, 0))]
     total = len(todo)
-    new_frames, new_fetched = {}, {}
-    for i in range(0, total, CHUNK):
+    dirty = False
+    for n, i in enumerate(range(0, total, CHUNK)):
         chunk = todo[i:i + CHUNK]
         log_progress(i, total, f"Downloading prices {i}/{total}")
         try:
@@ -287,29 +326,19 @@ def load_prices(symbols, force=False):
             if frame is None:
                 continue
             frame = yd._repair_unadjusted_splits(frame, s)
-            new_frames[s] = frame[["Open", "High", "Low", "Close", "Volume"]].copy()
-            new_fetched[s] = now
+            cache["frames"][s] = frame[["Open", "High", "Low", "Close", "Volume"]].copy()
+            cache["fetched"][s] = now
+            dirty = True
+        # Persist every 90 s, not only at the end: a cold $300M universe can
+        # hit the screen's 10-minute timeout, and a kill before a single write
+        # threw every chunk away, so each retry started from zero. Time, not
+        # chunk count: each write pickles every universe's frames.
+        if dirty and time.time() - state["saved"] >= 90:
+            _persist(cache, path, state)
+            dirty = False
     log_progress(total, total, "Prices ready")
-    cache["frames"].update(new_frames)
-    cache["fetched"].update(new_fetched)
-    if new_frames:
-        try:
-            lock = _locked(path)
-            try:
-                disk = _read_cache(path)
-                for s, ts in disk["fetched"].items():
-                    # newest fetch wins — including over our own, when a
-                    # concurrent scan fetched the symbol after we did
-                    if ts > cache["fetched"].get(s, 0) and s in disk["frames"]:
-                        cache["frames"][s], cache["fetched"][s] = disk["frames"][s], ts
-                tmp = f"{path}.{os.getpid()}.tmp"
-                with open(tmp, "wb") as fh:
-                    pickle.dump(cache, fh)
-                os.replace(tmp, path)
-            finally:
-                lock.close()
-        except Exception as e:
-            print(f"price cache not written: {e}", file=sys.stderr)
+    if dirty:
+        _persist(cache, path, state)
     got = {s: cache["frames"][s] for s in want if s in cache["frames"]}
     oldest = min((cache["fetched"].get(s, 0) for s in got), default=0)
     # served from cache although not current: their chunk's download failed
@@ -376,6 +405,9 @@ def price_signals(close, high, low, volume=None):
     0% day.
     """
     ret = close.pct_change(fill_method=None)
+    # ADR on real bars too: a carried bar would repeat the previous day's
+    # range. The mean of the real bars among the last 20, at least 15 of them.
+    adr = (high / low - 1).rolling(20, min_periods=15).mean()
     close, high, low = close.ffill(limit=5), high.ffill(limit=5), low.ffill(limit=5)
     s = {}
     s["sma10"] = close.rolling(10, min_periods=10).mean()
@@ -391,7 +423,7 @@ def price_signals(close, high, low, volume=None):
     # IBD-style relative-strength composite: the last quarter double-weighted
     s["rs_raw"] = 0.4 * s["r3m"] + 0.2 * s["r6m"] + 0.2 * s["r9m"] + 0.2 * s["r12m"]
     s["vol252"] = ret.rolling(252, min_periods=200).std() * np.sqrt(252)
-    s["adr20"] = (high / low - 1).rolling(20, min_periods=20).mean()
+    s["adr20"] = adr
     s["off_high"] = close / s["hi52"] - 1
     s["above_low"] = close / s["lo52"] - 1
     sma200_up = s["sma200"] > s["sma200"].shift(21)
@@ -589,6 +621,16 @@ def compute(fund, frames):
     `fund` = parse_universe() output, `frames` = load_prices() output.
     """
     close, high, low, volume = panels(frames)
+    # Keep only sessions most names traded. One frame with an extra row — a
+    # pre-market stub with volume and no prices, a holiday bar, SPY's own
+    # dates — becomes a union-index row that is NaN for everyone else; read as
+    # "the last session" it blanked every 1D change and dated the scan to a
+    # day that had not traded.
+    # Near-empty rows only: mid-session, a real day can have today's bar for
+    # well under half the names (a failed chunk serves the rest stale), and
+    # dropping it would discard the fresh prices and date the scan yesterday.
+    real = close.notna().sum(axis=1) >= max(3, 0.05 * close.shape[1])
+    close, high, low, volume = close[real], high[real], low[real], volume[real]
     spy = close.pop(BENCHMARK) if BENCHMARK in close.columns else None
     for p in (high, low, volume):
         if BENCHMARK in p.columns:

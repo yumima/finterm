@@ -12,7 +12,7 @@ card to `fincept-qt/scripts/screener_evidence.json`; output in
 **No strategy we could test beats an equal-weighted S&P 500 with statistical
 significance over 2010-01 → 2026-08.** The best — RS composite (+2.0%/yr,
 t 0.8), Trend Template top 25 by RS (+1.7%, t 0.5), Momentum 12-1 (+1.5%,
-t 0.6), Quality+Momentum (+1.3%, t 0.6) — are inside noise, and every momentum-family result earned its excess in
+t 0.6), Quality+Momentum (+1.0%, t 0.5) — are inside noise, and every momentum-family result earned its excess in
 2023-26 alone (the AI-led rally) after losing in each earlier period. This
 agrees with the repo's own earlier harness (`scripts/factor_rating/__init__.py`:
 12-1 momentum IC +0.012, t 0.6, on 178 large caps and again on 408 small/mid caps).
@@ -85,13 +85,13 @@ discretionary layer.
 | Leaders top 2% by 1/3/6m | 12.6% | −35.4% | +0.3% | 0.06 | −2.0% | −3.2% | +4.3% | +5.6% |
 | Low volatility, lowest decile | 10.9% | −19.6% | −3.0% | −1.08 | −2.9% | +1.4% | −6.5% | −6.2% |
 | 1-month reversal | 10.4% | −39.9% | −1.5% | −0.58 | | | | |
-| Gross profitability GP/A, top decile | 14.4% | −30.4% | +1.1% | 0.46 | +9.6% | −1.4% | +2.1% | −8.1% |
+| Gross profitability GP/A, top decile | 12.4% | −32.6% | −0.8% | -0.44 | +4.3% | −2.3% | +1.7% | −7.8% |
 | Piotroski F ≥ 8 | 14.2% | −29.2% | +0.6% | 0.46 | −0.1% | +0.2% | +1.5% | +1.5% |
 | Piotroski F ≥ 8 in cheapest 30% B/M | 4.9% | −62.2% | −5.2% | −0.99 | (median 3 names) | | | |
-| Magic Formula, top 30 | 14.4% | −24.2% | +0.9% | 0.61 | +3.2% | +0.5% | +2.7% | −3.1% |
+| Magic Formula, top 30 | 13.7% | −24.6% | +0.2% | 0.14 | +2.5% | −0.2% | +1.6% | −3.4% |
 | Value composite, top decile | 13.1% | −48.1% | +0.8% | 0.32 | −3.2% | −0.7% | +6.8% | +3.3% |
 | Trending Value | 13.3% | −44.2% | +0.7% | 0.29 | −0.7% | −2.7% | +3.7% | +4.8% |
-| Quality+Momentum (GP/A top 30% → 25 by 12-1) | 14.9% | −24.3% | +1.3% | 0.61 | +0.4% | −0.7% | −0.8% | +7.2% |
+| Quality+Momentum (GP/A top 30% → 25 by 12-1) | 14.6% | −25.2% | +1.0% | 0.47 | +0.4% | −2.1% | +0.1% | +6.8% |
 
 **Corrections made in review (2026-10-19), all now in the table:** the first
 Magic Formula run ranked ascending and negated, selecting the 30 WORST names
@@ -100,7 +100,11 @@ which is itself a lesson about noise); balance sheets from the Dec-31 frame
 were visible before they were filed for non-December fiscal years (a record
 is now dated by its LATEST period end); the float roll-forward used total-return
 prices (now split-only closes, `collect_raw.py`); an unknown shareholder yield
-scored 0; one-bar price holes blanked a stock's 52-week signals for a year.
+scored 0; one-bar price holes blanked a stock's 52-week signals for a year;
+and (third review) the Magic Formula / GP/A / Quality+Momentum backtests did
+not exclude Finance and Utilities as the shipped screens do — now excluded by
+SEC SIC code (6000-6799, 4900-4999; `collect_sic.py`), which took the Magic
+Formula from +0.9% to +0.2%/yr (t 0.1).
 `fund_backtest.py` now asserts every ranked screen's picks beat the universe
 median on their own metric, and the card's numbers are exported
 (`export_evidence.py` → `scripts/screener_evidence.json`), never hand-copied.

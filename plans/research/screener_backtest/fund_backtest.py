@@ -20,6 +20,15 @@ import backtest as B
 D = B.D
 frames = pickle.load(open(os.path.join(D, "frames.pkl"), "rb"))
 cik_of = pickle.load(open(os.path.join(D, "cik.pkl"), "rb"))
+# collect_sic.py. The shipped Magic Formula and Quality+Momentum exclude
+# TradingView's Finance and Utilities sectors; the same names by SIC here:
+# 6000-6799 (finance, insurance, real estate incl. REITs), 4900-4999.
+sic_of = pickle.load(open(os.path.join(D, "sic.pkl"), "rb"))
+
+
+def operating(cik):
+    sic = sic_of.get(cik)
+    return not (sic and (6000 <= sic <= 6799 or 4900 <= sic <= 4999))
 
 FIELDS = {  # output field -> concepts in priority order
     "rev": ["Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet"],
@@ -170,7 +179,8 @@ def metrics(t, u):
         shy = (np.nan if not (np.isfinite(div) or np.isfinite(bb))
                else (0 if not np.isfinite(div) else div) + (0 if not np.isfinite(bb) else bb))
         rows[s] = {
-            "gpa": gross_profit(r) / a if a and a > 0 else np.nan,
+            "op": operating(cik),
+            "gpa": gross_profit(r) / a if a and a > 0 and operating(cik) else np.nan,
             "f": piotroski(r, p),
             "ey": ebit / ev if np.isfinite(ev) and ev > 0 else np.nan,
             "roc": ebit / cap if np.isfinite(cap) and cap > 0 else np.nan,
@@ -187,7 +197,7 @@ def metrics(t, u):
         # 30 WORST names and reported their record as the formula's.)
         # Ranked within names that have BOTH, as the shipped screen does —
         # ranking each over its own population offsets the sum.
-        both = m["ey"].notna() & m["roc"].notna()
+        both = m["ey"].notna() & m["roc"].notna() & m["op"].astype(bool)
         m["magic"] = (m["ey"][both].rank() + m["roc"][both].rank()).reindex(m.index)
     cache[key] = m
     return m
@@ -219,7 +229,7 @@ def _(t, u):
     return list(m.index[cheap & (m["f"] >= 8)])
 
 @strat("Magic Formula (top 30)")
-def _(t, u): return top(metrics(t, u)["magic"].where(metrics(t, u)[["ey", "roc"]].notna().all(axis=1)), n=30)
+def _(t, u): return top(metrics(t, u)["magic"], n=30)  # NaN outside operating names with both
 
 @strat("Value composite (top decile)")
 def _(t, u): return top(metrics(t, u)["value"], frac=0.10)

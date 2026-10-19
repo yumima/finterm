@@ -40,17 +40,17 @@
    "t": -1.76
   },
   "Gross profitability GP/A (top decile)": {
-   "excess": 0.0106,
-   "hit": 0.475,
-   "max_dd": -0.3039,
-   "median_names": 26,
+   "excess": -0.0082,
+   "hit": 0.485,
+   "max_dd": -0.3262,
+   "median_names": 23,
    "subperiods": [
-    0.0959,
-    -0.0144,
-    0.0215,
-    -0.0807
+    0.0426,
+    -0.0231,
+    0.0167,
+    -0.0776
    ],
-   "t": 0.46
+   "t": -0.44
   },
   "Leaders: top 2% by 1/3/6m (Qullamaggie-style)": {
    "excess": 0.0025,
@@ -79,17 +79,17 @@
    "t": -1.08
   },
   "Magic Formula (top 30)": {
-   "excess": 0.009,
-   "hit": 0.525,
-   "max_dd": -0.2425,
+   "excess": 0.0021,
+   "hit": 0.515,
+   "max_dd": -0.2461,
    "median_names": 30,
    "subperiods": [
-    0.0317,
-    0.0049,
-    0.0273,
-    -0.0313
+    0.0246,
+    -0.0021,
+    0.0159,
+    -0.0342
    ],
-   "t": 0.61
+   "t": 0.14
   },
   "Minervini Trend Template (all passers)": {
    "excess": -0.009,
@@ -183,17 +183,17 @@
    "t": -0.99
   },
   "Quality+Momentum: GP/A top 30% -> top 25 by 12-1": {
-   "excess": 0.0133,
+   "excess": 0.0103,
    "hit": 0.56,
-   "max_dd": -0.2427,
+   "max_dd": -0.2517,
    "median_names": 25,
    "subperiods": [
-    0.0035,
-    -0.0075,
-    -0.0078,
-    0.0723
+    0.0043,
+    -0.0206,
+    0.001,
+    0.0682
    ],
-   "t": 0.61
+   "t": 0.47
   },
   "RS composite (top decile)": {
    "excess": 0.0199,

@@ -44,7 +44,7 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
 
   private:
     void build_ui();
-    void run_scan(bool force);
+    void run_scan();
     void apply_result(const screener::ScanResult& r, bool from_cache);
     void populate_strategies();
     void show_strategy(const QString& id);
@@ -71,6 +71,9 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     // Newest scan generation saved per cache file: a superseded scan that
     // finishes late must not overwrite a newer result for its universe.
     QHash<QString, int> saved_gen_;
+    // Generation of the result on screen (-1 = a disk cache), so a superseded
+    // scan for the universe selected NOW can still replace an older view.
+    int displayed_gen_ = -1;
 };
 
 } // namespace fincept::screens

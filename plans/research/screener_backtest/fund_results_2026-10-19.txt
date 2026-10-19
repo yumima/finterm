@@ -2,34 +2,34 @@ Period 2010-01-29 .. 2026-08-31 (200 months), cost 10bp/side
                                         strategy  CAGR   vol CAGR/vol  maxDD excess/yr vs EW t(excess) hit vs EW median n
                                               EW 13.6% 15.6%     0.87 -26.9%            0.0%       NaN      0.0%      409
                                              SPY 14.5% 14.3%     1.01 -23.9%            0.6%      0.49     50.0%      409
-           Gross profitability GP/A (top decile) 14.4% 17.5%     0.83 -30.4%            1.1%      0.46     47.5%       26
+           Gross profitability GP/A (top decile) 12.4% 17.3%     0.72 -32.6%           -0.8%     -0.44     48.5%       23
                           Piotroski F >= 8 (all) 14.2% 16.3%     0.87 -29.2%            0.6%      0.46     52.0%       22
             Piotroski F >= 8 in cheapest 30% B/M  4.9% 27.9%     0.18 -62.2%           -5.2%     -0.99     43.5%        3
-                          Magic Formula (top 30) 14.4% 16.8%     0.86 -24.2%            0.9%      0.61     52.5%       30
+                          Magic Formula (top 30) 13.7% 16.6%     0.82 -24.6%            0.2%      0.14     51.5%       30
                     Value composite (top decile) 13.1% 22.0%     0.59 -48.1%            0.8%      0.32     49.5%       39
 Trending Value: value top decile -> top 25 by 6m 13.3% 20.5%     0.65 -44.2%            0.7%      0.29     52.0%       25
-Quality+Momentum: GP/A top 30% -> top 25 by 12-1 14.9% 16.5%     0.91 -24.3%            1.3%      0.61     56.0%       25
+Quality+Momentum: GP/A top 30% -> top 25 by 12-1 14.6% 16.6%     0.88 -25.2%            1.0%      0.47     56.0%       25
 
 Excess/yr vs EW by sub-period
                                                   2010-2014  2015-2019  2020-2022  2023-2026
-Gross profitability GP/A (top decile)                 +9.6%      -1.4%      +2.1%      -8.1%
+Gross profitability GP/A (top decile)                 +4.3%      -2.3%      +1.7%      -7.8%
 Piotroski F >= 8 (all)                                -0.1%      +0.2%      +1.5%      +1.5%
 Piotroski F >= 8 in cheapest 30% B/M                  -0.5%     -13.7%      -3.2%      -1.7%
-Magic Formula (top 30)                                +3.2%      +0.5%      +2.7%      -3.1%
+Magic Formula (top 30)                                +2.5%      -0.2%      +1.6%      -3.4%
 Value composite (top decile)                          -3.2%      -0.7%      +6.8%      +3.3%
 Trending Value: value top decile -> top 25 by 6m      -0.7%      -2.7%      +3.7%      +4.8%
-Quality+Momentum: GP/A top 30% -> top 25 by 12-1      +0.4%      -0.7%      -0.8%      +7.2%
+Quality+Momentum: GP/A top 30% -> top 25 by 12-1      +0.4%      -2.1%      +0.1%      +6.8%
 SPY                                                   -3.0%      +0.7%      -2.7%      +8.0%
 
 Monthly IC (Spearman vs forward 1m return)
-  GP/A                         mean +0.011  t +1.25  months 200
+  GP/A                         mean +0.009  t +0.96  months 200
   Piotroski F                  mean +0.006  t +0.90  months 197
-  Magic (rank sum)             mean +0.006  t +0.74  months 200
+  Magic (rank sum)             mean +0.004  t +0.46  months 200
   Value composite              mean +0.005  t +0.43  months 200
 
 direction guard: picks beat the universe median on their own metric — ok
 
-names with a point-in-time record: median 259 (min 87, max 297) of a median 409 eligible
+names with a point-in-time record: median 227 (min 82, max 268) of a median 409 eligible
 
 latest month market caps ($B, float-based):
 NVDA     5090.0
