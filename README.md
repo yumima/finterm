@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`d24b7ddaa`](https://github.com/yumima/finterm/commit/d24b7ddaa) screener: review fixes — the write-up always shows, ER closes only when alone
 - [`e1dbd65e2`](https://github.com/yumima/finterm/commit/e1dbd65e2) screener: strategies | summary over the list | write-up or Equity Research
 - [`c620a70cf`](https://github.com/yumima/finterm/commit/c620a70cf) screener: rules and record always shown above the list; scans no longer crash after a download
 - [`1f229780a`](https://github.com/yumima/finterm/commit/1f229780a) screener: Equity Research beside the list; honest, fast intraday prices

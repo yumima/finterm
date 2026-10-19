@@ -6,6 +6,7 @@
 #include "services/util/DiskCache.h"
 #include "ui/theme/Theme.h"
 
+#include <QButtonGroup>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFrame>
@@ -310,6 +311,32 @@ void ScreenerScreen::build_ui() {
     table_title_->setWordWrap(true);
     ml->addWidget(table_title_);
     auto* tools = new QHBoxLayout;
+    // Passing today | one rule away: what already qualifies, and what is
+    // closest to qualifying next (only screens with a tested setting-up list)
+    view_box_ = new QWidget;
+    auto* vl = new QHBoxLayout(view_box_);
+    vl->setContentsMargins(0, 0, 8, 0);
+    vl->setSpacing(0);
+    passing_btn_ = new QPushButton;
+    setup_btn_ = new QPushButton;
+    for (QPushButton* b : {passing_btn_, setup_btn_}) {
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setStyleSheet(QString("QPushButton:checked{background:%1;color:%2;border-color:%1;}")
+                             .arg(ui::colors::AMBER(), ui::colors::BG_BASE()));
+        vl->addWidget(b);
+    }
+    passing_btn_->setToolTip(QStringLiteral("The names that pass every rule today"));
+    setup_btn_->setToolTip(QStringLiteral(
+        "Setting up: names one rule from passing, with the rule and how far they are — the closest "
+        "to qualifying next. See the write-up for how such a list did."));
+    auto* views = new QButtonGroup(this);
+    views->setExclusive(true);
+    views->addButton(passing_btn_);
+    views->addButton(setup_btn_);
+    passing_btn_->setChecked(true);
+    view_box_->hide();
+    tools->addWidget(view_box_);
     filter_ = new QLineEdit;
     filter_->setPlaceholderText(QStringLiteral("Filter by symbol, name or sector…"));
     filter_->setClearButtonEnabled(true);
@@ -433,6 +460,11 @@ void ScreenerScreen::build_ui() {
         });
     });
     connect(filter_, &QLineEdit::textChanged, this, [this](const QString&) { apply_filter(); });
+    connect(setup_btn_, &QPushButton::toggled, this, [this](bool on) {
+        setting_up_ = on; // no early return: a restored state may disagree with the button
+        if (has_lists())
+            fill_table();
+    });
     // Only Shares and Position depend on these: updated in place, so the
     // reader's sort and selection survive every keystroke.
     connect(account_, &QDoubleSpinBox::valueChanged, this, [this](double v) {
@@ -471,7 +503,7 @@ double ScreenerScreen::min_mcap() const {
 }
 
 QString ScreenerScreen::cache_name() const {
-    return QStringLiteral("scan_v3_%1.json").arg(qint64(min_mcap())); // v3: write-ups + worked examples
+    return QStringLiteral("scan_v4_%1.json").arg(qint64(min_mcap())); // v4: write-ups, worked examples, setting up
 }
 
 void ScreenerScreen::showEvent(QShowEvent* e) {
@@ -769,6 +801,7 @@ void ScreenerScreen::populate_strategies() {
 void ScreenerScreen::show_strategy(const QString& id) {
     current_id_ = id;
     plan_box_->setVisible(id == QLatin1String("luk_pullback"));
+    update_view_toggle();
     fill_band();
     render_band(true);
     render_details();
@@ -783,6 +816,27 @@ void ScreenerScreen::show_strategy(const QString& id) {
     if (!inline_on_)
         centre_->setCurrentIndex(1);
     fill_table();
+}
+
+bool ScreenerScreen::setting_up() const {
+    const auto* s = result_.strategy(current_id_);
+    return setting_up_ && s && !s->setups_from.isEmpty();
+}
+
+void ScreenerScreen::update_view_toggle() {
+    const auto* s = current_id_ == kOverview ? nullptr : result_.strategy(current_id_);
+    const bool show = s && !s->setups_from.isEmpty() && has_lists();
+    view_box_->setVisible(show);
+    if (!show)
+        return;
+    passing_btn_->setText(QStringLiteral("Passing · %1").arg(s->symbols.size()));
+    setup_btn_->setText(QStringLiteral("Setting up · %1").arg(result_.setups.value(s->setups_from).size()));
+    setup_btn_->setToolTip(s->setups_from == current_id_
+                               ? QStringLiteral("Names one rule from passing, with the rule and how far they are")
+                               : QStringLiteral("Names one rule from the Trend Template (whose top 25 by RS this "
+                                                "list is), with the rule and how far they are"));
+    const QSignalBlocker b1(passing_btn_), b2(setup_btn_);
+    (setting_up_ ? setup_btn_ : passing_btn_)->setChecked(true); // the group unchecks the other
 }
 
 QString ScreenerScreen::inline_html() const {
@@ -878,14 +932,22 @@ void ScreenerScreen::fill_table() {
             symbols << row.symbol;
             picked_by.insert(row.symbol, row.by);
         }
+    } else if (setting_up()) {
+        for (const auto& su : result_.setups.value(s->setups_from))
+            symbols << su.symbol;
     } else {
         symbols = s->symbols;
     }
+    const bool su_view = !ov && setting_up();
+    QHash<QString, screener::ScanResult::Setup> setup_of;
+    if (su_view)
+        for (const auto& su : result_.setups.value(s->setups_from))
+            setup_of.insert(su.symbol, su);
 
     // One order for every view: who it is and how it trades first, then what
     // THIS strategy is about (and, for the pullback, the trade plan), then the
     // context. Name and sector at the end: wide, and not why you are here.
-    enum class Col { Rank, Symbol, Trend, Metric, Shares, Position, PickedBy, Name, Sector };
+    enum class Col { Rank, Symbol, Trend, Metric, Shares, Position, PickedBy, Misses, Gap, Name, Sector };
     struct Spec {
         Col col;
         const screener::ColumnDef* def = nullptr;
@@ -902,6 +964,13 @@ void ScreenerScreen::fill_table() {
         metric("screens");
         cols.push_back({Col::PickedBy, nullptr, QStringLiteral("Picked by")});
         metric("rs");
+        metric("r3m");
+    } else if (su_view) {
+        // what it misses and how far, then why it is close
+        cols.push_back({Col::Misses, nullptr, QStringLiteral("Misses")});
+        cols.push_back({Col::Gap, nullptr, QStringLiteral("To pass")});
+        metric("rs");
+        metric("off_high");
         metric("r3m");
     } else {
         for (const QString& key : s->columns) {
@@ -946,6 +1015,12 @@ void ScreenerScreen::fill_table() {
                 h->setToolTip(QStringLiteral("Shares so that a stop-out costs your chosen risk of the account"));
             else if (cols[c].col == Col::Position)
                 h->setToolTip(QStringLiteral("Position value at the entry price"));
+            else if (cols[c].col == Col::Misses)
+                h->setToolTip(QStringLiteral("The one rule it fails today"));
+            else if (cols[c].col == Col::Gap)
+                h->setToolTip(QStringLiteral(
+                    "How far that rule's measure must still move. A close is one day's move; a slow average "
+                    "rising takes weeks — sort within the same rule"));
         }
     }
     table_->setRowCount(symbols.size());
@@ -993,6 +1068,18 @@ void ScreenerScreen::fill_table() {
                     it = text_item(picked_by.value(sym).join(QStringLiteral(", ")));
                     it->setToolTip(picked_by.value(sym).join(QLatin1Char('\n')));
                     break;
+                case Col::Misses: {
+                    const auto& su = setup_of.value(sym);
+                    it = text_item(su.short_rule.isEmpty() ? su.rule : su.short_rule);
+                    it->setToolTip(su.rule);
+                    break;
+                }
+                case Col::Gap: {
+                    // the move still needed; the sentence on hover
+                    it = metric_item(Kind::Pct, setup_of.value(sym).gap);
+                    it->setToolTip(setup_of.value(sym).gap_text);
+                    break;
+                }
                 case Col::Name:
                     it = text_item(o.value(QStringLiteral("name")).toString());
                     break;
@@ -1009,14 +1096,25 @@ void ScreenerScreen::fill_table() {
     table_->setColumnWidth(2, 96);
     for (int c = 0; c < cols.size(); ++c) {
         const int cap = cols[c].col == Col::Name ? 190 : cols[c].col == Col::Sector ? 140
-                      : cols[c].col == Col::PickedBy ? 300 : 0;
+                      : cols[c].col == Col::PickedBy ? 300 : cols[c].col == Col::Misses ? 260 : 0;
         if (cap && table_->columnWidth(c) > cap)
             table_->setColumnWidth(c, cap);
     }
 
     const QString name = ov ? QStringLiteral("Overview") : s->name;
+    // RS Leaders shows the Trend Template's setting-up list: say whose it is
+    const auto* target = su_view ? result_.strategy(s->setups_from) : nullptr;
+    const QString su_target = !su_view ? QString()
+                              : s->setups_from == current_id_ || !target ? QStringLiteral("passing")
+                                                                          : QStringLiteral("the ") + target->name;
     table_title_->setText(
-        symbols.isEmpty()
+        su_view ? (symbols.isEmpty()
+                       ? QStringLiteral("%1 — no name is one rule from %2 today").arg(name, su_target)
+                       : QStringLiteral("%1 — setting up: %2 names one rule from %3, ranked by RS")
+                             .arg(name)
+                             .arg(symbols.size())
+                             .arg(su_target))
+        : symbols.isEmpty()
             ? QStringLiteral("%1 — no stock passes today").arg(name)
             : ov ? QStringLiteral("Overview — %1 names picked by two or more screens, most-picked first")
                        .arg(symbols.size())
@@ -1283,6 +1381,42 @@ void ScreenerScreen::fill_band() {
         d += example(QStringLiteral("WORKED EXAMPLE · %1, TODAY'S FIRST PICK"), s->pick);
         d += example(QStringLiteral("THE FIRST NAME THAT MISSED · %1"), s->miss);
     }
+    if (!s->setups_from.isEmpty()) {
+        // the forward-looking list, with what its record says and does not
+        const QJsonObject rec = result_.setups_record.value(s->setups_from).toObject();
+        const QJsonObject trap = result_.setups_record.value(QStringLiteral("rs_trap")).toObject();
+        const auto pc = [&](const QJsonObject& o, const char* k, bool sign) {
+            const auto v = screener::num(o, QString::fromLatin1(k));
+            return v ? fmtn::format_percent(*v * 100.0, 1, sign) : fmtn::placeholder();
+        };
+        const auto tv = [&](const QJsonObject& o) {
+            const auto v = screener::num(o, QStringLiteral("t"));
+            return v ? QString::number(*v, 'f', 2) : fmtn::placeholder();
+        };
+        d += head(has_lists() ? QStringLiteral("SETTING UP · %1 NAMES ONE RULE AWAY")
+                                    .arg(result_.setups.value(s->setups_from).size())
+                              : QStringLiteral("SETTING UP"));
+        d += para(QStringLiteral(
+            "The Setting up view above the list: names with RS of at least 70 that fail exactly one of the "
+            "Trend Template's seven price rules, with the rule and how far its measure must still move. It is "
+            "the closest thing here to \"what could come next\". A close below an average can be one day's "
+            "move; a slow average that must rise takes weeks — compare gaps within the same rule."));
+        if (!rec.isEmpty())
+            d += para(QStringLiteral(
+                         "What it did, 2010-2026 on the S&P 500: a month later %1 of these names were on the Trend "
+                         "Template, against %2 of all non-passers, so the list does find the next passers. Held as a "
+                         "list, it did no better than the index: %3 / yr, t %4. Passing next is not the same as "
+                         "rising next.")
+                         .arg(pc(rec, "qualify_next", false), pc(rec, "qualify_base", false),
+                              pc(rec, "excess", true), tv(rec)));
+        if (!trap.isEmpty())
+            d += para(QStringLiteral(
+                         "Left out on purpose: names whose price trend passes all seven rules but whose RS is "
+                         "below 70. Held as a list they were reliably worse than the index, %1 / yr, t %2, in "
+                         "every sub-period — one of the two significant results in this research, both "
+                         "negative (the other: buying the names nearest their 52-week high).")
+                         .arg(pc(trap, "excess", true), tv(trap)));
+    }
     d += section(QStringLiteral("PRACTISE IT · PAPER FIRST"), s->practice);
     if (!s->reading.isEmpty())
         d += head(QStringLiteral("FURTHER READING")) + bullets(s->reading);
@@ -1293,6 +1427,7 @@ void ScreenerScreen::restore_state(const QVariantMap& state) {
     const QString id = state.value(QStringLiteral("strategy")).toString();
     if (!id.isEmpty())
         current_id_ = id;
+    setting_up_ = state.value(QStringLiteral("setting_up")).toBool();
     const double m = state.value(QStringLiteral("min_mcap")).toDouble();
     if (m > 0) {
         const int idx = universe_->findData(m);
@@ -1318,6 +1453,7 @@ void ScreenerScreen::restore_state(const QVariantMap& state) {
 
 QVariantMap ScreenerScreen::save_state() const {
     return {{QStringLiteral("strategy"), current_id_},
+            {QStringLiteral("setting_up"), setting_up_},
             {QStringLiteral("min_mcap"), min_mcap()},
             {QStringLiteral("account"), account_value_},
             {QStringLiteral("risk"), risk_frac_}};

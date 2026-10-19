@@ -448,6 +448,8 @@ def price_signals(close, high, low, volume=None):
     # criterion 1 is two comparisons; count it once
     c1 = crit[0] & crit[1]
     parts = [c1] + crit[2:]
+    for i, c in enumerate(parts):  # the 7 price criteria, in TT_RULES order (the setting-up list names the miss)
+        s[f"tt_p{i}"] = c
     s["tt_core"] = parts[0]
     for c in parts[1:]:
         s["tt_core"] = s["tt_core"] & c
@@ -519,6 +521,54 @@ def pullback_signals(close, high, low):
     return out
 
 
+# The Trend Template's 7 price criteria as the setting-up list names them, in
+# price_signals' order, with how far each must still move: (label, gap(row))
+# where gap is the change still needed, as a fraction of the moving side;
+# then what must move, and the table's short label.
+TT_RULES = [
+    ("Close above the 150- and 200-day SMA",
+     lambda x: max(x["sma150"], x["sma200"]) / x["price"] - 1, "the close must rise", "Close < 150/200-day"),
+    ("150-day SMA above the 200-day", lambda x: x["sma200"] / x["sma150"] - 1, "the 150-day must rise",
+     "150-day < 200-day"),
+    ("200-day SMA rising over 21 sessions", lambda x: x["sma200_prev"] / x["sma200"] - 1,
+     "the 200-day must rise", "200-day not rising"),
+    ("50-day SMA above the 150- and 200-day",
+     lambda x: max(x["sma150"], x["sma200"]) / x["sma50"] - 1, "the 50-day must rise", "50-day < 150/200-day"),
+    ("Close above the 50-day SMA", lambda x: x["sma50"] / x["price"] - 1, "the close must rise", "Close < 50-day"),
+    ("At least 30% above the 52-week low", lambda x: 1.30 * x["lo52"] / x["price"] - 1, "the close must rise",
+     "Near the 52w low"),
+    ("Within 25% of the 52-week high", lambda x: 0.75 * x["hi52"] / x["price"] - 1, "the close must rise",
+     "Far off the 52w high"),
+]
+
+
+def tt_setting_up(sig, df, k=-1):
+    """Names one rule from the Trend Template: RS >= 70 and exactly one of the
+    7 price criteria failed — the list that reached the template a month
+    later 38% of the time against 9% for other non-passers, and as a holding
+    did no better than the index (setups_backtest.py). Names failing ONLY the
+    RS rule are left out: holding them was reliably worse (t -3.0).
+    Ranked by RS. Returns [{"symbol", "rule", "gap", "gap_text"}]."""
+    parts = [sig[f"tt_p{i}"].iloc[k] for i in range(len(TT_RULES))]
+    syms = df.index
+    ok = pd.DataFrame({i: p.reindex(syms).fillna(False).astype(bool) for i, p in enumerate(parts)})
+    one = (ok.sum(axis=1) == 6) & (df["rs"] >= 70)
+    out = []
+    prev = sig["sma200"].iloc[k - 21] if len(sig["sma200"]) > 21 else None
+    for sym in df.index[one.to_numpy()].tolist():
+        miss = int(np.flatnonzero(~ok.loc[sym].to_numpy())[0])
+        x = {"price": df.at[sym, "price"], "sma50": sig["sma50"][sym].iloc[k],
+             "sma150": sig["sma150"][sym].iloc[k], "sma200": sig["sma200"][sym].iloc[k],
+             "sma200_prev": prev[sym] if prev is not None else np.nan,
+             "lo52": sig["lo52"][sym].iloc[k], "hi52": sig["hi52"][sym].iloc[k]}
+        label, gap_fn, what, short = TT_RULES[miss]
+        gap = float(gap_fn(x))
+        out.append({"symbol": sym, "rule": label, "short": short, "gap": _clean(gap),
+                    "gap_text": f"{what} {gap * 100:.1f}%" if np.isfinite(gap) else ""})
+    out.sort(key=lambda d: (-df.at[d["symbol"], "rs"], d["symbol"]))
+    return out
+
+
 def pct_rank(series):
     """Percentile 0..1 among the names that have a value; NaN stays NaN."""
     return series.rank(pct=True)
@@ -565,6 +615,7 @@ def evidence(strategy, ev_doc):
 STRATEGIES = [
     {
         "id": "trend_template", "name": "Minervini Trend Template", "family": "Practitioner",
+        "setups": "trend_template",
         "source": "Mark Minervini — US Investing Champion 2021 (+334.8%), 1997",
         "summary": "Stage-2 uptrend filter: price above rising long averages, near its high, strong RS.",
         "rules": ["Close > 150-day and 200-day SMA", "150-day SMA > 200-day SMA",
@@ -584,6 +635,7 @@ STRATEGIES = [
     },
     {
         "id": "rs_leaders", "name": "RS Leaders (Trend Template top 25)", "family": "Practitioner",
+        "setups": "trend_template",
         "source": "Minervini / IBD leadership — the strongest names that pass the template",
         "summary": "The 25 highest-RS stocks among Trend Template passers.",
         "rules": None,  # the Trend Template's, then the top 25 (filled in below)
@@ -1041,6 +1093,7 @@ def compute(fund, frames, extras=None, now=None):
         # NOT df.attrs: pandas deep-copies attrs into every derived frame
         extras["closes"] = close.iloc[-CHART_BARS:]
         extras["plan_asof"] = plan_asof
+        extras["setups"] = {"trend_template": tt_setting_up(sig, df)}
         extras["examples"] = worked_examples(df, sig, lists, {
             "combo": combo, "magic": magic, "gpa_pool": gpa_pool, "cheap": cheap,
             "combo_pb": combo_pb.iloc[-1], "one": {n: v.iloc[-1] for n, v in one.items()},
@@ -1252,7 +1305,8 @@ def scan(min_mcap=2e9, force=False):
     log_progress(1, 1, "Computing screens")
     extras = {}
     df, lists, market, asof = compute(fund, frames, extras, now)
-    in_any = sorted({s for v in lists.values() for s in v})
+    setups = extras.get("setups") or {}
+    in_any = sorted({s for v in lists.values() for s in v} | {d["symbol"] for v in setups.values() for d in v})
     rows = {s: {k: _clean(df.at[s, k]) for k in OUT_FIELDS if k in df.columns} for s in in_any}
     closes = extras.get("closes")
     if closes is not None:
@@ -1278,6 +1332,7 @@ def scan(min_mcap=2e9, force=False):
                      "min_mcap": float(min_mcap)},
         "market": market,
         "plan_asof": extras.get("plan_asof"),  # the completed session the pullback plans use
+        "setups": setups,  # one rule away (tt_setting_up); its record is in meta
         "rows": rows,
     })
     return doc
@@ -1297,9 +1352,12 @@ def meta(lists=None, examples=None):
         out["symbols"] = (lists or {}).get(st["id"], [])
         if examples and st["id"] in examples:
             out["example"] = examples[st["id"]]
+        if st.get("setups"):
+            out["setups_from"] = st["setups"]  # whose setting-up list this strategy shows
         strategies.append(out)
     return {
         "evidence_basis": ev_doc.get("basis", ""),
+        "setups_record": ev_doc.get("setups") or {},
         "subperiods": ev_doc.get("subperiods", []),
         "strategies": strategies,
     }

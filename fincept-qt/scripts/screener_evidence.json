@@ -173,30 +173,30 @@
    "t": 0.43
   },
   "Piotroski F >= 8 (all)": {
-   "excess": 0.0061,
-   "hit": 0.52,
+   "excess": 0.0148,
+   "hit": 0.528,
    "max_dd": -0.2922,
    "median_names": 22,
    "subperiods": [
-    -0.0011,
+    0.0284,
     0.0016,
     0.0149,
     0.015
    ],
-   "t": 0.46
+   "t": 1.18
   },
   "Piotroski F >= 8 in cheapest 30% B/M": {
-   "excess": -0.0522,
-   "hit": 0.435,
+   "excess": -0.0161,
+   "hit": 0.465,
    "max_dd": -0.6223,
    "median_names": 3,
    "subperiods": [
-    -0.005,
-    -0.1372,
-    -0.0319,
+    0.0243,
+    -0.1223,
+    0.1001,
     -0.0171
    ],
-   "t": -0.99
+   "t": -0.29
   },
   "Quality+Momentum: GP/A top 30% -> top 25 by 12-1": {
    "excess": 0.0103,
@@ -332,6 +332,38 @@
    "t": -4.4869,
    "trades": 693,
    "win": 0.2381
+  }
+ },
+ "setups": {
+  "rs_trap": {
+   "excess": -0.0561,
+   "max_dd": -0.3569,
+   "median_names": 15,
+   "months": 200,
+   "months_held": 162,
+   "subperiods": [
+    -0.0441,
+    -0.046,
+    -0.0603,
+    -0.0815
+   ],
+   "t": -2.43
+  },
+  "trend_template": {
+   "excess": -0.0021,
+   "max_dd": -0.2413,
+   "median_names": 31,
+   "months": 200,
+   "months_held": 200,
+   "qualify_base": 0.087,
+   "qualify_next": 0.379,
+   "subperiods": [
+    -0.0369,
+    0.0085,
+    0.012,
+    0.0194
+   ],
+   "t": -0.1
   }
  },
  "subperiods": [

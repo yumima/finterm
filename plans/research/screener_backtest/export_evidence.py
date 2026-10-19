@@ -33,7 +33,11 @@ def num(x, nd):
 
 
 def stats(col):
+    # months that held names only (an empty month is booked as 0.0 cash by the
+    # runners, and its "excess" would be minus the index): see setup_stats
     s = res[col].dropna()
+    if col + "|n" in res:
+        s = s[res.loc[s.index, col + "|n"] > 0]
     ex = s - res.loc[s.index, "EW"]
     eq = (1 + s).cumprod()
     return {
@@ -41,8 +45,7 @@ def stats(col):
         "t": num(ex.mean() / ex.std() * np.sqrt(len(ex)) if ex.std() > 0 else np.nan, 2),
         "max_dd": num((eq / eq.cummax() - 1).min(), 4),
         "hit": num((ex > 0).mean(), 3),
-        "subperiods": [num((res.loc[a:b, col] - res.loc[a:b, "EW"]).mean() * 12, 4)
-                       for a, b in PERIODS],
+        "subperiods": [num((ex.loc[a:b]).mean() * 12, 4) for a, b in PERIODS],
         "median_names": int(res[col + "|n"].median()) if col + "|n" in res else None,
         **({"trades": int(len(TRADES[col])), "win_rate": num((TRADES[col]["R"] > 0).mean(), 3),
             "avg_R": num(TRADES[col]["R"].mean(), 2)} if col in TRADES else {}),
@@ -71,6 +74,39 @@ out = {
     # survivorship bias in its favour (only names alive today)
     "pullback_broad": {k: {kk: num(vv, 4) if isinstance(vv, float) else vv for kk, vv in v.items()}
                        for k, v in broad.items()},
+}
+# Setting-up lists (setups_backtest.py): names one rule away from a screen.
+# Same months and index as the screens; the qualify-next-month rates are
+# that script's graduation measurement.
+setups = pd.read_pickle(os.path.join(D, "setups_results.pkl"))
+grad = pd.read_pickle(os.path.join(D, "setups_graduation.pkl"))
+assert setups.index.equals(res.index), "the setups backtest must cover the same months"
+
+
+def setup_stats(col):
+    # Months that HELD names only: bt.run books an empty month as 0.0 (cash),
+    # and a cash month's excess is just minus the index — the RS-trap list was
+    # empty in 38 of 200 months, which inflated its record from -5.6% (t -2.4)
+    # to -9.6% (t -3.0) in a first export.
+    held = setups[col + "|n"] > 0
+    s = setups.loc[held, col].dropna()
+    ex = s - setups.loc[s.index, "EW"]
+    eq = (1 + s).cumprod()
+    return {"excess": num(ex.mean() * 12, 4),
+            "t": num(ex.mean() / ex.std() * np.sqrt(len(ex)) if ex.std() > 0 else np.nan, 2),
+            "max_dd": num((eq / eq.cummax() - 1).min(), 4),
+            "subperiods": [num(((s - setups.loc[s.index, "EW"]).loc[a:b]).mean() * 12, 4) for a, b in PERIODS],
+            "median_names": int(setups[col + "|n"].median()),
+            "months_held": int(held.sum()), "months": int(len(setups))}
+
+
+out["setups"] = {
+    # what the tab lists: RS >= 70 and exactly one of the 7 price criteria missed
+    "trend_template": {**setup_stats("TT one rule away, the rule = a price criterion (RS >= 70)"),
+                       "qualify_next": num(grad["tt_price_one_away"], 3),
+                       "qualify_base": num(grad["tt_non_passer"], 3)},
+    # what it leaves out, and why: the full price trend without the RS
+    "rs_trap": setup_stats("TT one rule away, the rule = RS (price trend complete)"),
 }
 with open(OUT, "w") as fh:
     json.dump(out, fh, indent=1, sort_keys=True, allow_nan=False)

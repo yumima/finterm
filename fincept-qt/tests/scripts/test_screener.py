@@ -151,6 +151,9 @@ for i in range(60):
         c = 30 * np.exp(0.006 * np.minimum(t60, n60 - 12)) * (1 + 0.004 * rng60.standard_normal(n60))
     if i % 7 == 1:  # explosive movers: a big, volatile run to new highs (breakout candidates)
         c = 20 * np.exp(0.009 * t60) * (1 + 0.01 * rng60.standard_normal(n60))
+    if i in (2, 9):  # a sharp V: a year's decline, then a 30-session rally — strong RS, but the
+        # 150-day is still under the 200-day (one price rule away)
+        c = 30 * np.where(t60 < 300, np.exp(-0.002 * t60), np.exp(-0.002 * 300 + 0.045 * (t60 - 300)))
     rngs = 1 + rng60.uniform(0.005, 0.05, n60)
     if i % 7 == 1:
         rngs = 1 + rng60.uniform(0.05, 0.08, n60)  # ADR well above 4%
@@ -191,6 +194,37 @@ for st in sd.STRATEGIES:
 # all but the Leader Pullback, whose resting-at-support setup a random market
 # does not produce (its pick path was checked on the real 2026-10-19 scan)
 check(both >= 10, f"60 names: strategies with both a pick and a miss: {both} of {len(sd.STRATEGIES)}")
+# setting up: RS >= 70, exactly 6 of the 7 price criteria, never a passer, the
+# named rule really is the one failed, and its gap is a move still needed
+df60, _, _, _ = sd.compute(fund60, fr60)
+su = ex60["setups"]["trend_template"]
+check(len(su) > 0, f"60 names: some names are one rule from the Trend Template ({len(su)})")
+labels = [r_[0] for r_ in sd.TT_RULES]
+for d_ in su:
+    sym_ = d_["symbol"]
+    check(df60.at[sym_, "rs"] >= 70 and df60.at[sym_, "tt_count"] == 6 and sym_ not in lists60["trend_template"],
+          f"setting up {sym_}: RS >= 70, 6 of 7 price criteria, not a passer")
+    check(d_["rule"] in labels and d_["gap"] is not None and d_["gap"] >= 0,
+          f"setting up {sym_}: names a rule and a gap still to close: {d_}")
+sig60 = sd.price_signals(*[pd.DataFrame({k_: f_[c_] for k_, f_ in fr60.items() if k_ != "SPY"})
+                           for c_ in ("Close", "High", "Low")])
+for d_ in su:
+    failing = [i for i in range(7) if not bool(sig60[f"tt_p{i}"][d_["symbol"]].iloc[-1])]
+    check(failing == [labels.index(d_["rule"])],
+          f"setting up {d_['symbol']}: the named rule is the one it fails ({failing}, {d_['rule']})")
+# every gap formula: > 0 exactly when its rule fails, on a hand-made row where
+# only that rule is in question (the fixture's setups all miss one rule)
+base = {"price": 100.0, "sma50": 90.0, "sma150": 80.0, "sma200": 70.0, "sma200_prev": 65.0,
+        "lo52": 50.0, "hi52": 110.0}
+bad = [{"price": 75.0}, {"sma150": 65.0}, {"sma200_prev": 72.0}, {"sma50": 78.0}, {"sma50": 105.0},
+       {"lo52": 80.0}, {"hi52": 140.0}]
+for i, (label_, gap_fn, _w, _s) in enumerate(sd.TT_RULES):
+    check(gap_fn(base) <= 0, f"TT_RULES[{i}] {label_}: no gap left when the rule passes")
+    check(gap_fn({**base, **bad[i]}) > 0, f"TT_RULES[{i}] {label_}: a positive gap when it fails")
+trap = df60.index[(df60["tt_count"] == 7) & (df60["rs"] < 70)]
+check(not set(trap) & {d_["symbol"] for d_ in su}, "a full price trend without RS (the measured trap) is left out")
+check([d_["symbol"] for d_ in su] == sorted([d_["symbol"] for d_ in su], key=lambda x: (-df60.at[x, "rs"], x)),
+      "setting up is ranked by RS")
 check("nan" not in json.dumps(ex60["examples"]).lower().replace("finance", ""),
       "no example value prints a literal nan")
 check("SPY" not in df.index, "the benchmark is not a screen candidate")

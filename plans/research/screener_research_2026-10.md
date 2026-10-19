@@ -86,8 +86,15 @@ discretionary layer.
 | Low volatility, lowest decile | 10.9% | −19.6% | −3.0% | −1.08 | −2.9% | +1.4% | −6.5% | −6.2% |
 | 1-month reversal | 10.4% | −39.9% | −1.5% | −0.58 | | | | |
 | Gross profitability GP/A, top decile | 12.4% | −32.6% | −0.8% | -0.44 | +4.3% | −2.3% | +1.7% | −7.8% |
-| Piotroski F ≥ 8 | 14.2% | −29.2% | +0.6% | 0.46 | −0.1% | +0.2% | +1.5% | +1.5% |
-| Piotroski F ≥ 8 in cheapest 30% B/M | 4.9% | −62.2% | −5.2% | −0.99 | (median 3 names) | | | |
+| Piotroski F ≥ 8 | 14.2% | −29.2% | +1.5%¹ | 1.18¹ | +2.8% | +0.2% | +1.5% | +1.5% |
+| Piotroski F ≥ 8 in cheapest 30% B/M | 4.9% | −62.2% | −1.6%¹ | −0.29¹ | (median 3 names) | | | |
+
+¹ Excess and t over the months that held names (corrected 2026-10-19 in the
+setups review): the runners book an empty month as 0.0 cash, whose "excess" is
+minus the index. Piotroski F ≥ 8 was empty in 3 months (2010-14, sparse early
+filings), the cheapest-30% version in 15; with those counted as cash they read
++0.6% (t 0.46) and −5.2% (t −0.99). No other screen had an empty month. CAGR
+and drawdown above still include the cash months.
 | Magic Formula, top 30 | 13.7% | −24.6% | +0.2% | 0.14 | +2.5% | −0.2% | +1.6% | −3.4% |
 | Value composite, top decile | 13.1% | −48.1% | +0.8% | 0.32 | −3.2% | −0.7% | +6.8% | +3.3% |
 | Trending Value | 13.3% | −44.2% | +0.7% | 0.29 | −0.7% | −2.7% | +3.7% | +4.8% |
@@ -198,3 +205,36 @@ account and risk, 3R/5R), and this record on its card.
 - Fundamentals come live from the TradingView scanner (one request for the
   whole US market, incl. a computed Piotroski score); prices from Yahoo daily
   bars, computed with the same definitions as `backtest.py`.
+
+## Setting up: one rule away (2026-10-19, `setups_backtest.py`)
+
+The question behind it: the lists show what already happened (MRNA appears
+after +280%); a reader wants what could come next. Same data and method as
+above (point-in-time S&P 500, monthly, equal weight, 10 bp per side, excess
+vs the equal-weighted universe), shipped signal definitions.
+
+| List | excess/yr | t | median names |
+|---|---|---|---|
+| Trend Template, all passers (reference) | −0.9% | −0.42 | 82 |
+| TT one rule away (any of the 8) | −0.5% | −0.35 | 52 |
+| TT one rule away, RS ≥ 70, one PRICE criterion missed | −0.2% | −0.10 | 31 |
+| **TT price trend complete, RS < 70** | **−5.6%** | **−2.43** | 15 (held in 162 of 200 months) |
+| TT fresh passers (new this month) | −2.7% | −1.22 | 28 |
+| TT passers within 5% of the 52-week high | −1.9% | −0.68 | 69 |
+| Breakout Leaders one filter away | −0.2% | −0.05 | 15 |
+| Momentum 12-1, next decile (ranks 10-20%) | −1.6% | −0.94 | 41 |
+
+**Graduation:** a month later 37.9% of the RS ≥ 70 one-away names (33.0% of
+all one-away) were on the Trend Template, against 8.7% of all non-passers.
+The list finds the next passers; passing next is not rising next. The
+Breakout numbers are not meaningful on the S&P 500: almost no large cap clears
+ADR ≥ 4%, so the shipped Breakout list is near-empty there (median 0).
+
+**A second significant negative** (with 52-week-high nearness, t −2.02): a
+stock whose price trend passes all seven Trend Template rules but whose RS is
+below 70 was reliably WORSE (−5.6%/yr, t −2.43, every sub-period −4% to −8%,
+over the 162 months the list held names; a first export that counted its 38
+empty months as cash read −9.6%, t −3.0). Shipped: the tab's
+"Setting up" view lists RS ≥ 70 names one price criterion away (with the rule
+and the gap) and leaves the RS-only misses out; the write-up states both
+records (exported to screener_evidence.json → `setups`).

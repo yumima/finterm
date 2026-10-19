@@ -67,6 +67,7 @@ struct Strategy {
     QString practice;          // a paper-trading routine
     QStringList reading;       // books and papers
     Example pick, miss;        // today's first pick, and the first name that missed
+    QString setups_from;       // whose setting-up list it shows ("trend_template"), or none
     QStringList rules, columns, symbols;
     Evidence evidence;
 };
@@ -93,6 +94,13 @@ struct ScanResult {
     bool meta_only = false;             // `meta`: strategies + evidence, no lists yet
     QVector<Strategy> strategies;
     QHash<QString, QJsonObject> rows;
+    /// A name one rule from a screen: the rule it misses and how far it is.
+    struct Setup {
+        QString symbol, rule, short_rule, gap_text;
+        std::optional<double> gap;
+    };
+    QHash<QString, QVector<Setup>> setups; // by screen ("trend_template"), ranked
+    QJsonObject setups_record;              // the measured record of those lists (and of the trap)
 
     const Strategy* strategy(const QString& id) const {
         for (const auto& s : strategies)
@@ -160,6 +168,7 @@ inline ScanResult parse_scan(const QJsonObject& root) {
         s.tested = so.value(QStringLiteral("tested")).toString();
         s.reading = string_list(so.value(QStringLiteral("reading")));
         s.practice = so.value(QStringLiteral("practice")).toString();
+        s.setups_from = so.value(QStringLiteral("setups_from")).toString();
         const QJsonObject ex = so.value(QStringLiteral("example")).toObject();
         const auto example = [](const QJsonObject& o) {
             Example e;
@@ -197,6 +206,20 @@ inline ScanResult parse_scan(const QJsonObject& root) {
     const QJsonObject rows = root.value(QStringLiteral("rows")).toObject();
     for (auto it = rows.begin(); it != rows.end(); ++it)
         r.rows.insert(it.key(), it.value().toObject());
+    r.setups_record = root.value(QStringLiteral("setups_record")).toObject();
+    const QJsonObject su = root.value(QStringLiteral("setups")).toObject();
+    for (auto it = su.begin(); it != su.end(); ++it) {
+        QVector<ScanResult::Setup> list;
+        for (const auto& v : it.value().toArray()) {
+            const QJsonObject o = v.toObject();
+            const QString sym = o.value(QStringLiteral("symbol")).toString();
+            if (!sym.isEmpty())
+                list.push_back({sym, o.value(QStringLiteral("rule")).toString(),
+                                o.value(QStringLiteral("short")).toString(),
+                                o.value(QStringLiteral("gap_text")).toString(), num(o, QStringLiteral("gap"))});
+        }
+        r.setups.insert(it.key(), list);
+    }
     return r;
 }
 

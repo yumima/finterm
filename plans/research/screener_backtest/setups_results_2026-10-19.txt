@@ -1,0 +1,32 @@
+Period 2010-01-29 .. 2026-08-31 (200 months), cost 10bp/side
+                                                 strategy  CAGR   vol CAGR/vol  maxDD excess/yr vs EW t(excess) hit vs EW median n
+                                                       EW 13.6% 15.6%     0.87 -26.9%            0.0%       NaN      0.0%      409
+                                                      SPY 14.5% 14.3%     1.01 -23.9%            0.6%      0.49     50.0%      409
+                 Trend Template (all passers) [reference] 12.9% 14.0%     0.92 -21.1%           -0.9%     -0.42     53.5%       82
+                                         TT one rule away 13.3% 14.2%     0.93 -22.1%           -0.5%     -0.35     49.0%       52
+   TT one rule away, the rule = RS (price trend complete)  3.6% 12.9%     0.28 -35.7%           -9.6%     -3.00     37.5%       15
+TT one rule away, the rule = a price criterion (RS >= 70) 13.3% 15.9%     0.84 -24.1%           -0.2%     -0.10     50.5%       31
+                        TT fresh passers (new this month) 10.9% 14.0%     0.78 -24.2%           -2.7%     -1.22     48.5%       28
+  TT passers within 5% of the 52-week high (near a pivot) 11.9% 13.4%     0.88 -22.7%           -1.9%     -0.68     52.0%       69
+           Breakout Leaders (shipped filters) [reference]  3.9% 27.3%     0.14 -63.1%           -6.6%     -0.97     40.0%        0
+                         Breakout Leaders one filter away 13.4% 16.0%     0.84 -29.7%           -0.2%     -0.05     53.0%       15
+            Momentum 12-1, the next decile (ranks 10-20%) 12.0% 14.9%     0.81 -22.8%           -1.6%     -0.94     51.5%       41
+
+Excess/yr vs EW by sub-period
+                                                           2010-2014  2015-2019  2020-2022  2023-2026
+Trend Template (all passers) [reference]                       -1.9%      -1.8%      -3.3%      +3.6%
+TT one rule away                                               -2.8%      +0.1%      -1.2%      +2.3%
+TT one rule away, the rule = RS (price trend complete)         -9.1%      -9.3%      -7.7%     -12.2%
+TT one rule away, the rule = a price criterion (RS >= 70)      -3.7%      +0.8%      +1.2%      +1.9%
+TT fresh passers (new this month)                              -4.2%      -4.1%      -4.9%      +3.0%
+TT passers within 5% of the 52-week high (near a pivot)        -1.9%      -2.1%      -2.9%      -0.6%
+Breakout Leaders (shipped filters) [reference]                -15.4%      -3.8%      -1.6%      -2.5%
+Breakout Leaders one filter away                               -2.0%      -6.2%      +5.0%      +6.3%
+Momentum 12-1, the next decile (ranks 10-20%)                  -0.1%      -0.6%      -7.3%      -0.2%
+SPY                                                            -3.0%      +0.7%      -2.7%      +8.0%
+
+Monthly IC (Spearman vs forward 1m return)
+
+On the screen a month later (mean of monthly rates):
+  Trend Template: one rule away 33.0%, its RS >= 70 subset 37.9%, any non-passer 8.7%
+  Breakout Leaders: one filter away 2.0%, any non-passer 0.3%

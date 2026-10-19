@@ -178,6 +178,24 @@ class TestScreenerModel : public QObject {
         QVERIFY(o.idea.isEmpty() && o.reading.isEmpty() && o.pick.empty() && o.miss.empty());
     }
 
+    void setting_up_parses_in_order() {
+        const ScanResult r = parse_scan(QJsonDocument::fromJson(
+            R"({"strategies": [{"id": "tt", "name": "TT", "setups_from": "trend_template"}],
+                "rows": {},
+                "setups": {"trend_template": [
+                    {"symbol": "B", "rule": "Close above the 50-day SMA", "gap": 0.021, "gap_text": "the close must rise 2.1%"},
+                    {"symbol": "A", "rule": "150-day SMA above the 200-day", "gap": null, "gap_text": ""},
+                    {"rule": "no symbol: dropped"}]},
+                "setups_record": {"trend_template": {"qualify_next": 0.379}}})").object());
+        QCOMPARE(r.strategies[0].setups_from, QStringLiteral("trend_template"));
+        const auto su = r.setups.value(QStringLiteral("trend_template"));
+        QCOMPARE(su.size(), 2);
+        QCOMPARE(su[0].symbol, QStringLiteral("B")); // the backend's RS order, kept
+        QVERIFY(su[0].gap && std::abs(*su[0].gap - 0.021) < 1e-12);
+        QVERIFY(!su[1].gap); // a null gap is unknown, not 0
+        QVERIFY(r.setups_record.value(QStringLiteral("trend_template")).isObject());
+    }
+
     void null_close_is_a_gap_not_zero() {
         const auto v = number_list(QJsonDocument::fromJson("[1, null, 1.2]").array());
         QCOMPARE(v.size(), 3);

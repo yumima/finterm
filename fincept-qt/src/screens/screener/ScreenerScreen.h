@@ -88,6 +88,8 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void update_details_pane();
     void render_details();
     QString inline_html() const;
+    bool setting_up() const; // the setting-up view, on a screen that has one
+    void update_view_toggle();
     void render_inline();
     void leave_inline();
     double min_mcap() const;
@@ -113,6 +115,10 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     QLabel*       table_title_ = nullptr;
     QLineEdit*    filter_ = nullptr;
     QWidget*      plan_box_ = nullptr;
+    QWidget*      view_box_ = nullptr; // Passing | Setting up
+    QPushButton*  passing_btn_ = nullptr;
+    QPushButton*  setup_btn_ = nullptr;
+    bool          setting_up_ = false;
     QDoubleSpinBox* account_ = nullptr;
     QComboBox*    risk_ = nullptr;
     QTableWidget* table_ = nullptr;
