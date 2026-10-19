@@ -19,7 +19,7 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
 
     QVector<TabDef> tabs = {
         {"dashboard", "DASHBOARD"}, {"markets", "MARKETS"},   {"crypto_trading", "CRYPTO"},  {"portfolio", "PORTFOLIO"},
-        {"ownership", "OWNERSHIP"}, {"pre_ipo", "IPO WATCH"},
+        {"ownership", "OWNERSHIP"}, {"screener", "SCREENER"}, {"pre_ipo", "IPO WATCH"},
         // "equity_research" replaced "fingpt" (which had replaced "ai_chat"):
         // the per-stock AI — both forecast engines, headline sentiment and the
         // stock chat — now lives in Equity Research's AI tab, and the global

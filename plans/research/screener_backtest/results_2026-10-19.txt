@@ -1,0 +1,64 @@
+Period 2010-01-29 .. 2026-08-31 (200 months), cost 10bp/side
+                                     strategy  CAGR   vol CAGR/vol  maxDD excess/yr vs EW t(excess) hit vs EW median n
+                                           EW 13.6% 15.6%     0.87 -26.9%            0.0%       NaN      0.0%      409
+                                          SPY 14.5% 14.3%     1.01 -23.9%            0.6%      0.49     50.0%      409
+                   Momentum 12-1 (top decile) 14.8% 18.1%     0.82 -23.5%            1.5%      0.57     55.0%       41
+           52-week-high nearness (top decile)  9.1% 12.2%     0.74 -20.5%           -4.6%     -2.02     49.5%       41
+       Minervini Trend Template (all passers) 12.9% 14.0%     0.92 -21.1%           -0.9%     -0.42     53.5%       82
+                 Trend Template, top 25 by RS 15.1% 18.0%     0.84 -22.6%            1.7%      0.51     54.5%       25
+                    RS composite (top decile) 15.5% 17.3%     0.90 -19.6%            2.0%      0.77     51.0%       41
+Leaders: top 2% by 1/3/6m (Qullamaggie-style) 12.6% 21.2%     0.60 -35.4%            0.3%      0.06     52.5%        8
+               Low volatility (lowest decile) 10.9% 11.5%     0.95 -19.6%           -3.0%     -1.08     46.0%       41
+     1-month reversal (biggest losers decile) 10.4% 22.5%     0.46 -39.9%           -1.5%     -0.58     45.5%       41
+  Momentum 12-1 within Trend Template, top 25 14.7% 18.2%     0.81 -22.4%            1.4%      0.43     56.5%       25
+                                        EW +M  9.1% 11.5%     0.79 -22.3%           -4.7%     -1.76      5.5%      409
+                Momentum 12-1 (top decile) +M  8.5% 13.8%     0.61 -27.7%           -4.9%     -1.45     51.5%      409
+    Minervini Trend Template (all passers) +M  9.5% 12.0%     0.79 -18.9%           -4.2%     -1.38     51.0%      409
+              Trend Template, top 25 by RS +M 11.0% 16.1%     0.68 -24.8%           -2.2%     -0.56     52.5%      409
+                 RS composite (top decile) +M 10.7% 14.5%     0.74 -25.2%           -2.8%     -0.81     49.0%      409
+
+Excess/yr vs EW by sub-period
+                                               2010-2014  2015-2019  2020-2022  2023-2026
+Momentum 12-1 (top decile)                         -1.6%      -2.2%      -1.5%     +13.1%
+52-week-high nearness (top decile)                 -3.7%      -4.6%      -5.7%      -4.8%
+Minervini Trend Template (all passers)             -1.9%      -1.8%      -3.3%      +3.6%
+Trend Template, top 25 by RS                       +1.4%      -4.1%      -0.0%     +11.6%
+RS composite (top decile)                          +0.3%      -2.0%      +1.4%     +10.1%
+Leaders: top 2% by 1/3/6m (Qullamaggie-style)      -2.0%      -3.3%      +3.3%      +5.6%
+Low volatility (lowest decile)                     -2.9%      +1.4%      -6.5%      -6.2%
+1-month reversal (biggest losers decile)           -0.9%      +0.3%      +4.6%     -10.0%
+Momentum 12-1 within Trend Template, top 25        +0.2%      -4.0%      -4.0%     +15.0%
+EW +M                                              -2.4%      -6.5%      -5.2%      -4.8%
+Momentum 12-1 (top decile) +M                      -3.3%      -7.3%     -10.8%      +1.0%
+Minervini Trend Template (all passers) +M          -1.7%      -6.4%      -8.0%      -1.4%
+Trend Template, top 25 by RS +M                    +1.5%      -8.9%      -6.1%      +4.8%
+RS composite (top decile) +M                       -0.1%      -6.5%      -5.9%      +1.0%
+SPY                                                -3.0%      +0.7%      -2.7%      +8.0%
+
+Monthly IC (Spearman vs forward 1m return)
+  mom12_1                      mean +0.007  t +0.48  months 200
+  pth (52w-high nearness)      mean -0.001  t -0.07  months 200
+  rs composite                 mean +0.004  t +0.26  months 200
+  -vol252                      mean -0.010  t -0.51  months 200
+  -ret1m (reversal)            mean +0.008  t +0.67  months 200
+  trend template (0/1)         mean -0.004  t -0.39  months 200
+
+Coverage (index members with Yahoo data), by year
+date
+2010   65.5%
+2011   66.3%
+2012   68.0%
+2013   70.2%
+2014   71.3%
+2015   73.3%
+2016   76.0%
+2017   79.2%
+2018   81.2%
+2019   83.6%
+2020   86.7%
+2021   88.9%
+2022   91.6%
+2023   94.0%
+2024   95.2%
+2025   96.9%
+2026   98.3%

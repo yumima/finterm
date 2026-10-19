@@ -1,0 +1,285 @@
+{
+ "backtests": {
+  "1-month reversal (biggest losers decile)": {
+   "excess": -0.0153,
+   "hit": 0.455,
+   "max_dd": -0.3995,
+   "median_names": 41,
+   "subperiods": [
+    -0.0086,
+    0.0035,
+    0.0462,
+    -0.1003
+   ],
+   "t": -0.58
+  },
+  "52-week-high nearness (top decile)": {
+   "excess": -0.0459,
+   "hit": 0.495,
+   "max_dd": -0.2047,
+   "median_names": 41,
+   "subperiods": [
+    -0.0373,
+    -0.0463,
+    -0.0572,
+    -0.048
+   ],
+   "t": -2.02
+  },
+  "EW +M": {
+   "excess": -0.0466,
+   "hit": 0.055,
+   "max_dd": -0.223,
+   "median_names": null,
+   "subperiods": [
+    -0.0238,
+    -0.0655,
+    -0.0517,
+    -0.0478
+   ],
+   "t": -1.76
+  },
+  "Gross profitability GP/A (top decile)": {
+   "excess": 0.0106,
+   "hit": 0.475,
+   "max_dd": -0.3039,
+   "median_names": 26,
+   "subperiods": [
+    0.0959,
+    -0.0144,
+    0.0215,
+    -0.0807
+   ],
+   "t": 0.46
+  },
+  "Leaders: top 2% by 1/3/6m (Qullamaggie-style)": {
+   "excess": 0.0025,
+   "hit": 0.525,
+   "max_dd": -0.3543,
+   "median_names": 8,
+   "subperiods": [
+    -0.0197,
+    -0.0329,
+    0.0331,
+    0.0561
+   ],
+   "t": 0.06
+  },
+  "Low volatility (lowest decile)": {
+   "excess": -0.0298,
+   "hit": 0.46,
+   "max_dd": -0.196,
+   "median_names": 41,
+   "subperiods": [
+    -0.0288,
+    0.014,
+    -0.0653,
+    -0.062
+   ],
+   "t": -1.08
+  },
+  "Magic Formula (top 30)": {
+   "excess": 0.009,
+   "hit": 0.525,
+   "max_dd": -0.2425,
+   "median_names": 30,
+   "subperiods": [
+    0.0317,
+    0.0049,
+    0.0273,
+    -0.0313
+   ],
+   "t": 0.61
+  },
+  "Minervini Trend Template (all passers)": {
+   "excess": -0.009,
+   "hit": 0.535,
+   "max_dd": -0.2115,
+   "median_names": 82,
+   "subperiods": [
+    -0.0186,
+    -0.0177,
+    -0.0334,
+    0.0359
+   ],
+   "t": -0.42
+  },
+  "Minervini Trend Template (all passers) +M": {
+   "excess": -0.0419,
+   "hit": 0.51,
+   "max_dd": -0.189,
+   "median_names": null,
+   "subperiods": [
+    -0.0174,
+    -0.0639,
+    -0.0798,
+    -0.0144
+   ],
+   "t": -1.38
+  },
+  "Momentum 12-1 (top decile)": {
+   "excess": 0.0146,
+   "hit": 0.55,
+   "max_dd": -0.2352,
+   "median_names": 41,
+   "subperiods": [
+    -0.0164,
+    -0.0218,
+    -0.0154,
+    0.131
+   ],
+   "t": 0.57
+  },
+  "Momentum 12-1 (top decile) +M": {
+   "excess": -0.0491,
+   "hit": 0.515,
+   "max_dd": -0.2769,
+   "median_names": null,
+   "subperiods": [
+    -0.0333,
+    -0.0728,
+    -0.1078,
+    0.0096
+   ],
+   "t": -1.45
+  },
+  "Momentum 12-1 within Trend Template, top 25": {
+   "excess": 0.0144,
+   "hit": 0.565,
+   "max_dd": -0.2244,
+   "median_names": 25,
+   "subperiods": [
+    0.0022,
+    -0.04,
+    -0.0403,
+    0.1501
+   ],
+   "t": 0.43
+  },
+  "Piotroski F >= 8 (all)": {
+   "excess": 0.0061,
+   "hit": 0.52,
+   "max_dd": -0.2922,
+   "median_names": 22,
+   "subperiods": [
+    -0.0011,
+    0.0016,
+    0.0149,
+    0.015
+   ],
+   "t": 0.46
+  },
+  "Piotroski F >= 8 in cheapest 30% B/M": {
+   "excess": -0.0522,
+   "hit": 0.435,
+   "max_dd": -0.6223,
+   "median_names": 3,
+   "subperiods": [
+    -0.005,
+    -0.1372,
+    -0.0319,
+    -0.0171
+   ],
+   "t": -0.99
+  },
+  "Quality+Momentum: GP/A top 30% -> top 25 by 12-1": {
+   "excess": 0.0133,
+   "hit": 0.56,
+   "max_dd": -0.2427,
+   "median_names": 25,
+   "subperiods": [
+    0.0035,
+    -0.0075,
+    -0.0078,
+    0.0723
+   ],
+   "t": 0.61
+  },
+  "RS composite (top decile)": {
+   "excess": 0.0199,
+   "hit": 0.51,
+   "max_dd": -0.1962,
+   "median_names": 41,
+   "subperiods": [
+    0.003,
+    -0.0197,
+    0.0144,
+    0.1013
+   ],
+   "t": 0.77
+  },
+  "RS composite (top decile) +M": {
+   "excess": -0.0281,
+   "hit": 0.49,
+   "max_dd": -0.2524,
+   "median_names": null,
+   "subperiods": [
+    -0.0007,
+    -0.0652,
+    -0.0588,
+    0.0104
+   ],
+   "t": -0.81
+  },
+  "Trend Template, top 25 by RS": {
+   "excess": 0.0174,
+   "hit": 0.545,
+   "max_dd": -0.2262,
+   "median_names": 25,
+   "subperiods": [
+    0.014,
+    -0.0406,
+    -0.0001,
+    0.1156
+   ],
+   "t": 0.51
+  },
+  "Trend Template, top 25 by RS +M": {
+   "excess": -0.0224,
+   "hit": 0.525,
+   "max_dd": -0.2479,
+   "median_names": null,
+   "subperiods": [
+    0.015,
+    -0.0886,
+    -0.0612,
+    0.0483
+   ],
+   "t": -0.56
+  },
+  "Trending Value: value top decile -> top 25 by 6m": {
+   "excess": 0.0068,
+   "hit": 0.52,
+   "max_dd": -0.4424,
+   "median_names": 25,
+   "subperiods": [
+    -0.0068,
+    -0.0275,
+    0.0368,
+    0.0477
+   ],
+   "t": 0.29
+  },
+  "Value composite (top decile)": {
+   "excess": 0.008,
+   "hit": 0.495,
+   "max_dd": -0.4815,
+   "median_names": 39,
+   "subperiods": [
+    -0.0315,
+    -0.0069,
+    0.0682,
+    0.033
+   ],
+   "t": 0.32
+  }
+ },
+ "basis": "S&P 500 point-in-time, 2010-01 to 2026-08, monthly rebalance, 10 bp/side; excess = per year vs the equal-weighted index",
+ "months": 200,
+ "subperiods": [
+  "2010-14",
+  "2015-19",
+  "2020-22",
+  "2023-26"
+ ]
+}

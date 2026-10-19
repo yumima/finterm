@@ -356,6 +356,7 @@ QMenu* ToolBar::build_navigate_menu() {
     // Research & Intelligence
     auto* res = add_sub("Research & Intelligence");
     nav(res, "Equity Research", "equity_research");
+    nav(res, "Stock Screener", "screener");
     nav(res, "M&A Analytics", "ma_analytics");
     nav(res, "Alt. Investments", "alt_investments");
     nav(res, "Geopolitics", "geopolitics");

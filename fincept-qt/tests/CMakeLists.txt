@@ -434,6 +434,14 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_equity_talipp.py
     )
     set_tests_properties(equity_talipp PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
+    # SCREENER backend: universe parse, price signals, the ten screens and the
+    # vendor-null rule, on synthetic data (no network). The venv interpreter,
+    # because it has pandas; 77 = skipped without it.
+    add_test(
+        NAME screener_data
+        COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_screener.py
+    )
+    set_tests_properties(screener_data PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
 # ── QueryStore provenance / revalidate tests ─────────────────────────────────
@@ -725,6 +733,21 @@ target_include_directories(test_ownership_flags PRIVATE ../src)
 target_link_libraries(test_ownership_flags PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_ownership_flags PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME ownership_flags COMMAND test_ownership_flags)
+
+# ── SCREENER: scan parse + metric formatting ────────────────────────────────
+# A vendor null must reach the table as the placeholder, never as the 0.0
+# QJsonValue::toDouble() reads it as; an untested strategy must not render a
+# 0.0% excess return on its evidence card.
+add_executable(test_screener_model
+    screens/test_screener_model.cpp
+    ../src/ui/theme/Theme.cpp
+    ../src/ui/theme/ThemeManager.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_screener_model PRIVATE ../src)
+target_link_libraries(test_screener_model PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+set_target_properties(test_screener_model PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME screener_model COMMAND test_screener_model)
 
 # ── Palette contrast ─────────────────────────────────────────────────────────
 # text_dim shipped at 1.91:1 and text_tertiary at 2.53:1 against the ground —
