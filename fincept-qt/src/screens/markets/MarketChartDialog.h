@@ -54,10 +54,11 @@ class MarketChartDialog : public QDialog {
     void apply(const QVector<services::equity::Candle>& candles);
     void update_header(int hover_idx);
     void sync_buttons();
-    /// The AFT readout: the index's futures-implied after-hours move, shown
-    /// when the reader turns AFT on and the index has a future to read.
-    void fetch_after_hours();
-    void update_aft_visibility();
+    /// The FUT readout: the index's futures quote (contract, last, change
+    /// since settle), shown when the reader turns FUT on and the index has a
+    /// future on the feed.
+    void fetch_futures();
+    void update_fut_visibility();
 
     QString symbol_;
     QString label_;
@@ -72,9 +73,9 @@ class MarketChartDialog : public QDialog {
     QLabel* last_ = nullptr;
     QLabel* change_ = nullptr;
     QLabel* readout_ = nullptr;
-    QLabel* aft_ = nullptr;
-    QTimer* aft_timer_ = nullptr;
-    int aft_seq_ = 0;
+    QLabel* fut_ = nullptr;
+    QTimer* fut_timer_ = nullptr;
+    int fut_seq_ = 0;
     QHash<QString, QPushButton*> period_btns_;
     QHash<int, QPushButton*> style_btns_;
     QHash<QString, QPushButton*> toggle_btns_;

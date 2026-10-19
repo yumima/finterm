@@ -1,6 +1,6 @@
 #pragma once
 #include "screens/dashboard/widgets/BaseWidget.h"
-#include "services/markets/IndexAfterHours.h"
+#include "services/markets/IndexFutures.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/tables/DataTable.h"
 
@@ -30,13 +30,15 @@ class QuoteTableWidget : public BaseWidget {
 
     void refresh_data();
 
-    /// Add the AFT% column: each index's after-hours move, implied by its
-    /// future (services::IndexAfterHours). Rows without a future show a dash.
-    void enable_after_hours();
+    /// Add the FUT% column: each index's futures quote, live — its change
+    /// since the previous settle (services::IndexFutures). Rows without a
+    /// future show a dash.
+    void enable_futures();
 
   protected:
     void on_theme_changed() override;
     void showEvent(QShowEvent* e) override;
+    bool eventFilter(QObject* obj, QEvent* e) override;
     void hideEvent(QHideEvent* e) override;
 
   private:
@@ -67,14 +69,17 @@ class QuoteTableWidget : public BaseWidget {
     QHash<QString, fincept::services::QuoteData> row_cache_;
     bool hub_active_ = false;
 
-    void fetch_after_hours();
-    void apply_aft_columns();
-    void set_aft_header(const QString& suffix, const QString& extra_tip = {});
-    bool aft_enabled_ = false;
-    QHash<QString, fincept::services::IndexAfterHoursQuote> aft_;
-    QTimer* aft_timer_ = nullptr;
-    bool aft_in_flight_ = false;
-    bool aft_failed_ = false;
+    void fetch_futures();
+    void apply_fut_columns();
+    void fit_columns();
+    void schedule_fit();
+    bool fit_pending_ = false;
+    void set_fut_header(const QString& suffix, const QString& extra_tip = {});
+    bool fut_enabled_ = false;
+    QHash<QString, fincept::services::IndexFutureQuote> fut_;
+    QTimer* fut_timer_ = nullptr;
+    bool fut_in_flight_ = false;
+    bool fut_failed_ = false;
 };
 
 } // namespace fincept::screens::widgets

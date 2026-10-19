@@ -888,7 +888,7 @@ set(SERVICE_SOURCES
     src/services/crypto/TotpService.cpp
     src/services/python_cli/PythonCliService.cpp
     src/services/markets/MarketDataService.cpp
-    src/services/markets/IndexAfterHours.cpp
+    src/services/markets/IndexFutures.cpp
     src/services/data_normalization/DataNormalizationService.cpp
     src/services/news/NewsService.cpp
     src/services/news/NewsClusterService.cpp

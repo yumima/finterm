@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`c59c90279`](https://github.com/yumima/finterm/commit/c59c90279) dashboard: index after-hours from the index future; the Futures tab goes
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

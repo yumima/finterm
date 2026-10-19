@@ -488,10 +488,10 @@ def test_pre_session_falls_back_to_the_prior_post_market():
           f"got {row['ext_change_pct']}")
 
 
-# ── Index after-hours (futures-implied) ──────────────────────────────────────
+# ── Index futures ────────────────────────────────────────────────────────────
 # A cash index stops at the bell, so its own "post-market" print is the close
-# restamped: +0.00% forever. These pin the replacement — the future's move since
-# the CASH close, with the close instant read off the index's own bars.
+# restamped: +0.00% for ever. The FUT% column is the index future's quote
+# instead: last price against the previous settle, read from one contract.
 
 def _bars(points):
     """Close series of 1m bars from [(tz-aware start, price), ...]."""
@@ -499,112 +499,61 @@ def _bars(points):
     return pd.Series([v for _, v in points], index=idx, dtype=float)
 
 
-def _session_bars(day_offset, open_px, close_px, close_h=16, close_m=0):
-    """An index session: one bar at the open, one in the last minute."""
-    return [(_et(9, 30, day_offset=day_offset), open_px),
-            (_et(close_h, close_m, day_offset=day_offset) - timedelta(minutes=1), close_px)]
+def _daily(points):
+    """Daily Close series from [(date, price), ...], stamped at ET midnight like Yahoo's."""
+    idx = pd.DatetimeIndex([pd.Timestamp(d).tz_localize(ET) for d, _ in points])
+    return pd.Series([v for _, v in points], index=idx, dtype=float)
 
 
-def _iah(index_pts, proxy_pts, now):
-    return yd._index_after_hours_row(_bars(index_pts), _bars(proxy_pts),
-                                     "America/New_York", (9, 30), (16, 0), now)
+def _day(offset):
+    return (_et(0, 0, day_offset=offset)).date()
 
 
-def test_index_after_hours_is_the_future_since_the_cash_close():
-    """After the bell: close → latest futures print, against the future AT the close."""
-    index = _session_bars(0, 7600.0, 7650.0) + [
-        (_et(16, 40), 7650.0),   # Yahoo restamping the close after the bell
-    ]
-    proxy = [(_et(15, 59), 7700.0), (_et(18, 0), 7777.0)]
-    r = _iah(index, proxy, _et(18, 5))
-    check("index after-hours is measured", r is not None, "got None")
-    check("against the future at the bell, not the cash level (basis cancels)",
-          r and abs(r["pct"] - 1.0) < 1e-9, f"got {r and r['pct']}")
-    check("restamped closing bars don't move the reference",
-          r and r["ref_ts"] == int(_et(16, 0).timestamp()), f"got {r and r['ref_ts']}")
-    check("same evening reads POST", r and r["session"] == "POST", f"got {r and r['session']}")
-    check("and the cash market reads closed", r and not r["cash_open"], "")
+def test_index_future_is_measured_from_the_previous_close():
+    """Mid-session: last print against the PREVIOUS trading day's close."""
+    daily = _daily([(_day(-1), 7700.0), (_day(0), 7777.0)])
+    r, why = yd._index_future_row(_bars([(_et(11, 0), 7777.0)]), daily, _et(11, 5))
+    check("future measured", r is not None, why)
+    check("against yesterday's close", r and abs(r["pct"] - 1.0) < 1e-9, f"got {r}")
+    check("price is the last print", r and r["price"] == 7777.0, f"got {r}")
 
 
-def test_index_after_hours_freezes_at_the_open():
-    """During the session the number is the move INTO today's open, not a live one."""
-    index = _session_bars(-1, 7600.0, 7650.0) + [(_et(9, 30), 7700.0), (_et(11, 0), 7720.0)]
-    proxy = [(_et(15, 59, day_offset=-1), 7700.0), (_et(9, 29), 7623.0), (_et(11, 0), 9999.0)]
-    r = _iah(index, proxy, _et(11, 1))
-    check("open-session move is measured", r is not None, "got None")
-    check("previous close → open, ignoring prints after the open",
-          r and abs(r["pct"] + 1.0) < 1e-9, f"got {r and r['pct']}")
-    check("labelled PRE", r and r["session"] == "PRE" and r["cash_open"], f"got {r}")
+def test_index_future_evening_session_is_the_next_trading_day():
+    """19:00 ET: the reopened session belongs to tomorrow, so the reference is TODAY's close."""
+    daily = _daily([(_day(-1), 7600.0), (_day(0), 7700.0), (_day(1), 7777.0)])
+    r, why = yd._index_future_row(_bars([(_et(19, 0), 7777.0)]), daily, _et(19, 5))
+    check("evening measured from today's close", r and abs(r["pct"] - 1.0) < 1e-9, f"got {r} {why}")
 
 
-def test_index_after_hours_half_day_closes_at_its_last_bar():
-    """A 13:00 close is read off the bars — no calendar, no 16:00 assumption."""
-    index = _session_bars(0, 7600.0, 7650.0, close_h=13)
-    proxy = [(_et(12, 59), 7700.0), (_et(14, 0), 7700.0 * 1.005)]
-    r = yd._index_after_hours_row(_bars(index), _bars(proxy), "America/New_York", (9, 30), (16, 0),
-                                  _et(14, 30), None, (13, 0))
-    check("half-day is closed by 14:30", r and not r["cash_open"], f"got {r}")
-    check("reference is the 13:00 close",
-          r and r["ref_ts"] == int(_et(13, 0).timestamp()), f"got {r and r['ref_ts']}")
-    check("and the move runs from there", r and abs(r["pct"] - 0.5) < 1e-9, f"got {r and r['pct']}")
+def test_index_future_half_day_and_bank_holiday_need_no_calendar():
+    """A 13:15 half-day close and a Columbus-Day session are just daily bars.
+
+    The earlier calendar-based version counted Columbus Day as closed and
+    measured Monday evening from Friday — a two-day move as the day's change.
+    """
+    daily = _daily([(_day(-3), 7500.0), (_day(0), 7700.0)])   # the bars ARE the calendar
+    r, why = yd._index_future_row(_bars([(_et(20, 0), 7777.0)]), daily, _et(20, 5))
+    check("previous close is the last bar before the print's day",
+          r and r["ref_price"] == 7700.0, f"got {r} {why}")
 
 
-def test_index_after_hours_needs_the_future_trading_at_the_close():
-    """A futures bar from hours before the bell would fold in the session's own move."""
-    index = _session_bars(0, 7600.0, 7650.0)
-    proxy = [(_et(12, 0), 7700.0), (_et(18, 0), 7777.0)]
-    check("no reference print near the close → no number",
-          _iah(index, proxy, _et(18, 5)) is None, "")
+def test_index_future_lagging_bars_keep_the_days_change():
+    """18:03 with the newest bar from 16:55: still the day that just closed, vs yesterday."""
+    daily = _daily([(_day(-1), 7700.0), (_day(0), 7777.0)])
+    r, why = yd._index_future_row(_bars([(_et(16, 55), 7777.0)]), daily, _et(18, 3))
+    check("lagging bars still give the day's change", r and abs(r["pct"] - 1.0) < 1e-9, f"got {r} {why}")
 
 
-def test_index_after_hours_with_nothing_after_the_close():
-    """Seconds after the bell there is no after-hours print yet — not a 0.00%."""
-    index = _session_bars(0, 7600.0, 7650.0)
-    proxy = [(_et(15, 59), 7700.0)]
-    check("no print after the close → no number",
-          _iah(index, proxy, _et(16, 0) + timedelta(seconds=30)) is None, "")
+def test_index_future_dead_feed_is_a_dash_not_old_news():
+    """Globex open on a weekday, last print hours ago: not today's quote."""
+    daily = _daily([(_day(-2), 7700.0), (_day(-1), 7777.0)])
+    r, why = yd._index_future_row(_bars([(_et(15, 0, day_offset=-1), 7777.0)]), daily, _et(11, 0))
+    check("stale contract → no number", r is None and "no prints since" in (why or ""), f"got {r} {why}")
 
 
-def test_index_after_hours_lunch_break_is_not_the_close():
-    """Tokyo's lunch: no bars for an hour, but the session is not over."""
-    jst = ZoneInfo("Asia/Tokyo")
-    day = datetime(2026, 8, 13, tzinfo=jst)
-    at = lambda h, m, d=0: day.replace(hour=h, minute=m) + timedelta(days=d)
-    index = [(at(9, 0, -1), 100.0), (at(15, 29, -1), 101.0),
-             (at(9, 0), 102.0), (at(11, 29), 103.0)]
-    proxy = [(at(15, 29, -1), 200.0), (at(8, 59), 202.0), (at(12, 0), 210.0)]
-    r = yd._index_after_hours_row(_bars(index), _bars(proxy), "Asia/Tokyo", (9, 0), (15, 30),
-                                  at(12, 10), ((11, 30), (12, 30)))
-    check("lunch break reads as open", r and r["cash_open"], f"got {r}")
-    check("and the number is the move into the open, not since lunch",
-          r and abs(r["pct"] - 1.0) < 1e-9, f"got {r and r['pct']}")
-
-
-def test_index_after_hours_stalled_feed_is_not_a_close():
-    """Index bars stop at 10:30 on a normal day: a feed stall, not the bell."""
-    index = _session_bars(-1, 7600.0, 7650.0) + [(_et(9, 30), 7700.0), (_et(10, 30), 7710.0)]
-    proxy = [(_et(15, 59, day_offset=-1), 7700.0), (_et(9, 29), 7623.0), (_et(11, 0), 7800.0)]
-    r = yd._index_after_hours_row(_bars(index), _bars(proxy), "America/New_York", (9, 30), (16, 0),
-                                  _et(11, 0), None, (13, 0))
-    check("a stalled index feed mid-session gives no number", r is None, f"got {r}")
-
-
-def test_index_after_hours_before_the_first_bar_of_the_day():
-    """09:35 with Yahoo's first index bar not in yet: open by the clock, cut at 09:30."""
-    index = _session_bars(-1, 7600.0, 7650.0)
-    proxy = [(_et(15, 59, day_offset=-1), 7700.0), (_et(9, 29), 7623.0), (_et(9, 33), 9999.0)]
-    r = _iah(index, proxy, _et(9, 35))
-    check("open by the clock before the first bar", r and r["cash_open"], f"got {r}")
-    check("and nothing after the open leaks in", r and abs(r["pct"] + 1.0) < 1e-9, f"got {r and r['pct']}")
-
-
-def test_index_after_hours_holiday_is_closed():
-    """A weekday with no index bars an hour after the open was not a session."""
-    index = _session_bars(-1, 7600.0, 7650.0)
-    proxy = [(_et(15, 59, day_offset=-1), 7700.0), (_et(10, 29), 7777.0)]
-    r = _iah(index, proxy, _et(10, 30))
-    check("holiday reads as closed, measured from the last real close",
-          r and not r["cash_open"] and abs(r["pct"] - 1.0) < 1e-9, f"got {r}")
+def test_index_future_missing_contract_says_so():
+    r, why = yd._index_future_row(None, None, _et(11, 0))
+    check("missing data is reported as missing", r is None and "no intraday data" in why, why)
 
 
 def test_index_future_contract_is_pinned_across_the_roll():

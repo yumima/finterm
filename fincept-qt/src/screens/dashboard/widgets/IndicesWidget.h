@@ -12,7 +12,7 @@ inline QuoteTableWidget* create_indices_widget(QWidget* parent = nullptr) {
     };
     auto* w = new QuoteTableWidget("GLOBAL INDICES", services::MarketDataService::indices_symbols(), labels, 2, {},
                                    parent);
-    w->enable_after_hours();
+    w->enable_futures();
     return w;
 }
 

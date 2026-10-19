@@ -53,7 +53,7 @@ WidgetRegistry::WidgetRegistry() {
     // Existing widgets ignore it until they opt into configurable behaviour.
 
     // ── Markets ───────────────────────────────────────────────────────────────
-    register_widget({"indices", "Market Indices", "Markets", "Major global indices, with after-hours implied by index futures", 4, 5, 3, 1,
+    register_widget({"indices", "Market Indices", "Markets", "Major global indices, with their index futures live", 4, 5, 3, 1,
                      [](const QJsonObject&) { return widgets::create_indices_widget(); }});
 
     register_widget({"forex", "Forex Pairs", "Markets", "Major FX pairs — EURUSD, GBPUSD, USDJPY", 4, 4, 2, 1,

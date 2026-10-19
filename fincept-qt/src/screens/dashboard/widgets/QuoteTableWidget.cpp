@@ -31,31 +31,34 @@ QuoteTableWidget::QuoteTableWidget(const QString& title, const QStringList& symb
 }
 
 namespace {
-// Slow on purpose: the future's 1-minute bars are ~10 minutes delayed, so a
-// faster poll only re-reads the same number. One batched call (~0.5 s) a
-// minute, and only while the tile is on screen.
-constexpr int kAftRefreshMs = 60'000;
-constexpr int kColAft = 4;
-constexpr auto kAftTip =
-    "After-hours move of each index, implied by its future: the future's move since the cash "
-    "index's last close, against the future's own price at that close.\n\n"
-    "Hover a cell for its session — PRE: toward (or, while the market is open, into) the next "
-    "open; POST: the same evening as the close — and the two prices it is measured between.\n\n"
+// The futures bars are ~10 minutes delayed, so polling faster than this only
+// re-reads the same number. One batched call (~0.6 s), shared by every tile
+// and chart window through the daemon's cache, and only while on screen.
+constexpr int kFutRefreshMs = 60'000;
+constexpr int kColFut = 4;
+constexpr auto kFutTip =
+    "Each index's futures quote: the future's change since its previous close, live day and "
+    "night — after the cash close this is the index's after-hours move. Hover a cell for the "
+    "contract, its last price and the close it is measured from.\n\n"
     "A dash means there is no honest number for that row right now; hover it for why (no future "
-    "on the feed for that index, still fetching, or no futures print since the close yet).";
+    "on the feed for that index, or still fetching).";
 } // namespace
 
 void QuoteTableWidget::build_table() {
     table_ = new ui::DataTable;
-    if (aft_enabled_) {
-        apply_aft_columns();
+    if (fut_enabled_) {
+        apply_fut_columns();
     } else {
         table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%"});
         table_->set_column_widths({130, 100, 80, 70});
     }
     content_layout()->addWidget(table_);
-    if (aft_enabled_)
-        set_aft_header(aft_failed_ ? QStringLiteral(" !") : QString());
+    if (fut_enabled_) {
+        set_fut_header(fut_failed_ ? QStringLiteral(" !") : QString());
+        // The viewport, not the table: the table's own Resize arrives before
+        // its viewport has taken the new size, so the fit would use the old.
+        table_->viewport()->installEventFilter(this);
+    }
     // Left click opens the row's chart.
     table_->viewport()->setCursor(Qt::PointingHandCursor);
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
@@ -66,69 +69,124 @@ void QuoteTableWidget::build_table() {
     });
 }
 
-void QuoteTableWidget::enable_after_hours() {
-    if (aft_enabled_)
+void QuoteTableWidget::enable_futures() {
+    if (fut_enabled_)
         return;
-    aft_enabled_ = true;
-    if (table_)
-        apply_aft_columns();
-    set_aft_header(QString());
-    aft_timer_ = new QTimer(this);
-    aft_timer_->setInterval(kAftRefreshMs);
-    connect(aft_timer_, &QTimer::timeout, this, [this] { fetch_after_hours(); });
+    fut_enabled_ = true;
+    if (table_) {
+        apply_fut_columns();
+        table_->viewport()->installEventFilter(this);
+    }
+    set_fut_header(QString());
+    fut_timer_ = new QTimer(this);
+    fut_timer_->setInterval(kFutRefreshMs);
+    connect(fut_timer_, &QTimer::timeout, this, [this] { fetch_futures(); });
     if (isVisible()) {
-        aft_timer_->start();
-        fetch_after_hours();
+        fut_timer_->start();
+        fetch_futures();
     }
 }
 
-void QuoteTableWidget::apply_aft_columns() {
-    table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%", "AFT%"});
-    // Five columns don't fit a default-width tile at fixed widths. The numbers
-    // size to their contents so none is ever cut; the name takes what is left
-    // and is the one that elides when the tile is narrow.
+void QuoteTableWidget::apply_fut_columns() {
+    table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%", "FUT%"});
+    // Widths are set by fit_columns(), not by the header's resize modes.
     auto* h = table_->horizontalHeader();
     h->setStretchLastSection(false);
-    h->setSectionResizeMode(0, QHeaderView::Stretch);
-    for (int c = 1; c <= kColAft; ++c)
-        h->setSectionResizeMode(c, QHeaderView::ResizeToContents);
+    for (int c = 0; c <= kColFut; ++c)
+        h->setSectionResizeMode(c, QHeaderView::Interactive);
+    fit_columns();
 }
 
-void QuoteTableWidget::set_aft_header(const QString& suffix, const QString& extra_tip) {
-    if (!table_ || table_->columnCount() <= kColAft)
+void QuoteTableWidget::fit_columns() {
+    if (!table_ || !fut_enabled_)
         return;
-    auto* h = table_->horizontalHeaderItem(kColAft);
+    // Every column gets what its widest cell needs. Spare width is shared by
+    // the number columns, not handed to the name: a stretched SYMBOL column
+    // leaves a gulf between the name and its price. Short of width, the name
+    // gives way first (it elides), so no number is ever cut.
+    auto* h = table_->horizontalHeader();
+    const int n = table_->columnCount();
+    table_->resizeColumnsToContents();   // measures cells and header alike
+    QVector<int> need(n);
+    int total = 0;
+    for (int c = 0; c < n; ++c) {
+        need[c] = table_->columnWidth(c);
+        total += need[c];
+    }
+    const int avail = table_->viewport()->width();
+    int extra = avail - total;
+    if (extra < 0) {
+        need[0] = std::max(h->sectionSizeHint(0), need[0] + extra);
+        extra = 0;
+    }
+    const int share = n > 1 ? extra / (n - 1) : 0;
+    int rem = n > 1 ? extra % (n - 1) : 0;
+    for (int c = 0; c < n; ++c) {
+        int w = need[c];
+        if (c > 0) {
+            w += share + (rem > 0 ? 1 : 0);
+            if (rem > 0)
+                --rem;
+        }
+        h->resizeSection(c, w);
+    }
+}
+
+bool QuoteTableWidget::eventFilter(QObject* obj, QEvent* e) {
+    if (table_ && obj == table_->viewport() && e->type() == QEvent::Resize)
+        fit_columns();
+    return BaseWidget::eventFilter(obj, e);
+}
+
+void QuoteTableWidget::set_fut_header(const QString& suffix, const QString& extra_tip) {
+    if (!table_ || table_->columnCount() <= kColFut)
+        return;
+    auto* h = table_->horizontalHeaderItem(kColFut);
     if (!h)
         return;
-    h->setText(QStringLiteral("AFT%") + suffix);
-    h->setToolTip(extra_tip.isEmpty() ? QString::fromUtf8(kAftTip)
-                                      : QString::fromUtf8(kAftTip) + QStringLiteral("\n\n") + extra_tip);
+    h->setText(QStringLiteral("FUT%") + suffix);
+    h->setToolTip(extra_tip.isEmpty() ? QString::fromUtf8(kFutTip)
+                                      : QString::fromUtf8(kFutTip) + QStringLiteral("\n\n") + extra_tip);
+    // The " !" marker is the only sign a refresh failed; it must not be cut.
+    schedule_fit();
 }
 
-void QuoteTableWidget::fetch_after_hours() {
-    if (!aft_enabled_ || aft_in_flight_)
+void QuoteTableWidget::schedule_fit() {
+    // Coalesced: each symbol's quote arrives separately and re-renders the
+    // table, so measuring on every delivery would re-measure every cell a
+    // dozen times per refresh. Once per event-loop pass is enough.
+    if (fit_pending_)
         return;
-    aft_in_flight_ = true;
+    fit_pending_ = true;
+    QTimer::singleShot(0, this, [this]() {
+        fit_pending_ = false;
+        fit_columns();
+    });
+}
+
+void QuoteTableWidget::fetch_futures() {
+    if (!fut_enabled_ || fut_in_flight_)
+        return;
+    fut_in_flight_ = true;
     // The suffix is the only sign a first fetch is still running; without it
     // an empty column is indistinguishable from a broken one.
-    if (aft_.isEmpty())
-        set_aft_header(QStringLiteral(" ·"), QStringLiteral("Fetching index futures…"));
-    services::fetch_index_after_hours(
-        symbols_, this, [this](bool ok, QHash<QString, services::IndexAfterHoursQuote> fresh, QString err) {
-            aft_in_flight_ = false;
+    if (fut_.isEmpty())
+        set_fut_header(QStringLiteral(" ·"), QStringLiteral("Fetching index futures…"));
+    services::fetch_index_futures(
+        symbols_, this, [this](bool ok, QHash<QString, services::IndexFutureQuote> fresh, QString err) {
+            fut_in_flight_ = false;
             if (!ok) {
                 // Keep the last good numbers on screen; say the refresh failed.
-                aft_failed_ = true;
-                set_aft_header(QStringLiteral(" !"),
-                               QStringLiteral("The last fetch failed: %1\nRetrying in a minute.").arg(err));
+                fut_failed_ = true;
+                set_fut_header(QStringLiteral(" !"),
+                               QStringLiteral("The last fetch failed: %1\nRetrying shortly.").arg(err));
                 return;
             }
-            aft_failed_ = false;
-            // Replace, don't merge: an index that lost its sound reading (a
-            // new close with no futures print after it yet) must go back to a
-            // dash, not keep the previous evening's move under today's close.
-            aft_ = fresh;
-            set_aft_header(QString());
+            fut_failed_ = false;
+            // Replace, don't merge: a row that lost its sound reading goes
+            // back to a dash rather than keeping a quote against an old settle.
+            fut_ = fresh;
+            set_fut_header(QString());
             render_from_cache();
         });
 }
@@ -145,9 +203,9 @@ void QuoteTableWidget::showEvent(QShowEvent* e) {
     BaseWidget::showEvent(e);
     if (!hub_active_)
         hub_subscribe_all();
-    if (aft_timer_ && !aft_timer_->isActive()) {
-        aft_timer_->start();
-        fetch_after_hours();
+    if (fut_timer_ && !fut_timer_->isActive()) {
+        fut_timer_->start();
+        fetch_futures();
     }
 }
 
@@ -155,8 +213,8 @@ void QuoteTableWidget::hideEvent(QHideEvent* e) {
     BaseWidget::hideEvent(e);
     if (hub_active_)
         hub_unsubscribe_all();
-    if (aft_timer_)
-        aft_timer_->stop();
+    if (fut_timer_)
+        fut_timer_->stop();
 }
 
 void QuoteTableWidget::refresh_data() {
@@ -169,7 +227,7 @@ void QuoteTableWidget::refresh_data() {
     for (const auto& sym : symbols_)
         topics.append(QStringLiteral("market:quote:") + sym);
     hub.request(topics, /*force=*/true);
-    fetch_after_hours();
+    fetch_futures();
 }
 
 
@@ -231,28 +289,27 @@ void QuoteTableWidget::render_from_cache() {
         QString pct_str = ui::formatting::format_percent(q.change_pct, 2, true);
 
         QStringList cells{display_name, price_str, chg_str, pct_str};
-        const auto aft = aft_.constFind(q.symbol);
-        if (aft_enabled_)
-            // The session (PRE/POST) is in the tooltip: a default-width tile
-            // has no room for it beside the number without truncating CHG%.
-            cells << (aft != aft_.constEnd() ? ui::formatting::format_percent(aft->pct, 2, true)
+        const auto fut = fut_.constFind(q.symbol);
+        if (fut_enabled_)
+            cells << (fut != fut_.constEnd() ? ui::formatting::format_percent(fut->pct, 2, true)
                                              : ui::formatting::placeholder());
         table_->add_row(cells);
         row_symbols_.append(q.symbol);
         int row = table_->rowCount() - 1;
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
         table_->set_cell_color(row, 3, ui::change_color(q.change_pct));
-        if (aft_enabled_) {
-            if (auto* it = table_->item(row, kColAft)) {
-                if (aft != aft_.constEnd()) {
-                    it->setForeground(QColor(ui::change_color(aft->pct)));
-                    it->setToolTip(services::index_after_hours_tooltip(*aft, display_name));
+        if (fut_enabled_) {
+            if (auto* it = table_->item(row, kColFut)) {
+                if (fut != fut_.constEnd()) {
+                    it->setForeground(QColor(ui::change_color(fut->pct)));
+                    it->setToolTip(services::index_future_tooltip(*fut, display_name));
                 } else {
-                    it->setToolTip(services::index_after_hours_unavailable_tooltip(q.symbol, display_name));
+                    it->setToolTip(services::index_future_unavailable_tooltip(q.symbol, display_name));
                 }
             }
         }
     }
+    schedule_fit();
 }
 
 
