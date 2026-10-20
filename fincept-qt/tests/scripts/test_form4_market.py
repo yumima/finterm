@@ -38,7 +38,10 @@ def main():
     os.environ["FINCEPT_DATA_DIR"] = tmp
 
     # ── an old-schema store, as shipped before the flags existed ───────────
-    old = sqlite3.connect(os.path.join(tmp, "form4.sqlite"))
+    # Where the store lives (market_data/ since the 2026-10-14 layout move) —
+    # planted at the old root, the migration under test never saw it.
+    import finterm_paths
+    old = sqlite3.connect(finterm_paths.market_data_path("form4.sqlite"))
     old.execute("""CREATE TABLE tx (
         accession TEXT, filed TEXT, tx_date TEXT, symbol TEXT, issuer TEXT,
         insider TEXT, insider_cik TEXT, roles TEXT, code TEXT, direction TEXT,
