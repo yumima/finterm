@@ -482,8 +482,15 @@ def build_mcp_server() -> Any:
         if not YFINANCE_AVAILABLE:
             return {"error": "yfinance not installed"}
         try:
-            results = yf.Search(query, max_results=min(20, limit))
+            results = yf.Search(query, max_results=40)
             quotes = results.quotes if hasattr(results, "quotes") else []
+            # No Indian listings (user policy: no India sources). Same test as
+            # yfinance_data._is_indian_listing; keep the two in step.
+            quotes = [q for q in quotes
+                      if not ((q.get("symbol") or "").upper().endswith((".NS", ".BO"))
+                              or (q.get("exchange") or "").upper() in {"NSI", "BSE", "BOM", "NSE"}
+                              or (q.get("market") or "").lower() == "in_market")]
+            quotes = quotes[:min(20, limit)]
             return {
                 "query":   query,
                 "results": [
@@ -493,7 +500,7 @@ def build_mcp_server() -> Any:
                         "exchange": q.get("exchange", ""),
                         "type":     q.get("quoteType", ""),
                     }
-                    for q in quotes[:limit]
+                    for q in quotes
                 ],
                 "total": len(quotes),
             }

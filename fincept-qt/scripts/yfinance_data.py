@@ -2174,6 +2174,19 @@ _YAHOO_TO_UI_TYPE = {
 }
 
 
+# Indian listings never surface from search (user policy: no India sources).
+# Yahoo marks them by suffix (.NS NSE, .BO BSE), exchange code or market.
+# agents/rdagents/mcp_server.py symbol_search inlines the same test.
+_INDIA_SUFFIXES = (".NS", ".BO")
+_INDIA_EXCHANGES = {"NSI", "BSE", "BOM", "NSE"}
+
+
+def _is_indian_listing(symbol, exchange="", market=""):
+    return ((symbol or "").upper().endswith(_INDIA_SUFFIXES)
+            or (exchange or "").upper() in _INDIA_EXCHANGES
+            or (market or "").lower() == "in_market")
+
+
 def search_symbols(query, limit=20, asset_type=""):
     """
     Search for stock symbols using yfinance's search API.
@@ -2196,7 +2209,7 @@ def search_symbols(query, limit=20, asset_type=""):
             return {"results": [], "query": query, "count": 0}
 
         # Use Yahoo Finance search/autocomplete API (fast, no auth needed)
-        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={url_quote(query_str)}&quotesCount={limit}&newsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query"
+        url = f"https://query2.finance.yahoo.com/v1/finance/search?q={url_quote(query_str)}&quotesCount={min(limit * 2, 50)}&newsCount=0&enableFuzzyQuery=false&quotesQueryId=tss_match_phrase_query"
         ctx = ssl.create_default_context()
         req = Request(url, headers={"User-Agent": "Mozilla/5.0"})
 
@@ -2207,7 +2220,7 @@ def search_symbols(query, limit=20, asset_type=""):
 
                 for q in quotes:
                     symbol = q.get("symbol", "")
-                    if not symbol:
+                    if not symbol or _is_indian_listing(symbol, q.get("exchange"), q.get("market")):
                         continue
                     yahoo_type = (q.get("quoteType") or "").upper()
                     ui_type = _YAHOO_TO_UI_TYPE.get(yahoo_type)
@@ -2237,9 +2250,13 @@ def search_symbols(query, limit=20, asset_type=""):
             # Fallback: try the exact symbol as a yfinance Ticker
             query_upper = query_str.upper()
             for candidate in [query_upper]:
+                if _is_indian_listing(candidate):
+                    break
                 try:
                     ticker = yf.Ticker(candidate)
                     info = ticker.info
+                    if _is_indian_listing(candidate, info.get("exchange"), info.get("market")):
+                        break
                     if info.get("longName") or info.get("shortName"):
                         yahoo_type = (info.get("quoteType") or "").upper()
                         ui_type = _YAHOO_TO_UI_TYPE.get(yahoo_type)
