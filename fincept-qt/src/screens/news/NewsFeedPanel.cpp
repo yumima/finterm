@@ -157,13 +157,11 @@ void NewsFeedPanel::show_breaking(const QVector<services::NewsCluster>& breaking
     const auto& lead = cluster.lead_article;
     int64_t now = QDateTime::currentSecsSinceEpoch();
 
-    // Global cooldown
-    if (now < global_cooldown_until_)
-        return;
-
-    // Per-event deduplication
+    // Global cooldown and per-event dedup throttle re-showing the SAME backlog
+    // banner. A fresh story (play_sound) skips both: the caller has already
+    // claimed it, so returning here would lose it for good — banner and sound.
     QString key = lead.headline.left(50).toLower();
-    if (is_banner_duplicate(key))
+    if (!play_sound && (now < global_cooldown_until_ || is_banner_duplicate(key)))
         return;
 
     // Show banner

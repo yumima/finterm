@@ -127,6 +127,11 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     QString view_mode_ = "WIRE";
     QString search_query_;
     bool loading_ = false;
+    // Bumped per refresh_data. Re-opening the screen or switching variant
+    // starts a fetch without cancelling the one in flight, so the older one's
+    // completion must not clear loading_ (or feed its partials into the view)
+    // while the newer one is still streaming.
+    int fetch_gen_ = 0;
     bool visible_ = false;
     bool first_show_ = true;
 
@@ -168,10 +173,19 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // id-based "seen" set calls the whole backlog new on every refresh.
     // Undated items (sort_ts 0) never alert.
     int64_t alert_since_ts_ = 0;
-    bool is_alertable(const services::NewsArticle& a) const;
+    // Keys of items stamped in the future (a feed in the wrong timezone). They
+    // are claimed the first time they are seen, or they would turn "fresh"
+    // hours later when the clock reaches their timestamp.
+    QSet<QString> future_dated_;
+    static constexpr int64_t kAlertMaxAgeSec = 3600;
+    static constexpr int64_t kAlertFutureSlackSec = 300;
+    bool is_alertable(const services::NewsArticle& a, int64_t now) const;
     // Dedup key for the notified_* sets, stable across fetches for the same
     // reason (the link, else the headline).
     static QString alert_key(const services::NewsArticle& a);
+    // True when `a` is alertable and its key was not in `notified`; claims the
+    // key either way so the next pass does not ask again.
+    bool claim_alert(QSet<QString>& notified, const services::NewsArticle& a, int64_t now);
 
     // Pulse animation timer
     QTimer* pulse_timer_ = nullptr;

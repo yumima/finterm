@@ -884,6 +884,7 @@ void NewsScreen::on_drawer_toggle() {
 
 void NewsScreen::refresh_data(bool force) {
     LOG_INFO("NewsScreen", "refresh_data: start");
+    const int gen = ++fetch_gen_;
     loading_ = true;
     command_bar_->set_loading(true);
     feed_panel_->set_loading(true);
@@ -893,9 +894,13 @@ void NewsScreen::refresh_data(bool force) {
     QPointer<NewsScreen> self = this;
     auto conn = std::make_shared<QMetaObject::Connection>();
     *conn = connect(svc, &services::NewsService::articles_partial, this,
-                    [self, conn](QVector<services::NewsArticle> articles, int done, int total) {
+                    [self, conn, gen](QVector<services::NewsArticle> articles, int done, int total) {
                         if (!self)
                             return;
+                        if (gen != self->fetch_gen_) {
+                            QObject::disconnect(*conn);
+                            return;
+                        }
                         self->all_articles_ = std::move(articles);
                         self->command_bar_->set_loading_progress(done, total);
                         // Hide skeleton as soon as we have any articles to render —
@@ -909,8 +914,8 @@ void NewsScreen::refresh_data(bool force) {
                             QObject::disconnect(*conn);
                     });
 
-    svc->fetch_all_news_progressive(force, [self](bool ok, QVector<services::NewsArticle> articles) {
-        if (!self)
+    svc->fetch_all_news_progressive(force, [self, gen](bool ok, QVector<services::NewsArticle> articles) {
+        if (!self || gen != self->fetch_gen_)
             return;
         self->loading_ = false;
         self->command_bar_->set_loading(false);
@@ -1178,12 +1183,17 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     // again. Queued so the list paints first: the brief takes seconds and the
     // feed should not wait behind it. NewsService caches by content hash, so
     // re-opening the screen within the TTL costs nothing.
-    if (!auto_tldr_done_ && !loading_ && !filtered.isEmpty() && !tldr_in_flight_) {
+    //
+    // A brief already in flight here is one the user asked for during the load;
+    // that answers the opening brief too, so it is consumed rather than
+    // deferred to some later, unrelated filter pass.
+    if (!auto_tldr_done_ && !loading_ && !filtered.isEmpty()) {
         auto_tldr_done_ = true;
-        QMetaObject::invokeMethod(this, [this]() {
-            if (!tldr_in_flight_ && !filtered_articles_.isEmpty())
-                QMetaObject::invokeMethod(command_bar_, "summarize_clicked", Qt::DirectConnection);
-        }, Qt::QueuedConnection);
+        if (!tldr_in_flight_)
+            QMetaObject::invokeMethod(this, [this]() {
+                if (!tldr_in_flight_ && !filtered_articles_.isEmpty())
+                    QMetaObject::invokeMethod(command_bar_, "summarize_clicked", Qt::DirectConnection);
+            }, Qt::QueuedConnection);
     }
 
     // Update feed model
@@ -1276,22 +1286,44 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     side_panel_->update_top_stories(top5);
     side_panel_->update_categories(category_counts);
 
+    // Claim future-dated items before anything below can alert on them.
+    const int64_t now = QDateTime::currentSecsSinceEpoch();
+    for (const auto& a : std::as_const(all_articles_)) {
+        if (a.sort_ts > now + kAlertFutureSlackSec)
+            future_dated_.insert(alert_key(a));
+    }
+
     // Breaking banner
     auto breaking = services::get_breaking_clusters(clusters);
     if (!breaking.isEmpty()) {
-        // Claimed here, independent of the notification setting, so the sound
-        // plays once per new story even with breaking pushes turned off.
-        QVector<services::NewsCluster> fresh;
+        // One story is one cluster, so claim the cluster: every member's key,
+        // on every pass, whether or not it alerts. A syndicated copy arriving
+        // later then joins an already-claimed story instead of re-alerting it,
+        // and a backlog story cannot come back as "new" through a new copy.
+        // Freshness is judged on the member that MADE the cluster breaking —
+        // the lead is picked by tier, and need not be a FLASH/URGENT item.
+        // Claimed independently of the notification setting, so the sound
+        // plays once per story even with breaking pushes turned off.
+        QVector<services::NewsCluster> fresh, rest;
         for (const auto& cluster : breaking) {
-            if (!is_alertable(cluster.lead_article))
-                continue;
-            const QString key = alert_key(cluster.lead_article);
-            if (notified_breaking_.contains(key))
-                continue;
-            notified_breaking_.insert(key);
-            fresh.append(cluster);
+            const services::NewsArticle* trigger = nullptr;
+            bool claimed_before = false;
+            for (const auto& m : cluster.articles) {
+                if ((m.priority == services::Priority::FLASH || m.priority == services::Priority::URGENT)
+                    && (!trigger || m.sort_ts > trigger->sort_ts))
+                    trigger = &m;
+                claimed_before = claimed_before || notified_breaking_.contains(alert_key(m));
+            }
+            for (const auto& m : cluster.articles)
+                notified_breaking_.insert(alert_key(m));
+            if (trigger && !claimed_before && is_alertable(*trigger, now))
+                fresh.append(cluster);
+            else
+                rest.append(cluster);
         }
-        feed_panel_->show_breaking(breaking, !fresh.isEmpty());
+        // The banner shows the first cluster, so a fresh one leads — the sound
+        // must not play over an old headline.
+        feed_panel_->show_breaking(fresh + rest, !fresh.isEmpty());
 
         auto& repo = fincept::SettingsRepository::instance();
         auto get_bool = [&](const QString& key, bool def) -> bool {
@@ -1329,11 +1361,20 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     compute_deviations();
 }
 
-bool NewsScreen::is_alertable(const services::NewsArticle& a) const {
-    // The upper bound drops future-dated items (a feed in the wrong timezone),
-    // which would otherwise pass every open's cut-off.
-    return a.sort_ts > 0 && a.sort_ts >= alert_since_ts_
-           && a.sort_ts <= QDateTime::currentSecsSinceEpoch() + 300;
+bool NewsScreen::is_alertable(const services::NewsArticle& a, int64_t now) const {
+    // The age cap bounds the late case: a story hidden by the active filter is
+    // first seen when the filter is cleared, possibly hours on, and by then it
+    // is not news. An hour clears the 10-minute refresh plus feed lag.
+    return a.sort_ts > 0 && a.sort_ts >= alert_since_ts_ && a.sort_ts >= now - kAlertMaxAgeSec
+           && a.sort_ts <= now + kAlertFutureSlackSec && !future_dated_.contains(alert_key(a));
+}
+
+bool NewsScreen::claim_alert(QSet<QString>& notified, const services::NewsArticle& a, int64_t now) {
+    const QString key = alert_key(a);
+    if (notified.contains(key))
+        return false;
+    notified.insert(key);
+    return is_alertable(a, now);
 }
 
 QString NewsScreen::alert_key(const services::NewsArticle& a) {
@@ -1537,12 +1578,8 @@ void NewsScreen::compute_deviations() {
                 continue;
             if (article.impact != services::Impact::HIGH)
                 continue;
-            if (!is_alertable(article))
+            if (!claim_alert(notified_flash_, article, now))
                 continue;
-            const QString key = alert_key(article);
-            if (notified_flash_.contains(key))
-                continue;
-            notified_flash_.insert(key);
 
             NotificationRequest req;
             req.title = QString("FLASH: %1").arg(article.headline.left(80));
