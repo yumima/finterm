@@ -159,6 +159,20 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     QSet<QString> notified_deviations_;
     QSet<QString> notified_flash_;
 
+    // Breaking/FLASH alerts (the banner's sound and the notification pushes)
+    // fire only for stories PUBLISHED since the screen was last shown.
+    // Everything already in the feed on open is backlog — every feed carries
+    // some FLASH/URGENT-keyword headline, so alerting on it dinged and
+    // re-pushed old stories on every open. Decided on the article's own
+    // timestamp, not on ids: parse_rss_xml mints a fresh id per fetch, so an
+    // id-based "seen" set calls the whole backlog new on every refresh.
+    // Undated items (sort_ts 0) never alert.
+    int64_t alert_since_ts_ = 0;
+    bool is_alertable(const services::NewsArticle& a) const;
+    // Dedup key for the notified_* sets, stable across fetches for the same
+    // reason (the link, else the headline).
+    static QString alert_key(const services::NewsArticle& a);
+
     // Pulse animation timer
     QTimer* pulse_timer_ = nullptr;
 
@@ -202,8 +216,8 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // no clue why. The watchdog guarantees it clears even if a stream dies
     // without ever reporting done.
     bool tldr_in_flight_ = false;
-    /// One-shot: the opening brief is generated the first time a filtered feed
-    /// lands, not on every filter change. Otherwise typing in the search box or
+    /// One-shot: the opening brief is generated the first time a COMPLETE
+    /// filtered feed lands, not on every filter change. Otherwise typing in the search box or
     /// switching category would fire an LLM request per keystroke.
     bool auto_tldr_done_ = false;
     QTimer* tldr_watchdog_ = nullptr;

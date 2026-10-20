@@ -43,7 +43,7 @@ class NewsFeedPanel : public QWidget {
     // no row is active.
     services::NewsArticle current_article() const;
 
-    void show_breaking(const QVector<services::NewsCluster>& breaking_clusters);
+    void show_breaking(const QVector<services::NewsCluster>& breaking_clusters, bool play_sound);
     void clear_breaking();
     void set_loading(bool loading);
     /// When loading has finished but no articles arrived, show a non-blocking

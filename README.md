@@ -2,29 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-10-19)
+## Today's commits (2026-10-20)
 
 Latest first.
 
-- [`36658264e`](https://github.com/yumima/finterm/commit/36658264e) tests: form4_market planted its old store where the code no longer looks
-- [`c05629d87`](https://github.com/yumima/finterm/commit/c05629d87) data truth: a refused Yahoo lookup is not an answer, and a partial total says so
-- [`e62aaf388`](https://github.com/yumima/finterm/commit/e62aaf388) screener: right-click a name — Equity Research, or add it to a portfolio
-- [`3d5525777`](https://github.com/yumima/finterm/commit/3d5525777) screener: "Setting up" for every screen — the names next in line, tested
-- [`958953a1c`](https://github.com/yumima/finterm/commit/958953a1c) screener: reading links, the ranking column marked, write-up as tiles or a column
-- [`6ecd899a9`](https://github.com/yumima/finterm/commit/6ecd899a9) screener: "Setting up" — names one rule from the Trend Template, tested first
-- [`d24b7ddaa`](https://github.com/yumima/finterm/commit/d24b7ddaa) screener: review fixes — the write-up always shows, ER closes only when alone
-- [`e1dbd65e2`](https://github.com/yumima/finterm/commit/e1dbd65e2) screener: strategies | summary over the list | write-up or Equity Research
-- [`c620a70cf`](https://github.com/yumima/finterm/commit/c620a70cf) screener: rules and record always shown above the list; scans no longer crash after a download
-- [`1f229780a`](https://github.com/yumima/finterm/commit/1f229780a) screener: Equity Research beside the list; honest, fast intraday prices
-- [`0667ff30d`](https://github.com/yumima/finterm/commit/0667ff30d) live tv: the channel picker is the title at the top-left
-- [`9c27e8a12`](https://github.com/yumima/finterm/commit/9c27e8a12) dashboard: an error no longer destroys a widget — the root cause, not eight workarounds
-- [`119a37925`](https://github.com/yumima/finterm/commit/119a37925) sec: declare the user's contact to SEC — and to no one else
-- [`6928a8422`](https://github.com/yumima/finterm/commit/6928a8422) screener: opens instantly, evens out, draws curves; Martin Luk's pullback, tested as trades
-- [`8fefc1642`](https://github.com/yumima/finterm/commit/8fefc1642) screener: review fixes — sector-matched evidence, stray rows, cache merge
-- [`8c611167e`](https://github.com/yumima/finterm/commit/8c611167e) screener: a top-level SCREENER tab — ten rule-exact strategies, each beside its measured record
-- [`e2c461918`](https://github.com/yumima/finterm/commit/e2c461918) live tv: switch channel from the now-playing dropdown, not BACK + pick
-- [`1392dbb8f`](https://github.com/yumima/finterm/commit/1392dbb8f) dashboard: FUT% — the index futures quote, live; futures price in the chart popup
-- [`c59c90279`](https://github.com/yumima/finterm/commit/c59c90279) dashboard: index after-hours from the index future; the Futures tab goes
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

@@ -149,7 +149,7 @@ void NewsFeedPanel::build_breaking_banner() {
     layout->addWidget(dismiss_btn);
 }
 
-void NewsFeedPanel::show_breaking(const QVector<services::NewsCluster>& breaking_clusters) {
+void NewsFeedPanel::show_breaking(const QVector<services::NewsCluster>& breaking_clusters, bool play_sound) {
     if (breaking_clusters.isEmpty())
         return;
 
@@ -189,8 +189,9 @@ void NewsFeedPanel::show_breaking(const QVector<services::NewsCluster>& breaking
     int dismiss_ms = (lead.priority == services::Priority::FLASH) ? 60000 : 30000;
     banner_dismiss_timer_->start(dismiss_ms);
 
-    // Sound notification with 5-min cooldown
-    if (now - last_sound_at_ >= SOUND_COOLDOWN_SEC) {
+    // Sound notification with 5-min cooldown — only for a story that is new to
+    // this session; the caller decides that, the banner cannot.
+    if (play_sound && now - last_sound_at_ >= SOUND_COOLDOWN_SEC) {
         last_sound_at_ = now;
 #if defined(Q_OS_WIN)
         MessageBeep(MB_ICONEXCLAMATION);
