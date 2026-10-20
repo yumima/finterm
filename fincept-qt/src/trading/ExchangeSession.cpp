@@ -3,7 +3,6 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "storage/secure/SecureStorage.h"
-#include "trading/BrokerRegistry.h"
 #include "trading/ExchangeDaemonPool.h"
 
 #include <QElapsedTimer>
@@ -30,10 +29,6 @@ QString session_resolve_script_path(const QString& relative) {
     if (dir.isEmpty())
         return {};
     return dir + "/" + relative;
-}
-
-bool session_is_broker_stream(const QString& id) {
-    return fincept::trading::BrokerRegistry::instance().has(id);
 }
 
 } // namespace
@@ -168,12 +163,6 @@ bool ExchangeSession::start_ws(const QString& primary_symbol, const QStringList&
     QString script_path;
     QStringList args;
 
-    if (session_is_broker_stream(exchange_id_)) {
-        // The broker WS bridge only ever covered the Indian brokers, which are
-        // gone. A broker id must not fall through to ws_stream.py (ccxt).
-        LOG_ERROR(kSessionTag, "No WebSocket stream for broker " + exchange_id_);
-        return false;
-    }
     script_path = session_resolve_script_path("exchange/ws_stream.py");
     if (python_path.isEmpty() || script_path.isEmpty()) {
         LOG_ERROR(kSessionTag, "Python or ws_stream.py not found");

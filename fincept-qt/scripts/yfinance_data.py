@@ -2236,9 +2236,7 @@ def search_symbols(query, limit=20, asset_type=""):
         except Exception as search_err:
             # Fallback: try the exact symbol as a yfinance Ticker
             query_upper = query_str.upper()
-            suffixes = [""]
-            for suffix in suffixes:
-                candidate = query_upper + suffix
+            for candidate in [query_upper]:
                 try:
                     ticker = yf.Ticker(candidate)
                     info = ticker.info
@@ -4155,11 +4153,12 @@ def resolve_symbol(symbol):
     """
     Resolve a bare stock symbol to its correct yfinance-compatible form.
 
-    Tries the symbol as-is (a foreign listing must carry its own suffix).
+    Tries the symbol as-is, then the common exchange suffixes
+    (_candidate_yf_symbols: .TO, .L, .AX, .HK).
 
     Returns a dict with:
       - resolved_symbol: the working yfinance symbol (e.g., "SHOP.TO")
-      - original_symbol: what the user typed (e.g., "SHOP.TO")
+      - original_symbol: what the user typed (e.g., "SHOP")
       - exchange: detected exchange name (if available)
       - found: bool indicating if any variant returned data
     """
@@ -4179,10 +4178,8 @@ def resolve_symbol(symbol):
             pass
         return {"resolved_symbol": symbol, "original_symbol": symbol, "exchange": "", "found": False}
 
-    # Try bare symbol first (US stocks, crypto, etc.)
-    suffixes_to_try = [""]
-    for suffix in suffixes_to_try:
-        candidate = symbol + suffix
+    # Same candidates as the portfolio history path, so both resolvers agree
+    for candidate in _candidate_yf_symbols(symbol):
         try:
             ticker = yf.Ticker(candidate)
             hist = ticker.history(period="5d")

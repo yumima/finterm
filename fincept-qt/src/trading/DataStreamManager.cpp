@@ -44,6 +44,14 @@ void DataStreamManager::start_stream(const QString& account_id) {
         LOG_WARN(DSM_TAG, QString("Cannot start stream: account %1 not found").arg(account_id));
         return;
     }
+    // An account saved for a broker that has since been removed has nothing
+    // to poll; a stream for it would spin on a null broker.
+    const QString broker_id = AccountManager::instance().get_account(account_id).broker_id;
+    if (!BrokerRegistry::instance().has(broker_id)) {
+        LOG_WARN(DSM_TAG, QString("Cannot start stream: account %1 uses broker '%2', which is no longer supported")
+                              .arg(account_id, broker_id));
+        return;
+    }
 
     auto* stream = new AccountDataStream(account_id, this);
     wire_stream_signals(stream);
@@ -68,13 +76,6 @@ void DataStreamManager::stop_stream(const QString& account_id) {
 void DataStreamManager::start_all_active() {
     const auto accounts = AccountManager::instance().active_accounts();
     for (const auto& account : accounts) {
-        // An account saved for a broker that has since been removed has
-        // nothing to poll; a stream for it would spin on a null broker.
-        if (!BrokerRegistry::instance().has(account.broker_id)) {
-            LOG_WARN(DSM_TAG, QString("Skipping account %1: broker '%2' is no longer supported")
-                                  .arg(account.account_id, account.broker_id));
-            continue;
-        }
         if (!streams_.contains(account.account_id))
             start_stream(account.account_id);
     }

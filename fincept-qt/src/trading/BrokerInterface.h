@@ -19,7 +19,6 @@ enum class CredentialField {
     ApiSecret,   // "API Secret" / "Secret Key" / "MPIN"
     AuthCode,    // "Auth Code" / "TOTP secret" (base32)
     Environment, // "Live / Paper" toggle — Alpaca only
-    ClientCode,  // Secondary login ID, separate from the API key
 };
 
 struct CredentialFieldDef {

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`c4496d471`](https://github.com/yumima/finterm/commit/c4496d471) india: gut every India-based source — brokers, NSE feeds, the F&O screen
 - [`36688bea2`](https://github.com/yumima/finterm/commit/36688bea2) news: review fixes — a breaking story alerts once, as a story, and is never lost
 - [`847a650b5`](https://github.com/yumima/finterm/commit/847a650b5) news: brief the whole feed on open, and don't ding for the backlog
 

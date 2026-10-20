@@ -202,10 +202,6 @@ void EquityWatchlist::rebuild_table() {
     }
 }
 
-void EquityWatchlist::set_broker_id(const QString& broker_id) {
-    broker_id_ = broker_id;
-}
-
 void EquityWatchlist::add_symbol(const QString& symbol) {
     if (symbol.trimmed().isEmpty())
         return;

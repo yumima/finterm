@@ -285,13 +285,6 @@ void AccountManagementDialog::load_saved_credentials(const QString& account_id) 
         case CredentialField::AuthCode:
             // Auth codes are ephemeral — don't pre-fill
             break;
-        case CredentialField::ClientCode: {
-            // Parse from additional_data JSON
-            auto doc = QJsonDocument::fromJson(creds.additional_data.toUtf8());
-            if (doc.isObject())
-                cred_fields_[idx]->setText(doc.object().value("client_code").toString());
-            break;
-        }
         default:
             break;
         }
@@ -390,10 +383,6 @@ void AccountManagementDialog::on_connect_account() {
         case CredentialField::AuthCode:
             auth_code = val;
             break;
-        case CredentialField::ClientCode:
-            // Store in additional_data as JSON
-            creds.additional_data = QJsonDocument(QJsonObject{{"client_code", val}}).toJson(QJsonDocument::Compact);
-            break;
         default:
             break;
         }
@@ -443,7 +432,7 @@ void AccountManagementDialog::on_connect_account() {
                 if (!result.user_id.isEmpty())
                     creds.user_id = result.user_id;
 
-                // Merge additional_data (keep existing like client_code, add new from token response)
+                // Merge additional_data (keep existing fields, add new from token response)
                 auto existing = QJsonDocument::fromJson(existing_additional.toUtf8()).object();
                 auto extra = QJsonDocument::fromJson(result.additional_data.toUtf8()).object();
                 for (auto it = extra.begin(); it != extra.end(); ++it)

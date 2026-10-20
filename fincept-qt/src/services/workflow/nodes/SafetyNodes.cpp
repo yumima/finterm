@@ -288,7 +288,7 @@ void register_safety_nodes(NodeRegistry& registry) {
                 auto data = inputs.isEmpty() ? QJsonValue{} : inputs[0];
                 QJsonObject obj = data.isObject() ? data.toObject() : QJsonObject{};
 
-                QString exchange = params.value("exchange").toString("NYSE");
+                const QString exchange = params.value("exchange").toString("NYSE").toUpper();
                 bool allow_premarket = params.value("allow_premarket").toBool(false);
 
                 // Evaluate in the exchange's own time zone so DST shifts are

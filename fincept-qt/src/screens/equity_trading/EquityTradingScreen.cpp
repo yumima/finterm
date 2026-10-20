@@ -439,7 +439,6 @@ void EquityTradingScreen::init_focused_account() {
         const auto prof = broker->profile();
         order_entry_->configure_for_broker(prof);
         order_entry_->set_broker_id(account.broker_id);
-        watchlist_->set_broker_id(account.broker_id);
     }
 
     // Register fill callback for paper trading
@@ -699,7 +698,6 @@ void EquityTradingScreen::on_account_changed(const QString& account_id) {
 
         order_entry_->configure_for_broker(prof);
         order_entry_->set_broker_id(account.broker_id);
-        watchlist_->set_broker_id(account.broker_id);
     }
 
     // Update mode button to reflect this account's trading mode

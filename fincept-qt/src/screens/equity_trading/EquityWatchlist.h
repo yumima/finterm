@@ -29,7 +29,6 @@ class EquityWatchlist : public QWidget {
     void set_symbols(const QStringList& symbols);
     void update_quotes(const QVector<trading::BrokerQuote>& quotes);
     void set_active_symbol(const QString& symbol);
-    void set_broker_id(const QString& broker_id);
     void add_symbol(const QString& symbol);
 
   signals:
@@ -52,7 +51,6 @@ class EquityWatchlist : public QWidget {
 
     QVector<WatchlistEntry> entries_;
     QString active_symbol_;
-    QString broker_id_;
     QMutex mutex_;
 };
 

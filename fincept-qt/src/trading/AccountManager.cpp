@@ -321,8 +321,7 @@ bool AccountManager::has_account(const QString& account_id) const {
 // ── Credentials ─────────────────────────────────────────────────────────────
 
 // NOTE: creds.additional_data is an opaque JSON blob owned by the individual
-// broker dialog. E.g., {"client_code":"..."}.
-// AccountManager does not interpret it.
+// broker dialog. AccountManager does not interpret it.
 void AccountManager::save_credentials(const QString& account_id, const BrokerCredentials& creds) {
     auto& secure = SecureStorage::instance();
     secure.store(acct_key(account_id, "api_key"), creds.api_key);
