@@ -68,7 +68,12 @@ struct InfoData {
     QString sector;
     QString industry;
     QString country;
-    QString currency;
+    QString currency; // empty when Yahoo gave none — never a default
+    // Did the profile lookup (get_info) answer? Empty fields mean "Yahoo has
+    // none" only when it did. info_transient: it was refused or not answered
+    // (auth, rate limit, timeout) — the blanks say nothing about the symbol.
+    bool info_answered = false;
+    bool info_transient = false;
     double market_cap = kUnknownNum;
     double pe_ratio = kUnknownNum;
     double forward_pe = kUnknownNum;

@@ -51,6 +51,7 @@ class PortfolioFFNView : public QWidget {
     QPushButton* back_btn_ = nullptr;
     QPushButton* run_btn_ = nullptr;
     QLabel* status_label_ = nullptr;
+    QLabel* partial_banner_ = nullptr; // figures cover part of the book
 
     // ── Tab container ─────────────────────────────────────────────────────────
     QTabWidget* tabs_ = nullptr;

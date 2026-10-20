@@ -179,6 +179,7 @@ QJsonObject summary_to_json(const portfolio::PortfolioSummary& s) {
     o[QStringLiteral("total_day_change_percent")] = s.total_day_change_percent;
     o[QStringLiteral("total_realized_pnl")]  = s.total_realized_pnl;
     o[QStringLiteral("fx_incomplete")]       = s.fx_incomplete;
+    o[QStringLiteral("flows_fx_incomplete")] = s.flows_fx_incomplete;
     QJsonObject rates;
     for (auto it = s.fx_rates.cbegin(); it != s.fx_rates.cend(); ++it)
         rates[it.key()] = it.value();
@@ -221,6 +222,7 @@ portfolio::PortfolioSummary summary_from_json(const QJsonObject& o) {
     s.total_day_change_percent   = o[QStringLiteral("total_day_change_percent")].toDouble();
     s.total_realized_pnl         = o[QStringLiteral("total_realized_pnl")].toDouble();
     s.fx_incomplete              = o[QStringLiteral("fx_incomplete")].toBool();
+    s.flows_fx_incomplete        = o[QStringLiteral("flows_fx_incomplete")].toBool();
     const QJsonObject rates = o[QStringLiteral("fx_rates")].toObject();
     for (auto it = rates.constBegin(); it != rates.constEnd(); ++it)
         s.fx_rates.insert(it.key(), it.value().toDouble(1.0));
@@ -345,6 +347,7 @@ void PortfolioService::delete_portfolio(const QString& id) {
     invalidate_cache(id);
     invalidate_transactions(id);
     backfill_awaiting_fx_.remove(id);
+    backfill_needs_fx_.remove(id);
     // fx_pair_series_ is deliberately NOT cleared: it is keyed by currency
     // pair, not by portfolio, so it is still correct for every other
     // portfolio (and for this one's symbols if they reappear elsewhere).
@@ -992,6 +995,7 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                         // No conversion: left out of the realized/dividend
                         // totals (flagged ≈) rather than summed at 1.0.
                         summary.fx_incomplete = true;
+                        summary.flows_fx_incomplete = true;
                     }
                     replayed.insert(it.key(), std::move(pos));
                 }
@@ -1017,6 +1021,7 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                     const double divs = convert_events(it.key(), it->dividend_events);
                     if (!std::isfinite(realized) || !std::isfinite(divs)) {
                         summary.fx_incomplete = true;
+                        summary.flows_fx_incomplete = true;
                         continue;
                     }
                     converted.insert(it.key(), {realized, divs});
@@ -2613,7 +2618,7 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
 
     QPointer<PortfolioService> self = this;
     python::PythonWorker::instance().submit("portfolio_closes_history", payload,
-        [self, portfolio_id, txns_by_symbol, fx_of_symbol, fabricated_cutoff](bool ok, QJsonObject obj, QString err) {
+        [self, portfolio_id, period, txns_by_symbol, fx_of_symbol, fabricated_cutoff](bool ok, QJsonObject obj, QString err) {
         if (!self)
             return;
         if (!ok || obj.contains("error")) {
@@ -2678,6 +2683,7 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
             double last_close = 0;
             QString fx_pair;    // empty = portfolio currency
             double fx_factor = 1.0; // sub-unit normalisation (GBp → GBP)
+            bool fx_unknown = false; // trading currency unknown: no conversion exists
         };
         std::vector<SymbolState> states;
         QSet<QString> date_set;
@@ -2687,7 +2693,8 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
                            .cursor = portfolio::LedgerCursor(it.value()),
                            .closes = parse_series(it.key(), &date_set),
                            .fx_pair = fx.pair,
-                           .fx_factor = fx.factor};
+                           .fx_factor = fx.factor,
+                           .fx_unknown = fx.unknown};
             if (st.closes.isEmpty()) {
                 LOG_WARN("PortfolioSvc",
                          QString("backfill_history: no close history for %1 — its value is "
@@ -2696,8 +2703,8 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
             }
             if (fx.unknown)
                 LOG_WARN("PortfolioSvc",
-                         QString("backfill_history: trading currency of %1 unknown — valued at "
-                                 "face value in the portfolio currency").arg(it.key()));
+                         QString("backfill_history: trading currency of %1 unknown — the dates it "
+                                 "is held are left out of the backfilled NAV").arg(it.key()));
             states.push_back(std::move(st));
         }
 
@@ -2709,6 +2716,7 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
         int written = 0;
         int skipped_live = 0;
         int skipped_partial = 0;
+        bool skipped_for_currency = false;
         for (const QString& d : dates) {
             // Today's row belongs to the live path — build_summary values it
             // from actual quotes and writes it as 'live'.
@@ -2739,6 +2747,13 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
                 st.cursor.advance_to(d);
                 const auto& pos = st.cursor.position();
                 if (pos.quantity > 1e-9 && st.last_close > 0) {
+                    if (st.fx_unknown) {
+                        // Face value in the portfolio currency would be an
+                        // assumption written down as history.
+                        complete = false;
+                        skipped_for_currency = true;
+                        continue;
+                    }
                     double rate = st.fx_factor;
                     if (!st.fx_pair.isEmpty()) {
                         const double fx = pair_states.value(st.fx_pair).last;
@@ -2797,6 +2812,8 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
                      .arg(portfolio_id)
                      .arg(skipped_live)
                      .arg(skipped_partial));
+        if (skipped_for_currency)
+            self->backfill_needs_fx_.insert(portfolio_id, period);
         self->invalidate_cache(portfolio_id);
         emit self->history_backfilled(portfolio_id, written);
     },
@@ -3156,7 +3173,8 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
 
 namespace {
 constexpr qint64 kSymbolCurrencyTtlSec = 30LL * 86400;    // listings don't change currency
-constexpr qint64 kCurrencyUnknownTtlSec = 6LL * 3600;     // retry a failed lookup in 6h, not 20s
+constexpr qint64 kCurrencyUnknownTtlSec = 6LL * 3600;     // Yahoo answered without one: retry in 6h, not 20s
+constexpr qint64 kCurrencyRetryTtlSec = 120;              // Yahoo refused / did not answer: says nothing
 constexpr const char* kCurrencyUnknown = "?";
 QString symbol_currency_key(const QString& symbol) {
     return QStringLiteral("symbol_currency:") + symbol.toUpper();
@@ -3308,17 +3326,25 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                     QMutexLocker lock(&self->cache_mutex_);
                     self->currency_memo_.insert(sym, ccy);
                 } else if (QMutexLocker lock(&self->cache_mutex_); !self->currency_memo_.contains(sym)) {
-                    // Remember the failure, briefly, so the retry is paced —
-                    // unless a caller noted the currency meanwhile
-                    // (note_symbol_currency): a lookup that lost must not
-                    // overwrite a known answer with "unknown".
+                    // Remember the failure so the retry is paced — unless a
+                    // caller noted the currency meanwhile (note_symbol_currency):
+                    // a lookup that lost must not overwrite a known answer.
+                    // A refusal or a timeout is not an answer: retry in
+                    // minutes, not after the 6h an answer without one earns.
                     lock.unlock();
+                    const bool transient = !ok || obj.value("transient").toBool();
                     fincept::CacheManager::instance().put(symbol_currency_key(sym),
                                                           QString::fromLatin1(kCurrencyUnknown),
-                                                          kCurrencyUnknownTtlSec);
+                                                          transient ? kCurrencyRetryTtlSec : kCurrencyUnknownTtlSec);
                 }
-                if (--(*pending) == 0)
+                if (--(*pending) == 0) {
                     emit self->symbol_currencies_resolved();
+                    // Histories that skipped dates for an unknown currency:
+                    // fill them now. Each re-records itself if still short.
+                    const auto waiting = std::exchange(self->backfill_needs_fx_, {});
+                    for (auto it = waiting.cbegin(); it != waiting.cend(); ++it)
+                        self->backfill_history(it.key(), it.value());
+                }
             },
             python::PythonWorker::kNetworkActionTimeoutMs);
     }

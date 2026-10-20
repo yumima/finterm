@@ -466,15 +466,23 @@ void PortfolioCommandBar::set_summary(const portfolio::PortfolioSummary& s) {
     auto color = [](double v) { return v >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(); };
     const QString base_css = "font-size:12px; font-weight:700; letter-spacing:0.3px;";
 
-    nav_label_->setText(QString("NAV  %1").arg(fmt(s.total_market_value)));
+    // No holding valued: unknown, not 0. Some left out: the NAV says which
+    // (P&L and DAY beside it cover the same holdings).
+    const bool none = s.nothing_valued();
+    const QString note = s.exclusion_note();
+    nav_label_->setText(none ? QStringLiteral("NAV  —")
+                             : QString("NAV  %1%2").arg(fmt(s.total_market_value),
+                                                        note.isEmpty() ? QString() : QStringLiteral("  ") + note));
     nav_label_->setStyleSheet(QString("color:%1; %2").arg(ui::colors::WARNING(), base_css));
 
-    pnl_label_->setText(
-        QString("P&L  %1%2%").arg(s.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl_percent)));
+    pnl_label_->setText(none ? QStringLiteral("P&L  —")
+                             : QString("P&L  %1%2%").arg(s.total_unrealized_pnl >= 0 ? "+" : "")
+                                   .arg(fmt(s.total_unrealized_pnl_percent)));
     pnl_label_->setStyleSheet(QString("color:%1; %2").arg(color(s.total_unrealized_pnl), base_css));
 
-    day_label_->setText(
-        QString("DAY  %1%2%").arg(s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change_percent)));
+    day_label_->setText(none ? QStringLiteral("DAY  —")
+                             : QString("DAY  %1%2%").arg(s.total_day_change >= 0 ? "+" : "")
+                                   .arg(fmt(s.total_day_change_percent)));
     day_label_->setStyleSheet(QString("color:%1; %2").arg(color(s.total_day_change), base_css));
 
     pos_label_->setText(QString("POS %1  \u25B4%2  \u25BE%3").arg(s.total_positions).arg(s.gainers).arg(s.losers));

@@ -122,10 +122,15 @@ void PortfolioStatusBar::set_summary(const portfolio::PortfolioSummary& s) {
                                                      "is in flight; they update when it lands."));
     }
 
-    nav_label_->setText(QString("NAV %1 %2").arg(s.portfolio.currency, fmt(s.total_market_value)));
+    // No holding valued: unknown, not 0; some left out: say which.
+    const bool none = s.nothing_valued();
+    const QString note = s.exclusion_note();
+    nav_label_->setText(none ? QString("NAV %1 —").arg(s.portfolio.currency)
+                             : QString("NAV %1 %2%3").arg(s.portfolio.currency, fmt(s.total_market_value),
+                                                          note.isEmpty() ? QString() : QStringLiteral(" ") + note));
 
     double pnl = s.total_unrealized_pnl;
-    pnl_label_->setText(QString("P&L %1%2").arg(pnl >= 0 ? "+" : "").arg(fmt(pnl)));
+    pnl_label_->setText(none ? QStringLiteral("P&L —") : QString("P&L %1%2").arg(pnl >= 0 ? "+" : "").arg(fmt(pnl)));
     pnl_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;")
                                   .arg(pnl >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
 }

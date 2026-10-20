@@ -177,12 +177,20 @@ void ReportsView::update_summary() {
         return std::isfinite(v) ? QString::number(v, 'f', dp) : ui::formatting::placeholder();
     };
 
+    // A total over part of the book names what it leaves out; with no
+    // holding valued it is unknown, never 0 (PortfolioSummary::exclusion_note).
+    const bool none = summary_.nothing_valued();
+    const QString note = summary_.exclusion_note().isEmpty() ? QString()
+                                                             : QStringLiteral("  ") + summary_.exclusion_note();
+    const auto book = [&](const QString& v) { return none ? ui::formatting::placeholder() : v + note; };
     add_card(0, 0, "PORTFOLIO", summary_.portfolio.name.toUpper(), ui::colors::AMBER);
-    add_card(0, 1, "TOTAL VALUE", QString("%1 %2").arg(currency_, fmt(summary_.total_market_value)),
+    add_card(0, 1, "TOTAL VALUE", QString("%1 %2").arg(currency_, book(fmt(summary_.total_market_value))),
              ui::colors::WARNING);
-    add_card(0, 2, "COST BASIS", QString("%1 %2").arg(currency_, fmt(summary_.total_cost_basis)), ui::colors::CYAN);
+    add_card(0, 2, "COST BASIS", QString("%1 %2").arg(currency_, book(fmt(summary_.total_cost_basis))),
+             ui::colors::CYAN);
     add_card(0, 3, "UNREALIZED P&L",
-             QString("%1%2").arg(summary_.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(summary_.total_unrealized_pnl)),
+             book(QString("%1%2").arg(summary_.total_unrealized_pnl >= 0 ? "+" : "")
+                      .arg(fmt(summary_.total_unrealized_pnl))),
              summary_.total_unrealized_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
 
     add_card(1, 0, "POSITIONS", QString::number(summary_.total_positions), ui::colors::TEXT_PRIMARY);
@@ -190,23 +198,28 @@ void ReportsView::update_summary() {
     add_card(1, 2, "LOSERS", QString::number(summary_.losers), ui::colors::NEGATIVE);
     // Unrealized only — open positions against their average cost.
     add_card(1, 3, "UNREALIZED RETURN",
-             QString("%1%2%")
-                 .arg(summary_.total_unrealized_pnl_percent >= 0 ? "+" : "")
-                 .arg(fmt(summary_.total_unrealized_pnl_percent)),
+             book(QString("%1%2%")
+                      .arg(summary_.total_unrealized_pnl_percent >= 0 ? "+" : "")
+                      .arg(fmt(summary_.total_unrealized_pnl_percent))),
              summary_.total_unrealized_pnl_percent >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
 
     // The all-in figure, separately and named for what it sums: unrealized
     // (open positions) + realized (closed lots, trade-date FX) + dividends.
-    const QString approx = summary_.fx_incomplete || summary_.valuation_partial() ? QStringLiteral("≈") : QString();
-    const auto money = [&](double v) {
+    // "≈" only where a figure is an estimate or itself left a flow out;
+    // the total includes unrealized, so it carries the book's note.
+    const QString flows_approx = summary_.flows_fx_incomplete ? QStringLiteral("≈") : QString();
+    const QString stale = summary_.has_estimate() ? QStringLiteral("≈") : QString();
+    const auto money = [&](double v, const QString& approx) {
         return QString("%1 %2%3%4").arg(currency_, approx, v >= 0 ? "+" : "").arg(fmt(v));
     };
     const double total_pnl =
         summary_.total_unrealized_pnl + summary_.total_realized_pnl + summary_.total_dividend_income;
-    add_card(2, 0, "REALIZED P&L", money(summary_.total_realized_pnl),
+    add_card(2, 0, "REALIZED P&L", money(summary_.total_realized_pnl, flows_approx),
              summary_.total_realized_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
-    add_card(2, 1, "DIVIDENDS", money(summary_.total_dividend_income), ui::colors::CYAN);
-    add_card(2, 2, "TOTAL P&L (UNREAL. + REAL. + DIV.)", money(total_pnl),
+    add_card(2, 1, "DIVIDENDS", money(summary_.total_dividend_income, flows_approx), ui::colors::CYAN);
+    add_card(2, 2, "TOTAL P&L (UNREAL. + REAL. + DIV.)",
+             none ? QString("%1 %2").arg(currency_, ui::formatting::placeholder())
+                  : money(total_pnl, flows_approx.isEmpty() ? stale : flows_approx) + note,
              total_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
 
     layout->addLayout(grid);

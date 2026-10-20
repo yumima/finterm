@@ -803,7 +803,9 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                          [shared, symbol, try_complete](bool ok, QJsonObject o, QString /*err*/) {
                                              shared->info_done = true;
                                              if (!ok || o.contains("error")) {
-                                                 LOG_WARN("MarketData", "get_info failed for " + symbol);
+                                                 shared->info.info_transient = !ok || o["transient"].toBool();
+                                                 LOG_WARN("MarketData", "get_info failed for " + symbol +
+                                                                            (shared->info.info_transient ? " (transient)" : ""));
                                                  try_complete();
                                                  return;
                                              }
@@ -821,7 +823,6 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                              shared->info.industry = scrub(o["industry"]);
                                              shared->info.country = scrub(o["country"]);
                                              shared->info.currency = scrub(o["currency"]);
-                                             if (shared->info.currency.isEmpty()) shared->info.currency = "USD";
                                              shared->info.market_cap = num(o, "market_cap");
                                              shared->info.beta = num(o, "beta");
                                              shared->info.week52_high = num(o, "fifty_two_week_high");
@@ -848,6 +849,7 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                                      shared->info.officers.append(co);
                                              }
                                              shared->info_ok = true;
+                                             shared->info.info_answered = true;
                                              try_complete();
                                          },
                                          python::PythonWorker::kNetworkActionTimeoutMs);

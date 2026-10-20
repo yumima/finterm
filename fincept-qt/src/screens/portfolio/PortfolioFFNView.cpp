@@ -1,6 +1,8 @@
 // src/screens/portfolio/PortfolioFFNView.cpp
 #include "screens/portfolio/PortfolioFFNView.h"
 
+#include "screens/portfolio/PortfolioDetailWrapper.h"
+
 #include "core/logging/Logger.h"
 #include "services/portfolio/PortfolioAnalyticsService.h"
 #include "services/portfolio/PortfolioService.h"
@@ -134,6 +136,10 @@ void PortfolioFFNView::build_ui() {
     h_layout->addWidget(run_btn_);
 
     layout->addWidget(header);
+
+    // Same rule as PortfolioDetailWrapper: a partial book says so up front.
+    partial_banner_ = PortfolioDetailWrapper::make_partial_book_banner();
+    layout->addWidget(partial_banner_);
 
     // ── Tabs ──────────────────────────────────────────────────────────────────
     tabs_ = new QTabWidget;
@@ -378,6 +384,9 @@ QChartView* PortfolioFFNView::make_chart_view(const QString& title) {
 void PortfolioFFNView::set_data(const portfolio::PortfolioSummary& summary, const QString& currency) {
     summary_ = summary;
     currency_ = currency;
+    const QString partial = summary.partial_book_message();
+    partial_banner_->setText(partial);
+    partial_banner_->setVisible(!partial.isEmpty());
     update_overview();
 }
 
@@ -454,12 +463,12 @@ void PortfolioFFNView::update_overview() {
              ui::colors::POSITIVE},
             {"Worst Holding", worst_sym.isEmpty() ? "--" : worst_sym + " (" + pct_str(worst_ret) + ")", "--",
              ui::colors::NEGATIVE},
-            {"Total Return (cost)", pct_str(pnl_pct / 100.0), "--",
+            {"Total Return (cost)", summary_.nothing_valued() ? QStringLiteral("—") : pct_str(pnl_pct / 100.0), "--",
              pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE},
             {"Win Rate", fmt(win_rate) + "%", "--", ui::colors::CYAN},
             {"Positions", QString::number(summary_.total_positions), "--", ui::colors::CYAN},
-            {"Total Value", currency_ + " " + fmt(summary_.total_market_value), "--", ui::colors::WARNING},
-            {"Cost Basis", currency_ + " " + fmt(summary_.total_cost_basis), "--", ui::colors::TEXT_SECONDARY},
+            {"Total Value", currency_ + " " + (summary_.nothing_valued() ? QStringLiteral("—") : fmt(summary_.total_market_value) + (summary_.exclusion_note().isEmpty() ? QString() : "  " + summary_.exclusion_note())), "--", ui::colors::WARNING},
+            {"Cost Basis", currency_ + " " + (summary_.nothing_valued() ? QStringLiteral("—") : fmt(summary_.total_cost_basis)), "--", ui::colors::TEXT_SECONDARY},
         };
     } else {
         // Pre-run: show live data and prompt user. No volatility/Sharpe here:
@@ -472,8 +481,8 @@ void PortfolioFFNView::update_overview() {
             {"Sharpe Ratio (geo)", ui::formatting::placeholder(), "--", ui::colors::TEXT_SECONDARY},
             {"Win Rate", fmt(win_rate) + "%", "--", ui::colors::CYAN},
             {"Positions", QString::number(summary_.total_positions), "--", ui::colors::CYAN},
-            {"Total Value", currency_ + " " + fmt(summary_.total_market_value), "--", ui::colors::WARNING},
-            {"Cost Basis", currency_ + " " + fmt(summary_.total_cost_basis), "--", ui::colors::TEXT_SECONDARY},
+            {"Total Value", currency_ + " " + (summary_.nothing_valued() ? QStringLiteral("—") : fmt(summary_.total_market_value) + (summary_.exclusion_note().isEmpty() ? QString() : "  " + summary_.exclusion_note())), "--", ui::colors::WARNING},
+            {"Cost Basis", currency_ + " " + (summary_.nothing_valued() ? QStringLiteral("—") : fmt(summary_.total_cost_basis)), "--", ui::colors::TEXT_SECONDARY},
             {"FFN Deep Metrics", "Click RUN FFN ANALYSIS for full stats", "--", ui::colors::AMBER},
         };
     }

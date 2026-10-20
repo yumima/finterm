@@ -23,6 +23,10 @@ class PortfolioDetailWrapper : public QWidget {
     void update_snapshots(const QVector<portfolio::PortfolioSnapshot>& snapshots);
     void update_metrics(const portfolio::ComputedMetrics& metrics);
 
+    /// The warning strip a view puts above figures that cover part of the
+    /// book (PortfolioSummary::partial_book_message); hidden until set.
+    static QLabel* make_partial_book_banner();
+
   signals:
     void back_requested();
     void sector_selected(QString sector); // forwarded from AnalyticsSectorsView
@@ -34,6 +38,7 @@ class PortfolioDetailWrapper : public QWidget {
 
     QLabel* title_label_ = nullptr;
     QLabel* portfolio_label_ = nullptr;
+    QLabel* partial_banner_ = nullptr; // the views' figures cover part of the book
     QPushButton* back_btn_ = nullptr;
     QStackedWidget* view_stack_ = nullptr;
 

@@ -14,7 +14,8 @@ namespace fincept::services {
 
 namespace {
 
-constexpr qint64 kNegativeTtlSeconds = 7 * 24 * 3600; // 7 days
+constexpr qint64 kRetryTransientSec = 120;  // refused / unanswered: says nothing about the symbol
+constexpr qint64 kRetryErrorSec = 3600;     // failed some other way: still not an answer
 
 // Symbols that look like TSX bare tickers (letters only, 1–4 chars, no dot).
 // We try a `.TO` suffix first before giving up, since many Canadian holdings
@@ -61,23 +62,24 @@ void SectorResolver::load_cache() {
         return;
 
     QSqlQuery q(db_mgr.raw_db());
-    if (!q.exec("SELECT symbol, sector, resolved_at FROM sector_cache")) {
+    if (!q.exec("SELECT symbol, sector, quote_type FROM sector_cache")) {
         LOG_WARN("SectorResolver", "Cache load failed: " + q.lastError().text());
         return;
     }
 
     QMutexLocker lock(&mutex_);
-    qint64 now = QDateTime::currentSecsSinceEpoch();
     int loaded = 0;
     while (q.next()) {
         QString sym = q.value(0).toString();
         QString sec = q.value(1).toString();
-        qint64 resolved = q.value(2).toLongLong();
 
-        // Drop stale negative cache entries (sector == Unclassified/empty and
-        // older than TTL) so we retry on next access.
-        bool is_negative = sec.isEmpty() || sec == "Unclassified";
-        if (is_negative && (now - resolved) > kNegativeTtlSeconds)
+        // A negative entry is re-confirmed once per session, not trusted:
+        // until 2026-10 a refused lookup (Yahoo's 401 bursts) was stored as
+        // "Unclassified" — 13 of 43 such rows here were real companies. One
+        // lookup per fund/ETF per launch is the price of never serving one.
+        // A sector the user set (override) stands.
+        const bool is_negative = sec.isEmpty() || sec == "Unclassified";
+        if (is_negative && q.value(2).toString() != QLatin1String("override"))
             continue;
 
         if (!sec.isEmpty()) {
@@ -133,6 +135,9 @@ QString SectorResolver::sector_for(const QString& symbol) {
     if (it != cache_.constEnd())
         return it.value();
 
+    if (const auto ra = retry_after_.constFind(sym);
+        ra != retry_after_.constEnd() && QDateTime::currentSecsSinceEpoch() < ra.value())
+        return {};
     if (!inflight_.contains(sym)) {
         inflight_.insert(sym);
         lock.unlock();
@@ -144,6 +149,12 @@ QString SectorResolver::sector_for(const QString& symbol) {
 void SectorResolver::prefetch(const QStringList& symbols) {
     for (const auto& s : symbols)
         (void)sector_for(s);
+}
+
+void SectorResolver::defer(const QString& symbol, qint64 secs) {
+    QMutexLocker lock(&mutex_);
+    inflight_.remove(symbol);
+    retry_after_.insert(symbol, QDateTime::currentSecsSinceEpoch() + secs);
 }
 
 void SectorResolver::resolve_async(const QString& symbol) {
@@ -176,6 +187,14 @@ void SectorResolver::resolve_async(const QString& symbol) {
             finish(sector, info.industry, {});
             return;
         }
+        // Only an ANSWER without a sector may become "Unclassified" — a
+        // refused or failed lookup (a 401 burst) used to be stored as one
+        // for 7 days, for companies Yahoo does classify.
+        if (!info.info_answered) {
+            LOG_WARN("SectorResolver", QString("No answer for %1 — not classifying it").arg(symbol));
+            self->defer(symbol, info.info_transient ? kRetryTransientSec : kRetryErrorSec);
+            return;
+        }
 
         // Try 2: TSX suffix fallback for bare Canadian tickers.
         if (looks_like_canadian_bare(symbol)) {
@@ -184,7 +203,13 @@ void SectorResolver::resolve_async(const QString& symbol) {
                 tsx_symbol, [self, symbol, finish](bool ok2, InfoData info2) {
                     if (!self)
                         return;
-                    finish(ok2 ? info2.sector : QString{}, info2.industry, {});
+                    // .TO is a guess: refused -> ask again later; failed for
+                    // good (no such listing) -> the answer try 1 already gave.
+                    if (!info2.info_answered && info2.info_transient) {
+                        self->defer(symbol, kRetryTransientSec);
+                        return;
+                    }
+                    finish(info2.info_answered ? info2.sector : QString{}, info2.industry, {});
                 });
             return;
         }

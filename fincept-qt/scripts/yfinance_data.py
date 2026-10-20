@@ -219,10 +219,17 @@ def _install_download_serializer():
 _install_download_serializer()
 
 # ── yfinance crumb/session state ──────────────────────────────────────────────
-# Yahoo Finance periodically rotates its internal auth crumb.  When this
-# happens every outgoing request returns HTTP 401 "Invalid Crumb".  The daemon
-# must reset yfinance's cached session so the next request re-authenticates
-# transparently rather than failing for the rest of the process lifetime.
+# HTTP 401 "Invalid Crumb" means the request's crumb does not match its cookie
+# (verified 2026-10-19: another session's crumb, a garbage crumb and no crumb
+# all return exactly this; new sessions on the same IP do NOT invalidate an
+# old one). Bursts of it (1-8 requests inside ~50 ms, every one failing
+# yfinance's own one retry) hit a few times a week; what changes the cookie
+# under the crumb is not yet known — _install_auth_probe logs the evidence.
+#
+# NOTE _reset_yfinance_session does NOT reset the crumb: it lives on the
+# yfinance.data.YfData singleton, which reload(yf) leaves in place (verified).
+# And it rarely runs at all — yfinance logs a 401 and returns None rather than
+# raising, so _daemon_dispatch_with_crumb_retry never sees an exception.
 
 _CRUMB_ERROR_PATTERNS = ("invalid crumb", "unauthorized", "401")
 
@@ -244,6 +251,116 @@ def _reset_yfinance_session() -> None:
     # download lock for the rest of the daemon's life.
     _install_download_serializer()
     _install_inmemory_tz_cache()
+
+# ── Auth probe + per-thread HTTP outcome ─────────────────────────────────────
+# Every Yahoo request yfinance makes passes through YfData._make_request. The
+# wrapper records each response's status for the calling thread (so a lookup
+# can tell a transient refusal from an answer) and, on a 401 or on a response
+# that changes the session's cookie, writes one line of evidence to stderr
+# (the app log): what the request sent vs what the session holds now. Hashes
+# only — never a cookie or crumb value.
+
+_http_trace = threading.local()
+# Statuses that say nothing about the symbol: auth, rate limit, server trouble.
+_TRANSIENT_HTTP = {401, 403, 408, 429, 500, 502, 503, 504}
+
+
+def _trace_reset():
+    _http_trace.statuses = []
+    _http_trace.net_error = False
+
+
+def _trace_transient():
+    """True when a request on this thread since _trace_reset was refused or
+    never answered — the lookup's outcome is not a fact about the symbol."""
+    st = getattr(_http_trace, "statuses", [])
+    return getattr(_http_trace, "net_error", False) or any(c in _TRANSIENT_HTTP for c in st)
+
+
+def _h(v):
+    if not v:
+        return "-"
+    import hashlib
+    return hashlib.sha1(str(v).encode()).hexdigest()[:8]
+
+
+def _session_a3(yd):
+    try:
+        for c in yd._session.cookies.jar:
+            if c.name == "A3":
+                return c.value
+    except Exception:
+        pass
+    return None
+
+
+def _install_auth_probe():
+    try:
+        from yfinance.data import YfData
+    except Exception:
+        return
+    orig = YfData._make_request
+    if getattr(orig, "_finterm_probe", False):
+        return
+
+    # *args/**kwargs: the signature differs across yfinance versions (1.x
+    # passes data= from post()).
+    def _make_request(self, url, request_method, *args, **kwargs):
+        def traced(**kw):
+            crumb_sent = (kw.get("params") or {}).get("crumb")
+            cookie_sent = _session_a3(self)
+            strategy = self._cookie_strategy
+            r = request_method(**kw)
+            cookie_now = _session_a3(self)
+            if r.status_code == 401 or cookie_now != cookie_sent:
+                try:
+                    set_cookie = "A3" if "A3=" in (r.headers.get("set-cookie") or "") else "-"
+                except Exception:
+                    set_cookie = "?"
+                print(f"[yf-auth] {r.status_code} {url.split('?')[0].rsplit('/', 3)[-2]} "
+                      f"thread={threading.current_thread().name} strategy={strategy}->{self._cookie_strategy} "
+                      f"crumb sent={_h(crumb_sent)} now={_h(self._crumb)} "
+                      f"cookie sent={_h(cookie_sent)} now={_h(cookie_now)} set-cookie={set_cookie}",
+                      file=sys.stderr, flush=True)
+            return r
+        try:
+            r = orig(self, url, traced, *args, **kwargs)
+        except Exception:
+            _http_trace.net_error = True
+            raise
+        # Only the request's FINAL status counts: yfinance retries any >= 400
+        # once with the other cookie strategy, and a 401 the retry recovered
+        # is an answer.
+        st = getattr(_http_trace, "statuses", None)
+        if st is not None:
+            st.append(r.status_code)
+        return r
+
+    _make_request._finterm_probe = True
+    YfData._make_request = _make_request
+
+    # cache_get is lru_cache'd by URL for the process's life, and keeps
+    # whatever came back — a 401 included. .info's key-statistics request goes
+    # through it with a URL that changes once a day, so one refused request
+    # failed every later .info for that symbol until midnight or a restart
+    # (verified 2026-10-19). A failed response is never kept.
+    orig_cg = YfData.cache_get
+    clear = getattr(orig_cg, "cache_clear", None)
+    if clear is not None and not getattr(orig_cg, "_finterm_probe", False):
+        def cache_get(self, *args, **kwargs):
+            r = orig_cg(self, *args, **kwargs)
+            # a refusal only — a 404 is a stable answer worth keeping; the
+            # lru_cache cannot drop one entry, and refusals are rare
+            if getattr(r, "status_code", 200) in _TRANSIENT_HTTP:
+                clear()
+            return r
+        cache_get._finterm_probe = True
+        cache_get.cache_clear = clear
+        YfData.cache_get = cache_get
+
+
+_install_auth_probe()
+
 
 def get_orderbook(symbol):
     """Best-effort live order-book snapshot (bid/ask + sizes) for a single symbol.
@@ -740,10 +857,19 @@ def get_historical_price(symbol, target_date):
         return {"found": False, "error": str(e), "symbol": symbol}
 
 def get_info(symbol):
-    """Fetch company info for a symbol"""
+    """Fetch company info for a symbol.
+
+    A lookup Yahoo refused or did not answer — any request inside it, since
+    .info makes two and returns whatever the other one got — comes back as
+    {"error", "transient": true}: its blanks are not facts about the symbol
+    (a 401 on the profile request alone used to read as "no sector")."""
+    _trace_reset()
     try:
         ticker = yf.Ticker(symbol)
         info = ticker.info
+        if _trace_transient():
+            return {"error": "Yahoo refused or did not answer part of the lookup",
+                    "transient": True, "symbol": symbol}
 
         # Class-share dot notation (BRK.B, BF.B) returns a degraded info dict
         # from Yahoo — the financialData module comes back empty, so analyst
@@ -882,6 +1008,8 @@ def get_info(symbol):
 
         return info_data
     except Exception as e:
+        if _trace_transient():
+            return {"error": f"Yahoo refused or did not answer ({e})", "transient": True, "symbol": symbol}
         return {"error": str(e), "symbol": symbol}
 
 def get_batch_info(symbols):
@@ -898,8 +1026,14 @@ def get_batch_info(symbols):
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     def _one(sym):
+        # Runs on its own pool thread, so the per-thread trace is this
+        # lookup's alone. A refused row is an error (consumers skip it and
+        # it is not cached), never a profile with a blank sector.
+        _trace_reset()
         try:
             info = yf.Ticker(sym).info or {}
+            if _trace_transient():
+                return {"symbol": sym, "error": "Yahoo refused or did not answer", "transient": True}
             return {
                 "symbol": sym,
                 "long_name": info.get("longName") or info.get("shortName") or "",
@@ -911,6 +1045,8 @@ def get_batch_info(symbols):
                 "employees": info.get("fullTimeEmployees"),
             }
         except Exception as e:
+            if _trace_transient():
+                return {"symbol": sym, "error": f"Yahoo refused or did not answer ({e})", "transient": True}
             return {"symbol": sym, "error": str(e)}
 
     out = []
@@ -4407,6 +4543,9 @@ def _is_cacheable_result(result):
     if result is None:
         return False
     if isinstance(result, list):
+        # a row Yahoo refused must be asked again, not served for the TTL
+        if any(isinstance(r, dict) and r.get("transient") for r in result):
+            return False
         return len(result) > 0
     if isinstance(result, dict):
         if not result:

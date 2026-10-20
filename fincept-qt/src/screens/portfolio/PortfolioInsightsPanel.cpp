@@ -639,18 +639,26 @@ void PortfolioInsightsPanel::reload_agents() {
 
 QString PortfolioInsightsPanel::build_portfolio_context() const {
     QStringList lines;
+    // The model reads these as facts: an unknown total is "unknown", not 0,
+    // and a partial one says what it leaves out on the same line.
+    const bool none = summary_.nothing_valued();
+    const QString note = summary_.exclusion_note().isEmpty()
+                             ? QString()
+                             : QStringLiteral(" (") + summary_.exclusion_note() + QStringLiteral(")");
     lines << QString("Portfolio: %1  |  NAV: %2 %3")
                  .arg(summary_.portfolio.name, summary_.portfolio.currency)
-                 .arg(QString::number(summary_.total_market_value, 'f', 2));
-    lines << QString("Total P&L: %1%  |  Day Change: %2%  |  Positions: %3")
-                 .arg(QString::number(summary_.total_unrealized_pnl_percent, 'f', 2))
-                 .arg(QString::number(summary_.total_day_change_percent, 'f', 2))
+                 .arg(none ? QStringLiteral("unknown") : QString::number(summary_.total_market_value, 'f', 2) + note);
+    lines << QString("Total P&L: %1  |  Day Change: %2  |  Positions: %3")
+                 .arg(none ? QStringLiteral("unknown")
+                           : QString::number(summary_.total_unrealized_pnl_percent, 'f', 2) + "%" + note)
+                 .arg(none ? QStringLiteral("unknown")
+                           : QString::number(summary_.total_day_change_percent, 'f', 2) + "%")
                  .arg(summary_.total_positions);
     lines << "";
     lines << "Holdings:";
     for (const auto& h : summary_.holdings) {
         lines << QString("  %1 [%2]  qty %3 @ %4  |  P&L %5%  |  wt %6%")
-                     .arg(h.symbol, h.sector.isEmpty() ? "Unclassified" : h.sector)
+                     .arg(h.symbol, h.sector.isEmpty() ? QStringLiteral("sector unknown") : h.sector)
                      .arg(QString::number(h.quantity, 'f', 2))
                      .arg(h.price_known ? QString::number(h.current_price, 'f', 2)
                                         : QStringLiteral("no price (excluded from NAV)"))
@@ -705,11 +713,16 @@ void PortfolioInsightsPanel::run_ai(bool force) {
     QJsonObject summary_json;
     summary_json["name"] = summary_.portfolio.name;
     summary_json["currency"] = summary_.portfolio.currency;
-    summary_json["total_market_value"] = summary_.total_market_value;
-    summary_json["total_cost_basis"] = summary_.total_cost_basis;
-    summary_json["total_unrealized_pnl"] = summary_.total_unrealized_pnl;
-    summary_json["total_unrealized_pnl_percent"] = summary_.total_unrealized_pnl_percent;
-    summary_json["total_day_change_percent"] = summary_.total_day_change_percent;
+    // Totals over no valued holding are unknown (null), not 0; a partial
+    // total travels with the holdings it leaves out.
+    const bool none = summary_.nothing_valued();
+    const auto total = [none](double v) { return none ? QJsonValue() : QJsonValue(v); };
+    summary_json["total_market_value"] = total(summary_.total_market_value);
+    summary_json["total_cost_basis"] = total(summary_.total_cost_basis);
+    summary_json["total_unrealized_pnl"] = total(summary_.total_unrealized_pnl);
+    summary_json["total_unrealized_pnl_percent"] = total(summary_.total_unrealized_pnl_percent);
+    summary_json["total_day_change_percent"] = total(summary_.total_day_change_percent);
+    summary_json["totals_exclude"] = QJsonArray::fromStringList(summary_.excluded_symbols());
     summary_json["total_positions"] = summary_.total_positions;
     summary_json["holdings"] = holdings;
     // Include a plain-text fallback for Python paths that ignore the structured

@@ -59,10 +59,14 @@ class SectorResolver : public QObject {
     void resolve_async(const QString& symbol);
     static QString normalize(const QString& symbol);
     static QString fallback_for_unresolvable(const QString& symbol);
+    // No answer from Yahoo is not "no sector": nothing is cached or stored,
+    // and the symbol is asked again after `secs`.
+    void defer(const QString& symbol, qint64 secs);
 
     mutable QMutex mutex_;
     QHash<QString, QString> cache_;   // symbol → sector
     QSet<QString> inflight_;           // symbols currently being fetched
+    QHash<QString, qint64> retry_after_; // symbol → epoch secs: unanswered, ask again then
 };
 
 } // namespace fincept::services

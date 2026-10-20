@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e62aaf388`](https://github.com/yumima/finterm/commit/e62aaf388) screener: right-click a name — Equity Research, or add it to a portfolio
 - [`3d5525777`](https://github.com/yumima/finterm/commit/3d5525777) screener: "Setting up" for every screen — the names next in line, tested
 - [`958953a1c`](https://github.com/yumima/finterm/commit/958953a1c) screener: reading links, the ranking column marked, write-up as tiles or a column
 - [`6ecd899a9`](https://github.com/yumima/finterm/commit/6ecd899a9) screener: "Setting up" — names one rule from the Trend Template, tested first

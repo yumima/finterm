@@ -71,10 +71,25 @@ void PortfolioDetailWrapper::build_ui() {
 
     layout->addWidget(header);
 
+    // Every view below computes from the summary's valued holdings: when some
+    // are left out, say so above all of them rather than in each.
+    partial_banner_ = make_partial_book_banner();
+    layout->addWidget(partial_banner_);
+
     // ── View stack ───────────────────────────────────────────────────────────
     view_stack_ = new QStackedWidget;
     view_stack_->setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));
     layout->addWidget(view_stack_, 1);
+}
+
+QLabel* PortfolioDetailWrapper::make_partial_book_banner() {
+    auto* b = new QLabel;
+    b->setWordWrap(true);
+    b->setStyleSheet(QString("background:%1; color:%2; border-bottom:1px solid %2;"
+                             "padding:6px 10px; font-size:12px; font-weight:600;")
+                         .arg(ui::colors::BG_RAISED(), ui::colors::WARNING()));
+    b->hide();
+    return b;
 }
 
 void PortfolioDetailWrapper::show_view(portfolio::DetailView view, const portfolio::PortfolioSummary& summary,
@@ -106,6 +121,9 @@ void PortfolioDetailWrapper::update_snapshots(const QVector<portfolio::Portfolio
 void PortfolioDetailWrapper::update_data(const portfolio::PortfolioSummary& summary, const QString& currency) {
     current_summary_ = summary;
     current_currency_ = currency;
+    const QString partial = summary.partial_book_message();
+    partial_banner_->setText(partial);
+    partial_banner_->setVisible(!partial.isEmpty());
 
     auto* current = view_stack_->currentWidget();
     if (!current)

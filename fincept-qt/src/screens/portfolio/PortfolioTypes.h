@@ -183,11 +183,15 @@ struct PortfolioSummary {
     // and listed in fx_unknown_symbols — or a closed position's realized
     // P&L/dividends, excluded from those totals). The UI marks totals "≈".
     bool fx_incomplete = false;
+    // The realized-P&L / dividend totals themselves left something out (a
+    // sale or dividend with no conversion). Open holdings' unknown FX does
+    // not touch those totals, so it must not mark them.
+    bool flows_fx_incomplete = false;
     // Instrument→portfolio-currency multiplier for EVERY symbol in the
     // transaction log, not just open holdings — closed positions still
     // contribute cash flows that the return math must convert. Absent means
-    // "no conversion known"; consumers treat that as 1.0 and should already
-    // have set fx_incomplete.
+    // "no conversion known": the return math (FxRates, strict) reads it as
+    // NaN and marks the affected days uncomputable, never 1:1.
     QHash<QString, double> fx_rates;
     // Holdings with no price at all (excluded from every total), holdings
     // priced from a stale last-known cache entry, and holdings whose day
@@ -202,6 +206,65 @@ struct PortfolioSummary {
     bool book_incomplete() const { return !unpriced_symbols.isEmpty() || !fx_unknown_symbols.isEmpty(); }
     bool valuation_partial() const {
         return book_incomplete() || !stale_symbols.isEmpty();
+    }
+    /// Every holding is left out: the totals are unknown, not 0.
+    bool nothing_valued() const {
+        if (holdings.isEmpty())
+            return false;
+        for (const auto& h : holdings)
+            if (h.valued())
+                return false;
+        return true;
+    }
+    /// The holdings the totals leave out (no price, or no conversion), plus
+    /// any `extra` a particular total also leaves out (the day total: holdings
+    /// whose move today is unknown) — deduplicated, in order.
+    QStringList excluded_symbols(const QStringList& extra = {}) const {
+        QStringList out;
+        for (const QStringList* l : {&unpriced_symbols, &fx_unknown_symbols, &extra})
+            for (const auto& sym : *l)
+                if (!out.contains(sym))
+                    out.append(sym);
+        return out;
+    }
+    /// What a total says about the holdings it leaves out — "excl. MU",
+    /// "excl. 4" — or empty when it covers the whole book. A sum over part of
+    /// the book is not "approximately" the total ("≈" is for estimates: stale
+    /// prices); it is a different number, and must say which.
+    static QString exclusion_note_for(const QStringList& syms) {
+        if (syms.isEmpty())
+            return {};
+        return QStringLiteral("excl. ") +
+               (syms.size() <= 2 ? syms.join(QStringLiteral(", ")) : QString::number(syms.size()));
+    }
+    QString exclusion_note() const { return exclusion_note_for(excluded_symbols()); }
+    /// A holding IN the totals is priced from a stale last-known print: the
+    /// totals are estimates ("≈"). A stale holding that is also left out (no
+    /// conversion) is not in them, and `also_out` names more such holdings.
+    bool has_estimate(const QStringList& also_out = {}) const {
+        for (const auto& h : holdings)
+            if (h.valued() && h.price_stale && !also_out.contains(h.symbol))
+                return true;
+        return false;
+    }
+    /// For an analysis view: what its figures cover, when that is not the
+    /// whole book. Weights, concentration, stress, projections are computed
+    /// over the valued holdings only — real for those, not for the portfolio.
+    QString partial_book_message() const {
+        if (!book_incomplete())
+            return {};
+        QStringList why;
+        if (!unpriced_symbols.isEmpty())
+            why << unpriced_symbols.join(QStringLiteral(", ")) + QStringLiteral(" (no price)");
+        QStringList no_fx;
+        for (const auto& sym : fx_unknown_symbols)
+            if (!unpriced_symbols.contains(sym))
+                no_fx << sym;
+        if (!no_fx.isEmpty())
+            why << no_fx.join(QStringLiteral(", ")) + QStringLiteral(" (currency or FX rate not known)");
+        return QStringLiteral("PARTIAL BOOK — the figures below cover only the holdings that could be valued. "
+                              "Left out: ") +
+               why.join(QStringLiteral("; ")) + QStringLiteral(". They are included once the data arrives.");
     }
 };
 

@@ -412,7 +412,16 @@ void AnalyticsSectorsView::update_overview() {
 void AnalyticsSectorsView::update_kpi_strip(const QVector<SectorInfo>& sectors) {
     kpi_sectors_->setText(QString::number(sectors.size()));
     kpi_positions_->setText(QString::number(summary_.total_positions));
-    kpi_market_value_->setText(format_money(summary_.total_market_value));
+    // unknown with no holding valued; a partial book is named by the banner above
+    kpi_market_value_->setText(summary_.nothing_valued() ? QStringLiteral("—")
+                                                         : format_money(summary_.total_market_value));
+    if (summary_.nothing_valued()) { // unknown, not a flat +0.00
+        kpi_pnl_->setText(QStringLiteral("—"));
+        kpi_pnl_->setStyleSheet(QString("color:%1; font-size:%2px; font-weight:700;")
+                                    .arg(ui::colors::TEXT_SECONDARY())
+                                    .arg(ui::fonts::font_px(2)));
+        return;
+    }
     const QString sign = summary_.total_unrealized_pnl >= 0 ? "+" : "";
     kpi_pnl_->setText(QString("%1%2  (%3)")
                            .arg(sign)

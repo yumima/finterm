@@ -357,6 +357,30 @@ set_target_properties(test_portfolio_ledger PROPERTIES
 
 add_test(NAME portfolio_ledger COMMAND test_portfolio_ledger)
 
+# ── Portfolio totals: whole book, or say what is left out ────────────────────
+# A sum over part of the book showed as "≈" — "NAV ≈0.00" for a $905 position
+# whose currency was unknown. Header-only rules every total display uses.
+
+add_executable(test_portfolio_summary_totals
+    services/test_portfolio_summary_totals.cpp
+)
+
+target_include_directories(test_portfolio_summary_totals PRIVATE
+    ../src
+)
+
+target_link_libraries(test_portfolio_summary_totals PRIVATE
+    Qt6::Core
+    Qt6::Test
+)
+
+set_target_properties(test_portfolio_summary_totals PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME portfolio_summary_totals COMMAND test_portfolio_summary_totals)
+
 # ── Portfolio time-weighted return tests ─────────────────────────────────────
 # The period-return convention: deposits are flows, not performance. Pure
 # chaining function over the snapshot series + transaction log.
@@ -567,6 +591,23 @@ if(Python3_Interpreter_FOUND)
                 ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_info_contract.py
     )
     set_tests_properties(info_contract PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+endif()
+
+# ── A refused lookup is not an answer ────────────────────────────────────────
+# Yahoo's 401 "Invalid Crumb" bursts made get_info return blanks (or half a
+# profile) that the app stored as facts: "Unclassified" for 7 days, currency
+# "unknown" for 6h, NAV ≈0.00 — and yfinance's lru_cache kept the 401 for the
+# key-statistics request, failing that symbol until midnight. get_info must
+# flag every refused/unanswered lookup "transient", keep answers as answers,
+# and recover the moment Yahoo does. Offline: canned responses through
+# yfinance's real request path.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME info_transient
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_info_transient.py
+    )
+    set_tests_properties(info_transient PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
 endif()
 
 # ── Price-less bars ──────────────────────────────────────────────────────────

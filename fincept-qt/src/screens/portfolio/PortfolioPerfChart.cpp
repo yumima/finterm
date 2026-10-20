@@ -1377,16 +1377,22 @@ void PortfolioPerfChart::update_chart() {
     // whether or not there is enough history to draw. "≈" when the summary
     // itself is an estimate (unpriced/stale holdings, incomplete FX).
     const auto fill_total_labels = [&]() {
-        const QString approx = (summary_.fx_incomplete || summary_.valuation_partial())
-                                   ? QStringLiteral("≈") : QString();
+        // "≈" for an estimate (stale prices); a total leaving holdings out
+        // names them; none valued is unknown — see PortfolioStatsRibbon.
+        const QString approx = summary_.has_estimate() ? QStringLiteral("≈") : QString();
+        const QString note = summary_.exclusion_note().isEmpty() ? QString()
+                                                                 : QStringLiteral("  ") + summary_.exclusion_note();
+        const bool none = summary_.nothing_valued();
         const double total_pnl_pct = summary_.total_unrealized_pnl_percent;
         const char* total_color = total_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
         // Unrealized only: open positions vs their average cost. Realized P&L
         // (closed lots) and dividends are not in it — the all-in figure is in
         // the tooltip, labelled as what it is.
-        total_return_label_->setText(QString("UNREALIZED  %1%2%3%")
-                                         .arg(approx, total_pnl_pct >= 0 ? "+" : "")
-                                         .arg(QString::number(total_pnl_pct, 'f', 2)));
+        total_return_label_->setText(none ? QStringLiteral("UNREALIZED  —")
+                                          : QString("UNREALIZED  %1%2%3%%4")
+                                                .arg(approx, total_pnl_pct >= 0 ? "+" : "")
+                                                .arg(QString::number(total_pnl_pct, 'f', 2))
+                                                .arg(note));
         total_return_label_->setStyleSheet(
             QString("color:%1; font-size:14px; font-weight:700;").arg(total_color));
         const double total_pnl =
@@ -1400,13 +1406,18 @@ void PortfolioPerfChart::update_chart() {
                 .arg(QString::number(summary_.total_realized_pnl, 'f', 2))
                 .arg(QString::number(summary_.total_dividend_income, 'f', 2))
                 .arg(QString::number(total_pnl, 'f', 2))
-                .arg(approx.isEmpty() ? QString() : tr("\n(approximate — some holdings unpriced or unconverted)")));
+                .arg(QString(approx.isEmpty() ? QString() : tr("\n(estimate — some holdings at a stale price)")) +
+                     (note.isEmpty() ? QString() : tr("\n(%1: no price or no currency conversion)").arg(note.trimmed()))));
 
-        nav_label_->setText(QString("NAV %1 %2%3").arg(currency_, approx).arg(QString::number(live_nav, 'f', 2)));
+        nav_label_->setText(none ? QString("NAV %1 —").arg(currency_)
+                                 : QString("NAV %1 %2%3%4").arg(currency_, approx)
+                                       .arg(QString::number(live_nav, 'f', 2)).arg(note));
         if (cost_basis_label_) {
-            if (cost_basis > 0)
+            if (none)
+                cost_basis_label_->setText(QString("COST %1 —").arg(currency_));
+            else if (cost_basis > 0)
                 cost_basis_label_->setText(
-                    QString("COST %1 %2%3").arg(currency_, approx).arg(QString::number(cost_basis, 'f', 2)));
+                    QString("COST %1 %2%3%4").arg(currency_, approx).arg(QString::number(cost_basis, 'f', 2)).arg(note));
             else
                 cost_basis_label_->clear();
         }
