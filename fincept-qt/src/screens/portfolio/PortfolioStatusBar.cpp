@@ -122,17 +122,17 @@ void PortfolioStatusBar::set_summary(const portfolio::PortfolioSummary& s) {
                                                      "is in flight; they update when it lands."));
     }
 
-    // No holding valued: unknown, not 0; some left out: say which.
+    // No holding valued: unknown, not 0 (nor a gain's colour); some left
+    // out: say which.
     const bool none = s.nothing_valued();
-    const QString note = s.exclusion_note();
-    nav_label_->setText(none ? QString("NAV %1 —").arg(s.portfolio.currency)
-                             : QString("NAV %1 %2%3").arg(s.portfolio.currency, fmt(s.total_market_value),
-                                                          note.isEmpty() ? QString() : QStringLiteral(" ") + note));
+    nav_label_->setText(QString("NAV %1 %2").arg(s.portfolio.currency, s.total_text(fmt(s.total_market_value))));
 
     double pnl = s.total_unrealized_pnl;
-    pnl_label_->setText(none ? QStringLiteral("P&L —") : QString("P&L %1%2").arg(pnl >= 0 ? "+" : "").arg(fmt(pnl)));
+    pnl_label_->setText(QStringLiteral("P&L ") +
+                        s.total_text(QString("%1%2").arg(pnl >= 0 ? "+" : "").arg(fmt(pnl)), QStringLiteral("")));
     pnl_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;")
-                                  .arg(pnl >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
+                                  .arg(none ? ui::colors::TEXT_SECONDARY()
+                                            : pnl >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
 }
 
 } // namespace fincept::screens

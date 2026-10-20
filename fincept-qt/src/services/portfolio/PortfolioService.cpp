@@ -54,7 +54,9 @@ QString summary_filename(const QString& portfolio_id) {
     for (auto& ch : safe) {
         if (!ch.isLetterOrNumber()) ch = QChar('_');
     }
-    return QStringLiteral("summary_") + safe + QStringLiteral(".json");
+    // v2: flows_fx_incomplete — a v1 file reads it as false and would drop
+    // the "≈" off a realized/dividend total that left a flow out.
+    return QStringLiteral("summary_v2_") + safe + QStringLiteral(".json");
 }
 
 // ── PortfolioSummary <-> JSON ────────────────────────────────────────────────
@@ -828,7 +830,11 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
             h.first_purchase_date = asset.first_purchase_date;
             // Prefer stored sector; fall back to resolver cache (which may
             // populate async — see sector_resolved handler in constructor).
-            h.sector = asset.sector.isEmpty()
+            // A stored "Unclassified" is re-checked, not trusted: until
+            // 2026-10 a refused lookup was written here as one (LMT was), and
+            // sector_resolved then corrects the row. Empty while it is asked
+            // — unknown, not a class.
+            h.sector = (asset.sector.isEmpty() || asset.sector == QLatin1String("Unclassified"))
                            ? SectorResolver::instance().sector_for(asset.symbol)
                            : asset.sector;
 
@@ -2716,7 +2722,7 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
         int written = 0;
         int skipped_live = 0;
         int skipped_partial = 0;
-        bool skipped_for_currency = false;
+        QStringList skipped_for_currency; // open holdings whose currency is unknown
         for (const QString& d : dates) {
             // Today's row belongs to the live path — build_summary values it
             // from actual quotes and writes it as 'live'.
@@ -2751,7 +2757,8 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
                         // Face value in the portfolio currency would be an
                         // assumption written down as history.
                         complete = false;
-                        skipped_for_currency = true;
+                        if (!skipped_for_currency.contains(st.symbol))
+                            skipped_for_currency.append(st.symbol);
                         continue;
                     }
                     double rate = st.fx_factor;
@@ -2812,8 +2819,8 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
                      .arg(portfolio_id)
                      .arg(skipped_live)
                      .arg(skipped_partial));
-        if (skipped_for_currency)
-            self->backfill_needs_fx_.insert(portfolio_id, period);
+        if (!skipped_for_currency.isEmpty())
+            self->backfill_needs_fx_.insert(portfolio_id, {period, skipped_for_currency});
         self->invalidate_cache(portfolio_id);
         emit self->history_backfilled(portfolio_id, written);
     },
@@ -3339,11 +3346,23 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                 }
                 if (--(*pending) == 0) {
                     emit self->symbol_currencies_resolved();
-                    // Histories that skipped dates for an unknown currency:
-                    // fill them now. Each re-records itself if still short.
-                    const auto waiting = std::exchange(self->backfill_needs_fx_, {});
-                    for (auto it = waiting.cbegin(); it != waiting.cend(); ++it)
-                        self->backfill_history(it.key(), it.value());
+                    // Histories that skipped dates for a currency now known:
+                    // fill them. Still-unknown ones wait for their own answer.
+                    QList<QPair<QString, QString>> rerun;
+                    for (auto it = self->backfill_needs_fx_.begin(); it != self->backfill_needs_fx_.end();) {
+                        const bool resolved = std::any_of(it->second.cbegin(), it->second.cend(),
+                                                          [](const QString& sym) {
+                                                              return !cached_symbol_currency(sym).isEmpty();
+                                                          });
+                        if (resolved) {
+                            rerun.append({it.key(), it->first});
+                            it = self->backfill_needs_fx_.erase(it);
+                        } else {
+                            ++it;
+                        }
+                    }
+                    for (const auto& [pid, per] : rerun)
+                        self->backfill_history(pid, per);
                 }
             },
             python::PythonWorker::kNetworkActionTimeoutMs);

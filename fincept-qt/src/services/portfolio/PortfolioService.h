@@ -463,10 +463,11 @@ class PortfolioService : public QObject {
     // One retry only — a second pass proceeds with whatever is known so a
     // permanently undiscoverable symbol cannot block history forever.
     QSet<QString> backfill_awaiting_fx_;
-    // Portfolio → period whose last backfill skipped dates for a holding of
-    // unknown currency: re-run when a currency lookup resolves, or the
-    // history stays short for good (a refusal is retried in minutes).
-    QHash<QString, QString> backfill_needs_fx_;
+    // Portfolio → (period, symbols of unknown currency) whose last backfill
+    // skipped dates for them: re-run once one of THOSE resolves — not on any
+    // lookup finishing, which re-downloaded a year of closes every ~2 min
+    // while Yahoo kept refusing.
+    QHash<QString, QPair<QString, QStringList>> backfill_needs_fx_;
     static constexpr qint64 kPeakTtlSec = 6 * 3600; // 6h
 
     // Last successfully computed fundamentals, keyed by portfolio_id. When

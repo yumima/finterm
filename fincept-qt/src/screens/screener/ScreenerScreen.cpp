@@ -1428,7 +1428,10 @@ void ScreenerScreen::add_to_portfolio(const QString& sym) {
         flash_status(QStringLiteral("Could not open the portfolio \"%1\" — see the log").arg(name), true);
         return;
     }
-    ps.note_symbol_currency(sym, QStringLiteral("USD")); // the universe is NASDAQ/NYSE/AMEX listings
+    // The universe is NASDAQ/NYSE/AMEX listings, so USD is known — filled in
+    // only where no lookup has answered yet, never over one.
+    if (services::PortfolioService::cached_symbol_currency(sym).isEmpty())
+        ps.note_symbol_currency(sym, QStringLiteral("USD"));
     if (!ps.add_asset(id, sym, shares, price)) {
         flash_status(QStringLiteral("Could not add %1 to %2 — see the log").arg(sym, name), true);
         return;

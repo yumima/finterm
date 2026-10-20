@@ -652,7 +652,9 @@ QString PortfolioInsightsPanel::build_portfolio_context() const {
                  .arg(none ? QStringLiteral("unknown")
                            : QString::number(summary_.total_unrealized_pnl_percent, 'f', 2) + "%" + note)
                  .arg(none ? QStringLiteral("unknown")
-                           : QString::number(summary_.total_day_change_percent, 'f', 2) + "%")
+                           : QString::number(summary_.total_day_change_percent, 'f', 2) + "%" +
+                                 (summary_.day_note().isEmpty() ? QString()
+                                                                : " (" + summary_.day_note() + ")"))
                  .arg(summary_.total_positions);
     lines << "";
     lines << "Holdings:";
@@ -697,7 +699,7 @@ void PortfolioInsightsPanel::run_ai(bool force) {
     for (const auto& h : summary_.holdings) {
         QJsonObject o;
         o["symbol"] = h.symbol;
-        o["sector"] = h.sector.isEmpty() ? QStringLiteral("Unclassified") : h.sector;
+        o["sector"] = h.sector.isEmpty() ? QJsonValue() : QJsonValue(h.sector); // unknown, not a class
         o["quantity"] = h.quantity;
         o["avg_buy_price"] = h.avg_buy_price;
         // Unknown figures go out as null (QJson writes NaN as null), and an

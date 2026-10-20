@@ -161,7 +161,7 @@ void PortfolioSectorPanel::update_donut() {
     QHash<QString, int> sector_counts;
 
     for (const auto& h : holdings_) {
-        QString sector = h.sector.isEmpty() ? QStringLiteral("Unclassified") : h.sector;
+        QString sector = h.sector.isEmpty() ? QStringLiteral("Sector unknown") : h.sector;
         sector_weights[sector] += h.weight;
         if (std::isfinite(h.unrealized_pnl)) // unpriced holding: no P&L to add
             sector_pnl[sector] += h.unrealized_pnl;

@@ -180,9 +180,10 @@ void ReportsView::update_summary() {
     // A total over part of the book names what it leaves out; with no
     // holding valued it is unknown, never 0 (PortfolioSummary::exclusion_note).
     const bool none = summary_.nothing_valued();
-    const QString note = summary_.exclusion_note().isEmpty() ? QString()
-                                                             : QStringLiteral("  ") + summary_.exclusion_note();
-    const auto book = [&](const QString& v) { return none ? ui::formatting::placeholder() : v + note; };
+    const auto book = [&](const QString& v) { return summary_.total_text(v); };
+    const auto tone = [none](double v) {
+        return none ? ui::colors::TEXT_SECONDARY : v >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+    };
     add_card(0, 0, "PORTFOLIO", summary_.portfolio.name.toUpper(), ui::colors::AMBER);
     add_card(0, 1, "TOTAL VALUE", QString("%1 %2").arg(currency_, book(fmt(summary_.total_market_value))),
              ui::colors::WARNING);
@@ -191,7 +192,7 @@ void ReportsView::update_summary() {
     add_card(0, 3, "UNREALIZED P&L",
              book(QString("%1%2").arg(summary_.total_unrealized_pnl >= 0 ? "+" : "")
                       .arg(fmt(summary_.total_unrealized_pnl))),
-             summary_.total_unrealized_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+             tone(summary_.total_unrealized_pnl));
 
     add_card(1, 0, "POSITIONS", QString::number(summary_.total_positions), ui::colors::TEXT_PRIMARY);
     add_card(1, 1, "GAINERS", QString::number(summary_.gainers), ui::colors::POSITIVE);
@@ -201,7 +202,7 @@ void ReportsView::update_summary() {
              book(QString("%1%2%")
                       .arg(summary_.total_unrealized_pnl_percent >= 0 ? "+" : "")
                       .arg(fmt(summary_.total_unrealized_pnl_percent))),
-             summary_.total_unrealized_pnl_percent >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+             tone(summary_.total_unrealized_pnl_percent));
 
     // The all-in figure, separately and named for what it sums: unrealized
     // (open positions) + realized (closed lots, trade-date FX) + dividends.
@@ -218,9 +219,12 @@ void ReportsView::update_summary() {
              summary_.total_realized_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
     add_card(2, 1, "DIVIDENDS", money(summary_.total_dividend_income, flows_approx), ui::colors::CYAN);
     add_card(2, 2, "TOTAL P&L (UNREAL. + REAL. + DIV.)",
-             none ? QString("%1 %2").arg(currency_, ui::formatting::placeholder())
-                  : money(total_pnl, flows_approx.isEmpty() ? stale : flows_approx) + note,
-             total_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
+             QString("%1 %2").arg(currency_, summary_.total_text(
+                                                  QString("%1%2%3")
+                                                      .arg(flows_approx.isEmpty() ? stale : flows_approx,
+                                                           total_pnl >= 0 ? "+" : "")
+                                                      .arg(fmt(total_pnl)))),
+             tone(total_pnl));
 
     layout->addLayout(grid);
 

@@ -238,6 +238,16 @@ struct PortfolioSummary {
                (syms.size() <= 2 ? syms.join(QStringLiteral(", ")) : QString::number(syms.size()));
     }
     QString exclusion_note() const { return exclusion_note_for(excluded_symbols()); }
+    /// The day total also leaves out holdings whose move today is unknown.
+    QString day_note() const { return exclusion_note_for(excluded_symbols(day_change_unknown_symbols)); }
+    /// A book total as displayed: "—" when no holding is valued (unknown,
+    /// not 0), else `figure` followed by what it leaves out, if anything.
+    QString total_text(const QString& figure, const QString& note_override = QString()) const {
+        if (nothing_valued())
+            return QStringLiteral("—");
+        const QString n = note_override.isNull() ? exclusion_note() : note_override;
+        return n.isEmpty() ? figure : figure + QStringLiteral("  ") + n;
+    }
     /// A holding IN the totals is priced from a stale last-known print: the
     /// totals are estimates ("≈"). A stale holding that is also left out (no
     /// conversion) is not in them, and `also_out` names more such holdings.

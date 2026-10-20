@@ -463,12 +463,12 @@ void PortfolioFFNView::update_overview() {
              ui::colors::POSITIVE},
             {"Worst Holding", worst_sym.isEmpty() ? "--" : worst_sym + " (" + pct_str(worst_ret) + ")", "--",
              ui::colors::NEGATIVE},
-            {"Total Return (cost)", summary_.nothing_valued() ? QStringLiteral("—") : pct_str(pnl_pct / 100.0), "--",
+            {"Total Return (cost)", summary_.total_text(pct_str(pnl_pct / 100.0)), "--",
              pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE},
             {"Win Rate", fmt(win_rate) + "%", "--", ui::colors::CYAN},
             {"Positions", QString::number(summary_.total_positions), "--", ui::colors::CYAN},
-            {"Total Value", currency_ + " " + (summary_.nothing_valued() ? QStringLiteral("—") : fmt(summary_.total_market_value) + (summary_.exclusion_note().isEmpty() ? QString() : "  " + summary_.exclusion_note())), "--", ui::colors::WARNING},
-            {"Cost Basis", currency_ + " " + (summary_.nothing_valued() ? QStringLiteral("—") : fmt(summary_.total_cost_basis)), "--", ui::colors::TEXT_SECONDARY},
+            {"Total Value", currency_ + " " + summary_.total_text(fmt(summary_.total_market_value)), "--", ui::colors::WARNING},
+            {"Cost Basis", currency_ + " " + summary_.total_text(fmt(summary_.total_cost_basis)), "--", ui::colors::TEXT_SECONDARY},
         };
     } else {
         // Pre-run: show live data and prompt user. No volatility/Sharpe here:
@@ -481,8 +481,8 @@ void PortfolioFFNView::update_overview() {
             {"Sharpe Ratio (geo)", ui::formatting::placeholder(), "--", ui::colors::TEXT_SECONDARY},
             {"Win Rate", fmt(win_rate) + "%", "--", ui::colors::CYAN},
             {"Positions", QString::number(summary_.total_positions), "--", ui::colors::CYAN},
-            {"Total Value", currency_ + " " + (summary_.nothing_valued() ? QStringLiteral("—") : fmt(summary_.total_market_value) + (summary_.exclusion_note().isEmpty() ? QString() : "  " + summary_.exclusion_note())), "--", ui::colors::WARNING},
-            {"Cost Basis", currency_ + " " + (summary_.nothing_valued() ? QStringLiteral("—") : fmt(summary_.total_cost_basis)), "--", ui::colors::TEXT_SECONDARY},
+            {"Total Value", currency_ + " " + summary_.total_text(fmt(summary_.total_market_value)), "--", ui::colors::WARNING},
+            {"Cost Basis", currency_ + " " + summary_.total_text(fmt(summary_.total_cost_basis)), "--", ui::colors::TEXT_SECONDARY},
             {"FFN Deep Metrics", "Click RUN FFN ANALYSIS for full stats", "--", ui::colors::AMBER},
         };
     }

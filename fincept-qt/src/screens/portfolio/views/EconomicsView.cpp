@@ -129,7 +129,7 @@ void EconomicsView::update_indicators() {
         set(0, h.symbol, ui::colors::CYAN);
         // The holding's resolved sector (stored or SectorResolver), not a
         // hardcoded ticker map that labelled everything else "Other".
-        set(1, h.sector.isEmpty() ? QStringLiteral("Unclassified") : h.sector, ui::colors::TEXT_SECONDARY);
+        set(1, h.sector.isEmpty() ? QStringLiteral("Sector unknown") : h.sector, ui::colors::TEXT_SECONDARY);
         set(2, QString("%1%").arg(QString::number(h.weight, 'f', 1)), ui::colors::TEXT_PRIMARY);
         set(3, h.fx_known ? QString("%1 %2").arg(currency_).arg(QString::number(h.cost_basis, 'f', 2))
                           : ui::formatting::placeholder(),

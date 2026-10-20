@@ -72,7 +72,10 @@ def main():
                 jar = []
             self.cookies = Cookies()
 
+        calls = []  # every URL asked, across sessions
+
         def get(self, url, params=None, timeout=30, **_):
+            Session.calls.append(url)
             route = (self.stats if "timeseries" in url
                      else self.profile if "quoteSummary" in url else self.quote)
             if isinstance(route, list):  # a sequence: one response per call
@@ -119,6 +122,15 @@ def main():
     r = lookup((200, PROFILE), (200, QUOTE), "HHH")
     check("error" not in r and r.get("sector") == "Technology",
           "once Yahoo answers again the same symbol recovers (the 401 was not cached)")
+
+    # A refusal for one symbol must not evict another's cached answer (the
+    # first fix cleared the whole cache, re-fetching everything mid-burst).
+    lookup((200, PROFILE), (200, QUOTE), "LLL")
+    lookup((200, PROFILE), (200, QUOTE), "MMM", stats=(401, UNAUTH))
+    Session.calls.clear()
+    lookup((200, PROFILE), (200, QUOTE), "LLL")
+    check(not any("timeseries" in u and "LLL" in u for u in Session.calls),
+          "another symbol's refusal leaves LLL's cached key-statistics in place")
 
     # yfinance retries any >= 400 once with the other cookie strategy: a 401
     # that the retry recovers is an answer, not a refusal.

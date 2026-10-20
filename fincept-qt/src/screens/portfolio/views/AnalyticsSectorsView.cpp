@@ -372,7 +372,7 @@ void AnalyticsSectorsView::set_data(const portfolio::PortfolioSummary& summary, 
 QVector<AnalyticsSectorsView::SectorInfo> AnalyticsSectorsView::compute_sectors() const {
     QHash<QString, SectorInfo> map;
     for (const auto& h : summary_.holdings) {
-        QString sec = h.sector.isEmpty() ? QStringLiteral("Unclassified") : h.sector;
+        QString sec = h.sector.isEmpty() ? QStringLiteral("Sector unknown") : h.sector;
         auto& info = map[sec];
         info.name = sec;
         info.weight += h.weight;

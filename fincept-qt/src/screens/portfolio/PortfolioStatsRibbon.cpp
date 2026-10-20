@@ -274,15 +274,12 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
     const auto with_note = [&note](const QString& sub) {
         return note.isEmpty() ? sub : sub + QStringLiteral(" · ") + note;
     };
-    QString value_tip =
-        s.fx_incomplete
-            ? tr("Current market value of all holdings, converted into %1.\nAPPROXIMATE: at least one "
-                 "trading currency or FX rate is not yet available;\nthose figures are left out of the "
-                 "totals. This usually resolves within seconds\nonce currency discovery completes.")
-                  .arg(s.portfolio.currency)
-            : tr("Current market value of all holdings, converted into %1.\nSum of (quantity × price × FX "
-                 "rate) for every position.")
-                  .arg(s.portfolio.currency);
+    // The PARTIAL lines below name exactly what the value leaves out; the
+    // lead line only describes it. (fx_incomplete also covers realized/
+    // dividend flows, which the market value does not contain.)
+    QString value_tip = tr("Current market value of the holdings, converted into %1.\nSum of (quantity × "
+                           "price × FX rate) for every position that has both.")
+                            .arg(s.portfolio.currency);
     if (!s.unpriced_symbols.isEmpty())
         value_tip += tr("\n\nPARTIAL: no price available for %1 — excluded from value, cost and P&L.")
                          .arg(s.unpriced_symbols.join(", "));
@@ -304,14 +301,13 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
              : compose(QString("%1%2%3").arg(approx, s.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl)),
                        with_note(QString("%1%2%").arg(s.total_unrealized_pnl_percent >= 0 ? "+" : "")
                                      .arg(fmt(s.total_unrealized_pnl_percent)))));
-    apply_hero_styles(pnl_, color_tok(s.total_unrealized_pnl));
+    apply_hero_styles(pnl_, none ? ui::colors::TEXT_SECONDARY : color_tok(s.total_unrealized_pnl));
 
     // Day change — also partial when some holding's day move is unknown
     // (no price, or only a last-known print from an earlier session).
     // Holdings whose move today is unknown are left out of the day total too;
     // a stale holding's last-known move that IS in it makes it an estimate.
-    const QString day_note =
-        portfolio::PortfolioSummary::exclusion_note_for(s.excluded_symbols(s.day_change_unknown_symbols));
+    const QString day_note = s.day_note();
     const QString day_approx = s.has_estimate(s.day_change_unknown_symbols) ? QStringLiteral("≈") : QString();
     {
         QString tip = tr("Total portfolio value change today.\n"
@@ -327,7 +323,7 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
         none ? compose(dash, dash)
              : compose(QString("%1%2%3").arg(day_approx, s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change)),
                        day_note.isEmpty() ? day_pct : day_pct + QStringLiteral(" · ") + day_note));
-    apply_hero_styles(day_change_, color_tok(s.total_day_change));
+    apply_hero_styles(day_change_, none ? ui::colors::TEXT_SECONDARY : color_tok(s.total_day_change));
 
     // Positions
     positions_.value->setText(compose(

@@ -343,19 +343,30 @@ def _install_auth_probe():
     # whatever came back — a 401 included. .info's key-statistics request goes
     # through it with a URL that changes once a day, so one refused request
     # failed every later .info for that symbol until midnight or a restart
-    # (verified 2026-10-19). A failed response is never kept.
-    orig_cg = YfData.cache_get
-    clear = getattr(orig_cg, "cache_clear", None)
-    if clear is not None and not getattr(orig_cg, "_finterm_probe", False):
-        def cache_get(self, *args, **kwargs):
-            r = orig_cg(self, *args, **kwargs)
-            # a refusal only — a 404 is a stable answer worth keeping; the
-            # lru_cache cannot drop one entry, and refusals are rare
-            if getattr(r, "status_code", 200) in _TRANSIENT_HTTP:
-                clear()
+    # (verified 2026-10-19). Replaced by the same bounded LRU that simply
+    # never STORES a refusal (clearing the lru on one would drop every good
+    # entry, re-fetching them exactly while Yahoo is refusing).
+    if not getattr(YfData.cache_get, "_finterm_probe", False):
+        import collections
+        store = collections.OrderedDict()
+        store_lock = threading.Lock()
+
+        def cache_get(self, url, params=None, timeout=30):
+            key = (url, json.dumps(params, sort_keys=True, default=str))
+            with store_lock:
+                r = store.get(key)
+                if r is not None:
+                    store.move_to_end(key)
+                    return r
+            r = self.get(url, params=params, timeout=timeout)
+            if getattr(r, "status_code", 200) not in _TRANSIENT_HTTP:
+                with store_lock:
+                    store[key] = r
+                    while len(store) > 64:  # yfinance's own lru maxsize
+                        store.popitem(last=False)
             return r
+
         cache_get._finterm_probe = True
-        cache_get.cache_clear = clear
         YfData.cache_get = cache_get
 
 
@@ -910,7 +921,12 @@ def get_info(symbol):
                     # ticker. Better a thin profile than a wrong one.
                     def _name(d):
                         return (d.get("longName") or d.get("shortName") or "").strip().lower()
-                    same = _name(info_alt) and _name(info_alt) == _name(info)
+                    # Yahoo often knows NOTHING under the dot form (BRK.B
+                    # returns no name at all, so the comparison could never
+                    # pass): with no primary name there is nothing to
+                    # contradict, and for an A-D class share the dash form is
+                    # Yahoo's spelling of the same security, not a guess.
+                    same = _name(info_alt) and (_name(info_alt) == _name(info) or not _name(info))
                     if same and (info_alt.get("currentPrice") or
                                  info_alt.get("targetMeanPrice")):
                         info = info_alt

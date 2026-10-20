@@ -297,7 +297,7 @@ void PortfolioScreen::build_ui() {
         }
         QStringList matching;
         for (const auto& h : current_summary_.holdings) {
-            QString h_sector = h.sector.isEmpty() ? QStringLiteral("Unclassified") : h.sector;
+            QString h_sector = h.sector.isEmpty() ? QStringLiteral("Sector unknown") : h.sector;
             if (h_sector == sector)
                 matching.append(h.symbol);
         }
@@ -1229,7 +1229,7 @@ QWidget* PortfolioScreen::build_main_view() {
         }
         QStringList matching;
         for (const auto& h : current_summary_.holdings) {
-            QString h_sector = h.sector.isEmpty() ? QStringLiteral("Unclassified") : h.sector;
+            QString h_sector = h.sector.isEmpty() ? QStringLiteral("Sector unknown") : h.sector;
             if (h_sector == sector)
                 matching.append(h.symbol);
         }
