@@ -407,6 +407,10 @@ check(all(s_["rules"] for s_ in m["strategies"]), "meta carries every strategy's
 for s_ in m["strategies"]:
     check(all(s_.get(k) for k in ("idea", "use", "tested", "practice")) and s_.get("reading"),
           f"{s_['id']}: the write-up has its idea, use, test, practice and reading")
+    check(all(len(r_) == 2 and r_[0] and r_[1].startswith("https://") for r_ in s_["reading"]),
+          f"{s_['id']}: every reading has its text and an https link")
+    check(s_["rank_key"] == "" or s_["rank_key"] in s_["columns"],
+          f"{s_['id']}: the ranking column is one the list shows ({s_['rank_key']})")
 by_id = {s_["id"]: s_ for s_ in m["strategies"]}
 check(by_id["rs_leaders"]["rules"][:-1] == by_id["trend_template"]["rules"]
       and "25" in by_id["rs_leaders"]["rules"][-1], "RS Leaders lists the Trend Template's rules, then the top 25")

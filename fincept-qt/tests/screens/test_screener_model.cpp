@@ -157,11 +157,14 @@ class TestScreenerModel : public QObject {
         QVERIFY(!parse_scan(sample()).meta_only);
     }
 
+    // NB: no "//" inside a raw string here — moc reads it as a comment, loses
+    // the class and emits an empty .moc (an undefined vtable at link); JSON's
+    // "\/" spells the slash instead.
     void write_up_and_example_parse_and_absent_fields_are_empty() {
         const ScanResult r = parse_scan(QJsonDocument::fromJson(
             R"({"strategies": [
                 {"id": "x", "name": "X", "idea": "I", "use": "U", "tested": "T", "practice": "P",
-                 "reading": ["R1", "R2"],
+                 "reading": [["R1", "https:\/\/doi.org\/x"], "R2"], "rank_key": "rs",
                  "example": {"pick": {"symbol": "AAA", "checks": [{"rule": "r", "value": "v", "ok": true}]},
                              "miss": {"symbol": "BBB", "checks": [{"rule": "r", "value": "w", "ok": false}]}}},
                 {"id": "old", "name": "Old"}]})").object());
@@ -170,6 +173,9 @@ class TestScreenerModel : public QObject {
         QCOMPARE(x.idea, QStringLiteral("I"));
         QCOMPARE(x.practice, QStringLiteral("P"));
         QCOMPARE(x.reading.size(), 2);
+        QCOMPARE(x.reading[0].second, QStringLiteral("https://doi.org/x"));
+        QVERIFY(x.reading[1].second.isEmpty()); // an old cached plain string: text, no link
+        QCOMPARE(x.rank_key, QStringLiteral("rs"));
         QCOMPARE(x.pick.symbol, QStringLiteral("AAA"));
         QVERIFY(x.pick.checks.size() == 1 && x.pick.checks[0].ok);
         QVERIFY(x.miss.checks.size() == 1 && !x.miss.checks[0].ok);

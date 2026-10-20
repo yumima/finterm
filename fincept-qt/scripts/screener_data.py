@@ -626,8 +626,9 @@ STRATEGIES = [
         "idea": "Big winners almost always start their run from a confirmed uptrend (Weinstein's 'Stage 2'). The template keeps only stocks already in one, so time is never spent on stocks in a downtrend or a base that has not resolved.",
         "use": "Minervini's first filter, not a buy list: he then waits for a tight, low-volume base (his volatility-contraction pattern) and buys the breakout from it with a small stop. A stock that drops out of the template is no longer a candidate.",
         "tested": 'Every month-end 2010-01 to 2026-08, all point-in-time S&P 500 members passing the 7 price rules plus RS ≥ 70, equal weight, held one month, 10 bp per side.',
-        "reading": ["Mark Minervini, 'Trade Like a Stock Market Wizard' (2013)", "Stan Weinstein, 'Secrets for Profiting in Bull and Bear Markets' (1988) — the four stages"],
+        "reading": [["Mark Minervini, 'Trade Like a Stock Market Wizard' (2013)", 'https://openlibrary.org/search?q=Trade+Like+a+Stock+Market+Wizard+Minervini'], ["Stan Weinstein, 'Secrets for Profiting in Bull and Bear Markets' (1988) — the four stages", 'https://openlibrary.org/search?q=Secrets+for+Profiting+in+Bull+and+Bear+Markets+Weinstein']],
         "practice": "Each weekend, open the charts of the passers with the highest RS. Note the ones forming a tight base: each pullback shallower than the last, volume drying up. Paper-buy only a breakout above the base's high, with the stop set before entry (Minervini keeps his losses in single digits), and log entry, stop and outcome. After 20 trades compare your average win with your average loss: the method lives on small losses.",
+        "rank_key": 'rs',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "RS rating, highest first",
         "columns": ["rs", "off_high", "above_low", "r3m", "r12m", "adr20"],
         "backtest": 'Minervini Trend Template (all passers)',
@@ -642,8 +643,9 @@ STRATEGIES = [
         "idea": "The template's strongest names: relative strength persists, so the leaders of the market tend to stay leaders for a while (IBD's 'L' and Minervini's focus).",
         "use": 'A short list to look at first among template passers; the same entry discipline (base, breakout, small stop) applies.',
         "tested": 'Same test as the Trend Template, holding only the 25 passers with the highest RS rating each month.',
-        "reading": ["Mark Minervini, 'Trade Like a Stock Market Wizard' (2013)", "William O'Neil, 'How to Make Money in Stocks' (4th ed., 2009) — the 'L' in CAN SLIM"],
+        "reading": [["Mark Minervini, 'Trade Like a Stock Market Wizard' (2013)", 'https://openlibrary.org/search?q=Trade+Like+a+Stock+Market+Wizard+Minervini'], ["William O'Neil, 'How to Make Money in Stocks' (4th ed., 2009) — the 'L' in CAN SLIM", 'https://openlibrary.org/search?q=How+to+Make+Money+in+Stocks+O%27Neil']],
         "practice": 'Use it as the first page of your weekend review: the same base-and-breakout routine as the Trend Template, applied to fewer, stronger names. Log every paper trade with its RS at entry to see whether the strongest really did better for you.',
+        "rank_key": 'rs',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "RS rating",
         "columns": ["rs", "off_high", "r1m", "r3m", "r12m", "adr20"],
         "backtest": 'Trend Template, top 25 by RS',
@@ -657,8 +659,9 @@ STRATEGIES = [
         "idea": 'Stocks that rose most over the past year keep outperforming for the next 3-12 months; the most cited explanation is that investors under-react to news. The latest month is skipped because one-month returns tend to reverse.',
         "use": 'The academic form holds the top decile and rebalances monthly; it is a systematic portfolio, not a stock pick. Prone to sharp crashes when beaten-down stocks rebound.',
         "tested": 'Top decile of point-in-time S&P 500 members by 12-1 return, equal weight, rebalanced monthly, 10 bp per side.',
-        "reading": ["Jegadeesh & Titman (1993), 'Returns to Buying Winners and Selling Losers', Journal of Finance", "Asness, Frazzini, Israel & Moskowitz (2014), 'Fact, Fiction and Momentum Investing', Journal of Portfolio Management", "Daniel & Moskowitz (2016), 'Momentum Crashes', Journal of Financial Economics"],
+        "reading": [["Jegadeesh & Titman (1993), 'Returns to Buying Winners and Selling Losers', Journal of Finance", 'https://doi.org/10.1111/j.1540-6261.1993.tb04702.x'], ["Asness, Frazzini, Israel & Moskowitz (2014), 'Fact, Fiction and Momentum Investing', Journal of Portfolio Management", 'https://doi.org/10.3905/jpm.2014.40.5.075'], ["Daniel & Moskowitz (2016), 'Momentum Crashes', Journal of Financial Economics", 'https://doi.org/10.1016/j.jfineco.2015.12.002']],
         "practice": 'Paper-hold the whole list in equal weights for one month, rebalance on the first trading day of each month, and track it against an equal-weighted S&P 500 fund (RSP). The test is the portfolio over years, not any one stock; expect long stretches behind the index and sharp drops in rebounds.',
+        "rank_key": 'mom12_1',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "12-1 return",
         "columns": ["mom12_1", "r1m", "rs", "off_high", "vol252"],
         "backtest": 'Momentum 12-1 (top decile)',
@@ -675,8 +678,9 @@ STRATEGIES = [
         "idea": "O'Neil studied the biggest stock winners over many decades and listed the traits they shared before their run: strong current and annual earnings growth (C, A), something new (N), supply (S), leadership (L), institutional buying (I), and a rising market (M).",
         "use": "O'Neil buys a leader as it breaks out of a sound base (often a cup-with-handle) on heavy volume, only in a confirmed uptrend, and cuts every loss at 7-8%.",
         "tested": 'Not backtested: it needs point-in-time quarterly EPS, which this test did not collect.',
-        "reading": ["William O'Neil, 'How to Make Money in Stocks' (4th ed., 2009)"],
+        "reading": [["William O'Neil, 'How to Make Money in Stocks' (4th ed., 2009)", 'https://openlibrary.org/search?q=How+to+Make+Money+in+Stocks+O%27Neil']],
         "practice": "Watch the list for a stock completing a base. O'Neil's rules: buy no more than 5% past the pivot, on volume well above average, only when the market is in an uptrend, and sell any position 7-8% below cost without exception. Paper-trade it that way and log each rule you were tempted to break.",
+        "rank_key": 'rs',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "RS rating",
         "columns": ["eps_growth_q", "eps_growth_fy", "roe", "rs", "off_high"],
         "backtest": None,
@@ -693,8 +697,9 @@ STRATEGIES = [
         "idea": 'Kullamägi trades momentum bursts: the stocks that just made the biggest moves often pause in a tight range near their highs and then break out for another leg.',
         "use": "He buys the break of the opening range out of the consolidation, with the stop at the day's low, sells part after a few days and trails the rest with the 10- or 20-day average. The list is the watchlist; the trade is the breakout.",
         "tested": 'Simplified: the top 2% of point-in-time S&P 500 members by combined 1/3/6-month rank, monthly, equal weight, WITHOUT the volatility, near-high, average and volume filters.',
-        "reading": ["Kristjan Kullamägi's own write-ups of his setups at qullamaggie.com (self-published)"],
+        "reading": [["Kristjan Kullamägi's own write-ups of his setups at qullamaggie.com (self-published)", 'https://qullamaggie.com/']],
         "practice": "Before each open, mark names that have paused for days to weeks after a big move. Paper-buy the break of the opening range, stop at the day's low, and skip trades whose stop is wider than about one ADR. Sell a third to a half after 3-5 days and trail the rest with the 10- or 20-day average. Log results in R (multiples of the risk).",
+        "rank_key": '',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "Combined 1/3/6-month rank",
         "columns": ["r1m", "r3m", "r6m", "adr20", "off_high", "dollar_vol50"],
         "backtest": 'Leaders: top 2% by 1/3/6m (Qullamaggie-style)',
@@ -710,8 +715,9 @@ STRATEGIES = [
         "idea": 'Buy good businesses at bargain prices: a high return on capital says the business is good, a high earnings yield says the price is low. Ranking on both together avoids cheap-but-bad and good-but-expensive.',
         "use": "Greenblatt's version: buy 20-30 names a few at a time through the year, hold each about a year, replace and repeat, and stick with it for 3-5 years through long losing stretches.",
         "tested": "Top 30 point-in-time S&P 500 members by the combined rank, Finance and Utilities excluded (SEC SIC codes), fundamentals from SEC filings visible 120 days after period end, held one month. The test's return on capital is EBIT / (net working capital + net PP&E) and its EV uses market cap from the filed public float; the live screen uses TradingView's EBIT/EV and ROIC.",
-        "reading": ["Joel Greenblatt, 'The Little Book That Beats the Market' (2005); updated as 'The Little Book That Still Beats the Market' (2010)"],
+        "reading": [["Joel Greenblatt, 'The Little Book That Beats the Market' (2005); updated as 'The Little Book That Still Beats the Market' (2010)", 'https://openlibrary.org/search?q=The+Little+Book+That+Beats+the+Market+Greenblatt']],
         "practice": "Paper-buy 5-7 names from the list every 2-3 months until you hold 20-30, sell each after about a year, and repeat. Track the paper portfolio against SPY and RSP for at least three years: Greenblatt's point is that it works only for those who stay with it through years when it lags.",
+        "rank_key": '',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "Combined rank",
         "columns": ["earnings_yield", "roic", "pe", "ev_ebitda", "r6m"],
         "backtest": 'Magic Formula (top 30)',
@@ -728,8 +734,10 @@ STRATEGIES = [
         "idea": 'Among cheap stocks, the ones whose accounts are improving do much better than the ones whose accounts are deteriorating; nine simple yes/no tests from the financial statements separate the two.',
         "use": 'Piotroski bought high scorers within the cheapest fifth by book/market and held a year. Here it is shown on the whole universe, cheapest first, as a check that a business is getting healthier.',
         "tested": 'All point-in-time S&P 500 members with a score ≥ 8 computed from SEC filings, equal weight, held one month.',
-        "reading": ["Joseph Piotroski (2000), 'Value Investing: The Use of Historical Financial Statement Information to Separate Winners from Losers', Journal of Accounting Research"],
+        "reading": [["Joseph Piotroski (2000), 'Value Investing: The Use of Historical Financial Statement Information to Separate Winners from Losers', Journal of Accounting Research", 'https://doi.org/10.2307/2672906']],
         "practice": 'Once a year, after annual reports are out, paper-buy the cheapest high scorers (lowest P/B on the list), hold 12 months, and compare with RSP. Note which ones were cheap for a reason: the score is a health check, not a guarantee.',
+        "rank_asc": True,  # lowest first
+        "rank_key": 'pb',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "Price/book, cheapest first",
         "columns": ["piotroski", "pb", "pe", "roe", "r6m"],
         "backtest": 'Piotroski F >= 8 (all)',
@@ -744,8 +752,9 @@ STRATEGIES = [
         "idea": "Gross profit / assets is the cleanest measure of how productive a business is (Novy-Marx): profitable firms earn more even when they look expensive. Taking the strongest-momentum names among them adds the momentum effect. The combination is this terminal's, not a published strategy.",
         "use": 'A systematic portfolio, rebalanced monthly as tested.',
         "tested": 'Point-in-time S&P 500 members in the top 30% by gross profit / assets (Finance and Utilities excluded), then the top 25 by 12-1 return, monthly, equal weight.',
-        "reading": ["Robert Novy-Marx (2013), 'The Other Side of Value: The Gross Profitability Premium', Journal of Financial Economics", "Jegadeesh & Titman (1993), 'Returns to Buying Winners and Selling Losers', Journal of Finance"],
+        "reading": [["Robert Novy-Marx (2013), 'The Other Side of Value: The Gross Profitability Premium', Journal of Financial Economics", 'https://doi.org/10.1016/j.jfineco.2013.01.003'], ["Jegadeesh & Titman (1993), 'Returns to Buying Winners and Selling Losers', Journal of Finance", 'https://doi.org/10.1111/j.1540-6261.1993.tb04702.x']],
         "practice": 'Paper-hold the list in equal weights, rebalance monthly, and compare with RSP. Watch how much turnover the momentum step causes: costs are part of the result.',
+        "rank_key": 'mom12_1',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "12-1 return",
         "columns": ["gpa", "mom12_1", "gross_margin", "roic", "off_high"],
         "backtest": 'Quality+Momentum: GP/A top 30% -> top 25 by 12-1',
@@ -760,8 +769,9 @@ STRATEGIES = [
         "idea": 'Cheap stocks beat expensive ones over time, but many cheap stocks are cheap for a reason. Requiring the cheapest to also be rising (6-month return) avoids most value traps.',
         "use": "O'Shaughnessy holds the 25 for a year and rebalances annually.",
         "tested": 'The same six-ratio composite from SEC filings, cheapest decile of point-in-time S&P 500 members, then the top 25 by 6-month return, rebalanced monthly (not annually as in the book).',
-        "reading": ["James O'Shaughnessy, 'What Works on Wall Street' (4th ed., 2011)"],
+        "reading": [["James O'Shaughnessy, 'What Works on Wall Street' (4th ed., 2011)", 'https://openlibrary.org/search?q=What+Works+on+Wall+Street+O%27Shaughnessy']],
         "practice": 'Paper-buy all 25 in equal weights, hold a year, rebalance, and compare with RSP. Look up why each name is cheap: a value list holds many unloved businesses, and that is the point.',
+        "rank_key": 'r6m',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "6-month return",
         "columns": ["value_score", "pe", "pb", "ev_ebitda", "shareholder_yield", "r6m"],
         "backtest": 'Trending Value: value top decile -> top 25 by 6m',
@@ -782,8 +792,9 @@ STRATEGIES = [
         "idea": 'A market leader that pulls back in an orderly way to its rising 21-day EMA, and holds, usually resumes its trend. Entering at that support allows a very tight stop, so a small loss buys a large potential win.',
         "use": "Luk enters intraday as the stock dips, turns and breaks the prior candle's high, risks about 0.5% of the account per trade, and sells into strength (3R, 5R), trailing the rest. The columns here are a plan from the last close.",
         "tested": "As individual trades on daily bars: a buy stop at the setup day's high, filled the next session, the stop and exits above, 0.5% risk, compared with random entries with the same exits; on the S&P 500 2010-26 and on today's stocks ≥ $300M 2022-26.",
-        "reading": ["Martin Luk's own interviews and posts; no book. The rules here follow the playbook summary in the hb_stocks thread on X (2026-10-19)"],
+        "reading": [["Martin Luk's own interviews and posts; no book. The rules here follow the playbook summary in the hb_stocks thread on X (2026-10-19)", 'https://x.com/hb_stocks/status/2112038539676574098']],
         "practice": 'Use the plan columns: set your account size and risk, paper-place a buy stop at Entry with the Stop beneath it, and if filled sell a third at 3R, a third at 5R and trail the rest under the 9 EMA. Log every trade in R. Mechanically the record is a losing average, so practise to see whether your own reading of the intraday turn improves on it before any money is at risk.',
+        "rank_key": '',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "Combined 1/3/6-month rank",
         "columns": ["entry", "stop", "risk_pct", "target3", "rs", "group_rs", "adr20"],
         "backtest": "Luk pullback (trades, 0.5% risk)",
@@ -802,8 +813,10 @@ STRATEGIES = [
         "idea": 'Low-risk stocks have historically earned about as much as high-risk ones with far smaller swings — the low-volatility anomaly, which contradicts the textbook trade-off between risk and return.',
         "use": 'A defensive sleeve held as a diversified portfolio and rebalanced periodically; it gives up return in strong bull markets led by high-beta stocks.',
         "tested": 'Lowest decile of point-in-time S&P 500 members by one-year volatility, equal weight, rebalanced monthly.',
-        "reading": ["Blitz & van Vliet (2007), 'The Volatility Effect: Lower Risk Without Lower Return', Journal of Portfolio Management", "Baker, Bradley & Wurgler (2011), 'Benchmarks as Limits to Arbitrage: Understanding the Low-Volatility Anomaly', Financial Analysts Journal"],
+        "reading": [["Blitz & van Vliet (2007), 'The Volatility Effect: Lower Risk Without Lower Return', Journal of Portfolio Management", 'https://doi.org/10.3905/jpm.2007.698039'], ["Baker, Bradley & Wurgler (2011), 'Benchmarks as Limits to Arbitrage: Understanding the Low-Volatility Anomaly', Financial Analysts Journal", 'https://doi.org/10.2469/faj.v67.n1.4']],
         "practice": 'Paper-hold the list, rebalance monthly or quarterly, and compare both the return and the worst drop with RSP: its claim is a smoother ride, not more return.',
+        "rank_asc": True,  # lowest first
+        "rank_key": 'vol252',  # the column the list is ranked by ("" = a score with no column)
         "rank_by": "Volatility, lowest first",
         "columns": ["vol252", "r12m", "div_yield", "pe", "off_high"],
         "backtest": 'Low volatility (lowest decile)',
@@ -1347,7 +1360,9 @@ def meta(lists=None, examples=None):
     strategies = []
     for st in STRATEGIES:
         out = {k: st[k] for k in ("id", "name", "family", "source", "summary", "idea", "use",
-                                  "rules", "rank_by", "columns", "tested", "reading", "practice")}
+                                  "rules", "rank_by", "rank_key", "columns", "tested", "reading",
+                                  "practice")}
+        out["rank_asc"] = bool(st.get("rank_asc"))
         out["evidence"] = evidence(st, ev_doc)
         out["symbols"] = (lists or {}).get(st["id"], [])
         if examples and st["id"] in examples:

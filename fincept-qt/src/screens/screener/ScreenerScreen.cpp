@@ -8,6 +8,7 @@
 
 #include <QButtonGroup>
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QDoubleSpinBox>
 #include <QFrame>
 #include <QGuiApplication>
@@ -379,7 +380,11 @@ void ScreenerScreen::build_ui() {
     inline_->setOpenLinks(false);
     inline_->setStyleSheet(QString("QTextBrowser{background:%1;color:%2;border:1px solid %3;padding:8px 14px;}")
                                .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
-    connect(inline_, &QTextBrowser::anchorClicked, this, [this](const QUrl&) { leave_inline(); });
+    connect(inline_, &QTextBrowser::anchorClicked, this, [this](const QUrl& u) {
+        if (!open_reading(u))
+            leave_inline(); // the "Back to the list" link
+    });
+    inline_->viewport()->installEventFilter(this);
     centre_->addWidget(inline_);
     mainl->addWidget(centre_, 1);
     split_->addWidget(main);
@@ -394,13 +399,55 @@ void ScreenerScreen::build_ui() {
     body->setContentsMargins(0, 0, 0, 0);
     body->setSpacing(10);
     body->addWidget(split_, 1);
+    details_pane_ = new QWidget;
+    auto* dpl = new QVBoxLayout(details_pane_);
+    dpl->setContentsMargins(0, 0, 0, 0);
+    dpl->setSpacing(4);
+    // Layout: Auto (tiles when the pane is wide enough, one column when not)
+    // | Tiles | Column — the reader's choice, kept with the screen's state
+    auto* lay_row = new QHBoxLayout;
+    lay_row->setSpacing(0);
+    auto* lay_lbl = new QLabel(QStringLiteral("Layout  "));
+    lay_lbl->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
+    lay_row->addStretch(1);
+    lay_row->addWidget(lay_lbl);
+    auto* lay_group = new QButtonGroup(this);
+    lay_group->setExclusive(true);
+    const QStringList lay_names = {QStringLiteral("Auto"), QStringLiteral("Tiles"), QStringLiteral("Column")};
+    const QStringList lay_tips = {QStringLiteral("Tiles on a wide pane, one column on a narrow one"),
+                                  QStringLiteral("The three parts side by side: least scrolling on a wide screen"),
+                                  QStringLiteral("One column: easiest to read on a laptop")};
+    for (int i = 0; i < lay_names.size(); ++i) {
+        auto* b = new QPushButton(lay_names[i]);
+        b->setCheckable(true);
+        b->setCursor(Qt::PointingHandCursor);
+        b->setToolTip(lay_tips[i]);
+        b->setStyleSheet(QString("QPushButton{padding:1px 10px;}"
+                                 "QPushButton:checked{background:%1;color:%2;border-color:%1;}")
+                             .arg(ui::colors::AMBER(), ui::colors::BG_BASE()));
+        lay_group->addButton(b, i);
+        lay_row->addWidget(b);
+    }
+    layout_group_ = lay_group;
+    lay_group->button(0)->setChecked(true);
+    connect(lay_group, &QButtonGroup::idClicked, this, [this](int id) {
+        details_layout_ = id;
+        render_details(true);
+        if (inline_on_)
+            render_inline();
+    });
+    dpl->addLayout(lay_row);
     details_ = new QTextBrowser;
     details_->setOpenLinks(false);
     details_->setStyleSheet(QString("QTextBrowser{background:%1;color:%2;border:1px solid %3;padding:8px 14px;}")
                                 .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
-    details_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
-    details_->hide();
-    body->addWidget(details_, 1);
+    connect(details_, &QTextBrowser::anchorClicked, this, [this](const QUrl& u) { open_reading(u); });
+    // its width picks the tile count
+    details_->viewport()->installEventFilter(this);
+    dpl->addWidget(details_, 1);
+    details_pane_->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    details_pane_->hide();
+    body->addWidget(details_pane_, 1);
     root->addLayout(body, 1);
 
     follow_timer_ = new QTimer(this);
@@ -526,15 +573,40 @@ void ScreenerScreen::resizeEvent(QResizeEvent* e) {
     even_out_panes();
 }
 
-void ScreenerScreen::render_details() {
-    if (!details_ || details_html_ == details_shown_)
+void ScreenerScreen::render_details(bool force) {
+    if (!details_)
         return;
-    // the same strategy re-rendered (a finished scan): keep the reader's place
+    const QString html = compose_details(details_columns(layout_width(details_)));
+    if (!force && html == details_shown_)
+        return;
+    // the same strategy re-rendered (a finished scan, a new width): keep the place
     const int at = details_id_ == current_id_ ? details_->verticalScrollBar()->value() : 0;
-    details_->setHtml(details_html_);
-    details_shown_ = details_html_;
-    details_->verticalScrollBar()->setValue(at);
+    details_->setHtml(html);
+    details_shown_ = html;
+    if (at > 0)
+        details_->verticalScrollBar()->setValue(at);
     details_id_ = current_id_;
+    // Repaint it all: the new document's layout (and the scroll bar it may
+    // bring in) can leave the old pixels on screen otherwise — a write-up
+    // showed its header twice, ~90 px apart, until the next full repaint.
+    details_->viewport()->update();
+}
+
+int ScreenerScreen::layout_width(const QTextBrowser* b) {
+    // The width to choose tiles by, as if the scroll bar were not there: the
+    // bar comes and goes WITH the tile count (3 columns -> taller -> a bar ->
+    // narrower -> 2 columns -> shorter -> no bar -> 3 ...), so choosing by the
+    // viewport alone re-rendered without end at some sizes.
+    const auto* bar = b->verticalScrollBar();
+    return b->viewport()->width() + (bar && bar->isVisible() ? bar->width() : 0);
+}
+
+bool ScreenerScreen::open_reading(const QUrl& u) {
+    // only the write-up's own web links; anything else is not ours to open
+    if (u.scheme() != QLatin1String("https"))
+        return false;
+    QDesktopServices::openUrl(u);
+    return true;
 }
 
 void ScreenerScreen::update_details_pane() {
@@ -544,8 +616,8 @@ void ScreenerScreen::update_details_pane() {
     // visibility: no feedback loop.
     const QWidget* win = window();
     const bool alone = win && width() >= 1100 && width() > win->width() * 0.7;
-    if (details_ && details_->isVisible() != alone) {
-        details_->setVisible(alone);
+    if (details_pane_ && details_pane_->isVisible() != alone) {
+        details_pane_->setVisible(alone);
         if (alone)
             leave_inline(); // the pane on the right has it now
         render_band(true); // its pointer to the write-up depends on this
@@ -555,6 +627,21 @@ void ScreenerScreen::update_details_pane() {
 bool ScreenerScreen::eventFilter(QObject* o, QEvent* e) {
     if (band_ && e->type() == QEvent::Resize && (o == band_->viewport() || o == band_->parentWidget()))
         render_band(); // unchanged width and cap are a no-op there: no loop
+    // The tile count follows the width — after the resize has finished: a new
+    // document set from inside the scroll area's own resize handling (the
+    // scroll bar appearing) is laid out mid-geometry-change. Coalesced.
+    if (e->type() == QEvent::Resize && ((details_ && o == details_->viewport()) ||
+                                        (inline_ && inline_on_ && o == inline_->viewport()))) {
+        if (!relayout_pending_) {
+            relayout_pending_ = true;
+            QTimer::singleShot(0, this, [this]() {
+                relayout_pending_ = false;
+                render_details(); // same html is a no-op
+                if (inline_on_)
+                    render_inline();
+            });
+        }
+    }
     return QWidget::eventFilter(o, e);
 }
 
@@ -572,7 +659,7 @@ void ScreenerScreen::render_band(bool force) {
     band_width_ = w;
     // with the write-up hidden (Equity Research beside), say where it went
     const QString html = band_html_ +
-                         (details_ && !details_->isVisible() && !band_html_.isEmpty()
+                         (details_pane_ && !details_pane_->isVisible() && !band_html_.isEmpty()
                               ? QStringLiteral("<div style='color:%1;margin-top:4px'>Click the strategy on the "
                                                "left for its full write-up.</div>")
                                     .arg(ui::colors::TEXT_TERTIARY())
@@ -842,7 +929,7 @@ void ScreenerScreen::update_view_toggle() {
 QString ScreenerScreen::inline_html() const {
     return QStringLiteral("<p><a href='back' style='color:%1'>◂ Back to the list</a></p>")
                .arg(ui::colors::AMBER()) +
-           details_html_;
+           compose_details(details_columns(layout_width(inline_)));
 }
 
 void ScreenerScreen::render_inline() {
@@ -854,11 +941,13 @@ void ScreenerScreen::render_inline() {
     inline_->setHtml(html);
     inline_shown_ = html;
     inline_id_ = current_id_;
-    inline_->verticalScrollBar()->setValue(at);
+    if (at > 0)
+        inline_->verticalScrollBar()->setValue(at);
+    inline_->viewport()->update(); // see render_details
 }
 
 void ScreenerScreen::show_details_inline() {
-    if (details_->isVisible() || details_html_.isEmpty())
+    if (details_pane_->isVisible() || details_html_.isEmpty())
         return; // the right-hand pane has it
     inline_on_ = true;
     render_inline();
@@ -988,6 +1077,16 @@ void ScreenerScreen::fill_table() {
     cols.push_back({Col::Sector, nullptr, QStringLiteral("Sector")});
     metric("mcap");
 
+    // the column the list is ranked by: marked in its header, its values bold
+    const QString rank_key = ov ? QStringLiteral("screens") : su_view ? QStringLiteral("rs") : s->rank_key;
+    const bool rank_asc = !ov && !su_view && s->rank_asc;
+    const QString arrow = rank_asc ? QStringLiteral(" ▲") : QStringLiteral(" ▼");
+    for (auto& c : cols) {
+        if (c.def && QLatin1String(c.def->key) == rank_key)
+            c.header += arrow;
+
+    }
+
     const QString keep = table_->currentRow() >= 0 && table_->item(table_->currentRow(), kSymbolCol)
                              ? table_->item(table_->currentRow(), kSymbolCol)->text()
                              : QString();
@@ -1009,7 +1108,14 @@ void ScreenerScreen::fill_table() {
         if (cols[c].col == Col::Sector)
             sector_col_ = c;
         if (auto* h = table_->horizontalHeaderItem(c)) {
-            if (cols[c].def)
+            const bool ranks = cols[c].def ? QLatin1String(cols[c].def->key) == rank_key
+                                           : cols[c].col == Col::Rank && rank_key.isEmpty();
+            if (ranks)
+                h->setToolTip(QStringLiteral("Ranks the list (%1). %2")
+                                  .arg(ov ? QStringLiteral("most-picked first, then RS")
+                                          : su_view ? QStringLiteral("RS, highest first") : s->rank_by,
+                                       cols[c].def ? QString::fromUtf8(cols[c].def->tip) : QString()));
+            else if (cols[c].def)
                 h->setToolTip(QString::fromUtf8(cols[c].def->tip));
             else if (cols[c].col == Col::Shares)
                 h->setToolTip(QStringLiteral("Shares so that a stop-out costs your chosen risk of the account"));
@@ -1055,6 +1161,11 @@ void ScreenerScreen::fill_table() {
                                        ? std::optional<double>(picked_by.value(sym).size())
                                        : screener::num(o, key);
                     it = metric_item(cols[c].def->kind, v);
+                    if (key == rank_key) {
+                        QFont f = it->font();
+                        f.setBold(true);
+                        it->setFont(f);
+                    }
                     break;
                 }
                 case Col::Shares:
@@ -1193,12 +1304,27 @@ void ScreenerScreen::fill_band() {
             .arg(amber, name.toHtmlEscaped(), dim, sub.toHtmlEscaped(), summary.toHtmlEscaped());
     };
     // what each column of the list means: the table's own definitions
-    const auto columns = [&](const QStringList& keys) {
+    const auto columns = [&](const QStringList& keys, const QString& rank_key, bool asc) {
         QString h = head(QStringLiteral("THE COLUMNS")) + QStringLiteral("<table cellspacing='0' cellpadding='1'>");
-        const auto row = [&](const QString& name, const QString& tip) {
-            h += QStringLiteral("<tr><td valign='top' style='color:%1'>%2&nbsp;&nbsp;</td><td>%3</td></tr>")
-                     .arg(dim, name.toHtmlEscaped(), tip.toHtmlEscaped());
+        const auto row = [&](const QString& name, const QString& tip, bool ranks = false) {
+            // the ranking column stands out, as it does in the table
+            h += ranks ? QStringLiteral("<tr><td valign='top' style='color:%1;font-weight:700'>%2 %3&nbsp;&nbsp;</td>"
+                                        "<td><b style='color:%1'>Ranks the list.</b> %4</td></tr>")
+                             .arg(amber, name.toHtmlEscaped(),
+                                  // "#" keeps the table's own sort arrow, so no second one here
+                                  name == QLatin1String("#") ? QString()
+                                  : asc                      ? QStringLiteral("▲")
+                                                             : QStringLiteral("▼"),
+                                  tip.toHtmlEscaped())
+                       : QStringLiteral("<tr><td valign='top' style='color:%1'>%2&nbsp;&nbsp;</td><td>%3</td></tr>")
+                             .arg(dim, name.toHtmlEscaped(), tip.toHtmlEscaped());
         };
+        if (rank_key.isEmpty())
+            row(QStringLiteral("#"), QStringLiteral("The rank: by a combined score the table does not show (see "
+                                                    "Ranked by)"),
+                true);
+        else
+            row(QStringLiteral("#"), QStringLiteral("The rank, by the column marked below"));
         row(QStringLiteral("Trend 6M"), QStringLiteral("The last 126 daily closes, green if up over the span"));
         for (const QString& k : keys) {
             if (k == QLatin1String("picked_by"))
@@ -1209,7 +1335,7 @@ void ScreenerScreen::fill_band() {
             else if (k == QLatin1String("position"))
                 row(QStringLiteral("Position"), QStringLiteral("Shares × Entry: the money the trade ties up"));
             else if (const auto* d = screener::column_def(k))
-                row(QString::fromUtf8(d->header), QString::fromUtf8(d->tip));
+                row(QString::fromUtf8(d->header), QString::fromUtf8(d->tip), k == rank_key);
         }
         row(QStringLiteral("Name, Sector"), QStringLiteral("The company and its TradingView sector"));
         return h + QStringLiteral("</table>");
@@ -1218,6 +1344,27 @@ void ScreenerScreen::fill_band() {
                               ? QString()
                               : QStringLiteral("<div style='color:%1;font-size:11px;margin-top:12px'>Basis: %2.</div>")
                                     .arg(dim, result_.basis.toHtmlEscaped());
+    // the write-up is three parts, each opened by a band: side by side as
+    // tiles or stacked as one column (compose_details)
+    const auto part = [&](const QString& t) {
+        return QStringLiteral("<table width='100%' cellspacing='0' cellpadding='4' style='margin-top:12px'>"
+                              "<tr><td style='background:%1;color:%2;font-size:13px;font-weight:700'>%3</td>"
+                              "</tr></table>")
+            .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), t);
+    };
+    // readings link out: papers to their DOI, books to an Open Library search
+    const auto readings = [&](const QVector<QPair<QString, QString>>& items) {
+        QString h = QStringLiteral("<ul style='margin-left:-24px;margin-top:2px'>");
+        for (const auto& [text, url] : items)
+            h += url.startsWith(QLatin1String("https://"))
+                     // double quotes: Qt decodes &amp; only there (toHtmlEscaped escapes ")
+                     ? QStringLiteral("<li><a href=\"%1\" style='color:%2'>%3</a></li>")
+                           .arg(url.toHtmlEscaped(), amber, text.toHtmlEscaped())
+                     : QStringLiteral("<li>%1</li>").arg(text.toHtmlEscaped());
+        return h + QStringLiteral("</ul>");
+    };
+    details_parts_.clear();
+    details_tail_ = basis;
 
     if (current_id_ == kOverview) {
         band_html_ =
@@ -1243,7 +1390,7 @@ void ScreenerScreen::fill_band() {
                                     : QStringLiteral("<span style='color:%1'>not backtested</span>").arg(dim));
         }
         t += QStringLiteral("</table>");
-        details_html_ =
+        details_head_ =
             card_head(QStringLiteral("Overview"), QStringLiteral("How to read the screens and their records"),
                       QStringLiteral("The screens come from practitioners — US Investing Champions Minervini and "
                                      "Luk, O'Neil's CAN SLIM (with which David Ryan won), Kullamägi's "
@@ -1251,16 +1398,17 @@ void ScreenerScreen::fill_band() {
                                      "Momentum is this terminal's combination of two published factors. Most "
                                      "code only the SELECTION rules (the Leader Pullback also codes entry, stop, "
                                      "size and exits); what the practitioners add — entries, stops, sizing, "
-                                     "judgment — is described under each strategy and is not in the list.")) +
-            head(QStringLiteral("HOW TO READ THE RECORDS")) +
+                                     "judgment — is described under each strategy and is not in the list."));
+        details_parts_ << part(QStringLiteral("1 · HOW TO READ THE RECORDS")) +
             QStringLiteral("<p style='margin-top:2px'>Every screen but CAN SLIM was backtested on the S&amp;P 500 "
                            "as it stood on each date, 2010-2026, monthly, after costs (the Leader Pullback as "
                            "individual trades). <b>None beat the equal-weighted index with statistical significance</b>. The "
                            "t-stat measures how far an average excess is from zero relative to its month-to-month "
                            "noise: |t| &lt; 2 is indistinguishable from luck. A list here is where a method would "
                            "look, not a forecast.</p>") +
-            t +
-            section(QStringLiteral("HOW THE RECORDS WERE MEASURED"),
+            t;
+        details_parts_ << part(QStringLiteral("2 · HOW THEY WERE MEASURED")) +
+            section(QStringLiteral("THE TEST"),
                     QStringLiteral("Universe: the S&P 500's actual members on each month-end from 2010-01 to "
                                    "2026-08 (200 rebalances), those with at least 260 days of prices. Holding: equal "
                                    "weight for one month, 10 bp cost per side on every buy and sell. Fundamentals "
@@ -1279,16 +1427,19 @@ void ScreenerScreen::fill_band() {
                                    "every strategy it was tried on worse: the plain index (-4.7%/yr), Momentum "
                                    "12-1, the Trend Template, its top 25 and the RS composite. The 2010-26 "
                                    "sell-offs recovered faster than a month-end 200-day rule gets back in. The header still "
-                                   "shows SPY against its 50- and 200-day as context.")) +
+                                   "shows SPY against its 50- and 200-day as context."));
+        details_parts_ << part(QStringLiteral("3 · THE LIST")) +
             columns({QStringLiteral("price"), QStringLiteral("chg_1d"), QStringLiteral("screens"),
                      QStringLiteral("picked_by"), QStringLiteral("rs"), QStringLiteral("r3m"),
-                     QStringLiteral("mcap")}) +
-            basis;
+                     QStringLiteral("mcap")}, QStringLiteral("screens"), false);
+        details_html_ = compose_details(1);
         return;
     }
     const auto* s = result_.strategy(current_id_);
     if (!s) {
         band_html_.clear();
+        details_head_.clear();
+        details_tail_.clear();
         details_html_.clear();
         return;
     }
@@ -1309,16 +1460,8 @@ void ScreenerScreen::fill_band() {
     band_html_ = card_head(s->name, sub, s->summary) + line + QStringLiteral("</div>");
 
     // the write-up, in three parts: how it works, what it did, today
-    const auto part = [&](const QString& t) {
-        // a band across the pane: the three parts read at a glance
-        return QStringLiteral("<table width='100%' cellspacing='0' cellpadding='4' style='margin-top:16px'>"
-                              "<tr><td style='background:%1;color:%2;font-size:13px;font-weight:700'>%3</td>"
-                              "</tr></table>")
-            .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), t);
-    };
-    QString d = card_head(s->name, sub, s->summary);
-
-    d += part(QStringLiteral("1 · HOW IT WORKS"));
+    details_head_ = card_head(s->name, sub, s->summary);
+    QString d = part(QStringLiteral("1 · HOW IT WORKS"));
     d += section(QStringLiteral("THE IDEA"), s->idea);
     d += head(QStringLiteral("RULES")) + bullets(s->rules) +
          QStringLiteral("<div style='color:%1'>Ranked by: %2</div>").arg(dim, s->rank_by.toHtmlEscaped());
@@ -1331,9 +1474,12 @@ void ScreenerScreen::fill_band() {
             keys << QStringLiteral("shares") << QStringLiteral("position");
     }
     keys << QStringLiteral("mcap");
-    d += columns(keys);
+    d += columns(keys, s->rank_key, s->rank_asc);
+    if (!s->setups_from.isEmpty())
+        d += QStringLiteral("<div style='color:%1'>Setting up is ranked by RS.</div>").arg(dim);
 
-    d += part(QStringLiteral("2 · WHAT IT DID"));
+    details_parts_ << d;
+    d = part(QStringLiteral("2 · WHAT IT DID"));
     d += head(QStringLiteral("MEASURED RECORD"));
     if (ev.tested) {
         d += QStringLiteral("<table cellspacing='0' cellpadding='1'>"
@@ -1359,7 +1505,8 @@ void ScreenerScreen::fill_band() {
         d += para(ev.note);
     d += section(QStringLiteral("HOW IT WAS TESTED"), s->tested);
 
-    d += part(QStringLiteral("3 · TODAY"));
+    details_parts_ << d;
+    d = part(QStringLiteral("3 · TODAY"));
     // the rules on real stocks, with the scan's own numbers
     const auto example = [&](const QString& title, const screener::Example& e) {
         if (e.empty())
@@ -1419,8 +1566,43 @@ void ScreenerScreen::fill_band() {
     }
     d += section(QStringLiteral("PRACTISE IT · PAPER FIRST"), s->practice);
     if (!s->reading.isEmpty())
-        d += head(QStringLiteral("FURTHER READING")) + bullets(s->reading);
-    details_html_ = d + basis;
+        d += head(QStringLiteral("FURTHER READING")) + readings(s->reading);
+    details_parts_ << d;
+    details_html_ = compose_details(1);
+}
+
+int ScreenerScreen::details_columns(int width) const {
+    // Tiles: the three parts side by side on a wide pane, two on a medium
+    // one; Column: stacked, for a laptop. Auto picks by width, so a column
+    // never gets narrower than ~400 px of text.
+    if (details_layout_ == 2)
+        return 1;
+    if (width >= 1250)
+        return 3;
+    if (width >= 820 || details_layout_ == 1)
+        return 2;
+    return 1;
+}
+
+QString ScreenerScreen::compose_details(int n) const {
+    if (details_parts_.isEmpty())
+        return details_head_ + details_tail_;
+    if (n <= 1)
+        return details_head_ + details_parts_.join(QString()) + details_tail_;
+    QStringList cells;
+    if (n == 2 && details_parts_.size() >= 3) // the long first part beside the other two
+        cells = {details_parts_[0], details_parts_.mid(1).join(QString())};
+    else
+        cells = details_parts_;
+    const int pct = 100 / cells.size();
+    QString row;
+    for (int i = 0; i < cells.size(); ++i)
+        row += QStringLiteral("<td width='%1%' valign='top' style='%2'>%3</td>")
+                   .arg(pct)
+                   .arg(i + 1 < cells.size() ? QStringLiteral("padding-right:18px") : QString())
+                   .arg(cells[i]);
+    return details_head_ + QStringLiteral("<table width='100%' cellspacing='0' cellpadding='0'><tr>") + row +
+           QStringLiteral("</tr></table>") + details_tail_;
 }
 
 void ScreenerScreen::restore_state(const QVariantMap& state) {
@@ -1428,6 +1610,9 @@ void ScreenerScreen::restore_state(const QVariantMap& state) {
     if (!id.isEmpty())
         current_id_ = id;
     setting_up_ = state.value(QStringLiteral("setting_up")).toBool();
+    details_layout_ = std::clamp(state.value(QStringLiteral("details_layout")).toInt(), 0, 2);
+    if (auto* b = layout_group_->button(details_layout_))
+        b->setChecked(true);
     const double m = state.value(QStringLiteral("min_mcap")).toDouble();
     if (m > 0) {
         const int idx = universe_->findData(m);
@@ -1454,6 +1639,7 @@ void ScreenerScreen::restore_state(const QVariantMap& state) {
 QVariantMap ScreenerScreen::save_state() const {
     return {{QStringLiteral("strategy"), current_id_},
             {QStringLiteral("setting_up"), setting_up_},
+            {QStringLiteral("details_layout"), details_layout_},
             {QStringLiteral("min_mcap"), min_mcap()},
             {QStringLiteral("account"), account_value_},
             {QStringLiteral("risk"), risk_frac_}};

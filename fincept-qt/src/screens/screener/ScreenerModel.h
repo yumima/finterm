@@ -65,7 +65,9 @@ struct Strategy {
     QString id, name, family, source, summary, rank_by;
     QString idea, use, tested; // the thesis, how its author uses it, how the record was measured
     QString practice;          // a paper-trading routine
-    QStringList reading;       // books and papers
+    QVector<QPair<QString, QString>> reading; // books and papers: text, link
+    QString rank_key;          // the column the list is ranked by ("" = a score it does not show)
+    bool rank_asc = false;     // lowest first (volatility, P/B)
     Example pick, miss;        // today's first pick, and the first name that missed
     QString setups_from;       // whose setting-up list it shows ("trend_template"), or none
     QStringList rules, columns, symbols;
@@ -166,7 +168,15 @@ inline ScanResult parse_scan(const QJsonObject& root) {
         s.idea = so.value(QStringLiteral("idea")).toString();
         s.use = so.value(QStringLiteral("use")).toString();
         s.tested = so.value(QStringLiteral("tested")).toString();
-        s.reading = string_list(so.value(QStringLiteral("reading")));
+        for (const auto& rv : so.value(QStringLiteral("reading")).toArray()) {
+            const QJsonArray pair = rv.toArray();
+            if (rv.isString()) // a scan cached before the links
+                s.reading.push_back({rv.toString(), QString()});
+            else if (!pair.isEmpty())
+                s.reading.push_back({pair.at(0).toString(), pair.at(1).toString()});
+        }
+        s.rank_key = so.value(QStringLiteral("rank_key")).toString();
+        s.rank_asc = so.value(QStringLiteral("rank_asc")).toBool();
         s.practice = so.value(QStringLiteral("practice")).toString();
         s.setups_from = so.value(QStringLiteral("setups_from")).toString();
         const QJsonObject ex = so.value(QStringLiteral("example")).toObject();

@@ -16,6 +16,8 @@ class QSplitter;
 class QStackedWidget;
 class QTableWidget;
 class QTextBrowser;
+class QButtonGroup;
+class QUrl;
 class QTimer;
 
 namespace fincept::screens {
@@ -86,7 +88,11 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void set_progress(int done, int total, const QString& text);
     void even_out_panes();
     void update_details_pane();
-    void render_details();
+    void render_details(bool force = false);
+    int details_columns(int width) const;  // 1-3 tiles for the layout choice and the width
+    QString compose_details(int n) const;  // the write-up's head, parts and tail in n columns
+    bool open_reading(const QUrl& u);       // a further-reading link: https only
+    static int layout_width(const QTextBrowser* b); // its width as if no scroll bar (tiles don't flip-flop)
     QString inline_html() const;
     bool setting_up() const; // the setting-up view, on a screen that has one
     void update_view_toggle();
@@ -129,13 +135,19 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     QString       band_html_;       // the summary, from fill_band
     QString       band_shown_;      // the document on screen (summary + pointer)
     // The right half: the full write-up, while Equity Research is not beside.
+    QWidget*      details_pane_ = nullptr; // the layout row + details_
     QTextBrowser* details_ = nullptr;
+    QButtonGroup* layout_group_ = nullptr;
+    int           details_layout_ = 0;     // 0 Auto, 1 Tiles, 2 Column
+    QString       details_head_, details_tail_;
+    QStringList   details_parts_;          // 1 how it works · 2 what it did · 3 today
     QString       details_html_;
     QString       details_shown_;
     QTextBrowser* inline_ = nullptr;  // centre page 2: the write-up in place of the list
     bool          inline_on_ = false;
     QString       inline_shown_, inline_id_;
     bool          details_pending_ = false; // a click + activation, one request
+    bool          relayout_pending_ = false; // a write-up re-render after a resize, coalesced
     QString       details_id_;      // whose write-up is on screen (keeps the scroll on a refresh)
     int           band_width_ = -1; // the width the document was last laid out at
     int           band_cap_ = -1;   // the most height it may take (the pane's 75%)
