@@ -70,6 +70,7 @@ struct Strategy {
     bool rank_asc = false;     // lowest first (volatility, P/B)
     Example pick, miss;        // today's first pick, and the first name that missed
     QString setups_from;       // whose setting-up list it shows ("trend_template"), or none
+    QString setup_desc;        // what that list is, in words
     QStringList rules, columns, symbols;
     Evidence evidence;
 };
@@ -98,7 +99,7 @@ struct ScanResult {
     QHash<QString, QJsonObject> rows;
     /// A name one rule from a screen: the rule it misses and how far it is.
     struct Setup {
-        QString symbol, rule, short_rule, gap_text;
+        QString symbol, rule, short_rule, gap_short, gap_text;
         std::optional<double> gap;
     };
     QHash<QString, QVector<Setup>> setups; // by screen ("trend_template"), ranked
@@ -179,6 +180,7 @@ inline ScanResult parse_scan(const QJsonObject& root) {
         s.rank_asc = so.value(QStringLiteral("rank_asc")).toBool();
         s.practice = so.value(QStringLiteral("practice")).toString();
         s.setups_from = so.value(QStringLiteral("setups_from")).toString();
+        s.setup_desc = so.value(QStringLiteral("setup_desc")).toString();
         const QJsonObject ex = so.value(QStringLiteral("example")).toObject();
         const auto example = [](const QJsonObject& o) {
             Example e;
@@ -226,6 +228,7 @@ inline ScanResult parse_scan(const QJsonObject& root) {
             if (!sym.isEmpty())
                 list.push_back({sym, o.value(QStringLiteral("rule")).toString(),
                                 o.value(QStringLiteral("short")).toString(),
+                                o.value(QStringLiteral("gap_short")).toString(),
                                 o.value(QStringLiteral("gap_text")).toString(), num(o, QStringLiteral("gap"))});
         }
         r.setups.insert(it.key(), list);

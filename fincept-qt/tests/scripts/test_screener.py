@@ -221,6 +221,60 @@ bad = [{"price": 75.0}, {"sma150": 65.0}, {"sma200_prev": 72.0}, {"sma50": 78.0}
 for i, (label_, gap_fn, _w, _s) in enumerate(sd.TT_RULES):
     check(gap_fn(base) <= 0, f"TT_RULES[{i}] {label_}: no gap left when the rule passes")
     check(gap_fn({**base, **bad[i]}) > 0, f"TT_RULES[{i}] {label_}: a positive gap when it fails")
+# every screen's setting-up list: its own, never overlapping the screen,
+# in its tested definition
+su_all = ex60["setups"]
+check(set(su_all) == {st["id"] for st in sd.STRATEGIES if st["id"] != "rs_leaders"},
+      f"every screen has a setting-up list: {sorted(su_all)}")
+for sid_, items in su_all.items():
+    syms_ = [d_["symbol"] for d_ in items]
+    check(not set(syms_) & set(lists60.get(sid_, [])), f"{sid_}: setting up never repeats the list itself")
+    check(len(syms_) == len(set(syms_)), f"{sid_}: no name twice")
+    check(all(d_["rule"] and d_["gap_short"] is not None for d_ in items), f"{sid_}: each names a rule and a gap")
+n_mom = max(1, int(round(df60["mom12_1"].notna().sum() * 0.10)))
+order = df60["mom12_1"].dropna().sort_values(ascending=False, kind="stable").index
+check([d_["symbol"] for d_ in su_all["momentum"]] == list(order[n_mom:2 * n_mom]),
+      "momentum setting up = the next decile, in rank order")
+check(all(df60.at[d_["symbol"], "piotroski"] == 7 for d_ in su_all["piotroski"])
+      and len(su_all["piotroski"]) == int((df60["piotroski"] == 7).sum()),
+      "piotroski setting up = every F-score 7")
+combo60 = sd.pct_rank(df60["r1m"]) + sd.pct_rank(df60["r3m"]) + sd.pct_rank(df60["r6m"])
+check(all(combo60[d_["symbol"]] >= combo60.quantile(0.95) for d_ in su_all["breakout"]),
+      "breakout setting up = leaders only")
+for d_ in su_all["breakout"]:
+    r_ = df60.loc[d_["symbol"]]
+    checks_ = [r_["adr20"] >= 0.04, r_["off_high"] >= -0.15,
+               r_["price"] > r_["sma10"] and r_["price"] > r_["sma20"], r_["dollar_vol50"] >= 20e6]
+    check(all(np.isfinite(r_[c_]) for c_ in ("adr20", "off_high", "sma10", "sma20", "dollar_vol50"))
+          and sum(not c_ for c_ in checks_) == 1 and d_["gap"] is not None and d_["gap"] >= 0,
+          f"breakout setting up {d_['symbol']}: every filter measured, exactly one failed, a real gap")
+# a recent listing (~200 sessions: no 52-week high yet) that ran hard: never
+# "one filter short" — its missing value is no data, and the tested universe
+# never held it (>= 260 bars)
+ipo_idx = idx60[-200:]
+ipo_c = 10 * np.exp(0.012 * np.arange(200))
+fr_ipo = dict(fr60)
+fr_ipo["IPO"] = pd.DataFrame({"Open": ipo_c, "High": ipo_c * 1.06, "Low": ipo_c / 1.06, "Close": ipo_c,
+                              "Volume": 5e6}, index=ipo_idx)
+fund_ipo = dict(fund60)
+fund_ipo["IPO"] = fund_rec("IPO", mcap=5e9)
+ex_ipo = {}
+sd.compute(fund_ipo, fr_ipo, ex_ipo)
+check("IPO" not in {d_["symbol"] for d_ in ex_ipo["setups"]["breakout"]},
+      "a name too young for a 52-week high is not one breakout filter short")
+n_lv = max(1, int(round(df60["vol252"].notna().sum() * 0.10)))
+lv = (-df60["vol252"]).dropna().sort_values(ascending=False, kind="stable").index
+check([d_["symbol"] for d_ in su_all["low_vol"]] == list(lv[n_lv:2 * n_lv]), "low vol setting up = the next decile")
+check(all(d_["gap"] is not None and d_["gap"] >= 0 for v_ in su_all.values() for d_ in v_),
+      "every gap is a move still to go (>= 0)")
+# next_in_line itself (the 60-name pools are too small for Quality+Momentum and
+# Trending Value to have a next 25): ranks n+1..2n, the screen's order, gaps to the cut
+ser = pd.Series({"a": 9.0, "b": 8.0, "c": 7.0, "d": 6.0, "e": 5.0, "f": 4.0, "g": 3.0, "h": np.nan})
+nl = sd.next_in_line(ser, {"a", "b", "c"}, 3)
+check([d_["symbol"] for d_ in nl] == ["d", "e", "f"] and [d_["gap"] for d_ in nl] == [1.0, 2.0, 3.0],
+      f"next_in_line: the next n after the cut, with the gap to the cut's value: {nl}")
+check(sd.next_in_line(ser, set(), 0) == [] and sd.next_in_line(ser.iloc[:2], set(), 3) == [],
+      "next_in_line: nothing when there is no cut")
 trap = df60.index[(df60["tt_count"] == 7) & (df60["rs"] < 70)]
 check(not set(trap) & {d_["symbol"] for d_ in su}, "a full price trend without RS (the measured trap) is left out")
 check([d_["symbol"] for d_ in su] == sorted([d_["symbol"] for d_ in su], key=lambda x: (-df60.at[x, "rs"], x)),

@@ -238,3 +238,29 @@ empty months as cash read −9.6%, t −3.0). Shipped: the tab's
 "Setting up" view lists RS ≥ 70 names one price criterion away (with the rule
 and the gap) and leaves the RS-only misses out; the write-up states both
 records (exported to screener_evidence.json → `setups`).
+
+### Every screen's next-in-line list (`setups_all_backtest.py`)
+
+Same method; excess and t over the months the list held names (the export's
+rule). "On it next" = on the screen itself at the next month-end (the Leader
+Pullback, a daily state: on any of the next 10 sessions), against every other
+name.
+
+| Screen: setting up = | excess/yr | t | months held | on it next | others |
+|---|---|---|---|---|---|
+| Momentum: the next decile | −1.6% | −0.96 | 200 | 19.2% | 1.1% |
+| Low vol: the next decile | −2.0% | −0.95 | 200 | 8.8% | 0.1% |
+| Breakout: a leader one filter short¹ | −0.2% | −0.05 | 200 | 2.0% | 0.3% |
+| Magic Formula: ranks 31-60 | −0.3% | −0.22 | 200 | 7.6% | 0.2% |
+| Piotroski: F = 7 | −0.3% | −0.30 | 197 | 1.0% | 0.5% |
+| Quality+Momentum: pool ranks 26-50 | +0.2% | +0.08 | 197 | 15.3% | 0.2% |
+| Trending Value: pool ranks 26-50 | −1.1% | −0.26 | 190 | 23.9% | 0.8% |
+| Leader Pullback: resting, not yet at the 21 EMA | −2.7% | −0.56 | 159 | 28.0% | 2.3% |
+
+¹ Not meaningful on the S&P 500: almost no large cap clears ADR ≥ 4%.
+
+Every list finds the screen's next members above the base rate — far above for
+all but Piotroski (1.0% vs 0.5%: the F-score moves once a year); none, held as a
+list, differs from the index (|t| < 1). CAN SLIM: no test (no
+point-in-time quarterly EPS); its list ships labelled untested. The raw run
+counted empty months as cash: the pullback list read −9.0% (t −1.95) that way.

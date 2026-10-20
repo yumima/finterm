@@ -108,6 +108,14 @@ out["setups"] = {
     # what it leaves out, and why: the full price trend without the RS
     "rs_trap": setup_stats("TT one rule away, the rule = RS (price trend complete)"),
 }
+# every other screen's next-in-line list (setups_all_backtest.py)
+setups_all = pd.read_pickle(os.path.join(D, "setups_all_results.pkl"))
+grad_all = pd.read_pickle(os.path.join(D, "setups_all_graduation.pkl"))
+assert setups_all.index.equals(res.index), "the setups backtest must cover the same months"
+setups = setups_all  # setup_stats reads the module-level frame
+for sid, (g1, g0) in grad_all.items():
+    out["setups"][sid] = {**setup_stats(f"{sid} | setting up"),
+                          "qualify_next": num(g1, 3), "qualify_base": num(g0, 3)}
 with open(OUT, "w") as fh:
     json.dump(out, fh, indent=1, sort_keys=True, allow_nan=False)
 print(f"wrote {len(cols)} backtests to {os.path.normpath(OUT)}")

@@ -335,6 +335,118 @@
   }
  },
  "setups": {
+  "breakout": {
+   "excess": -0.0016,
+   "max_dd": -0.2967,
+   "median_names": 15,
+   "months": 200,
+   "months_held": 200,
+   "qualify_base": 0.003,
+   "qualify_next": 0.02,
+   "subperiods": [
+    -0.0195,
+    -0.0617,
+    0.0497,
+    0.063
+   ],
+   "t": -0.05
+  },
+  "low_vol": {
+   "excess": -0.0201,
+   "max_dd": -0.2113,
+   "median_names": 41,
+   "months": 200,
+   "months_held": 200,
+   "qualify_base": 0.001,
+   "qualify_next": 0.088,
+   "subperiods": [
+    -0.0076,
+    0.0113,
+    -0.0461,
+    -0.0589
+   ],
+   "t": -0.95
+  },
+  "luk_pullback": {
+   "excess": -0.0271,
+   "max_dd": -0.6223,
+   "median_names": 4,
+   "months": 200,
+   "months_held": 159,
+   "qualify_base": 0.023,
+   "qualify_next": 0.28,
+   "subperiods": [
+    0.0543,
+    -0.102,
+    -0.0951,
+    0.0041
+   ],
+   "t": -0.56
+  },
+  "magic_formula": {
+   "excess": -0.0027,
+   "max_dd": -0.2733,
+   "median_names": 30,
+   "months": 200,
+   "months_held": 200,
+   "qualify_base": 0.002,
+   "qualify_next": 0.076,
+   "subperiods": [
+    0.0037,
+    0.0074,
+    0.0002,
+    -0.0275
+   ],
+   "t": -0.22
+  },
+  "momentum": {
+   "excess": -0.016,
+   "max_dd": -0.2283,
+   "median_names": 41,
+   "months": 200,
+   "months_held": 200,
+   "qualify_base": 0.011,
+   "qualify_next": 0.192,
+   "subperiods": [
+    0.0006,
+    -0.0078,
+    -0.0726,
+    -0.0036
+   ],
+   "t": -0.96
+  },
+  "piotroski": {
+   "excess": -0.0029,
+   "max_dd": -0.2638,
+   "median_names": 56,
+   "months": 200,
+   "months_held": 197,
+   "qualify_base": 0.005,
+   "qualify_next": 0.01,
+   "subperiods": [
+    -0.0116,
+    0.0067,
+    -0.0024,
+    -0.0051
+   ],
+   "t": -0.3
+  },
+  "quality_momentum": {
+   "excess": 0.0015,
+   "max_dd": -0.2867,
+   "median_names": 25,
+   "months": 200,
+   "months_held": 197,
+   "qualify_base": 0.002,
+   "qualify_next": 0.153,
+   "subperiods": [
+    -0.0035,
+    0.0108,
+    0.0142,
+    -0.015
+   ],
+   "t": 0.08
+  },
   "rs_trap": {
    "excess": -0.0561,
    "max_dd": -0.3569,
@@ -364,6 +476,22 @@
     0.0194
    ],
    "t": -0.1
+  },
+  "trending_value": {
+   "excess": -0.0112,
+   "max_dd": -0.5407,
+   "median_names": 14,
+   "months": 200,
+   "months_held": 190,
+   "qualify_base": 0.008,
+   "qualify_next": 0.239,
+   "subperiods": [
+    -0.1558,
+    0.0267,
+    0.1027,
+    0.0082
+   ],
+   "t": -0.26
   }
  },
  "subperiods": [

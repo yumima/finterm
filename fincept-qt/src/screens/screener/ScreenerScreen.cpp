@@ -329,8 +329,8 @@ void ScreenerScreen::build_ui() {
     }
     passing_btn_->setToolTip(QStringLiteral("The names that pass every rule today"));
     setup_btn_->setToolTip(QStringLiteral(
-        "Setting up: names one rule from passing, with the rule and how far they are — the closest "
-        "to qualifying next. See the write-up for how such a list did."));
+        "Setting up: the names next in line, with the rule each misses and how far it is — the "
+        "closest to qualifying next. See the write-up for how such a list did."));
     auto* views = new QButtonGroup(this);
     views->setExclusive(true);
     views->addButton(passing_btn_);
@@ -550,7 +550,7 @@ double ScreenerScreen::min_mcap() const {
 }
 
 QString ScreenerScreen::cache_name() const {
-    return QStringLiteral("scan_v4_%1.json").arg(qint64(min_mcap())); // v4: write-ups, worked examples, setting up
+    return QStringLiteral("scan_v5_%1.json").arg(qint64(min_mcap())); // v5: setting up for every screen
 }
 
 void ScreenerScreen::showEvent(QShowEvent* e) {
@@ -919,7 +919,8 @@ void ScreenerScreen::update_view_toggle() {
     passing_btn_->setText(QStringLiteral("Passing · %1").arg(s->symbols.size()));
     setup_btn_->setText(QStringLiteral("Setting up · %1").arg(result_.setups.value(s->setups_from).size()));
     setup_btn_->setToolTip(s->setups_from == current_id_
-                               ? QStringLiteral("Names one rule from passing, with the rule and how far they are")
+                               ? QStringLiteral("Next in line: %1 — with the rule each misses and how far it is")
+                                     .arg(s->setup_desc)
                                : QStringLiteral("Names one rule from the Trend Template (whose top 25 by RS this "
                                                 "list is), with the rule and how far they are"));
     const QSignalBlocker b1(passing_btn_), b2(setup_btn_);
@@ -1028,6 +1029,7 @@ void ScreenerScreen::fill_table() {
         symbols = s->symbols;
     }
     const bool su_view = !ov && setting_up();
+    const bool tt_setups = su_view && s->setups_from == QLatin1String("trend_template"); // ranked by RS
     QHash<QString, screener::ScanResult::Setup> setup_of;
     if (su_view)
         for (const auto& su : result_.setups.value(s->setups_from))
@@ -1055,12 +1057,20 @@ void ScreenerScreen::fill_table() {
         metric("rs");
         metric("r3m");
     } else if (su_view) {
-        // what it misses and how far, then why it is close
+        // what it misses and how far, then the strategy's own columns
         cols.push_back({Col::Misses, nullptr, QStringLiteral("Misses")});
         cols.push_back({Col::Gap, nullptr, QStringLiteral("To pass")});
-        metric("rs");
-        metric("off_high");
-        metric("r3m");
+        if (tt_setups) {
+            metric("rs");
+            metric("off_high");
+            metric("r3m");
+        } else {
+            for (const QString& key : s->columns)
+                if (key != QLatin1String("price") && key != QLatin1String("chg_1d") &&
+                    key != QLatin1String("entry") && key != QLatin1String("stop") &&
+                    key != QLatin1String("risk_pct") && key != QLatin1String("target3"))
+                    metric(key.toLatin1().constData()); // no trade plan for a setup not yet formed
+        }
     } else {
         for (const QString& key : s->columns) {
             if (key == QLatin1String("price") || key == QLatin1String("chg_1d"))
@@ -1078,8 +1088,8 @@ void ScreenerScreen::fill_table() {
     metric("mcap");
 
     // the column the list is ranked by: marked in its header, its values bold
-    const QString rank_key = ov ? QStringLiteral("screens") : su_view ? QStringLiteral("rs") : s->rank_key;
-    const bool rank_asc = !ov && !su_view && s->rank_asc;
+    const QString rank_key = ov ? QStringLiteral("screens") : tt_setups ? QStringLiteral("rs") : s->rank_key;
+    const bool rank_asc = !ov && !tt_setups && s->rank_asc;
     const QString arrow = rank_asc ? QStringLiteral(" ▲") : QStringLiteral(" ▼");
     for (auto& c : cols) {
         if (c.def && QLatin1String(c.def->key) == rank_key)
@@ -1113,7 +1123,7 @@ void ScreenerScreen::fill_table() {
             if (ranks)
                 h->setToolTip(QStringLiteral("Ranks the list (%1). %2")
                                   .arg(ov ? QStringLiteral("most-picked first, then RS")
-                                          : su_view ? QStringLiteral("RS, highest first") : s->rank_by,
+                                          : tt_setups ? QStringLiteral("RS, highest first") : s->rank_by,
                                        cols[c].def ? QString::fromUtf8(cols[c].def->tip) : QString()));
             else if (cols[c].def)
                 h->setToolTip(QString::fromUtf8(cols[c].def->tip));
@@ -1187,7 +1197,10 @@ void ScreenerScreen::fill_table() {
                 }
                 case Col::Gap: {
                     // the move still needed; the sentence on hover
+                    // sorts by the number; reads in the list's own unit (%, pts, ranks, tests)
                     it = metric_item(Kind::Pct, setup_of.value(sym).gap);
+                    if (!setup_of.value(sym).gap_short.isEmpty())
+                        it->setText(setup_of.value(sym).gap_short);
                     it->setToolTip(setup_of.value(sym).gap_text);
                     break;
                 }
@@ -1220,11 +1233,15 @@ void ScreenerScreen::fill_table() {
                                                                           : QStringLiteral("the ") + target->name;
     table_title_->setText(
         su_view ? (symbols.isEmpty()
-                       ? QStringLiteral("%1 — no name is one rule from %2 today").arg(name, su_target)
-                       : QStringLiteral("%1 — setting up: %2 names one rule from %3, ranked by RS")
-                             .arg(name)
-                             .arg(symbols.size())
-                             .arg(su_target))
+                       ? (tt_setups ? QStringLiteral("%1 — no name is one rule from %2 today").arg(name, su_target)
+                                    : QStringLiteral("%1 — no name is next in line today").arg(name))
+                       : tt_setups ? QStringLiteral("%1 — setting up: %2 names one rule from %3, ranked by RS")
+                                         .arg(name)
+                                         .arg(symbols.size())
+                                         .arg(su_target)
+                                   : QStringLiteral("%1 — setting up: %2 names next in line, in the list's own order")
+                                         .arg(name)
+                                         .arg(symbols.size()))
         : symbols.isEmpty()
             ? QStringLiteral("%1 — no stock passes today").arg(name)
             : ov ? QStringLiteral("Overview — %1 names picked by two or more screens, most-picked first")
@@ -1475,8 +1492,11 @@ void ScreenerScreen::fill_band() {
     }
     keys << QStringLiteral("mcap");
     d += columns(keys, s->rank_key, s->rank_asc);
-    if (!s->setups_from.isEmpty())
+    if (s->setups_from == QLatin1String("trend_template"))
         d += QStringLiteral("<div style='color:%1'>Setting up is ranked by RS.</div>").arg(dim);
+    else if (!s->setups_from.isEmpty())
+        d += QStringLiteral("<div style='color:%1'>Setting up is ranked in the list's own order.</div>")
+                 .arg(dim);
 
     details_parts_ << d;
     d = part(QStringLiteral("2 · WHAT IT DID"));
@@ -1540,23 +1560,39 @@ void ScreenerScreen::fill_band() {
             const auto v = screener::num(o, QStringLiteral("t"));
             return v ? QString::number(*v, 'f', 2) : fmtn::placeholder();
         };
-        d += head(has_lists() ? QStringLiteral("SETTING UP · %1 NAMES ONE RULE AWAY")
-                                    .arg(result_.setups.value(s->setups_from).size())
+        const int n_su = result_.setups.value(s->setups_from).size();
+        d += head(has_lists() ? QStringLiteral("SETTING UP · %1 NAMES NEXT IN LINE").arg(n_su)
                               : QStringLiteral("SETTING UP"));
-        d += para(QStringLiteral(
-            "The Setting up view above the list: names with RS of at least 70 that fail exactly one of the "
-            "Trend Template's seven price rules, with the rule and how far its measure must still move. It is "
-            "the closest thing here to \"what could come next\". A close below an average can be one day's "
-            "move; a slow average that must rise takes weeks — compare gaps within the same rule."));
-        if (!rec.isEmpty())
+        d += para(QStringLiteral("The Setting up view above the list: %1, with the rule it misses and how far "
+                                 "it is. The closest thing here to \"what could come next\".")
+                      .arg(s->setup_desc));
+        const bool daily = s->setups_from == QLatin1String("luk_pullback");
+        if (rec.isEmpty())
+            d += para(QStringLiteral("Not tested: there is no backtest of this list, so nothing is claimed for "
+                                     "it."));
+        else
             d += para(QStringLiteral(
-                         "What it did, 2010-2026 on the S&P 500: a month later %1 of these names were on the Trend "
-                         "Template, against %2 of all non-passers, so the list does find the next passers. Held as a "
-                         "list, it did no better than the index: %3 / yr, t %4. Passing next is not the same as "
-                         "rising next.")
-                         .arg(pc(rec, "qualify_next", false), pc(rec, "qualify_base", false),
-                              pc(rec, "excess", true), tv(rec)));
-        if (!trap.isEmpty())
+                         "What it did, 2010-2026 on the S&P 500: %1 of these names were on %7 %2, against %3 "
+                         "of %8. Held as a list it returned %4 / yr against the index, t %5 (%6). Being next in "
+                         "line is not the same as rising next.")
+                         .arg(pc(rec, "qualify_next", false),
+                              daily ? QStringLiteral("within the next 10 sessions") : QStringLiteral("a month later"),
+                              pc(rec, "qualify_base", false), pc(rec, "excess", true), tv(rec),
+                              [&]() {
+                                  const auto t = screener::num(rec, QStringLiteral("t"));
+                                  return !t ? QStringLiteral("untested") : std::abs(*t) < 2.0
+                                                                              ? QStringLiteral("noise")
+                                                                          : *t > 0 ? QStringLiteral("beat the index")
+                                                                                   : QStringLiteral("reliably worse");
+                              }(),
+                              // whose list was measured (RS Leaders shows the Trend Template's)
+                              s->setups_from == current_id_ || !result_.strategy(s->setups_from)
+                                  ? QStringLiteral("the screen itself")
+                                  : QStringLiteral("the ") + result_.strategy(s->setups_from)->name,
+                              // the Trend Template's base counts every non-passer (setups_backtest.py)
+                              s->setups_from == QLatin1String("trend_template") ? QStringLiteral("all non-passers")
+                                                                                 : QStringLiteral("every other name")));
+        if (s->setups_from == QLatin1String("trend_template") && !trap.isEmpty())
             d += para(QStringLiteral(
                          "Left out on purpose: names whose price trend passes all seven rules but whose RS is "
                          "below 70. Held as a list they were reliably worse than the index, %1 / yr, t %2, in "

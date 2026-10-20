@@ -564,8 +564,128 @@ def tt_setting_up(sig, df, k=-1):
         label, gap_fn, what, short = TT_RULES[miss]
         gap = float(gap_fn(x))
         out.append({"symbol": sym, "rule": label, "short": short, "gap": _clean(gap),
+                    "gap_short": f"{gap * 100:.1f}%" if np.isfinite(gap) else "",
                     "gap_text": f"{what} {gap * 100:.1f}%" if np.isfinite(gap) else ""})
     out.sort(key=lambda d: (-df.at[d["symbol"], "rs"], d["symbol"]))
+    return out
+
+
+def _setup(sym, rule, short, gap, gap_short, gap_text):
+    return {"symbol": sym, "rule": rule, "short": short, "gap": _clean(gap),
+            "gap_short": gap_short, "gap_text": gap_text}
+
+
+def next_in_line(series, members, n, lo_first=False, fmt=None, what=""):
+    """A ranked screen's setting-up list: the names ranked just outside its cut
+    (#n+1..#2n of `series`, best first, the screen's own stable order), each
+    with how far its value is from the cut's. The tested definition
+    (setups_all_backtest.py). `lo_first`: the screen ranks lowest first (the
+    series is passed negated, as the screen ranks it)."""
+    s = series.dropna().sort_values(ascending=False, kind="stable")
+    if len(s) <= n or n <= 0:
+        return []
+    cut = s.iloc[n - 1]
+    fmt = fmt or (lambda x: f"{x * 100:.1f} pts")
+    out = []
+    for p, (sym, v) in enumerate(s.iloc[n:2 * n].items(), start=n + 1):
+        if sym in members:
+            continue
+        gap = float(cut - v)  # >= 0: how far below the cut's value
+        out.append(_setup(sym, f"Ranked #{p}; the list takes the top {n}", f"#{p} (cut #{n})", gap,
+                          fmt(gap), f"{what} {fmt(gap)} to reach #{n}".strip()))
+    return out
+
+
+def setting_up(df, sig, lists, ctx):
+    """Every screen's setting-up list — the names next in line — in the
+    definitions setups_all_backtest.py tested. {strategy id: [setup]}."""
+    k = ctx["k"]
+    out = {"trend_template": tt_setting_up(sig, df)}
+    tenth = lambda s: max(1, int(round(s.notna().sum() * 0.10)))
+    out["momentum"] = next_in_line(df["mom12_1"], set(lists["momentum"]), tenth(df["mom12_1"]),
+                                   what="12-1 return must rise")
+    out["low_vol"] = next_in_line(-df["vol252"], set(lists["low_vol"]), tenth(df["vol252"]),
+                                  what="volatility must fall")
+    out["magic_formula"] = next_in_line(ctx["magic"], set(lists["magic_formula"]), 30,
+                                        fmt=lambda x: f"{x:.1f} rank points", what="combined rank needs")
+    pool_q = df["mom12_1"].reindex(ctx["gpa_pool"])
+    out["quality_momentum"] = next_in_line(pool_q, set(lists["quality_momentum"]), 25,
+                                           what="12-1 return must rise")
+    pool_v = df["r6m"].reindex(ctx["cheap"])
+    out["trending_value"] = next_in_line(pool_v, set(lists["trending_value"]), 25,
+                                         what="6-month return must rise")
+    # Piotroski: one test short (F = 7) — every one, as tested; cheapest book
+    # first as the screen sorts (no positive book: last)
+    pio = df.index[df["piotroski"] == 7]
+    out["piotroski"] = [_setup(s_, "F-score 7 of 9: one test short of 8", "F-score 7", 1.0, "1 test",
+                               "one more of the nine tests must pass")
+                        for s_ in df.loc[pio, "pb"].where(df.loc[pio, "pb"] > 0)
+                        .sort_values(kind="stable", na_position="last").index]
+    # Breakout: a top-5% leader failing exactly one of the four filters
+    combo = ctx["combo"]
+    leader = combo >= combo.quantile(0.95)
+    px = df["price"]
+    filt = [("ADR% (20-day) at least 4%", "ADR% < 4%", df["adr20"] >= 0.04, 0.04 - df["adr20"], "pts"),
+            ("Within 15% of the 52-week high", "Far off the high", df["off_high"] >= -0.15,
+             -0.15 - df["off_high"], "pts"),
+            ("Close above the 10- and 20-day SMA", "Below 10/20-day",
+             (px > df["sma10"]) & (px > df["sma20"]), np.maximum(df["sma10"], df["sma20"]) / px - 1, "%"),
+            ("50-day dollar volume at least $20M", "Thin volume", df["dollar_vol50"] >= 20e6,
+             20e6 / df["dollar_vol50"] - 1, "%")]
+    oks = pd.DataFrame({i: f[2].fillna(False).astype(bool) for i, f in enumerate(filt)})
+    # every filter MEASURED: a missing value (a recent listing has no 52-week
+    # high yet) is no data, not a failed filter — and such names were never in
+    # the tested universe (>= 260 bars)
+    measured = df[["adr20", "off_high", "sma10", "sma20", "dollar_vol50"]].notna().all(axis=1)
+    brk = leader & measured & (oks.sum(axis=1) == 3)
+    out["breakout"] = []
+    for s_ in combo[brk].sort_values(ascending=False, kind="stable").index:
+        i = int(np.flatnonzero(~oks.loc[s_].to_numpy())[0])
+        rule, short, _, gap_s, unit = filt[i]
+        g = float(gap_s.get(s_, np.nan))
+        txt = f"{g * 100:.1f}%" if unit == "%" else f"{g * 100:.1f} pts"
+        out["breakout"].append(_setup(s_, rule, short, g, txt, f"{txt} to go"))
+    # Leader Pullback: resting leaders that have not yet reached the zone
+    cpb, lead = ctx["combo_pb"], ctx["lead"]
+    gk = lambda n: sig[n].iloc[k].reindex(df.index).fillna(False).astype(bool)
+    resting = gk("pb_higher_lows") & gk("pb_contracting") & gk("pb_above") & gk("pb_trend")
+    ema21 = sig["ema21"].iloc[k].reindex(df.index)
+    pbl = sig["pb_low"].iloc[k].reindex(df.index)
+    appr = lead.reindex(df.index).fillna(False).astype(bool) & resting & ~gk("pb_touched") & (pbl <= ema21 * 1.05)
+    def pb_item(s_):
+        # the distance to the zone (a low within 2% of the 21 EMA), against
+        # TODAY's EMA; the screen tests each day's own EMA, so a risen EMA can
+        # put a low that never touched the zone inside today's band
+        g = float(pbl[s_] / (ema21[s_] * 1.02) - 1)
+        if g >= 0:
+            return _setup(s_, "Resting leader, not yet at its 21 EMA (zone: a low within 2%)", "Above the zone",
+                          g, f"{g * 100:.1f}%", f"a low {g * 100:.1f}% lower reaches the zone")
+        return _setup(s_, "Resting leader, not yet at its 21 EMA (zone: a low within 2%)", "Above the zone",
+                      0.0, "at the zone",
+                      "today's 21 EMA has risen to its low, which never touched the EMA of its own day")
+    out["luk_pullback"] = [pb_item(s_) for s_ in
+                           cpb[appr.reindex(cpb.index).fillna(False)].sort_values(ascending=False, kind="stable").index]
+    # CAN SLIM: one of its five rules failed (not testable: no backtest)
+    can = [("C: latest-quarter EPS at least +25% y/y", "EPS Q < 25%", df["eps_growth_q"] >= 0.25,
+            0.25 - df["eps_growth_q"]),
+           ("A: fiscal-year EPS at least +25%", "EPS FY < 25%", df["eps_growth_fy"] >= 0.25,
+            0.25 - df["eps_growth_fy"]),
+           ("A: ROE at least 17%", "ROE < 17%", df["roe"] >= 0.17, 0.17 - df["roe"]),
+           ("N: within 15% of the 52-week high", "Far off the high", df["off_high"] >= -0.15,
+            -0.15 - df["off_high"]),
+           ("L: RS rating at least 80", "RS < 80", df["rs"] >= 80, (80 - df["rs"]) / 100)]
+    cok = pd.DataFrame({i: c[2].fillna(False).astype(bool) for i, c in enumerate(can)})
+    # one rule MEASURED and failed — an unreported value is no data, not a miss
+    vals = [df["eps_growth_q"], df["eps_growth_fy"], df["roe"], df["off_high"], df["rs"]]
+    have = pd.DataFrame({i: v.notna() for i, v in enumerate(vals)}).all(axis=1)
+    c1 = have & (cok.sum(axis=1) == 4)
+    out["canslim"] = []
+    for s_ in df.loc[c1, "rs"].sort_values(ascending=False, kind="stable").index:
+        i = int(np.flatnonzero(~cok.loc[s_].to_numpy())[0])
+        rule, short, _, gap_s = can[i]
+        g = float(gap_s[s_])
+        txt = f"{g * 100:.0f}" if i == 4 else f"{g * 100:.1f} pts"
+        out["canslim"].append(_setup(s_, rule, short, g, txt, f"{txt} to go"))
     return out
 
 
@@ -629,6 +749,7 @@ STRATEGIES = [
         "reading": [["Mark Minervini, 'Trade Like a Stock Market Wizard' (2013)", 'https://openlibrary.org/search?q=Trade+Like+a+Stock+Market+Wizard+Minervini'], ["Stan Weinstein, 'Secrets for Profiting in Bull and Bear Markets' (1988) — the four stages", 'https://openlibrary.org/search?q=Secrets+for+Profiting+in+Bull+and+Bear+Markets+Weinstein']],
         "practice": "Each weekend, open the charts of the passers with the highest RS. Note the ones forming a tight base: each pullback shallower than the last, volume drying up. Paper-buy only a breakout above the base's high, with the stop set before entry (Minervini keeps his losses in single digits), and log entry, stop and outcome. After 20 trades compare your average win with your average loss: the method lives on small losses.",
         "rank_key": 'rs',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'names with RS of at least 70 that fail exactly one of the seven price rules',
         "rank_by": "RS rating, highest first",
         "columns": ["rs", "off_high", "above_low", "r3m", "r12m", "adr20"],
         "backtest": 'Minervini Trend Template (all passers)',
@@ -646,6 +767,7 @@ STRATEGIES = [
         "reading": [["Mark Minervini, 'Trade Like a Stock Market Wizard' (2013)", 'https://openlibrary.org/search?q=Trade+Like+a+Stock+Market+Wizard+Minervini'], ["William O'Neil, 'How to Make Money in Stocks' (4th ed., 2009) — the 'L' in CAN SLIM", 'https://openlibrary.org/search?q=How+to+Make+Money+in+Stocks+O%27Neil']],
         "practice": 'Use it as the first page of your weekend review: the same base-and-breakout routine as the Trend Template, applied to fewer, stronger names. Log every paper trade with its RS at entry to see whether the strongest really did better for you.',
         "rank_key": 'rs',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": "names with RS of at least 70 that fail exactly one of the Trend Template's seven price rules",
         "rank_by": "RS rating",
         "columns": ["rs", "off_high", "r1m", "r3m", "r12m", "adr20"],
         "backtest": 'Trend Template, top 25 by RS',
@@ -653,6 +775,7 @@ STRATEGIES = [
     },
     {
         "id": "momentum", "name": "Momentum 12-1", "family": "Academic",
+        "setups": "momentum",
         "source": "Jegadeesh & Titman (1993); AQR 'Fact, Fiction and Momentum'",
         "summary": "Past 12-month return skipping the latest month — the classic cross-sectional momentum.",
         "rules": ["Return from 12 months ago to 1 month ago", "Top decile of the universe"],
@@ -662,6 +785,7 @@ STRATEGIES = [
         "reading": [["Jegadeesh & Titman (1993), 'Returns to Buying Winners and Selling Losers', Journal of Finance", 'https://doi.org/10.1111/j.1540-6261.1993.tb04702.x'], ["Asness, Frazzini, Israel & Moskowitz (2014), 'Fact, Fiction and Momentum Investing', Journal of Portfolio Management", 'https://doi.org/10.3905/jpm.2014.40.5.075'], ["Daniel & Moskowitz (2016), 'Momentum Crashes', Journal of Financial Economics", 'https://doi.org/10.1016/j.jfineco.2015.12.002']],
         "practice": 'Paper-hold the whole list in equal weights for one month, rebalance on the first trading day of each month, and track it against an equal-weighted S&P 500 fund (RSP). The test is the portfolio over years, not any one stock; expect long stretches behind the index and sharp drops in rebounds.',
         "rank_key": 'mom12_1',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'the next decile: the names ranked just below the top 10% by 12-1 return',
         "rank_by": "12-1 return",
         "columns": ["mom12_1", "r1m", "rs", "off_high", "vol252"],
         "backtest": 'Momentum 12-1 (top decile)',
@@ -669,6 +793,7 @@ STRATEGIES = [
     },
     {
         "id": "canslim", "name": "CAN SLIM (partial)", "family": "Practitioner",
+        "setups": "canslim",
         "source": "William O'Neil; David Ryan — US Investing Champion 1985-87",
         "summary": "Growth leaders: accelerating earnings, near highs, strong RS, in a healthy market.",
         "rules": ["C: latest-quarter EPS ≥ +25% y/y", "A: fiscal-year EPS ≥ +25% and ROE ≥ 17%",
@@ -681,6 +806,7 @@ STRATEGIES = [
         "reading": [["William O'Neil, 'How to Make Money in Stocks' (4th ed., 2009)", 'https://openlibrary.org/search?q=How+to+Make+Money+in+Stocks+O%27Neil']],
         "practice": "Watch the list for a stock completing a base. O'Neil's rules: buy no more than 5% past the pivot, on volume well above average, only when the market is in an uptrend, and sell any position 7-8% below cost without exception. Paper-trade it that way and log each rule you were tempted to break.",
         "rank_key": 'rs',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'names that fail exactly one of the five rules, every value reported',
         "rank_by": "RS rating",
         "columns": ["eps_growth_q", "eps_growth_fy", "roe", "rs", "off_high"],
         "backtest": None,
@@ -689,6 +815,7 @@ STRATEGIES = [
     },
     {
         "id": "breakout", "name": "Breakout Leaders (Kullamaggie-style)", "family": "Practitioner",
+        "setups": "breakout",
         "source": "Kristjan Kullamägi — self-reported; no audited record",
         "summary": "The biggest recent movers that are volatile enough to trade and resting near their highs.",
         "rules": ["Top 5% by combined 1/3/6-month return rank", "ADR% (20-day) ≥ 4%",
@@ -700,6 +827,7 @@ STRATEGIES = [
         "reading": [["Kristjan Kullamägi's own write-ups of his setups at qullamaggie.com (self-published)", 'https://qullamaggie.com/']],
         "practice": "Before each open, mark names that have paused for days to weeks after a big move. Paper-buy the break of the opening range, stop at the day's low, and skip trades whose stop is wider than about one ADR. Sell a third to a half after 3-5 days and trail the rest with the 10- or 20-day average. Log results in R (multiples of the risk).",
         "rank_key": '',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'top-5% leaders by the combined 1/3/6-month rank that fail exactly one of the four filters',
         "rank_by": "Combined 1/3/6-month rank",
         "columns": ["r1m", "r3m", "r6m", "adr20", "off_high", "dollar_vol50"],
         "backtest": 'Leaders: top 2% by 1/3/6m (Qullamaggie-style)',
@@ -707,6 +835,7 @@ STRATEGIES = [
     },
     {
         "id": "magic_formula", "name": "Magic Formula", "family": "Academic",
+        "setups": "magic_formula",
         "source": "Joel Greenblatt, 'The Little Book That Beats the Market' (2005)",
         "summary": "Good businesses at cheap prices: high earnings yield plus high return on capital.",
         "rules": ["Earnings yield = EBIT / enterprise value", "Return on capital ≈ ROIC",
@@ -718,6 +847,7 @@ STRATEGIES = [
         "reading": [["Joel Greenblatt, 'The Little Book That Beats the Market' (2005); updated as 'The Little Book That Still Beats the Market' (2010)", 'https://openlibrary.org/search?q=The+Little+Book+That+Beats+the+Market+Greenblatt']],
         "practice": "Paper-buy 5-7 names from the list every 2-3 months until you hold 20-30, sell each after about a year, and repeat. Track the paper portfolio against SPY and RSP for at least three years: Greenblatt's point is that it works only for those who stay with it through years when it lags.",
         "rank_key": '',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'ranks 31-60 by the combined rank: the next 30',
         "rank_by": "Combined rank",
         "columns": ["earnings_yield", "roic", "pe", "ev_ebitda", "r6m"],
         "backtest": 'Magic Formula (top 30)',
@@ -725,6 +855,7 @@ STRATEGIES = [
     },
     {
         "id": "piotroski", "name": "Piotroski F-Score ≥ 8", "family": "Academic",
+        "setups": "piotroski",
         "source": "Joseph Piotroski (2000), 'Value Investing: The Use of Historical Financial Statement Information'",
         "summary": "Nine accounting tests of improving health; 8-9 passes. Cheapest first.",
         "rules": ["Profitability: ROA > 0, CFO > 0, ROA up, CFO > net income",
@@ -738,6 +869,7 @@ STRATEGIES = [
         "practice": 'Once a year, after annual reports are out, paper-buy the cheapest high scorers (lowest P/B on the list), hold 12 months, and compare with RSP. Note which ones were cheap for a reason: the score is a health check, not a guarantee.',
         "rank_asc": True,  # lowest first
         "rank_key": 'pb',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'F-score 7: one of the nine tests short of 8',
         "rank_by": "Price/book, cheapest first",
         "columns": ["piotroski", "pb", "pe", "roe", "r6m"],
         "backtest": 'Piotroski F >= 8 (all)',
@@ -745,6 +877,7 @@ STRATEGIES = [
     },
     {
         "id": "quality_momentum", "name": "Quality + Momentum", "family": "Academic",
+        "setups": "quality_momentum",
         "source": "Novy-Marx (2013) gross profitability, combined with 12-1 momentum",
         "summary": "Most profitable third of the market by gross profit / assets, then the strongest 25 by momentum.",
         "rules": ["Gross profit / total assets in the top 30%", "Then top 25 by 12-1 momentum",
@@ -755,6 +888,7 @@ STRATEGIES = [
         "reading": [["Robert Novy-Marx (2013), 'The Other Side of Value: The Gross Profitability Premium', Journal of Financial Economics", 'https://doi.org/10.1016/j.jfineco.2013.01.003'], ["Jegadeesh & Titman (1993), 'Returns to Buying Winners and Selling Losers', Journal of Finance", 'https://doi.org/10.1111/j.1540-6261.1993.tb04702.x']],
         "practice": 'Paper-hold the list in equal weights, rebalance monthly, and compare with RSP. Watch how much turnover the momentum step causes: costs are part of the result.',
         "rank_key": 'mom12_1',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'ranks 26-50 by 12-1 return inside the top 30% by gross profit / assets',
         "rank_by": "12-1 return",
         "columns": ["gpa", "mom12_1", "gross_margin", "roic", "off_high"],
         "backtest": 'Quality+Momentum: GP/A top 30% -> top 25 by 12-1',
@@ -762,6 +896,7 @@ STRATEGIES = [
     },
     {
         "id": "trending_value", "name": "Trending Value", "family": "Academic",
+        "setups": "trending_value",
         "source": "James O'Shaughnessy, 'What Works on Wall Street' (4th ed.)",
         "summary": "Cheapest decile on six value ratios, then the 25 with the best 6-month return.",
         "rules": ["Value composite: average percentile of E/P, B/P, S/P, CFO/P, EBIT/EV and "
@@ -772,6 +907,7 @@ STRATEGIES = [
         "reading": [["James O'Shaughnessy, 'What Works on Wall Street' (4th ed., 2011)", 'https://openlibrary.org/search?q=What+Works+on+Wall+Street+O%27Shaughnessy']],
         "practice": 'Paper-buy all 25 in equal weights, hold a year, rebalance, and compare with RSP. Look up why each name is cheap: a value list holds many unloved businesses, and that is the point.',
         "rank_key": 'r6m',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'ranks 26-50 by 6-month return inside the cheapest 10%',
         "rank_by": "6-month return",
         "columns": ["value_score", "pe", "pb", "ev_ebitda", "shareholder_yield", "r6m"],
         "backtest": 'Trending Value: value top decile -> top 25 by 6m',
@@ -779,6 +915,7 @@ STRATEGIES = [
     },
     {
         "id": "luk_pullback", "name": "Leader Pullback (Martin Luk)", "family": "Practitioner",
+        "setups": "luk_pullback",
         "source": "Martin Luk — US Investing Champion 2025 (+969.8%), 2024 6th (+283.1%)",
         "summary": "A strong stock resting at support, ready to turn: buy the break of the prior "
                    "day's high with a 1-3% stop, risking 0.5% of the account.",
@@ -795,6 +932,7 @@ STRATEGIES = [
         "reading": [["Martin Luk's own interviews and posts; no book. The rules here follow the playbook summary in the hb_stocks thread on X (2026-10-19)", 'https://x.com/hb_stocks/status/2112038539676574098']],
         "practice": 'Use the plan columns: set your account size and risk, paper-place a buy stop at Entry with the Stop beneath it, and if filled sell a third at 3R, a third at 5R and trail the rest under the 9 EMA. Log every trade in R. Mechanically the record is a losing average, so practise to see whether your own reading of the intraday turn improves on it before any money is at risk.',
         "rank_key": '',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'leaders resting in the pattern (higher lows, contracting ranges, above the 9 and 21 EMA, 21 above 50) that have not yet touched the 21 EMA, with their 3-session low within 5% above it',
         "rank_by": "Combined 1/3/6-month rank",
         "columns": ["entry", "stop", "risk_pct", "target3", "rs", "group_rs", "adr20"],
         "backtest": "Luk pullback (trades, 0.5% risk)",
@@ -807,6 +945,7 @@ STRATEGIES = [
     },
     {
         "id": "low_vol", "name": "Low Volatility", "family": "Academic",
+        "setups": "low_vol",
         "source": "Blitz & van Vliet (2007), 'The Volatility Effect'",
         "summary": "The calmest decile by one-year realised volatility — a defensive tilt.",
         "rules": ["Annualised volatility of daily returns, past year", "Lowest 10% of the universe"],
@@ -817,6 +956,7 @@ STRATEGIES = [
         "practice": 'Paper-hold the list, rebalance monthly or quarterly, and compare both the return and the worst drop with RSP: its claim is a smoother ride, not more return.',
         "rank_asc": True,  # lowest first
         "rank_key": 'vol252',  # the column the list is ranked by ("" = a score with no column)
+        "setup_desc": 'the next decile: the names just above the calmest 10% by one-year volatility',
         "rank_by": "Volatility, lowest first",
         "columns": ["vol252", "r12m", "div_yield", "pe", "off_high"],
         "backtest": 'Low volatility (lowest decile)',
@@ -1106,7 +1246,9 @@ def compute(fund, frames, extras=None, now=None):
         # NOT df.attrs: pandas deep-copies attrs into every derived frame
         extras["closes"] = close.iloc[-CHART_BARS:]
         extras["plan_asof"] = plan_asof
-        extras["setups"] = {"trend_template": tt_setting_up(sig, df)}
+        extras["setups"] = setting_up(df, sig, lists, {
+            "k": k, "magic": magic, "gpa_pool": gpa_pool, "cheap": cheap, "combo": combo,
+            "combo_pb": combo_pb.iloc[-1], "lead": lead.iloc[-1]})
         extras["examples"] = worked_examples(df, sig, lists, {
             "combo": combo, "magic": magic, "gpa_pool": gpa_pool, "cheap": cheap,
             "combo_pb": combo_pb.iloc[-1], "one": {n: v.iloc[-1] for n, v in one.items()},
@@ -1361,7 +1503,7 @@ def meta(lists=None, examples=None):
     for st in STRATEGIES:
         out = {k: st[k] for k in ("id", "name", "family", "source", "summary", "idea", "use",
                                   "rules", "rank_by", "rank_key", "columns", "tested", "reading",
-                                  "practice")}
+                                  "practice", "setup_desc")}
         out["rank_asc"] = bool(st.get("rank_asc"))
         out["evidence"] = evidence(st, ev_doc)
         out["symbols"] = (lists or {}).get(st["id"], [])
