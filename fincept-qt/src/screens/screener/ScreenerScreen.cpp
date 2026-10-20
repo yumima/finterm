@@ -3,13 +3,19 @@
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "screens/ownership/OwnershipUi.h"
+#include "services/markets/MarketDataService.h"
+#include "services/portfolio/PortfolioService.h"
 #include "services/util/DiskCache.h"
+#include "storage/repositories/PortfolioRepository.h"
 #include "ui/theme/Theme.h"
 
 #include <QButtonGroup>
 #include <QComboBox>
 #include <QDesktopServices>
+#include <QDialog>
+#include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QFormLayout>
 #include <QFrame>
 #include <QGuiApplication>
 #include <QHBoxLayout>
@@ -19,6 +25,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QLocale>
+#include <QMenu>
 #include <QPainter>
 #include <QPointer>
 #include <QProgressBar>
@@ -32,6 +40,7 @@
 #include <QStyledItemDelegate>
 #include <QTableWidget>
 #include <QTextBrowser>
+#include <QTime>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -46,6 +55,7 @@ namespace ou = ownership_ui;
 using screener::Kind;
 
 const QString kOverview = QStringLiteral("__overview__");
+const QString kWatchPortfolio = QStringLiteral("Screener Watch");
 
 // The scan downloads ~1,700 two-year price histories on a cold cache (about a
 // minute); with a warm one it is the TradingView request plus the math.
@@ -370,7 +380,9 @@ void ScreenerScreen::build_ui() {
     tools->addWidget(plan_box_);
     ml->addLayout(tools);
     table_ = ou::make_table(kBaseHeaders);
-    table_->setToolTip(QStringLiteral("Click a stock to open it in Equity Research beside the list"));
+    table_->setToolTip(QStringLiteral("Click a stock to open it in Equity Research beside the list; "
+                                      "right-click to add it to a portfolio"));
+    table_->setContextMenuPolicy(Qt::CustomContextMenu);
     table_->setItemDelegateForColumn(2, new SparkDelegate(table_));
     ml->addWidget(table_, 1);
     centre_->addWidget(mid);
@@ -450,6 +462,10 @@ void ScreenerScreen::build_ui() {
     body->addWidget(details_pane_, 1);
     root->addLayout(body, 1);
 
+    flash_timer_ = new QTimer(this);
+    flash_timer_->setSingleShot(true);
+    flash_timer_->setInterval(8000);
+    connect(flash_timer_, &QTimer::timeout, this, [this]() { set_status(flash_prev_, flash_prev_error_); });
     follow_timer_ = new QTimer(this);
     follow_timer_->setSingleShot(true);
     follow_timer_->setInterval(180);
@@ -493,19 +509,10 @@ void ScreenerScreen::build_ui() {
     });
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
         follow_timer_->stop();
-        auto* it = table_->item(row, kSymbolCol);
-        if (!it)
-            return;
-        last_research_ = it->text();
-        // Queued, then focus back to the table: opening ER inside the mouse
-        // release splits the dock area (reparenting this screen, which drops
-        // focus) and builds ER (which may take it) — and then ↓ did nothing.
-        const QString sym = it->text();
-        QTimer::singleShot(0, this, [this, sym]() {
-            emit research_requested(sym, true);
-            table_->setFocus(Qt::OtherFocusReason);
-        });
+        if (auto* it = table_->item(row, kSymbolCol))
+            open_research(it->text());
     });
+    connect(table_, &QTableWidget::customContextMenuRequested, this, &ScreenerScreen::show_row_menu);
     connect(filter_, &QLineEdit::textChanged, this, [this](const QString&) { apply_filter(); });
     connect(setup_btn_, &QPushButton::toggled, this, [this](bool on) {
         setting_up_ = on; // no early return: a restored state may disagree with the button
@@ -719,6 +726,13 @@ void ScreenerScreen::load_meta() {
 }
 
 void ScreenerScreen::set_status(const QString& text, bool error) {
+    if (flash_timer_ && flash_timer_->isActive()) {
+        // the scan wrote while a message is flashed: that is what returns after it
+        flash_prev_ = text;
+        flash_prev_error_ = error;
+        return;
+    }
+    status_error_ = error;
     status_->setText(text);
     status_->setToolTip(text);
     status_->setStyleSheet(
@@ -1267,6 +1281,162 @@ void ScreenerScreen::fill_table() {
         table_->setCurrentCell(sel, kSymbolCol); // keep the place, but do not load it into ER
     follow_timer_->stop();
     filling_ = false;
+}
+
+void ScreenerScreen::open_research(const QString& sym) {
+    last_research_ = sym;
+    // Queued, then focus back to the table: opening ER inside the mouse
+    // release splits the dock area (reparenting this screen, which drops
+    // focus) and builds ER (which may take it) — and then ↓ did nothing.
+    QTimer::singleShot(0, this, [this, sym]() {
+        emit research_requested(sym, true);
+        table_->setFocus(Qt::OtherFocusReason);
+    });
+}
+
+void ScreenerScreen::flash_status(const QString& text, bool error) {
+    if (!flash_timer_->isActive()) { // a flash over a flash keeps the status beneath both
+        flash_prev_ = status_->text();
+        flash_prev_error_ = status_error_;
+    }
+    flash_timer_->stop(); // so set_status shows it rather than holding it for after
+    set_status(text, error);
+    flash_timer_->start();
+}
+
+void ScreenerScreen::show_row_menu(const QPoint& pos) {
+    const int row = table_->rowAt(pos.y());
+    auto* it = row >= 0 ? table_->item(row, kSymbolCol) : nullptr;
+    if (!it)
+        return;
+    follow_timer_->stop(); // the right-press moved the current row: not a pick to follow
+    const QString sym = it->text();
+    QMenu menu(this);
+    menu.addAction(QStringLiteral("Open %1 in Equity Research").arg(sym), this, [this, sym]() { open_research(sym); });
+    menu.addAction(QStringLiteral("Add %1 to a portfolio…").arg(sym), this, [this, sym]() { add_to_portfolio(sym); });
+    menu.exec(table_->viewport()->mapToGlobal(pos));
+}
+
+// A position at the current price: the screener's price shows at once, then a
+// fresh quote replaces it unless the reader has typed their own. The dialog is
+// the confirmation — nothing is recorded until Add.
+void ScreenerScreen::add_to_portfolio(const QString& sym) {
+    const auto listed = screener::num(result_.rows.value(sym), QStringLiteral("price"));
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(QStringLiteral("Add %1 to a portfolio").arg(sym));
+    auto* form = new QFormLayout(&dlg);
+    auto* pf = new QComboBox;
+    pf->setEditable(true);
+    pf->setToolTip(QStringLiteral("An existing portfolio, or type a name to create one"));
+    // Each item carries its portfolio's id: two portfolios may share a name.
+    int watch = -1;
+    if (const auto all = PortfolioRepository::instance().list_portfolios(); all.is_ok())
+        for (const auto& p : all.value()) {
+            if (watch < 0 && p.name.trimmed().compare(kWatchPortfolio, Qt::CaseInsensitive) == 0)
+                watch = pf->count();
+            pf->addItem(p.name.trimmed(), p.id);
+        }
+    if (watch < 0) {
+        pf->insertItem(0, kWatchPortfolio); // no id: created on Add
+        watch = 0;
+    }
+    pf->setCurrentIndex(watch);
+    form->addRow(QStringLiteral("Portfolio"), pf);
+    auto* qty = new QDoubleSpinBox;
+    qty->setRange(0.01, 1e9);
+    qty->setDecimals(2);
+    qty->setValue(1);
+    form->addRow(QStringLiteral("Shares"), qty);
+    auto* px = new QDoubleSpinBox;
+    px->setRange(0, 1e7);
+    px->setDecimals(2);
+    px->setPrefix(QStringLiteral("$"));
+    px->setGroupSeparatorShown(true);
+    form->addRow(QStringLiteral("Price"), px);
+    auto* note = new QLabel;
+    note->setWordWrap(true);
+    note->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
+    form->addRow(note);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
+    buttons->button(QDialogButtonBox::Ok)->setText(QStringLiteral("Add"));
+    form->addRow(buttons);
+    connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
+    connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
+
+    const auto can_add = [=]() {
+        buttons->button(QDialogButtonBox::Ok)->setEnabled(px->value() > 0 && !pf->currentText().trimmed().isEmpty());
+    };
+    bool typed = false; // the reader's own price is never replaced by the quote
+    bool setting = false;
+    const auto set_price = [&setting, px](double v) {
+        setting = true;
+        px->setDecimals(v < 1 ? 4 : 2); // cents would round a sub-dollar price's cost basis
+        px->setValue(v);
+        setting = false;
+    };
+    connect(px, &QDoubleSpinBox::valueChanged, &dlg, [&typed, &setting, note, can_add](double) {
+        if (setting)
+            return;
+        typed = true;
+        note->setText(QStringLiteral("Your price."));
+        can_add();
+    });
+    connect(pf, &QComboBox::currentTextChanged, &dlg, [can_add](const QString&) { can_add(); });
+    if (listed && *listed > 0) {
+        set_price(*listed);
+        note->setText(QStringLiteral("The screener's price — fetching a quote…"));
+    } else {
+        note->setText(QStringLiteral("Fetching a quote…"));
+    }
+    can_add();
+
+    QPointer<QDialog> alive(&dlg);
+    auto& mds = services::MarketDataService::instance();
+    mds.invalidate_quotes({sym}); // "current" means now, not a cached quote
+    mds.fetch_quotes({sym}, [alive, sym, &typed, set_price, note, can_add, listed](bool ok,
+                                                                                    QVector<services::QuoteData> q) {
+        if (!alive || typed) // closed already (the captured locals are gone), or the reader's price stands
+            return;
+        for (const auto& d : q) {
+            if (d.symbol.compare(sym, Qt::CaseInsensitive) == 0 && d.price > 0) {
+                set_price(d.price);
+                // the fetch time, not the price's: out of hours the latest
+                // quote is the last close
+                note->setText(QStringLiteral("Latest quote, fetched %1.").arg(QTime::currentTime().toString("HH:mm")));
+                can_add();
+                return;
+            }
+        }
+        note->setText(listed && *listed > 0
+                          ? QStringLiteral("No quote%1 — the screener's price.").arg(ok ? "" : " (fetch failed)")
+                          : QStringLiteral("No price available — enter one."));
+    });
+
+    if (dlg.exec() != QDialog::Accepted)
+        return;
+    const QString name = pf->currentText().trimmed();
+    const double shares = qty->value(), price = px->value();
+    auto& ps = services::PortfolioService::instance();
+    // the picked item's own id; a typed name finds or creates by name
+    QString id = pf->currentIndex() >= 0 && pf->itemText(pf->currentIndex()) == pf->currentText()
+                     ? pf->currentData().toString()
+                     : QString();
+    if (id.isEmpty())
+        id = ps.find_or_create_portfolio(name);
+    if (id.isEmpty()) {
+        flash_status(QStringLiteral("Could not open the portfolio \"%1\" — see the log").arg(name), true);
+        return;
+    }
+    ps.note_symbol_currency(sym, QStringLiteral("USD")); // the universe is NASDAQ/NYSE/AMEX listings
+    if (!ps.add_asset(id, sym, shares, price)) {
+        flash_status(QStringLiteral("Could not add %1 to %2 — see the log").arg(sym, name), true);
+        return;
+    }
+    flash_status(QStringLiteral("Added %1 %2 at $%3 to %4")
+                     .arg(QLocale().toString(shares, 'g', 10), sym,
+                          QLocale().toString(price, 'f', price < 1 ? 4 : 2), name),
+                 false);
 }
 
 void ScreenerScreen::apply_filter() {

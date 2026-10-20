@@ -17,6 +17,7 @@ class QStackedWidget;
 class QTableWidget;
 class QTextBrowser;
 class QButtonGroup;
+class QPoint;
 class QUrl;
 class QTimer;
 
@@ -39,7 +40,9 @@ namespace fincept::screens {
 /// Clicking a name opens Equity Research in the right half instead — the list
 /// stays in view, the details sit beside it, as in Portfolio; clicking a
 /// strategy puts ER away and brings the write-up back. Arrowing
-/// down the list follows in ER once it is open.
+/// down the list follows in ER once it is open. Right-click a name for the
+/// same, or to add it to a portfolio ("Screener Watch" by default) at the
+/// current price.
 ///
 /// The record sits on every strategy because the measurement found NO screen
 /// beating the equal-weighted S&P 500 with significance (2010-2026): a list is
@@ -105,10 +108,18 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     bool has_lists() const { return !result_.meta_only; }
     void update_empty_label();
     void update_plan_cells();
+    void open_research(const QString& sym); // a click or the menu: ER beside the list
+    void show_row_menu(const QPoint& pos); // right-click: Equity Research | Add to portfolio
+    void flash_status(const QString& text, bool error); // for a while, then the scan's status again
+    void add_to_portfolio(const QString& sym);
 
     QComboBox*    universe_ = nullptr;
     QPushButton*  refresh_btn_ = nullptr;
     QLabel*       status_ = nullptr;
+    bool          status_error_ = false;
+    QTimer*       flash_timer_ = nullptr; // a flashed message's lifetime
+    QString       flash_prev_;            // the status under it
+    bool          flash_prev_error_ = false;
     QLabel*       market_ = nullptr;
     QWidget*      progress_row_ = nullptr;
     QProgressBar* progress_ = nullptr;

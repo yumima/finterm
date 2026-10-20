@@ -319,6 +319,28 @@ void PortfolioService::create_portfolio(const QString& name, const QString& owne
     }
 }
 
+QString PortfolioService::find_or_create_portfolio(const QString& name, const QString& currency) {
+    const QString want = name.trimmed();
+    if (want.isEmpty())
+        return {};
+    auto& repo = PortfolioRepository::instance();
+    const auto all = repo.list_portfolios();
+    if (all.is_err()) {
+        LOG_ERROR("PortfolioSvc", "Failed to load portfolios: " + QString::fromStdString(all.error()));
+        return {};
+    }
+    for (const auto& p : all.value())
+        if (p.name.trimmed().compare(want, Qt::CaseInsensitive) == 0)
+            return p.id;
+    auto r = repo.create_portfolio(want, QString(""), currency); // owner is NOT NULL: empty, never null
+    if (r.is_err()) {
+        LOG_ERROR("PortfolioSvc", "Failed to create portfolio: " + QString::fromStdString(r.error()));
+        return {};
+    }
+    load_portfolios();
+    return r.value();
+}
+
 void PortfolioService::delete_portfolio(const QString& id) {
     invalidate_cache(id);
     invalidate_transactions(id);
@@ -1109,24 +1131,25 @@ portfolio::LedgerPosition PortfolioService::rebuild_position(const QString& port
     return pos;
 }
 
-void PortfolioService::add_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
+bool PortfolioService::add_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
                                  const QString& date) {
     if (qty <= 0) {
         LOG_ERROR("PortfolioSvc", QString("Rejected BUY of %1 x%2 — quantity must be positive").arg(symbol).arg(qty));
-        return;
+        return false;
     }
     auto& repo = PortfolioRepository::instance();
     QString txn_date = date.isEmpty() ? QDateTime::currentDateTimeUtc().toString(Qt::ISODate) : date;
     auto r = repo.add_transaction(portfolio_id, symbol, "BUY", qty, price, txn_date);
     if (r.is_err()) {
         LOG_ERROR("PortfolioSvc", "Failed to record buy: " + QString::fromStdString(r.error()));
-        return;
+        return false;
     }
     rebuild_position(portfolio_id, symbol);
 
     invalidate_transactions(portfolio_id);
     invalidate_cache(portfolio_id);
     emit asset_added(portfolio_id);
+    return true;
 }
 
 void PortfolioService::sell_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
@@ -3234,6 +3257,15 @@ portfolio::FxRates PortfolioService::fx_rates_for(const QString& portfolio_id,
     return out;
 }
 
+void PortfolioService::note_symbol_currency(const QString& symbol, const QString& currency) {
+    const QString up = symbol.toUpper();
+    if (up.isEmpty() || currency.isEmpty())
+        return;
+    fincept::CacheManager::instance().put(symbol_currency_key(up), currency, kSymbolCurrencyTtlSec);
+    QMutexLocker lock(&cache_mutex_);
+    currency_memo_.insert(up, currency);
+}
+
 void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
     QStringList missing;
     {
@@ -3275,8 +3307,12 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                                                           kSymbolCurrencyTtlSec);
                     QMutexLocker lock(&self->cache_mutex_);
                     self->currency_memo_.insert(sym, ccy);
-                } else {
-                    // Remember the failure, briefly, so the retry is paced.
+                } else if (QMutexLocker lock(&self->cache_mutex_); !self->currency_memo_.contains(sym)) {
+                    // Remember the failure, briefly, so the retry is paced —
+                    // unless a caller noted the currency meanwhile
+                    // (note_symbol_currency): a lookup that lost must not
+                    // overwrite a known answer with "unknown".
+                    lock.unlock();
                     fincept::CacheManager::instance().put(symbol_currency_key(sym),
                                                           QString::fromLatin1(kCurrencyUnknown),
                                                           kCurrencyUnknownTtlSec);

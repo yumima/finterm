@@ -35,6 +35,13 @@ class PortfolioService : public QObject {
     /// has always supported this; nothing surfaced it, so a portfolio's name
     /// was fixed at creation and could only be changed by editing the database.
     void update_portfolio(const QString& id, const QString& name, const QString& owner, const QString& currency);
+    /// The portfolio named `name` (case-insensitive), created in `currency`
+    /// when there is none. Unlike create_portfolio it does not emit
+    /// portfolio_created — that selects the new portfolio in an open
+    /// Portfolio screen, which a caller filing a name from elsewhere (the
+    /// Screener) must not do. Lists refresh through portfolios_loaded.
+    /// Empty on a database error.
+    QString find_or_create_portfolio(const QString& name, const QString& currency = QStringLiteral("USD"));
 
     // ── Summary (assets + live quotes) ───────────────────────────────────────
     void load_summary(const QString& portfolio_id);
@@ -44,7 +51,8 @@ class PortfolioService : public QObject {
     // Both record a transaction and then re-derive the asset row from the full
     // transaction log (rebuild_position). The log is the source of truth; the
     // asset row is a cache of its replay.
-    void add_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
+    /// False when nothing was recorded (non-positive quantity, a DB error).
+    bool add_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
                    const QString& date = {});
     void sell_asset(const QString& portfolio_id, const QString& symbol, double qty, double price,
                     const QString& date = {});
@@ -198,6 +206,12 @@ class PortfolioService : public QObject {
     /// Empty when not yet known. "GBp"/"GBX" (London pence) normalise to GBP
     /// via fx_price_factor().
     static QString cached_symbol_currency(const QString& symbol);
+
+    /// Record a trading currency the caller knows by construction (the
+    /// Screener's universe is NASDAQ/NYSE/AMEX, so USD) — no vendor lookup,
+    /// which can fail (Yahoo "Invalid Crumb") and then parks the holding
+    /// unvalued for the 6h retry window. Overwrites an "unknown" marker.
+    void note_symbol_currency(const QString& symbol, const QString& currency);
 
     /// Historical instrument→portfolio FX for `portfolio_id`, seeded with
     /// `summary`'s current rates so a symbol without a captured series still
