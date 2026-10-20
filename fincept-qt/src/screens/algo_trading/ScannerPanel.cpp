@@ -364,10 +364,10 @@ void ScannerPanel::build_ui() {
     auto* quick_row = new QHBoxLayout;
     quick_row->setSpacing(8);
 
-    auto* nifty_btn = new QPushButton("MEGA CAPS", right_col);
-    nifty_btn->setCursor(Qt::PointingHandCursor);
-    nifty_btn->setFixedHeight(26);
-    nifty_btn->setStyleSheet(
+    auto* megacaps_btn = new QPushButton("MEGA CAPS", right_col);
+    megacaps_btn->setCursor(Qt::PointingHandCursor);
+    megacaps_btn->setFixedHeight(26);
+    megacaps_btn->setStyleSheet(
         QString("QPushButton { background: %1; color: %2; border: 1px solid %3;"
                 " font-size: %4px; font-weight: 700; %5 padding: 2px 10px; }"
                 "QPushButton:hover { background: %6; color: %7; }")
@@ -375,17 +375,17 @@ void ScannerPanel::build_ui() {
             .arg(fincept::ui::fonts::TINY)
             .arg(kMonoFont())
             .arg(fincept::ui::colors::BG_HOVER(), fincept::ui::colors::TEXT_PRIMARY()));
-    connect(nifty_btn, &QPushButton::clicked, this,
+    connect(megacaps_btn, &QPushButton::clicked, this,
             [this]() { symbols_edit_->setPlainText(megacap_symbols().join("\n")); });
-    quick_row->addWidget(nifty_btn);
+    quick_row->addWidget(megacaps_btn);
 
-    auto* banknifty_btn = new QPushButton("BANKS", right_col);
-    banknifty_btn->setCursor(Qt::PointingHandCursor);
-    banknifty_btn->setFixedHeight(26);
-    banknifty_btn->setStyleSheet(nifty_btn->styleSheet());
-    connect(banknifty_btn, &QPushButton::clicked, this,
+    auto* banks_btn = new QPushButton("BANKS", right_col);
+    banks_btn->setCursor(Qt::PointingHandCursor);
+    banks_btn->setFixedHeight(26);
+    banks_btn->setStyleSheet(megacaps_btn->styleSheet());
+    connect(banks_btn, &QPushButton::clicked, this,
             [this]() { symbols_edit_->setPlainText(bank_symbols().join("\n")); });
-    quick_row->addWidget(banknifty_btn);
+    quick_row->addWidget(banks_btn);
     quick_row->addStretch();
 
     right_vl->addLayout(quick_row);

@@ -47,7 +47,7 @@ struct TopicPolicy {
     /// subscriber's owner window is inactive. Declarative only in this
     /// single-window finterm build — DataHub does NOT consult this flag
     /// during dispatch (upstream's WindowFrame-aware filtering wasn't
-    /// ported). Kept so producers like OptionChainService can set it
+    /// ported). Kept so producers can set it
     /// without #ifdef churn; promoting it to active enforcement requires
     /// the multi-window WindowFrame infrastructure.
     bool pause_when_inactive = false;

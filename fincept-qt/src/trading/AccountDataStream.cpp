@@ -8,8 +8,6 @@
 
 #include <QDate>
 #include <QDateTime>
-#include <QJsonDocument>
-#include <QJsonObject>
 #include <QMetaObject>
 #include <QPointer>
 #include <QtConcurrent>
@@ -546,38 +544,13 @@ void AccountDataStream::fetch_clock() {
 // ── WebSocket ───────────────────────────────────────────────────────────────
 
 void AccountDataStream::ws_init() {
-    // Currently only AngelOne has WebSocket support wired up
-    // Zerodha WS exists but isn't integrated into equity trading yet
-    if (broker_id_ != "angelone")
-        return;
-
-    auto creds = AccountManager::instance().load_credentials(account_id_);
-    if (creds.api_key.isEmpty() || creds.additional_data.isEmpty())
-        return;
-
-    // Parse feed_token and client_code from additional_data JSON
-    auto doc = QJsonDocument::fromJson(creds.additional_data.toUtf8());
-    if (!doc.isObject())
-        return;
-    auto obj = doc.object();
-    const QString feed_token = obj.value("feed_token").toString();
-    const QString client_code = obj.value("client_code").toString();
-    if (feed_token.isEmpty() || client_code.isEmpty())
-        return;
-
-    // Dynamically create AngelOneWebSocket (avoids hard header dependency)
-    // The AngelOneWebSocket class is in trading/websocket/AngelOneWebSocket.h
-    // For now, we include it directly — this can be abstracted later
-    // NOTE: This is deferred to Phase 5 when we wire the screen to DataStreamManager.
-    // At this point, ws_ stays null and polling is used.
-    // The ws_init implementation will be completed when EquityTradingScreen is refactored.
-    LOG_INFO(ADS_TAG, QString("WebSocket available for account %1 (AngelOne) — deferred to screen wiring").arg(account_id_));
+    // No broker has a WebSocket feed wired in yet; ws_ stays null and the
+    // polling timers carry quotes and portfolio.
 }
 
 void AccountDataStream::ws_teardown() {
     if (!ws_)
         return;
-    // The WS object will be an AngelOneWebSocket — call close and deleteLater
     QMetaObject::invokeMethod(ws_, "close");
     ws_->deleteLater();
     ws_ = nullptr;

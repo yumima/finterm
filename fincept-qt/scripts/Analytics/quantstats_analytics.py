@@ -58,8 +58,8 @@ _ticker_cache = {}
 def _resolve_ticker(ticker: str) -> str:
     """Try to resolve a bare ticker to a yfinance-compatible symbol.
 
-    Some portfolios store bare symbols like 'TCS' or 'RELIANCE' without
-    the exchange suffix. yfinance needs 'TCS.NS' or 'RELIANCE.NS' for Indian stocks.
+    Some portfolios store bare symbols like 'SHOP' or 'BARC' without
+    the exchange suffix. yfinance needs 'SHOP.TO' or 'BARC.L' for non-US listings.
     This function tries the ticker as-is first, then common suffixes.
     """
     if ticker in _ticker_cache:
@@ -84,8 +84,8 @@ def _resolve_ticker(ticker: str) -> str:
         _ticker_cache[ticker] = ticker
         return ticker
 
-    # Try common exchange suffixes (Indian exchanges first since this app has Indian broker integrations)
-    for suffix in ['.NS', '.BO', '.L', '.TO', '.AX', '.HK', '.T']:
+    # Try common exchange suffixes
+    for suffix in ['.L', '.TO', '.AX', '.HK', '.T']:
         candidate = ticker + suffix
         if _quick_check(candidate):
             sys.stderr.write(f"[QuantStats] Resolved bare ticker '{ticker}' -> '{candidate}'\n")

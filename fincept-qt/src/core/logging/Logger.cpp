@@ -29,7 +29,7 @@ constexpr qint64 kFlushBytesThreshold = 4 * 1024; // 4 KB — typical disk page
 constexpr qint64 kFlushIntervalMs = 500;          // half a second worth of buffered logs
 
 // Every line is scrubbed of credential-shaped values before it is written:
-// URLs carrying ?token= / ?api_key= (the Finnhub and Zerodha WebSockets put
+// URLs carrying ?token= / ?api_key= (the Finnhub WebSocket puts
 // the key in the URL, and every connect/disconnect logged it), JSON bodies
 // echoing "access_token", and Authorization headers. Logs are plain files a
 // user may attach to a bug report; a secret must never reach them.

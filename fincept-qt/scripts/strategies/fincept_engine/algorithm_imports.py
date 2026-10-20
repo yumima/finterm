@@ -863,10 +863,6 @@ class EquityExchange:
     def __init__(self):
         self.hours = ExchangeHours(); self.time_zone = "America/New_York"
 
-# --- IndiaOrderProperties ---
-class IndiaOrderProperties:
-    def __init__(self, exchange=None): self.exchange = exchange or ""
-
 # --- ETFConstituentData ---
 class ETFConstituentData:
     def __init__(self):

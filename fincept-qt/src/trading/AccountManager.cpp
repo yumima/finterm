@@ -141,7 +141,7 @@ BrokerAccount AccountManager::add_account(const QString& broker_id, const QStrin
     // Create linked paper portfolio
     auto* broker = BrokerRegistry::instance().get(broker_id);
     double paper_balance = 1000000.0;
-    QString currency = "INR";
+    QString currency = "USD";
     if (broker) {
         const auto prof = broker->profile();
         if (std::isfinite(prof.default_paper_balance) && prof.default_paper_balance > 0.0)
@@ -321,7 +321,7 @@ bool AccountManager::has_account(const QString& account_id) const {
 // ── Credentials ─────────────────────────────────────────────────────────────
 
 // NOTE: creds.additional_data is an opaque JSON blob owned by the individual
-// broker dialog. E.g., Zerodha stores {"password":"...","totp_secret":"..."}.
+// broker dialog. E.g., {"client_code":"..."}.
 // AccountManager does not interpret it.
 void AccountManager::save_credentials(const QString& account_id, const BrokerCredentials& creds) {
     auto& secure = SecureStorage::instance();

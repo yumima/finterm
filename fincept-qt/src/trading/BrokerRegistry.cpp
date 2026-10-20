@@ -6,22 +6,10 @@
 #include "storage/secure/SecureStorage.h"
 #include "storage/sqlite/Database.h"
 #include "trading/brokers/GenericBroker.h"
-#include "trading/brokers/aliceblue/AliceBlueBroker.h"
 #include "trading/brokers/alpaca/AlpacaBroker.h"
-#include "trading/brokers/angelone/AngelOneBroker.h"
-#include "trading/brokers/dhan/DhanBroker.h"
-#include "trading/brokers/fivepaisa/FivePaisaBroker.h"
-#include "trading/brokers/fyers/FyersBroker.h"
-#include "trading/brokers/groww/GrowwBroker.h"
 #include "trading/brokers/ibkr/IBKRBroker.h"
-#include "trading/brokers/iifl/IIFLBroker.h"
-#include "trading/brokers/kotak/KotakBroker.h"
-#include "trading/brokers/motilal/MotilalBroker.h"
 #include "trading/brokers/saxo/SaxoBankBroker.h"
-#include "trading/brokers/shoonya/ShoonyaBroker.h"
 #include "trading/brokers/tradier/TradierBroker.h"
-#include "trading/brokers/upstox/UpstoxBroker.h"
-#include "trading/brokers/zerodha/ZerodhaBroker.h"
 
 namespace fincept::trading {
 
@@ -109,20 +97,6 @@ BrokerRegistry::BrokerRegistry() {
 }
 
 void BrokerRegistry::register_all() {
-    // Indian brokers
-    brokers_["fyers"] = std::make_unique<FyersBroker>();
-    brokers_["zerodha"] = std::make_unique<ZerodhaBroker>();
-    brokers_["angelone"] = std::make_unique<AngelOneBroker>();
-    brokers_["upstox"] = std::make_unique<UpstoxBroker>();
-    brokers_["dhan"] = std::make_unique<DhanBroker>();
-    brokers_["kotak"] = std::make_unique<KotakBroker>();
-    brokers_["groww"] = std::make_unique<GrowwBroker>();
-    brokers_["aliceblue"] = std::make_unique<AliceBlueBroker>();
-    brokers_["fivepaisa"] = std::make_unique<FivePaisaBroker>();
-    brokers_["iifl"] = std::make_unique<IIFLBroker>();
-    brokers_["motilal"] = std::make_unique<MotilalBroker>();
-    brokers_["shoonya"] = std::make_unique<ShoonyaBroker>();
-
     // US brokers
     brokers_["alpaca"] = std::make_unique<AlpacaBroker>();
     brokers_["ibkr"] = std::make_unique<IBKRBroker>();

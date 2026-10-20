@@ -75,11 +75,11 @@ static QString list_ss() {
 // ── yfinance symbol conversion ───────────────────────────────────────────────
 
 /// Convert exchange + symbol to yfinance-compatible ticker.
-/// The /market/search API returns clean symbols (e.g. "RELIANCE") with exchange
+/// The /market/search API returns clean symbols (e.g. "SAP") with exchange
 /// as a separate field. yfinance needs suffixed tickers for non-US exchanges.
 static QString to_yfinance_symbol(const QString& symbol, const QString& exchange, const QString& country = {}) {
     // The daemon's search returns canonical Yahoo symbols — foreign listings
-    // already carry their suffix (e.g. "RELIANCE.NS"). Never re-suffix those,
+    // already carry their suffix (e.g. "SAP.DE"). Never re-suffix those,
     // or exchange-name collisions would double-append ("SPCX.VI" → "SPCX.VI.VI").
     if (symbol.contains('.'))
         return symbol;
@@ -93,9 +93,6 @@ static QString to_yfinance_symbol(const QString& symbol, const QString& exchange
     }
 
     static const QHash<QString, QString> suffix_map = {
-        // India
-        {"NSE", ".NS"},
-        {"BSE", ".BO"},
         // Asia-Pacific
         {"HKEX", ".HK"},
         {"TSE", ".T"},
@@ -251,12 +248,6 @@ void CommandBar::build_commands() {
          {"deriv", "derivatives", "options"},
          "",
          {"derivatives", "options", "futures"}},
-        {"fno",
-         "F&O",
-         "Sensibull-style F&O analytics: option chain, strategy builder, OI, max-pain, multi-straddle",
-         {"fno", "f&o", "fando", "options", "chain", "strategy"},
-         "",
-         {"fno", "options", "option-chain", "strategy-builder", "open-interest"}},
         // Research
         {"equity_research",
          "Equity Research",
@@ -1248,7 +1239,7 @@ void CommandBar::on_asset_results(const QJsonArray& results) {
         if (symbol.isEmpty())
             continue;
 
-        // Convert to yfinance-compatible ticker (e.g. RELIANCE → RELIANCE.NS)
+        // Convert to yfinance-compatible ticker (e.g. SAP → SAP.DE)
         const QString yf_symbol = to_yfinance_symbol(symbol, exchange, country);
 
         auto* item = new QListWidgetItem(list_);

@@ -96,9 +96,6 @@ class OrderDirection(IntEnum):
 
 class Market:
     USA = "usa"
-    INDIA = "india"
-    NSE = "nse"
-    BSE = "bse"
     CME = "cme"
     COMEX = "comex"
     EUREX = "eurex"
@@ -108,8 +105,6 @@ class Market:
     INTERACTIVE_BROKERS = "interactive_brokers"
     KRAKEN = "kraken"
     BYBIT = "bybit"
-    MCX = "mcx"
-    NFO = "nfo"
 
 
 class InsightDirection(IntEnum):
@@ -215,10 +210,7 @@ class BrokerageName(IntEnum):
     BINANCE_BROKERAGE = 6
     GDAX_BROKERAGE = 7
     ALPACA_BROKERAGE = 8
-    ZERODHA_BROKERAGE = 9
-    SAMCO_BROKERAGE = 10
     KRAKEN_BROKERAGE = 11
-    FYERS_BROKERAGE = 12
     BYBIT = 13
     BYBIT_BROKERAGE = 13
     COINBASE = 14
@@ -248,10 +240,7 @@ class BrokerageName(IntEnum):
     BinanceBrokerage = 6
     GDAXBrokerage = 7
     AlpacaBrokerage = 8
-    ZerodhaBrokerage = 9
-    SamcoBrokerage = 10
     KrakenBrokerage = 11
-    FyersBrokerage = 12
     BybitBrokerage = 13
     CoinbaseBrokerage = 14
     AxosBrokerage = 15

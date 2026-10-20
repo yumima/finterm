@@ -34,7 +34,6 @@ class BrokerRegion(str, Enum):
     """Broker region classification."""
     GLOBAL = "global"
     US = "us"
-    INDIA = "india"
     EUROPE = "europe"
     ASIA = "asia"
 
@@ -232,38 +231,6 @@ SUPPORTED_BROKERS: Dict[str, BrokerInfo] = {
         default_symbols=["BTC/USD", "ETH/USD", "SOL/USD"],
         maker_fee=0.00015,
         taker_fee=0.00035,
-        websocket_enabled=True,
-    ),
-
-    # Indian stock brokers
-    "zerodha": BrokerInfo(
-        id="zerodha",
-        name="zerodha",
-        display_name="Zerodha (Kite)",
-        broker_type=BrokerType.STOCKS,
-        region=BrokerRegion.INDIA,
-        supports_margin=True,
-        supports_futures=True,
-        supports_options=True,
-        max_leverage=5.0,
-        default_symbols=["RELIANCE", "TCS", "HDFCBANK", "INFY"],
-        maker_fee=0.0,
-        taker_fee=0.0003,
-        websocket_enabled=True,
-    ),
-    "fyers": BrokerInfo(
-        id="fyers",
-        name="fyers",
-        display_name="Fyers",
-        broker_type=BrokerType.STOCKS,
-        region=BrokerRegion.INDIA,
-        supports_margin=True,
-        supports_futures=True,
-        supports_options=True,
-        max_leverage=5.0,
-        default_symbols=["RELIANCE", "TCS", "HDFCBANK", "INFY"],
-        maker_fee=0.0,
-        taker_fee=0.0003,
         websocket_enabled=True,
     ),
 

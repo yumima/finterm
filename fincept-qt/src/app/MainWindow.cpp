@@ -39,7 +39,6 @@
 #include "screens/docs/DocsScreen.h"
 #include "screens/economics/EconomicsScreen.h"
 #include "screens/equity_research/EquityResearchScreen.h"
-#include "screens/fno/FnoScreen.h"
 #include "services/portfolio/PortfolioService.h"
 #include "screens/equity_trading/EquityTradingScreen.h"
 #include "screens/excel/ExcelScreen.h"
@@ -78,7 +77,6 @@
 #include "screens/watchlist/WatchlistScreen.h"
 #include "services/updater/UpdateService.h"
 #include "services/workspace/WorkspaceManager.h"
-#include "trading/instruments/InstrumentService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/navigation/DockStatusBar.h"
 #include "ui/navigation/DockToolBar.h"
@@ -653,7 +651,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 {"panel_news", {"News Feed", "news"}},
                 {"panel_portfolio", {"Portfolio", "portfolio"}},
                 {"panel_markets", {"Markets", "markets"}},
-                {"panel_fno", {"F&O", "fno"}},
                 {"panel_crypto", {"Crypto Trading", "crypto_trading"}},
                 {"panel_equity", {"Equity Trading", "equity_trading"}},
                 {"panel_algo", {"Algo Trading", "algo_trading"}},
@@ -1107,7 +1104,6 @@ void MainWindow::setup_docking_mode() {
 void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("dashboard", []() { return new screens::DashboardScreen; });
     dock_router_->register_factory("markets", []() { return new screens::MarketsScreen; });
-    dock_router_->register_factory("fno", []() { return new screens::fno::FnoScreen; });
     dock_router_->register_factory("crypto_trading", []() { return new screens::CryptoTradingScreen; });
     dock_router_->register_factory("news", []() { return new screens::NewsScreen; });
     dock_router_->register_factory("forum", []() { return new screens::ForumScreen; });
@@ -1370,11 +1366,6 @@ void MainWindow::on_auth_state_changed() {
                 services::UpdateService::instance().set_dialog_parent(this);
                 services::UpdateService::instance().check_for_updates(true);
             });
-            // Warm instrument cache in background — only loaded if not already cached.
-            // Runs concurrently while the user reads the dashboard (3-5s head start).
-            fincept::trading::InstrumentService::instance().load_from_db_async("zerodha");
-            fincept::trading::InstrumentService::instance().load_from_db_async("angelone");
-            fincept::trading::InstrumentService::instance().load_from_db_async("groww");
         } else {
             // Localhost-only fork: no paywall. Honor the same PIN-gate
             // guard as the paid branch — without it, on_auth_state_changed

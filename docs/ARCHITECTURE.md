@@ -129,13 +129,11 @@ fincept-qt/src/
 │   ├── OrderMatcher.cpp/h          # Order matching engine
 │   ├── PaperTrading.cpp/h          # Paper trading engine
 │   ├── UnifiedTrading.cpp/h        # Unified trading facade
-│   └── brokers/                    # 20+ broker implementations
-│       ├── ZerodhaBroker.h
-│       ├── FyersBroker.cpp/h
-│       ├── UpstoxBroker.h
+│   └── brokers/                    # Broker implementations
 │       ├── IBKRBroker.h
 │       ├── AlpacaBroker.h
 │       ├── SaxoBankBroker.h
+│       ├── TradierBroker.h
 │       └── ...
 │
 ├── services/

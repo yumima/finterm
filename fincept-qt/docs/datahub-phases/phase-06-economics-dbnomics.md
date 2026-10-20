@@ -42,7 +42,7 @@ the single entry point already.
 - **Economics tab panels** — 32 per-source files under
   `src/screens/economics/panels/` (FRED, World Bank, IMF, OECD,
   ECB, BIS, BLS, BEA, Census, SEC EDGAR, ONS UK, Eurostat, Bank of
-  Japan, PBOC, RBI, etc. — verified 64 files = 32 panels × .h/.cpp).
+  Japan, PBOC, etc. — verified 64 files = 32 panels × .h/.cpp).
 - **DBnomics screen components** — 4 files under
   `src/screens/dbnomics/...`.
 - **AkShare Data** and **Asia Markets** screens — use

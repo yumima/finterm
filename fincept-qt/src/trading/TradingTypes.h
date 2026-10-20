@@ -189,7 +189,7 @@ struct UnifiedOrder {
     double stop_loss = 0;
     double take_profit = 0;
     bool amo = false;
-    QString instrument_token; // broker-specific numeric token (e.g. Zerodha/AliceBlue/Dhan)
+    QString instrument_token; // broker-specific numeric token
 };
 
 struct BrokerPosition {
@@ -276,7 +276,7 @@ struct BrokerCandle {
     double close = 0;
     double volume = 0;
     // Open Interest — populated when the broker historical endpoint returns it
-    // (Zerodha c[6] when oi=1 is requested; F&O contracts only). Defaults to 0
+    // (futures/options contracts only). Defaults to 0
     // so existing 6-arg brace-init call sites remain source-compatible.
     double oi = 0;
 };
@@ -367,53 +367,7 @@ struct BasketMargin {
     QVector<OrderMargin> orders; // per-order breakdown
 };
 
-// ── GTT (Good Till Triggered) Orders — Zerodha-specific ──────────────────────
-
-enum class GttOrderType {
-    Single, // fires when price hits one trigger
-    OCO,    // one-cancels-other: two triggers (e.g. stop-loss + target)
-};
-
-struct GttTrigger {
-    double trigger_price = 0.0; // the price level that fires this leg
-    double limit_price = 0.0;   // limit price for the resulting order (0 = market)
-    double quantity = 0.0;
-    OrderSide side = OrderSide::Buy;
-    OrderType order_type = OrderType::Limit;
-    ProductType product = ProductType::Delivery;
-};
-
-struct GttOrder {
-    QString gtt_id;   // broker-assigned GTT ID
-    QString symbol;   // normalised symbol, e.g. "RELIANCE"
-    QString exchange; // "NSE" / "BSE"
-    GttOrderType type = GttOrderType::Single;
-    double last_price = 0.0; // LTP at the time of GTT creation
-    QString status;          // "active" / "triggered" / "cancelled" / "expired"
-    QString created_at;
-    QString updated_at;
-    QVector<GttTrigger> triggers; // 1 for Single, 2 for OCO
-};
-
-struct GttPlaceResponse {
-    bool success = false;
-    QString gtt_id;
-    QString error;
-};
-
 enum class BrokerId {
-    Fyers,
-    Zerodha,
-    Upstox,
-    Dhan,
-    Kotak,
-    Groww,
-    AliceBlue,
-    AngelOne,
-    FivePaisa,
-    IIFL,
-    Motilal,
-    Shoonya,
     Alpaca,
     IBKR,
     Tradier,
@@ -422,30 +376,6 @@ enum class BrokerId {
 
 inline const char* broker_id_str(BrokerId id) {
     switch (id) {
-        case BrokerId::Fyers:
-            return "fyers";
-        case BrokerId::Zerodha:
-            return "zerodha";
-        case BrokerId::Upstox:
-            return "upstox";
-        case BrokerId::Dhan:
-            return "dhan";
-        case BrokerId::Kotak:
-            return "kotak";
-        case BrokerId::Groww:
-            return "groww";
-        case BrokerId::AliceBlue:
-            return "aliceblue";
-        case BrokerId::AngelOne:
-            return "angelone";
-        case BrokerId::FivePaisa:
-            return "fivepaisa";
-        case BrokerId::IIFL:
-            return "iifl";
-        case BrokerId::Motilal:
-            return "motilal";
-        case BrokerId::Shoonya:
-            return "shoonya";
         case BrokerId::Alpaca:
             return "alpaca";
         case BrokerId::IBKR:
@@ -459,30 +389,6 @@ inline const char* broker_id_str(BrokerId id) {
 }
 
 inline std::optional<BrokerId> parse_broker_id(const QString& s) {
-    if (s == "fyers")
-        return BrokerId::Fyers;
-    if (s == "zerodha")
-        return BrokerId::Zerodha;
-    if (s == "upstox")
-        return BrokerId::Upstox;
-    if (s == "dhan")
-        return BrokerId::Dhan;
-    if (s == "kotak")
-        return BrokerId::Kotak;
-    if (s == "groww")
-        return BrokerId::Groww;
-    if (s == "aliceblue")
-        return BrokerId::AliceBlue;
-    if (s == "angelone")
-        return BrokerId::AngelOne;
-    if (s == "fivepaisa")
-        return BrokerId::FivePaisa;
-    if (s == "iifl")
-        return BrokerId::IIFL;
-    if (s == "motilal")
-        return BrokerId::Motilal;
-    if (s == "shoonya")
-        return BrokerId::Shoonya;
     if (s == "alpaca")
         return BrokerId::Alpaca;
     if (s == "ibkr")

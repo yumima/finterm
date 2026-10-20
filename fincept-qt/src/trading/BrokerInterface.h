@@ -19,10 +19,7 @@ enum class CredentialField {
     ApiSecret,   // "API Secret" / "Secret Key" / "MPIN"
     AuthCode,    // "Auth Code" / "TOTP secret" (base32)
     Environment, // "Live / Paper" toggle — Alpaca only
-    ClientCode,  // Secondary login ID (AngelOne: client code separate from API key)
-    Password,    // Zerodha login password (auto-login flow)
-    TotpSecret,  // Zerodha Base32 TOTP secret (auto-login flow)
-    UserId,      // Zerodha Kite user id (e.g., AB1234)
+    ClientCode,  // Secondary login ID, separate from the API key
 };
 
 struct CredentialFieldDef {
@@ -246,35 +243,6 @@ class IBroker {
         Q_UNUSED(creds);
         Q_UNUSED(orders);
         return {false, std::nullopt, "Basket margin not supported for this broker"};
-    }
-
-    // --- GTT (Good Till Triggered) Orders ---
-    // Default implementations return "Not supported" — only override in brokers that have GTT.
-    virtual GttPlaceResponse gtt_place(const BrokerCredentials& creds, const GttOrder& order) {
-        Q_UNUSED(creds);
-        Q_UNUSED(order);
-        return {false, "", "GTT not supported for this broker"};
-    }
-    virtual ApiResponse<GttOrder> gtt_get(const BrokerCredentials& creds, const QString& gtt_id) {
-        Q_UNUSED(creds);
-        Q_UNUSED(gtt_id);
-        return {false, std::nullopt, "GTT not supported for this broker"};
-    }
-    virtual ApiResponse<QVector<GttOrder>> gtt_list(const BrokerCredentials& creds) {
-        Q_UNUSED(creds);
-        return {false, std::nullopt, "GTT not supported for this broker"};
-    }
-    virtual ApiResponse<GttOrder> gtt_modify(const BrokerCredentials& creds, const QString& gtt_id,
-                                             const GttOrder& updated) {
-        Q_UNUSED(creds);
-        Q_UNUSED(gtt_id);
-        Q_UNUSED(updated);
-        return {false, std::nullopt, "GTT not supported for this broker"};
-    }
-    virtual ApiResponse<QJsonObject> gtt_cancel(const BrokerCredentials& creds, const QString& gtt_id) {
-        Q_UNUSED(creds);
-        Q_UNUSED(gtt_id);
-        return {false, std::nullopt, "GTT not supported for this broker"};
     }
 
     // --- WebSocket streaming ---

@@ -1072,7 +1072,7 @@ void EquityTradingScreen::async_modify_order(const QString& order_id, double qty
 // symbols match the format the portfolio screen's price engine (yfinance) expects.
 static QString yfinance_symbol_for(const QString& symbol, const QString& exchange) {
     static const QHash<QString, QString> suffix_map = {
-        {"NSE", ".NS"},        {"BSE", ".BO"},  {"HKEX", ".HK"}, {"TSE", ".T"},
+        {"HKEX", ".HK"},       {"TSE", ".T"},
         {"KRX", ".KS"},        {"SGX", ".SI"},  {"ASX", ".AX"},  {"IDX", ".JK"},
         {"MYX", ".KL"},        {"SET", ".BK"},  {"PSE", ".PS"},  {"XETR", ".DE"},
         {"FWB", ".F"},         {"LSE", ".L"},   {"BME", ".MC"},  {"MIL", ".MI"},
@@ -1111,7 +1111,7 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
 
     auto* info = new QLabel(QString("Importing <b>%1</b> holdings from <b>%2</b>. "
                                     "Tickers are auto-mapped to Yahoo Finance format "
-                                    "(NSE→.NS, BSE→.BO). Edit the <i>Yahoo Ticker</i> column "
+                                    "(e.g. LSE→.L, XETR→.DE). Edit the <i>Yahoo Ticker</i> column "
                                     "if any symbol needs a manual override.")
                                 .arg(holdings.size())
                                 .arg(account.display_name.isEmpty() ? broker_id.toUpper()

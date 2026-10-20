@@ -19,7 +19,7 @@ This document lists the phases to build and migrate to the DataHub. Each phase i
 | 4 | WebSocket producers                        | `ExchangeService`, `PolymarketWebSocket` | Medium  | 1          |
 | 5 | News                                       | `NewsService` + all news screens      | Medium     | 1          |
 | 6 | Economics & DBnomics                       | `EconomicsService`, `DBnomicsService` | Medium     | 1          |
-| 7 | Broker account streams                     | 16 broker adapters → `broker:*` topics| Large      | 1, 4       |
+| 7 | Broker account streams                     | Broker adapters → `broker:*` topics    | Large      | 1, 4       |
 | 8 | Geopolitics / Maritime / Gov Data          | Remaining data services               | Medium     | 1          |
 | 9 | AI / MCP / Agents integration              | Subscribers, not producers            | Medium     | 3, 4, 5    |
 | 10| Enforcement & cleanup                      | Lint rules, docs, kill old APIs       | Small      | All above  |
@@ -253,19 +253,17 @@ Screens — 4:
 
 ## Phase 7 — Broker Account Streams
 
-**Goal:** unified live account data from 16 broker integrations.
+**Goal:** unified live account data from the broker integrations.
 
 ### Targets
 Per-broker subdirectories under `src/trading/brokers/`:
-Zerodha, Angel One, Upstox, Fyers, Dhan, Groww, Kotak, IIFL, 5paisa,
-AliceBlue, Shoonya, Motilal, IBKR, Alpaca, Tradier, Saxo
-(verified against the current directory listing — 16 broker adapters).
+IBKR, Alpaca, Tradier, Saxo.
 
 ### Topics
 - `broker:<id>:positions` — push when broker WS pushes position update, poll fallback 5 s
 - `broker:<id>:orders` — same pattern
 - `broker:<id>:balance` — TTL 30 s
-- `broker:<id>:ticks:<sym>` — push-only for broker WS feeds (Zerodha Kite, Angel SmartStream)
+- `broker:<id>:ticks:<sym>` — push-only for broker WS feeds (none wired yet)
 
 ### Deliverables
 - Base `BrokerProducer` mixin — slots into `BrokerInterface` without breaking existing adapter contracts.

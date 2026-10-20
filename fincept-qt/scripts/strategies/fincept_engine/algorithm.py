@@ -712,7 +712,6 @@ class QCAlgorithm:
         - Data consolidation (time, renko, range, tick)
         - Universe selection (coarse/fine fundamental)
         - Alpha model framework (insights, portfolio targets)
-        - Indian market support (NSE, BSE, MCX, NFO)
     """
 
     def __init__(self):

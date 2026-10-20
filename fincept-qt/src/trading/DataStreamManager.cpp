@@ -2,6 +2,7 @@
 
 #include "core/logging/Logger.h"
 #include "trading/AccountManager.h"
+#include "trading/BrokerRegistry.h"
 
 #    include "datahub/DataHub.h"
 #    include "datahub/DataHubMetaTypes.h"
@@ -67,6 +68,13 @@ void DataStreamManager::stop_stream(const QString& account_id) {
 void DataStreamManager::start_all_active() {
     const auto accounts = AccountManager::instance().active_accounts();
     for (const auto& account : accounts) {
+        // An account saved for a broker that has since been removed has
+        // nothing to poll; a stream for it would spin on a null broker.
+        if (!BrokerRegistry::instance().has(account.broker_id)) {
+            LOG_WARN(DSM_TAG, QString("Skipping account %1: broker '%2' is no longer supported")
+                                  .arg(account.account_id, account.broker_id));
+            continue;
+        }
         if (!streams_.contains(account.account_id))
             start_stream(account.account_id);
     }

@@ -48,7 +48,7 @@ WorkspaceDef WorkspaceTemplates::equity_trader() {
     // Equity trading screen defaults
     WorkspaceScreenState eq;
     eq.screen_id = "equity_trading";
-    eq.state["broker_id"] = "fyers";
+    eq.state["broker_id"] = "alpaca";
     eq.state["symbol"] = "AAPL";
     eq.state["exchange"] = "NASDAQ";
     eq.state["trading_mode"] = "paper";

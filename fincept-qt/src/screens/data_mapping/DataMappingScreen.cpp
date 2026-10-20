@@ -941,7 +941,7 @@ QWidget* DataMappingScreen::create_api_config_panel() {
     bl->setSpacing(10);
 
     api_name_ = new QLineEdit;
-    api_name_->setPlaceholderText("e.g. Upstox OHLCV");
+    api_name_->setPlaceholderText("e.g. Alpaca OHLCV");
     bl->addWidget(create_form_row("MAPPING NAME", api_name_));
 
     api_base_url_ = new QLineEdit;

@@ -50,8 +50,8 @@ econ:fred:GDP
 econ:dbnomics:IMF/IFS/USA.PCPI_IX.Q
 ws:kraken:BTC-USD
 ws:hyperliquid:ETH
-broker:zerodha:positions
-broker:angelone:orders
+broker:alpaca:positions
+broker:ibkr:orders
 geopolitics:hdx:conflicts
 agent:hedgefund:run:42
 ```
@@ -87,7 +87,7 @@ class Producer {
 
     // Optional: max outbound requests per second. Hub scheduler groups and
     // paces refresh calls to respect this. Default 0 = unlimited.
-    // Examples: Zerodha REST = 3, Angel One REST = 1, Polymarket = 10.
+    // Example: Polymarket = 10.
     virtual int max_requests_per_sec() const { return 0; }
 
     // Optional: called when last subscriber leaves a topic. Producer may

@@ -665,9 +665,6 @@ set(STORAGE_SOURCES
     src/storage/repositories/NotesRepository.cpp
     src/storage/repositories/ReportRepository.cpp
     src/storage/repositories/PaperTradingRepository.cpp
-    src/storage/repositories/OISnapshotsRepository.cpp
-    src/storage/repositories/IvHistoryRepository.cpp
-    src/storage/repositories/StrategiesRepository.cpp
     src/storage/repositories/NewsMonitorRepository.cpp
     src/storage/repositories/NewsArticleRepository.cpp
     src/storage/repositories/ChatRepository.cpp
@@ -848,36 +845,13 @@ set(TRADING_SOURCES
     src/trading/ExchangeSessionManager.cpp
     src/trading/ExchangeDaemonPool.cpp
     src/trading/brokers/BrokerHttp.cpp
-    # Trading WebSocket
-    src/trading/websocket/ZerodhaWebSocket.cpp
-    src/trading/websocket/AngelOneWebSocket.cpp
-    # Indian brokers
-    src/trading/brokers/zerodha/ZerodhaBroker.cpp
-    src/trading/brokers/zerodha/Totp.cpp
-    src/trading/brokers/zerodha/ZerodhaAutoLogin.cpp
-    src/trading/auth/RedirectServer.cpp
-    src/trading/brokers/angelone/AngelOneBroker.cpp
-    src/trading/brokers/fyers/FyersBroker.cpp
-    src/trading/brokers/upstox/UpstoxBroker.cpp
-    src/trading/brokers/dhan/DhanBroker.cpp
-    src/trading/brokers/kotak/KotakBroker.cpp
-    src/trading/brokers/groww/GrowwBroker.cpp
-    src/trading/brokers/aliceblue/AliceBlueBroker.cpp
-    src/trading/brokers/fivepaisa/FivePaisaBroker.cpp
-    src/trading/brokers/iifl/IIFLBroker.cpp
-    src/trading/brokers/motilal/MotilalBroker.cpp
-    src/trading/brokers/shoonya/ShoonyaBroker.cpp
-    # Global brokers
+    # Brokers
     src/trading/brokers/alpaca/AlpacaBroker.cpp
     src/trading/brokers/ibkr/IBKRBroker.cpp
     src/trading/brokers/tradier/TradierBroker.cpp
     src/trading/brokers/saxo/SaxoBankBroker.cpp
 
     # Instrument system (Phase 1)
-    src/trading/instruments/InstrumentRepository.cpp
-    src/trading/instruments/ZerodhaInstrumentParser.cpp
-    src/trading/instruments/GrowwInstrumentParser.cpp
-    src/trading/instruments/InstrumentService.cpp
 )
 
 # Services
@@ -918,11 +892,6 @@ set(SERVICE_SOURCES
     src/services/portfolio/PortfolioAnalyticsService.cpp
     src/services/app_context/AppContextService.cpp
     src/services/quantlib/QuantLibClient.cpp
-    src/services/options/OISnapshotter.cpp
-    src/services/options/OptionChainService.cpp
-    src/services/options/OptionPricing.cpp
-    src/services/options/StrategyAnalytics.cpp
-    src/services/options/StrategyTemplates.cpp
     src/services/economics/EconomicsService.cpp
     src/services/agents/AgentService.cpp
     src/services/agents/AgentScheduler.cpp
@@ -1114,26 +1083,6 @@ set(SCREEN_SOURCES
     src/screens/markets/MarketPanelStore.cpp
     src/screens/markets/MarketPanelEditor.cpp
     src/screens/markets/MarketChartDialog.cpp
-    # ── F&O (Sensibull-style options analytics; FII/DII tab dropped) ─────
-    src/screens/fno/FnoScreen.cpp
-    src/screens/fno/FnoHeaderBar.cpp
-    src/screens/fno/ChainSubTab.cpp
-    src/screens/fno/OptionChainModel.cpp
-    src/screens/fno/OptionChainTable.cpp
-    src/screens/fno/BuilderSubTab.cpp
-    src/screens/fno/BuilderAnalyticsRibbon.cpp
-    src/screens/fno/LegEditorTable.cpp
-    src/screens/fno/PayoffChartWidget.cpp
-    src/screens/fno/TemplatePickerPanel.cpp
-    src/screens/fno/OrderConfirmDialog.cpp
-    src/screens/fno/OISubTab.cpp
-    src/screens/fno/IntradayOIChart.cpp
-    src/screens/fno/MultiStrikeOIChart.cpp
-    src/screens/fno/MaxPainChart.cpp
-    src/screens/fno/OIBuildupTable.cpp
-    src/screens/fno/MultiStraddleSubTab.cpp
-    src/screens/fno/MultiStraddleChart.cpp
-    src/screens/fno/ScreenerSubTab.cpp
     src/screens/dashboard/DashboardScreen.cpp
     src/screens/dashboard/DashboardToolBar.cpp
     src/screens/dashboard/DashboardStatusBar.cpp
@@ -1624,25 +1573,6 @@ set_source_files_properties(
     src/screens/forum/ForumScreen.cpp
     src/screens/forum/ForumSidebarPanel.cpp
     src/screens/forum/ForumThreadPanel.cpp
-    src/screens/fno/BuilderAnalyticsRibbon.cpp
-    src/screens/fno/BuilderSubTab.cpp
-    src/screens/fno/ChainSubTab.cpp
-    src/screens/fno/FnoHeaderBar.cpp
-    src/screens/fno/FnoScreen.cpp
-    src/screens/fno/IntradayOIChart.cpp
-    src/screens/fno/LegEditorTable.cpp
-    src/screens/fno/MaxPainChart.cpp
-    src/screens/fno/MultiStraddleChart.cpp
-    src/screens/fno/MultiStraddleSubTab.cpp
-    src/screens/fno/MultiStrikeOIChart.cpp
-    src/screens/fno/OIBuildupTable.cpp
-    src/screens/fno/OISubTab.cpp
-    src/screens/fno/OptionChainModel.cpp
-    src/screens/fno/OptionChainTable.cpp
-    src/screens/fno/OrderConfirmDialog.cpp
-    src/screens/fno/PayoffChartWidget.cpp
-    src/screens/fno/ScreenerSubTab.cpp
-    src/screens/fno/TemplatePickerPanel.cpp
     src/screens/geopolitics/ConflictMonitorPanel.cpp
     src/screens/geopolitics/GeopoliticsScreen.cpp
     src/screens/geopolitics/HDXDataPanel.cpp
@@ -1842,24 +1772,7 @@ set_source_files_properties(
     src/screens/polymarket/PolymarketActivityFeed.cpp
     src/screens/polymarket/PolymarketStatusBar.cpp
     src/screens/polymarket/PredictionAccountDialog.cpp
-    src/trading/websocket/ZerodhaWebSocket.cpp
-    src/trading/websocket/AngelOneWebSocket.cpp
     # Trading broker files — each defines static now_ts() in same namespace
-    src/trading/brokers/zerodha/ZerodhaBroker.cpp
-    src/trading/brokers/zerodha/Totp.cpp
-    src/trading/brokers/zerodha/ZerodhaAutoLogin.cpp
-    src/trading/auth/RedirectServer.cpp
-    src/trading/brokers/angelone/AngelOneBroker.cpp
-    src/trading/brokers/fyers/FyersBroker.cpp
-    src/trading/brokers/upstox/UpstoxBroker.cpp
-    src/trading/brokers/dhan/DhanBroker.cpp
-    src/trading/brokers/kotak/KotakBroker.cpp
-    src/trading/brokers/groww/GrowwBroker.cpp
-    src/trading/brokers/aliceblue/AliceBlueBroker.cpp
-    src/trading/brokers/fivepaisa/FivePaisaBroker.cpp
-    src/trading/brokers/iifl/IIFLBroker.cpp
-    src/trading/brokers/motilal/MotilalBroker.cpp
-    src/trading/brokers/shoonya/ShoonyaBroker.cpp
     src/trading/brokers/alpaca/AlpacaBroker.cpp
     src/trading/brokers/ibkr/IBKRBroker.cpp
     src/trading/brokers/tradier/TradierBroker.cpp
@@ -1916,27 +1829,10 @@ set_source_files_properties(
 # Trading brokers: each defines static now_ts() / TAG at file scope —
 # ODR collision if batched, must stay excluded from unity
 set_source_files_properties(
-    src/trading/brokers/zerodha/ZerodhaBroker.cpp
-    src/trading/brokers/zerodha/Totp.cpp
-    src/trading/brokers/zerodha/ZerodhaAutoLogin.cpp
-    src/trading/auth/RedirectServer.cpp
-    src/trading/brokers/angelone/AngelOneBroker.cpp
-    src/trading/brokers/fyers/FyersBroker.cpp
-    src/trading/brokers/upstox/UpstoxBroker.cpp
-    src/trading/brokers/dhan/DhanBroker.cpp
-    src/trading/brokers/kotak/KotakBroker.cpp
-    src/trading/brokers/groww/GrowwBroker.cpp
-    src/trading/brokers/aliceblue/AliceBlueBroker.cpp
-    src/trading/brokers/fivepaisa/FivePaisaBroker.cpp
-    src/trading/brokers/iifl/IIFLBroker.cpp
-    src/trading/brokers/motilal/MotilalBroker.cpp
-    src/trading/brokers/shoonya/ShoonyaBroker.cpp
     src/trading/brokers/alpaca/AlpacaBroker.cpp
     src/trading/brokers/ibkr/IBKRBroker.cpp
     src/trading/brokers/tradier/TradierBroker.cpp
     src/trading/brokers/saxo/SaxoBankBroker.cpp
-    src/trading/websocket/ZerodhaWebSocket.cpp
-    src/trading/websocket/AngelOneWebSocket.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION TRUE
 )
 

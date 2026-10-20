@@ -1,13 +1,13 @@
 """
 Backtest Engine — Walk-forward strategy backtester
 
-Fetches historical data via yfinance or from local candle_cache (Fyers),
+Fetches historical data via yfinance or from the local candle_cache,
 walks through candles bar-by-bar, evaluates entry/exit conditions at each bar,
 and computes performance metrics.
 
 Usage:
     python backtest_engine.py \
-        --symbol RELIANCE \
+        --symbol AAPL \
         --entry-conditions '[{"indicator":"RSI","params":{"period":14},"field":"value","operator":"crosses_below","value":30}]' \
         --exit-conditions '[{"indicator":"RSI","params":{"period":14},"field":"value","operator":"crosses_above","value":70}]' \
         --timeframe 1d \
@@ -15,7 +15,6 @@ Usage:
         --stop-loss 3 \
         --take-profit 5 \
         --initial-capital 100000 \
-        --provider fyers \
         --db /path/to/db
 
 Output:
@@ -107,7 +106,7 @@ def fetch_from_yfinance(symbol: str, period: str, interval: str):
 
 
 def fetch_from_candle_cache(db_path: str, symbol: str, timeframe: str, limit: int = 500):
-    """Fetch OHLCV data from local candle_cache (populated by Fyers/broker)."""
+    """Fetch OHLCV data from the local candle_cache table."""
     debug(f"fetch_from_candle_cache: db_path={db_path}, symbol={symbol}, timeframe={timeframe}, limit={limit}")
     try:
         if not os.path.exists(db_path):
@@ -169,7 +168,7 @@ def fetch_historical_data(symbol: str, period: str, interval: str, provider: str
     """Fetch OHLCV data from the specified provider."""
     debug(f"fetch_historical_data: symbol={symbol}, period={period}, interval={interval}, provider={provider}, db_path={db_path}")
 
-    if provider == 'fyers' or provider == 'candle_cache':
+    if provider == 'candle_cache':
         if not db_path:
             # Try default path
             db_path = os.path.join(os.environ.get('APPDATA', ''), 'fincept-terminal', 'fincept_terminal.db')
@@ -652,7 +651,7 @@ def cmd_run_backtest(params: dict, db_path: str):
         print(json.dumps({
             'success': False,
             'error': error or f'No historical data for {symbol}',
-            'hint': 'Use .NS suffix for NSE stocks (e.g. RELIANCE.NS) for yfinance.',
+            'hint': 'Use the yfinance exchange suffix for non-US stocks (e.g. SAP.DE, 7203.T, 0700.HK).',
             'debug': DEBUG_LOG,
         }))
         return

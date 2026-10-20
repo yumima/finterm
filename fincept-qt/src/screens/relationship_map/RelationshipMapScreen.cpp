@@ -50,7 +50,7 @@ static constexpr int kMaxSearchResults = 10;
 /// Convert exchange + symbol to yfinance-compatible ticker.
 static QString to_yfinance_symbol(const QString& symbol, const QString& exchange, const QString& country = {}) {
     // Daemon search returns canonical Yahoo symbols already suffixed for foreign
-    // listings (e.g. "RELIANCE.NS") — don't re-suffix and risk a double suffix.
+    // listings (e.g. "SAP.DE") — don't re-suffix and risk a double suffix.
     if (symbol.contains('.'))
         return symbol;
     if (exchange.toUpper() == "EURONEXT") {
@@ -61,7 +61,7 @@ static QString to_yfinance_symbol(const QString& symbol, const QString& exchange
         return symbol + (it != m.end() ? it.value() : ".PA");
     }
     static const QHash<QString, QString> s = {
-        {"NSE", ".NS"}, {"BSE", ".BO"}, {"HKEX", ".HK"}, {"TSE", ".T"},
+        {"HKEX", ".HK"}, {"TSE", ".T"},
         {"KRX", ".KS"}, {"SGX", ".SI"}, {"ASX", ".AX"}, {"IDX", ".JK"},
         {"XETR", ".DE"}, {"FWB", ".F"}, {"LSE", ".L"}, {"BME", ".MC"},
         {"MIL", ".MI"}, {"SIX", ".SW"}, {"VIE", ".VI"}, {"TSX", ".TO"},

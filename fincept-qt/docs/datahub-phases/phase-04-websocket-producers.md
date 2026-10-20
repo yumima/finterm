@@ -181,7 +181,7 @@ then deleted in Phase 10.
 
 ## Out of scope
 
-- Broker WebSockets (Zerodha Kite, Angel SmartStream, Fyers, etc.) —
+- Broker WebSockets (Alpaca, IBKR, etc.) —
   Phase 7.
 - Deleting legacy `tickReceived`, `orderBookUpdate` signals — Phase 10.
 - Historical OHLC backfill for charts — still goes through

@@ -58,24 +58,6 @@ BrokerHttpResponse BrokerHttp::del(const QString& url, const QMap<QString, QStri
     return execute("DELETE", url, body, body.isEmpty() ? "" : "application/json", headers);
 }
 
-BrokerHttpResponse BrokerHttp::post_form(const QString& url, const QMap<QString, QString>& params,
-                                         const QMap<QString, QString>& headers) {
-    QUrlQuery query;
-    for (auto it = params.constBegin(); it != params.constEnd(); ++it)
-        query.addQueryItem(it.key(), it.value());
-    QByteArray body = query.toString(QUrl::FullyEncoded).toUtf8();
-    return execute("POST", url, body, "application/x-www-form-urlencoded", headers);
-}
-
-BrokerHttpResponse BrokerHttp::put_form(const QString& url, const QMap<QString, QString>& params,
-                                        const QMap<QString, QString>& headers) {
-    QUrlQuery query;
-    for (auto it = params.constBegin(); it != params.constEnd(); ++it)
-        query.addQueryItem(it.key(), it.value());
-    QByteArray body = query.toString(QUrl::FullyEncoded).toUtf8();
-    return execute("PUT", url, body, "application/x-www-form-urlencoded", headers);
-}
-
 BrokerHttpResponse BrokerHttp::post_raw(const QString& url, const QByteArray& body,
                                         const QMap<QString, QString>& headers) {
     QString ct = "application/x-www-form-urlencoded";

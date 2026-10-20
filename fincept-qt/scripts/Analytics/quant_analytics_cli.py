@@ -165,7 +165,7 @@ class CFAQuantEngine:
         s = s.strip()
         if not s or ',' in s or s.startswith('[') or s.startswith('{'):
             return False
-        # Letters / dot / dash only (e.g. AAPL, BRK.B, TCS.NS, ^GSPC)
+        # Letters / dot / dash only (e.g. AAPL, BRK.B, SAP.DE, ^GSPC)
         return all(c.isalpha() or c in '.-^' for c in s)
 
     def _fetch_ticker_history(self, ticker: str, period: str = '1y',

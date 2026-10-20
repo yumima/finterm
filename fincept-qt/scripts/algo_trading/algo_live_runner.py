@@ -169,7 +169,7 @@ def get_current_price(conn, symbol: str) -> float:
     """Get latest price from strategy_price_cache.
 
     Tries exact match first, then normalized match to handle symbol format
-    differences (e.g., BTC/USD vs BTCUSD, NSE:RELIANCE vs RELIANCE).
+    differences (e.g., BTC/USD vs BTCUSD, NASDAQ:AAPL vs AAPL).
     """
     # Try exact match first
     row = conn.execute(

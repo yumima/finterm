@@ -405,7 +405,7 @@ void AddAssetDialog::show_results(const QJsonArray& results) {
             continue;
 
         // The daemon's search returns yfinance-ready symbols — foreign listings
-        // already carry their exchange suffix (e.g. "SPCX.TO", "RELIANCE.NS"),
+        // already carry their exchange suffix (e.g. "SPCX.TO", "SAP.DE"),
         // so the symbol is used as-is. (The old HTTP stub returned bare symbols
         // plus a friendly exchange name and needed a suffix lookup here.)
         const QString yf_sym = sym;

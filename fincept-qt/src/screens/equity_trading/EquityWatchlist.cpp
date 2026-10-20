@@ -2,13 +2,11 @@
 #include "screens/equity_trading/EquityWatchlist.h"
 
 #include "screens/equity_trading/EquityTypes.h"
-#include "trading/instruments/InstrumentService.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QMutexLocker>
-#include <QTimer>
 #include <QVBoxLayout>
 
 namespace fincept::screens::equity {
@@ -57,16 +55,7 @@ EquityWatchlist::EquityWatchlist(QWidget* parent) : QWidget(parent) {
     add_edit_->setObjectName("eqWatchlistAddEdit");
     add_edit_->setPlaceholderText("Add symbol...");
     add_edit_->setFixedHeight(22);
-    connect(add_edit_, &QLineEdit::textChanged, this, &EquityWatchlist::on_add_text_changed);
     connect(add_edit_, &QLineEdit::returnPressed, this, &EquityWatchlist::on_add_symbol_entered);
-
-    // Completer backed by InstrumentService::search()
-    completer_model_ = new QStringListModel(this);
-    completer_ = new QCompleter(completer_model_, this);
-    completer_->setCaseSensitivity(Qt::CaseInsensitive);
-    completer_->setFilterMode(Qt::MatchContains);
-    completer_->setMaxVisibleItems(8);
-    add_edit_->setCompleter(completer_);
 
     add_btn_ = new QPushButton("+");
     add_btn_->setObjectName("eqWatchlistAddBtn");
@@ -240,39 +229,11 @@ void EquityWatchlist::on_add_symbol_entered() {
     if (raw.isEmpty())
         return;
 
-    // If broker instruments are loaded, validate the symbol exists
-    // Extract just the symbol part (ignore "EXCHANGE:SYMBOL" format from completer)
-    QString sym = raw.contains(':') ? raw.section(':', 1) : raw;
-
-    if (!broker_id_.isEmpty() && trading::InstrumentService::instance().is_loaded(broker_id_)) {
-        // Accept if any exchange has it
-        auto results = trading::InstrumentService::instance().search(sym, "", broker_id_, 1);
-        if (results.isEmpty()) {
-            // Not found — flash the edit red briefly to signal invalid
-            add_edit_->setStyleSheet(QString("border: 1px solid %1;").arg(fincept::ui::colors::NEGATIVE()));
-            QTimer::singleShot(800, add_edit_, [this]() { add_edit_->setStyleSheet(""); });
-            return;
-        }
-        sym = results.first().symbol;
-    }
+    // Keep just the symbol part of an "EXCHANGE:SYMBOL" entry
+    const QString sym = raw.contains(':') ? raw.section(':', 1) : raw;
 
     add_symbol(sym);
     add_edit_->clear();
-}
-
-void EquityWatchlist::on_add_text_changed(const QString& text) {
-    if (broker_id_.isEmpty() || text.trimmed().length() < 2)
-        return;
-    if (!trading::InstrumentService::instance().is_loaded(broker_id_))
-        return;
-
-    const QString query = text.trimmed().toUpper();
-    auto results = trading::InstrumentService::instance().search(query, "", broker_id_, 12);
-    QStringList suggestions;
-    suggestions.reserve(results.size());
-    for (const auto& inst : results)
-        suggestions.append(inst.symbol);
-    completer_model_->setStringList(suggestions);
 }
 
 } // namespace fincept::screens::equity

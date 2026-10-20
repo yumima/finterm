@@ -38,8 +38,6 @@
 #include "services/maritime/MaritimeService.h"
 #include "services/markets/MarketDataService.h"
 #include "services/news/NewsService.h"
-#include "services/options/OISnapshotter.h"
-#include "services/options/OptionChainService.h"
 #include "services/polymarket/PolymarketWebSocket.h"
 #include "services/prediction/PredictionCredentialStore.h"
 #include "services/prediction/PredictionExchangeRegistry.h"
@@ -269,12 +267,6 @@ int main(int argc, char* argv[]) {
     // Track 10: cron-shaped scheduler for agent runs.  Reads agent_schedule
     // on each 60s tick; no-op until the user adds entries.
     fincept::services::AgentScheduler::instance().start();
-    // F&O: option:chain:* / option:tick:* fed by the active broker. OISnapshotter
-    // subscribes to option:chain:* and persists per-minute OI snapshots for the
-    // OI Buildup tab. FiiDiiService (upstream's India-specific FII/DII feed) is
-    // intentionally not registered — that tab was dropped from the screen.
-    fincept::services::options::OptionChainService::instance().ensure_registered_with_hub();
-    fincept::services::options::OISnapshotter::instance().ensure_registered_with_hub();
     // Create all application directories under %LOCALAPPDATA%/com.fincept.terminal
     fincept::AppPaths::ensure_all();
 

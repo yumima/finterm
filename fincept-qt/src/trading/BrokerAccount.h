@@ -10,13 +10,13 @@ namespace fincept::trading {
 enum class ConnectionState { Disconnected, Connecting, Connected, TokenExpired, Error };
 
 /// One authenticated broker account.
-/// Multiple accounts can share the same broker_id (e.g. two Zerodha accounts).
+/// Multiple accounts can share the same broker_id (e.g. two IBKR accounts).
 /// The IBroker* instance (from BrokerRegistry) is stateless and shared —
 /// different accounts simply pass different BrokerCredentials.
 struct BrokerAccount {
     QString account_id;           // UUID, permanent, generated once
-    QString broker_id;            // maps to BrokerRegistry ("angelone", "zerodha", etc.)
-    QString display_name;         // user label: "Zerodha - Tilak", "Angel One - Wife"
+    QString broker_id;            // maps to BrokerRegistry ("alpaca", "ibkr", etc.)
+    QString display_name;         // user label: "IBKR - Main", "Alpaca - Paper"
     QString paper_portfolio_id;   // linked PtPortfolio UUID for paper trading
     QString trading_mode = "paper"; // "live" or "paper" — per-account
     bool is_active = true;        // user can deactivate without deleting

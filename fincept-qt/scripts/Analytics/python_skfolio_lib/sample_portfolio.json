@@ -22,21 +22,21 @@
         "2022-01-20": [0.015, 0.028, 0.022, 0.012, -0.005, 0.018, 0.008, 0.025, 0.018, 0.015]
     },
     "assets": [
-        "RELIANCE.NS",
-        "TCS.NS",
-        "HDFCBANK.NS",
-        "INFY.NS",
-        "ICICIBANK.NS",
-        "KOTAKBANK.NS",
-        "HINDUNILVR.NS",
-        "SBIN.NS",
-        "BHARTIARTL.NS",
-        "ITC.NS"
+        "XOM",
+        "MSFT",
+        "JPM",
+        "AAPL",
+        "BAC",
+        "GS",
+        "PG",
+        "WFC",
+        "VZ",
+        "PM"
     ],
     "metadata": {
-        "description": "Sample Indian stock portfolio returns data",
+        "description": "Sample US stock portfolio returns data",
         "frequency": "daily",
-        "currency": "INR",
+        "currency": "USD",
         "period": "January 2022",
         "num_assets": 10,
         "num_observations": 20

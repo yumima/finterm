@@ -2181,7 +2181,7 @@ def search_symbols(query, limit=20, asset_type=""):
 
     asset_type (stock/fund/index/crypto) filters by Yahoo's quoteType; empty
     means "any". Results carry the canonical Yahoo `symbol` (foreign listings
-    already include their exchange suffix, e.g. "RELIANCE.NS"), a friendly
+    already include their exchange suffix, e.g. "SAP.DE"), a friendly
     exchange display name, and the UI asset-type slug.
     """
     asset_type = (asset_type or "").strip().lower()
@@ -2236,7 +2236,7 @@ def search_symbols(query, limit=20, asset_type=""):
         except Exception as search_err:
             # Fallback: try the exact symbol as a yfinance Ticker
             query_upper = query_str.upper()
-            suffixes = ["", ".NS", ".BO"]
+            suffixes = [""]
             for suffix in suffixes:
                 candidate = query_upper + suffix
                 try:
@@ -3591,8 +3591,8 @@ def _candidate_yf_symbols(symbol):
     # Already has an exchange suffix or is an index/crypto/forex pair → trust it.
     if '.' in s or s.startswith('^') or '-' in s or '=' in s:
         return [s]
-    # Bare ticker — try US first, then Toronto, NSE, BSE, LSE, ASX, Hong Kong.
-    return [s, f"{s}.TO", f"{s}.NS", f"{s}.BO", f"{s}.L", f"{s}.AX", f"{s}.HK"]
+    # Bare ticker — try US first, then Toronto, LSE, ASX, Hong Kong.
+    return [s, f"{s}.TO", f"{s}.L", f"{s}.AX", f"{s}.HK"]
 
 
 def _resolve_for_history(symbols, period, auto_adjust=True):
@@ -3710,7 +3710,7 @@ def get_portfolio_closes_history(symbols, period='1y'):
              "resolved": {sym: yf_sym}, "missing": [sym, ...]}.
 
     Each input symbol is resolved via _resolve_for_history, which tries common
-    exchange suffixes (.TO, .NS, .BO, .L, .AX, .HK) when the bare symbol
+    exchange suffixes (.TO, .L, .AX, .HK) when the bare symbol
     returns no data.
 
     Closes are UNADJUSTED (auto_adjust=False), deliberately. The C++ caller
@@ -4155,12 +4155,11 @@ def resolve_symbol(symbol):
     """
     Resolve a bare stock symbol to its correct yfinance-compatible form.
 
-    Tries the symbol as-is first, then with common exchange suffixes
-    (.NS for NSE India, .BO for BSE India).
+    Tries the symbol as-is (a foreign listing must carry its own suffix).
 
     Returns a dict with:
-      - resolved_symbol: the working yfinance symbol (e.g., "PIDILITIND.NS")
-      - original_symbol: what the user typed (e.g., "PIDILITIND")
+      - resolved_symbol: the working yfinance symbol (e.g., "SHOP.TO")
+      - original_symbol: what the user typed (e.g., "SHOP.TO")
       - exchange: detected exchange name (if available)
       - found: bool indicating if any variant returned data
     """
@@ -4181,7 +4180,7 @@ def resolve_symbol(symbol):
         return {"resolved_symbol": symbol, "original_symbol": symbol, "exchange": "", "found": False}
 
     # Try bare symbol first (US stocks, crypto, etc.)
-    suffixes_to_try = ["", ".NS", ".BO"]
+    suffixes_to_try = [""]
     for suffix in suffixes_to_try:
         candidate = symbol + suffix
         try:

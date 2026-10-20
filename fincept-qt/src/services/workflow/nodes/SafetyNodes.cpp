@@ -279,7 +279,7 @@ void register_safety_nodes(NodeRegistry& registry) {
             },
         .parameters =
             {
-                {"exchange", "Exchange", "select", "NYSE", {"NYSE", "NASDAQ", "LSE", "TSE", "NSE", "BSE"}, ""},
+                {"exchange", "Exchange", "select", "NYSE", {"NYSE", "NASDAQ", "LSE", "TSE"}, ""},
                 {"allow_premarket", "Allow Pre-Market", "boolean", false, {}, ""},
             },
         .execute =
@@ -305,8 +305,13 @@ void register_safety_nodes(NodeRegistry& registry) {
                     session = {"Europe/London", 800, 1630, 700};
                 else if (exchange == "TSE")
                     session = {"Asia/Tokyo", 900, 1530, 800};
-                else if (exchange == "NSE" || exchange == "BSE")
-                    session = {"Asia/Kolkata", 915, 1530, 900};
+                else if (exchange != "NYSE" && exchange != "NASDAQ") {
+                    // A saved workflow may name a venue this node no longer
+                    // knows; judging it on New York hours would gate orders
+                    // on the wrong clock.
+                    cb(false, {}, QString("Trading Hours: unsupported exchange %1").arg(exchange));
+                    return;
+                }
 
                 const QDateTime utc_now = QDateTime::currentDateTimeUtc();
                 const QTimeZone tz(QByteArray(session.tz));

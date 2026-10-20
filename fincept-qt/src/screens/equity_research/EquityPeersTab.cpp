@@ -451,8 +451,6 @@ QStringList EquityPeersTab::default_peers(const QString& symbol) const {
         {"JPM", {"BAC", "WFC", "GS", "MS", "C"}},
         {"JNJ", {"PFE", "ABT", "MRK", "BMY", "ABBV"}},
         {"XOM", {"CVX", "BP", "SHEL", "COP", "EOG"}},
-        {"RELIANCE.NS", {"TCS.NS", "INFY.NS", "HDFCBANK.NS", "ITC.NS", "HINDUNILVR.NS"}},
-        {"TCS.NS", {"INFY.NS", "WIPRO.NS", "HCLTECH.NS", "TECHM.NS", "RELIANCE.NS"}},
         // Quantum computing
         {"IONQ", {"RGTI", "QBTS", "QUBT", "IBM", "ARQQ"}},
         {"RGTI", {"IONQ", "QBTS", "QUBT", "IBM", "ARQQ"}},

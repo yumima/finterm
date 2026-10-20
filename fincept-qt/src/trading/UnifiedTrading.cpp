@@ -52,7 +52,7 @@ TradingSession UnifiedTrading::switch_mode(const QString& mode) {
 
     if (!session_) {
         session_ = TradingSession{};
-        session_->broker = "fyers";
+        session_->broker = "alpaca";
     }
 
     session_->mode = (mode == "live") ? "live" : "paper";

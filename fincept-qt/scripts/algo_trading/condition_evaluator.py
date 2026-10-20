@@ -47,7 +47,7 @@ def load_candles_from_db(db_path: str, symbol: str, timeframe: str, limit: int =
     """Load candles from candle_cache table.
 
     Tries exact symbol match first, then falls back to normalized matching
-    to handle format differences (e.g., BTC/USD vs BTCUSD, NSE:RELIANCE vs RELIANCE).
+    to handle format differences (e.g., BTC/USD vs BTCUSD, NASDAQ:AAPL vs AAPL).
     """
     conn = sqlite3.connect(db_path)
 
@@ -64,7 +64,7 @@ def load_candles_from_db(db_path: str, symbol: str, timeframe: str, limit: int =
 
     if df.empty:
         # Fallback: find the actual symbol name in the cache that matches when normalized
-        # Also handles broker truncation (e.g., Angel One truncates "AVANTIFEEDS" to "AVANTIFEED")
+        # Also handles broker symbol truncation
         norm = _normalize_symbol(symbol)
         try:
             cached_symbols = pd.read_sql_query(

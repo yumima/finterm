@@ -237,8 +237,8 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
 
             {"📊", "How do I connect a broker?",
              "Navigate to Settings → Brokers, select your broker from the list, and enter your "
-             "API key and secret. Multiple brokers supported (Zerodha, Angel One, Upstox, "
-             "Interactive Brokers, and more). Credentials stay on your machine."},
+             "API key and secret. Multiple brokers supported (Interactive Brokers, Alpaca, "
+             "Tradier, Saxo Bank). Credentials stay on your machine."},
 
             {"🐍", "Why does Python install at first launch?",
              "finterm embeds Python for analytics scripts covering equity, portfolio, derivatives, "

@@ -184,8 +184,6 @@ class Exchange:
     """Security exchange information."""
 
     # Exchange constants
-    NSE = "NSE"
-    BSE = "BSE"
     NYSE = "NYSE"
     NASDAQ = "NASDAQ"
     AMEX = "AMEX"

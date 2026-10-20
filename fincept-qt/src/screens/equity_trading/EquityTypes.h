@@ -103,8 +103,6 @@ inline QColor ROW_ALT() {
 // ── Exchange → Currency mapping ────────────────────────────────────────────
 
 inline QString exchange_currency(const QString& exchange) {
-    if (exchange == "NSE" || exchange == "BSE" || exchange == "NFO" || exchange == "MCX" || exchange == "CDS")
-        return "INR";
     if (exchange == "NYSE" || exchange == "NASDAQ" || exchange == "AMEX" || exchange == "CBOE")
         return "USD";
     if (exchange == "LSE")

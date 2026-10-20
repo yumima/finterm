@@ -546,21 +546,6 @@ if(Python3_Interpreter_FOUND)
                          PROPERTIES TIMEOUT 120 SKIP_RETURN_CODE 77)
 endif()
 
-# ── Options strategy max profit / max loss ───────────────────────────────────
-# These were read off the sampled payoff curve, whose default window is spot
-# +/-30% — so a short put's "max loss" was its loss at the edge of the chart,
-# not at S -> 0. A short 24000 PE at 200 reported 350k against a true 1.19m,
-# and that figure is what OrderConfirmDialog shows before the order is sent.
-add_executable(test_strategy_max_pnl
-    services/test_strategy_max_pnl.cpp
-    ../src/services/options/StrategyAnalytics.cpp
-    ../src/services/options/OptionPricing.cpp
-)
-target_include_directories(test_strategy_max_pnl PRIVATE ../src)
-target_link_libraries(test_strategy_max_pnl PRIVATE Qt6::Core Qt6::Test)
-set_target_properties(test_strategy_max_pnl PROPERTIES AUTOMOC ON)
-add_test(NAME strategy_max_pnl COMMAND test_strategy_max_pnl)
-
 # ── Bar vs event timestamp decoders ──────────────────────────────────────────
 # Two kinds of epoch second, both qint64, both called `timestamp`, decoded
 # differently — and fromSecsSinceEpoch() looks correct for both. Wrong in five

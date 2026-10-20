@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`36688bea2`](https://github.com/yumima/finterm/commit/36688bea2) news: review fixes — a breaking story alerts once, as a story, and is never lost
 - [`847a650b5`](https://github.com/yumima/finterm/commit/847a650b5) news: brief the whole feed on open, and don't ding for the backlog
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

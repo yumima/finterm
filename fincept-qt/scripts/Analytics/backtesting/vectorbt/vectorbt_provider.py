@@ -1485,7 +1485,7 @@ class VectorBTProvider(BacktestingProviderBase):
         Clean up symbol list.
 
         Symbols are expected to already include correct exchange suffixes
-        (e.g., PIDILITIND.NS, AAPL) as resolved at portfolio-add time.
+        (e.g., SAP.DE, AAPL) as resolved at portfolio-add time.
         This method just strips whitespace and uppercases.
         """
         normalized = []

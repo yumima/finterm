@@ -22,7 +22,7 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"order_type", "Order Type", "select", "market", {"market", "limit", "stop", "stop_limit"}, ""},
                 {"quantity", "Quantity", "number", 1, {}, "Number of shares/contracts", true},
                 {"price", "Limit Price", "number", 0, {}, "Price for limit orders"},
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr, // Wired via UnifiedTrading
@@ -41,7 +41,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"order_id", "Order ID", "string", "", {}, "Order ID to cancel", true},
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
@@ -62,7 +62,7 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"order_id", "Order ID", "string", "", {}, "Order ID to modify", true},
                 {"quantity", "New Quantity", "number", 0, {}, ""},
                 {"price", "New Price", "number", 0, {}, ""},
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
@@ -81,7 +81,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"status", "Status", "select", "all", {"all", "open", "filled", "cancelled"}, ""},
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
@@ -99,7 +99,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::PortfolioData}},
         .parameters =
             {
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
@@ -117,7 +117,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::PortfolioData}},
         .parameters =
             {
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
@@ -135,7 +135,7 @@ void register_trading_nodes(NodeRegistry& registry) {
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::Main}},
         .parameters =
             {
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
@@ -155,7 +155,7 @@ void register_trading_nodes(NodeRegistry& registry) {
             {
                 {"symbol", "Symbol", "string", "", {}, "Ticker symbol", true},
                 {"quantity", "Quantity", "number", 0, {}, "0 = close all"},
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
@@ -181,7 +181,7 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"entry_price", "Entry Price", "number", 0, {}, "Limit price"},
                 {"stop_loss", "Stop Loss", "number", 0, {}, "Stop price", true},
                 {"take_profit", "Take Profit", "number", 0, {}, "Target price", true},
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
@@ -203,7 +203,7 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"trail_type", "Trail Type", "select", "percent", {"percent", "fixed"}, ""},
                 {"trail_value", "Trail Value", "number", 5.0, {}, "% or $ amount"},
                 {"quantity", "Quantity", "number", 0, {}, "0 = all shares"},
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
@@ -226,7 +226,7 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"total_quantity", "Total Qty", "number", 100, {}, "", true},
                 {"tranches", "Tranches", "number", 4, {}, "Number of orders"},
                 {"interval_sec", "Interval (sec)", "number", 60, {}, "Seconds between orders"},
-                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "zerodha", "fyers", "ib"}, ""},
+                {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ib"}, ""},
                 {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,

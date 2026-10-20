@@ -962,7 +962,7 @@ void EquityResearchScreen::update_quote_bar(const services::equity::QuoteData& q
 // current wall-clock in the exchange's local timezone.
 //
 // Scope for Pass 2a: US equity venues + the major non-US ones we already
-// surface elsewhere in the app (LSE, TSX, TYO, HKG, NSE/BSE, German /
+// surface elsewhere in the app (LSE, TSX, TYO, HKG, Shanghai/Shenzhen, German /
 // Euronext). Unrecognised codes show the raw venue code in a muted
 // "no status" style — better than misleading the user with a guess.
 // US exchange holidays, computed rather than tabulated so the app does not
@@ -1038,7 +1038,7 @@ void EquityResearchScreen::update_market_status_badge() {
         QPair<int, int> pre;      // hours-of-day (24h), inclusive start, exclusive end
         QPair<int, int> regular;
         QPair<int, int> after;
-        // Half-hour offsets for venues like NSE (09:15–15:30 IST). Encoded
+        // Half-hour offsets for venues like LSE (08:00–16:30). Encoded
         // as start_minute / end_minute on top of the hour fields.
         int regular_start_min = 0;
         int regular_end_min   = 0;
@@ -1068,8 +1068,6 @@ void EquityResearchScreen::update_market_status_badge() {
         m.insert("HKG", {"Asia/Hong_Kong",    {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
         m.insert("SHH", {"Asia/Shanghai",     {-1, -1}, {9, 15}, {-1, -1}, 30, 0});
         m.insert("SHZ", {"Asia/Shanghai",     {-1, -1}, {9, 15}, {-1, -1}, 30, 0});
-        m.insert("NSI", {"Asia/Kolkata",      {-1, -1}, {9, 15}, {-1, -1}, 15, 30});
-        m.insert("BSE", {"Asia/Kolkata",      {-1, -1}, {9, 15}, {-1, -1}, 15, 30});
         m.insert("GER", {"Europe/Berlin",     {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
         m.insert("FRA", {"Europe/Berlin",     {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
         m.insert("AMS", {"Europe/Amsterdam",  {-1, -1}, {9, 17}, {-1, -1}, 0, 30});

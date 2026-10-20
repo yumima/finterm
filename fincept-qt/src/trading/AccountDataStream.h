@@ -1,7 +1,7 @@
 #pragma once
 // AccountDataStream — per-account data streaming service.
 // Each active broker account gets one instance. Owns:
-//   - WebSocket connection (if broker supports it: AngelOne, Zerodha)
+//   - WebSocket connection (hook only — no broker wires one yet)
 //   - Polling timers (quote, portfolio, watchlist)
 //   - Cached data snapshots (positions, holdings, orders, funds, quotes)
 // Signals are emitted on the main thread for UI consumption.

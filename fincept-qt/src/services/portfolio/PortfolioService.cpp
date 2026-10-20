@@ -1502,7 +1502,7 @@ struct CurrencyBenchmark {
 };
 constexpr CurrencyBenchmark kCurrencyBenchmarks[] = {
     {"USD", "SPY"},      {"CAD", "^GSPTSE"}, {"GBP", "^FTSE"}, {"EUR", "^STOXX50E"},
-    {"AUD", "^AXJO"},    {"INR", "^NSEI"},   {"JPY", "^N225"}, {"HKD", "^HSI"},
+    {"AUD", "^AXJO"},    {"JPY", "^N225"},   {"HKD", "^HSI"},
 };
 constexpr const char* kFallbackBenchmark = "SPY"; // unknown currencies
 
@@ -1564,7 +1564,7 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
                     // Daily BAR stamps (interval "1d"), so exchange-midnight —
                     // and the benchmark is often not a US index:
                     // default_benchmark_for_currency() maps JPY to ^N225, HKD to
-                    // ^HSI, INR to ^NSEI. ^N225's midnight JST is 15:00 UTC the
+                    // ^HSI. ^N225's midnight JST is 15:00 UTC the
                     // PREVIOUS day, so a UTC decode shifted the whole benchmark
                     // series one session against the NAV it is plotted with.
                     const QDate d = fincept::core::bartime::bar_date(ts);

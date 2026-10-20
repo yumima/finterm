@@ -337,7 +337,6 @@ QMenu* ToolBar::build_navigate_menu() {
 
     // Markets & Data
     auto* mkt = add_sub("Markets & Data");
-    nav(mkt, "F&&O", "fno");  // && escapes Qt menu-mnemonic interpretation of &
     nav(mkt, "Economics", "economics");
     nav(mkt, "GOVT Data", "gov_data");
     nav(mkt, "DBnomics", "dbnomics");
@@ -413,7 +412,6 @@ QMenu* ToolBar::build_view_menu() {
     panels->addAction("News Feed", this, [this]() { emit action_triggered("panel_news"); });
     panels->addAction("Portfolio", this, [this]() { emit action_triggered("panel_portfolio"); });
     panels->addAction("Markets", this, [this]() { emit action_triggered("panel_markets"); });
-    panels->addAction("F&&O", this, [this]() { emit action_triggered("panel_fno"); });
     panels->addSeparator();
     panels->addAction("Crypto Trading", this, [this]() { emit action_triggered("panel_crypto"); });
     panels->addAction("Equity Trading", this, [this]() { emit action_triggered("panel_equity"); });

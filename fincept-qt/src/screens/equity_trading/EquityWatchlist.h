@@ -3,12 +3,10 @@
 
 #include "trading/TradingTypes.h"
 
-#include <QCompleter>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMutex>
 #include <QPushButton>
-#include <QStringListModel>
 #include <QTableWidget>
 #include <QVector>
 #include <QWidget>
@@ -42,7 +40,6 @@ class EquityWatchlist : public QWidget {
     void on_cell_clicked(int row, int col);
     void on_filter_changed(const QString& text);
     void on_add_symbol_entered();
-    void on_add_text_changed(const QString& text);
 
   private:
     void rebuild_table();
@@ -50,8 +47,6 @@ class EquityWatchlist : public QWidget {
     QLineEdit* filter_edit_ = nullptr;
     QLineEdit* add_edit_ = nullptr; // symbol add input
     QPushButton* add_btn_ = nullptr;
-    QStringListModel* completer_model_ = nullptr;
-    QCompleter* completer_ = nullptr;
     QLabel* count_label_ = nullptr;
     QTableWidget* table_ = nullptr;
 
