@@ -222,9 +222,9 @@ _install_download_serializer()
 # HTTP 401 "Invalid Crumb" means the request's crumb does not match its cookie
 # (verified 2026-10-19: another session's crumb, a garbage crumb and no crumb
 # all return exactly this; new sessions on the same IP do NOT invalidate an
-# old one). Bursts of it (1-8 requests inside ~50 ms, every one failing
-# yfinance's own one retry) hit a few times a week; what changes the cookie
-# under the crumb is not yet known — _install_auth_probe logs the evidence.
+# old one). What changed the cookie under the crumb was yf.download() swapping
+# the singleton's session (caught by _install_auth_probe 2026-10-20) — pinned
+# in _install_auth_probe; the probe stays to catch any other cause.
 #
 # NOTE _reset_yfinance_session does NOT reset the crumb: it lives on the
 # yfinance.data.YfData singleton, which reload(yf) leaves in place (verified).
@@ -338,6 +338,35 @@ def _install_auth_probe():
 
     _make_request._finterm_probe = True
     YfData._make_request = _make_request
+
+    # THE cause of the 401 bursts (caught by the probe above, 2026-10-20):
+    # yf.download() builds a fresh curl session on every call and installs it
+    # into this singleton (multi.py: `YfData(session=session)` ->
+    # _set_session). That swaps out the cookie jar but keeps the crumb and the
+    # _cookie flag, so the next quoteSummary goes out with the old crumb and NO
+    # cookie -> 401 "Invalid Crumb", and Yahoo's Set-Cookie on that response
+    # plants a new A3 the crumb does not belong to either. Every batch quote
+    # did it, so `.info` (analyst targets, 52w range) failed whenever a
+    # download had just run — the screener, the watchlist poll. The daemon
+    # never passes its own session, so a replacement is never wanted: keep
+    # the first one, whose cookie the crumb was minted against.
+    orig_set_session = YfData._set_session
+    if not getattr(orig_set_session, "_finterm_probe", False):
+        dropped = []
+
+        def _set_session(self, session):
+            if getattr(self, "_session", None) is not None:
+                if session is not None and session is not self._session and not dropped:
+                    # Once: download() does this on every call. Says where a
+                    # deliberately passed session (a proxy, say) went.
+                    dropped.append(True)
+                    print("[yf-auth] replacement session ignored — the crumb belongs to "
+                          "the live one", file=sys.stderr, flush=True)
+                return
+            return orig_set_session(self, session)
+
+        _set_session._finterm_probe = True
+        YfData._set_session = _set_session
 
     # cache_get is lru_cache'd by URL for the process's life, and keeps
     # whatever came back — a 401 included. .info's key-statistics request goes

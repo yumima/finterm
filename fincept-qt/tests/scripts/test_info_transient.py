@@ -150,6 +150,24 @@ def main():
     check(rows and rows[0].get("sector") == "Technology" and yd._is_cacheable_result(rows),
           "batch profile answered -> data, cacheable")
 
+    # The cause of the bursts: yf.download() installs a brand-new session into
+    # the YfData singleton on every call (multi.py), dropping the cookie the
+    # cached crumb belongs to — the next .info then 401s. The session must
+    # survive a download; it runs offline because the swap happens before any
+    # ticker is fetched (an empty list fails right after it).
+    import yfinance as yf
+    pinned = data._session
+    try:
+        yf.download([], progress=False)
+    except Exception:  # noqa: BLE001
+        pass
+    check(data._session is pinned, "yf.download() keeps the session the crumb was minted for")
+    try:
+        YfData(session=object())
+    except Exception:  # noqa: BLE001  — unguarded, 0.2.66 rejects a non-curl session
+        pass
+    check(data._session is pinned, "YfData(session=...) never replaces a live session")
+
     if failed:
         print(f"\n{len(failed)} FAILED: " + ", ".join(failed))
         return 1

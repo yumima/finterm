@@ -212,6 +212,8 @@ class EquityOverviewTab : public QWidget {
     /// fetches and errors leave it unwritten, so without this the previous
     /// company's fundamentals sit under the new header indefinitely.
     void clear_info_panels();
+    void set_info_loading(bool on, const QString& message = QStringLiteral("LOADING\xe2\x80\xa6"));
+    void add_info_overlay(QWidget* over);
     void apply_historical_state(const services::query::QueryStore::State& s);
     void apply_earnings_state(const services::query::QueryStore::State& s);
     /// Bind or drop the earnings subscription depending on the EARN toggle
@@ -432,6 +434,10 @@ class EquityOverviewTab : public QWidget {
     // Overlay show/hide is driven from apply_historical_state's State.loading
     // tuple; quote/info panels populate independently as their subscriptions
     // resolve.
+    // One per info-driven panel group (valuation, share stats, column 4, the
+    // bottom row): up while the profile is in flight, so a pending fetch reads
+    // as loading rather than as a profile with no data in it.
+    QVector<ui::LoadingOverlay*> info_overlays_;
 };
 
 } // namespace fincept::screens

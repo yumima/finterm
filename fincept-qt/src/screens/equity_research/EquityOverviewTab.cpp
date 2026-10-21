@@ -754,6 +754,7 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     if (vol_val_)        vol_val_->setText(QStringLiteral("--"));
 
     clear_info_panels();
+    set_info_loading(true);
     update_primary_stats_row(-1);
     if (loading_overlay_)
         loading_overlay_->show_loading("LOADING OVERVIEW\xe2\x80\xa6");
@@ -827,7 +828,8 @@ void EquityOverviewTab::build_ui() {
     top->addWidget(col4);
 
     vl->addLayout(top, 1);
-    vl->addWidget(build_bottom_row(), 0);
+    auto* bottom = build_bottom_row();
+    vl->addWidget(bottom, 0);
 
     scroll->setWidget(content);
 
@@ -840,6 +842,16 @@ void EquityOverviewTab::build_ui() {
     // own signals arrive and stay readable; period buttons remain clickable
     // so the user can switch periods to interrupt a slow 5Y fetch.
     loading_overlay_ = new ui::LoadingOverlay(candle_canvas_);
+    add_info_overlay(col4);
+    add_info_overlay(bottom);
+}
+
+void EquityOverviewTab::add_info_overlay(QWidget* over) {
+    auto* o = new ui::LoadingOverlay(over);
+    // Click-through: the panels' tooltips and links stay reachable while a
+    // slow profile is in flight.
+    o->setAttribute(Qt::WA_TransparentForMouseEvents, true);
+    info_overlays_.append(o);
 }
 
 // ── Column 1: Trading + Valuation + Share Stats ───────────────────────────────
@@ -850,8 +862,11 @@ QWidget* EquityOverviewTab::build_col1() {
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(6);
     vl->addWidget(build_trading_panel());
-    vl->addWidget(build_valuation_panel());
-    vl->addWidget(build_share_stats_panel());
+    // Today's Trading is quote-driven; these two are info-driven.
+    for (QWidget* p : {build_valuation_panel(), build_share_stats_panel()}) {
+        vl->addWidget(p);
+        add_info_overlay(p);
+    }
     return w;
 }
 
@@ -2011,6 +2026,15 @@ void EquityOverviewTab::clear_info_panels() {
         targets_note_->hide();
 }
 
+void EquityOverviewTab::set_info_loading(bool on, const QString& message) {
+    for (auto* o : info_overlays_) {
+        if (on)
+            o->show_loading(message);
+        else
+            o->hide_loading();
+    }
+}
+
 void EquityOverviewTab::refresh_target_rows() {
     const auto& info = cached_info_;
     // ── Analyst Targets ──────────────────────────────────────────────────────
@@ -2083,11 +2107,22 @@ void EquityOverviewTab::apply_quote_state(const services::query::QueryStore::Sta
 void EquityOverviewTab::apply_info_state(const services::query::QueryStore::State& s) {
     if (s.fetched_at.isValid())
         info_as_of_ = s.fetched_at;
-    if (!s.data.isValid() || s.data.isNull())
+    const bool has_data = s.data.isValid() && !s.data.isNull();
+    const auto info = has_data ? s.data.value<services::equity::StockInfo>()
+                               : services::equity::StockInfo{};
+    if (!has_data || !info.valid) {
+        // Nothing to show yet. A failed fetch keeps the overlays up rather
+        // than leaving "—" behind, which reads as a company with no targets
+        // and no 52-week range: the screen's 20s refresh re-kicks this key
+        // (QueryStore backs a failure off to one attempt a minute), so a
+        // refusal really is "still loading".
+        if (s.loading)
+            set_info_loading(true);
+        else if (!s.error.isEmpty())
+            set_info_loading(true, QStringLiteral("DID NOT LOAD \xc2\xb7 RETRYING\xe2\x80\xa6"));
         return;
-    const auto info = s.data.value<services::equity::StockInfo>();
-    if (!info.valid)
-        return;
+    }
+    set_info_loading(false);
     cached_info_ = info;
     current_currency_ = info.currency;
     // The 52w-hi cell on the always-visible primary stats strip depends on
