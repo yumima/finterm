@@ -2026,10 +2026,10 @@ void EquityOverviewTab::clear_info_panels() {
         targets_note_->hide();
 }
 
-void EquityOverviewTab::set_info_loading(bool on, const QString& message) {
+void EquityOverviewTab::set_info_loading(bool on) {
     for (auto* o : info_overlays_) {
         if (on)
-            o->show_loading(message);
+            o->show_loading(QStringLiteral("LOADING\xe2\x80\xa6"));
         else
             o->hide_loading();
     }
@@ -2111,15 +2111,23 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
     const auto info = has_data ? s.data.value<services::equity::StockInfo>()
                                : services::equity::StockInfo{};
     if (!has_data || !info.valid) {
-        // Nothing to show yet. A failed fetch keeps the overlays up rather
-        // than leaving "—" behind, which reads as a company with no targets
-        // and no 52-week range: the screen's 20s refresh re-kicks this key
-        // (QueryStore backs a failure off to one attempt a minute), so a
-        // refusal really is "still loading".
-        if (s.loading)
+        // Nothing to show. A failure says so over the panels rather than
+        // leaving "—", which reads as a company with no targets and no 52-week
+        // range. Static (no animation): nothing is in flight. The screen's
+        // 20s refresh re-kicks a failed key while this tab is visible, at
+        // most once a minute — worth saying only when the vendor refused,
+        // since a permanent error will fail the same way again.
+        if (s.loading) {
             set_info_loading(true);
-        else if (!s.error.isEmpty())
-            set_info_loading(true, QStringLiteral("DID NOT LOAD \xc2\xb7 RETRYING\xe2\x80\xa6"));
+        } else if (!s.error.isEmpty()) {
+            const QString msg = services::equity::is_transient_error(s.error)
+                                    ? QStringLiteral("PROFILE DID NOT LOAD\nYahoo refused \xe2\x80\x94 will retry")
+                                    : QStringLiteral("NO PROFILE DATA\n") + s.error.section(QStringLiteral(" ("), 0, 0);
+            for (auto* o : info_overlays_)
+                o->show_message(msg);
+        } else {
+            set_info_loading(false);
+        }
         return;
     }
     set_info_loading(false);

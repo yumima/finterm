@@ -2,15 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-10-20)
+## Today's commits (2026-10-21)
 
 Latest first.
 
-- [`87556c481`](https://github.com/yumima/finterm/commit/87556c481) india: symbol search drops Indian listings (.NS/.BO, NSE/BSE)
-- [`fc4736d78`](https://github.com/yumima/finterm/commit/fc4736d78) india: review fixes — removed-broker guard covers every stream, ccxt alpaca streams again
-- [`c4496d471`](https://github.com/yumima/finterm/commit/c4496d471) india: gut every India-based source — brokers, NSE feeds, the F&O screen
-- [`36688bea2`](https://github.com/yumima/finterm/commit/36688bea2) news: review fixes — a breaking story alerts once, as a story, and is never lost
-- [`847a650b5`](https://github.com/yumima/finterm/commit/847a650b5) news: brief the whole feed on open, and don't ding for the backlog
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

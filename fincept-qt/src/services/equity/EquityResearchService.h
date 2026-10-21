@@ -12,6 +12,12 @@
 
 namespace fincept::services::equity {
 
+/// QueryStore errors are plain strings; an info fetch the vendor REFUSED
+/// (the daemon's {"transient": true} — a 401 burst, a timeout) is marked so a
+/// panel can say "try again" rather than "this symbol has no profile".
+inline QString mark_transient_error(const QString& e) { return QStringLiteral("transient:") + e; }
+inline bool is_transient_error(const QString& e) { return e.startsWith(QLatin1String("transient:")); }
+
 class EquityResearchService : public QObject {
     Q_OBJECT
   public:

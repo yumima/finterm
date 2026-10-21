@@ -212,7 +212,7 @@ class EquityOverviewTab : public QWidget {
     /// fetches and errors leave it unwritten, so without this the previous
     /// company's fundamentals sit under the new header indefinitely.
     void clear_info_panels();
-    void set_info_loading(bool on, const QString& message = QStringLiteral("LOADING\xe2\x80\xa6"));
+    void set_info_loading(bool on);
     void add_info_overlay(QWidget* over);
     void apply_historical_state(const services::query::QueryStore::State& s);
     void apply_earnings_state(const services::query::QueryStore::State& s);

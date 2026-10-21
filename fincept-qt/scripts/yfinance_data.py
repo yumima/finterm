@@ -198,8 +198,17 @@ def _install_download_serializer():
         if getattr(orig, "_finterm_serialized", False):
             return
 
+        from yfinance.data import YfData as _YfData
+
         @functools.wraps(orig)
         def _serialized(*args, **kwargs):
+            # Hand download the LIVE session. Given none, it builds a fresh
+            # curl session per call and installs it into the YfData singleton
+            # (multi.py `YfData(session=session)`), which drops the cookie the
+            # cached crumb was minted for: every .info after a batch quote
+            # then 401'd "Invalid Crumb" (caught by the [yf-auth] probe,
+            # 2026-10-20). _install_session_pin is the backstop.
+            kwargs.setdefault("session", _YfData()._session)
             with _DOWNLOAD_LOCK:
                 _gate_enter_download()
                 try:
@@ -223,8 +232,9 @@ _install_download_serializer()
 # (verified 2026-10-19: another session's crumb, a garbage crumb and no crumb
 # all return exactly this; new sessions on the same IP do NOT invalidate an
 # old one). What changed the cookie under the crumb was yf.download() swapping
-# the singleton's session (caught by _install_auth_probe 2026-10-20) — pinned
-# in _install_auth_probe; the probe stays to catch any other cause.
+# the singleton's session (caught by _install_auth_probe 2026-10-20) — fixed
+# in _install_download_serializer, backstopped by _install_session_pin; the
+# probe stays to catch any other cause.
 #
 # NOTE _reset_yfinance_session does NOT reset the crumb: it lives on the
 # yfinance.data.YfData singleton, which reload(yf) leaves in place (verified).
@@ -339,35 +349,6 @@ def _install_auth_probe():
     _make_request._finterm_probe = True
     YfData._make_request = _make_request
 
-    # THE cause of the 401 bursts (caught by the probe above, 2026-10-20):
-    # yf.download() builds a fresh curl session on every call and installs it
-    # into this singleton (multi.py: `YfData(session=session)` ->
-    # _set_session). That swaps out the cookie jar but keeps the crumb and the
-    # _cookie flag, so the next quoteSummary goes out with the old crumb and NO
-    # cookie -> 401 "Invalid Crumb", and Yahoo's Set-Cookie on that response
-    # plants a new A3 the crumb does not belong to either. Every batch quote
-    # did it, so `.info` (analyst targets, 52w range) failed whenever a
-    # download had just run — the screener, the watchlist poll. The daemon
-    # never passes its own session, so a replacement is never wanted: keep
-    # the first one, whose cookie the crumb was minted against.
-    orig_set_session = YfData._set_session
-    if not getattr(orig_set_session, "_finterm_probe", False):
-        dropped = []
-
-        def _set_session(self, session):
-            if getattr(self, "_session", None) is not None:
-                if session is not None and session is not self._session and not dropped:
-                    # Once: download() does this on every call. Says where a
-                    # deliberately passed session (a proxy, say) went.
-                    dropped.append(True)
-                    print("[yf-auth] replacement session ignored — the crumb belongs to "
-                          "the live one", file=sys.stderr, flush=True)
-                return
-            return orig_set_session(self, session)
-
-        _set_session._finterm_probe = True
-        YfData._set_session = _set_session
-
     # cache_get is lru_cache'd by URL for the process's life, and keeps
     # whatever came back — a 401 included. .info's key-statistics request goes
     # through it with a URL that changes once a day, so one refused request
@@ -400,6 +381,39 @@ def _install_auth_probe():
 
 
 _install_auth_probe()
+
+
+def _install_session_pin():
+    """Keep YfData's first session for the process's life.
+
+    A crumb is valid only with the cookie it was minted against, and
+    _set_session swaps the cookie jar while keeping the crumb — so ANY
+    replacement turns the next crumbed request into a 401. yf.download() was
+    the one caller doing it (fixed at the source in the download serializer);
+    this drops whatever else tries, and says so each time, because the daemon
+    never passes a session of its own and a drop now means a new cause."""
+    try:
+        from yfinance.data import YfData
+    except Exception:
+        return
+    orig = YfData._set_session
+    if getattr(orig, "_finterm_pinned", False):
+        return
+
+    def _set_session(self, session):
+        live = getattr(self, "_session", None)
+        if live is None:
+            return orig(self, session)
+        if session is not None and session is not live:
+            print(f"[yf-auth] replacement session ignored (crumb belongs to the live one) "
+                  f"thread={threading.current_thread().name}", file=sys.stderr, flush=True)
+
+    _set_session.__wrapped__ = orig
+    _set_session._finterm_pinned = True
+    YfData._set_session = _set_session
+
+
+_install_session_pin()
 
 
 def get_orderbook(symbol):

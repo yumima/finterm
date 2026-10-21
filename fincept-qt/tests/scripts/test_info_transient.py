@@ -152,21 +152,28 @@ def main():
 
     # The cause of the bursts: yf.download() installs a brand-new session into
     # the YfData singleton on every call (multi.py), dropping the cookie the
-    # cached crumb belongs to — the next .info then 401s. The session must
-    # survive a download; it runs offline because the swap happens before any
-    # ticker is fetched (an empty list fails right after it).
+    # cached crumb belongs to — the next .info then 401s. Both guards are
+    # checked on their own: the download serializer hands download the live
+    # session, and the pin refuses any other replacement. Offline: the swap
+    # happens before any ticker is fetched (an empty list fails right after).
     import yfinance as yf
+    from curl_cffi import requests as curl_requests
     pinned = data._session
+    pin = YfData._set_session
+    unpinned = getattr(pin, "__wrapped__", None)
+    check(unpinned is not None, "session pin installed (wraps YfData._set_session)")
+    # The serializer alone: lift the pin for the call.
+    YfData._set_session = unpinned or pin
     try:
         yf.download([], progress=False)
     except Exception:  # noqa: BLE001
         pass
-    check(data._session is pinned, "yf.download() keeps the session the crumb was minted for")
-    try:
-        YfData(session=object())
-    except Exception:  # noqa: BLE001  — unguarded, 0.2.66 rejects a non-curl session
-        pass
-    check(data._session is pinned, "YfData(session=...) never replaces a live session")
+    finally:
+        YfData._set_session = pin
+    check(data._session is pinned, "yf.download() is handed the live session, so it installs nothing new")
+    # The pin alone.
+    YfData(session=curl_requests.Session(impersonate="chrome"))
+    check(data._session is pinned, "YfData(session=<new curl session>) never replaces a live session")
 
     if failed:
         print(f"\n{len(failed)} FAILED: " + ", ".join(failed))

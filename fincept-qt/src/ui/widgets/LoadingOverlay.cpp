@@ -52,7 +52,19 @@ void LoadingOverlay::show_loading(const QString& message) {
     raise();
     show();
     tick_ = 0;
+    animated_ = true;
     anim_timer_->start();
+}
+
+void LoadingOverlay::show_message(const QString& message) {
+    message_ = message;
+    animated_ = false;
+    anim_timer_->stop();
+    if (parentWidget())
+        setGeometry(parentWidget()->rect());
+    raise();
+    show();
+    update();
 }
 
 void LoadingOverlay::hide_loading() {
@@ -82,6 +94,14 @@ void LoadingOverlay::paintEvent(QPaintEvent*) {
     const int base_y = cy + 4;
 
     QColor accent_color(tokens_.accent);
+
+    if (!animated_) {
+        QColor text_color(tokens_.text_secondary);
+        p.setPen(text_color);
+        p.setFont(QFont(tokens_.font_family, 10, QFont::Bold));
+        p.drawText(rect().adjusted(8, 0, -8, 0), Qt::AlignCenter | Qt::TextWordWrap, message_);
+        return;
+    }
 
     for (int i = 0; i < BAR_COUNT; ++i) {
         double phase = (tick_ * 0.3) - i * 0.7;

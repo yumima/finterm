@@ -19,6 +19,10 @@ class LoadingOverlay : public QWidget {
     explicit LoadingOverlay(QWidget* parent = nullptr);
 
     void show_loading(const QString& message = "LOADING\xe2\x80\xa6");
+    /// Same veil, message only — no bars, no animation timer. For a state
+    /// that is not in progress (a failed fetch), so it neither claims work is
+    /// happening nor repaints 10x a second for as long as it stands.
+    void show_message(const QString& message);
     void hide_loading();
 
   protected:
@@ -29,6 +33,7 @@ class LoadingOverlay : public QWidget {
     QTimer* anim_timer_ = nullptr;
     QString message_;
     int tick_ = 0;
+    bool animated_ = true;
     ThemeTokens tokens_{};
 
     static constexpr int BAR_COUNT = 5;

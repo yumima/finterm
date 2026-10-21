@@ -491,7 +491,8 @@ void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol
                     emit error_occurred(symbol, "Info", msg);
                     StockInfo failed; failed.symbol = symbol; failed.valid = false;
                     emit info_loaded(failed);
-                    reject(msg);
+                    // A daemon that never answered is as transient as a refusal.
+                    reject(!ok || obj.value("transient").toBool() ? mark_transient_error(msg) : msg);
                     return;
                 }
                 fincept::CacheManager::instance().put(
