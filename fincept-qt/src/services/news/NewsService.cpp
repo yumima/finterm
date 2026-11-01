@@ -45,6 +45,11 @@
 
 namespace fincept::services {
 
+// Versioned: articles carry their feed's region tag, and the v2 feed list
+// retagged several feeds (SCMP News/Business, DW, France 24, Guardian UK
+// Business). A cache written under the old tags would file those stories
+// under the wrong region pill until it expired.
+static constexpr const char* kArticlesCacheKey = "news:articles:v2";
 static constexpr int kFeedTransferTimeoutMs = 8000;   // 8s per RSS feed request
 
 // Model role used for AI briefs (TL;DR / DIGEST). A hearth role name rather
@@ -99,7 +104,7 @@ NewsService::NewsService() {
 
 void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
     if (!force) {
-        const QVariant cached = fincept::CacheManager::instance().get("news:articles");
+        const QVariant cached = fincept::CacheManager::instance().get(kArticlesCacheKey);
         if (!cached.isNull()) {
             const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
             QVector<NewsArticle> articles;
@@ -230,7 +235,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
                     arr.append(o);
                 }
                 fincept::CacheManager::instance().put(
-                    "news:articles", QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+                    kArticlesCacheKey, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                     kArticleCacheTtlSec, "news");
 
                 LOG_INFO("NewsService",
@@ -250,7 +255,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
 
 void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_cb) {
     if (!force) {
-        const QVariant cached = fincept::CacheManager::instance().get("news:articles");
+        const QVariant cached = fincept::CacheManager::instance().get(kArticlesCacheKey);
         if (!cached.isNull()) {
             const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
             QVector<NewsArticle> articles;
@@ -390,7 +395,7 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
                     parr.append(o);
                 }
                 fincept::CacheManager::instance().put(
-                    "news:articles", QVariant(QString::fromUtf8(QJsonDocument(parr).toJson(QJsonDocument::Compact))),
+                    kArticlesCacheKey, QVariant(QString::fromUtf8(QJsonDocument(parr).toJson(QJsonDocument::Compact))),
                     kArticleCacheTtlSec, "news");
 
                 LOG_INFO(
@@ -1182,7 +1187,7 @@ void NewsService::connect_live_feed(const QString& ws_url) {
         // Prepend to cached articles
         QVector<NewsArticle> updated;
         {
-            const QVariant cv = fincept::CacheManager::instance().get("news:articles");
+            const QVariant cv = fincept::CacheManager::instance().get(kArticlesCacheKey);
             if (!cv.isNull()) {
                 const QJsonArray existing = QJsonDocument::fromJson(cv.toString().toUtf8()).array();
                 updated.reserve(existing.size() + 1);
@@ -1220,7 +1225,7 @@ void NewsService::connect_live_feed(const QString& ws_url) {
             narr.append(o);
         }
         fincept::CacheManager::instance().put(
-            "news:articles", QVariant(QString::fromUtf8(QJsonDocument(narr).toJson(QJsonDocument::Compact))),
+            kArticlesCacheKey, QVariant(QString::fromUtf8(QJsonDocument(narr).toJson(QJsonDocument::Compact))),
             kArticleCacheTtlSec, "news");
         emit articles_partial(updated, 1, 1);
         LOG_INFO("NewsService", "Live article: " + article.headline.left(50));

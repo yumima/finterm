@@ -32,18 +32,28 @@
 
 namespace fincept::news {
 
-/// One region pill: the label the command bar shows and the filter keys on.
+/// One region pill: the label the command bar shows and the filter keys on,
+/// and the feed region tag (RSSFeed::region) that puts a whole feed under it.
 struct RegionPill {
     const char* code;
+    const char* feed_tag;
     const char* tooltip;
 };
 
 /// The region pills, in display order. Labels are fixed by the user: US, CHN, EU.
 inline constexpr RegionPill kRegionPills[] = {
-    {"US", "United States: all news (economy, tech, politics, markets…)"},
-    {"CHN", "China: all news (economy, tech, politics, markets…)"},
-    {"EU", "European Union & eurozone: all news (economy, tech, politics, markets…)"},
+    {"US", "US", "United States: all news (economy, tech, politics, markets…)"},
+    {"CHN", "CHINA", "China: all news (economy, tech, politics, markets…)"},
+    {"EU", "EU", "European Union & eurozone: all news (economy, tech, politics, markets…)"},
 };
+
+inline const RegionPill* find_pill(const QString& code) {
+    for (const auto& p : kRegionPills) {
+        if (code == QLatin1StringView(p.code))
+            return &p;
+    }
+    return nullptr;
+}
 
 inline const QStringList& region_codes() {
     static const QStringList kCodes = [] {
@@ -56,13 +66,16 @@ inline const QStringList& region_codes() {
 }
 
 inline bool is_region_code(const QString& code) {
-    return region_codes().contains(code);
+    return find_pill(code) != nullptr;
 }
 
-/// The feed region tags that put a whole feed under a pill (US / CHN / EU).
+/// The feed region tags that put a whole feed under a pill (US / CHINA / EU).
 inline bool is_pill_feed_region(const QString& feed_region) {
-    return feed_region == QLatin1StringView("US") || feed_region == QLatin1StringView("CHINA") ||
-           feed_region == QLatin1StringView("EU");
+    for (const auto& p : kRegionPills) {
+        if (feed_region == QLatin1StringView(p.feed_tag))
+            return true;
+    }
+    return false;
 }
 
 namespace detail {
@@ -84,11 +97,31 @@ inline bool contains_any(const QString& bounded, const QStringList& needles) {
     return false;
 }
 
-// "us" is also the pronoun, so lowercased text can't tell "US stocks" from
-// "join us". Capital letters can: check for "US"/"USA" as an upper-case
-// whole word in the ORIGINAL text. Skip any part written entirely in capitals
-// ("TELL US WHAT YOU THINK") because there the capitals carry no meaning.
-inline bool has_uppercase_us(const QString& original) {
+// Folds accents away ("Orbán" -> "Orban") so the ASCII keyword lists match
+// accented spellings; the word-bounded view would otherwise split the word
+// at the accented letter ("orb n").
+inline QString fold_accents(const QString& text) {
+    QString out;
+    const QString decomposed = text.normalized(QString::NormalizationForm_KD);
+    out.reserve(decomposed.size());
+    for (const QChar c : decomposed) {
+        if (c.category() != QChar::Mark_NonSpacing)
+            out.append(c);
+    }
+    return out;
+}
+
+// Some US signals are only readable from capital letters. "us" is also the
+// pronoun ("join us"), and "fed" is also the verb ("investors fed up"), so
+// those are checked case-sensitively against the ORIGINAL text: "US", "USA"
+// and "Fed" as whole words.
+//
+// Capitals carry no meaning in shouted text, so a match inside a run of three
+// or more all-caps words ("JOIN US LIVE: …", "TELL US WHAT YOU THINK") is
+// ignored, and so is a part written entirely in capitals. "US GDP grows"
+// (a run of two) still counts. "Fed up" is the verb even capitalised at the
+// start of a headline.
+inline bool has_capitalised_us_signal(const QString& original) {
     if (original.isEmpty())
         return false;
     bool has_lower = false;
@@ -107,9 +140,37 @@ inline bool has_uppercase_us(const QString& original) {
     static const QRegularExpression kNonWord(QStringLiteral("[^A-Za-z0-9]+"));
     QString v = original;
     v.replace(kUsDollar, QStringLiteral(" "));
-    v.replace(kNonWord, QStringLiteral(" "));
-    v = QLatin1Char(' ') + v.trimmed() + QLatin1Char(' ');
-    return v.contains(QLatin1StringView(" US ")) || v.contains(QLatin1StringView(" USA "));
+    const QStringList words = v.split(kNonWord, Qt::SkipEmptyParts);
+
+    auto all_caps = [](const QString& w) {
+        if (w.size() < 2)
+            return false;
+        for (const QChar c : w) {
+            if (!c.isUpper())
+                return false;
+        }
+        return true;
+    };
+    auto in_shouted_run = [&](qsizetype i) {
+        qsizetype lo = i, hi = i;
+        while (lo > 0 && all_caps(words[lo - 1]))
+            --lo;
+        while (hi + 1 < words.size() && all_caps(words[hi + 1]))
+            ++hi;
+        return hi - lo + 1 >= 3;
+    };
+    for (qsizetype i = 0; i < words.size(); ++i) {
+        const QString& w = words[i];
+        if (w == QLatin1StringView("US") || w == QLatin1StringView("USA")) {
+            if (!in_shouted_run(i))
+                return true;
+        } else if (w == QLatin1StringView("Fed")) {
+            const bool verb = i + 1 < words.size() && words[i + 1] == QLatin1StringView("up");
+            if (!verb)
+                return true;
+        }
+    }
+    return false;
 }
 
 inline const QStringList& us_needles() {
@@ -121,7 +182,7 @@ inline const QStringList& us_needles() {
         "republican", "republicans", "democrat", "democrats", "gop", "midterm", "midterms", "fbi", "cia", "fda", "irs",
         "medicare", "medicaid",
         // the central bank and the markets
-        "federal reserve", "fed", "fomc", "powell", "wall street", "nasdaq", "nyse", "dow jones",
+        "federal reserve", "fomc", "powell", "wall street", "nasdaq", "nyse", "dow jones",
         "s p 500", "treasuries",
         // places
         "new york", "california", "texas", "florida", "silicon valley",
@@ -191,24 +252,15 @@ inline constexpr qsizetype kSummaryLedeChars = 200;
 /// region code returns false.
 inline bool in_region(const QString& code, const QString& feed_region, const QString& headline,
                       const QString& summary) {
-    const QStringList* needles = nullptr;
-    if (code == QLatin1StringView("US")) {
-        if (feed_region == QLatin1StringView("US"))
-            return true;
-        if (detail::has_uppercase_us(headline))
-            return true;
-        needles = &detail::us_needles();
-    } else if (code == QLatin1StringView("CHN")) {
-        if (feed_region == QLatin1StringView("CHINA"))
-            return true;
-        needles = &detail::chn_needles();
-    } else if (code == QLatin1StringView("EU")) {
-        if (feed_region == QLatin1StringView("EU"))
-            return true;
-        needles = &detail::eu_needles();
-    } else {
+    const RegionPill* pill = find_pill(code);
+    if (!pill)
         return false;
-    }
+    if (feed_region == QLatin1StringView(pill->feed_tag))
+        return true;
+    const bool us = code == QLatin1StringView("US");
+    const QStringList& needles = us ? detail::us_needles()
+                               : code == QLatin1StringView("CHN") ? detail::chn_needles()
+                                                                  : detail::eu_needles();
 
     // Only the summary's lede counts. Feeds like the Guardian's carry whole
     // opening paragraphs, and deep in those a region turns up in passing ("the
@@ -223,10 +275,10 @@ inline bool in_region(const QString& code, const QString& feed_region, const QSt
         const qsizetype space = lede.lastIndexOf(QLatin1Char(' '), kSummaryLedeChars);
         lede.truncate(space > 0 ? space : kSummaryLedeChars);
     }
-    if (code == QLatin1StringView("US") && detail::has_uppercase_us(lede))
+    if (us && (detail::has_capitalised_us_signal(headline) || detail::has_capitalised_us_signal(lede)))
         return true;
-    QString bounded = word_bounded_view((headline + QLatin1Char(' ') + lede).toLower());
-    if (code == QLatin1StringView("US")) {
+    QString bounded = word_bounded_view(detail::fold_accents(headline + QLatin1Char(' ') + lede).toLower());
+    if (us) {
         for (const QString& ex : detail::us_exclusions())
             // Repeat until gone: adjacent copies ("latin america latin
             // america") share a space, so one replace() pass consumes it
@@ -234,7 +286,7 @@ inline bool in_region(const QString& code, const QString& feed_region, const QSt
             while (bounded.contains(ex))
                 bounded.replace(ex, QStringLiteral(" "));
     }
-    return detail::contains_any(bounded, *needles);
+    return detail::contains_any(bounded, needles);
 }
 
 } // namespace fincept::news

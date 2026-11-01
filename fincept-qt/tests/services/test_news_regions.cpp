@@ -64,6 +64,15 @@ class TestNewsRegions : public QObject {
         // "US$" is a currency, the way Asian outlets write every dollar amount.
         QVERIFY(!in_region("US", "GLOBAL", "Tencent raises US$5bn in bond sale", {}));
         QVERIFY(in_region("US", "GLOBAL", "US fines Tencent US$5bn", {}));
+        // "fed" the verb is not the Fed; only the capitalised name counts.
+        QVERIFY(!in_region("US", "GLOBAL", "Investors fed up with volatility", {}));
+        QVERIFY(!in_region("US", "GLOBAL", "Fed up with rents, tenants march", {}));
+        QVERIFY(in_region("US", "GLOBAL", "Fed holds rates steady", {}));
+        QVERIFY(in_region("US", "GLOBAL", "Markets rally after Fed decision", {}));
+        // Shouted runs carry no meaning in their capitals.
+        QVERIFY(!in_region("US", "GLOBAL", "JOIN US LIVE: the Bank of England decision", {}));
+        QVERIFY(!in_region("US", "GLOBAL", "TELL US WHAT YOU THINK: readers on housing", {}));
+        QVERIFY(in_region("US", "GLOBAL", "US GDP grows 2.1% in third quarter", {}));
         // Adjacent exclusions are all removed, not just the first.
         QVERIFY(!in_region("US", "GLOBAL", "Latin America Latin America summit opens", {}));
     }
@@ -84,6 +93,8 @@ class TestNewsRegions : public QObject {
         QVERIFY(in_region("EU", "GLOBAL", "Eurozone inflation ticks up", {}));
         QVERIFY(in_region("EU", "GLOBAL", "Macron calls snap vote", {}));
         QVERIFY(!in_region("EU", "GLOBAL", "Analysts stay neutral on oil", {}));
+        // Accented spellings fold to the ASCII keyword.
+        QVERIFY(in_region("EU", "GLOBAL", "Orbán vetoes aid package", {}));
         QVERIFY(!in_region("EU", "GLOBAL", "Workers polish the new terminal floor", {}));
     }
 
