@@ -729,6 +729,18 @@ target_link_libraries(test_news_brief_selection PRIVATE Qt6::Core Qt6::Network Q
 set_target_properties(test_news_brief_selection PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME news_brief_selection COMMAND test_news_brief_selection)
 
+# ── News region pills (US / CHN / EU) ────────────────────────────────────────
+# Which articles land under a region pill. Whole-word matching is what keeps
+# "eu" out of "neutral", "xi" out of "taxi" and the pronoun "us" out of US.
+add_executable(test_news_regions
+    services/test_news_regions.cpp
+)
+target_include_directories(test_news_regions PRIVATE ../src)
+# Qt6::Network for headers only: NewsFeedMerge.h includes NewsService.h.
+target_link_libraries(test_news_regions PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+set_target_properties(test_news_regions PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME news_regions COMMAND test_news_regions)
+
 # ── External-link scheme guard ───────────────────────────────────────────────
 # open_external_link() sits in front of QDesktopServices::openUrl, which hands
 # a URL to the desktop's scheme handler rather than to a browser. Dashboard

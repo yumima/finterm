@@ -10,6 +10,7 @@
 #include "screens/news/NewsSidePanel.h"
 #include "screens/news/NewsTickerStrip.h"
 #include "services/news/NewsCategories.h"
+#include "services/news/NewsRegions.h"
 #include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsNlpService.h"
 #include "services/notifications/NotificationService.h"
@@ -1039,8 +1040,13 @@ void NewsScreen::apply_filters_async() {
                 continue;
             }
 
-            // Category filter
-            if (category != "ALL") {
+            // Region filter: every category, restricted to one region.
+            if (fincept::news::is_region_code(category)) {
+                if (!fincept::news::in_region(category, a.region, a.headline, a.summary)) {
+                    ++rejected_category;
+                    continue;
+                }
+            } else if (category != "ALL") {
                 static const QHash<QString, QString> cat_map = {
                     {"MKT", "MARKETS"}, {"EARN", "EARNINGS"}, {"ECO", "ECONOMIC"},    {"TECH", "TECH"},
                     {"NRG", "ENERGY"},  {"CRPT", "CRYPTO"},   {"GEO", "GEOPOLITICS"}, {"DEF", "DEFENSE"},

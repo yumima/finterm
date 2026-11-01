@@ -5,6 +5,7 @@
 #include "services/news/NewsBriefSelection.h"
 #include "services/news/NewsCategories.h"
 #include "services/news/NewsClusterService.h"
+#include "services/news/NewsFeedMerge.h"
 
 #include "ai_chat/Degeneracy.h"
 #include "ai_chat/LlmService.h"
@@ -137,6 +138,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
     struct FetchState {
         QMutex mutex;
         QVector<NewsArticle> all_articles;
+        QHash<QString, qsizetype> index_by_link; // link -> position in all_articles
         QAtomicInt remaining{0};
         ArticlesCallback callback;
         NewsService* service = nullptr;
@@ -189,7 +191,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
 
             {
                 QMutexLocker lock(&state->mutex);
-                state->all_articles.append(articles);
+                fincept::news::merge_feed_batch(state->all_articles, state->index_by_link, articles);
             }
 
             if (state->remaining.fetchAndSubRelaxed(1) == 1) {
@@ -288,6 +290,7 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
     struct FetchState {
         QMutex mutex;
         QVector<NewsArticle> all_articles;
+        QHash<QString, qsizetype> index_by_link; // link -> position in all_articles
         QAtomicInt remaining{0};
         QAtomicInt done{0};
         ArticlesCallback callback;
@@ -339,7 +342,7 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
             int feeds_done = 0;
             {
                 QMutexLocker lock(&state->mutex);
-                state->all_articles.append(batch);
+                fincept::news::merge_feed_batch(state->all_articles, state->index_by_link, batch);
                 feeds_done = state->done.fetchAndAddRelaxed(1) + 1;
                 // Partial snapshot sorted by time for progressive display
                 snapshot = state->all_articles;
@@ -1737,7 +1740,10 @@ QVector<RSSFeed> NewsService::default_feeds() {
          "NYT", 2},
         {"guardian-world", "Guardian World", "https://www.theguardian.com/world/rss", "GEOPOLITICS", "GLOBAL",
          "GUARDIAN", 2},
-        {"france24", "France 24", "https://www.france24.com/en/rss", "GEOPOLITICS", "EU", "FRANCE 24", 2},
+        // France 24 and DW (below) are world services from European
+        // broadcasters, not EU desks: EUROPE, so only their stories that name
+        // the EU or a member state land under the EU pill.
+        {"france24", "France 24", "https://www.france24.com/en/rss", "GEOPOLITICS", "EUROPE", "FRANCE 24", 2},
 
         // Tier 2 — Geopolitics & Defense
         {"foreignpolicy", "Foreign Policy", "https://foreignpolicy.com/feed/", "GEOPOLITICS", "GLOBAL",
@@ -1756,9 +1762,32 @@ QVector<RSSFeed> NewsService::default_feeds() {
         {"fxstreet", "FXStreet", "https://www.fxstreet.com/rss/news", "MARKETS", "GLOBAL", "FXSTREET", 2},
 
         // Tier 2 — China & Asia
-        {"scmp", "South China Morning Post", "https://www.scmp.com/rss/91/feed", "GEOPOLITICS", "CHINA", "SCMP", 2},
+        // SCMP's News and Business feeds cover all of Asia (Malaysia, Singapore,
+        // Korea…), so they are tagged ASIA and only stories naming China count
+        // under CHN. Its China desk (scmp-china below) is tagged CHINA.
+        {"scmp", "South China Morning Post", "https://www.scmp.com/rss/91/feed", "GEOPOLITICS", "ASIA", "SCMP", 2},
         {"nikkei-asia", "Nikkei Asia", "https://asia.nikkei.com/rss/feed/nar", "MARKETS", "ASIA", "NIKKEI ASIA", 2},
-        {"caixin", "Caixin Global", "https://www.caixinglobal.com/feed/", "MARKETS", "CHINA", "CAIXIN", 2},
+        // (Caixin Global's /feed/ returns 404 — endpoint discontinued.)
+        {"scmp-china", "SCMP China", "https://www.scmp.com/rss/4/feed/", "GEOPOLITICS", "CHINA", "SCMP", 2},
+        {"ft-china", "FT China", "https://www.ft.com/china?format=rss", "MARKETS", "CHINA", "FT", 2},
+        {"bbc-china", "BBC China", "https://feeds.bbci.co.uk/news/world/asia/china/rss.xml", "GEOPOLITICS",
+         "CHINA", "BBC", 2},
+
+        // Tier 2 — Region desks for the US / CHN / EU news pills. A feed tagged
+        // with a pill's region lands under it whole; a broader desk is tagged
+        // more loosely so only the stories that name the region count. BBC Europe
+        // and NYT Europe carry the UK, Ukraine and Russia as well (EUROPE, not
+        // EU); BBC "US & Canada" carries Canada (GLOBAL, not US).
+        {"politico-eu", "Politico Europe", "https://www.politico.eu/feed/", "GEOPOLITICS", "EU", "POLITICO", 2},
+        {"euractiv", "Euractiv", "https://www.euractiv.com/feed/", "GEOPOLITICS", "EU", "EURACTIV", 2},
+        {"bbc-europe", "BBC Europe", "https://feeds.bbci.co.uk/news/world/europe/rss.xml", "GEOPOLITICS", "EUROPE",
+         "BBC", 2},
+        {"nyt-europe", "NYT Europe", "https://rss.nytimes.com/services/xml/rss/nyt/Europe.xml", "GEOPOLITICS",
+         "EUROPE", "NYT", 2},
+        {"nyt-us", "NYT U.S.", "https://rss.nytimes.com/services/xml/rss/nyt/US.xml", "GEOPOLITICS", "US", "NYT", 2},
+        {"npr-news", "NPR News", "https://feeds.npr.org/1001/rss.xml", "GEOPOLITICS", "US", "NPR", 2},
+        {"bbc-us", "BBC US & Canada", "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml", "GEOPOLITICS",
+         "GLOBAL", "BBC", 2},
 
         // Tier 2 — MENA
         {"middle-east-eye", "Middle East Eye", "https://www.middleeasteye.net/rss", "GEOPOLITICS", "MENA",
@@ -1798,11 +1827,11 @@ QVector<RSSFeed> NewsService::default_feeds() {
         {"benzinga", "Benzinga", "https://www.benzinga.com/feed", "MARKETS", "US", "BENZINGA", 2},
 
         // Tier 2 — Europe
-        {"dw-world", "Deutsche Welle", "https://rss.dw.com/rdf/rss-en-all", "GEOPOLITICS", "EU", "DW", 2},
+        {"dw-world", "Deutsche Welle", "https://rss.dw.com/rdf/rss-en-all", "GEOPOLITICS", "EUROPE", "DW", 2},
 
         // Tier 2 — China & Europe (additional)
-        {"scmp-biz", "SCMP Business", "https://www.scmp.com/rss/92/feed", "MARKETS", "CHINA", "SCMP", 2},
-        {"guardian-biz", "Guardian Business", "https://www.theguardian.com/uk/business/rss", "MARKETS", "EU",
+        {"scmp-biz", "SCMP Business", "https://www.scmp.com/rss/92/feed", "MARKETS", "ASIA", "SCMP", 2},
+        {"guardian-biz", "Guardian Business", "https://www.theguardian.com/uk/business/rss", "MARKETS", "UK",
          "GUARDIAN", 2},
         {"euronews-biz", "Euronews Business", "https://www.euronews.com/rss?level=theme&name=business", "MARKETS", "EU",
          "EURONEWS", 2},

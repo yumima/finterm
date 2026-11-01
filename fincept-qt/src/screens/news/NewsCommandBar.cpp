@@ -1,5 +1,6 @@
 #include "screens/news/NewsCommandBar.h"
 
+#include "services/news/NewsRegions.h"
 #include "ui/theme/Theme.h"
 
 #include <QScrollArea>
@@ -62,8 +63,12 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     hl->addSpacing(4);
 
     // Category pills — compact
-    QStringList categories = {"ALL", "MKT", "EARN", "ECO", "TECH", "NRG", "CRPT", "GEO", "DEF"};
-    for (const auto& cat : categories) {
+    // The region pills (US / CHN / EU) share this exclusive group: a region
+    // pill shows every category for that region, so combining it with a
+    // category pill would narrow it back down to one aspect. A separator sets
+    // them apart because they filter on a different axis.
+    const QStringList categories = {"ALL", "MKT", "EARN", "ECO", "TECH", "NRG", "CRPT", "GEO", "DEF"};
+    auto add_pill = [this, hl](const QString& cat) {
         auto* btn = make_pill(cat, cat, hl);
         category_btns_.append(btn);
         connect(btn, &QPushButton::clicked, this, [this, cat]() {
@@ -71,7 +76,15 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
             update_pill_group(category_btns_, active_category_);
             emit category_changed(cat);
         });
-    }
+        return btn;
+    };
+    for (const auto& cat : categories)
+        add_pill(cat);
+    auto* region_sep = new QLabel("|", row);
+    region_sep->setObjectName("newsCommandBarSep");
+    hl->addWidget(region_sep);
+    for (const auto& pill : fincept::news::kRegionPills)
+        add_pill(QString::fromLatin1(pill.code))->setToolTip(QString::fromUtf8(pill.tooltip));
     update_pill_group(category_btns_, active_category_);
 
     hl->addSpacing(4);
