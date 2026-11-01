@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`1e0bf1385`](https://github.com/yumima/finterm/commit/1e0bf1385) news: US / CHN / EU region pills
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

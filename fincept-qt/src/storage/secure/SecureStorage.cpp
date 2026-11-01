@@ -3,6 +3,9 @@
 #include "core/config/AppIdentity.h"
 #include "core/config/ProfileManager.h"
 #include "core/logging/Logger.h"
+#include <QHash>
+#include <QMutex>
+#include <QSet>
 #include <QSettings>
 
 // ── Platform-specific credential storage ──────────────────────────────────────
@@ -174,8 +177,7 @@ static QString scoped_key(const QString& key) {
 // store
 // ─────────────────────────────────────────────────────────────────────────────
 
-Result<void> SecureStorage::store(const QString& key_in, const QString& value) {
-    const QString key = scoped_key(key_in);
+static Result<void> backend_store(const QString& key, const QString& value) {
 #ifdef Q_OS_WIN
     // Windows Credential Manager — DPAPI-encrypted, user-scoped
     std::wstring target = L"FinceptTerminal/" + key.toStdWString();
@@ -298,8 +300,7 @@ Result<void> SecureStorage::store(const QString& key_in, const QString& value) {
 // retrieve
 // ─────────────────────────────────────────────────────────────────────────────
 
-Result<QString> SecureStorage::retrieve(const QString& key_in) {
-    const QString key = scoped_key(key_in);
+static Result<QString> backend_retrieve(const QString& key) {
 #ifdef Q_OS_WIN
     std::wstring target = L"FinceptTerminal/" + key.toStdWString();
     PCREDENTIALW cred = nullptr;
@@ -401,12 +402,12 @@ Result<QString> SecureStorage::retrieve(const QString& key_in) {
 #endif
 }
 
+
 // ─────────────────────────────────────────────────────────────────────────────
 // remove
 // ─────────────────────────────────────────────────────────────────────────────
 
-Result<void> SecureStorage::remove(const QString& key_in) {
-    const QString key = scoped_key(key_in);
+static Result<void> backend_remove(const QString& key) {
 #ifdef Q_OS_WIN
     std::wstring target = L"FinceptTerminal/" + key.toStdWString();
     if (!CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0) && GetLastError() != ERROR_NOT_FOUND) {
@@ -467,6 +468,150 @@ Result<void> SecureStorage::remove(const QString& key_in) {
     return Result<void>::ok();
 #    endif
 #endif
+}
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// In-memory cache over the backend
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Every Python subprocess is started with the whole credential catalogue
+// injected (PythonRunner::build_python_env: ~145 keys), and that runs on the
+// GUI thread. On Linux each uncached lookup is a synchronous Secret Service
+// D-Bus round trip, and a miss costs a second one (default_collection_locked).
+// Measured at 750-1000 ms per Python launch. During startup or a news fetch,
+// launches arrive back to back and hold the event loop for seconds. The UI
+// freezes, and pending QNetworkReplies make no progress until their transfer
+// timeouts fire (30 of 55 news feeds timed out together at exactly 8 s).
+//
+// So values are cached by scoped key, and absences too. Errors (locked or
+// unreachable keyring) are never cached, so they are retried. On libsecret
+// the first lookup lists every item with its secret in one search, which
+// makes the catalogue sweep D-Bus-free from then on. One mutex serializes all
+// keyring access through this class, so a lookup can't race a store and cache
+// a stale value.
+//
+// The cache only sees writes made through this process. Another process
+// editing this profile's keyring entries (secret-tool, a second instance on
+// the same profile) shows up after a restart.
+namespace {
+
+struct SecretCache {
+    QMutex mutex;
+    QHash<QString, QString> values; // scoped key -> value
+    QSet<QString> absent;           // scoped keys known not to exist
+    bool complete = false;          // values holds every item: a miss is "Not found"
+    bool preload_tried = false;
+};
+
+SecretCache& secret_cache() {
+    static SecretCache c;
+    return c;
+}
+
+const Result<QString> kNotFound = Result<QString>::err("Not found");
+
+#if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+// One Secret Service search returning every fincept item with its secret.
+// Leaves the cache incomplete (per-key lookups take over) if the search fails
+// or any item's secret could not be read, e.g. a collection that stayed locked.
+void preload_all(SecretCache& c) {
+    GError* err = nullptr;
+    const int flags = SECRET_SEARCH_ALL | SECRET_SEARCH_UNLOCK | SECRET_SEARCH_LOAD_SECRETS;
+    GList* items =
+        secret_password_search_sync(fincept_schema(), static_cast<SecretSearchFlags>(flags), nullptr, &err, nullptr);
+    if (err) {
+        LOG_WARN(TAG, QString("libsecret preload failed, using per-key lookups: ") + QString::fromUtf8(err->message));
+        g_error_free(err);
+        return;
+    }
+    QHash<QString, QString> loaded;
+    bool all_read = true;
+    for (GList* l = items; l; l = l->next) {
+        auto* retrievable = SECRET_RETRIEVABLE(l->data);
+        GHashTable* attrs = secret_retrievable_get_attributes(retrievable);
+        const auto* raw = static_cast<const gchar*>(g_hash_table_lookup(attrs, "fincept-key"));
+        const QString key = raw ? QString::fromUtf8(raw) : QString();
+        g_hash_table_unref(attrs);
+        if (key.isEmpty())
+            continue;
+        SecretValue* value = SECRET_IS_ITEM(l->data) ? secret_item_get_secret(SECRET_ITEM(l->data)) : nullptr;
+        if (!value) {
+            all_read = false;
+            continue;
+        }
+        loaded.insert(key, QString::fromUtf8(secret_value_get_text(value)));
+        secret_value_unref(value);
+    }
+    g_list_free_full(items, g_object_unref);
+    // Partial reads still go in: each value is genuine. Only "complete" is withheld.
+    for (auto it = loaded.cbegin(); it != loaded.cend(); ++it)
+        c.values.insert(it.key(), it.value());
+    c.complete = all_read;
+}
+#else
+void preload_all(SecretCache&) {} // Credential Manager / Keychain lookups are local and fast
+#endif
+
+// After a failed write the keyring may or may not hold the key, so the cache
+// must stop answering for it. Dropping it from `values` alone is not enough:
+// with `complete` set, a miss would then be reported as "Not found", and
+// callers that read absent as empty would show a blank, and possibly save
+// one, over a secret that is still there.
+void forget(SecretCache& c, const QString& key) {
+    c.values.remove(key);
+    c.absent.remove(key);
+    c.complete = false;
+}
+
+} // namespace
+
+Result<void> SecureStorage::store(const QString& key_in, const QString& value) {
+    const QString key = scoped_key(key_in);
+    auto& c = secret_cache();
+    QMutexLocker lock(&c.mutex);
+    auto r = backend_store(key, value);
+    if (r.is_ok()) {
+        c.values.insert(key, value);
+        c.absent.remove(key);
+    } else {
+        forget(c, key);
+    }
+    return r;
+}
+
+Result<QString> SecureStorage::retrieve(const QString& key_in) {
+    const QString key = scoped_key(key_in);
+    auto& c = secret_cache();
+    QMutexLocker lock(&c.mutex);
+    if (!c.preload_tried) {
+        c.preload_tried = true;
+        preload_all(c);
+    }
+    if (const auto it = c.values.constFind(key); it != c.values.constEnd())
+        return Result<QString>::ok(it.value());
+    if (c.complete || c.absent.contains(key))
+        return kNotFound;
+    auto r = backend_retrieve(key);
+    if (r.is_ok())
+        c.values.insert(key, r.value());
+    else if (is_not_found(r))
+        c.absent.insert(key);
+    return r;
+}
+
+Result<void> SecureStorage::remove(const QString& key_in) {
+    const QString key = scoped_key(key_in);
+    auto& c = secret_cache();
+    QMutexLocker lock(&c.mutex);
+    auto r = backend_remove(key);
+    if (r.is_ok()) {
+        c.values.remove(key);
+        c.absent.insert(key);
+    } else {
+        forget(c, key);
+    }
+    return r;
 }
 
 
@@ -535,6 +680,7 @@ bool SecureStorage::can_enumerate() {
 
 Result<QStringList> SecureStorage::list_keys(const QString& prefix) {
 #if !defined(Q_OS_WIN) && !defined(Q_OS_MAC) && defined(FINCEPT_HAVE_LIBSECRET)
+    QMutexLocker lock(&secret_cache().mutex); // serialized with every other keyring call
     QStringList out;
     const QString scope = ProfileManager::instance().secure_key_prefix();
     GError* err = nullptr;
