@@ -137,6 +137,8 @@ class IpoWatchView : public QWidget {
         QDate   last_filing_date;
         QVector<LadderStep> ladder;
         bool    edgar_known = false;
+        bool    edgar_failed = false;   // SEC was asked and did not answer (no stale copy)
+        bool    edgar_skipped = false;  // first filed too long ago to be read
         Projection proj;
         /// The date the pipeline is ordered and windowed by: the projected
         /// pricing date (or the window start) for a pending deal; the event
@@ -237,6 +239,8 @@ class IpoWatchView : public QWidget {
     void apply_pane_weights(bool chart_heavy);
     void render_kpis();
     void render_detail(const Entry* e); // nullptr clears the rail
+    const Entry* detail_entry() const;  // the open dossier's row, by deal id
+    void rerender_detail();
     // Per-section detail rail builders — each populates one tab page or pane.
     // Split out so render_detail isn't a 200-line monolith and so individual
     // sections can be unit-tested or reused later.
@@ -386,6 +390,7 @@ class IpoWatchView : public QWidget {
     /// from then on; automatic weighting stops.
     bool splitter_user_sized_ = false;
     QString detail_symbol_;
+    QString detail_deal_id_;   // the open dossier's deal (tickers repeat across re-filings)
     // Starred-ticker set, persisted under SettingsRepository key
     // `ipo_watch.starred`. Each entry is either the ticker (preferred) or
     // company name for upcoming deals with no ticker yet — see starred_key().

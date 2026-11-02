@@ -115,11 +115,9 @@ void PipelineView::rebuild_grid() {
     // bottom.
     const QDate today = QDate::currentDate();
 
-    // Priority: use actual_ipo_date (from Nasdaq) when available; fall back
-    // to filed_date + 90-day sector-median estimate for EDGAR-only filers.
+    // filed_date + 90 days (EDGAR-only; the projected pricing date with its
+    // basis lives in IPO Watch's calendar).
     auto days_to_price = [&](const S1Filing& s) -> qint64 {
-        if (s.has_actual_date && s.actual_ipo_date.isValid())
-            return today.daysTo(s.actual_ipo_date); // signed: negative = already pricing
         if (!s.filed_date.isValid())
             return std::numeric_limits<qint64>::max();
         // Estimated: filed + 90 days. Returning the signed value means overdue
@@ -155,8 +153,7 @@ void PipelineView::rebuild_grid() {
         ++idx;
     }
     grid_->setRowStretch(rows_per_col + 1, 1);
-    const QString src_note = sorted.isEmpty() ? "" :
-        (sorted.first().has_actual_date ? " (incl. Nasdaq)" : " (EDGAR S-1/F-1)");
+    const QString src_note = sorted.isEmpty() ? "" : " (EDGAR S-1/F-1)";
     count_lbl_->setText(QString::number(total) + " filers" + src_note);
 }
 
@@ -233,16 +230,11 @@ QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) c
     row3->addWidget(win_chip);
     vl->addLayout(row3);
 
-    // Row 4: IPO date — confirmed (from Nasdaq) or estimated (filed + 90d).
+    // Row 4: estimated IPO date (filed + 90d).
     {
         QString date_text;
         QString date_color = colors::TEXT_SECONDARY();
-        if (s.has_actual_date && s.actual_ipo_date.isValid()) {
-            const int d = today.daysTo(s.actual_ipo_date);
-            date_text  = d <= 0 ? "IPO: TODAY / PRICING"
-                                : QString("IPO: %1").arg(s.actual_ipo_date.toString("MMM d, yyyy"));
-            date_color = d <= 0 ? colors::POSITIVE() : colors::AMBER();
-        } else if (s.filed_date.isValid() && days >= 0) {
+        if (s.filed_date.isValid() && days >= 0) {
             const int est_days = std::max(0, 90 - days);
             const QDate est_date = today.addDays(est_days);
             date_text  = est_days == 0

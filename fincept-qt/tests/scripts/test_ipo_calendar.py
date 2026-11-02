@@ -154,13 +154,13 @@ def test_no_filing_date_still_bounds_the_ladder():
     # Uplisting: only an upcoming row in the window; a 2023 424B4 is history.
     d = {"deal_id": "u", "company": "U", "status": "upcoming", "filed_date": None,
          "expected_date": date(2026, 11, 10)}
-    ic.apply_submissions(d, sub([("S-1/A", "2026-10-20"), ("S-1", "2026-06-01"), ("424B4", "2023-03-01")]))
+    ic.apply_submissions(d, sub([("S-1/A", "2026-10-20"), ("S-1", "2026-06-01"), ("424B4", "2023-03-01")]), date(2026, 11, 1))
     assert d["status"] == "upcoming" and d["stage"] == "on_file", d
 
 
 def test_edgar_424b4_overrides_a_lagging_calendar():
     d = {"deal_id": "x", "company": "X", "status": "filed", "filed_date": date(2026, 10, 1)}
-    ic.apply_submissions(d, sub([("424B4", "2026-10-30"), ("EFFECT", "2026-10-29"), ("S-1", "2026-10-01")]))
+    ic.apply_submissions(d, sub([("424B4", "2026-10-30"), ("EFFECT", "2026-10-29"), ("S-1", "2026-10-01")]), date(2026, 11, 1))
     assert d["status"] == "priced" and d["priced_from"] == "edgar" and d["priced_date"] == date(2026, 10, 30)
     p = ic.project(d, None, T)
     assert p["kind"] == "priced" and "424B" in p["basis"], p   # not "Nasdaq priced row"
@@ -244,6 +244,40 @@ def test_overview_dashes_are_absent():
     ov = ic.parse_overview(po)
     assert ov["cik"] == "2103076" and ov["lockup_days"] is None and ov["shares"] == 16_000_000
     assert ov["overallot"] == 2_400_000
+
+
+def test_month_copy_taken_while_open_is_not_trusted_for_three_days():
+    nov1 = date(2026, 11, 1)
+    oct31_10am = ic._month_end_epoch("2026-10") - 14 * 3600
+    assert ic._month_ttl("2026-10", nov1, oct31_10am) == 30 * 60
+    assert ic._month_ttl("2026-10", nov1, ic._month_end_epoch("2026-10") + 2 * 86400) == 3 * 86400
+    assert ic._month_ttl("2026-11", nov1, None) == 30 * 60
+
+
+def test_pending_overview_is_reread_once_the_deal_prices():
+    import tempfile
+    c = ic.Cache(os.path.join(tempfile.mkdtemp(), "c.sqlite"))
+    c.put("ov:123", {"lockup_days": None})          # cached while pending (no _final)
+    calls = []
+    real = ic._fetch_overview_net
+    ic._fetch_overview_net = lambda did: calls.append(did) or {"lockup_days": 90}
+    try:
+        assert ic.overviews(c, [("123", False)])["123"] == {"lockup_days": None}
+        assert calls == []
+        got = ic.overviews(c, [("123", True)])["123"]
+        assert calls == ["123"] and got["lockup_days"] == 90 and got["_final"]
+        calls.clear()
+        assert ic.overviews(c, [("123", True)])["123"]["lockup_days"] == 90 and calls == []
+    finally:
+        ic._fetch_overview_net = real
+
+
+def test_ladder_floor_uses_the_as_of_date():
+    d = {"deal_id": "u", "company": "U", "status": "filed", "filed_date": None, "expected_date": None}
+    # As of 2026-06-01 the floor is 2025-06-01: a 2025-07 S-1 is in the
+    # ladder (the real date would have cut it off).
+    ic.apply_submissions(d, sub([("S-1", "2025-07-01")]), date(2026, 6, 1))
+    assert d["stage"] == "on_file" and len(d["ladder"]) == 1, d
 
 
 def main():

@@ -919,13 +919,23 @@ void IpoWatchView::load_calendar(bool enrich) {
                 if (!enrich) self->load_calendar(true);   // EDGAR may still answer
                 return;
             }
+            // Once EDGAR has been applied, a calendar-only answer would take
+            // it away (EDGAR verdicts, stages, imminent windows) for the
+            // minutes until enrich lands. Keep the enriched rows; re-quote.
+            if (!enrich && self->enriched_) {
+                self->enrich_priced_with_quotes();
+                self->load_calendar(true);
+                return;
+            }
             if (enrich) self->enrich_applied_gen_ = self->calendar_gen_;
             self->apply_calendar(root, enrich);
             // The fast pass is shown; now the slow one (a no-op while one
             // is already in flight).
             if (!enrich) self->load_calendar(true);
         },
-        {}, enrich ? 300'000 : 90'000);
+        // Cold enrich is ~4–5 min (overviews, then SEC at 2.5 req/s); each
+        // answer is cached as it lands, so a killed run still warms the next.
+        {}, enrich ? 600'000 : 90'000);
 }
 
 IpoWatchView::Entry IpoWatchView::entry_from_json(const QJsonObject& o) {
@@ -958,6 +968,8 @@ IpoWatchView::Entry IpoWatchView::entry_from_json(const QJsonObject& o) {
     x.stage_date     = d("stage_date");
     x.last_filing_date = d("last_filing_date");
     x.edgar_known    = o.contains("stage");
+    x.edgar_failed   = o.value("edgar_failed").toBool();
+    x.edgar_skipped  = o.value("edgar_skipped").toBool();
 
     if (x.status == "upcoming")       x.date = x.expected_date;
     else if (x.status == "priced")    x.date = x.priced_date;
@@ -1085,10 +1097,10 @@ void IpoWatchView::on_fetch_done() {
 
     render();
     // Keep the open dossier in step with the reload (its stage/projection
-    // may just have arrived). Matched by ticker, the rail's key.
+    // may just have arrived). Matched by deal id: a withdrawn deal and its
+    // re-filing often share the proposed ticker.
     if (!detail_symbol_.isEmpty() && active_lens_ != LensPrivate && active_lens_ != LensSignals)
-        for (const auto& en : entries_)
-            if (en.ticker == detail_symbol_) { render_detail(&en); break; }
+        rerender_detail();
 
     // Pre-fetch live quotes for priced tickers so the PERFORMANCE lens and
     // KPI strip have pop % ready on first interaction.
@@ -1157,12 +1169,8 @@ void IpoWatchView::fetch_history_for_detail(const Entry& e) {
             self->history_cache_.insert(sym, closes);
             // Only re-render if this ticker is still on screen.
             if (self->detail_symbol_ == sym) {
-                for (const auto& en : self->entries_) {
-                    if (en.ticker == sym) {
-                        self->render_detail(&en);
-                        return;
-                    }
-                }
+                self->rerender_detail();
+                return;
             }
         });
 }
@@ -1185,11 +1193,7 @@ void IpoWatchView::fetch_ipo_extras_for_detail(const Entry& e) {
             self->ipo_extras_inflight_.remove(sym);
             if (!ok) return;
             self->ipo_extras_.insert(sym, data);
-            if (self->detail_symbol_ == sym) {
-                for (const auto& en : self->entries_) {
-                    if (en.ticker == sym) { self->render_detail(&en); return; }
-                }
-            }
+            if (self->detail_symbol_ == sym) self->rerender_detail();
         });
 }
 
@@ -1232,21 +1236,11 @@ void IpoWatchView::fetch_sec_filings_for_detail(const Entry& e) {
                         if (!self || gen != self->filings_gen_)
                             return;
                         self->filings_retry_pending_.remove(sym);
-                        if (self->detail_symbol_ != sym)
-                            return;
-                        for (const auto& en : self->entries_)
-                            if (en.ticker == sym) {
-                                self->render_detail(&en);
-                                return;
-                            }
+                        if (self->detail_symbol_ == sym) self->rerender_detail();
                     });
                 }
             }
-            if (self->detail_symbol_ == sym) {
-                for (const auto& en : self->entries_) {
-                    if (en.ticker == sym) { self->render_detail(&en); return; }
-                }
-            }
+            if (self->detail_symbol_ == sym) self->rerender_detail();
         });
 }
 
@@ -1285,11 +1279,7 @@ void IpoWatchView::fetch_s1_funding_for_detail(const Entry& e) {
             self->s1_inflight_.remove(sym);
             if (!ok) { self->s1_misses_.insert(sym); return; }
             self->s1_cache_.insert(sym, data);
-            if (self->detail_symbol_ == sym) {
-                for (const auto& en : self->entries_) {
-                    if (en.ticker == sym) { self->render_detail(&en); return; }
-                }
-            }
+            if (self->detail_symbol_ == sym) self->rerender_detail();
         });
 }
 
@@ -1370,11 +1360,8 @@ void IpoWatchView::fetch_wikipedia_for_detail(const Entry& e) {
             // Only re-render if the currently selected row still has this
             // company name — we keyed on name (not ticker) so this differs
             // from the other fetchers.
-            for (const auto& en : self->entries_) {
-                if (en.company == name && self->detail_symbol_ == en.ticker) {
-                    self->render_detail(&en); return;
-                }
-            }
+            if (const Entry* en = self->detail_entry(); en && en->company == name)
+                self->render_detail(en);
         });
 }
 
@@ -3132,8 +3119,8 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
             // $1,000,000,000 against a multi-tens-of-billions IPO). Surfacing it
             // as "deal size" is exactly the misleading number this rework
             // removed — show the curated valuation + status instead. A genuine
-            // price range arrives via the Nasdaq-calendar enrichment near
-            // pricing (S1Filing::ticker / price_range), not from the S-1 header.
+            // price range arrives on the IPO calendar row near pricing, not
+            // from the S-1 header.
             h += "<p class='muted'>Offering size isn't shown — the S-1 registers a "
                  "nominal fee-placeholder amount, not the deal size. Open the EDGAR "
                  "prospectus for the live terms.</p>";
@@ -3265,6 +3252,7 @@ void IpoWatchView::render_detail_private(const QString& company_id) {
     // that space into the facts pane.
     apply_pane_weights(/*chart_heavy*/ has_mark_chart);
     detail_symbol_ = c.id;
+    detail_deal_id_.clear();
 }
 
 // ── Watchlist helpers ────────────────────────────────────────────────────────
@@ -3391,6 +3379,22 @@ static QString build_detail_css() {
     ).arg(body).arg(hdr).arg(meta).arg(big);
 }
 
+const IpoWatchView::Entry* IpoWatchView::detail_entry() const {
+    // The open dossier's deal: by deal id, else (a deal id the reload no
+    // longer carries) the first row with its ticker.
+    if (!detail_deal_id_.isEmpty())
+        for (const auto& en : entries_)
+            if (en.deal_id == detail_deal_id_) return &en;
+    if (detail_symbol_.isEmpty()) return nullptr;
+    for (const auto& en : entries_)
+        if (en.ticker == detail_symbol_) return &en;
+    return nullptr;
+}
+
+void IpoWatchView::rerender_detail() {
+    if (const Entry* en = detail_entry()) render_detail(en);
+}
+
 void IpoWatchView::render_detail(const Entry* e) {
     if (!header_lbl_) return;
     if (!e) {
@@ -3410,9 +3414,11 @@ void IpoWatchView::render_detail(const Entry* e) {
         if (tabs_facts_)  for (int i = 0; i < tabs_facts_->count();  ++i) tabs_facts_->setTabVisible(i, true);
         if (tabs_charts_) for (int i = 0; i < tabs_charts_->count(); ++i) tabs_charts_->setTabVisible(i, true);
         detail_symbol_.clear();
+        detail_deal_id_.clear();
         return;
     }
     detail_symbol_ = e->ticker;
+    detail_deal_id_ = e->deal_id;
     // Equity Research button only makes sense for already-listed companies —
     // upcoming/filed have no public market for ER to research.
     if (er_btn_) er_btn_->setVisible(e->status == "priced" && !e->ticker.isEmpty());
@@ -3458,11 +3464,7 @@ void IpoWatchView::render_detail(const Entry* e) {
             sym, [self, sym](bool ok, services::InfoData info) {
                 if (!self || !ok) return;
                 self->info_cache_.insert(sym, info);
-                if (self->detail_symbol_ == sym) {
-                    for (const auto& en : self->entries_) {
-                        if (en.ticker == sym) { self->render_detail(&en); return; }
-                    }
-                }
+                if (self->detail_symbol_ == sym) self->rerender_detail();
             });
     }
 
@@ -3826,6 +3828,12 @@ QString IpoWatchView::build_pipeline_html(const Entry& e) const {
     if (!enriched_)
         h += "<div class='muted' style='margin-top:6px;'>Reading the EDGAR registration stage… an 8-A, exchange "
              "certification or SEC effectiveness narrows this to days.</div>";
+    else if (e.edgar_failed)
+        h += "<div class='muted' style='margin-top:6px;'>SEC EDGAR did not answer for this issuer — stage unknown "
+             "(SEC refuses clients without Settings › Credentials › Contact email).</div>";
+    else if (e.edgar_skipped)
+        h += "<div class='muted' style='margin-top:6px;'>First filed over a year ago with no pricing — EDGAR "
+             "stage not read.</div>";
     else if (!e.edgar_known && e.cik.isEmpty())
         h += "<div class='muted' style='margin-top:6px;'>No SEC CIK on Nasdaq's deal page — EDGAR stage unknown.</div>";
     return h;
@@ -3896,6 +3904,11 @@ QString IpoWatchView::build_lockup_html(const Entry& e) const {
 QString IpoWatchView::build_timeline_html(const Entry& e) const {
     if (e.ladder.isEmpty()) {
         if (!enriched_) return "<div class='muted'>Reading EDGAR…</div>";
+        if (e.edgar_failed)
+            return "<div class='muted'>SEC EDGAR did not answer for this issuer — the ladder is unknown, not empty "
+                   "(SEC refuses clients without Settings › Credentials › Contact email).</div>";
+        if (e.edgar_skipped)
+            return "<div class='muted'>First filed over a year ago with no pricing — the EDGAR ladder was not read.</div>";
         return e.cik.isEmpty()
             ? "<div class='muted'>No SEC CIK on Nasdaq's deal page — the EDGAR ladder is unavailable.</div>"
             : "<div class='muted'>No registration filings found on EDGAR for this CIK.</div>";

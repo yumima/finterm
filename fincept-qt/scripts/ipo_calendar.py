@@ -170,6 +170,10 @@ class Cache:
             return None
         return json.loads(row[0])
 
+    def written_at(self, key):
+        row = self.con.execute("SELECT at FROM kv WHERE k=?", (f"v{SCHEMA_V}:{key}",)).fetchone()
+        return row[0] if row else None
+
     def stale(self, key):
         row = self.con.execute("SELECT v FROM kv WHERE k=?", (f"v{SCHEMA_V}:{key}",)).fetchone()
         return json.loads(row[0]) if row else None
@@ -183,8 +187,10 @@ class Cache:
 _last = {"nasdaq": 0.0, "sec": 0.0}
 # Request STARTS are spaced; the requests themselves run concurrently (Nasdaq
 # answers in ~2.5 s, so one-at-a-time made a cold enrich take >10 minutes).
-# SEC: ≤4 starts/s from this process, under its shared 10/s cap.
-_GAP = {"nasdaq": 0.12, "sec": 0.25}
+# SEC: ≤2.5 starts/s, the same budget as the other SEC scripts — up to three
+# of them run at once (PreIpoService's S-1/Form D/N-PORT fetches start when
+# IPO Watch opens) under SEC's shared 10/s cap.
+_GAP = {"nasdaq": 0.12, "sec": 0.4}
 _gate = threading.Lock()
 WORKERS = 8
 
@@ -209,10 +215,22 @@ def _http_json(kind, url, headers):
 
 # ── Nasdaq calendar ───────────────────────────────────────────────────────────
 
-def _month_ttl(yyyymm, today):
+def _month_end_epoch(yyyymm):
+    y, m = int(yyyymm[:4]), int(yyyymm[5:7])
+    nxt = date(y + (m == 12), m % 12 + 1, 1)
+    return time.mktime(nxt.timetuple())
+
+
+def _month_ttl(yyyymm, today, written_at=None):
     """A closed month is re-read after 3 days (Nasdaq occasionally back-fills
-    a row); the current and next month after 30 minutes."""
-    return 30 * 60 if yyyymm >= today.strftime("%Y-%m") else 3 * 86400
+    a row); the current and next month after 30 minutes. A copy taken while
+    the month was still open (or within a day of its close — the last day's
+    pricings land overnight) keeps the short TTL: the month's tail is missing."""
+    if yyyymm >= today.strftime("%Y-%m"):
+        return 30 * 60
+    if written_at is not None and written_at < _month_end_epoch(yyyymm) + 86400:
+        return 30 * 60
+    return 3 * 86400
 
 
 def _fetch_month_net(yyyymm):
@@ -233,7 +251,7 @@ def fetch_months(cache, months, today):
     failed month falls back to its last cached copy and says so."""
     docs, errors, miss = {}, [], []
     for m in months:
-        hit = cache.get(f"month:{m}", _month_ttl(m, today))
+        hit = cache.get(f"month:{m}", _month_ttl(m, today, cache.written_at(f"month:{m}")))
         if hit is not None:
             docs[m] = hit
         else:
@@ -538,13 +556,19 @@ def overviews(cache, wanted):
             out[did] = None
             continue
         hit = cache.get(f"ov:{did}", _ov_ttl(final))
+        # A copy taken while the deal was pending is not settled: the lock-up
+        # term, final shares and over-allotment arrive with the prospectus.
+        if hit is not None and final and not hit.get("_final"):
+            hit = None
         if hit is not None:
             out[did] = hit
         else:
             miss.append(did)
+    final_of = dict(wanted)
     with ThreadPoolExecutor(WORKERS) as ex:
         for did, ov in zip(miss, ex.map(_fetch_overview_net, miss)):
             if ov is not None:
+                ov["_final"] = bool(final_of.get(did))
                 cache.put(f"ov:{did}", ov)
             out[did] = ov if ov is not None else cache.stale(f"ov:{did}")
     return out
@@ -629,7 +653,7 @@ def apply_overview(d, ov):
         d["exchange"] = ov["exchange"]
 
 
-def apply_submissions(d, sub):
+def apply_submissions(d, sub, today):
     if not sub:
         return
     if sub.get("sic"):
@@ -638,7 +662,7 @@ def apply_submissions(d, sub):
     # No filing date in the window (first filed >13 months ago; only the
     # upcoming row is here): bound the ladder anyway, or an old 424B4 from an
     # earlier offering reads as this deal having priced.
-    floor = d.get("filed_date") or ((d.get("expected_date") or date.today()) - timedelta(days=365))
+    floor = d.get("filed_date") or ((d.get("expected_date") or today) - timedelta(days=365))
     ladder = ladder_from_submissions(sub, floor)
     d["ladder"] = ladder[:24]
     d["stage"], sd = stage_of(ladder)
@@ -669,6 +693,9 @@ def build(today=None, enrich=False, cache=None):
         horizon = today - timedelta(days=DORMANT_DAYS * 3)
         pending = [d for d in deals.values() if d["status"] in ("upcoming", "filed")
                    and (d.get("filed_date") or today) >= horizon]
+        for d in deals.values():
+            if d["status"] in ("upcoming", "filed") and (d.get("filed_date") or today) < horizon:
+                d["edgar_skipped"] = True
         recent_priced = [d for d in deals.values() if d.get("priced_date") and not d.get("spac")
                          and (today - d["priced_date"]).days <= LOCKUP_LOOKBACK]
         ovs = overviews(cache, [(d["deal_id"], False) for d in pending] +
@@ -680,15 +707,19 @@ def build(today=None, enrich=False, cache=None):
         failed = subs.pop("__failed__", [])
         for d in pending:
             if d.get("cik"):
-                apply_submissions(d, subs.get(d["cik"]))
+                sub = subs.get(d["cik"])
+                apply_submissions(d, sub, today)
+                d["edgar_failed"] = sub is None
         if failed:
             errors.append(f"SEC EDGAR unavailable for {len(failed)} issuer(s) — their stage is "
                           "unknown (SEC refuses clients without Settings › Credentials › Contact email)")
         lockups = lockup_rows(deals, today)
 
     # Project only after every stage is known: comparables read the others.
+    # Terminal deals return before reading comparables — don't build them.
     for d in deals.values():
-        d["projection"] = project(d, comparables(deals, d, today), today)
+        live = d["status"] in ("upcoming", "filed") and d.get("stage") not in ("priced", "withdrawn")
+        d["projection"] = project(d, comparables(deals, d, today) if live else None, today)
 
     return {"as_of": today.isoformat(), "enriched": enrich,
             "deals": sorted((_ser(d) for d in deals.values()), key=lambda r: r["deal_id"]),
