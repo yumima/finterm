@@ -7,6 +7,8 @@
 #include <QPointer>
 #include <QProcess>
 #include <QString>
+#include <QDeadlineTimer>
+#include <QVector>
 #include <QTimer>
 
 #include <functional>
@@ -26,9 +28,10 @@ namespace fincept::python {
 /// (6 network workers + 2 compute workers). Multiple requests can be
 /// in-flight simultaneously. Interactive requests (quote, info, historical,
 /// compute_technicals, …) are sent to the daemon immediately. Background
-/// batch actions (batch_all, batch_quotes, batch_sparklines) are deduplicated
-/// — at most one of each is in-flight at a time; new submissions while one is
-/// running are silently dropped (the refresh timer fires again in seconds).
+/// batch actions (batch_all, batch_quotes, batch_sparklines) share one
+/// background slot; at most one request per action waits behind it, and a
+/// later submission merges into that one (lists unioned, every callback
+/// answered — callers keep their own symbols). Nothing is dropped.
 class PythonWorker : public QObject {
     Q_OBJECT
   public:
@@ -49,6 +52,15 @@ class PythonWorker : public QObject {
                 int timeout_ms = 0);
 
     static constexpr int kNetworkActionTimeoutMs = 10'000;
+    static constexpr int kMaxMergedTimeoutMs = 20'000;   // a merged background request's budget cap
+    static constexpr int kBackgroundBackoffMs = 5'000;   // pause after a failed background sweep
+
+    /// The daemon sends an action's {"error": …} as ok:false WITH its body
+    /// (yfinance_data._reply_for). The body says whether it was a refusal
+    /// ("transient"); a failure without a body (timeout, no daemon) is one.
+    static bool reply_is_transient(bool ok, const QJsonObject& result) {
+        return result.contains(QStringLiteral("error")) ? result.value(QStringLiteral("transient")).toBool() : !ok;
+    }
     static constexpr int kComputeActionTimeoutMs = 30'000;
 
     void stop();
@@ -62,6 +74,7 @@ class PythonWorker : public QObject {
         QString     action;
         QJsonObject payload;
         Callback    cb;
+        QVector<Callback> also;   // callers merged into this background request
         QTimer*     deadline = nullptr;
     };
 
@@ -73,11 +86,15 @@ class PythonWorker : public QObject {
     void on_socket_data();         // socket: all response frames
     void try_drain_frames();       // parse frames from socket_buf_
     void dispatch_queued();        // called after socket connects
-    void on_background_complete(); // send next queued background action
+    void on_background_complete(bool failed = false); // send next queued background action (backs off after a failure)
     void send_to_daemon(int id, Pending p);
     void fail_all_pending(const QString& reason);
 
     static bool is_background_action(const QString& action);
+    /// Union of two background payloads (list fields merged, others newest).
+    static QJsonObject merge_background_payload(const QJsonObject& a, const QJsonObject& b);
+    static void answer(Pending& p, bool ok, const QJsonObject& result, const QString& err);
+    QTimer* make_deadline(int id, const QString& action, int timeout_ms);
 
     QProcess*      proc_          = nullptr;
     QLocalSocket*  socket_        = nullptr;
@@ -89,6 +106,7 @@ class PythonWorker : public QObject {
     static constexpr int kReadyTimeoutMs = 15'000;
 
     QHash<int, Pending>          in_flight_;
+    QDeadlineTimer               bg_backoff_{0};   // no background sends until it expires (monotonic)
     QVector<QPair<int, Pending>> queue_;
     int next_id_ = 1;
 

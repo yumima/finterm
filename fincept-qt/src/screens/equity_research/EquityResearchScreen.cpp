@@ -1,5 +1,6 @@
 // src/screens/equity_research/EquityResearchScreen.cpp
 #include "screens/equity_research/EquityResearchScreen.h"
+#include "ui/SearchFailedText.h"
 
 #include "screens/ownership/StockOwnershipPanel.h"
 
@@ -530,8 +531,10 @@ QWidget* EquityResearchScreen::build_title_bar() {
     // every time user types in the global bar.
     auto& svc = services::equity::EquityResearchService::instance();
     connect(&svc, &services::equity::EquityResearchService::search_results_loaded, this,
-            [this](QVector<services::equity::SearchResult> results) {
+            [this](QVector<services::equity::SearchResult> results, QString query) {
         if (!inline_search_input_ || !inline_search_input_->hasFocus()) return;
+        // A late answer to an earlier query must not replace the current one.
+        if (query != strip_search_prefix(inline_search_input_->text()).trimmed()) return;
         inline_search_popup_->clear();
         for (const auto& r : results) {
             // The delegate paints from the structured roles — no display
@@ -551,6 +554,23 @@ QWidget* EquityResearchScreen::build_title_bar() {
             return;
         }
         inline_search_popup_->setCurrentRow(0);
+        position_inline_search_popup();
+        inline_search_popup_->show();
+        inline_search_popup_->raise();
+    });
+
+    // A failed search says so in the popup instead of leaving the previous
+    // query's matches (or an empty list that reads as "no such ticker").
+    connect(&svc, &services::equity::EquityResearchService::search_failed, this, [this](QString query, QString, bool transient) {
+        if (!inline_search_input_ || !inline_search_input_->hasFocus()) return;
+        // A late failure of an earlier query must not cover the current one.
+        if (query != strip_search_prefix(inline_search_input_->text()).trimmed()) return;
+        inline_search_popup_->clear();
+        // The delegate paints from the roles, not the item text.
+        auto* it = new QListWidgetItem;
+        it->setData(kRoleName, fincept::ui::search_failed_text(transient));
+        it->setFlags(Qt::NoItemFlags);   // a message, not a pickable symbol
+        inline_search_popup_->addItem(it);
         position_inline_search_popup();
         inline_search_popup_->show();
         inline_search_popup_->raise();

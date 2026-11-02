@@ -183,9 +183,8 @@ void EquityOptionsTab::fetch() {
 void EquityOptionsTab::on_result(const QString& symbol, bool ok, const QJsonObject& obj, const QString& err) {
     in_flight_ = false;
     refresh_btn_->setEnabled(true);
-    // The worker reports ok=true for anything the action RETURNED, so the
-    // action's own {"error": ...} (no spot, every chain failed) lands here
-    // as a success unless checked.
+    // The action's own {"error": ...} (no spot, every chain failed) arrives as
+    // ok=false with its text in err; the body check stays as a backstop.
     const QString failure = !ok ? err : obj.value("error").toString();
     if (!ok || !failure.isEmpty()) {
         status_label_->setText(QStringLiteral("Option chain unavailable"));

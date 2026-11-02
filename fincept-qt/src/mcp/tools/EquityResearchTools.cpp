@@ -402,33 +402,33 @@ std::vector<ToolDef> get_equity_research_tools() {
             AsyncDispatch::callback_to_promise(
                 svc, std::move(ctx), promise,
                 [svc, q](auto resolve) {
-                    auto* holder = new QObject(svc);
-                    QObject::connect(svc, &services::equity::EquityResearchService::search_results_loaded, holder,
-                                      [resolve, holder](QVector<services::equity::SearchResult> rs) {
-                                          QJsonArray arr;
-                                          for (const auto& r : rs) {
-                                              arr.append(QJsonObject{
-                                                  {"symbol", r.symbol},
-                                                  {"name", r.name},
-                                                  {"exchange", r.exchange},
-                                                  {"type", r.type},
-                                                  {"currency", r.currency},
-                                                  {"industry", r.industry},
-                                              });
-                                          }
-                                          resolve(ToolResult::ok_data(arr));
-                                          holder->deleteLater();
-                                      });
-                    QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [resolve, holder](QString, QString context, QString msg) {
-                                          // Search errors are the only ones meant for this call;
-                                          // a quote/info failure for some symbol on the shared
-                                          // service must not fail an unrelated search.
-                                          if (context != QLatin1String("Search")) return;
-                                          resolve(ToolResult::fail(msg));
-                                          holder->deleteLater();
-                                      });
-                    svc->search_symbols(q);
+                    // search_symbols_for ignores a blank query (no callback):
+                    // answer it here rather than hang the tool call.
+                    if (q.trimmed().isEmpty()) {
+                        resolve(ToolResult::fail(QStringLiteral("empty query")));
+                        return;
+                    }
+                    // Answered to this call alone (search_symbols_for), so
+                    // another caller's search can't resolve or fail it.
+                    svc->search_symbols_for(q, [resolve](QString, QVector<services::equity::SearchResult> rs,
+                                                         QString error) {
+                        if (!error.isEmpty()) {
+                            resolve(ToolResult::fail(error));
+                            return;
+                        }
+                        QJsonArray arr;
+                        for (const auto& r : rs) {
+                            arr.append(QJsonObject{
+                                {"symbol", r.symbol},
+                                {"name", r.name},
+                                {"exchange", r.exchange},
+                                {"type", r.type},
+                                {"currency", r.currency},
+                                {"industry", r.industry},
+                            });
+                        }
+                        resolve(ToolResult::ok_data(arr));
+                    });
                 });
         };
         tools.push_back(std::move(t));

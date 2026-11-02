@@ -3349,7 +3349,9 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                     // A refusal or a timeout is not an answer: retry in
                     // minutes, not after the 6h an answer without one earns.
                     lock.unlock();
-                    const bool transient = !ok || obj.value("transient").toBool();
+                    // A daemon {"error"} arrives as ok:false with its body, which
+                    // says whether it was a refusal; no body (timeout) is one.
+                    const bool transient = python::PythonWorker::reply_is_transient(ok, obj);
                     fincept::CacheManager::instance().put(symbol_currency_key(sym),
                                                           QString::fromLatin1(kCurrencyUnknown),
                                                           transient ? kCurrencyRetryTtlSec : kCurrencyUnknownTtlSec);

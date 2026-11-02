@@ -1,5 +1,6 @@
 // src/screens/portfolio/PortfolioDialogs.cpp
 #include "screens/portfolio/PortfolioDialogs.h"
+#include "ui/SearchFailedText.h"
 
 #include "python/PythonWorker.h"
 #include "services/portfolio/PortfolioDates.h"
@@ -356,24 +357,15 @@ void AddAssetDialog::fire_search(const QString& query) {
         [self, query](bool ok, QJsonObject result, QString) {
             if (!self || self->pending_query_ != query)
                 return;
-            if (!ok)
-                return;
-
-            // Daemon wraps flat arrays under "_value"; search_symbols' native
-            // shape is {results:[...]}. Each result is already a yfinance-ready
-            // symbol (foreign listings arrive with their suffix, e.g. "SPCX.TO").
-            QJsonArray arr;
-            if (result.contains("_value") && result["_value"].isArray())
-                arr = result["_value"].toArray();
-            else if (result.contains("results"))
-                arr = result["results"].toArray();
-
-            self->show_results(arr);
+            // A failed search says so (read_search_reply) — not the last query's
+            // matches, and not an empty list that reads as "no such ticker".
+            const auto reply = fincept::ui::read_search_reply(ok, result);
+            self->show_results(reply.results, reply.failure);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
-void AddAssetDialog::show_results(const QJsonArray& results) {
+void AddAssetDialog::show_results(const QJsonArray& results, const QString& failure) {
     search_list_->clear();
 
     if (results.isEmpty()) {
@@ -383,7 +375,7 @@ void AddAssetDialog::show_results(const QJsonArray& results) {
         row->setStyleSheet("background:transparent;");
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(10, 6, 10, 6);
-        auto* lbl = new QLabel("No results found");
+        auto* lbl = new QLabel(failure.isEmpty() ? QStringLiteral("No results found") : failure);
         lbl->setStyleSheet(
             QString("color:%1; font-size:12px; font-family:'Consolas',monospace; background:transparent;")
                 .arg(ui::colors::TEXT_SECONDARY()));

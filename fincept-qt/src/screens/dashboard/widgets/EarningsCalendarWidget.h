@@ -145,6 +145,8 @@ class EarningsCalendarWidget : public BaseWidget {
     int pending_symbols_ = 0;
     int ok_days_ = 0;
     int ok_symbols_ = 0;
+    QStringList refused_symbols_;   // refused / unanswered (not "no earnings")
+    QString     refused_note_;      // names them under the list; replaced per fetch
     bool week_rows_ready_ = false;
 
     QVector<portfolio::Portfolio> portfolios_;

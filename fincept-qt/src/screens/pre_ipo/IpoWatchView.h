@@ -27,6 +27,10 @@
 #include <QHash>
 #include <QJsonDocument>
 #include <QSet>
+
+#include <QDeadlineTimer>
+
+#include <functional>
 #include <QString>
 #include <QStringList>
 #include <QVector>
@@ -216,8 +220,25 @@ class IpoWatchView : public QWidget {
     void apply_calendar(const QJsonObject& root, bool enriched);
     static Entry entry_from_json(const QJsonObject& o);
     void on_fetch_done();
-    void enrich_priced_with_quotes(); // single batch_quotes, populates pop_pct
-    void enrich_with_profiles();      // single batch_info, populates sector/industry
+    void enrich_priced_with_quotes(); // queues priced tickers for quotes (pop_pct)
+    void enrich_with_profiles();      // queues priced tickers for profiles (sector/industry)
+    // Yahoo is asked for IPO tickers in chunks, one at a time (run_pump).
+    struct ChunkPump {
+        QStringList   queue;       // waiting, in order
+        QSet<QString> queued;      // = queue, for O(1) membership
+        QSet<QString> requested;   // asked (or waiting) — not re-queued; cleared on refresh / wake
+        QSet<QString> inflight;    // the chunk being asked now
+        bool    busy = false;      // a chunk is out, or the gap after it runs
+        quint64 gen = 0;           // bumped on send and on reply/give-up: a stale reply or watchdog is ignored
+        QDeadlineTimer cooldown{0};   // after a refusal: no chunk before it expires
+        bool    cooldown_wake = false; // a resume is already scheduled
+        bool add(const QString& ticker);   // false when already asked / waiting
+    };
+    /// fetch(syms, done) asks for one chunk; done(refused, retry) reports it:
+    /// `retry` tickers are asked again later, `refused` stops the chain.
+    using ChunkDone  = std::function<void(bool refused, const QSet<QString>& retry)>;
+    using ChunkFetch = std::function<void(const QStringList& syms, ChunkDone done)>;
+    void run_pump(ChunkPump* p, const char* what, ChunkFetch fetch, std::function<void()> on_drain);
 
     // ── Rendering ───────────────────────────────────────────────────────────
     void render();                  // dispatch by active_lens_
@@ -342,8 +363,7 @@ class IpoWatchView : public QWidget {
     bool    enriched_          = false;   // EDGAR stage present in entries_
     quint64 calendar_gen_      = 0;       // bumped per refresh; stale fast replies dropped
     quint64 enrich_applied_gen_ = 0;      // gen at which the last enrich reply was applied
-    QSet<QString> profiles_requested_;    // batch_info asked once per session (cleared on wake)
-    QSet<QString> quotes_requested_;      // batch_quotes asked once per refresh
+    ChunkPump quote_pump_, profile_pump_;
     QStringList calendar_errors_;
     QString status_text() const;
     // Lazy per-symbol info cache for the detail rail. fetch_info returns

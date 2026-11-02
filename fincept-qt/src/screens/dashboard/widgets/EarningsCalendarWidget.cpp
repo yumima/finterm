@@ -382,6 +382,7 @@ void EarningsCalendarWidget::refresh_data() {
     week_rows_ready_ = false;
     entries_.clear();
     note_.clear();
+    refused_note_.clear();
     holdings_by_portfolio_.clear();
     awaiting_summaries_.clear();
     set_loading(true);
@@ -648,6 +649,7 @@ void EarningsCalendarWidget::on_holdings_ready() {
 void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, qint64 epoch, bool portfolio_view) {
     pending_symbols_ = symbols.size();
     ok_symbols_ = 0;
+    refused_symbols_.clear();
 
     QPointer<EarningsCalendarWidget> self = this;
     for (const QString& sym : symbols) {
@@ -660,16 +662,26 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
 
         python::PythonWorker::instance().submit(
             "earnings_dates", payload,
-            [self, sym, epoch, portfolio_view](bool ok, QJsonObject result, QString err) {
+            [self, sym, epoch, portfolio_view, total = symbols.size()](bool ok, QJsonObject result, QString err) {
                 if (!self || epoch != self->epoch_)
                     return;
 
                 if (ok && !result.contains("error")) {
                     ++self->ok_symbols_;
                     self->apply_symbol_result(sym, result, portfolio_view);
-                } else if (!ok) {
+                } else if (python::PythonWorker::reply_is_transient(ok, result)) {
+                    // A refusal or no answer at all. A plain {"error"} body
+                    // (ok:false since the daemon sends errors as failed
+                    // replies) is the ETF/index "no earnings" case — skipped
+                    // quietly, as before.
                     LOG_WARN("EarningsCal",
                              QString("earnings_dates failed for %1: %2").arg(sym, err.left(120)));
+                    self->refused_symbols_.append(sym);
+                } else {
+                    // Not a refusal: usually an ETF/index with no earnings —
+                    // logged quietly so a real parse bug is still findable.
+                    LOG_DEBUG("EarningsCal",
+                              QString("earnings_dates: no data for %1: %2").arg(sym, err.left(120)));
                 }
 
                 if (--self->pending_symbols_ > 0)
@@ -677,9 +689,23 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
 
                 self->set_loading(false);
                 if (portfolio_view && self->ok_symbols_ == 0) {
-                    self->show_status(QStringLiteral("Couldn't load earnings dates for these holdings."));
+                    // Blame Yahoo only when it refused them all; some may
+                    // simply have no earnings (ETFs).
+                    self->show_status(self->refused_symbols_.size() == total
+                                          ? QStringLiteral("Couldn't load earnings dates — no answer from Yahoo.")
+                                          : QStringLiteral("Couldn't load earnings dates for these holdings."));
                     return;
                 }
+                // Refused lookups are named, not left to read as "no upcoming
+                // earnings" — per fetch (replaced, not appended to note_). In
+                // the week view they are only an enrichment of rows already
+                // shown, so the calendar stays.
+                // At most five names, so a burst on a big book can't flood the tile.
+                const auto& rs = self->refused_symbols_;
+                self->refused_note_ = rs.isEmpty() ? QString()
+                    : rs.size() <= 5 ? QStringLiteral("No answer from Yahoo for: %1.").arg(rs.join(QStringLiteral(", ")))
+                                     : QStringLiteral("No answer from Yahoo for %1 symbols (%2, …).")
+                                           .arg(rs.size()).arg(rs.mid(0, 5).join(QStringLiteral(", ")));
                 if (portfolio_view) {
                     std::sort(self->entries_.begin(), self->entries_.end(),
                               [](const Entry& a, const Entry& b) {
@@ -1016,9 +1042,11 @@ void EarningsCalendarWidget::populate() {
     }
     list_layout_->addStretch();
 
-    status_label_->setVisible(!note_.isEmpty());
-    if (!note_.isEmpty())
-        status_label_->setText(note_);
+    const QString note = note_.isEmpty() ? refused_note_
+                       : refused_note_.isEmpty() ? note_ : note_ + QLatin1Char(' ') + refused_note_;
+    status_label_->setVisible(!note.isEmpty());
+    if (!note.isEmpty())
+        status_label_->setText(note);
     scroll_area_->show();
 }
 

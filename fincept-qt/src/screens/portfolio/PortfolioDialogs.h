@@ -60,7 +60,7 @@ class AddAssetDialog : public QDialog {
   private:
     void schedule_search(const QString& query);
     void fire_search(const QString& query);
-    void show_results(const QJsonArray& results);
+    void show_results(const QJsonArray& results, const QString& failure = {});  // failure: shown instead of "No results"
     void select_result(const QString& symbol);
     void position_dropdown();
 

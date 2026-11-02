@@ -391,12 +391,17 @@ void EquityResearchService::search_symbols(const QString& query) {
     QJsonObject payload;
     payload["query"] = query;
     payload["limit"] = 20;
-    run_daemon("search", payload, [this](bool ok, QJsonObject result, QString err) {
+    run_daemon("search", payload, [this, query](bool ok, QJsonObject result, QString err) {
         if (!ok) {
+            // Said as a failure (its own signal — error_occurred with no
+            // symbol would fail every MCP equity tool listening for one), not
+            // as an empty result list, which reads as "no such ticker". The
+            // query lets a listener ignore a late failure of an older one.
             LOG_WARN("EquityResearch", "Symbol search failed: " + err);
+            emit search_failed(query, err, python::PythonWorker::reply_is_transient(ok, result));
             return;
         }
-        emit search_results_loaded(parse_search_results(result));
+        emit search_results_loaded(parse_search_results(result), query);
     });
 }
 
@@ -491,8 +496,11 @@ void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol
                     emit error_occurred(symbol, "Info", msg);
                     StockInfo failed; failed.symbol = symbol; failed.valid = false;
                     emit info_loaded(failed);
-                    // A daemon that never answered is as transient as a refusal.
-                    reject(!ok || obj.value("transient").toBool() ? mark_transient_error(msg) : msg);
+                    // A daemon that never answered (no body) is as transient as a
+                    // refusal; a vendor {"error"} body (ok:false since the daemon
+                    // sends errors as failed replies) says which it was.
+                    const bool transient = python::PythonWorker::reply_is_transient(ok, obj);
+                    reject(transient ? mark_transient_error(msg) : msg);
                     return;
                 }
                 fincept::CacheManager::instance().put(
@@ -792,7 +800,12 @@ void EquityResearchService::subscribe_earnings(QObject* owner, const QString& sy
         payload["symbol"] = symbol;
         run_daemon("earnings_dates", payload,
             [this, symbol, resolve, reject](bool ok, QJsonObject result, QString err) {
-                if (!ok) { reject(err); return; }
+                // A refusal or no answer at all is not "no earnings" — don't
+                // hold an empty answer for the TTL.
+                if (python::PythonWorker::reply_is_transient(ok, result)) {
+                    reject(mark_transient_error(result.contains("error") ? result.value("error").toString() : err));
+                    return;
+                }
                 if (result.contains("error")) {
                     // Non-fatal: many tickers have no earnings (ETFs, indices,
                     // certain ADRs). Resolve with empty so the chart just
@@ -883,7 +896,7 @@ void EquityResearchService::fetch_quote(const QString& symbol) {
 
 // ── Load symbol (quote + info + historical in parallel) ───────────────────────
 void EquityResearchService::search_symbols_for(
-    const QString& query, std::function<void(QString, QVector<SearchResult>)> cb) {
+    const QString& query, std::function<void(QString, QVector<SearchResult>, QString)> cb) {
     const QString q = query.trimmed();
     if (q.isEmpty() || !cb)
         return;
@@ -891,16 +904,20 @@ void EquityResearchService::search_symbols_for(
     payload["query"] = q;
     payload["limit"] = 20;
     run_daemon("search", payload, [q, cb = std::move(cb)](bool ok, QJsonObject result, QString err) {
-        // Answered even on failure. The broadcast path can afford to log and
-        // drop, because nothing is waiting on it; a caller that asked a
-        // question is owed an answer, if only an empty one, or its box sits
-        // there looking like the search is still running.
+        // Answered even on failure — a caller that asked is owed an answer,
+        // or its box sits there looking like the search is still running —
+        // but the failure is said as one, not as an empty result list.
         if (!ok) {
             LOG_WARN("EquityResearch", "Symbol search failed: " + err);
-            cb(q, {});
+            // Whether a retry can help, said in the text (the one string
+            // this callback carries): the MCP tool's agent decides on it.
+            const QString why = err.isEmpty() ? QStringLiteral("search failed") : err;
+            cb(q, {}, python::PythonWorker::reply_is_transient(ok, result)
+                          ? QStringLiteral("no answer from Yahoo (retry may help): ") + why
+                          : why);
             return;
         }
-        cb(q, parse_search_results(result));
+        cb(q, parse_search_results(result), QString());
     });
 }
 
@@ -938,7 +955,10 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                 auto attempt = std::make_shared<std::function<void(int)>>();
                 *attempt = [this, symbol, inflight_key, payload, attempt](int tries_left) {
                     run_daemon("info", payload, [this, symbol, inflight_key, attempt, tries_left](bool ok, QJsonObject obj, QString err) {
-                        if (!ok && tries_left > 0 && err.contains(QLatin1String("timeout"), Qt::CaseInsensitive)) {
+                        // A timeout of the daemon call itself — no body; a vendor
+                        // error's text can say "timed out" too and is not retried.
+                        if (!ok && !obj.contains("error") && tries_left > 0 &&
+                            err.contains(QLatin1String("timeout"), Qt::CaseInsensitive)) {
                             LOG_WARN("EquityResearch", QString("info timed out for %1 — retrying once").arg(symbol));
                             QTimer::singleShot(4000, this, [attempt, tries_left]() { (*attempt)(tries_left - 1); });
                             return;

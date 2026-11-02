@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QObject>
+#include <QSet>
 #include <QTimer>
 #include <QVector>
 
@@ -164,7 +165,11 @@ class MarketDataService : public QObject
     /// Fetch quotes — batched and cached. Callback receives filtered results for requested symbols.
     /// Phase 3+: prefer `DataHub::subscribe(this, "market:quote:<sym>", ...)` for streaming widgets.
     /// This callback API remains for one-shot reads (e.g. report builder snapshots).
-    void fetch_quotes(const QStringList& symbols, QuoteCallback cb);
+    /// On a failed fetch the callback normally gets ok=true with whatever
+    /// stale cached quotes exist. stale_on_failure=false reports the failure
+    /// instead (ok=false, no rows) — for a caller pacing its own asks, which
+    /// must see a refusal to stop.
+    void fetch_quotes(const QStringList& symbols, QuoteCallback cb, bool stale_on_failure = true);
 
     /// Real day's top gainers + losers via yfinance's predefined screeners.
     /// Returns both sides in one daemon round-trip. Used by TopMoversWidget;
@@ -224,7 +229,11 @@ class MarketDataService : public QObject
         QString country;
         double  market_cap = 0;
         int     employees  = 0;
+        bool    known_none = false;   // Yahoo answered "unknown ticker" (404) — no profile exists
+        bool    refused    = false;   // Yahoo refused / did not answer for this ticker — ask again
+        bool    failed     = false;   // the lookup errored (not Yahoo's answer) — not cached
     };
+    /// ok=false when the lookup failed — cached rows may still come along.
     using ProfileCallback = std::function<void(bool, QVector<CompanyProfile>)>;
     void fetch_company_profiles(const QStringList& symbols, ProfileCallback cb);
 
@@ -405,6 +414,10 @@ class MarketDataService : public QObject
         QVector<HistoryPoint> points;
     };
     QVector<QuoteData>        refresh_pending_quotes_;
+    // symbol -> absolute position in refresh_pending_quotes_ (minus _base_ =
+    // index), so a newer print replaces a waiting one in O(1).
+    QHash<QString, qint64>    refresh_pending_quote_at_;
+    qint64                    refresh_pending_quote_base_ = 0;   // count taken from the front
     QVector<PendingSparkline> refresh_pending_sparks_;
     QVector<PendingHistory>   refresh_pending_hists_;
     bool                      refresh_drain_scheduled_ = false;
@@ -419,6 +432,7 @@ class MarketDataService : public QObject
     struct PendingRequest {
         QStringList symbols;
         QuoteCallback cb;
+        bool stale_on_failure = true;
     };
     QVector<PendingRequest> pending_;
     bool batch_scheduled_ = false;

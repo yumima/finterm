@@ -160,11 +160,19 @@ void MarketDataService::refresh(const QStringList& topics) {
             // at a time via singleShot(0). Wall-clock total is unchanged, but
             // the event loop gets to interleave keystrokes and video frames
             // between chunks instead of waiting behind the whole burst.
+            // Only what THIS refresh asked for: PythonWorker merges a waiting
+            // request with later ones and answers every caller with the
+            // union — each publishes its own topics, not the others' again.
+            const QSet<QString> want_quotes(quote_syms.begin(), quote_syms.end());
+            const QSet<QString> want_sparks(spark_syms.begin(), spark_syms.end());
+            QSet<QString> want_hists;
+            for (const auto& h : hist_reqs)
+                want_hists.insert(h.symbol + QLatin1Char('|') + h.period + QLatin1Char('|') + h.interval);
             const QJsonArray quotes_arr = root.value("quotes").toArray();
             int quotes_parsed = 0;
             for (const auto& v : quotes_arr) {
                 const QJsonObject q = v.toObject();
-                if (q.isEmpty() || q.contains("error"))
+                if (q.isEmpty() || q.contains("error") || !want_quotes.contains(q["symbol"].toString()))
                     continue;
                 QuoteData qd{};
                 qd.symbol     = q["symbol"].toString();
@@ -179,6 +187,17 @@ void MarketDataService::refresh(const QStringList& topics) {
                 qd.ask        = q["ask"].toDouble();
                 qd.bid_size   = q["bid_size"].toDouble();
                 qd.ask_size   = q["ask_size"].toDouble();
+                // A symbol already waiting to be stored/published (merged
+                // refreshes answer every caller with the same union, or an
+                // older reply not yet drained) is replaced by this one — the
+                // newer print — not queued twice.
+                if (auto at = self->refresh_pending_quote_at_.constFind(qd.symbol);
+                    at != self->refresh_pending_quote_at_.constEnd()) {
+                    self->refresh_pending_quotes_[at.value() - self->refresh_pending_quote_base_] = qd;
+                    continue;
+                }
+                self->refresh_pending_quote_at_.insert(
+                    qd.symbol, self->refresh_pending_quote_base_ + self->refresh_pending_quotes_.size());
                 self->refresh_pending_quotes_.append(qd);
                 ++quotes_parsed;
             }
@@ -188,14 +207,20 @@ void MarketDataService::refresh(const QStringList& topics) {
             int sparks_parsed = 0;
             for (auto it = sparks.begin(); it != sparks.end(); ++it) {
                 const QJsonArray closes = it.value().toArray();
-                if (closes.isEmpty())
+                if (closes.isEmpty() || !want_sparks.contains(it.key()))
                     continue;
                 PendingSparkline ps;
                 ps.symbol = it.key();
                 ps.points.reserve(closes.size());
                 for (const auto& c : closes)
                     ps.points.append(c.toDouble());
-                self->refresh_pending_sparks_.append(std::move(ps));
+                // Same rule as quotes: one pending entry per symbol, the newest
+                // (merged refreshes answer every caller with the union). The
+                // pending lists are short (tens), so a scan is fine.
+                bool replaced = false;
+                for (auto& pending : self->refresh_pending_sparks_)
+                    if (pending.symbol == ps.symbol) { pending = std::move(ps); replaced = true; break; }
+                if (!replaced) self->refresh_pending_sparks_.append(std::move(ps));
                 ++sparks_parsed;
             }
 
@@ -204,7 +229,10 @@ void MarketDataService::refresh(const QStringList& topics) {
             int hists_parsed = 0;
             for (const auto& hv : hists) {
                 const QJsonObject h = hv.toObject();
-                if (h.contains("error"))
+                if (h.contains("error") ||
+                    !want_hists.contains(h.value("symbol").toString() + QLatin1Char('|') +
+                                         h.value("period").toString() + QLatin1Char('|') +
+                                         h.value("interval").toString()))
                     continue;
                 PendingHistory ph;
                 ph.symbol   = h.value("symbol").toString();
@@ -223,7 +251,15 @@ void MarketDataService::refresh(const QStringList& topics) {
                     pt.volume = static_cast<qint64>(p["volume"].toDouble());
                     ph.points.append(pt);
                 }
-                self->refresh_pending_hists_.append(std::move(ph));
+                bool replaced = false;
+                for (auto& pending : self->refresh_pending_hists_)
+                    if (pending.symbol == ph.symbol && pending.period == ph.period &&
+                        pending.interval == ph.interval) {
+                        pending = std::move(ph);
+                        replaced = true;
+                        break;
+                    }
+                if (!replaced) self->refresh_pending_hists_.append(std::move(ph));
                 ++hists_parsed;
             }
 
@@ -269,6 +305,8 @@ void MarketDataService::drain_refresh_chunk() {
     // Quotes — cache write + publish.
     while (budget > 0 && !refresh_pending_quotes_.isEmpty()) {
         const QuoteData qd = refresh_pending_quotes_.takeFirst();
+        refresh_pending_quote_at_.remove(qd.symbol);
+        ++refresh_pending_quote_base_;   // positions are absolute: no reindex on takeFirst
         QJsonObject co;
         co["symbol"]     = qd.symbol;
         co["name"]       = qd.name;
@@ -513,7 +551,7 @@ void MarketDataService::invalidate_quotes(const QStringList& symbols) {
 
 // ── Batched + Cached fetch_quotes ───────────────────────────────────────────
 
-void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback cb) {
+void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback cb, bool stale_on_failure) {
     if (symbols.isEmpty()) {
         cb(true, {});
         return;
@@ -562,7 +600,7 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
     }
 
     // Queue for batching
-    pending_.append({symbols, std::move(cb)});
+    pending_.append({symbols, std::move(cb), stale_on_failure});
 
     if (!batch_scheduled_) {
         batch_scheduled_ = true;
@@ -601,8 +639,13 @@ void MarketDataService::flush_batch() {
 
     python::PythonWorker::instance().submit(
         "batch_quotes", payload,
-        [this, requests = std::move(requests)](bool ok, QJsonObject result, QString err) {
+        [this, requests = std::move(requests), all_symbols](bool ok, QJsonObject result, QString err) {
+            // Only this batch's symbols: PythonWorker may answer with a merged
+            // request's union — the other symbols are stored by their own
+            // caller.
+            const QSet<QString> mine(all_symbols.begin(), all_symbols.end());
             QVector<QuoteData> all_quotes;
+            QSet<QString> refused_syms;   // rows Yahoo refused (transient)
 
             if (ok) {
                 auto parse_quote = [](const QJsonObject& q) -> QuoteData {
@@ -647,14 +690,15 @@ void MarketDataService::flush_batch() {
                                               : result.value("quotes").toArray();
                 for (const auto& v : quotes) {
                     auto q = v.toObject();
-                    if (q.contains("error"))
+                    if (q.value("transient").toBool())
+                        refused_syms.insert(q["symbol"].toString());
+                    if (q.contains("error") || !mine.contains(q["symbol"].toString()))
                         continue;
                     auto quote = parse_quote(q);
                     all_quotes.append(quote);
                     store_quote(quote);
                     publish_quote_to_hub(quote);
                 }
-
                 LOG_INFO("MarketData", QString("Fetched %1 quotes (cached)").arg(all_quotes.size()));
             } else {
                 LOG_WARN("MarketData", "Batch fetch failed: " + err);
@@ -662,6 +706,10 @@ void MarketDataService::flush_batch() {
 
             // Fan out results to each waiting callback, filtered to their requested symbols
             for (const auto& req : requests) {
+                if (!ok && !req.stale_on_failure) {
+                    req.cb(false, {});
+                    continue;
+                }
                 if (!ok) {
                     // On failure, try to serve from stale cache (ignoring TTL)
                     QVector<QuoteData> stale;
@@ -696,7 +744,10 @@ void MarketDataService::flush_batch() {
                         filtered.append(q);
                     }
                 }
-                req.cb(true, filtered);
+                // A caller pacing its asks hears a partial refusal (some of
+                // ITS tickers refused by Yahoo) as one, with what did answer.
+                const bool refused_mine = !req.stale_on_failure && wanted.intersects(refused_syms);
+                req.cb(!refused_mine, filtered);
             }
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -803,7 +854,11 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
                                          [shared, symbol, try_complete](bool ok, QJsonObject o, QString /*err*/) {
                                              shared->info_done = true;
                                              if (!ok || o.contains("error")) {
-                                                 shared->info.info_transient = !ok || o["transient"].toBool();
+                                                 // A daemon-side {"error"} arrives as ok:false WITH its body,
+                                                 // which says whether it was a refusal; no body (timeout, no
+                                                 // daemon) counts as one.
+                                                 shared->info.info_transient =
+                                                     python::PythonWorker::reply_is_transient(ok, o);
                                                  LOG_WARN("MarketData", "get_info failed for " + symbol +
                                                                             (shared->info.info_transient ? " (transient)" : ""));
                                                  try_complete();
@@ -965,8 +1020,19 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
     cached_out.reserve(symbols.size());
     for (const auto& sym : symbols) {
         const auto it = hits.constFind("ipo_info:" + sym);
-        if (it != hits.constEnd()) cached_out.append(parse_cached(it.value(), sym));
-        else                       missing.append(sym);
+        if (it == hits.constEnd())
+            missing.append(sym);
+        else if (!it.value().contains(QLatin1String("\"none\":true")))
+            cached_out.append(parse_cached(it.value(), sym));
+        else {
+            // Yahoo answered "unknown ticker" within the last hour — not
+            // re-asked, and said as such (not left out, which a caller
+            // can't tell from "no answer").
+            CompanyProfile none;
+            none.symbol = sym;
+            none.known_none = true;
+            cached_out.append(none);
+        }
     }
     if (missing.isEmpty()) {
         LOG_INFO("MarketData", QString("fetch_company_profiles: %1 cached, 0 fresh").arg(cached_out.size()));
@@ -985,7 +1051,22 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
             QVector<CompanyProfile> out = cached_out;
             if (!ok) {
                 LOG_WARN("MarketData", "batch_info failed: " + err);
-                cb(!out.isEmpty(), out);
+                if (!python::PythonWorker::reply_is_transient(ok, result)) {
+                    // Not a refusal (a bug in the lookup): every asked ticker
+                    // is reported `failed` — a pacing caller settles them
+                    // rather than re-sending the same failing chunk forever.
+                    for (const auto& sym : missing) {
+                        CompanyProfile f;
+                        f.symbol = sym;
+                        f.failed = true;
+                        out.append(f);
+                    }
+                    cb(true, out);
+                    return;
+                }
+                // A refusal: failed is failed, even with cached rows along —
+                // a caller pacing its asks must see it (the rows still help).
+                cb(false, out);
                 return;
             }
             const QJsonArray rows = result.contains("_value")
@@ -995,7 +1076,40 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
                 const QJsonObject o = v.toObject();
                 CompanyProfile p;
                 p.symbol     = o["symbol"].toString();
-                if (p.symbol.isEmpty() || o.contains("error")) continue;
+                if (p.symbol.isEmpty()) continue;
+                if (o.contains("error")) {
+                    if (o.value("transient").toBool()) {
+                        // Refused for this ticker: said so, not left out (a
+                        // caller would settle a missing ticker as "none").
+                        CompanyProfile refused;
+                        refused.symbol = p.symbol;
+                        refused.refused = true;
+                        out.append(refused);
+                        continue;
+                    }
+                    // Yahoo ANSWERED that the ticker is unknown (a 404 —
+                    // "not_found"): remember that for an hour so it isn't
+                    // re-asked every session. A parse error or a yfinance bug
+                    // is not an answer: reported as `failed`, not cached (the
+                    // next session asks again).
+                    if (o.value("not_found").toBool()) {
+                        fincept::CacheManager::instance().put(
+                            "ipo_info:" + p.symbol, QVariant(QStringLiteral("{\"none\":true}")),
+                            // An hour, not a day: a deal priced last night
+                            // is unknown to Yahoo until it starts trading.
+                            60 * 60, "ipo_info");
+                        CompanyProfile none;
+                        none.symbol = p.symbol;
+                        none.known_none = true;
+                        out.append(none);
+                    } else {
+                        CompanyProfile failed;
+                        failed.symbol = p.symbol;
+                        failed.failed = true;
+                        out.append(failed);
+                    }
+                    continue;
+                }
                 p.long_name  = o["long_name"].toString();
                 p.sector     = o["sector"].toString();
                 p.industry   = o["industry"].toString();
@@ -1620,8 +1734,17 @@ void MarketDataService::fetch_sparklines(const QStringList& symbols, SparklineCa
     QJsonObject payload;
     payload["symbols"] = syms_arr;
 
+    // Only this caller's symbols: PythonWorker may answer with a merged
+    // request's union.
+    const QSet<QString> mine(symbols.begin(), symbols.end());
     python::PythonWorker::instance().submit("batch_sparklines", payload,
-        [cb](bool ok, QJsonObject obj, QString err) {
+        [cb, mine](bool ok, QJsonObject obj, QString err) {
+        // "No data" (an answer, not a refusal) is an empty success, as it
+        // was before the daemon sent {"error"} bodies as failed replies.
+        if (!ok && obj.contains("error") && !python::PythonWorker::reply_is_transient(ok, obj)) {
+            cb(true, {});
+            return;
+        }
         if (!ok) {
             LOG_WARN("MarketData", "Sparklines failed: " + err.left(200));
             cb(false, {});
@@ -1629,7 +1752,7 @@ void MarketDataService::fetch_sparklines(const QStringList& symbols, SparklineCa
         }
         QHash<QString, QVector<double>> out;
         for (auto it = obj.begin(); it != obj.end(); ++it) {
-            if (it.key() == "_value") continue;
+            if (it.key() == "_value" || !mine.contains(it.key())) continue;
             QVector<double> prices;
             for (const auto& v : it.value().toArray())
                 prices.append(v.toDouble());

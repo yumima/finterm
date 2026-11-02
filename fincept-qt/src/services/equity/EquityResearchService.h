@@ -35,8 +35,11 @@ class EquityResearchService : public QObject {
     /// or an MCP tool call, receives every other caller's results as if they
     /// were its own, and two requests in flight can land out of order. A
     /// caller that needs to know what it asked for uses this instead.
+    /// `error` is empty when the search answered (even with no matches) and
+    /// says why when it could not (Yahoo refused, timeout) — a failure is not
+    /// an empty result list, which reads as "no such ticker".
     void search_symbols_for(const QString& query,
-                            std::function<void(QString, QVector<SearchResult>)> cb);
+                            std::function<void(QString, QVector<SearchResult>, QString error)> cb);
 
     /// Fetches quote + info + historical in parallel (three Python calls)
     void load_symbol(const QString& symbol, const QString& period = "1y");
@@ -149,7 +152,10 @@ class EquityResearchService : public QObject {
                         const QString& period = "2y");
 
   signals:
-    void search_results_loaded(QVector<fincept::services::equity::SearchResult> results);
+    /// `query` lets a listener drop a late answer to an older query.
+    void search_results_loaded(QVector<fincept::services::equity::SearchResult> results, QString query);
+    /// search_symbols(query) could not get an answer (Yahoo refused, timeout).
+    void search_failed(QString query, QString error, bool transient);
     void quote_loaded(fincept::services::equity::QuoteData quote);
     void info_loaded(fincept::services::equity::StockInfo info);
     // period is one of "1mo", "3mo", "6mo", "1y", "5y" — receivers must

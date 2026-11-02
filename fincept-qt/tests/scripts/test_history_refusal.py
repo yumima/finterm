@@ -14,6 +14,7 @@ Yahoo refused, and still return [] for a genuine empty answer. Offline:
 canned responses through yfinance's real request path.
 """
 import json
+import urllib.error
 import os
 import sys
 import time
@@ -86,17 +87,20 @@ def main():
     def dispatch(route, sym):
         data._session = Session(route)
         yd._cache.clear()
+        # What the C++ side receives: the daemon's reply frame.
         try:
-            return "ok", yd._daemon_dispatch("historical_period",
-                                             {"symbol": sym, "period": "1mo", "interval": "1d"})
+            res = yd._daemon_dispatch("historical_period", {"symbol": sym, "period": "1mo", "interval": "1d"})
         except Exception as e:  # noqa: BLE001
-            return "raised", str(e)
+            return "failed", str(e)
+        frame = yd._reply_for(7, res)
+        return ("ok", frame["result"]) if frame["ok"] else ("failed", frame)
 
     how, r = dispatch((429, TOO_MANY), "USDJPY=X")
-    check(how == "raised", f"429 (rate limited) -> failed reply, not an empty series [{how}: {r!s:.80}]")
+    check(how == "failed" and isinstance(r, dict) and r["result"].get("transient") is True,
+          f"429 (rate limited) -> failed reply carrying transient, not an empty series [{how}: {r!s:.120}]")
 
     how, r = dispatch((401, UNAUTH), "GBPUSD=X")
-    check(how == "raised", f"401 -> failed reply, not an empty series [{how}: {r!s:.80}]")
+    check(how == "failed", f"401 -> failed reply, not an empty series [{how}: {r!s:.80}]")
 
     how, r = dispatch((200, BARS), "EURUSD=X")
     check(how == "ok" and isinstance(r, list) and len(r) == 5, f"bars answered -> the bars [{how}: {str(r)[:80]}]")
@@ -117,6 +121,64 @@ def main():
     out = yd.get_batch_all({"histories": [{"symbol": "NZDUSD=X", "period": "1mo", "interval": "1d"}]})
     h = (out.get("histories") or [{}])[0]
     check(bool(h.get("error")), f"batch_all history refused -> entry carries error [{h}]")
+
+    # A refused SEARCH (Yahoo 429 on the search endpoint, exact-symbol
+    # fallback empty) is a failed reply — not "no matches" for AAPL.
+    import urllib.request
+    real_urlopen = urllib.request.urlopen
+    def refuse(*a, **k):
+        raise urllib.error.HTTPError("https://query2.finance.yahoo.com", 429, "Too Many Requests", {}, None)
+    urllib.request.urlopen = refuse
+    data._session = Session((429, TOO_MANY))
+    try:
+        frame = yd._reply_for(3, yd.search_symbols("AAPL"))
+        check(frame["ok"] is False and frame["result"].get("transient") is True,
+              f"search refused -> failed reply, not 'no results' [{str(frame)[:120]}]")
+    finally:
+        urllib.request.urlopen = real_urlopen
+
+    # A rate-limited QUOTE download: yf.download returns an empty frame and
+    # says why only in shared._ERRORS — a failed reply, not "no quotes".
+    data._session = Session((429, TOO_MANY))
+    yd._cache.clear()
+    q = yd.get_batch_quotes(["AAA", "BBB"])
+    frame = yd._reply_for(4, q)
+    check(frame["ok"] is False and isinstance(q, dict) and q.get("transient") is True,
+          f"batch_quotes 429 -> failed reply, not [] [{str(q)[:120]}]")
+
+    # What counts as "Yahoo refused" in yfinance's per-ticker error text —
+    # a 401 inside a timestamp or a ticker is not one.
+    check(yd._is_refusal_text("YFRateLimitError('Too Many Requests')"), "rate limit text is a refusal")
+    check(yd._is_refusal_text("HTTP Error 503: x"), "HTTP 503 is a refusal")
+    check(not yd._is_refusal_text("possibly delisted; no price data found 1704012000"),
+          "a delisted ticker (digits incl. 401) is not a refusal")
+    check(not yd._is_refusal_text("4012.T: KeyError"), "a ticker containing 401 is not a refusal")
+
+    # An action that RAISED: the failed reply carries a body saying whether
+    # Yahoo refused (retry) or it was a bug (don't) — not body-less, which
+    # the C++ side reads as "no answer, try again".
+    yd._trace_reset()   # as the daemon does per request (_handle)
+    r = yd._exception_reply(9, KeyError("x"))
+    check(r["ok"] is False and r["result"]["transient"] is False, "a bug -> failed reply, not transient")
+    r = yd._exception_reply(9, RuntimeError("YFRateLimitError: Too Many Requests"))
+    check(r["result"]["transient"] is True, "a raised rate limit -> transient")
+
+    # The frame's "refused" flag (the worker's background back-off reads it):
+    # refused rows / sections count; plain "no data" doesn't.
+    check(yd._reply_for(1, [{"symbol": "A", "error": "x", "transient": True}])["refused"] is True,
+          "a refused row -> frame refused")
+    check(yd._reply_for(1, {"quotes": [], "quotes_error": "x", "quotes_transient": True})["refused"] is True,
+          "a refused section -> frame refused")
+    check(yd._reply_for(1, {"error": "No data"})["refused"] is False, "'No data' -> not refused")
+    check(yd._reply_for(1, [])["refused"] is False, "an empty answer -> not refused")
+
+    # Every action, not just history: a top-level error is a failed reply;
+    # "<section>_error" partials and plain data stay ok.
+    check(yd._reply_for(1, {"error": "x", "transient": True})["ok"] is False, "any {error} -> ok:false")
+    check(yd._reply_for(1, {"error": "x"})["result"] == {"error": "x"}, "the failed reply still carries the body")
+    check(yd._reply_for(1, {"symbol": "A", "holders_error": "x"})["ok"] is True, "partial <section>_error stays ok")
+    check(yd._reply_for(1, [])["ok"] is True and yd._reply_for(1, {"error": None, "v": 1})["ok"] is True,
+          "empty list / null error stay ok")
 
     if failed:
         print(f"\n{len(failed)} FAILED: " + ", ".join(failed))

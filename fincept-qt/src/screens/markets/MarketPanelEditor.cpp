@@ -1,4 +1,5 @@
 #include "screens/markets/MarketPanelEditor.h"
+#include "ui/SearchFailedText.h"
 
 #include "python/PythonWorker.h"
 #include "ui/theme/Theme.h"
@@ -131,7 +132,10 @@ void MarketPanelEditor::build_ui() {
 
     connect(search_edit_, &QLineEdit::textChanged, this, &MarketPanelEditor::on_search_text_changed);
     connect(search_edit_, &QLineEdit::returnPressed, this, [this]() {
-        if (dropdown_->isVisible() && dropdown_->currentItem())
+        // A current item without a symbol (the "search failed" message row)
+        // falls through to the typed text.
+        if (dropdown_->isVisible() && dropdown_->currentItem() &&
+            !dropdown_->currentItem()->data(Qt::UserRole).toString().isEmpty())
             on_add_symbol(dropdown_->currentItem()->data(Qt::UserRole).toString());
         else if (!search_edit_->text().trimmed().isEmpty())
             on_add_symbol(search_edit_->text().trimmed().toUpper());
@@ -240,23 +244,21 @@ void MarketPanelEditor::fire_search(const QString& query) {
         [self, query](bool ok, QJsonObject result, QString) {
             if (!self) return;
             if (self->pending_query_ != query) return; // stale response
-            if (!ok) return;
-
-            // Daemon wraps flat arrays under "_value"; results also come as
-            // a direct array or under a "results" key.
-            QJsonArray arr;
-            if (result.contains("_value") && result["_value"].isArray())
-                arr = result["_value"].toArray();
-            else if (result.contains("results"))
-                arr = result["results"].toArray();
-
-            self->on_search_results(arr);
+            // A failed search says so (read_search_reply) — not the last query's
+            // matches, and not an empty list that reads as "no such ticker".
+            const auto reply = fincept::ui::read_search_reply(ok, result);
+            self->on_search_results(reply.results, reply.failure);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
-void MarketPanelEditor::on_search_results(const QJsonArray& results) {
+void MarketPanelEditor::on_search_results(const QJsonArray& results, const QString& failure) {
     dropdown_->clear();
+    if (!failure.isEmpty()) {
+        auto* item = new QListWidgetItem(failure);
+        item->setFlags(Qt::NoItemFlags);   // a message, not a pickable symbol
+        dropdown_->addItem(item);
+    }
 
     for (const auto& v : results) {
         const auto obj    = v.toObject();

@@ -5,11 +5,16 @@
 #include "python/PythonRunner.h"
 #include "python/PythonSetupManager.h"
 
+#include <algorithm>
 #include <QByteArray>
 #include <QCoreApplication>
+#include <QDateTime>
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QSet>
 #include <QJsonDocument>
 
 namespace fincept::python {
@@ -59,54 +64,109 @@ bool PythonWorker::is_background_action(const QString& action) {
     return action == "batch_all" || action == "batch_quotes" || action == "batch_sparklines";
 }
 
+// static
+void PythonWorker::answer(Pending& p, bool ok, const QJsonObject& result, const QString& err) {
+    // The caller, then every request merged into it (Background merging).
+    if (p.cb) p.cb(ok, result, err);
+    for (auto& cb : p.also)
+        if (cb) cb(ok, result, err);
+}
+
+// static
+QJsonObject PythonWorker::merge_background_payload(const QJsonObject& a, const QJsonObject& b) {
+    // List fields (symbols, quotes, sparklines, histories): the union, first
+    // seen order. Anything else: the newer value.
+    auto key = [](const QJsonValue& v) {
+        return v.isString() ? v.toString()
+                            : QString::fromUtf8(QJsonDocument(QJsonArray{v}).toJson(QJsonDocument::Compact));
+    };   // strings (symbols) as-is; history request objects serialized once each
+    QJsonObject out = a;
+    for (auto it = b.begin(); it != b.end(); ++it) {
+        const QJsonValue av = out.value(it.key());
+        if (it.value().isArray() && av.isArray()) {
+            QJsonArray merged = av.toArray();
+            QSet<QString> have;
+            for (const auto& v : merged) have.insert(key(v));
+            for (const auto& v : it.value().toArray()) {
+                const QString k = key(v);
+                if (!have.contains(k)) { have.insert(k); merged.append(v); }
+            }
+            out[it.key()] = merged;
+        } else {
+            out[it.key()] = it.value();
+        }
+    }
+    return out;
+}
+
+QTimer* PythonWorker::make_deadline(int id, const QString& action, int timeout_ms) {
+    // Started in send_to_daemon (queue wait doesn't count against the budget).
+    auto* t = new QTimer(this);
+    t->setSingleShot(true);
+    t->setInterval(timeout_ms);
+    connect(t, &QTimer::timeout, this, [this, id, action]() {
+        auto it = in_flight_.find(id);
+        if (it == in_flight_.end()) return;
+        Pending tp = std::move(it.value());
+        in_flight_.erase(it);
+        const int ms = tp.deadline ? tp.deadline->interval() : 0;
+        LOG_WARN("PythonWorker",
+                 QString("action '%1' (id=%2) timed out after %3ms — "
+                         "daemon may still be working on it; UI callback failed")
+                     .arg(action).arg(id).arg(ms));
+        if (tp.deadline) tp.deadline->deleteLater();
+        // A timeout is no answer: back off BEFORE the callbacks, so one that
+        // re-submits synchronously meets it instead of the free slot.
+        if (is_background_action(action)) bg_backoff_.setRemainingTime(kBackgroundBackoffMs);
+        answer(tp, false, {}, QString("timeout (%1ms)").arg(ms));
+        // If it was a background action, unblock the next queued background
+        // (after the back-off: a timeout is no answer).
+        if (is_background_action(action)) on_background_complete(/*failed=*/true);
+    });
+    return t;
+}
+
 // ── submit ────────────────────────────────────────────────────────────────────
 
 void PythonWorker::submit(const QString& action, const QJsonObject& payload, Callback cb,
                           int timeout_ms) {
     ensure_started();
 
-    // ── Background deduplication ─────────────────────────────────────────────
-    // batch_all/batch_quotes/batch_sparklines are idempotent refresh sweeps.
-    // Only the latest payload matters; stale queued or in-flight copies are
-    // discarded so the daemon queue never grows under slow-symbol conditions.
+    // ── Background merging ───────────────────────────────────────────────────
+    // batch_all/batch_quotes/batch_sparklines share ONE background slot. A
+    // submission used to be failed when one of the same action was in flight
+    // ("deduped: already in-flight") or replaced a queued one ("superseded")
+    // — but two callers' symbol sets differ (the hub's 127-quote tick, a
+    // 7-quote portfolio group, two fetch_quotes callers), so the hub then
+    // waited out its 30 s refresh timeout with the price unchanged and a
+    // fetch_quotes caller fell back to stale prices. Now at most ONE request
+    // per action waits behind the slot, and a later one merges into it: the
+    // union of their lists, every callback answered with the merged result
+    // (each caller keeps only its own symbols). Nothing is dropped and the
+    // queue cannot grow. The merged request is one download of the union —
+    // no more Yahoo work than the separate requests it replaces.
     if (is_background_action(action)) {
-        // Already in-flight: daemon is working on it — drop new submission.
-        for (const auto& p : in_flight_) {
-            if (p.action == action) {
-                if (cb) cb(false, {}, "deduped: already in-flight");
-                return;
-            }
-        }
-        // Already queued: replace with latest payload (keep same queue slot).
         for (auto& entry : queue_) {
-            if (entry.second.action == action) {
-                if (entry.second.deadline) entry.second.deadline->deleteLater();
-                if (entry.second.cb) entry.second.cb(false, {}, "deduped: superseded");
-                entry.second.payload = payload;
-                entry.second.cb      = std::move(cb);
-                entry.second.deadline = nullptr;
-                if (timeout_ms > 0) {
-                    auto* t = new QTimer(this);
-                    t->setSingleShot(true);
-                    t->setInterval(timeout_ms);
-                    const int eid = entry.first;
-                    connect(t, &QTimer::timeout, this, [this, eid, action, timeout_ms]() {
-                        auto it = in_flight_.find(eid);
-                        if (it == in_flight_.end()) return;
-                        Pending ep = std::move(it.value());
-                        in_flight_.erase(it);
-                        LOG_WARN("PythonWorker",
-                                 QString("action '%1' (id=%2) timed out after %3ms")
-                                     .arg(action).arg(eid).arg(timeout_ms));
-                        if (ep.deadline) ep.deadline->deleteLater();
-                        if (ep.cb) ep.cb(false, {}, QString("timeout (%1ms)").arg(timeout_ms));
-                        on_background_complete();
-                    });
-                    entry.second.deadline = t;
-                }
-                return;
+            if (entry.second.action != action) continue;
+            entry.second.payload = merge_background_payload(entry.second.payload, payload);
+            if (cb) {
+                if (!entry.second.cb) entry.second.cb = std::move(cb);
+                else entry.second.also.append(std::move(cb));   // flat, not nested
             }
+            // The merged request carries both callers' work, so it gets both
+            // budgets (capped): one shared 10 s for the union failed every
+            // merged caller together. A queued request with NO deadline keeps
+            // none — its caller asked to wait without a limit, and a later
+            // caller must not impose one. The timer starts at dispatch.
+            if (timeout_ms > 0 && entry.second.deadline) {
+                const int cur = entry.second.deadline->interval();
+                // Never below what the queued caller already had.
+                entry.second.deadline->setInterval(std::max(cur, std::min(cur + timeout_ms, kMaxMergedTimeoutMs)));
+            }
+            return;
         }
+        // Nothing of this action queued: fall through — the gate below
+        // queues it behind an in-flight background request, or sends it.
     }
 
     const int id = next_id_++;
@@ -114,26 +174,7 @@ void PythonWorker::submit(const QString& action, const QJsonObject& payload, Cal
     p.action  = action;
     p.payload = payload;
     p.cb      = std::move(cb);
-
-    if (timeout_ms > 0) {
-        p.deadline = new QTimer(this);
-        p.deadline->setSingleShot(true);
-        p.deadline->setInterval(timeout_ms);
-        connect(p.deadline, &QTimer::timeout, this, [this, id, action, timeout_ms]() {
-            auto it = in_flight_.find(id);
-            if (it == in_flight_.end()) return;
-            Pending tp = std::move(it.value());
-            in_flight_.erase(it);
-            LOG_WARN("PythonWorker",
-                     QString("action '%1' (id=%2) timed out after %3ms — "
-                             "daemon may still be working on it; UI callback failed")
-                         .arg(action).arg(id).arg(timeout_ms));
-            if (tp.deadline) tp.deadline->deleteLater();
-            if (tp.cb) tp.cb(false, {}, QString("timeout (%1ms)").arg(timeout_ms));
-            // If it was a background action, unblock the next queued background.
-            if (is_background_action(action)) on_background_complete();
-        });
-    }
+    if (timeout_ms > 0) p.deadline = make_deadline(id, action, timeout_ms);
 
     bool socket_live = socket_ && socket_->state() == QLocalSocket::ConnectedState;
 
@@ -156,6 +197,15 @@ void PythonWorker::submit(const QString& action, const QJsonObject& payload, Cal
     // Socket is live. Interactive requests go immediately; background requests
     // are gated — only one of each type may be in-flight at a time.
     if (is_background_action(action)) {
+        // Backing off after a refusal, or older background requests still
+        // waiting: wait in line (no jumping the queue from a callback).
+        bool older_waiting = false;
+        for (const auto& e : queue_)
+            if (is_background_action(e.second.action)) { older_waiting = true; break; }
+        if (!bg_backoff_.hasExpired() || older_waiting) {
+            queue_.append({id, std::move(p)});
+            return;
+        }
         for (const auto& existing : in_flight_) {
             if (is_background_action(existing.action)) {
                 queue_.append({id, std::move(p)});
@@ -317,26 +367,37 @@ void PythonWorker::on_process_finished(int exit_code, QProcess::ExitStatus statu
         socket_ = nullptr;
     }
 
-    for (auto it = in_flight_.begin(); it != in_flight_.end(); ++it) {
-        if (it.value().deadline) it.value().deadline->deleteLater();
-        if (it.value().cb) it.value().cb(false, {}, reason);
-    }
+    // Taken out now, answered LAST — after the restart decision: a callback
+    // that submits again would otherwise launch a daemon from inside the
+    // loop, which the launch below then tears down (and it would mutate
+    // in_flight_ mid-iteration).
+    auto lost = std::move(in_flight_);
     in_flight_.clear();
+    auto answer_lost = [this, &lost, &reason]() {
+        for (auto it = lost.begin(); it != lost.end(); ++it) {
+            if (it.value().deadline) it.value().deadline->deleteLater();
+            answer(it.value(), false, {}, reason);
+        }
+    };
 
-    if (shutting_down_ || QCoreApplication::closingDown())
+    if (shutting_down_ || QCoreApplication::closingDown()) {
+        answer_lost();
         return;
+    }
 
     if (restart_count_ >= kMaxRestarts) {
         LOG_ERROR("PythonWorker",
                   QString("Restart cap (%1) reached — pending requests will fail")
                       .arg(kMaxRestarts));
         fail_all_pending(QStringLiteral("worker restart cap reached"));
+        answer_lost();
         return;
     }
     ++restart_count_;
     LOG_INFO("PythonWorker", QString("Restarting daemon (attempt %1/%2)")
                                   .arg(restart_count_).arg(kMaxRestarts));
     launch_process();
+    answer_lost();
 }
 
 void PythonWorker::on_process_error(QProcess::ProcessError err) {
@@ -455,10 +516,17 @@ void PythonWorker::try_drain_frames() {
         else result_obj["_value"] = rv;
 
         const bool was_background = is_background_action(p.action);
-        if (p.cb) p.cb(ok, result_obj, err);
+        // A REFUSED sweep (all or part — the daemon's one rule,
+        // yfinance_data._is_refusal_result, sent as the frame's "refused"):
+        // the next one waits. Plain "no data" is not a refusal.
+        const bool refused = was_background && obj.value(QStringLiteral("refused")).toBool();
+        // Set BEFORE the callback: one that re-submits a background action
+        // synchronously must meet the back-off, not slip into the free slot.
+        if (refused) bg_backoff_.setRemainingTime(kBackgroundBackoffMs);
+        answer(p, ok, result_obj, err);
 
         // Background slot just freed — send next queued background action.
-        if (was_background) on_background_complete();
+        if (was_background) on_background_complete(refused);
     }
 }
 
@@ -468,8 +536,9 @@ void PythonWorker::dispatch_queued() {
     if (!socket_ || socket_->state() != QLocalSocket::ConnectedState) return;
 
     // Send ALL interactive requests immediately (daemon handles concurrently).
-    // Send at most ONE background action (gate opens after response arrives).
-    bool bg_sent = false;
+    // Send at most ONE background action (gate opens after response arrives),
+    // and none while backing off (on_background_complete sends it then).
+    bool bg_sent = !bg_backoff_.hasExpired();
     QVector<QPair<int, Pending>> remaining;
 
     for (auto& entry : queue_) {
@@ -485,9 +554,23 @@ void PythonWorker::dispatch_queued() {
     queue_ = std::move(remaining);
 }
 
-void PythonWorker::on_background_complete() {
+void PythonWorker::on_background_complete(bool failed) {
     // A background slot is now free — send the next queued background action.
+    // After a failed one, not at once: a refused sweep is not cached by the
+    // daemon, so sending the next straight away re-downloads into the same
+    // 429 back to back. Interactive requests are not held.
+    if (failed)
+        bg_backoff_.setRemainingTime(kBackgroundBackoffMs);   // monotonic: no wall-clock steps
+    if (!bg_backoff_.hasExpired()) {
+        // Re-armed for what is left: a coarse timer may fire a little early,
+        // and returning without re-arming would strand the queue for good.
+        QTimer::singleShot(std::max<qint64>(bg_backoff_.remainingTime(), 1) + 5, Qt::PreciseTimer, this,
+                           [this]() { on_background_complete(false); });
+        return;
+    }
     if (!socket_ || socket_->state() != QLocalSocket::ConnectedState) return;
+    for (const auto& existing : in_flight_)
+        if (is_background_action(existing.action)) return;   // slot already taken
     for (int i = 0; i < queue_.size(); ++i) {
         if (is_background_action(queue_[i].second.action)) {
             auto entry = std::move(queue_[i]);
@@ -501,16 +584,20 @@ void PythonWorker::on_background_complete() {
 // ── fail_all_pending ──────────────────────────────────────────────────────────
 
 void PythonWorker::fail_all_pending(const QString& reason) {
-    for (auto& entry : queue_) {
-        if (entry.second.deadline) entry.second.deadline->deleteLater();
-        if (entry.second.cb) entry.second.cb(false, {}, reason);
-    }
+    // Taken out BEFORE any callback runs: a callback may submit again, which
+    // would merge into (or append to) the very containers being walked.
+    auto queued = std::move(queue_);
     queue_.clear();
-    for (auto it = in_flight_.begin(); it != in_flight_.end(); ++it) {
-        if (it.value().deadline) it.value().deadline->deleteLater();
-        if (it.value().cb) it.value().cb(false, {}, reason);
-    }
+    auto inflight = std::move(in_flight_);
     in_flight_.clear();
+    for (auto& entry : queued) {
+        if (entry.second.deadline) entry.second.deadline->deleteLater();
+        answer(entry.second, false, {}, reason);
+    }
+    for (auto it = inflight.begin(); it != inflight.end(); ++it) {
+        if (it.value().deadline) it.value().deadline->deleteLater();
+        answer(it.value(), false, {}, reason);
+    }
 }
 
 } // namespace fincept::python

@@ -1,5 +1,6 @@
 // src/screens/relationship_map/RelationshipMapScreen.cpp
 #include "screens/relationship_map/RelationshipMapScreen.h"
+#include "ui/SearchFailedText.h"
 
 #include "core/events/EventBus.h"
 #include "core/session/ScreenStateManager.h"
@@ -569,19 +570,15 @@ void RelationshipMapScreen::fire_asset_search(const QString& query) {
         [self, query](bool ok, QJsonObject result, QString) {
             if (!self) return;
             if (self->pending_query_ != query) return;
-            if (!ok) return;
-
-            QJsonArray arr;
-            if (result.contains("_value") && result["_value"].isArray())
-                arr = result["_value"].toArray();
-            else if (result.contains("results"))
-                arr = result["results"].toArray();
-            self->on_asset_results(arr);
+            // A failed search says so (read_search_reply) — not the last query's
+            // matches, and not an empty list that reads as "no such ticker".
+            const auto reply = fincept::ui::read_search_reply(ok, result);
+            self->on_asset_results(reply.results, reply.failure);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
-void RelationshipMapScreen::on_asset_results(const QJsonArray& results) {
+void RelationshipMapScreen::on_asset_results(const QJsonArray& results, const QString& failure) {
     search_dropdown_->clear();
 
     if (results.isEmpty()) {
@@ -591,7 +588,7 @@ void RelationshipMapScreen::on_asset_results(const QJsonArray& results) {
         row->setStyleSheet("background:transparent;");
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(8, 4, 8, 4);
-        auto* lbl = new QLabel("No results found");
+        auto* lbl = new QLabel(failure.isEmpty() ? QStringLiteral("No results found") : failure);
         lbl->setStyleSheet(QString("color:%1;font-size:12px;%2;background:transparent;")
                                .arg(ui::colors::TEXT_TERTIARY.get(), MF()));
         rl->addWidget(lbl);

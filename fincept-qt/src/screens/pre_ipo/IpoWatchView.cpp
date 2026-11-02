@@ -228,9 +228,9 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
                 s_last_inactive_ms = 0;
                 // Drop per-symbol caches so the next enrichment pass re-hits
                 // the daemon. refresh() clears perf_fetched and the quote
-                // request set; profiles_requested_ is cleared here.
+                // pump's requested set; the profile pump's is cleared here.
                 info_cache_.clear();
-                profiles_requested_.clear();
+                profile_pump_.requested.clear();
                 history_cache_.clear();
                 history_inflight_.clear();
                 ipo_extras_.clear();
@@ -878,7 +878,7 @@ void IpoWatchView::refresh() {
     ++calendar_gen_;
     calendar_errors_.clear();
     // A refresh asks for fresh quotes; profiles (sector) are kept.
-    quotes_requested_.clear();
+    quote_pump_.requested.clear();
     for (auto& e : entries_) e.perf_fetched = false;
     // An enrich run still in flight is NOT restarted: it is minutes of
     // EDGAR reads holding one of three Python slots, and its answer is as
@@ -1111,39 +1111,162 @@ void IpoWatchView::on_fetch_done() {
     enrich_with_profiles();
 }
 
-void IpoWatchView::enrich_with_profiles() {
-    // Each ticker is asked once per session: unlisted (pending) tickers never
-    // resolve, and every calendar apply re-sent hundreds of them, twice per
-    // refresh, while the first batch was still in flight.
-    QStringList syms;
-    for (const auto& e : entries_)
-        if (!e.ticker.isEmpty() && !e.profile_fetched && !profiles_requested_.contains(e.ticker)) {
-            syms.append(e.ticker);
-            profiles_requested_.insert(e.ticker);
+// Yahoo is asked in chunks, one at a time: the screen's 380 priced tickers
+// (and, before, every pending ticker too) went out as ONE batch_quotes and
+// ONE ~700-symbol batch_info at open — the burst that got the whole app
+// rate-limited (429) for minutes, blanking Markets charts and portfolio
+// prices. A refused chunk stops the chain; the rest is asked on the next
+// apply, not hammered into a limit. "Refused" is the reply saying so: quotes
+// are asked with stale_on_failure=false (a 429'd download is a failed reply
+// since the daemon reads yfinance's per-ticker errors), profiles report a
+// failed lookup as ok=false and a refused row as `refused`. A chunk that
+// answers nothing for its tickers (delisted, not yet trading) is an answer,
+// not a refusal — it must not stall the chain on the same chunk every apply.
+// Chunks are spaced kYahooChunkGapMs apart.
+static constexpr int kYahooChunk = 40;
+static constexpr int kYahooChunkGapMs = 1500;
+static constexpr int kPumpWatchdogMs = 120'000;
+static constexpr int kPumpRefusalCooldownMs = 30'000;   // after Yahoo refused a chunk
+
+// The SECTOR cell: the sector; "…" while a listed ticker's profile is being
+// asked; "—" when answered without one, or never asked (an unlisted deal's
+// proposed ticker has no Yahoo profile — enrich_with_profiles skips it).
+static QString sector_display(const QString& sector, bool profile_fetched, const QString& ticker,
+                              const QString& status) {
+    if (!sector.isEmpty()) return sector;
+    if (profile_fetched || ticker.isEmpty() || status != "priced") return QStringLiteral("—");
+    return QStringLiteral("…");
+}
+
+bool IpoWatchView::ChunkPump::add(const QString& ticker) {
+    if (requested.contains(ticker) || inflight.contains(ticker) || queued.contains(ticker)) return false;
+    queue.append(ticker);
+    queued.insert(ticker);
+    requested.insert(ticker);
+    return true;
+}
+
+void IpoWatchView::run_pump(ChunkPump* p, const char* what, ChunkFetch fetch, std::function<void()> on_drain) {
+    if (p->busy || p->queue.isEmpty()) return;
+    // After a refusal the pump waits out a cool-down (batch_info is an
+    // interactive action — the worker's background back-off doesn't cover
+    // it): the next apply re-queues, and resumes when it expires.
+    if (!p->cooldown.hasExpired()) {
+        if (!p->cooldown_wake) {
+            p->cooldown_wake = true;
+            QPointer<IpoWatchView> self = this;
+            QTimer::singleShot(p->cooldown.remainingTime() + 5, this, [self, p, what, fetch, on_drain]() {
+                if (!self) return;
+                p->cooldown_wake = false;
+                self->run_pump(p, what, fetch, on_drain);
+            });
         }
-    if (syms.isEmpty()) return;
+        return;
+    }
+    const QStringList syms = p->queue.mid(0, kYahooChunk);
+    p->queue = p->queue.mid(syms.size());
+    for (const auto& t : syms) p->queued.remove(t);
+    p->busy = true;
+    p->inflight = QSet<QString>(syms.begin(), syms.end());
+    const quint64 gen = ++p->gen;   // this chunk's; moves on when its reply (or the watchdog) lands
 
     QPointer<IpoWatchView> self = this;
-    services::MarketDataService::instance().fetch_company_profiles(
-        syms, [self, syms](bool ok, QVector<services::MarketDataService::CompanyProfile> profiles) {
+    // A chunk answered synchronously came from the local cache (no daemon
+    // call): the next one needn't wait out the Yahoo gap.
+    auto in_fetch = std::make_shared<bool>(true);
+    // Give up the chunk (and the queue behind it): asked again on the next apply.
+    auto give_up = [p](const QStringList& chunk) {
+        for (const auto& t : chunk) p->requested.remove(t);
+        for (const auto& t : std::as_const(p->queue)) p->requested.remove(t);
+        p->queue.clear();
+        p->queued.clear();
+    };
+    // Watchdog: a reply that never comes (no Python yet, a lost callback)
+    // must not latch the pump busy for the session; a late reply for a
+    // given-up chunk is ignored (generation).
+    QTimer::singleShot(kPumpWatchdogMs, this, [self, p, syms, gen, what, give_up, on_drain]() {
+        if (!self || gen != p->gen) return;   // replied (or superseded) meanwhile
+        LOG_WARN("IpoWatch", QString("%1 chunk got no reply in %2 s — giving up on it")
+                                 .arg(QLatin1String(what)).arg(kPumpWatchdogMs / 1000));
+        ++p->gen;   // the late reply, if it ever comes, is now ignored
+        p->busy = false;
+        p->inflight.clear();
+        give_up(syms);
+        if (on_drain) on_drain();   // show what the earlier chunks brought
+    });
+    fetch(syms, [self, p, gen, what, fetch, on_drain, give_up, in_fetch](bool refused, const QSet<QString>& retry) {
+        if (!self || gen != p->gen) return;   // given up by the watchdog
+        ++p->gen;   // replied: the watchdog for this chunk stands down
+        p->inflight.clear();
+        for (const auto& t : retry) p->requested.remove(t);
+        if (refused) {
+            give_up({});   // stop the chain: don't push on into a limit
+            p->cooldown.setRemainingTime(kPumpRefusalCooldownMs);
+        }
+        if (p->queue.isEmpty()) {
+            p->busy = false;
+            if (on_drain) on_drain();   // one rebuild when done, not one per chunk
+            return;
+        }
+        // Busy through the gap, so another apply can't send early.
+        QTimer::singleShot(*in_fetch ? 0 : kYahooChunkGapMs, self.data(), [self, p, what, fetch, on_drain]() {
             if (!self) return;
-            if (!ok) {   // a failed request is retried on the next apply
-                for (const auto& t : syms) self->profiles_requested_.remove(t);
-                return;
-            }
-            QHash<QString, services::MarketDataService::CompanyProfile> by_sym;
-            for (const auto& p : profiles) by_sym.insert(p.symbol, p);
-            for (auto& e : self->entries_) {
-                if (e.ticker.isEmpty() || e.profile_fetched) continue;
-                auto it = by_sym.constFind(e.ticker);
-                if (it == by_sym.constEnd()) continue;
-                e.sector   = it.value().sector;
-                e.industry = it.value().industry;
-                e.website  = it.value().website;
-                e.profile_fetched = true;
-            }
-            self->render();
+            p->busy = false;
+            self->run_pump(p, what, fetch, on_drain);
         });
+    });
+    *in_fetch = false;
+}
+
+void IpoWatchView::enrich_with_profiles() {
+    // Listed (priced) tickers only — a pending deal's proposed ticker has no
+    // Yahoo profile, and asking for hundreds of them was most of the burst.
+    // Each ticker is asked once per session.
+    for (const auto& e : entries_)
+        if (e.status == "priced" && !e.ticker.isEmpty() && !e.profile_fetched)
+            profile_pump_.add(e.ticker);
+
+    QPointer<IpoWatchView> self = this;
+    run_pump(&profile_pump_, "profile",
+        [self](const QStringList& syms, ChunkDone done) {
+            services::MarketDataService::instance().fetch_company_profiles(
+                syms, [self, syms, done](bool ok, QVector<services::MarketDataService::CompanyProfile> profiles) {
+                    if (!self) return;
+                    QHash<QString, services::MarketDataService::CompanyProfile> by_sym;
+                    QSet<QString> retry;
+                    bool refused = !ok;
+                    for (const auto& p : profiles) {
+                        // Refused by Yahoo (the burst is on): asked again,
+                        // not settled. A lookup that errored otherwise (a
+                        // yfinance parse error) would fail the same way on
+                        // every apply — settled for the session ("—") below.
+                        if (p.refused) { refused = true; retry.insert(p.symbol); continue; }
+                        if (p.failed)  continue;
+                        by_sym.insert(p.symbol, p);
+                    }
+                    if (refused)
+                        for (const auto& t : syms)
+                            if (!by_sym.contains(t)) retry.insert(t);
+                    const QSet<QString> asked(syms.begin(), syms.end());
+                    for (auto& e : self->entries_) {
+                        if (e.ticker.isEmpty() || e.profile_fetched || !asked.contains(e.ticker)) continue;
+                        auto it = by_sym.constFind(e.ticker);
+                        if (it == by_sym.constEnd()) {
+                            // Answered, and nothing for this ticker: settled
+                            // ("—"), not "…" forever.
+                            if (!retry.contains(e.ticker)) e.profile_fetched = true;
+                            continue;
+                        }
+                        // known_none: Yahoo says there is no such ticker — sector stays empty ("—").
+                        e.sector   = it.value().sector;
+                        e.industry = it.value().industry;
+                        e.website  = it.value().website;
+                        e.profile_fetched = true;
+                    }
+                    done(refused, retry);
+                });
+        },
+        [self]() { if (self) self->render(); });
 }
 
 void IpoWatchView::fetch_history_for_detail(const Entry& e) {
@@ -1366,40 +1489,48 @@ void IpoWatchView::fetch_wikipedia_for_detail(const Entry& e) {
 }
 
 // Lazily fetch yfinance quotes for priced tickers so the PERFORMANCE lens can
-// show pop %. Single batch_quotes call — cheap. Only re-fetches symbols whose
+// show pop %, in paced chunks (run_pump). Only re-fetches symbols whose
 // perf_fetched is false, so subsequent lens switches are no-ops.
 void IpoWatchView::enrich_priced_with_quotes() {
-    QStringList syms;
     for (const auto& e : entries_)
-        if (e.status == "priced" && !e.ticker.isEmpty() && !e.perf_fetched &&
-            !quotes_requested_.contains(e.ticker)) {
-            syms.append(e.ticker);
-            quotes_requested_.insert(e.ticker);
-        }
-    if (syms.isEmpty()) return;
+        if (e.status == "priced" && !e.ticker.isEmpty() && !e.perf_fetched)
+            quote_pump_.add(e.ticker);
 
     QPointer<IpoWatchView> self = this;
-    services::MarketDataService::instance().fetch_quotes(
-        syms, [self, syms](bool ok, QVector<services::QuoteData> quotes) {
+    run_pump(&quote_pump_, "quote",
+        [self](const QStringList& syms, ChunkDone done) {
+            services::MarketDataService::instance().fetch_quotes(
+                syms, [self, syms, done](bool ok, QVector<services::QuoteData> quotes) {
+                    if (!self) return;
+                    QHash<QString, double> price_map;
+                    for (const auto& q : quotes) price_map.insert(q.symbol, q.price);
+                    // A refusal: what didn't answer is asked again (the
+                    // PERFORMANCE-lens retry / next refresh). Without one, a
+                    // ticker merely unquoted stays asked until then.
+                    QSet<QString> retry;
+                    if (!ok)
+                        for (const auto& t : syms)
+                            if (!price_map.contains(t)) retry.insert(t);
+                    for (auto& e : self->entries_) {
+                        if (e.status != "priced" || e.ticker.isEmpty()) continue;
+                        auto it = price_map.constFind(e.ticker);
+                        if (it == price_map.constEnd()) continue;
+                        e.last_price = it.value();
+                        // No offer price or no usable quote → return since IPO is unknown.
+                        e.pop_pct = (e.final_price > 0 && std::isfinite(e.last_price) && e.last_price > 0)
+                            ? (e.last_price - e.final_price) / e.final_price * 100.0
+                            : std::numeric_limits<double>::quiet_NaN();
+                        e.perf_fetched = true;
+                    }
+                    done(!ok, retry);
+                },
+                /*stale_on_failure=*/false);   // a refusal must stop the chain, not read as answered
+        },
+        [self]() {
             if (!self) return;
-            if (!ok) {   // let the PERFORMANCE-lens retry ask again
-                for (const auto& t : syms) self->quotes_requested_.remove(t);
-                return;
-            }
-            QHash<QString, double> price_map;
-            for (const auto& q : quotes) price_map.insert(q.symbol, q.price);
-            for (auto& e : self->entries_) {
-                if (e.status != "priced" || e.ticker.isEmpty()) continue;
-                auto it = price_map.constFind(e.ticker);
-                if (it == price_map.constEnd()) continue;
-                e.last_price = it.value();
-                // No offer price or no usable quote → return since IPO is unknown.
-                e.pop_pct = (e.final_price > 0 && std::isfinite(e.last_price) && e.last_price > 0)
-                    ? (e.last_price - e.final_price) / e.final_price * 100.0
-                    : std::numeric_limits<double>::quiet_NaN();
-                e.perf_fetched = true;
-            }
-            if (self->active_lens_ == LensPerformance) self->render();
+            // The table only where pop % is on screen; the KPI strip always is.
+            if (self->active_lens_ == LensPerformance || self->active_lens_ == LensWatchlist) self->render();
+            else self->render_kpis();
         });
 }
 
@@ -1843,10 +1974,9 @@ void IpoWatchView::render_calendar() {
             table_->setItem(i, C_Size, ds);
         }
         // SECTOR is populated lazily after the batch_info enrichment lands;
-        // "…" until then, "—" once we know the daemon couldn't resolve it.
-        const QString sector_disp = e.sector.isEmpty()
-            ? (e.profile_fetched ? QStringLiteral("—") : (e.ticker.isEmpty() ? QStringLiteral("—") : QStringLiteral("…")))
-            : e.sector;
+        // "…" while a listed ticker is being asked, "—" once answered without
+        // one or when it is never asked (unlisted: no Yahoo profile exists).
+        const QString sector_disp = sector_display(e.sector, e.profile_fetched, e.ticker, e.status);
         table_->setItem(i, C_Sector, new QTableWidgetItem(sector_disp));
     }
     table_->setSortingEnabled(true);
@@ -1922,9 +2052,7 @@ void IpoWatchView::render_performance() {
                 ds->setToolTip(QStringLiteral("S-1 filed — not priced. The S-1 fee-table maximum offering price is a registration-fee placeholder, not a deal size."));
             table_->setItem(r, 7, ds);
         }
-        const QString sector_disp = e.sector.isEmpty()
-            ? (e.profile_fetched ? QStringLiteral("—") : QStringLiteral("…"))
-            : e.sector;
+        const QString sector_disp = sector_display(e.sector, e.profile_fetched, e.ticker, e.status);
         table_->setItem(r, 8, new QTableWidgetItem(sector_disp));
     }
     table_->setSortingEnabled(true);
@@ -2029,9 +2157,7 @@ void IpoWatchView::render_watchlist() {
                 ds->setToolTip(QStringLiteral("S-1 filed — not priced. The S-1 fee-table maximum offering price is a registration-fee placeholder, not a deal size."));
             table_->setItem(r, 9, ds);
         }
-        const QString sector_disp = e.sector.isEmpty()
-            ? (e.profile_fetched ? QStringLiteral("—") : QStringLiteral("…"))
-            : e.sector;
+        const QString sector_disp = sector_display(e.sector, e.profile_fetched, e.ticker, e.status);
         table_->setItem(r, 10, new QTableWidgetItem(sector_disp));
     };
 

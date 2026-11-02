@@ -273,6 +273,7 @@ def _reset_yfinance_session() -> None:
 _http_trace = threading.local()
 # Statuses that say nothing about the symbol: auth, rate limit, server trouble.
 _TRANSIENT_HTTP = {401, 403, 408, 429, 500, 502, 503, 504}
+_NO_ANSWER = -1   # a request that raised before any response (recorded in order)
 
 
 def _trace_reset():
@@ -285,6 +286,60 @@ def _trace_transient():
     never answered — the lookup's outcome is not a fact about the symbol."""
     st = getattr(_http_trace, "statuses", [])
     return getattr(_http_trace, "net_error", False) or any(c in _TRANSIENT_HTTP for c in st)
+
+
+def _download_refusals(symbols, dl_errors):
+    """{caller's spelling: error} for the tickers a yf.download was refused
+    for, read from its shared._ERRORS snapshot. Keyed by EVERY spelling a
+    caller asked with (yfinance uppercases its keys; a merged request can
+    carry "brk-b" and "BRK-B"); only tickers THIS download asked for (a
+    concurrent standalone history() can write into the shared dict).
+    ("no timezone found" is NOT read as a refusal: yfinance says the same for
+    a ticker Yahoo doesn't know, and a chunk of delisted tickers would then
+    "refuse" — and pause every background refresh — on every ask.)"""
+    asked = {}
+    for sym in symbols:
+        asked.setdefault(sym.upper(), []).append(sym)
+    mine = {str(k).upper(): str(e) for k, e in dl_errors.items() if str(k).upper() in asked}
+    refused = {}
+    for k, e in mine.items():
+        if _is_refusal_text(e):
+            for spelling in asked[k]:
+                refused[spelling] = e
+    return refused
+
+
+def _is_refusal_text(msg):
+    """An error message that says Yahoo refused or never answered (as opposed
+    to "no such ticker" / "no data for this period")."""
+    m = msg.lower()
+    if any(k in m for k in ("ratelimit", "too many requests", "unauthorized", "invalid crumb",
+                            "timed out", "timeout", "connection", "could not resolve",
+                            "failed to connect", "couldn't connect", "server error",
+                            "service unavailable", "bad gateway", "gateway time", "forbidden")):
+        return True
+    # Status codes as whole words only — a timestamp or ticker can contain 401.
+    return re.search(r"\b(?:http(?: error)? ?)(401|403|429|5\d\d)\b", m) is not None
+
+
+def _trace_last_refused():
+    """True when the LAST data request on this thread was refused or
+    unanswered — the one an empty answer came from. An earlier 401 or network
+    error that yfinance recovered from does not make a real empty answer a
+    refusal. (Crumb/cookie fetches use the session directly and are not
+    traced, so they cannot mask the data request.)"""
+    st = getattr(_http_trace, "statuses", [])
+    return bool(st) and (st[-1] in _TRANSIENT_HTTP or st[-1] == _NO_ANSWER)
+
+
+def _trace_refusal_text():
+    """What the last request on this thread got: 'HTTP 429', 'no answer' or
+    'refused' — the one the failure came from, not a status yfinance had
+    already recovered from."""
+    st = getattr(_http_trace, "statuses", [])
+    if st and st[-1] in _TRANSIENT_HTTP:
+        return f"HTTP {st[-1]}"
+    return "no answer" if st and st[-1] == _NO_ANSWER else "refused"
 
 
 def _h(v):
@@ -335,8 +390,13 @@ def _install_auth_probe():
             return r
         try:
             r = orig(self, url, traced, *args, **kwargs)
-        except Exception:
+        except Exception as e:
             _http_trace.net_error = True
+            st = getattr(_http_trace, "statuses", None)
+            if st is not None:
+                # In order, so "the last request" can see it. yfinance raises
+                # YFRateLimitError for a 429 before we see the response.
+                st.append(429 if "RateLimit" in type(e).__name__ else _NO_ANSWER)
             raise
         # Only the request's FINAL status counts: yfinance retries any >= 400
         # once with the other cookie strategy, and a 401 the retry recovered
@@ -1093,6 +1153,12 @@ def get_batch_info(symbols):
             info = yf.Ticker(sym).info or {}
             if _trace_transient():
                 return {"symbol": sym, "error": "Yahoo refused or did not answer", "transient": True}
+            # yfinance swallows quoteSummary's 404 for an unknown ticker and
+            # returns an empty .info: with no name from any request and that
+            # 404 on record, Yahoo has said the ticker is unknown.
+            if not (info.get("longName") or info.get("shortName") or info.get("quoteType")) and \
+                    404 in getattr(_http_trace, "statuses", []):
+                return {"symbol": sym, "error": "unknown to Yahoo (404)", "not_found": True}
             return {
                 "symbol": sym,
                 "long_name": info.get("longName") or info.get("shortName") or "",
@@ -1106,16 +1172,24 @@ def get_batch_info(symbols):
         except Exception as e:
             if _trace_transient():
                 return {"symbol": sym, "error": f"Yahoo refused or did not answer ({e})", "transient": True}
-            return {"symbol": sym, "error": str(e)}
+            # Only a 404 on the request it failed on is Yahoo saying the
+            # ticker is unknown — the one failure a caller may remember as
+            # "no profile". A parse error or a yfinance bug is neither.
+            st = getattr(_http_trace, "statuses", [])
+            not_found = bool(st) and st[-1] == 404
+            return {"symbol": sym, "error": str(e), **({"not_found": True} if not_found else {})}
 
     out = []
     with ThreadPoolExecutor(max_workers=8) as ex:
-        futures = [ex.submit(_one, s) for s in symbols]
+        futures = {ex.submit(_one, s): s for s in symbols}
         for f in as_completed(futures):
             try:
                 out.append(f.result())
             except Exception as e:
-                out.append({"symbol": "", "error": str(e)})
+                # Keep the ticker: a row without one can't be matched, and
+                # the caller would settle it as answered.
+                out.append({"symbol": futures[f], "error": str(e),
+                            "transient": _is_refusal_text(str(e))})
     return out
 
 
@@ -1808,9 +1882,22 @@ def get_batch_quotes(symbols):
             # (Adjusted series remain correct for performance questions:
             # charts, technicals and the 52-week band all use auto_adjust=True
             # via get_historical_period.)
-            data = yf.download(symbols, period="5d", group_by='ticker', progress=False, threads=True, auto_adjust=False)
+            # Held across the download AND the read of its per-ticker errors
+            # (module globals the next download clears); the lock is
+            # re-entrant, so the serializer's own acquire nests.
+            with _DOWNLOAD_LOCK:
+                data = yf.download(symbols, period="5d", group_by='ticker', progress=False, threads=True, auto_adjust=False)
+                dl_errors = dict(getattr(getattr(yf, "shared", None), "_ERRORS", {}) or {})
 
+        # A refused ticker (429, 401, 5xx, no answer) is recorded only in
+        # shared._ERRORS. All refused: a failed reply. Some refused: an error
+        # row each (callers skip it; a pacing caller sees the refusal) —
+        # never "no quote" for a ticker Yahoo didn't answer about.
+        refused = _download_refusals(symbols, dl_errors)
         if data is None or data.empty:
+            if refused:
+                return {"error": f"Yahoo refused the quote download ({len(refused)} symbols)",
+                        "transient": True}
             return []
 
         results = []
@@ -1936,6 +2023,10 @@ def get_batch_quotes(symbols):
             print(f"[yfinance_data] session-aware fixup failed: {e!r}",
                   file=sys.stderr)
 
+        have = {r.get("symbol") for r in results}
+        for sym, why in refused.items():
+            if sym not in have:
+                results.append({"symbol": sym, "error": f"Yahoo refused: {why[:120]}", "transient": True})
         return results
     except Exception as e:
         # Fallback: fetch one by one
@@ -1955,25 +2046,33 @@ def get_batch_sparklines(symbols, period="5d", interval="1h"):
     # Normalize class-share dot notation → hyphen (BRK.B → BRK-B) so yfinance
     # batch download finds the symbol.  Keep a reverse map so results are
     # keyed by the original symbol the caller passed in.
+    # Every original spelling per normalized ticker: a merged request can
+    # carry "BRK.B" from one caller and "BRK-B" from another.
     norm_to_orig = {}
     download_syms = []
     for s in symbols:
         n = re.sub(r'\.([A-Z])$', r'-\1', s)
-        norm_to_orig[n] = s
-        download_syms.append(n)
+        if n not in norm_to_orig:
+            download_syms.append(n)
+        norm_to_orig.setdefault(n, []).append(s)
 
     try:
         _buf = io.StringIO()
-        with contextlib.redirect_stdout(_buf):
+        with contextlib.redirect_stdout(_buf), _DOWNLOAD_LOCK:   # re-entrant; see get_batch_quotes
             data = yf.download(download_syms, period=period, interval=interval,
                                group_by='ticker', progress=False, threads=True, auto_adjust=True)
+            dl_errors = dict(getattr(getattr(yf, "shared", None), "_ERRORS", {}) or {})
 
+        refused_syms = _download_refusals(download_syms, dl_errors)
         if data is None or data.empty:
+            # A refused download is not "no data" (see get_batch_quotes).
+            if refused_syms:
+                return {"error": "Yahoo refused the sparkline download", "transient": True}
             return {"error": "No data"}
 
         result = {}
         for norm_sym in download_syms:
-            orig_sym = norm_to_orig.get(norm_sym, norm_sym)
+            orig_syms = norm_to_orig.get(norm_sym, [norm_sym])
             try:
                 if not isinstance(data.columns, pd.MultiIndex):
                     hist = data
@@ -1990,10 +2089,16 @@ def get_batch_sparklines(symbols, period="5d", interval="1h"):
                 closes = hist['Close'].dropna()
                 if closes.empty:
                     continue
-                result[orig_sym] = [round(float(v), 4) for v in closes.tolist()]
+                series = [round(float(v), 4) for v in closes.tolist()]
+                for orig_sym in orig_syms:
+                    result[orig_sym] = series
             except Exception:
                 continue
 
+        if refused_syms:
+            # Some tickers refused: the rest is kept, but marked so the result
+            # isn't cached and the worker backs off (_is_refusal_result).
+            result["_transient"] = True
         return result
     except Exception as e:
         return {"error": str(e)}
@@ -2025,11 +2130,28 @@ def get_batch_all(payload):
 
     quote_syms = payload.get("quotes") or []
     if quote_syms:
-        out["quotes"] = get_batch_quotes(quote_syms)
+        q = get_batch_quotes(quote_syms)
+        if isinstance(q, dict):   # refused: a list for the C++ parser, and a
+            out["quotes"] = []    # "<section>_error" so the result isn't cached
+            out["quotes_error"] = q.get("error", "quotes failed")
+            if q.get("transient"):
+                out["quotes_transient"] = True
+        else:
+            out["quotes"] = q   # refused rows carry "transient" (not cached: _is_cacheable_result)
 
     spark_syms = payload.get("sparklines") or []
     if spark_syms:
-        out["sparklines"] = get_batch_sparklines(spark_syms)
+        sp = get_batch_sparklines(spark_syms)
+        if isinstance(sp, dict) and sp.pop("_transient", False):   # partly refused
+            out["sparklines_transient"] = True
+        if isinstance(sp, dict) and sp.get("transient"):   # refused: not cached, worker backs off
+            out["sparklines"] = {}
+            out["sparklines_error"] = sp.get("error", "sparklines refused")
+            out["sparklines_transient"] = True
+        elif isinstance(sp, dict) and isinstance(sp.get("error"), str):
+            out["sparklines"] = {}   # plain "No data": an answer, cacheable as before
+        else:
+            out["sparklines"] = sp
 
     hist_reqs = payload.get("histories") or []
     if hist_reqs:
@@ -2049,7 +2171,8 @@ def get_batch_all(payload):
                     "points": points if isinstance(points, list) else [],
                     # A refusal is not an empty series: MarketDataService
                     # skips an entry carrying "error" (it used to publish []).
-                    **({"error": points.get("error")} if isinstance(points, dict) else {}),
+                    **({"error": points.get("error"), "transient": bool(points.get("transient"))}
+                       if isinstance(points, dict) else {}),
                 })
             except Exception as e:
                 histories.append({
@@ -2250,6 +2373,7 @@ def search_symbols(query, limit=20, asset_type=""):
         import ssl
 
         results = []
+        search_failed, search_transient = None, False
         query_str = query.strip()
         if not query_str:
             return {"results": [], "query": query, "count": 0}
@@ -2293,6 +2417,26 @@ def search_symbols(query, limit=20, asset_type=""):
                     if len(results) >= limit:
                         break
         except Exception as search_err:
+            # Classified by type: a refusal or no answer is "failed — try
+            # again" (transient); a 4xx for an odd query is no matches; a bug,
+            # a bad body or a certificate error is a failed search a retry
+            # won't fix (not transient).
+            from urllib.error import HTTPError as _HTTPError, URLError as _URLError
+            if isinstance(search_err, _HTTPError):
+                if search_err.code in _TRANSIENT_HTTP:
+                    search_failed, search_transient = search_err, True
+            elif isinstance(search_err, (_URLError, TimeoutError, ConnectionError, OSError,
+                                         __import__("http.client").client.HTTPException)) and \
+                    "certificate" not in str(search_err).lower() and \
+                    "ssl" not in type(search_err).__name__.lower():
+                search_failed, search_transient = search_err, True
+            elif isinstance(search_err, ValueError) and not isinstance(search_err, UnicodeDecodeError) \
+                    and "certificate" not in str(search_err).lower() and "ssl" not in type(search_err).__name__.lower():
+                # A 200 that isn't JSON — Yahoo's throttling / consent
+                # interstitial — is a refusal, not a bug in the query.
+                search_failed, search_transient = search_err, True
+            else:
+                search_failed, search_transient = search_err, False
             # Fallback: try the exact symbol as a yfinance Ticker
             query_upper = query_str.upper()
             for candidate in [query_upper]:
@@ -2321,6 +2465,12 @@ def search_symbols(query, limit=20, asset_type=""):
                 except Exception:
                     continue
 
+        # The search endpoint failed (a 429, a timeout) and the exact-symbol
+        # fallback found nothing: that is a failed search, not "no matches" —
+        # the box must not read as "no such ticker".
+        if search_failed is not None and not results:
+            return {"error": f"search failed: {search_failed}", "transient": search_transient,
+                    "query": query, "results": []}
         return {"results": results, "query": query, "count": len(results)}
 
     except Exception as e:
@@ -2340,12 +2490,21 @@ def get_earnings_dates(symbol, lookback_days=1825, lookahead_days=180):
              "eps_estimate": <float|None>,
              "eps_actual":   <float|None>,
              "surprise_pct": <float|None>}, ...]}
+
+    A failure carries "transient" when Yahoo refused or did not answer — a
+    429 is not "this ticker has no earnings".
     """
     from datetime import datetime, timedelta, timezone
+    _trace_reset()
     try:
         ticker = yf.Ticker(symbol)
         df = ticker.earnings_dates
         if df is None or getattr(df, "empty", True):
+            # yfinance swallows a refused request into None / an empty frame;
+            # that is not "this ticker has no earnings".
+            if _trace_last_refused():
+                return {"error": f"Yahoo refused or did not answer ({_trace_refusal_text()})",
+                        "symbol": symbol, "dates": [], "transient": True}
             return {"symbol": symbol, "dates": []}
         now = datetime.now(timezone.utc)
         cutoff_back = now - timedelta(days=lookback_days)
@@ -2384,7 +2543,10 @@ def get_earnings_dates(symbol, lookback_days=1825, lookahead_days=180):
         dates.sort(key=lambda d: d["timestamp"])
         return {"symbol": symbol, "dates": dates}
     except Exception as e:
-        return {"error": str(e), "symbol": symbol, "dates": []}
+        return {"error": str(e), "symbol": symbol, "dates": [],
+                # The request the failure came from — a 401 yfinance already
+                # recovered from does not make an ETF's "no earnings" a refusal.
+                "transient": _trace_last_refused() or "RateLimit" in type(e).__name__}
 
 
 # ── Earnings analysis (ER "Earnings" tab) ────────────────────────────────────
@@ -4158,6 +4320,10 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
         # BRK.B-style dot notation returns empty history for periods > 1d
         # even though the 1d quote endpoint succeeds.  Retry with the
         # canonical hyphen form (BRK-B) before giving up.
+        # The primary request's refusal is remembered: the dash-form retry
+        # answering empty must not turn a refused BRK.B into "no bars".
+        primary_refused = hist.empty and _trace_last_refused()
+        primary_why = _trace_refusal_text() if primary_refused else None
         if hist.empty:
             ticker_alt, _ = _yf_ticker_with_fallback(symbol)
             if ticker_alt.ticker != symbol:
@@ -4172,9 +4338,11 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
         if hist.empty:
             # yfinance turns a refused request (401 crumb, a 429 on the
             # timezone probe) into an empty frame plus a log line. That is
-            # not "no bars for this period".
-            if _trace_transient():
-                return {"error": "Yahoo refused or did not answer (HTTP 401/429 or no response) — try again",
+            # not "no bars for this period" — judged by the request the empty
+            # answer came from, not one yfinance already recovered from.
+            if primary_refused or _trace_last_refused():
+                why = primary_why or _trace_refusal_text()
+                return {"error": f"Yahoo refused or did not answer ({why}) — try again",
                         "transient": True, "symbol": symbol}
             return []
 
@@ -4217,9 +4385,12 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
 
         return historical_data
     except Exception as e:
-        # YFRateLimitError lands here: Yahoo's 429 on the chart request.
-        return {"error": f"{type(e).__name__}: {e}", "symbol": symbol,
-                "transient": _trace_transient() or "RateLimit" in type(e).__name__}
+        # YFRateLimitError lands here: Yahoo's 429 on the chart request. A
+        # 401 often surfaces as a yfinance TypeError on the error body — the
+        # status is appended so the log says what it really was.
+        refused = _trace_last_refused()
+        return {"error": f"{type(e).__name__}: {e}" + (f" [{_trace_refusal_text()}]" if refused else ""),
+                "symbol": symbol, "transient": refused or "RateLimit" in type(e).__name__}
 
 def resolve_symbol(symbol):
     """
@@ -4634,8 +4805,14 @@ def _is_cacheable_result(result):
     if isinstance(result, dict):
         if not result:
             return False
-        for k in result:
+        for k, v in result.items():
             if k in ("error", "fatal") or (isinstance(k, str) and k.endswith("_error")):
+                return False
+            if isinstance(k, str) and k.endswith("_transient") and v:   # a refused part
+                return False
+            # A section list carrying a refused row (batch_all's "quotes"):
+            # the row must be asked again, not served for the TTL.
+            if isinstance(v, list) and any(isinstance(r, dict) and r.get("transient") for r in v):
                 return False
         if set(result.keys()) <= {"symbol"}:
             return False
@@ -4721,6 +4898,57 @@ class _Flight:
         self.done = False
 
 
+def _exception_reply(req_id, exc):
+    """A failed reply for an action that RAISED. The body says whether it was
+    Yahoo refusing (worth a retry) or a bug / unknown action (not) — without
+    one, the C++ side reads any failure as "no answer, try again"."""
+    msg = f"{type(exc).__name__}: {exc}"
+    # By type: a programming error is not worth a retry; anything else
+    # raised (network, curl, HTTP, rate limit) is treated as no answer —
+    # what a body-less failure always meant before.
+    # A 401 often surfaces as a yfinance TypeError on the error body: the
+    # request the failure came from decides first.
+    transient = _trace_last_refused() or not isinstance(
+        exc, (KeyError, IndexError, TypeError, AttributeError, NameError,
+              AssertionError, NotImplementedError, ZeroDivisionError))
+    return {"id": req_id, "ok": False, "error": str(exc), "refused": transient,
+            "result": {"error": msg, "transient": transient}}
+
+
+def _reply_for(req_id, result):
+    """The reply frame for an action's result. An action that failed RETURNS
+    {"error": ...} (the CLI path prints it); sent as ok:true, every C++ caller
+    had to remember result.contains("error") — the ones that didn't read a
+    Yahoo 429 as an empty answer ("No data available for this period" on the
+    Markets chart). A top-level error is a failed reply; the body still rides
+    along so a caller can read "transient". Partial failures use
+    "<section>_error" keys and stay ok."""
+    refused = _is_refusal_result(result)
+    if isinstance(result, dict) and result.get("error"):
+        return {"id": req_id, "ok": False, "error": str(result["error"]), "refused": refused,
+                "result": _sanitize_for_json(result)}
+    return {"id": req_id, "ok": True, "refused": refused, "result": _sanitize_for_json(result)}
+
+
+def _is_refusal_result(result):
+    """Did Yahoo refuse (all or part of) this result? The one rule, next to
+    _is_cacheable_result, that the worker's background back-off reads from
+    the frame's "refused" flag: a top-level transient error, a refused
+    section ("<section>_transient"), or refused rows ({"transient": true})
+    in a list. Plain "no data" is not a refusal."""
+    def rows_refused(v):
+        return isinstance(v, list) and any(isinstance(r, dict) and r.get("transient") for r in v)
+    if rows_refused(result):
+        return True
+    if isinstance(result, dict):
+        if result.get("transient"):
+            return True
+        for k, v in result.items():
+            if (isinstance(k, str) and k.endswith("_transient") and v) or rows_refused(v):
+                return True
+    return False
+
+
 def _daemon_dispatch(action, payload):
     """Run one action and return the raw result object (not wrapped).
 
@@ -4799,12 +5027,16 @@ def _daemon_dispatch(action, payload):
 
 def _daemon_dispatch_with_crumb_retry(action, payload):
     try:
-        return _daemon_dispatch_inner(action, payload)
+        result = _daemon_dispatch_inner(action, payload)
     except Exception as e:
         if _is_crumb_error(e):
             _reset_yfinance_session()
             return _daemon_dispatch_inner(action, payload)
         raise
+    # A RETURNED failure (most actions; sent as ok:false by _reply_for) is not
+    # retried here: per the NOTE above, a session reset does not reset the
+    # crumb, so a retry would only repeat the refused call.
+    return result
 
 
 def _daemon_dispatch_inner(action, payload):
@@ -4819,20 +5051,13 @@ def _daemon_dispatch_inner(action, payload):
         return get_batch_sparklines(syms)
     if action == "historical_period":
         p = payload or {}
-        res = get_historical_period(
+        # A failed fetch comes back {"error", "transient"} and goes out as a
+        # failed reply (see _reply_for).
+        return get_historical_period(
             p.get("symbol"), p.get("period", "6mo"), p.get("interval", "1d"),
             # Callers that compare against a RAW live price (the portfolio's
             # trailing-stop peak) pass auto_adjust=false explicitly.
             bool(p.get("auto_adjust", True)))
-        # A failed fetch is a failed REPLY. Returned as a dict it went out as
-        # ok:true, every C++ caller read the missing "_value" as an empty
-        # series, and a Yahoo 429 showed as "No data available for this
-        # period" on the Markets chart (and blank ER / portfolio / IPO charts).
-        # The message carries the cause (YFRateLimitError, HTTP status) for
-        # the caller's log; "transient" does not survive the raise.
-        if isinstance(res, dict) and res.get("error"):
-            raise RuntimeError(res["error"])
-        return res
     if action == "batch_closes":
         p = payload or {}
         return batch_closes(p.get("symbols") or [], p.get("start"), p.get("end"))
@@ -5698,21 +5923,26 @@ def run_daemon_socket(socket_path):
         try:
             body = json.dumps(resp_dict, allow_nan=False).encode("utf-8")
         except (ValueError, TypeError) as exc:
+            # A bug, not a refusal — said in a body, or the C++ side reads a
+            # body-less failure as "no answer, try again".
             body = json.dumps({
                 "id": resp_dict.get("id", 0), "ok": False,
-                "error": f"non-JSON-safe result: {exc}"
+                "error": f"non-JSON-safe result: {exc}",
+                "result": {"error": f"non-JSON-safe result: {exc}", "transient": False}
             }).encode("utf-8")
         frame = len(body).to_bytes(4, "big") + body
         with write_lock:
             conn.sendall(frame)
 
     def _handle(req_id, action, payload):
+        # Pool threads are reused: this request's trace starts empty, so a
+        # failure is never judged by an earlier request's statuses.
+        _trace_reset()
         try:
             result = _daemon_dispatch(action, payload)
-            _send_response({"id": req_id, "ok": True,
-                            "result": _sanitize_for_json(result)})
+            _send_response(_reply_for(req_id, result))
         except Exception as exc:
-            _send_response({"id": req_id, "ok": False, "error": str(exc)})
+            _send_response(_exception_reply(req_id, exc))
 
     network_pool = concurrent.futures.ThreadPoolExecutor(
         max_workers=6, thread_name_prefix="yf-net")
@@ -5802,10 +6032,11 @@ def run_daemon():
             break
 
         try:
+            _trace_reset()   # this request's trace only (see _handle)
             result = _daemon_dispatch(action, req.get("payload"))
-            resp = {"id": req_id, "ok": True, "result": _sanitize_for_json(result)}
+            resp = _reply_for(req_id, result)   # same rule as the socket transport
         except Exception as e:
-            resp = {"id": req_id, "ok": False, "error": str(e)}
+            resp = _exception_reply(req_id, e)
         try:
             # allow_nan=False is the safety net — if anything still slips
             # through _sanitize_for_json (e.g. numpy.float64 NaN we missed),
@@ -5814,7 +6045,8 @@ def run_daemon():
             body = json.dumps(resp, allow_nan=False).encode("utf-8")
         except (ValueError, TypeError) as e:
             err_resp = {"id": req_id, "ok": False,
-                        "error": f"non-JSON-safe result: {e}"}
+                        "error": f"non-JSON-safe result: {e}",
+                        "result": {"error": f"non-JSON-safe result: {e}", "transient": False}}
             body = json.dumps(err_resp).encode("utf-8")
         try:
             _daemon_write_frame(stdout, body)

@@ -2,15 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-11-01)
+## Today's commits (2026-11-02)
 
 Latest first.
 
-- [`b1a5c12db`](https://github.com/yumima/finterm/commit/b1a5c12db) IPO Watch: review fixes — stale caches, SEC budget, refresh keeps EDGAR, dossier by deal id
-- [`a2a8b8853`](https://github.com/yumima/finterm/commit/a2a8b8853) IPO Watch: one row per deal, and a projected pricing date that says what it rests on
-- [`72568a26b`](https://github.com/yumima/finterm/commit/72568a26b) news regions: review fixes — "Fed" vs fed, shouted US, accents, stale cache
-- [`ad79fc9ee`](https://github.com/yumima/finterm/commit/ad79fc9ee) secure storage: cache keyring lookups — every Python launch froze the GUI ~1s
-- [`1e0bf1385`](https://github.com/yumima/finterm/commit/1e0bf1385) news: US / CHN / EU region pills
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

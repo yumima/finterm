@@ -53,7 +53,7 @@ class RelationshipMapScreen : public QWidget, public IStatefulScreen {
     void on_search();
     void on_search_text_changed(const QString& text);
     void fire_asset_search(const QString& query);
-    void on_asset_results(const QJsonArray& results);
+    void on_asset_results(const QJsonArray& results, const QString& failure = {});  // failure: shown instead of "No results"
     void show_dropdown();
     void hide_dropdown();
     void on_data_ready(const fincept::relmap::RelationshipData& data);

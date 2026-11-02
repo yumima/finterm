@@ -1,4 +1,5 @@
 #include "ui/navigation/CommandBar.h"
+#include "ui/SearchFailedText.h"
 
 #include "core/events/EventBus.h"
 #include "core/keys/KeyConfigManager.h"
@@ -1194,21 +1195,15 @@ void CommandBar::fire_asset_search(const QString& query) {
             // Only process if user hasn't changed the query since we fired
             if (self->pending_query_ != query)
                 return;
-            if (!ok)
-                return;
-
-            // Daemon wraps flat arrays under "_value"; native shape is {results}.
-            QJsonArray arr;
-            if (result.contains("_value") && result["_value"].isArray())
-                arr = result["_value"].toArray();
-            else if (result.contains("results"))
-                arr = result["results"].toArray();
-            self->on_asset_results(arr);
+            // A failed search says so (read_search_reply) — not the last query's
+            // matches, and not an empty list that reads as "no such ticker".
+            const auto reply = fincept::ui::read_search_reply(ok, result);
+            self->on_asset_results(reply.results, reply.failure);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
-void CommandBar::on_asset_results(const QJsonArray& results) {
+void CommandBar::on_asset_results(const QJsonArray& results, const QString& failure) {
     list_->clear();
 
     if (results.isEmpty()) {
@@ -1218,7 +1213,7 @@ void CommandBar::on_asset_results(const QJsonArray& results) {
         row->setStyleSheet("background:transparent;");
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(10, 6, 10, 6);
-        auto* lbl = new QLabel("No results found");
+        auto* lbl = new QLabel(failure.isEmpty() ? QStringLiteral("No results found") : failure);
         lbl->setStyleSheet(QString("color:%1;font-size:12px;font-family:'Consolas',monospace;background:transparent;")
                                .arg(colors::TEXT_TERTIARY.get()));
         rl->addWidget(lbl);
