@@ -29,6 +29,18 @@ HoldingWithQuote holding(const QString& sym, bool price_known, bool fx_known) {
 class TestPortfolioSummaryTotals : public QObject {
     Q_OBJECT
   private slots:
+    // A print another screen's fresh quote wrote seconds ago is the current
+    // price, not "≈" — one 429 on the portfolio's own fetch put ≈ on every
+    // LAST while the hub delivered fresh prices. Today's close, read in the
+    // evening, is the last price; yesterday's is an estimate.
+    void todays_print_is_current_older_is_last_known() {
+        const QDateTime now = QDateTime::fromString("2026-11-01T22:30:00", Qt::ISODate);
+        QVERIFY(fincept::portfolio::is_current_print(now.addSecs(-10), now));
+        QVERIFY(fincept::portfolio::is_current_print(now.addSecs(-6 * 3600), now));
+        QVERIFY(!fincept::portfolio::is_current_print(now.addDays(-1), now));
+        QVERIFY(!fincept::portfolio::is_current_print(QDateTime(), now));
+        QVERIFY(!fincept::portfolio::is_current_print(now.addSecs(3600), now));
+    }
     void whole_book_says_nothing() {
         PortfolioSummary s;
         s.holdings = {holding("MU", true, true), holding("PBF", true, true)};

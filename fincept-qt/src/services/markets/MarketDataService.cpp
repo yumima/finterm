@@ -904,10 +904,10 @@ void MarketDataService::fetch_history(const QString& symbol, const QString& peri
             cb(false, {});
             return;
         }
-        // Daemon returns a flat list; wrapped under _value.
-        const QJsonArray points = result.contains("_value")
-                                       ? result.value("_value").toArray()
-                                       : result.value("history").toArray();
+        // Daemon returns a flat list; wrapped under _value. A failed fetch
+        // (a Yahoo 429 included) arrives as ok:false — the daemon raises for
+        // historical_period — so an empty list here is a real "no bars".
+        const QJsonArray points = result.value("_value").toArray();
 
         QVector<HistoryPoint> history;
         for (const auto& v : points) {

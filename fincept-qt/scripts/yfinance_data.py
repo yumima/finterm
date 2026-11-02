@@ -2047,6 +2047,9 @@ def get_batch_all(payload):
                     "period": period,
                     "interval": interval,
                     "points": points if isinstance(points, list) else [],
+                    # A refusal is not an empty series: MarketDataService
+                    # skips an entry carrying "error" (it used to publish []).
+                    **({"error": points.get("error")} if isinstance(points, dict) else {}),
                 })
             except Exception as e:
                 histories.append({
@@ -4128,6 +4131,7 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
     or a custom date range encoded as 'range:YYYY-MM-DD:YYYY-MM-DD'. The
     range form drives yfinance's start/end parameters so the C++ side can
     pass any user-chosen window through the same daemon action."""
+    _trace_reset()
     try:
         import io, contextlib
         ticker = yf.Ticker(symbol)
@@ -4166,6 +4170,12 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
                                                   auto_adjust=auto_adjust)
 
         if hist.empty:
+            # yfinance turns a refused request (401 crumb, a 429 on the
+            # timezone probe) into an empty frame plus a log line. That is
+            # not "no bars for this period".
+            if _trace_transient():
+                return {"error": "Yahoo refused or did not answer (HTTP 401/429 or no response) — try again",
+                        "transient": True, "symbol": symbol}
             return []
 
         # A split Yahoo has announced but not yet applied to the bars would
@@ -4207,7 +4217,9 @@ def get_historical_period(symbol, period='6mo', interval='1d', auto_adjust=True)
 
         return historical_data
     except Exception as e:
-        return {"error": str(e), "symbol": symbol}
+        # YFRateLimitError lands here: Yahoo's 429 on the chart request.
+        return {"error": f"{type(e).__name__}: {e}", "symbol": symbol,
+                "transient": _trace_transient() or "RateLimit" in type(e).__name__}
 
 def resolve_symbol(symbol):
     """
@@ -4807,11 +4819,20 @@ def _daemon_dispatch_inner(action, payload):
         return get_batch_sparklines(syms)
     if action == "historical_period":
         p = payload or {}
-        return get_historical_period(
+        res = get_historical_period(
             p.get("symbol"), p.get("period", "6mo"), p.get("interval", "1d"),
             # Callers that compare against a RAW live price (the portfolio's
             # trailing-stop peak) pass auto_adjust=false explicitly.
             bool(p.get("auto_adjust", True)))
+        # A failed fetch is a failed REPLY. Returned as a dict it went out as
+        # ok:true, every C++ caller read the missing "_value" as an empty
+        # series, and a Yahoo 429 showed as "No data available for this
+        # period" on the Markets chart (and blank ER / portfolio / IPO charts).
+        # The message carries the cause (YFRateLimitError, HTTP status) for
+        # the caller's log; "transient" does not survive the raise.
+        if isinstance(res, dict) and res.get("error"):
+            raise RuntimeError(res["error"])
+        return res
     if action == "batch_closes":
         p = payload or {}
         return batch_closes(p.get("symbols") or [], p.get("start"), p.get("end"))

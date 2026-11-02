@@ -127,6 +127,17 @@ struct HoldingWithQuote {
 
 /// True when the holding has a usable (finite) value for `v`. NaN marks an
 /// unknown figure — consumers must render placeholder() for it, never 0.
+/// A `market_last:` print written today (every fresh quote, from any screen,
+/// rewrites it) is the current price — after the close it IS the last price;
+/// an older one is a last-known estimate (≈). One rule for both of
+/// PortfolioService's readers: the fetch-failed fallback used to call a print
+/// from ten seconds ago "≈", so one Yahoo 429 on the portfolio's own quote
+/// fetch put ≈ on every LAST while the hub was delivering fresh prices.
+inline bool is_current_print(const QDateTime& written_at, const QDateTime& now = QDateTime::currentDateTime()) {
+    return written_at.isValid() && written_at <= now.addSecs(60) &&   // a little clock skew, not the future
+           written_at.toLocalTime().date() == now.toLocalTime().date();
+}
+
 inline bool has_value(double v) {
     return v == v; // !isnan without pulling <cmath> into every includer
 }

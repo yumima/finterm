@@ -595,6 +595,19 @@ if(Python3_Interpreter_FOUND)
     set_tests_properties(info_transient PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
 endif()
 
+# ── A refused chart request is not an empty chart ───────────────────────────
+# A Yahoo 429 went out from the daemon as ok:true {"error"} and every chart
+# read it as an empty series: "No data available for this period" on the
+# Markets chart for symbols with years of bars. Offline, canned responses.
+if(Python3_Interpreter_FOUND)
+    add_test(
+        NAME history_refusal
+        COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_history_refusal.py
+    )
+    set_tests_properties(history_refusal PROPERTIES TIMEOUT 60 SKIP_RETURN_CODE 77)
+endif()
+
 # ── Price-less bars ──────────────────────────────────────────────────────────
 # yfinance emits an all-NaN OHLC row for a session it has no prices for yet.
 # _sanitize_for_json must turn each NaN into JSON null (bare NaN is invalid

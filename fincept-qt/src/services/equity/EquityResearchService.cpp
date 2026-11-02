@@ -1162,13 +1162,15 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     hist_payload["interval"] = interval;
     python::PythonWorker::instance().submit("historical_period", hist_payload,
         [self, symbol, candles_key, candles_disk_sub, run_compute, inflight_key](bool ok, QJsonObject result,
-                                                                                  QString /*err*/) {
+                                                                                  QString err) {
             if (!self) return;
             if (!ok) {
                 // Stage 1 failed — release the dedup key here since stage 2
                 // will never run to release it for us.
                 self->release_inflight(inflight_key);
-                emit self->error_occurred(symbol, "Technicals", "Failed historical fetch");
+                emit self->error_occurred(symbol, "Technicals",
+                                          err.isEmpty() ? QStringLiteral("Failed historical fetch")
+                                                        : QStringLiteral("Failed historical fetch: ") + err);
                 return;
             }
             // Daemon returns a flat array; PythonWorker wraps under _value.

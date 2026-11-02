@@ -570,7 +570,7 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
                                        ait.value().written_at.toLocalTime().date() == today_local;
             // A print from today is current (not stale); an older one is the
             // last known price — an estimate (≈).
-            h.price_stale = !written_today;
+            h.price_stale = !(ait != hits.constEnd() && portfolio::is_current_print(ait.value().written_at));
             if (written_today) {
                 h.day_change         = o.value("change").toDouble(h.day_change);
                 h.day_change_percent = o.value("change_pct").toDouble(h.day_change_percent);
@@ -738,6 +738,8 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
         // is still the last real print, but its change/change_pct belong to
         // that older session and must not be presented as today's move.
         QSet<QString> last_known_change_stale;
+        // ...and those written today by another fresh quote: current.
+        QSet<QString> last_known_current;
         {
             QStringList missing;
             for (const auto& a : assets) {
@@ -770,6 +772,8 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                     if (!it.value().written_at.isValid() ||
                         it.value().written_at.toLocalTime().date() != today_local)
                         last_known_change_stale.insert(sym);
+                    if (portfolio::is_current_print(it.value().written_at))
+                        last_known_current.insert(sym);
                     QuoteData qd{};
                     qd.price      = o.value("price").toDouble();
                     qd.change     = o.value("change").toDouble();
@@ -857,14 +861,20 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                        lk != last_known.constEnd() && lk->price > 0) {
                 // No fresh quote — hold the last-known price so the ribbon/
                 // blotter keep showing a real (if stale) print instead of
-                // collapsing P&L to zero. It can be up to 7 days old, so the
-                // valuation is an estimate (≈) and never a 'live' snapshot.
+                // collapsing P&L to zero. It can be up to 7 days old — then
+                // the valuation is an estimate (≈), never a 'live' snapshot;
+                // written today (another screen's fresh quote) it is the
+                // current price (is_current_print).
                 // Its day change is only today's if the entry was written
                 // today; an older session's move is unknown, not "today".
                 // Order-book fields aren't in the 7d payload; leave them at 0.
                 h.current_price = lk->price;
-                h.price_stale = true;
-                summary.stale_symbols.append(asset.symbol);
+                // Shown without ≈ when today's print (is_current_print); the
+                // snapshot is still not a 'live' observation — the price came
+                // from the cache, not this fetch.
+                h.price_stale = !last_known_current.contains(asset.symbol);
+                if (h.price_stale)
+                    summary.stale_symbols.append(asset.symbol);
                 valuation_estimated = true;
                 if (last_known_change_stale.contains(asset.symbol)) {
                     h.day_change = kNaN;
