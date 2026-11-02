@@ -1,7 +1,6 @@
 // src/services/pre_ipo/PreIpoService.h
 #pragma once
 #include "screens/pre_ipo/PreIpoTypes.h"
-#include "services/finnhub/FinnhubService.h"
 
 #include <QHash>
 #include <QJsonObject>
@@ -66,13 +65,6 @@ class PreIpoService : public QObject {
     QVector<pre_ipo::Signal>      signal_list() const;
     QVector<pre_ipo::FundEntry>   funds() const;
 
-    /// Multi-exchange IPO calendar from Finnhub (NYSE + Nasdaq + AMEX). The
-    /// existing Nasdaq run_nasdaq_ipo_fetch covers Nasdaq only — this fills
-    /// in the rest. Empty when FINNHUB_API_KEY is not set.
-    QVector<finnhub::FinnhubIPO>    finnhub_ipos()    const;
-    /// Upcoming insider-share lockup expiries from Finnhub. Empty when no
-    /// API key. The signature pre-IPO data we have nowhere else.
-    QVector<finnhub::FinnhubLockup> finnhub_lockups() const;
 
     bool is_loaded() const { return loaded_; }
 
@@ -147,15 +139,6 @@ class PreIpoService : public QObject {
     /// capped XML enrichment). Independent of the 3-bit finalize_load flow —
     /// a slow/failed scan never blocks the core Form D / N-PORT / S-1 load.
     void run_spv_fetch();
-    /// Finnhub augmentation — runs alongside the 3-bit SEC flow. Independent
-    /// of finalize_load gating: completes when it completes, emits a summary
-    /// progressively. No-op when FINNHUB_API_KEY is unset.
-    void run_finnhub_calendar_fetch();
-    /// Fetch upcoming + recently priced IPOs from the Nasdaq public calendar
-    /// API (no auth). Enriches pipeline_ with confirmed IPO dates and adds
-    /// any companies not already in the EDGAR pipeline. Independent of the
-    /// 3-bit finalize_load flow — emits when done regardless of other fetches.
-    void run_nasdaq_ipo_fetch(const QString& yyyymm);
 
     /// Arm a one-shot timer that fires at the next 05:00 America/New_York
     /// to pre-warm the cache before the user opens the screen. Re-arms
@@ -318,8 +301,6 @@ class PreIpoService : public QObject {
     QVector<pre_ipo::S1Filing>       pipeline_;
     QVector<pre_ipo::Signal>         signals_;
     QVector<pre_ipo::FundEntry>      funds_;
-    QVector<finnhub::FinnhubIPO>     finnhub_ipos_;
-    QVector<finnhub::FinnhubLockup>  finnhub_lockups_;
     bool loaded_ = false;
 };
 

@@ -917,6 +917,11 @@ if(Python3_Interpreter_FOUND)
         NAME s1_pipeline
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_s1_pipeline.py
     )
+    # IPO Watch calendar: one row per deal, EDGAR ladder, projected pricing date
+    add_test(
+        NAME ipo_calendar
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_ipo_calendar.py
+    )
 endif()
 
 # ── Credential catalogue sync ────────────────────────────────────────────────

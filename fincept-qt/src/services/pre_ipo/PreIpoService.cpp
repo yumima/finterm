@@ -3,7 +3,6 @@
 #include "core/config/AppPaths.h"
 
 #include "core/logging/Logger.h"
-#include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
 
 #include <QDate>
@@ -286,24 +285,10 @@ void PreIpoService::refresh_internal(bool force) {
     run_nport_marks_fetch();
     run_s1_pipeline_fetch();
 
-    // Deep SPV scan runs independently of the 3-bit SEC flow (like Nasdaq /
-    // Finnhub below): its ~2-min targeted full-text search must never block or
+    // Deep SPV scan runs independently of the 3-bit SEC flow: its ~2-min targeted full-text search must never block or
     // fail the core Form D load. Results land in spv_raw_ and are re-joined to
     // companies on every emit_summary().
     run_spv_fetch();
-
-    // Nasdaq IPO calendar runs independently — no auth, fast, enriches the
-    // pipeline with confirmed dates and catches companies not yet in EDGAR.
-    const QDate today = QDate::currentDate();
-    run_nasdaq_ipo_fetch(today.toString("yyyy-MM"));
-    run_nasdaq_ipo_fetch(today.addMonths(1).toString("yyyy-MM"));
-
-    // Finnhub augmentation — multi-exchange IPO calendar + lockup expiries.
-    // Independent of all the other fetches; no-op when no API key. The
-    // results live in finnhub_ipos_/finnhub_lockups_ alongside (not merged
-    // into) the SEC-sourced pipeline_, so the UI can render Finnhub-sourced
-    // rows with a distinct badge and the SEC source-of-truth stays clean.
-    run_finnhub_calendar_fetch();
 }
 
 QVector<PrivateCompany> PreIpoService::companies() const { return companies_; }
@@ -392,8 +377,6 @@ QVector<S1Filing>    PreIpoService::ipo_pipeline()  const { return pipeline_; }
 QVector<Signal>      PreIpoService::signal_list()   const { return signals_; }
 QVector<FundEntry>   PreIpoService::funds()         const { return funds_; }
 
-QVector<services::finnhub::FinnhubIPO>    PreIpoService::finnhub_ipos()    const { return finnhub_ipos_; }
-QVector<services::finnhub::FinnhubLockup> PreIpoService::finnhub_lockups() const { return finnhub_lockups_; }
 
 // ── Fetchers ─────────────────────────────────────────────────────────────────
 
@@ -1104,136 +1087,6 @@ void PreIpoService::attach_spv_activity() {
                   });
 }
 
-// ── Nasdaq IPO calendar ───────────────────────────────────────────────────────
-
-// ── Finnhub augmentation ─────────────────────────────────────────────────────
-//
-// Runs the Finnhub IPO calendar + lockup calendar via FinnhubService and
-// stores the results alongside (NOT merged into) the SEC pipeline. The
-// existing SEC + Nasdaq path stays untouched — Finnhub is additive.
-// Skipped entirely when FINNHUB_API_KEY isn't set: the service returns
-// an empty result, finnhub_ipos_/finnhub_lockups_ stay empty, the
-// PicksView/PipelineView render without Finnhub-sourced rows.
-void PreIpoService::run_finnhub_calendar_fetch() {
-    if (!services::finnhub::FinnhubService::instance().has_api_key()) {
-        // No-op: the user hasn't configured a Finnhub key. UI's gated on
-        // finnhub_ipos_.isEmpty() / .has_api_key(), so this is invisible.
-        return;
-    }
-    const QDate from = QDate::currentDate().addMonths(-3);  // recently priced
-    const QDate to   = QDate::currentDate().addMonths(+3);  // upcoming
-    QPointer<PreIpoService> self = this;
-    services::finnhub::FinnhubService::instance().subscribe_ipo_calendar(
-        this, from, to,
-        [self](const services::query::QueryStore::State& s) {
-            if (!self) return;
-            if (!s.error.isEmpty() || !s.data.isValid() || s.data.isNull())
-                return;
-            self->finnhub_ipos_ = s.data.value<QVector<services::finnhub::FinnhubIPO>>();
-            self->emit_summary();
-        });
-    services::finnhub::FinnhubService::instance().subscribe_lockups(
-        this, QDate::currentDate(), QDate::currentDate().addMonths(+6), {},
-        [self](const services::query::QueryStore::State& s) {
-            if (!self) return;
-            if (!s.error.isEmpty() || !s.data.isValid() || s.data.isNull())
-                return;
-            self->finnhub_lockups_ = s.data.value<QVector<services::finnhub::FinnhubLockup>>();
-            self->emit_summary();
-        });
-}
-
-void PreIpoService::run_nasdaq_ipo_fetch(const QString& yyyymm) {
-    const QString url =
-        QString("https://api.nasdaq.com/api/ipo/calendar?date=%1").arg(yyyymm);
-
-    QPointer<PreIpoService> self = this;
-    HttpClient::instance().get(url, [self](Result<QJsonDocument> res) {
-        if (!self || !res.is_ok() || !res.value().isObject())
-            return;
-
-        const auto data = res.value().object()["data"].toObject();
-        const QDate today = QDate::currentDate();
-
-        // Returns "2026/05/15" format
-        auto parse_nasdaq_date = [](const QString& s) -> QDate {
-            return QDate::fromString(s.left(10), "yyyy/MM/dd");
-        };
-
-        // Strip common legal suffixes and punctuation for fuzzy name matching.
-        // Plain toLower() misses "Cerebras Systems Inc" ↔ "Cerebras Systems, Inc."
-        auto normalise = [](const QString& s) -> QString {
-            QString r = s.toLower().trimmed();
-            static const QStringList kSuffix = {
-                ", inc.", " inc.", ", inc",  " inc",
-                ", corp.", " corp.", ", corp", " corp",
-                ", ltd.", " ltd.",  ", ltd",  " ltd",
-                ", llc.", " llc.",  ", llc",
-                ", co.", " co.",    ", co",
-                ", plc", " plc",
-            };
-            for (const auto& suf : kSuffix) {
-                if (r.endsWith(suf, Qt::CaseInsensitive)) { r.chop(suf.size()); break; }
-            }
-            r.remove(u','); r.remove(u'.'); r.remove(u'('); r.remove(u')');
-            return r.simplified();
-        };
-
-        // Build a lookup: normalised company name → index in pipeline_
-        QHash<QString, int> name_index;
-        for (int i = 0; i < self->pipeline_.size(); ++i) {
-            name_index[normalise(self->pipeline_[i].company_name)] = i;
-        }
-
-        auto merge_or_add = [&](const QString& company, const QString& ticker,
-                                 const QDate& date, const QString& price_range) {
-            if (company.isEmpty() || !date.isValid()) return;
-            const QString key = normalise(company);
-            if (name_index.contains(key)) {
-                // Enrich existing EDGAR entry with confirmed date
-                auto& entry = self->pipeline_[name_index[key]];
-                entry.actual_ipo_date = date;
-                entry.has_actual_date = true;
-                if (!ticker.isEmpty()) entry.ticker = ticker;
-                if (!price_range.isEmpty()) entry.price_range = price_range;
-            } else {
-                // Company not in EDGAR pipeline — add as a Nasdaq-sourced entry
-                S1Filing f;
-                f.company_name    = company;
-                f.ticker          = ticker;
-                f.filed_date      = today;     // use today as proxy for sorting
-                f.amendment_count = 0;
-                f.actual_ipo_date = date;
-                f.has_actual_date = true;
-                f.price_range     = price_range;
-                self->pipeline_.append(f);
-            }
-        };
-
-        // Upcoming
-        for (const auto& v :
-             data["upcoming"].toObject()["upcomingTable"].toObject()["rows"].toArray()) {
-            const auto e = v.toObject();
-            merge_or_add(e["companyName"].toString(),
-                         e["proposedTickerSymbol"].toString(),
-                         parse_nasdaq_date(e["expectedPriceDate"].toString()),
-                         e["proposedSharePrice"].toString());
-        }
-
-        // Priced (recently listed — still useful for the record)
-        for (const auto& v :
-             data["priced"].toObject()["pricedTable"].toObject()["rows"].toArray()) {
-            const auto e = v.toObject();
-            merge_or_add(e["companyName"].toString(),
-                         e["proposedTickerSymbol"].toString(),
-                         parse_nasdaq_date(e["ipoDate"].toString()),
-                         e["dealPrice"].toString());
-        }
-
-        LOG_INFO("PreIpo", "Nasdaq IPO calendar merged into pipeline");
-        self->emit_summary();
-    });
-}
 
 // ── Parsers ──────────────────────────────────────────────────────────────────
 

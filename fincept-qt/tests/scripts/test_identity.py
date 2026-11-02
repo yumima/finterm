@@ -40,6 +40,7 @@ SCRIPTS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "
 DECLARED = {  # host each file talks to
     "sec_form_d_data.py", "sec_data.py", "sec_s1_pipeline.py", "sec_form4_bulk.py", "sec_13f_bulk.py",
     "sec_xbrl_data.py", "sec_nport_marks.py", "sec_ownership_data.py",
+    "ipo_calendar.py",                                           # EDGAR submissions only (Nasdaq gets no contact)
     "finra_short_volume.py", "finra_short_interest.py",          # FINRA
     "nominatim_data.py", "overpass_api_data.py",                 # OpenStreetMap
     "yfinance_data.py",                                          # its EDGAR document fetch

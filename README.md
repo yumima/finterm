@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`72568a26b`](https://github.com/yumima/finterm/commit/72568a26b) news regions: review fixes — "Fed" vs fed, shouted US, accents, stale cache
 - [`ad79fc9ee`](https://github.com/yumima/finterm/commit/ad79fc9ee) secure storage: cache keyring lookups — every Python launch froze the GUI ~1s
 - [`1e0bf1385`](https://github.com/yumima/finterm/commit/1e0bf1385) news: US / CHN / EU region pills
 

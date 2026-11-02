@@ -1,11 +1,11 @@
 #pragma once
 // IpoWatchView — Bloomberg-style IPO research terminal.
 //
-// Single consolidated screen with three lenses on the same Nasdaq calendar
-// dataset:
-//   CALENDAR    — time-ordered, upcoming first, priced below (default)
-//   PERFORMANCE — priced deals sorted by Day-1 pop %, color-coded
-//   BOOKRUNNERS — grouped by lead underwriter (banker view)
+// Lenses on one deal dataset (scripts/ipo_calendar.py — Nasdaq's calendar
+// merged per deal, staged on EDGAR, with a projected pricing date):
+//   CALENDAR    — the pipeline by projected pricing date, priced below (default)
+//   PERFORMANCE — priced deals sorted by return since IPO
+//   WATCHLIST / LOCKUPS / PRIVATE / SIGNALS — see the Lens enum
 //
 // Layout (wide screens 2:1 and up):
 //   ┌─ title bar (lens tabs + refresh) ──────────────────────────────┐
@@ -23,6 +23,7 @@
 #include "services/markets/MarketDataService.h"
 
 #include <QDate>
+#include <QJsonObject>
 #include <QHash>
 #include <QJsonDocument>
 #include <QSet>
@@ -30,6 +31,8 @@
 #include <QStringList>
 #include <QVector>
 #include <QWidget>
+
+#include <limits>
 
 class QComboBox;
 class QFrame;
@@ -65,46 +68,110 @@ class IpoWatchView : public QWidget {
     bool eventFilter(QObject* obj, QEvent* ev) override;
 
   private:
-    /// One IPO event. Mix of as-filed and as-priced fields.
+    /// One registration-ladder filing on EDGAR (S-1, S-1/A, 8-A12B, CERT,
+    /// EFFECT, 424B4, RW, DRS…), newest first.
+    struct LadderStep {
+        QString form;
+        QDate   date;
+        QString url;   // EDGAR document, empty when the accession is unknown
+    };
+
+    /// When the deal is expected to price, and what that rests on. Kinds
+    /// (see scripts/ipo_calendar.py for the measurement behind each):
+    ///   scheduled — Nasdaq's expected price date
+    ///   imminent  — 8-A / CERT / EFFECT on file; date + p10–p90 window
+    ///   estimate  — comparables window [lo, hi], point = median; `share` of
+    ///               comparable filers that priced at all
+    ///   long_shot — under 10% of comparables priced; no date
+    ///   overdue / stalled — past its window and not priced
+    ///   dormant   — no registration filing for 120 days
+    ///   none      — too few comparables
+    ///   priced / withdrawn — terminal
+    struct Projection {
+        QString kind;
+        QDate   date, lo, hi;
+        double  share = std::numeric_limits<double>::quiet_NaN();
+        QString basis;
+        int     comps_at_risk = 0, comps_priced = 0, comps_withdrawn = 0, comps_pending = 0;
+        int     age_days = -1;
+        bool firm() const { return kind == "scheduled" || kind == "imminent"; }
+    };
+
+    /// One IPO DEAL — Nasdaq's buckets merged by dealID into one lifecycle
+    /// row (scripts/ipo_calendar.py). Reading the buckets as separate rows
+    /// showed a deal that priced in June as a live "filed" entry from May.
     struct Entry {
+        QString deal_id;
         QString company;
         QString ticker;
         QString exchange;
-        QDate   date;             // expectedPriceDate or pricedDate
+        // `date` is the event that defines the row for its status — expected
+        // (upcoming), first public filing (filed), pricing (priced),
+        // withdrawal (withdrawn). The explicit fields below say which is which.
+        QDate   date;
         QString date_raw;
-        QString price_range;      // e.g. "$15.00-$17.00" or "$17.00" for priced
-        QString final_price_raw;  // priced only — original string from API
+        QDate   filed_date;       // first public S-1/F-1 (Nasdaq filedDate)
+        QDate   expected_date;    // Nasdaq expectedPriceDate (upcoming only)
+        QDate   priced_date;
+        QDate   withdrawn_date;
+        bool    priced_from_edgar    = false;  // 424B4 seen before Nasdaq moved it
+        bool    withdrawn_from_edgar = false;  // RW seen before Nasdaq moved it
+        QString price_range;      // e.g. "15.00-17.00" or "17.00" for priced
+        bool    range_from_overview = false;   // filed deal: range from Nasdaq's deal page
+        QString final_price_raw;  // priced only
         double  final_price = 0;  // priced only — parsed dollars
         QString shares_raw;
         double  shares       = 0;
+        double  overallot    = 0; // greenshoe shares, 0 = unknown
         QString deal_size;        // display string ($170M / $1.2B)
         double  deal_size_dollars = 0;
-        QString bookrunner;       // primary lead firm
+        QString bookrunner;       // Nasdaq's feed carries none; kept for search
         QStringList all_bookrunners;
-        QString status;           // "upcoming" | "filed" | "priced"
-        // For filed entries, `date` carries the filedDate. We expose both
-        // semantic names so the detail rail can label the field correctly.
-        QDate   filed_date;       // mirror of date when status == "filed"
+        QString status;           // "upcoming" | "filed" | "priced" | "withdrawn"
+        bool    spac = false;
+        // EDGAR (enrich pass)
+        QString cik;
+        int     lockup_days = 0;  // prospectus term; 0 = not on file
+        QString stage;            // on_file | listing | certified | effective | priced | withdrawn | unknown
+        QDate   stage_date;
+        QDate   last_filing_date;
+        QVector<LadderStep> ladder;
+        bool    edgar_known = false;
+        Projection proj;
+        /// The date the pipeline is ordered and windowed by: the projected
+        /// pricing date (or the window start) for a pending deal; the event
+        /// date otherwise.
+        QDate when() const;
+        bool pending() const { return status == "upcoming" || status == "filed"; }
         // Performance enrichment via yfinance batch_quotes — pre-fetched on load.
         bool   perf_fetched = false;
         double last_price   = 0;
         double pop_pct      = 0;  // (last - final) / final * 100, priced only
         // Company profile via yfinance batch_info — pre-fetched on load too.
-        // Used for SECTOR column and same-sector comps in the detail rail.
         bool    profile_fetched = false;
         QString sector;
         QString industry;
         QString website;
     };
 
+    /// Lock-up expiry of a recent operating-company IPO, from the deal's own
+    /// term (Nasdaq overview) or the 180-day convention where none is on file.
+    struct Lockup {
+        QString ticker, company;
+        QDate   priced, expiry;
+        int     days = 0;
+        bool    assumed = false;
+        double  shares_offered = 0, final_price = 0;
+    };
+
     /// Filter state.
     /// BOOKRUNNERS lens removed — Nasdaq's public IPO calendar doesn't carry
     /// `leadFirmName`. We keep the field on the Entry struct for a future
     /// SEC EDGAR-driven source but the lens shipped only "Unknown" rows.
-    /// LOCKUPS shows upcoming insider-share lockup expiries from Finnhub —
-    /// the canonical post-IPO supply-surge signal. Free elsewhere only for
-    /// paid data services; we get it via finnhub_lockup_calendar in
-    /// PreIpoService::finnhub_lockups(). Hidden when no FINNHUB_API_KEY.
+    /// LOCKUPS shows lock-up expiries of operating-company IPOs priced in the
+    /// last ~13 months, from each deal's own prospectus term (Nasdaq deal
+    /// overview). It used Finnhub's /stock/lockup, which is premium-only
+    /// (302) — the lens was permanently empty behind a "no entries" message.
     ///
     /// PRIVATE shows SEC Form D filers (Rule 506(b)/(c)/504 fundraises) so
     /// pre-S-1 private companies — SpaceX, Anthropic, OpenAI, Anduril,
@@ -140,7 +207,12 @@ class IpoWatchView : public QWidget {
     void apply_styles();
 
     // ── Networking ──────────────────────────────────────────────────────────
-    void fetch_month(const QString& yyyymm);
+    /// scripts/ipo_calendar.py: `calendar` (Nasdaq only, seconds) renders
+    /// first; `enrich` (EDGAR stage + projections + lock-ups; minutes cold,
+    /// seconds warm) replaces it when it lands.
+    void load_calendar(bool enrich);
+    void apply_calendar(const QJsonObject& root, bool enriched);
+    static Entry entry_from_json(const QJsonObject& o);
     void on_fetch_done();
     void enrich_priced_with_quotes(); // single batch_quotes, populates pop_pct
     void enrich_with_profiles();      // single batch_info, populates sector/industry
@@ -242,6 +314,14 @@ class IpoWatchView : public QWidget {
     void toggle_private_star(const QString& company_id);
 
     // Helpers
+    /// EXPECTED cell: the projected pricing date in the typography of its
+    /// basis (firm dates bold, estimates "~" and muted, no-date kinds say
+    /// why), tooltip = the basis. Sorts by when().
+    QTableWidgetItem* make_when_item(const Entry& e) const;
+    QTableWidgetItem* make_status_item(const Entry& e) const;
+    static QString stage_label(const Entry& e);
+    static QString status_label(const Entry& e);
+    static QString status_color(const Entry& e);
     static QString format_money(double dollars);
     /// Bare magnitude for quantities that are NOT money (share counts).
     /// Passing a share count to format_money prefixes it with '$'.
@@ -252,7 +332,16 @@ class IpoWatchView : public QWidget {
 
     // ── State ───────────────────────────────────────────────────────────────
     QVector<Entry> entries_;
-    int pending_fetches_ = 0;
+    QVector<Lockup> lockups_;
+    bool    calendar_inflight_ = false;
+    bool    enrich_inflight_   = false;
+    bool    enriched_          = false;   // EDGAR stage present in entries_
+    quint64 calendar_gen_      = 0;       // bumped per refresh; stale fast replies dropped
+    quint64 enrich_applied_gen_ = 0;      // gen at which the last enrich reply was applied
+    QSet<QString> profiles_requested_;    // batch_info asked once per session (cleared on wake)
+    QSet<QString> quotes_requested_;      // batch_quotes asked once per refresh
+    QStringList calendar_errors_;
+    QString status_text() const;
     // Lazy per-symbol info cache for the detail rail. fetch_info returns
     // P/E, margins, growth, beta, analyst targets, etc. — too expensive to
     // pre-fetch for every entry but quick on a single row click.
@@ -306,9 +395,13 @@ class IpoWatchView : public QWidget {
     // Default to UPCOMING because the screen's primary value is forward
     // pipeline research — past priced deals are the COMPS context, not the
     // headline. User can flip to ALL / PRICED via the status chip.
-    QString    status_filter_ = "upcoming"; // all | upcoming | priced
+    QString    status_filter_ = "upcoming"; // all | upcoming (pipeline) | priced | withdrawn
     QString    exch_filter_   = "all";     // all | NYSE | NASDAQ | …
     QString    size_filter_   = "all";     // all | <100M | 100-500M | 500M+
+    QString    type_filter_   = "all";     // all | operating | spac
+    /// Exchange chip match. Nasdaq's feed names NYSE American "NYSE MKT", so
+    /// "AMEX" never matched by substring and "NYSE" swallowed it.
+    bool exchange_matches(const QString& exch) const;
     QString    search_query_;
 
     // ── Widgets ─────────────────────────────────────────────────────────────
@@ -332,6 +425,7 @@ class IpoWatchView : public QWidget {
     QComboBox* window_chip_ = nullptr;
     QComboBox* exch_chip_   = nullptr;
     QComboBox* size_chip_   = nullptr;
+    QComboBox* type_chip_   = nullptr;
     QLineEdit* search_      = nullptr;
 
     // Workspace + detail
