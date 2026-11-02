@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`1a7f320bc`](https://github.com/yumima/finterm/commit/1a7f320bc) Yahoo refusals: daemon errors are failed replies, background requests are merged not dropped, IPO Watch paces its asks
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

@@ -1,5 +1,6 @@
 #include "ui/theme/StyleSheets.h"
 
+#include "ui/theme/QssSlots.h"
 #include "ui/theme/Theme.h"
 
 namespace fincept::ui::styles {
@@ -49,7 +50,8 @@ QString muted_button() {
 }
 
 QString news_screen_styles() {
-    return QString(
+    return fill_qss_checked("news_screen_styles",
+        QString(
                /* ── NewsScreen root ── */
                "#newsScreen { background: %1; }"
 
@@ -303,29 +305,31 @@ QString news_screen_styles() {
                "#newsEmptyState { background: #13110f; }"
                "#newsEmptyStateTitle { color: %12; font-size: 13px; font-weight: 700; "
                "  letter-spacing: 0.5px; background: transparent; }"
-               "#newsEmptyStateHint { color: %6; font-size: 11px; background: transparent; }")
-        .arg(colors::BG_BASE())        // %1
-        .arg(colors::BG_SURFACE())     // %2
-        .arg(colors::BORDER_DIM())     // %3
-        .arg(colors::TEXT_PRIMARY())   // %4
-        .arg(colors::BORDER_BRIGHT())  // %5
-        .arg(colors::TEXT_SECONDARY())  // %6
-        .arg(colors::TEXT_SECONDARY()) // %7
-        .arg(colors::BG_RAISED())      // %8
-        .arg(colors::ORANGE())         // %9
-        .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::NEGATIVE())       // %11
-        .arg(colors::AMBER())          // %12
-        .arg(colors::BG_HOVER())       // %13
-        .arg(colors::CYAN())           // %14
-        .arg(colors::POSITIVE())       // %15
-        .arg(colors::WARNING())        // %16
-        .arg(colors::NEGATIVE_BG())    // %17
-        ;
+               "#newsEmptyStateHint { color: %6; font-size: 11px; background: transparent; }"),
+        {
+            QString::fromLatin1(colors::BG_BASE()),         // %1
+            QString::fromLatin1(colors::BG_SURFACE()),      // %2
+            QString::fromLatin1(colors::BORDER_DIM()),      // %3
+            QString::fromLatin1(colors::TEXT_PRIMARY()),    // %4
+            QString::fromLatin1(colors::BORDER_BRIGHT()),   // %5
+            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %6
+            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %7
+            QString::fromLatin1(colors::BG_RAISED()),       // %8
+            QString::fromLatin1(colors::ORANGE()),          // %9
+            QString::fromLatin1(colors::AMBER_DIM()),       // %10
+            QString::fromLatin1(colors::NEGATIVE()),        // %11
+            QString::fromLatin1(colors::AMBER()),           // %12
+            QString::fromLatin1(colors::BG_HOVER()),        // %13
+            QString::fromLatin1(colors::CYAN()),            // %14
+            QString::fromLatin1(colors::POSITIVE()),        // %15
+            QString::fromLatin1(colors::WARNING()),         // %16
+            QString::fromLatin1(colors::NEGATIVE_BG()),     // %17
+        });
 }
 
 QString crypto_trading_styles() {
-    return QString(
+    return fill_qss_checked("crypto_trading_styles",
+        QString(
                /* ── Root ── */
                "#cryptoScreen { background: %1; font-family: 'Consolas','Courier New',monospace; }"
 
@@ -504,33 +508,35 @@ QString crypto_trading_styles() {
                "#cryptoTimeSales { background: %1; }"
 
                /* ── Depth Chart ── */
-               "#cryptoDepthChart { background: %1; }")
-        .arg(colors::BG_BASE())        // %1
-        .arg(colors::BG_SURFACE())     // %2
-        .arg(colors::BORDER_DIM())     // %3
-        .arg(colors::TEXT_PRIMARY())   // %4
-        .arg(colors::BORDER_BRIGHT())  // %5
-        .arg(colors::TEXT_SECONDARY())  // %6
-        .arg(colors::TEXT_SECONDARY()) // %7
-        .arg(colors::BG_RAISED())      // %8
-        .arg(colors::TEXT_SECONDARY())       // %9
-        .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::NEGATIVE())       // %11
-        .arg(colors::AMBER())          // %12
-        .arg(colors::BG_HOVER())       // %13
-        .arg(colors::CYAN())           // %14
-        .arg(colors::POSITIVE())       // %15
-        .arg(colors::ACCENT_BG())      // %16
-        .arg(colors::POSITIVE_BG())    // %17
-        .arg(colors::NEGATIVE_BG())    // %18
-        .arg(colors::POSITIVE_DIM())   // %19
-        .arg(colors::NEGATIVE_DIM())   // %20
-        ;
+               "#cryptoDepthChart { background: %1; }"),
+        {
+            QString::fromLatin1(colors::BG_BASE()),         // %1
+            QString::fromLatin1(colors::BG_SURFACE()),      // %2
+            QString::fromLatin1(colors::BORDER_DIM()),      // %3
+            QString::fromLatin1(colors::TEXT_PRIMARY()),    // %4
+            QString::fromLatin1(colors::BORDER_BRIGHT()),   // %5
+            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %6
+            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %7
+            QString::fromLatin1(colors::BG_RAISED()),       // %8
+            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %9
+            QString::fromLatin1(colors::AMBER_DIM()),       // %10
+            QString::fromLatin1(colors::NEGATIVE()),        // %11
+            QString::fromLatin1(colors::AMBER()),           // %12
+            QString::fromLatin1(colors::BG_HOVER()),        // %13
+            QString::fromLatin1(colors::CYAN()),            // %14
+            QString::fromLatin1(colors::POSITIVE()),        // %15
+            QString::fromLatin1(colors::ACCENT_BG()),       // %16
+            QString::fromLatin1(colors::POSITIVE_BG()),     // %17
+            QString::fromLatin1(colors::NEGATIVE_BG()),     // %18
+            QString::fromLatin1(colors::POSITIVE_DIM()),    // %19
+            QString::fromLatin1(colors::NEGATIVE_DIM()),    // %20
+        });
 }
 
 QString equity_trading_styles() {
     // Reuse same Obsidian color palette as crypto — identical visual language
-    return QString(
+    return fill_qss_checked("equity_trading_styles",
+        QString(
                /* ── Root ── */
                "#eqScreen { background: %1; font-family: 'Consolas','Courier New',monospace; }"
 
@@ -678,28 +684,29 @@ QString equity_trading_styles() {
                "#eqTable { background: %1; border: none; color: %4; font-size: 12px; }"
                "#eqTable::item { padding: 0 4px; border-bottom: 1px solid %3; }"
                "#eqTable QHeaderView::section { background: %2; color: %9; "
-               "  font-size: 11px; font-weight: 700; border: none; border-bottom: 1px solid %3; padding: 0 4px; }")
-        .arg(colors::BG_BASE())        // %1
-        .arg(colors::BG_SURFACE())     // %2
-        .arg(colors::BORDER_DIM())     // %3
-        .arg(colors::TEXT_PRIMARY())   // %4
-        .arg(colors::BORDER_BRIGHT())  // %5
-        .arg(colors::TEXT_SECONDARY())  // %6
-        .arg(colors::TEXT_SECONDARY()) // %7
-        .arg(colors::BG_RAISED())      // %8
-        .arg(colors::TEXT_SECONDARY())       // %9
-        .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::NEGATIVE())       // %11
-        .arg(colors::AMBER())          // %12
-        .arg(colors::BG_HOVER())       // %13
-        .arg(colors::CYAN())           // %14
-        .arg(colors::POSITIVE())       // %15
-        .arg(colors::ACCENT_BG())      // %16
-        .arg(colors::POSITIVE_BG())    // %17
-        .arg(colors::NEGATIVE_BG())    // %18
-        .arg(colors::POSITIVE_DIM())   // %19
-        .arg(colors::NEGATIVE_DIM())   // %20
-        ;
+               "  font-size: 11px; font-weight: 700; border: none; border-bottom: 1px solid %3; padding: 0 4px; }"),
+        {
+            QString::fromLatin1(colors::BG_BASE()),         // %1
+            QString::fromLatin1(colors::BG_SURFACE()),      // %2
+            QString::fromLatin1(colors::BORDER_DIM()),      // %3
+            QString::fromLatin1(colors::TEXT_PRIMARY()),    // %4
+            QString::fromLatin1(colors::BORDER_BRIGHT()),   // %5
+            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %6
+            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %7
+            QString::fromLatin1(colors::BG_RAISED()),       // %8
+            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %9
+            QString::fromLatin1(colors::AMBER_DIM()),       // %10
+            QString::fromLatin1(colors::NEGATIVE()),        // %11
+            QString::fromLatin1(colors::AMBER()),           // %12
+            QString::fromLatin1(colors::BG_HOVER()),        // %13
+            QString::fromLatin1(colors::CYAN()),            // %14
+            QString::fromLatin1(colors::POSITIVE()),        // %15
+            QString::fromLatin1(colors::ACCENT_BG()),       // %16
+            QString::fromLatin1(colors::POSITIVE_BG()),     // %17
+            QString::fromLatin1(colors::NEGATIVE_BG()),     // %18
+            QString::fromLatin1(colors::POSITIVE_DIM()),    // %19
+            QString::fromLatin1(colors::NEGATIVE_DIM()),    // %20
+        });
 }
 
 } // namespace fincept::ui::styles

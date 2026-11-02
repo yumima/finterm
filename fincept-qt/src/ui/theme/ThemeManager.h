@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/theme/QssSlots.h"
 #include "ui/theme/ThemeTokens.h"
 
 #include <QFont>
@@ -46,6 +47,11 @@ class ThemeManager : public QObject {
     /// to override ADS's internally loaded default.css / focus_highlighting.css.
     QString build_ads_qss() const;
 
+    /// The application-wide QSS for the current tokens/font/density.
+    QString build_global_qss() const;
+    /// Same, with the template/value match report (for tests).
+    QssSlotFill build_global_qss_fill() const;
+
   signals:
     /// Emitted after every successful apply_theme / apply_density call.
     /// Custom paintEvent widgets connect to this to invalidate caches and call update().
@@ -55,7 +61,6 @@ class ThemeManager : public QObject {
     ThemeManager();
 
     void rebuild_and_apply();
-    QString build_global_qss() const;
 
     ThemeTokens current_;
     QString font_family_ = "Consolas";

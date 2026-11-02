@@ -831,6 +831,7 @@ add_test(NAME screener_model COMMAND test_screener_model)
 add_executable(test_palette_contrast
     ui/test_palette_contrast.cpp
     ../src/ui/theme/Theme.cpp
+    ../src/ui/theme/StyleSheets.cpp
     ../src/ui/theme/ThemeManager.cpp
     ../src/core/logging/Logger.cpp
 )

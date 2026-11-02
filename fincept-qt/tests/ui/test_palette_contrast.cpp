@@ -14,7 +14,12 @@
 
 #include <QTest>
 
+#include "ui/theme/QssSlots.h"
+#include "ui/theme/StyleSheets.h"
 #include "ui/theme/Theme.h"
+#include "ui/theme/ThemeManager.h"
+
+#include <QRegularExpression>
 
 #include <cmath>
 
@@ -68,6 +73,50 @@ private slots:
             QVERIFY2(contrast(c, bg) >= 3.0,
                      qPrintable(QStringLiteral("%1 is %2:1").arg(n).arg(contrast(c, bg))));
         }
+    }
+
+    void qss_slots_fill_by_number() {
+        using fincept::ui::fill_qss_slots;
+        // An .arg() chain would put "b" into %3 because %2 is unused.
+        auto r = fill_qss_slots("x:%1; y:%3;", {"a", "b", "c"});
+        QCOMPARE(r.text, QStringLiteral("x:a; y:c;"));
+        QCOMPARE(r.unused, QList<int>{2});
+        QVERIFY(r.missing.isEmpty());
+
+        // Two digits always form one slot; past the end it is reported and kept.
+        r = fill_qss_slots("c:%28; d:%2;", {"a", "b"});
+        QCOMPARE(r.text, QStringLiteral("c:%28; d:b;"));
+        QCOMPARE(r.missing, QList<int>{28});
+
+        // %0…, a bare %, and a % inside an inserted value are literal.
+        r = fill_qss_slots("w:100%; u:%0A5; v:%1", {"%23fff"});
+        QCOMPARE(r.text, QStringLiteral("w:100%; u:%0A5; v:%23fff"));
+        QVERIFY(r.exact());
+
+        // Only ASCII digits make a slot (U+0662 is ARABIC-INDIC DIGIT TWO).
+        r = fill_qss_slots(QStringLiteral("a:%1; b:%\u0662;"), {"x", "y"});
+        QCOMPARE(r.text, QStringLiteral("a:x; b:%\u0662;"));
+        QCOMPARE(r.unused, QList<int>{2});
+    }
+
+    void global_qss_slots_match_values_and_state_colours_land() {
+        auto& tm = fincept::ui::ThemeManager::instance();
+        const auto fill = tm.build_global_qss_fill();
+        QVERIFY2(fill.missing.isEmpty(), "global QSS has a slot with no value");
+        QVERIFY2(fill.unused.isEmpty(), "global QSS has a value no slot uses (shifts nothing now, but is dead)");
+        const auto& t = tm.tokens();
+        // Regression: these three were one slot off (icon_dim / icon_hover / positive).
+        QVERIFY(fill.text.contains(QStringLiteral("#positiveText { color: %1; }").arg(t.positive)));
+        QVERIFY(fill.text.contains(QStringLiteral("#negativeText { color: %1; }").arg(t.negative)));
+        QVERIFY(fill.text.contains(QStringLiteral("#warningText  { color: %1; }").arg(t.warning)));
+    }
+
+    void screen_stylesheets_slots_match_values() {
+        // fill_qss_checked warns on any mismatch; any warning fails this test.
+        QTest::failOnWarning(QRegularExpression(QStringLiteral(".*")));
+        QVERIFY(!fincept::ui::styles::news_screen_styles().isEmpty());
+        QVERIFY(!fincept::ui::styles::crypto_trading_styles().isEmpty());
+        QVERIFY(!fincept::ui::styles::equity_trading_styles().isEmpty());
     }
 
 };

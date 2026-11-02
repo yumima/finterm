@@ -1,6 +1,7 @@
 #include "ui/theme/ThemeManager.h"
 
 #include "core/logging/Logger.h"
+#include "ui/theme/QssSlots.h"
 
 #include <QApplication>
 #include <QPalette>
@@ -162,20 +163,19 @@ void ThemeManager::rebuild_and_apply() {
     LOG_INFO("ThemeManager", "theme_changed emitted");
 }
 
-QString ThemeManager::build_global_qss() const {
+QssSlotFill ThemeManager::build_global_qss_fill() const {
     const auto& t = current_;
     const int p = density_pad_;      // padding px
     const int p2 = density_pad_ * 2; // double padding
 
     // SVG icons in this template are embedded as `data:` URIs whose colors are
     // URL-encoded `#hex` (i.e. `%23hex`). That `%23` token collides with the
-    // positional placeholder %23 used by the arg() chain below — Qt parses it
-    // as "insert arg 23 here" and substitutes positive_dim, producing 12
-    // "QString::arg: Argument missing" warnings per setStyleSheet and broken
-    // stroke colors. We use unmistakable sentinel tokens in the template
-    // (no `%` prefix → arg() never touches them) and rewrite them to the
-    // correct URL-encoded form after the arg() chain runs.
-    QString qss = QString(R"(
+    // slot syntax — `%23` would be read as "slot 23". We use unmistakable
+    // sentinel tokens in the template (no `%` prefix → fill_qss_slots never
+    // touches them) and rewrite them to the URL-encoded form afterwards. The
+    // strokes are their own fixed colours (#80808080 is 50%-alpha grey), not
+    // the icon_dim/icon_hover tokens.
+    const QString tmpl = QString(R"(
         * {
             font-family: %15;
             font-size: %16px;
@@ -484,73 +484,53 @@ QString ThemeManager::build_global_qss() const {
             color: %2; font-size: 13px; font-weight: 600;
             background: transparent; border: none; padding: 0;
         }
-        #positiveText { color: %20; }
-        #negativeText { color: %21; }
-        #warningText  { color: %22; }
-    )")
-        // %1  bg_base
-        .arg(t.bg_base)
-        // %2  text_primary
-        .arg(t.text_primary)
-        // %3  border_med
-        .arg(t.border_med)
-        // %4  border_bright
-        .arg(t.border_bright)
-        // %5  bg_surface
-        .arg(t.bg_surface)
-        // %6  border_dim
-        .arg(t.border_dim)
-        // %7  padding (density)
-        .arg(p)
-        // %8  double padding
-        .arg(p2)
-        // %9  accent
-        .arg(t.accent)
-        // %10 text_secondary
-        .arg(t.text_secondary)
-        // %11 bg_hover
-        .arg(t.bg_hover)
-        // %12 bg_raised
-        .arg(t.bg_raised)
-        // %13 text_dim
-        .arg(t.text_dim)
-        // %14 row_alt
-        .arg(t.row_alt)
-        // %15 font-family
-        .arg(font_family_)
-        // %16 font-size
-        .arg(font_size_px_)
-        // %17 text_on_accent
-        .arg(t.text_on_accent)
-        // %18 icon_dim
-        .arg(t.icon_dim)
-        // %19 icon_hover
-        .arg(t.icon_hover)
-        // %20 positive
-        .arg(t.positive)
-        // %21 negative
-        .arg(t.negative)
-        // %22 warning
-        .arg(t.warning)
-        // %23 positive_dim
-        .arg(t.positive_dim)
-        // %24 negative_dim
-        .arg(t.negative_dim)
-        // %25 accent_bg
-        .arg(t.accent_bg)
-        // %26 positive_bg
-        .arg(t.positive_bg)
-        // %27 negative_bg
-        .arg(t.negative_bg);
+        #positiveText { color: %18; }
+        #negativeText { color: %19; }
+        #warningText  { color: %20; }
+    )");
 
-    // Post-arg substitution: restore the URL-encoded `#` in SVG icon strokes.
-    // The sentinels (no `%` prefix) survived the arg() chain untouched, so we
-    // can now rewrite them to the form Qt's CSS engine expects without arg()
-    // mis-interpreting them as positional placeholders.
+    // Slot N takes value N (fill_qss_slots), never the lowest one left as an
+    // .arg() chain would: an unused slot there once shifted #positiveText to
+    // icon_dim and #warningText to the positive green.
+    const QssSlotFill fill = fill_qss_slots(tmpl, {
+        QString::fromUtf8(t.bg_base), // %1 bg_base
+        QString::fromUtf8(t.text_primary), // %2 text_primary
+        QString::fromUtf8(t.border_med), // %3 border_med
+        QString::fromUtf8(t.border_bright), // %4 border_bright
+        QString::fromUtf8(t.bg_surface), // %5 bg_surface
+        QString::fromUtf8(t.border_dim), // %6 border_dim
+        QString::number(p), // %7 padding (density)
+        QString::number(p2), // %8 double padding
+        QString::fromUtf8(t.accent), // %9 accent
+        QString::fromUtf8(t.text_secondary), // %10 text_secondary
+        QString::fromUtf8(t.bg_hover), // %11 bg_hover
+        QString::fromUtf8(t.bg_raised), // %12 bg_raised
+        QString::fromUtf8(t.text_dim), // %13 text_dim
+        QString::fromUtf8(t.row_alt), // %14 row_alt
+        font_family_, // %15 font-family
+        QString::number(font_size_px_), // %16 font-size
+        QString::fromUtf8(t.text_on_accent), // %17 text_on_accent
+        QString::fromUtf8(t.positive), // %18 positive
+        QString::fromUtf8(t.negative), // %19 negative
+        QString::fromUtf8(t.warning) // %20 warning
+    });
+    QssSlotFill out = fill;
+    QString& qss = out.text;
+
+    // Post-fill substitution: restore the URL-encoded `#` in SVG icon strokes.
+    // The sentinels (no `%` prefix) survived the slot fill untouched, so we
+    // can now rewrite them to the form Qt's CSS engine expects without
+    // the slot fill mis-reading them as positional placeholders.
     qss.replace("ZZICON_DIM_HASHZZ",   "%2380808080");  // dim icon stroke
     qss.replace("ZZICON_HOVER_HASHZZ", "%23e5e5e5");    // hover icon stroke
 
-    return qss;
+    return out;
+}
+
+QString ThemeManager::build_global_qss() const {
+    QssSlotFill fill = build_global_qss_fill();
+    report_qss_fill("global", fill);
+    return std::move(fill.text);
 }
 
 QString ThemeManager::build_ads_qss() const {
