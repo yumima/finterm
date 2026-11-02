@@ -58,6 +58,8 @@ struct NewsArticle {
     ThreatClassification threat;
     SourceFlag source_flag = SourceFlag::NONE;
     QString lang; // ISO language code (e.g., "en", "fr", "ar")
+    int similar = 0; // same-source items differing only in numbers folded into this row (NewsFeedMerge.h)
+    QStringList also_sources; // other outlets whose copy of this story was folded into this row (NewsFeedMerge.h)
 };
 
 struct SentimentAnalysis {

@@ -195,10 +195,25 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     int right_reserve = 180;
     int headline_width = rect.right() - x - right_reserve;
     if (headline_width > 0) {
+        // A folded templated series ("iShares iBonds Dec 2055 … declares …"
+        // ×6) shows its newest item plus "+N" for the rest — NewsFeedMerge.h.
+        QString more;
+        int more_w = 0;
+        if (article.similar > 0) {
+            more = QStringLiteral("+%1").arg(article.similar);
+            more_w = tiny_fm_.horizontalAdvance(more) + 6;
+        }
         QFontMetrics& fm = is_hot ? bold_fm_ : data_fm_;
-        QString elided = fm.elidedText(article.headline, Qt::ElideRight, headline_width);
-        painter->drawText(QRect(x, rect.top(), headline_width, rect.height()), Qt::AlignVCenter | Qt::AlignLeft,
-                          elided);
+        const int text_w = std::max(0, headline_width - more_w);
+        QString elided = fm.elidedText(article.headline, Qt::ElideRight, text_w);
+        painter->drawText(QRect(x, rect.top(), text_w, rect.height()), Qt::AlignVCenter | Qt::AlignLeft, elided);
+        if (more_w > 0) {
+            const int mx = x + fm.horizontalAdvance(elided) + 6;
+            painter->setFont(tiny_font_);
+            painter->setPen(kNewsTextSecondary);
+            painter->drawText(QRect(mx, rect.top(), more_w - 6, rect.height()), Qt::AlignVCenter | Qt::AlignLeft,
+                              more);
+        }
     }
     x = rect.right() - right_reserve;
 
@@ -311,8 +326,20 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     painter->setFont(bold_font_);
     painter->setPen(kNewsTextPrimary);
     int headline_w = rect.right() - x - 80;
-    QString elided = bold_fm_.elidedText(cluster.lead_article.headline, Qt::ElideRight, headline_w);
-    painter->drawText(QRect(x, y, headline_w, 18), Qt::AlignVCenter | Qt::AlignLeft, elided);
+    // Series items the feed merge folded into the LEAD row ("+N") — other
+    // rows' counts belong to their own headlines, not this one.
+    const int folded = cluster.lead_article.similar;
+    const QString more = folded > 0 ? QStringLiteral("+%1").arg(folded) : QString();
+    const int more_w = more.isEmpty() ? 0 : tiny_fm_.horizontalAdvance(more) + 6;
+    const int text_w = std::max(0, headline_w - more_w);
+    QString elided = bold_fm_.elidedText(cluster.lead_article.headline, Qt::ElideRight, text_w);
+    painter->drawText(QRect(x, y, text_w, 18), Qt::AlignVCenter | Qt::AlignLeft, elided);
+    if (more_w > 0) {
+        painter->setFont(tiny_font_);
+        painter->setPen(kNewsTextSecondary);
+        painter->drawText(QRect(x + bold_fm_.horizontalAdvance(elided) + 6, y, more_w - 6, 18),
+                          Qt::AlignVCenter | Qt::AlignLeft, more);
+    }
 
     // Velocity badge
     if (!velocity_text.isEmpty()) {
@@ -360,17 +387,20 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     // Row 3: "Also: Source1, Source2, Source3"
     y += 18;
     x = rect.left() + 8;
-    if (cluster.articles.size() > 1) {
+    if (cluster.articles.size() > 1 || !cluster.lead_article.also_sources.isEmpty()) {
         painter->setFont(tiny_font_);
         painter->setPen(kNewsTextSecondary);
 
         QStringList also_sources;
         QSet<QString> seen;
         seen.insert(cluster.lead_article.source);
+        // Each row may stand for several outlets' copies (NewsFeedMerge.h).
         for (const auto& a : cluster.articles) {
-            if (!seen.contains(a.source) && also_sources.size() < 3) {
-                also_sources.append(a.source);
-                seen.insert(a.source);
+            for (const auto& src : QStringList{a.source} + a.also_sources) {
+                if (!seen.contains(src) && also_sources.size() < 3) {
+                    also_sources.append(src);
+                    seen.insert(src);
+                }
             }
         }
         if (!also_sources.isEmpty()) {

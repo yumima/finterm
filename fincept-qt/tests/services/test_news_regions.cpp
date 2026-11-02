@@ -20,7 +20,26 @@ NewsArticle art(const QString& id, const QString& link, const QString& region) {
     a.id = id;
     a.link = link;
     a.region = region;
-    a.headline = id;
+    // Distinct headlines that differ in letters, not just digits, so the
+    // headline / series dedupe never joins them ("world-1" vs "world-2").
+    QString h = id;
+    for (auto& c : h)
+        if (c.isDigit())
+            c = QChar('a' + c.digitValue());
+    a.headline = QStringLiteral("Story ") + h;
+    return a;
+}
+
+NewsArticle story(const QString& source, const QString& headline, qint64 ts, int tier = 4,
+                  const QString& link = {}, QStringList tickers = {}) {
+    NewsArticle a;
+    a.source = source;
+    a.headline = headline;
+    a.sort_ts = ts;
+    a.tier = tier;
+    a.link = link.isEmpty() ? QStringLiteral("https://%1.test/%2").arg(source.toLower()).arg(ts) : link;
+    a.tickers = tickers;
+    a.region = QStringLiteral("GLOBAL");
     return a;
 }
 } // namespace
@@ -116,7 +135,7 @@ class TestNewsRegions : public QObject {
     // and the region-desk copy's tag survives whichever copy arrived first.
     void merge_dedupes_by_link_and_keeps_specific_region() {
         QVector<NewsArticle> all;
-        QHash<QString, qsizetype> idx;
+        fincept::news::FeedMergeIndex idx;
         merge_feed_batch(all, idx, {art("world-1", "https://bbc.test/a", "GLOBAL"),
                                     art("world-2", "https://bbc.test/b", "GLOBAL"), art("nolink-1", "", "GLOBAL")});
         merge_feed_batch(all, idx, {art("china-1", " https://bbc.test/a ", "CHINA"), art("nolink-2", "", "CHINA")});
@@ -138,6 +157,130 @@ class TestNewsRegions : public QObject {
         QCOMPARE(all.last().region, QStringLiteral("ASIA"));
         merge_feed_batch(all, idx, {art("scmp-china", "https://scmp.test/x", "CHINA")});
         QCOMPARE(all.last().region, QStringLiteral("CHINA"));
+    }
+
+    // The same wire story under two outlets' links is one row: the better
+    // tier wins, the tickers are joined, a pill tag survives.
+    void merge_same_headline_other_link_is_one_row() {
+        QVector<NewsArticle> all;
+        fincept::news::FeedMergeIndex idx;
+        auto inv = story("INVESTING.COM", "Stellantis chip shortage disrupts Fiat output in Italy, may last through December", 100, 3,
+                         {}, {"STLA"});
+        auto cna = story("CNA", "Stellantis chip shortage disrupts Fiat output in Italy — may last through December", 90, 2,
+                         {}, {"F"});
+        cna.region = QStringLiteral("EU");
+        merge_feed_batch(all, idx, {inv});
+        merge_feed_batch(all, idx, {cna});
+        QCOMPARE(all.size(), 1);
+        QCOMPARE(all[0].source, QStringLiteral("CNA")); // tier 2 beats tier 3
+        QCOMPARE(all[0].region, QStringLiteral("EU"));
+        QCOMPARE(all[0].tickers, (QStringList{"STLA", "F"}));
+        QCOMPARE(all[0].similar, 0); // a copy, not a sibling
+        QCOMPARE(all[0].also_sources, QStringList{"INVESTING.COM"}); // clustering still counts 2 outlets
+
+        // A later worse-tier repost (new link) never displaces the better copy.
+        merge_feed_batch(all, idx, {story("INVESTING.COM", "Stellantis chip shortage disrupts Fiat output in Italy, may last through December", 400, 3)});
+        QCOMPARE(all.size(), 1);
+        QCOMPARE(all[0].source, QStringLiteral("CNA"));
+
+        // Same outlet, same title, new link minutes later: one row, at the
+        // first report (a repost doesn't make it fresh), as urgent as its
+        // loudest copy.
+        auto repost = story("ABNORMAL RETURNS", "Top clicks this week on Abnormal Returns", 700);
+        repost.priority = fincept::services::Priority::URGENT;
+        merge_feed_batch(all, idx, {story("ABNORMAL RETURNS", "Top clicks this week on Abnormal Returns", 50)});
+        merge_feed_batch(all, idx, {repost});
+        QCOMPARE(all.size(), 2);
+        QCOMPARE(all[1].sort_ts, qint64(50));
+        QVERIFY(all[1].priority == fincept::services::Priority::URGENT);
+
+        // A same-outlet row out of the window doesn't hide another outlet's fresh row.
+        {
+            QVector<NewsArticle> rows;
+            fincept::news::FeedMergeIndex ix;
+            merge_feed_batch(rows, ix, {story("YAHOO", "Fed officials signal patience on further rate cuts", 100'000),
+                                        story("REUTERS", "Fed officials signal patience on further rate cuts", 300'000, 1),
+                                        story("YAHOO", "Fed officials signal patience on further rate cuts", 300'600)});
+            QCOMPARE(rows.size(), 2);
+            QCOMPARE(rows.last().source, QStringLiteral("REUTERS"));
+            QCOMPARE(rows.last().also_sources, QStringList{"YAHOO"});
+        }
+
+        // A daily repost of one title (a live blog) is one row per day, and a
+        // chain of reposts can't creep along the window (span, not last gap).
+        merge_feed_batch(all, idx, {story("YAHOO", "Stock market today Dow S&P 500 Nasdaq", 1000),
+                                    story("YAHOO", "Stock market today Dow S&P 500 Nasdaq", 1000 + 24 * 3600),
+                                    story("YAHOO", "Stock market today Dow S&P 500 Nasdaq", 1000 + 10 * 3600),
+                                    story("YAHOO", "Stock market today Dow S&P 500 Nasdaq", 1000 + 20 * 3600)});
+        // 0h + 10h fold; 24h and 20h fold (20h would stretch the first row to 20h > 18h).
+        QCOMPARE(all.size(), 4);
+        // A dated copy is never displaced by an undated one, and a row keeps
+        // its id whichever copy it shows.
+        merge_feed_batch(all, idx, {story("AP", "Undated wire copy must not blank the time", 5000, 2, "https://ap.test/u")});
+        const QString kept_id = all.last().id;
+        auto undated = story("AP", "Undated wire copy must not blank the time", 0, 1, "https://ap.test/u");
+        undated.id = QStringLiteral("other-id");
+        merge_feed_batch(all, idx, {undated});
+        QCOMPARE(all.size(), 5);
+        QCOMPARE(all.last().sort_ts, qint64(5000));
+        auto newer = story("AP", "Undated wire copy must not blank the time", 6000, 1, "https://ap.test/u2");
+        newer.id = QStringLiteral("newer-id");
+        merge_feed_batch(all, idx, {newer});
+        QCOMPARE(all.last().sort_ts, qint64(6000)); // the better copy shows…
+        QCOMPARE(all.last().id, kept_id);           // …under the row's original id
+
+        // Undated items fold only by link.
+        merge_feed_batch(all, idx, {story("RTE", "Irish budget passes final vote in the Dail", 0, 4, "https://rte.test/a"),
+                                    story("RTE", "Irish budget passes final vote in the Dail", 0, 4, "https://rte.test/b")});
+        QCOMPARE(all.size(), 7);
+
+        // A short generic title from two outlets is two stories.
+        merge_feed_batch(all, idx, {story("NYT", "Here's the latest", 10), story("CNN", "Here's the latest", 11)});
+        QCOMPARE(all.size(), 9);
+        // Accents and thousands separators don't split a story.
+        merge_feed_batch(all, idx, {story("FT", "Société Générale cuts 2,000 jobs after weak quarter", 20, 2),
+                                    story("REUTERS", "Societe Generale cuts 2000 jobs after weak quarter", 21, 1)});
+        QCOMPARE(all.size(), 10);
+        QCOMPARE(all.last().source, QStringLiteral("REUTERS"));
+        QCOMPARE(all.last().also_sources, QStringList{"FT"});
+    }
+
+    // A templated series from one source folds into its newest item with a count;
+    // numbers alone never join items across sources or days.
+    void merge_templated_series_folds_with_count() {
+        QVector<NewsArticle> all;
+        fincept::news::FeedMergeIndex idx;
+        const qint64 t0 = 1'780'000'000;
+        merge_feed_batch(all, idx,
+                         {story("SEEKING ALPHA", "iShares iBonds Dec 2033 Term Corporate ETF declares monthly distribution of $0.1043", t0),
+                          story("SEEKING ALPHA", "iShares iBonds Dec 2055 Term Treasury ETF declares monthly distribution of $0.0959", t0 + 240),
+                          story("SEEKING ALPHA", "iShares iBonds Dec 2054 Term Treasury ETF declares monthly distribution of $0.0930", t0 + 180),
+                          story("SEEKING ALPHA", "iShares iBonds Dec 2045 Term Treasury ETF declares monthly distribution of $0.0814", t0 + 120),
+                          story("SEEKING ALPHA", "iShares iBonds Dec 2034 Term Corporate ETF declares monthly distribution of $0.1050", t0 + 60)});
+        QCOMPARE(all.size(), 2); // Treasury x3, Corporate x2
+        QCOMPARE(all[0].headline.left(25), QStringLiteral("iShares iBonds Dec 2034 T"));
+        QCOMPARE(all[0].similar, 1);
+        QVERIFY(all[1].headline.contains("Dec 2055"));
+        QCOMPARE(all[1].similar, 2);
+
+        // Another source, or the same template two days later: separate rows.
+        merge_feed_batch(all, idx,
+                         {story("BENZINGA", "iShares iBonds Dec 2044 Term Treasury ETF declares monthly distribution of $0.0950", t0),
+                          story("SEEKING ALPHA", "iShares iBonds Dec 2035 Term Corporate ETF declares monthly distribution of $0.1001",
+                                t0 + 3 * 86400),
+                          // a separate numeric event the next day is not a "series"
+                          story("SEEKING ALPHA", "iShares iBonds Dec 2036 Term Corporate ETF declares monthly distribution of $0.1002",
+                                t0 + 3 * 86400 + 60)});
+        QCOMPARE(all.size(), 4); // 2035 and 2036 (a minute apart) fold together
+        QCOMPARE(all.last().similar, 1);
+
+        // A headline without numbers is never a "series" of a different one.
+        merge_feed_batch(all, idx, {story("SEEKING ALPHA", "Oshkosh partners with Grid Aero", t0 + 300)});
+        QCOMPARE(all.size(), 5);
+        // CJK headlines have no spaces: each character counts as a word.
+        QVERIFY(fincept::news::headline_keys(QStringLiteral("美联储维持利率不变")).words >= fincept::news::kMinCrossSourceWords);
+        QCOMPARE(fincept::news::headline_keys("Oil at $81.50, up 2%").series, QStringLiteral("oil at # up #"));
+        QCOMPARE(fincept::news::headline_keys("Oil at $81.50, up 2,000").story, QStringLiteral("oil at 81.50 up 2000"));
     }
 
     void one_story_two_regions() {

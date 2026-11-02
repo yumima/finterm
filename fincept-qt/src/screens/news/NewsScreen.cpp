@@ -1093,7 +1093,8 @@ void NewsScreen::apply_filters_async() {
                 const QString hl = a.headline.toLower();
                 const QString sum = a.summary.toLower();
                 bool match = hl.contains(search_lower) || sum.contains(search_lower) ||
-                             a.source.toLower().contains(search_lower);
+                             a.source.toLower().contains(search_lower) ||
+                             a.also_sources.join(' ').toLower().contains(search_lower);
                 if (!match) {
                     for (const auto& t : std::as_const(a.tickers)) {
                         if (t.toLower().contains(search_lower)) {

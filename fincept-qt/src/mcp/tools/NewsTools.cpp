@@ -116,7 +116,8 @@ static QVector<NewsArticle> filter_articles(const QVector<NewsArticle>& articles
             continue;
         if (!q_lower.isEmpty()) {
             bool match = a.headline.toLower().contains(q_lower) || a.summary.toLower().contains(q_lower) ||
-                         a.source.toLower().contains(q_lower) || a.tickers.join(' ').toLower().contains(q_lower);
+                         a.source.toLower().contains(q_lower) || a.also_sources.join(' ').toLower().contains(q_lower) ||
+                         a.tickers.join(' ').toLower().contains(q_lower);
             if (!match)
                 continue;
         }
@@ -145,7 +146,11 @@ static QJsonObject article_to_json(const NewsArticle& a) {
                        {"tickers", QJsonArray::fromStringList(a.tickers)},
                        {"link", a.link},
                        {"time", a.time},
-                       {"tier", a.tier}};
+                       {"tier", a.tier},
+                       // Outlets whose copy of this story was folded into this row,
+                       // and same-source series items it stands for ("+N" in the feed).
+                       {"also_sources", QJsonArray::fromStringList(a.also_sources)},
+                       {"similar", a.similar}};
 }
 
 std::vector<ToolDef> get_news_tools() {
@@ -795,6 +800,8 @@ std::vector<ToolDef> get_news_tools() {
             for (const auto& a : all) {
                 if (!a.source.isEmpty())
                     sources.insert(a.source);
+                for (const auto& o : a.also_sources) // outlets folded into this row
+                    sources.insert(o);
                 if (!a.category.isEmpty())
                     categories[a.category]++;
                 switch (a.sentiment) {

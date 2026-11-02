@@ -104,6 +104,8 @@ QVector<NewsCluster> cluster_articles(const QVector<NewsArticle>& articles) {
             const auto& a = articles[idx];
             c.articles.append(a);
             sources.insert(a.source);
+            for (const auto& s : a.also_sources) // outlets whose copy the feed merge folded into this row
+                sources.insert(s);
             if (a.sort_ts > c.latest_sort_ts)
                 c.latest_sort_ts = a.sort_ts;
             if (a.tier < c.tier)
