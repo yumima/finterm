@@ -13,7 +13,10 @@
 //   - a refused start says why (the service's own reason) instead of
 //     stranding on PREP…;
 //   - an error resets to idle and puts the reason in the tooltip until the
-//     next successful start restores the normal tooltip.
+//     next successful start restores the normal tooltip;
+//   - right-click opens the voice menu (the engine's voices, current one
+//     checked). Picking one re-reads what was playing in the new voice, or
+//     says a short line in it so the choice can be heard.
 //
 // ChatPane's 🔊 deliberately does NOT use this: it is part of hands-free voice
 // mode, which auto-speaks replies, resumes the mic when playback ends, and
@@ -25,6 +28,7 @@
 #include "ui/theme/ThemeManager.h"
 
 #include <QIcon>
+#include <QMenu>
 #include <QObject>
 #include <QPainter>
 #include <QPainterPath>
@@ -40,8 +44,10 @@ namespace fincept::ui {
 
 /// The read-aloud glyphs, drawn rather than shipped as assets so they take the
 /// current theme accent: a speaker with sound waves (play), the same speaker
-/// dimmed and silent (preparing), and a cross (stop).
-enum class ReadAloudGlyph { Speaker, Preparing, Cross };
+/// dimmed and silent (preparing), and the speaker struck through (playing —
+/// click to silence). Not a bare cross: next to a pane, a cross reads as
+/// "close this".
+enum class ReadAloudGlyph { Speaker, Preparing, Mute };
 inline QIcon read_aloud_icon(ReadAloudGlyph g, int px = 16) {
     const qreal dpr = 2.0; // crisp on HiDPI; Qt scales down on 1x
     QPixmap pm(int(px * dpr), int(px * dpr));
@@ -53,12 +59,6 @@ inline QIcon read_aloud_icon(ReadAloudGlyph g, int px = 16) {
     if (g == ReadAloudGlyph::Preparing)
         c.setAlphaF(0.45);
     const qreal s = px / 16.0;
-    if (g == ReadAloudGlyph::Cross) {
-        p.setPen(QPen(c, 2.0 * s, Qt::SolidLine, Qt::RoundCap));
-        p.drawLine(QPointF(4 * s, 4 * s), QPointF(12 * s, 12 * s));
-        p.drawLine(QPointF(12 * s, 4 * s), QPointF(4 * s, 12 * s));
-        return QIcon(pm);
-    }
     // Speaker: a box and a cone.
     QPainterPath body;
     body.moveTo(1.5 * s, 6 * s);
@@ -71,12 +71,23 @@ inline QIcon read_aloud_icon(ReadAloudGlyph g, int px = 16) {
     p.setPen(Qt::NoPen);
     p.setBrush(c);
     p.drawPath(body);
-    if (g == ReadAloudGlyph::Speaker) {
+    if (g != ReadAloudGlyph::Preparing) {
         p.setBrush(Qt::NoBrush);
         p.setPen(QPen(c, 1.4 * s, Qt::SolidLine, Qt::RoundCap));
         // Two waves; Qt angles are in 1/16 degree, centred on 3 o'clock.
         p.drawArc(QRectF(7 * s, 5 * s, 5 * s, 6 * s), -55 * 16, 110 * 16);
         p.drawArc(QRectF(6.5 * s, 2.5 * s, 8.5 * s, 11 * s), -55 * 16, 110 * 16);
+    }
+    if (g == ReadAloudGlyph::Mute) {
+        // The strike: first cut a transparent channel through the speaker so
+        // the line stands apart from it on any background, then draw it.
+        const QPointF a(2 * s, 1.5 * s), b(14.5 * s, 14.5 * s);
+        p.setCompositionMode(QPainter::CompositionMode_Clear);
+        p.setPen(QPen(Qt::transparent, 4.4 * s, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(a, b);
+        p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+        p.setPen(QPen(c, 1.7 * s, Qt::SolidLine, Qt::RoundCap));
+        p.drawLine(a, b);
     }
     return QIcon(pm);
 }
@@ -96,8 +107,13 @@ class ReadAloudToggle : public QObject {
     ReadAloudToggle(QPushButton* button, Labels labels, QString tooltip)
         : QObject(button), btn_(button), labels_(std::move(labels)), tooltip_(std::move(tooltip)) {
         show(State::Idle);
+        tooltip_ += QStringLiteral("\nRight-click to choose the voice");
         btn_->setToolTip(tooltip_);
         auto& tts = services::TtsService::instance();
+        btn_->setContextMenuPolicy(Qt::CustomContextMenu);
+        connect(btn_, &QPushButton::customContextMenuRequested, this,
+                [this](const QPoint& pos) { show_voice_menu(btn_->mapToGlobal(pos)); });
+        tts.refresh_engine_voices(); // so the first right-click has the list
         connect(&tts, &services::TtsService::session_state, this, [this](int session, bool speaking) {
             if (!active_ || session != session_)
                 return;
@@ -134,6 +150,23 @@ class ReadAloudToggle : public QObject {
             stop();
             return;
         }
+        last_launch_ = launch;
+        start(launch);
+    }
+
+    /// Stop playback if — and only if — this toggle owns it. Idempotent.
+    void stop() {
+        if (!active_)
+            return;
+        active_ = false; // first: TtsService::stop() emits state_changed(false)
+        services::TtsService::instance().stop();
+        show(State::Idle);
+    }
+
+    bool active() const { return active_; }
+
+  private:
+    void start(const std::function<bool()>& launch) {
         launching_ = true;
         launch_error_.clear();
         const bool ok = launch();
@@ -158,18 +191,55 @@ class ReadAloudToggle : public QObject {
         });
     }
 
-    /// Stop playback if — and only if — this toggle owns it. Idempotent.
-    void stop() {
-        if (!active_)
-            return;
-        active_ = false; // first: TtsService::stop() emits state_changed(false)
-        services::TtsService::instance().stop();
-        show(State::Idle);
+    void show_voice_menu(const QPoint& global_pos) {
+        auto& tts = services::TtsService::instance();
+        tts.refresh_engine_voices(); // reuses a fresh list; else updates for next time
+        const auto voices = tts.engine_voices();
+        const QString current = tts.engine_voice_key();
+        // On the heap and non-blocking (popup, not exec): the panel can delete
+        // the button while the menu is open, and a stack QMenu parented to it
+        // would then be deleted twice, with this toggle gone on return.
+        auto* menu = new QMenu(btn_);
+        menu->setAttribute(Qt::WA_DeleteOnClose);
+        // A disabled row, not addSection(): the app style draws section titles
+        // as a bare separator, which would leave the menu unlabelled.
+        menu->addAction(QStringLiteral("READ-ALOUD VOICE"))->setEnabled(false);
+        menu->addSeparator();
+        if (voices.isEmpty()) {
+            menu->addAction(current.isEmpty() ? QStringLiteral("No engine voice — using the on-device voice")
+                            : tts.engine_voices_unlisted()
+                                ? QStringLiteral("This engine can't list voices — update hearth")
+                                : QStringLiteral("Loading voices…"))
+                ->setEnabled(false);
+        }
+        for (const auto& v : voices) {
+            QAction* a = menu->addAction(v.label);
+            a->setCheckable(true);
+            a->setChecked(v.key() == current);
+            const QString key = v.key();
+            connect(a, &QAction::triggered, this, [this, key, current]() { pick_voice(key, current); });
+        }
+        menu->popup(global_pos);
     }
 
-    bool active() const { return active_; }
+    void pick_voice(const QString& key, const QString& previous) {
+        if (key == previous)
+            return;
+        const bool was_reading = active_;
+        stop();
+        services::TtsService::instance().set_engine_voice(key);
+        // Hear the choice: what was being read starts again in the new voice;
+        // otherwise a short line.
+        if (was_reading && last_launch_) {
+            start(last_launch_);
+            return;
+        }
+        start([]() {
+            return services::TtsService::instance().speak_via_engine(
+                QStringLiteral("Hi. This is the voice that will read your news."));
+        });
+    }
 
-  private:
     enum class State { Idle, Prep, Stop };
     void show(State st) {
         state_ = st;
@@ -177,7 +247,7 @@ class ReadAloudToggle : public QObject {
             btn_->setText({});
             btn_->setIcon(read_aloud_icon(st == State::Idle   ? ReadAloudGlyph::Speaker
                                           : st == State::Prep ? ReadAloudGlyph::Preparing
-                                                              : ReadAloudGlyph::Cross));
+                                                              : ReadAloudGlyph::Mute));
             // The state word goes to the accessible name, which an icon lacks.
             btn_->setAccessibleName(st == State::Idle ? labels_.idle : st == State::Prep ? labels_.prep : labels_.stop);
             return;
@@ -192,6 +262,7 @@ class ReadAloudToggle : public QObject {
     int session_ = -1;       ///< TtsService::session() of this toggle's reading
     bool launching_ = false; ///< inside launch(): errors belong to the launch
     QString launch_error_;
+    std::function<bool()> last_launch_; ///< the last click's reading, re-run on a voice change
     State state_ = State::Idle;
 };
 

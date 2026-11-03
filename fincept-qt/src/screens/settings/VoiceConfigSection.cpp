@@ -19,6 +19,7 @@
 #include <QNetworkRequest>
 #include <QPointer>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -374,10 +375,11 @@ void VoiceConfigSection::build_tts_ui(QVBoxLayout* parent_layout) {
     parent_layout->addWidget(divider);
     parent_layout->addSpacing(8);
 
-    auto* hdr = new QLabel(QStringLiteral("<b>Text-to-speech</b> (output) — read agent replies aloud.  "
-                                          "Install <code>piper-tts</code> via pip, download a voice .onnx "
-                                          "from <a href=\"https://github.com/rhasspy/piper#voices\">rhasspy/piper</a>, "
-                                          "point Model below at it."));
+    auto* hdr = new QLabel(QStringLiteral(
+        "<b>Text-to-speech</b> (output) — news read-aloud speaks with the LLM engine's voice: hearth's natural "
+        "Kokoro voices (provision with <code>hearth voice --voice kokoro</code>) or OpenAI's. Chat replies, and "
+        "read-aloud when the engine has no voice, use a local Piper voice — download one from "
+        "<a href=\"https://github.com/rhasspy/piper#voices\">rhasspy/piper</a> and point Model at it."));
     hdr->setTextFormat(Qt::RichText);
     hdr->setOpenExternalLinks(true);
     hdr->setWordWrap(true);
@@ -387,9 +389,33 @@ void VoiceConfigSection::build_tts_ui(QVBoxLayout* parent_layout) {
     auto* form = new QFormLayout;
     form->setSpacing(8);
 
+    // News read-aloud speaks through the LLM engine (hearth's Kokoro / Piper,
+    // or OpenAI) — its voice is picked here or by right-clicking the speaker.
+    auto* ev_row = new QWidget;
+    auto* ev_hl = new QHBoxLayout(ev_row);
+    ev_hl->setContentsMargins(0, 0, 0, 0);
+    tts_engine_voice_combo_ = new QComboBox;
+    tts_engine_voice_combo_->setToolTip(
+        QStringLiteral("Voice for news read-aloud, from the configured LLM engine. Applies immediately."));
+    tts_engine_preview_btn_ = new QPushButton(QStringLiteral("Preview"));
+    ev_hl->addWidget(tts_engine_voice_combo_, 1);
+    ev_hl->addWidget(tts_engine_preview_btn_);
+    form->addRow(QStringLiteral("Read-aloud voice"), ev_row);
+    auto& tts_svc = services::TtsService::instance();
+    connect(&tts_svc, &services::TtsService::engine_voices_changed, this, &VoiceConfigSection::fill_engine_voices);
+    connect(tts_engine_voice_combo_, &QComboBox::activated, this, [this](int i) {
+        services::TtsService::instance().set_engine_voice(tts_engine_voice_combo_->itemData(i).toString());
+    });
+    connect(tts_engine_preview_btn_, &QPushButton::clicked, this, []() {
+        services::TtsService::instance().speak_via_engine(
+            QStringLiteral("Hi. This is the voice that will read your news."));
+    });
+    fill_engine_voices();
+    tts_svc.refresh_engine_voices();
+
     tts_provider_combo_ = new QComboBox;
     tts_provider_combo_->addItem(QStringLiteral("None (TTS disabled)"), "none");
-    tts_provider_combo_->addItem(QStringLiteral("Piper (local)"), "piper");
+    tts_provider_combo_->addItem(QStringLiteral("On — engine voice, else local Piper"), "piper");
     form->addRow(QStringLiteral("Provider"), tts_provider_combo_);
 
     auto* model_row = new QWidget;
@@ -439,13 +465,36 @@ void VoiceConfigSection::build_tts_ui(QVBoxLayout* parent_layout) {
     load_tts_settings();
 }
 
+void VoiceConfigSection::fill_engine_voices() {
+    auto& tts = services::TtsService::instance();
+    const auto voices = tts.engine_voices();
+    const QString current = tts.engine_voice_key();
+    QSignalBlocker block(tts_engine_voice_combo_);
+    tts_engine_voice_combo_->clear();
+    for (const auto& v : voices)
+        tts_engine_voice_combo_->addItem(v.label, v.key());
+    // The voice in use may not be listed (Kokoro not provisioned): show no
+    // selection rather than the first entry, which isn't what is speaking.
+    tts_engine_voice_combo_->setCurrentIndex(tts_engine_voice_combo_->findData(current));
+    tts_engine_voice_combo_->setPlaceholderText(
+        current.isEmpty()              ? QStringLiteral("The configured LLM engine has no voices")
+        : tts.engine_voices_unlisted() ? QStringLiteral("This engine can't list voices — update hearth")
+        : voices.isEmpty()             ? QStringLiteral("Loading voices…")
+                                       : QStringLiteral("Choose a voice"));
+    const bool any = !voices.isEmpty();
+    tts_engine_voice_combo_->setEnabled(any);
+    tts_engine_preview_btn_->setEnabled(!current.isEmpty());
+}
+
 void VoiceConfigSection::load_tts_settings() {
     auto get = [](const char* key) {
         auto r = SettingsRepository::instance().get(QString::fromUtf8(key));
         return r.is_ok() ? r.value() : QString();
     };
     const QString provider = get("tts.provider");
-    const int idx = tts_provider_combo_->findData(provider.isEmpty() ? "none" : provider);
+    // Unset means ON (auto-detect, see TtsService::compute_available) — showing
+    // it as "None" made the next Save write "none" and silence read-aloud.
+    const int idx = tts_provider_combo_->findData(provider.isEmpty() ? "piper" : provider);
     tts_provider_combo_->setCurrentIndex(idx >= 0 ? idx : 0);
     tts_model_edit_->setText(get("tts.model_path"));
     tts_length_edit_->setText(get("tts.length"));

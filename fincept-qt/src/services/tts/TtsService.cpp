@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QMediaPlayer>
@@ -192,11 +193,13 @@ namespace {
 /// (fewer seams) and are synthesised while the previous one plays. No chunk
 /// exceeds `cap`, the engine's input limit — so a long brief is read in full
 /// rather than truncated (OpenAI rejects input past 4096 chars).
-QStringList split_for_speech(const QString& text, int cap) {
+QStringList split_for_speech(const QString& text, const ai_chat::LlmService::SpeechEndpoint& ep) {
     // Sizes ramp up: a short first chunk starts the audio fast, a medium second
     // one is synthesised while the first plays (so no gap after it), and the
-    // rest are long to keep the seams few.
-    constexpr int kFirst = 240, kSecond = 500, kRest = 900;
+    // rest are long to keep the seams few. The engine sets the ramp: a slower,
+    // more natural voice needs a shorter first chunk.
+    const int kFirst = ep.first_chunk, kSecond = ep.second_chunk, kRest = ep.rest_chunk;
+    int cap = ep.max_input;
     // Chunk 0 closes at the first paragraph end only once it holds this much —
     // a one-line opener ("Markets rallied.") alone would play in a second and
     // leave silence while chunk 1 synthesises.
@@ -310,7 +313,7 @@ void TtsService::prewarm_engine(const QString& text) {
     // listens to.
     if (!ep || !ep->local || !engine_usable(ep->url))
         return;
-    const QStringList chunks = split_for_speech(text, ep->max_input);
+    const QStringList chunks = split_for_speech(text, *ep);
     // Keyed on the FIRST CHUNK, not the whole text: a prewarm from the brief's
     // top half (breakdown still generating) must match the finished brief.
     if (chunks.isEmpty())
@@ -439,7 +442,7 @@ bool TtsService::speak_via_engine(const QString& text) {
     if (!ep || !engine_usable(ep->url))
         return start_piper(text); // no (working) speech route: Anthropic, Gemini, a dead hearth, …
 
-    eng_chunks_ = split_for_speech(text, ep->max_input);
+    eng_chunks_ = split_for_speech(text, *ep);
     if (eng_chunks_.isEmpty())
         return false;
     eng_url_ = ep->url;
@@ -798,6 +801,124 @@ void TtsService::cleanup_temp_file() {
         return;
     QFile::remove(pending_wav_path_);
     pending_wav_path_.clear();
+}
+
+// ── Voice catalogue ─────────────────────────────────────────────────────────
+
+QString TtsService::engine_voice_key() const {
+    const auto ep = ai_chat::LlmService::instance().speech_endpoint();
+    if (!ep)
+        return {};
+    const QString voice = ep->body.value("voice").toString();
+    // OpenAI voices all belong to one model; the key's model part is the family.
+    return ep->kind == QLatin1String("openai") ? QStringLiteral("openai:") + voice
+                                               : ep->body.value("model").toString() + QLatin1Char(':') + voice;
+}
+
+void TtsService::set_engine_voice(const QString& key) {
+    if (key.isEmpty() || key == engine_voice_key())
+        return;
+    auto r = SettingsRepository::instance().set(QStringLiteral("tts.engine_voice"), key, QStringLiteral("voice"));
+    if (r.is_err()) {
+        LOG_WARN(kTtsTag, QString("could not save the read-aloud voice: %1").arg(QString::fromStdString(r.error())));
+        return;
+    }
+    // No discard_warm(): warm_key() includes the request body, so a clip in the
+    // old voice is never reused — and a reading may be waiting on that request.
+    LOG_INFO(kTtsTag, QString("read-aloud voice → %1").arg(key));
+    emit engine_voices_changed();
+}
+
+void TtsService::drop_voices_request() {
+    if (QNetworkReply* r = voices_reply_) {
+        voices_reply_ = nullptr; // first: the finished handler ignores a reply that isn't current
+        r->abort();
+    }
+}
+
+void TtsService::refresh_engine_voices() {
+    const auto ep = ai_chat::LlmService::instance().speech_endpoint();
+    if (!ep) {
+        drop_voices_request();
+        if (!voices_.isEmpty() || !voices_url_.isEmpty()) {
+            voices_.clear();
+            voices_url_.clear();
+            voices_unlisted_ = false;
+            emit engine_voices_changed();
+        }
+        return;
+    }
+    if (ep->kind == QLatin1String("openai")) {
+        drop_voices_request();
+        if (voices_url_ == ep->url)
+            return; // fixed set, already shown
+        // OpenAI's set is fixed; softer voices first.
+        static const QVector<EngineVoice> kOpenAi = {
+            {"openai", "shimmer", "Shimmer — soft, warm"},
+            {"openai", "nova", "Nova — bright, friendly"},
+            {"openai", "coral", "Coral — warm, conversational"},
+            {"openai", "sage", "Sage — calm"},
+            {"openai", "alloy", "Alloy — neutral"},
+            {"openai", "ash", "Ash — male"},
+        };
+        voices_ = kOpenAi;
+        voices_url_ = ep->url;
+        voices_unlisted_ = false;
+        emit engine_voices_changed();
+        return;
+    }
+    // hearth: GET /v1/audio/voices next to /v1/audio/speech. A list for the
+    // same engine younger than a minute is reused — the menu calls this on
+    // every open. A request still in flight for ANOTHER engine (the provider
+    // changed) is dropped, so its late answer can't overwrite this one's.
+    QString url = ep->url;
+    url.replace(QStringLiteral("/audio/speech"), QStringLiteral("/audio/voices"));
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    if (voices_reply_ && voices_reply_url_ == url)
+        return;
+    if (url == voices_url_ && now - voices_at_ < 60'000)
+        return;
+    drop_voices_request();
+    if (!nam_)
+        nam_ = new QNetworkAccessManager(this);
+    QNetworkRequest req{QUrl(url)};
+    for (auto it = ep->headers.cbegin(); it != ep->headers.cend(); ++it)
+        req.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
+    req.setTransferTimeout(5000);
+    QNetworkReply* reply = nam_->get(req);
+    voices_reply_ = reply;
+    voices_reply_url_ = url;
+    connect(reply, &QNetworkReply::finished, this, [this, reply, url]() {
+        reply->deleteLater();
+        if (reply != voices_reply_)
+            return; // dropped: superseded by another engine's request
+        voices_reply_ = nullptr;
+        QVector<EngineVoice> list;
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const bool ok = reply->error() == QNetworkReply::NoError && status == 200;
+        if (ok) {
+            const QJsonArray arr = QJsonDocument::fromJson(reply->readAll()).object().value("voices").toArray();
+            for (const auto& v : arr) {
+                const QJsonObject o = v.toObject();
+                const QString id = o.value("id").toString();
+                const QString model = o.value("model").toString();
+                // A voice without a model can't be asked for by name.
+                if (!id.isEmpty() && !model.isEmpty())
+                    list.append({model, id, o.value("label").toString(id)});
+            }
+        } else {
+            LOG_WARN(
+                kTtsTag,
+                QString("voice list unavailable (%1)").arg(status ? QString::number(status) : reply->errorString()));
+        }
+        // No list (a hearth from before /audio/voices answers 404) → nothing
+        // is offered rather than a guess at what the engine really speaks.
+        voices_ = list;
+        voices_url_ = url;
+        voices_at_ = ok ? QDateTime::currentMSecsSinceEpoch() : 0; // a failure retries on the next open
+        voices_unlisted_ = !ok;
+        emit engine_voices_changed();
+    });
 }
 
 } // namespace fincept::services

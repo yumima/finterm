@@ -29,6 +29,7 @@
 #include <QObject>
 #include <QString>
 #include <QStringList>
+#include <QVector>
 
 #include <memory>
 
@@ -78,6 +79,31 @@ class TtsService : public QObject {
     /// Stop any in-flight playback.  Idempotent.
     void stop();
 
+    /// A voice the configured engine can read with. key() — "model:id", e.g.
+    /// "kokoro:af_heart" — is what set_engine_voice() stores.
+    struct EngineVoice {
+        QString model; ///< what the speech request names: kokoro | piper | (OpenAI) the voice family
+        QString id;
+        QString label;
+        QString key() const { return model + QLatin1Char(':') + id; }
+    };
+    /// The engine's voices as last fetched (empty until refresh_engine_voices()
+    /// answers, or when the engine has no speech route).
+    QVector<EngineVoice> engine_voices() const { return voices_; }
+    /// The engine serves speech but couldn't list its voices (an older hearth
+    /// without GET /v1/audio/voices) — there is nothing to choose from.
+    bool engine_voices_unlisted() const { return voices_unlisted_; }
+    /// The voice speak_via_engine() will use now ("model:id"), empty when no
+    /// engine serves speech. Same source as the request body, so it can't drift.
+    QString engine_voice_key() const;
+    /// Re-fetch the engine's voice list (hearth: GET /v1/audio/voices; OpenAI:
+    /// its fixed set). Async; engine_voices_changed() fires when it lands.
+    /// Cheap to call often: a fresh list for the same engine is reused.
+    void refresh_engine_voices();
+    /// Persist the read-aloud voice ("model:id") and drop the warm clip, which
+    /// was synthesised in the old voice.
+    void set_engine_voice(const QString& key);
+
     /// Id of the current reading. speak()/speak_via_engine() start a new one;
     /// read it right after a successful launch to own that reading, then follow
     /// session_state()/session_error() for THAT id only — no guessing from the
@@ -96,6 +122,8 @@ class TtsService : public QObject {
     /// An engine was found unusable (404 / unreachable): speaker buttons
     /// gated on engine_or_local_available() should re-check.
     void availability_changed();
+    /// engine_voices() or the chosen voice changed.
+    void engine_voices_changed();
 
   private:
     TtsService();
@@ -123,6 +151,14 @@ class TtsService : public QObject {
     QHash<QString, qint64> engine_unusable_until_; ///< url → epoch ms
     bool engine_usable(const QString& url) const;
     void mark_engine_failed(const QString& url, int http_status);
+
+    QVector<EngineVoice> voices_;
+    QString voices_url_;   ///< endpoint the list belongs to
+    qint64 voices_at_ = 0; ///< epoch ms of the last successful fetch
+    QNetworkReply* voices_reply_ = nullptr;
+    QString voices_reply_url_; ///< what voices_reply_ is fetching
+    bool voices_unlisted_ = false;
+    void drop_voices_request(); ///< abort an in-flight voice-list fetch, ignoring its answer
 
     QNetworkAccessManager* nam_ = nullptr;
     QNetworkReply* reply_ = nullptr; ///< in-flight engine /audio/speech request

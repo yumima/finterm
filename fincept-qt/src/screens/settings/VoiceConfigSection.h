@@ -52,6 +52,9 @@ class VoiceConfigSection : public QWidget {
     QWidget* deepgram_group_ = nullptr;
 
     // ── TTS (output) — separate group below the STT (input) group ─────
+    QComboBox* tts_engine_voice_combo_ = nullptr; ///< read-aloud voice on the LLM engine (news)
+    QPushButton* tts_engine_preview_btn_ = nullptr;
+    void fill_engine_voices();
     QComboBox* tts_provider_combo_ = nullptr;
     QLineEdit* tts_model_edit_ = nullptr;
     QPushButton* tts_browse_btn_ = nullptr;

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`4adcdf090`](https://github.com/yumima/finterm/commit/4adcdf090) blame: ignore the clang-format sweep
 - [`4823e51f8`](https://github.com/yumima/finterm/commit/4823e51f8) **style:** clang-format 18 over fincept-qt/src
 - [`e758c429e`](https://github.com/yumima/finterm/commit/e758c429e) lint: fix cppcheck findings, make D1/D4 checks see split calls
 - [`f8b031bf9`](https://github.com/yumima/finterm/commit/f8b031bf9) read-aloud review fixes: session ids, dead-engine probe, gapless chunks

@@ -346,6 +346,15 @@ QString api_root(const QString& p, const QString& cfg_base) {
 } // namespace
 
 std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
+    // The read-aloud voice, "model:id" (TtsService::set_engine_voice). Read
+    // before taking mutex_: the settings store has its own locking.
+    const QString pref = [] {
+        auto r = SettingsRepository::instance().get(QStringLiteral("tts.engine_voice"));
+        return r.is_ok() ? r.value().trimmed() : QString();
+    }();
+    const QString pref_model = pref.section(QLatin1Char(':'), 0, 0);
+    const QString pref_id = pref.section(QLatin1Char(':'), 1);
+
     QMutexLocker lock(&mutex_);
     ensure_config();
     const QString p = provider_;
@@ -361,12 +370,30 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
             return std::nullopt;
         ep.url = root + QStringLiteral("/audio/speech");
         ep.max_input = 8000; // hearth truncates there itself
-        // hearth picks its own default (English) Piper voice when none is named.
-        ep.body = QJsonObject{{"model", "piper"}, {"response_format", "wav"}};
+        ep.kind = QStringLiteral("hearth");
+        // Kokoro (natural voices) unless the user picked a Piper voice. A hearth
+        // without Kokoro answers a Kokoro request with its default Piper voice.
+        // Any model hearth lists (GET /v1/audio/voices) is passed through as
+        // named; only an OpenAI pick from a previous provider is ignored.
+        const bool picked = !pref_model.isEmpty() && pref_model != "openai" && !pref_id.isEmpty();
+        const QString model = picked ? pref_model : QStringLiteral("kokoro");
+        const QString voice = picked ? pref_id : QStringLiteral("af_heart");
+        ep.body = QJsonObject{{"model", model}, {"voice", voice}, {"response_format", "wav"}};
+        if (model == "kokoro") {
+            ep.first_chunk = 130;
+            ep.second_chunk = 350;
+            ep.rest_chunk = 700;
+        }
     } else if (p == "openai") {
         ep.url = api_root(p, base_url_) + QStringLiteral("/audio/speech");
         ep.max_input = 4096; // OpenAI rejects longer input with a 400
-        ep.body = QJsonObject{{"model", "gpt-4o-mini-tts"}, {"voice", "alloy"}, {"response_format", "wav"}};
+        ep.kind = QStringLiteral("openai");
+        const QString voice = pref_model == "openai" && !pref_id.isEmpty() ? pref_id : QStringLiteral("shimmer");
+        ep.body = QJsonObject{{"model", "gpt-4o-mini-tts"},
+                              {"voice", voice},
+                              {"instructions", "Read in a soft, warm, natural voice at a calm, unhurried pace, "
+                                               "like a friendly newsreader."},
+                              {"response_format", "wav"}};
     } else {
         return std::nullopt;
     }

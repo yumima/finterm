@@ -361,7 +361,7 @@ QWidget* NewsDetailPanel::build_content_view() {
     });
     listen_toggle_ = new ui::ReadAloudToggle(
         listen_btn_, {QStringLiteral("LISTEN"), QStringLiteral("STOP")},
-        QStringLiteral("Read the article aloud (local voice — set one up in Settings → Voice)"));
+        QStringLiteral("Read the article aloud (voice from the configured LLM engine, else the on-device voice)"));
     connect(listen_btn_, &QPushButton::clicked, this, [this]() {
         if (!has_article_ && !listen_toggle_->active())
             return;
@@ -372,7 +372,8 @@ QWidget* NewsDetailPanel::build_content_view() {
             const QString body = body_label_ ? body_label_->toPlainText().trimmed() : QString();
             if (!body.isEmpty())
                 text += "\n\n" + body;
-            return services::TtsService::instance().speak(text);
+            // The engine's natural voice; falls back to on-device Piper itself.
+            return services::TtsService::instance().speak_via_engine(text);
         });
     });
     connect(save_btn_, &QPushButton::clicked, this, [this]() {
@@ -1058,6 +1059,7 @@ void NewsDetailPanel::show_infrastructure(const QVector<services::Infrastructure
 
 void NewsDetailPanel::clear() {
     has_article_ = false;
+    listen_toggle_->stop(); // its button leaves with the article page
     stack_->setCurrentIndex(0);
     conceal_article_section(analysis_section_);
     conceal_article_section(related_section_);

@@ -211,6 +211,11 @@ class LlmService : public QObject {
         QJsonObject body;   ///< model/voice/response_format — the caller adds "input"
         int max_input = 0;  ///< engine's input cap in chars (0 = none)
         bool local = false; ///< on this machine — free to call speculatively
+        QString kind;       ///< "hearth" | "openai" — which voice catalogue applies
+        /// Chunk-size ramp for chunked synthesis (chars). A slower, natural
+        /// voice (Kokoro, ~0.2s of synthesis per 1s of audio) gets a shorter
+        /// first chunk so playback still starts in ~1.5s.
+        int first_chunk = 240, second_chunk = 500, rest_chunk = 900;
     };
     std::optional<SpeechEndpoint> speech_endpoint() const;
     int active_max_tokens() const;
