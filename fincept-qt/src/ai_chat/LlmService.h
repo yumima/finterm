@@ -9,6 +9,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QMap>
 #include <QMutex>
 #include <QNetworkAccessManager>
 #include <QObject>
@@ -198,6 +199,19 @@ class LlmService : public QObject {
     QString active_api_key() const;
     QString active_base_url() const;
     double active_temperature() const;
+
+    /// Text-to-speech on the CONFIGURED engine, in the OpenAI /v1/audio/speech
+    /// shape. Only engines that actually serve that route resolve: hearth
+    /// (Piper behind its gateway) and OpenAI. Every other provider — Anthropic,
+    /// Gemini, Groq, … — has no compatible speech endpoint, so this returns
+    /// nullopt and the caller falls back to the on-device voice.
+    struct SpeechEndpoint {
+        QString url;
+        QMap<QString, QString> headers;
+        QJsonObject body;  ///< model/voice/response_format — the caller adds "input"
+        int max_input = 0; ///< engine's input cap in chars (0 = none)
+    };
+    std::optional<SpeechEndpoint> speech_endpoint() const;
     int active_max_tokens() const;
     bool tools_enabled() const;
     bool is_configured() const;

@@ -202,6 +202,17 @@ class NewsDetailPanel : public QWidget {
     services::NewsArticle current_article_;
     bool has_article_ = false;
     bool listening_ = false;  // local TTS read-aloud toggle
+
+    // Read-aloud for the TL;DR, on the ARTICLE DETAIL header bar. Synthesised
+    // by the configured LLM engine (TtsService::speak_via_engine). Visible only
+    // while a finished brief owns the pane — there is nothing to read otherwise.
+    QPushButton* tldr_listen_btn_ = nullptr;
+    bool tldr_listening_ = false;
+    QString tldr_text_;  ///< the brief's markdown, as rendered
+    /// Show/hide the header button for the current brief state, and stop the
+    /// brief's playback when the brief leaves the pane.
+    void sync_tldr_listen();
+    void stop_tldr_listen();
 };
 
 } // namespace fincept::screens

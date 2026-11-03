@@ -1,5 +1,6 @@
 #include "services/tts/TtsService.h"
 
+#include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "storage/repositories/SettingsRepository.h"
 
@@ -8,12 +9,19 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
 #include <QMediaPlayer>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUuid>
+
+#include <algorithm>
 
 #if defined(Q_OS_UNIX)
 #include <csignal>
@@ -168,6 +176,97 @@ bool TtsService::compute_available() const {
     return true;
 }
 
+bool TtsService::engine_or_local_available() const {
+    if (get_setting("tts.provider") == QStringLiteral("none"))
+        return false;  // the user switched read-aloud off — engine included
+    return ai_chat::LlmService::instance().speech_endpoint().has_value() || is_available();
+}
+
+namespace {
+/// Cut to the engine's input cap at the last sentence end that fits, so the
+/// voice stops on a full stop rather than mid-word (OpenAI 400s past 4096).
+QString fit_input(const QString& text, int max_chars) {
+    if (max_chars <= 0 || text.size() <= max_chars)
+        return text;
+    const QString head = text.left(max_chars);
+    int cut = -1;
+    for (const QString& end : {QStringLiteral(". "), QStringLiteral(".\n"), QStringLiteral("? "),
+                               QStringLiteral("! "), QStringLiteral("\n")})
+        cut = std::max(cut, static_cast<int>(head.lastIndexOf(end)));
+    return cut > max_chars / 2 ? head.left(cut + 1) : head;
+}
+} // namespace
+
+bool TtsService::speak_via_engine(const QString& text) {
+    if (text.trimmed().isEmpty())
+        return false;
+    stop();
+
+    if (get_setting("tts.provider") == QStringLiteral("none")) {
+        emit error(QStringLiteral("Read-aloud is switched off (Settings → Voice)"));
+        return false;
+    }
+    const auto ep = ai_chat::LlmService::instance().speech_endpoint();
+    if (!ep)
+        return start_piper(text);  // engine has no speech route (Anthropic, Gemini, …)
+
+    if (!nam_)
+        nam_ = new QNetworkAccessManager(this);
+    QNetworkRequest req{QUrl(ep->url)};
+    for (auto it = ep->headers.cbegin(); it != ep->headers.cend(); ++it)
+        req.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
+    // Synthesis of a full brief takes seconds on CPU; hearth caps its own at 60s.
+    // hearth's own synth timeout is 60s; past that the request is dead anyway.
+    req.setTransferTimeout(60000);
+    QJsonObject body = ep->body;
+    const QString input = fit_input(text, ep->max_input);
+    if (input.size() < text.size())
+        LOG_WARN(kTtsTag, QString("speech input cut %1 → %2 chars (engine cap %3)")
+                              .arg(text.size()).arg(input.size()).arg(ep->max_input));
+    body["input"] = input;
+
+    LOG_INFO(kTtsTag, QString("speaking via engine %1 (%2 chars)").arg(ep->url).arg(text.size()));
+    reply_ = nam_->post(req, QJsonDocument(body).toJson(QJsonDocument::Compact));
+    connect(reply_, &QNetworkReply::finished, this, [this, text]() {
+        QNetworkReply* r = reply_;
+        if (!r)
+            return;
+        reply_ = nullptr;
+        r->deleteLater();
+        const int status = r->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const QByteArray data = r->readAll();
+        // RIFF = a WAV. Anything else (an error JSON with a 200, an mp3 from a
+        // provider ignoring response_format) is not something we asked for.
+        if (r->error() != QNetworkReply::NoError || status != 200 || !data.startsWith("RIFF")) {
+            LOG_WARN(kTtsTag, QString("engine speech failed (HTTP %1, %2): %3 — falling back to local voice")
+                                  .arg(status)
+                                  .arg(r->errorString(), QString::fromUtf8(data.left(200))));
+            if (!is_available()) {
+                // status is 0 when nothing answered (refused, timed out) — say that.
+                const QString why = status ? QStringLiteral("HTTP %1").arg(status) : r->errorString();
+                emit error(QStringLiteral("Engine speech failed (%1) and no local voice is set up").arg(why));
+                emit state_changed(false);
+                return;
+            }
+            if (!start_piper(text))
+                emit state_changed(false);
+            return;
+        }
+        pending_wav_path_ = new_temp_wav_path();
+        QFile f(pending_wav_path_);
+        if (!f.open(QIODevice::WriteOnly) || f.write(data) != data.size()) {
+            f.close();
+            cleanup_temp_file();
+            emit error(QStringLiteral("Could not write the synthesised audio to a temp file"));
+            emit state_changed(false);
+            return;
+        }
+        f.close();
+        start_playback();
+    });
+    return true;
+}
+
 bool TtsService::speak(const QString& text) {
     if (text.trimmed().isEmpty())
         return false;
@@ -176,7 +275,10 @@ bool TtsService::speak(const QString& text) {
     // one.  The user clicking 🔊 twice should mean "just say the new
     // one", not "play both overlapping".
     stop();
+    return start_piper(text);
+}
 
+bool TtsService::start_piper(const QString& text) {
     if (!is_available()) {
         emit error(QStringLiteral("TTS not available — configure Piper under Settings → Voice"));
         return false;
@@ -271,6 +373,15 @@ bool TtsService::speak(const QString& text) {
 }
 
 void TtsService::stop() {
+    if (reply_) {
+        // Disconnect first so abort()'s synchronous finished() doesn't run the
+        // fallback / playback handler for a request the user just cancelled.
+        QNetworkReply* r = reply_;
+        reply_ = nullptr;
+        disconnect(r, nullptr, this, nullptr);
+        r->abort();
+        r->deleteLater();
+    }
     if (proc_) {
         // Disconnect first so on_proc_finished doesn't fire and try to play the
         // (possibly half-written) WAV. Group-kill so the streaming pipeline's
@@ -338,6 +449,10 @@ void TtsService::on_proc_finished(int exit_code) {
         return;
     }
 
+    start_playback();
+}
+
+void TtsService::start_playback() {
     // Hand the WAV to QMediaPlayer.  Lives on this QObject so the
     // parent's destruction sweeps it.
     player_ = new QMediaPlayer(this);

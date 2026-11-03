@@ -17,6 +17,7 @@
 #include <QPointer>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QTextDocument>
 #include <QTextStream>
 #include <QTimer>
 #include <QUrl>
@@ -48,6 +49,8 @@ namespace {
 //   - <br> for soft line breaks inside a paragraph (rare — extractors
 //     typically emit \n\n between paragraphs, but trafilatura occasionally
 //     emits single \n inside one paragraph for byline / dateline blocks).
+const QString kTldrListenTip = QStringLiteral("Read the TL;DR aloud (voice from the configured LLM engine)");
+
 QString format_article_html(const QString& plain) {
     QString escaped = plain.toHtmlEscaped();
     const QStringList paras = escaped.split(QStringLiteral("\n\n"),
@@ -112,7 +115,61 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     title->setObjectName("newsDetailHeaderTitle");
     header_layout->addWidget(title);
     header_layout->addStretch();
+
+    tldr_listen_btn_ = new QPushButton(QStringLiteral("▶ LISTEN"), header);
+    tldr_listen_btn_->setObjectName("newsDetailHeaderBtn");
+    tldr_listen_btn_->setToolTip(kTldrListenTip);
+    tldr_listen_btn_->setCursor(Qt::PointingHandCursor);
+    tldr_listen_btn_->setFixedHeight(22);
+    tldr_listen_btn_->hide();
+    header_layout->addWidget(tldr_listen_btn_);
     root->addWidget(header);
+
+    connect(tldr_listen_btn_, &QPushButton::clicked, this, [this]() {
+        auto& tts = services::TtsService::instance();
+        if (tldr_listening_) {
+            stop_tldr_listen();
+            return;
+        }
+        if (tldr_text_.trimmed().isEmpty())
+            return;
+        // The brief is markdown; read the rendered words, not "hash hash star".
+        QTextDocument doc;
+        doc.setMarkdown(tldr_text_);
+        const QString plain = doc.toPlainText().trimmed();
+        // The article LISTEN shares the one TtsService; speak_via_engine()'s
+        // stop() resets that button through its own state_changed handler.
+        if (tts.speak_via_engine(plain)) {
+            tldr_listening_ = true;
+            tldr_listen_btn_->setToolTip(kTldrListenTip);
+            tldr_listen_btn_->setText(QStringLiteral("PREP…"));
+        } else {
+            tldr_listen_btn_->setText(QStringLiteral("NO VOICE"));
+            QTimer::singleShot(1500, this, [this]() {
+                if (tldr_listen_btn_ && !tldr_listening_)
+                    tldr_listen_btn_->setText(QStringLiteral("▶ LISTEN"));
+            });
+        }
+    });
+    connect(&services::TtsService::instance(), &services::TtsService::state_changed, this,
+            [this](bool speaking) {
+                if (!tldr_listening_)
+                    return;
+                if (speaking) {
+                    tldr_listen_btn_->setText(QStringLiteral("■ STOP"));
+                } else {
+                    tldr_listening_ = false;
+                    tldr_listen_btn_->setText(QStringLiteral("▶ LISTEN"));
+                }
+            });
+    connect(&services::TtsService::instance(), &services::TtsService::error, this,
+            [this](const QString& msg) {
+                if (!tldr_listening_)
+                    return;
+                tldr_listening_ = false;
+                tldr_listen_btn_->setText(QStringLiteral("▶ LISTEN"));
+                tldr_listen_btn_->setToolTip(QStringLiteral("Last attempt failed: %1").arg(msg));
+            });
 
     stack_ = new QStackedWidget(this);
     stack_->addWidget(build_empty_state());
@@ -1118,6 +1175,8 @@ void NewsDetailPanel::show_brief_unavailable(const QString& text, const QString&
     tldr_section_->show();
     if (tldr_detail_section_)
         tldr_detail_section_->hide();
+    tldr_text_.clear();
+    sync_tldr_listen();
     // Forcing page 1 with no story ever opened would reveal the never-filled
     // ARTICLE block — a permanent "Loading article…" under an empty headline,
     // with live ANALYZE / LISTEN / OPEN buttons pointing at nothing.
@@ -1140,6 +1199,8 @@ void NewsDetailPanel::show_tldr_loading(const QString& title) {
         tldr_detail_section_->hide();
     brief_pending_ = true;
     brief_owns_pane_ = true;
+    tldr_text_.clear();
+    sync_tldr_listen();
     set_article_visible(false);
     stack_->setCurrentIndex(1);
 }
@@ -1238,6 +1299,8 @@ void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& titl
             tldr_detail_section_->hide();
         // Nothing to show — give the pane back to the story that was open.
         brief_owns_pane_ = false;
+        tldr_text_.clear();
+        sync_tldr_listen();
         set_article_visible(has_article_);
         return;
     }
@@ -1263,13 +1326,41 @@ void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& titl
         }
     }
     brief_owns_pane_ = true;
+    // What is ON SCREEN, not the raw reply: the raw text carries the internal
+    // category marker and the duplicate sections split() merges away.
+    tldr_text_ = detail.isEmpty() ? summary : summary + QStringLiteral("\n\n") + detail;
+    sync_tldr_listen();
     set_article_visible(false);
     stack_->setCurrentIndex(1);
+}
+
+void NewsDetailPanel::stop_tldr_listen() {
+    if (!tldr_listening_)
+        return;
+    tldr_listening_ = false;  // first — stop() emits state_changed(false)
+    services::TtsService::instance().stop();
+    if (tldr_listen_btn_)
+        tldr_listen_btn_->setText(QStringLiteral("▶ LISTEN"));
+}
+
+void NewsDetailPanel::sync_tldr_listen() {
+    // No voice anywhere (e.g. Anthropic engine, no Piper, or voice switched
+    // off) → no button, rather than one that can only ever say NO VOICE.
+    const bool show = brief_owns_pane_ && !tldr_text_.trimmed().isEmpty()
+                      && services::TtsService::instance().engine_or_local_available();
+    // A brief that leaves the pane (new brief, article opened) takes its
+    // reading with it — the button that could stop it is about to vanish.
+    if (!show)
+        stop_tldr_listen();
+    if (tldr_listen_btn_)
+        tldr_listen_btn_->setVisible(show);
 }
 
 void NewsDetailPanel::hide_tldr() {
     brief_owns_pane_ = false;
     brief_pending_   = false;
+    tldr_text_.clear();
+    sync_tldr_listen();
     // Give the pane back to the open story. Today's only caller follows this
     // with show_article(), which would restore it anyway — but a method named
     // "hide the brief" must not be the reason the article stays hidden.

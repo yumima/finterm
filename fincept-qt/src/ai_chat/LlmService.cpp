@@ -31,6 +31,7 @@
 #include <QRegularExpression>
 #include <QThread>
 #include <QTimer>
+#include <QUrl>
 #include <QUuid>
 #include <QVariant>
 #include <QtConcurrent/QtConcurrent>
@@ -310,6 +311,39 @@ QString LlmService::active_base_url() const {
     QMutexLocker lock(&mutex_);
     ensure_config();
     return base_url_;
+}
+
+std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
+    QMutexLocker lock(&mutex_);
+    ensure_config();
+    const QString p = provider_;
+    SpeechEndpoint ep;
+    if (is_hearth_provider(p)) {
+        // The chat route falls back to Ollama's :11434 when no base is stored,
+        // but Ollama has no speech route — only hearth's gateway does.
+        const QString base = base_url_.trimmed().isEmpty()
+                                 ? HearthService::instance().engine_base_url()
+                                 : base_url_;
+        // "ollama" is a legacy alias of this provider, and a base on Ollama's
+        // own port is bare Ollama, which has no speech route — a guaranteed 404.
+        if (QUrl(normalize_llm_base(base)).port() == 11434)
+            return std::nullopt;
+        ep.max_input = 8000;  // hearth truncates there itself
+        ep.url = normalize_llm_base(base) + QStringLiteral("/v1/audio/speech");
+        // hearth picks its own default (English) Piper voice when none is named.
+        ep.body = QJsonObject{{"model", "piper"}, {"response_format", "wav"}};
+    } else if (p == "openai") {
+        const QString base = base_url_.trimmed().isEmpty() ? QStringLiteral("https://api.openai.com")
+                                                           : base_url_;
+        ep.url = normalize_llm_base(base) + QStringLiteral("/v1/audio/speech");
+        ep.max_input = 4096;  // OpenAI rejects longer input with a 400
+        ep.body = QJsonObject{{"model", "gpt-4o-mini-tts"}, {"voice", "alloy"}, {"response_format", "wav"}};
+    } else {
+        return std::nullopt;
+    }
+    ep.headers = get_headers();
+    ep.headers["Content-Type"] = "application/json";
+    return ep;
 }
 
 double LlmService::active_temperature() const {

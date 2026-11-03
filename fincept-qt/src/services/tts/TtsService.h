@@ -30,6 +30,8 @@
 
 class QProcess;
 class QMediaPlayer;
+class QNetworkAccessManager;
+class QNetworkReply;
 class QAudioOutput;
 
 namespace fincept::services {
@@ -53,6 +55,16 @@ class TtsService : public QObject {
     ///         in which case error() has already been emitted.
     bool speak(const QString& text);
 
+    /// True when the configured LLM engine serves speech (hearth / OpenAI —
+    /// see LlmService::speech_endpoint) OR the on-device Piper voice works.
+    bool engine_or_local_available() const;
+
+    /// Synthesise on the CONFIGURED LLM ENGINE (POST /v1/audio/speech) and play
+    /// the returned WAV. Falls back to the on-device Piper path when the engine
+    /// has no speech route or the request fails. Same contract as speak():
+    /// true = launched (state_changed(true) follows when audio starts).
+    bool speak_via_engine(const QString& text);
+
     /// Stop any in-flight playback.  Idempotent.
     void stop();
 
@@ -72,6 +84,14 @@ class TtsService : public QObject {
     bool stream_started_ = false;     ///< the streaming pipeline reported it launched
     QByteArray stream_out_;           ///< accumulated streaming-mode stdout (status/fatal) for diagnostics
 
+    QNetworkAccessManager* nam_ = nullptr;
+    QNetworkReply* reply_ = nullptr;  ///< in-flight engine /audio/speech request
+
+    /// speak() without the leading stop() — the engine path's fallback must not
+    /// emit a spurious state_changed(false) between "preparing" and "playing".
+    bool start_piper(const QString& text);
+    /// Play pending_wav_path_ through QMediaPlayer (both buffered paths).
+    void start_playback();
     void on_proc_finished(int exit_code);
     void cleanup_temp_file();
     /// Tear down the QMediaPlayer/QAudioOutput, remove the temp WAV, and
