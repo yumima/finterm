@@ -777,7 +777,8 @@ QThreadPool& brief_pool(const QString& provider) {
 // before it applies, so 20 means twenty distinct stories rather than twenty
 // rows off the top of a feed that may hold six copies of one of them.
 
-void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int count, SummaryCallback cb) {
+void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int count, SummaryCallback cb,
+                                      std::function<void(const QString& top)> on_top) {
     if (articles.isEmpty()) {
         cb(false, {});
         return;
@@ -832,7 +833,7 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
     auto* select_watcher = new QFutureWatcher<QVector<Story>>(this);
     QObject::connect(
         select_watcher, &QFutureWatcher<QVector<Story>>::finished, this,
-        [this, select_watcher, cb, cfg, held, pool_key]() {
+        [this, select_watcher, cb, on_top, cfg, held, pool_key]() {
             const QVector<Story> stories = select_watcher->result();
             select_watcher->deleteLater();
 
@@ -856,7 +857,7 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
             }
 
             extract_article_bodies(
-                to_enrich, [this, stories, cb, cfg, held, pool_key](QHash<QString, QString> bodies) mutable {
+                to_enrich, [this, stories, cb, on_top, cfg, held, pool_key](QHash<QString, QString> bodies) mutable {
                     QVector<Story> enriched = stories;
                     for (Story& s : enriched)
                         s.body = bodies.value(s.link.trimmed());
@@ -1031,7 +1032,7 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                     top_scope.max_tokens = 1800;
                     auto* top_watcher = new QFutureWatcher<ai_chat::LlmResponse>(this);
                     QObject::connect(top_watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
-                                     [top_watcher, job, finish, note_fallback]() {
+                                     [top_watcher, job, finish, note_fallback, on_top]() {
                                          const auto resp = top_watcher->result();
                                          top_watcher->deleteLater();
                                          note_fallback(job, resp);
@@ -1065,6 +1066,11 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                                          } else {
                                              job->top = text;
                                              job->top_ok = true;
+                                             // Breakdown still writing: hand the
+                                             // opening out now rather than when
+                                             // the slower half lands.
+                                             if (on_top && job->pending > 1)
+                                                 on_top(text);
                                          }
                                          finish();
                                      });

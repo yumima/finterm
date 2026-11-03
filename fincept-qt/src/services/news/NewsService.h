@@ -184,7 +184,14 @@ class NewsService : public QObject
     /// Cached twice — once against the input pool, once against the generated
     /// prompt — so an unchanged feed and an unchanged SELECTION both return
     /// the previous brief verbatim. Callback fires on the Qt event loop.
-    void summarize_headlines(const QVector<NewsArticle>& articles, int count, SummaryCallback cb);
+    ///
+    /// `on_top` (optional) fires with the TOP half the moment it is written,
+    /// if the category breakdown is still generating — an early look at the
+    /// brief's opening for consumers that can start work on it (read-aloud
+    /// pre-synthesis). It never fires for a cached brief, and `cb` still
+    /// delivers the whole thing.
+    void summarize_headlines(const QVector<NewsArticle>& articles, int count, SummaryCallback cb,
+                             std::function<void(const QString& top)> on_top = {});
 
     int feed_count() const { return feed_count_; }
     QStringList active_sources() const { return active_sources_; }

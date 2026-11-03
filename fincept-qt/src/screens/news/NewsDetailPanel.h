@@ -13,6 +13,8 @@
 #include <QVector>
 #include <QWidget>
 
+namespace fincept::ui { class ReadAloudToggle; }
+
 namespace fincept::screens {
 
 /// Article reading pane — the permanent right half of the news screen,
@@ -54,6 +56,9 @@ class NewsDetailPanel : public QWidget {
     /// Hide the TL;DR section (called when a new article is opened so the
     /// summary doesn't outlive its relevance to the feed snapshot).
     void hide_tldr();
+    /// Pre-synthesise the read-aloud opening from a brief still being written
+    /// (its top half), so the speaker button plays the moment the brief shows.
+    void prewarm_brief(const QString& partial);
 
   signals:
     void analyze_requested(const QString& article_url);
@@ -201,18 +206,19 @@ class NewsDetailPanel : public QWidget {
     QStackedWidget* stack_ = nullptr;
     services::NewsArticle current_article_;
     bool has_article_ = false;
-    bool listening_ = false;  // local TTS read-aloud toggle
+    ui::ReadAloudToggle* listen_toggle_ = nullptr;  ///< article LISTEN ↔ TtsService
 
     // Read-aloud for the TL;DR, on the ARTICLE DETAIL header bar. Synthesised
     // by the configured LLM engine (TtsService::speak_via_engine). Visible only
     // while a finished brief owns the pane — there is nothing to read otherwise.
     QPushButton* tldr_listen_btn_ = nullptr;
-    bool tldr_listening_ = false;
+    ui::ReadAloudToggle* tldr_listen_ = nullptr;
     QString tldr_text_;  ///< the brief's markdown, as rendered
     /// Show/hide the header button for the current brief state, and stop the
     /// brief's playback when the brief leaves the pane.
     void sync_tldr_listen();
-    void stop_tldr_listen();
+    QString tldr_plain_text() const;  ///< tldr_text_ as spoken (markdown rendered)
+    static QString spoken_text(const QString& markdown);  ///< markdown → the words read aloud
 };
 
 } // namespace fincept::screens

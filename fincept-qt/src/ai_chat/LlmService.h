@@ -210,6 +210,7 @@ class LlmService : public QObject {
         QMap<QString, QString> headers;
         QJsonObject body;  ///< model/voice/response_format — the caller adds "input"
         int max_input = 0; ///< engine's input cap in chars (0 = none)
+        bool local = false; ///< on this machine — free to call speculatively
     };
     std::optional<SpeechEndpoint> speech_endpoint() const;
     int active_max_tokens() const;

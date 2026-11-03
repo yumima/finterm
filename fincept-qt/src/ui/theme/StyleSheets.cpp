@@ -271,9 +271,10 @@ QString news_screen_styles() {
                "  border: 1px solid %10; font-size: 11px; font-weight: 700; padding: 0 10px; }"
                "#newsDetailAnalyzeBtn:hover { background: %12; color: %1; }"
                "#newsDetailAnalyzeBtn:disabled { color: %6; background: %8; border-color: %3; }"
-               "#newsDetailHeaderBtn { background: rgba(217,119,6,0.1); color: %12; "
-               "  border: 1px solid %10; font-size: 11px; font-weight: 700; padding: 0 10px; }"
-               "#newsDetailHeaderBtn:hover { background: %12; color: %1; }"
+               "#newsDetailHeaderBtn { background: %8; border: 1px solid %10; padding: 0; }"
+               // Not the solid-accent hover of the text buttons: the glyph IS
+               // the accent colour and would vanish into it.
+               "#newsDetailHeaderBtn:hover { background: %13; border-color: %12; }"
                "#newsDetailAiSummary { color: #f0e8d0; font-size: 12pt; line-height: 1.4; background: transparent; }"
                "#newsDetailAiSentiment { font-size: 12px; font-weight: 700; background: transparent; }"
                "#newsDetailAiUrgency { color: %16; font-size: 12px; background: transparent; }"

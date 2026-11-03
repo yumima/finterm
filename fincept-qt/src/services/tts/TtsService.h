@@ -23,6 +23,9 @@
 
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QJsonObject>
+#include <QMap>
+#include <QStringList>
 #include <QObject>
 #include <QString>
 
@@ -65,6 +68,12 @@ class TtsService : public QObject {
     /// true = launched (state_changed(true) follows when audio starts).
     bool speak_via_engine(const QString& text);
 
+    /// Synthesise the FIRST chunk of `text` in the background, so a later
+    /// speak_via_engine(text) starts playing at once instead of waiting on the
+    /// engine. Local engines only (hearth) — on a paid API this would bill
+    /// every text nobody listens to. Replaces any previous warm clip.
+    void prewarm_engine(const QString& text);
+
     /// Stop any in-flight playback.  Idempotent.
     void stop();
 
@@ -86,6 +95,30 @@ class TtsService : public QObject {
 
     QNetworkAccessManager* nam_ = nullptr;
     QNetworkReply* reply_ = nullptr;  ///< in-flight engine /audio/speech request
+
+    // Engine reading, synthesised in sentence chunks: the first is short so
+    // audio starts in ~2s, and each later chunk is fetched while the previous
+    // one plays. Also keeps every request under the engine's input cap.
+    bool eng_session_ = false;
+    QStringList eng_chunks_;
+    int eng_next_ = 0;            ///< index of the next chunk to fetch
+    QStringList eng_ready_;       ///< synthesised WAVs waiting to play (≤ 2)
+    QString eng_text_;            ///< the whole text, for the Piper fallback
+    QString eng_url_;
+    QMap<QString, QString> eng_headers_;
+    QJsonObject eng_body_;
+    void engine_fetch_next();
+    void engine_play_next();
+    void end_engine_session();     ///< abort the chunk request, drop queue + buffered WAVs; no signals
+
+    // prewarm_engine() state: one clip for one text.
+    QString warm_text_;  ///< warm_key(url, body, first chunk) of the warm clip — the match key
+    QString warm_wav_;
+    QNetworkReply* warm_reply_ = nullptr;
+    bool eng_waiting_warm_ = false;  ///< the session's chunk 0 IS the in-flight warm request
+    /// Queue a copy of the warm clip as chunk 0 and start; false if unusable.
+    bool adopt_warm_clip();
+    void discard_warm();
 
     /// speak() without the leading stop() — the engine path's fallback must not
     /// emit a spurious state_changed(false) between "preparing" and "playing".

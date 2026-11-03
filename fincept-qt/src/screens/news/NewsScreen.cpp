@@ -482,7 +482,14 @@ void NewsScreen::connect_signals() {
             // notice is not worth evicting the story the reader has open.
             self->detail_panel_->show_brief_unavailable(
                 QStringLiteral("**AI brief unavailable.** %1").arg(why), scope_title);
-        });
+        },
+            // The top half lands while the category breakdown is still being
+            // written: start synthesising the read-aloud's opening now, so the
+            // speaker plays at once when the brief appears.
+            [self](const QString& top) {
+                if (self && self->detail_panel_->brief_pending())
+                    self->detail_panel_->prewarm_brief(top);
+            });
     });
     connect(detail_panel_, &NewsDetailPanel::related_article_clicked, this, &NewsScreen::on_related_clicked);
 

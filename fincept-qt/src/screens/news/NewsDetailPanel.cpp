@@ -4,6 +4,7 @@
 #include "services/file_manager/FileManagerService.h"
 #include "services/tts/TtsService.h"
 #include "storage/repositories/NewsArticleRepository.h"
+#include "ui/ReadAloudToggle.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -49,8 +50,6 @@ namespace {
 //   - <br> for soft line breaks inside a paragraph (rare — extractors
 //     typically emit \n\n between paragraphs, but trafilatura occasionally
 //     emits single \n inside one paragraph for byline / dateline blocks).
-const QString kTldrListenTip = QStringLiteral("Read the TL;DR aloud (voice from the configured LLM engine)");
-
 QString format_article_html(const QString& plain) {
     QString escaped = plain.toHtmlEscaped();
     const QStringList paras = escaped.split(QStringLiteral("\n\n"),
@@ -116,60 +115,24 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     header_layout->addWidget(title);
     header_layout->addStretch();
 
-    tldr_listen_btn_ = new QPushButton(QStringLiteral("▶ LISTEN"), header);
+    tldr_listen_btn_ = new QPushButton(header);
     tldr_listen_btn_->setObjectName("newsDetailHeaderBtn");
-    tldr_listen_btn_->setToolTip(kTldrListenTip);
     tldr_listen_btn_->setCursor(Qt::PointingHandCursor);
-    tldr_listen_btn_->setFixedHeight(22);
+    tldr_listen_btn_->setFixedSize(28, 22);
+    tldr_listen_btn_->setIconSize(QSize(16, 16));
     tldr_listen_btn_->hide();
     header_layout->addWidget(tldr_listen_btn_);
     root->addWidget(header);
-
+    tldr_listen_ = new ui::ReadAloudToggle(
+        tldr_listen_btn_,
+        {QStringLiteral("Listen"), QStringLiteral("Stop"), QStringLiteral("Preparing"), /*icons=*/true},
+        QStringLiteral("Read the TL;DR aloud (voice from the configured LLM engine)"));
     connect(tldr_listen_btn_, &QPushButton::clicked, this, [this]() {
-        auto& tts = services::TtsService::instance();
-        if (tldr_listening_) {
-            stop_tldr_listen();
+        if (tldr_text_.trimmed().isEmpty() && !tldr_listen_->active())
             return;
-        }
-        if (tldr_text_.trimmed().isEmpty())
-            return;
-        // The brief is markdown; read the rendered words, not "hash hash star".
-        QTextDocument doc;
-        doc.setMarkdown(tldr_text_);
-        const QString plain = doc.toPlainText().trimmed();
-        // The article LISTEN shares the one TtsService; speak_via_engine()'s
-        // stop() resets that button through its own state_changed handler.
-        if (tts.speak_via_engine(plain)) {
-            tldr_listening_ = true;
-            tldr_listen_btn_->setToolTip(kTldrListenTip);
-            tldr_listen_btn_->setText(QStringLiteral("PREP…"));
-        } else {
-            tldr_listen_btn_->setText(QStringLiteral("NO VOICE"));
-            QTimer::singleShot(1500, this, [this]() {
-                if (tldr_listen_btn_ && !tldr_listening_)
-                    tldr_listen_btn_->setText(QStringLiteral("▶ LISTEN"));
-            });
-        }
+        tldr_listen_->toggle(
+            [this]() { return services::TtsService::instance().speak_via_engine(tldr_plain_text()); });
     });
-    connect(&services::TtsService::instance(), &services::TtsService::state_changed, this,
-            [this](bool speaking) {
-                if (!tldr_listening_)
-                    return;
-                if (speaking) {
-                    tldr_listen_btn_->setText(QStringLiteral("■ STOP"));
-                } else {
-                    tldr_listening_ = false;
-                    tldr_listen_btn_->setText(QStringLiteral("▶ LISTEN"));
-                }
-            });
-    connect(&services::TtsService::instance(), &services::TtsService::error, this,
-            [this](const QString& msg) {
-                if (!tldr_listening_)
-                    return;
-                tldr_listening_ = false;
-                tldr_listen_btn_->setText(QStringLiteral("▶ LISTEN"));
-                tldr_listen_btn_->setToolTip(QStringLiteral("Last attempt failed: %1").arg(msg));
-            });
 
     stack_ = new QStackedWidget(this);
     stack_->addWidget(build_empty_state());
@@ -343,7 +306,6 @@ QWidget* NewsDetailPanel::build_content_view() {
     listen_btn_ = new QPushButton("LISTEN", content);
     listen_btn_->setObjectName("newsDetailOpenBtn");
     listen_btn_->setFixedHeight(24);
-    listen_btn_->setToolTip("Read the article aloud (local voice — set one up in Settings → Voice)");
 
     save_btn_ = new QPushButton("SAVE", content);
     save_btn_->setObjectName("newsDetailSaveBtn");
@@ -394,63 +356,21 @@ QWidget* NewsDetailPanel::build_content_view() {
         analyze_timeout_->start();
         emit analyze_requested(current_article_.link);
     });
+    listen_toggle_ = new ui::ReadAloudToggle(
+        listen_btn_, {QStringLiteral("LISTEN"), QStringLiteral("STOP")},
+        QStringLiteral("Read the article aloud (local voice — set one up in Settings → Voice)"));
     connect(listen_btn_, &QPushButton::clicked, this, [this]() {
-        auto& tts = services::TtsService::instance();
-        if (listening_) {  // toggle off
-            tts.stop();
-            listening_ = false;
-            listen_btn_->setText("LISTEN");
+        if (!has_article_ && !listen_toggle_->active())
             return;
-        }
-        if (!tts.is_available()) {
-            listen_btn_->setText("NO VOICE");
-            QTimer::singleShot(1500, this, [this]() {
-                if (listen_btn_)
-                    listen_btn_->setText("LISTEN");
-            });
-            return;
-        }
-        if (!has_article_)
-            return;
-        QString text = current_article_.headline;
-        if (!current_article_.summary.isEmpty())
-            text += ". " + current_article_.summary;
-        const QString body = body_label_ ? body_label_->toPlainText().trimmed() : QString();
-        if (!body.isEmpty())
-            text += "\n\n" + body;
-        // Only enter the PREP… state if synthesis actually launched. speak()
-        // returns false (having already emitted error()) on a synchronous
-        // failure; setting listening_ first would strand the button on PREP….
-        if (tts.speak(text)) {
-            listening_ = true;
-            // Synthesis runs for several seconds on a long article; show progress
-            // until TTS signals playback actually started (handler flips to STOP).
-            listen_btn_->setText("PREP…");
-        }
-    });
-    // Reset the button whenever TTS actually stops — playback finished, was
-    // stopped, or failed to start. TtsService is shared, so only react to the
-    // "stopped" edge while we believe we're listening.
-    connect(&services::TtsService::instance(), &services::TtsService::state_changed, this,
-            [this](bool speaking) {
-                if (!listening_)
-                    return;
-                if (speaking) {
-                    // Synthesis done, audio now playing — offer to stop it.
-                    if (listen_btn_)
-                        listen_btn_->setText("STOP");
-                } else {
-                    listening_ = false;
-                    if (listen_btn_)
-                        listen_btn_->setText("LISTEN");
-                }
-            });
-    connect(&services::TtsService::instance(), &services::TtsService::error, this, [this](const QString&) {
-        if (listening_) {
-            listening_ = false;
-            if (listen_btn_)
-                listen_btn_->setText("LISTEN");
-        }
+        listen_toggle_->toggle([this]() {
+            QString text = current_article_.headline;
+            if (!current_article_.summary.isEmpty())
+                text += ". " + current_article_.summary;
+            const QString body = body_label_ ? body_label_->toPlainText().trimmed() : QString();
+            if (!body.isEmpty())
+                text += "\n\n" + body;
+            return services::TtsService::instance().speak(text);
+        });
     });
     connect(save_btn_, &QPushButton::clicked, this, [this]() {
         if (!has_article_)
@@ -762,12 +682,7 @@ QWidget* NewsDetailPanel::build_content_view() {
 
 void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     // Stop any read-aloud from the previously shown article.
-    if (listening_) {
-        services::TtsService::instance().stop();
-        listening_ = false;
-        if (listen_btn_)
-            listen_btn_->setText("LISTEN");
-    }
+    listen_toggle_->stop();
     current_article_ = article;
     has_article_ = true;
     // Opening a story takes the pane back from any brief that was holding it.
@@ -1330,17 +1245,32 @@ void NewsDetailPanel::show_tldr_summary(const QString& text, const QString& titl
     // category marker and the duplicate sections split() merges away.
     tldr_text_ = detail.isEmpty() ? summary : summary + QStringLiteral("\n\n") + detail;
     sync_tldr_listen();
+    // Synthesise the opening sentences now (local engine only), so a click on
+    // the speaker plays at once instead of waiting on the engine.
+    if (tldr_listen_btn_ && !tldr_listen_btn_->isHidden())
+        services::TtsService::instance().prewarm_engine(tldr_plain_text());
     set_article_visible(false);
     stack_->setCurrentIndex(1);
 }
 
-void NewsDetailPanel::stop_tldr_listen() {
-    if (!tldr_listening_)
-        return;
-    tldr_listening_ = false;  // first — stop() emits state_changed(false)
-    services::TtsService::instance().stop();
-    if (tldr_listen_btn_)
-        tldr_listen_btn_->setText(QStringLiteral("▶ LISTEN"));
+QString NewsDetailPanel::spoken_text(const QString& markdown) {
+    // The brief is markdown; read the rendered words, not "hash hash star".
+    // The click and both prewarms go through here — the warm clip is matched
+    // on the first chunk of the result.
+    QTextDocument doc;
+    doc.setMarkdown(markdown);
+    return doc.toPlainText().trimmed();
+}
+
+QString NewsDetailPanel::tldr_plain_text() const {
+    return spoken_text(tldr_text_);
+}
+
+void NewsDetailPanel::prewarm_brief(const QString& partial) {
+    // The same summary the finished brief will render — split() drops any
+    // category tail — so the opening sentences match what the click speaks.
+    if (services::TtsService::instance().engine_or_local_available())
+        services::TtsService::instance().prewarm_engine(spoken_text(brief::split(partial).first));
 }
 
 void NewsDetailPanel::sync_tldr_listen() {
@@ -1351,7 +1281,7 @@ void NewsDetailPanel::sync_tldr_listen() {
     // A brief that leaves the pane (new brief, article opened) takes its
     // reading with it — the button that could stop it is about to vanish.
     if (!show)
-        stop_tldr_listen();
+        tldr_listen_->stop();
     if (tldr_listen_btn_)
         tldr_listen_btn_->setVisible(show);
 }

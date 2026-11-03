@@ -313,6 +313,29 @@ QString LlmService::active_base_url() const {
     return base_url_;
 }
 
+namespace {
+/// The provider's versioned API root ("…/v1"), which every route hangs off —
+/// chat ("/chat/completions", Anthropic "/messages") and speech
+/// ("/audio/speech") alike, so a provider's default lives in ONE place. A
+/// configured base wins. Empty for providers without an OpenAI-shape root
+/// (Gemini's native API, fincept).
+QString api_root(const QString& p, const QString& cfg_base) {
+    if (!cfg_base.trimmed().isEmpty())
+        return normalize_llm_base(cfg_base) + QStringLiteral("/v1");
+    if (p == "openai")     return QStringLiteral("https://api.openai.com/v1");
+    if (p == "anthropic")  return QStringLiteral("https://api.anthropic.com/v1");
+    if (p == "groq")       return QStringLiteral("https://api.groq.com/openai/v1");
+    if (p == "deepseek")   return QStringLiteral("https://api.deepseek.com/v1");
+    if (p == "openrouter") return QStringLiteral("https://openrouter.ai/api/v1");
+    if (p == "minimax")    return QStringLiteral("https://api.minimax.io/v1");
+    if (p == "kimi")       return QStringLiteral("https://api.moonshot.ai/v1");
+    if (p == "xai")        return QStringLiteral("https://api.x.ai/v1");
+    if (is_hearth_provider(p))
+        return QStringLiteral("http://localhost:11434/v1");
+    return {};
+}
+} // namespace
+
 std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     QMutexLocker lock(&mutex_);
     ensure_config();
@@ -321,21 +344,23 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     if (is_hearth_provider(p)) {
         // The chat route falls back to Ollama's :11434 when no base is stored,
         // but Ollama has no speech route — only hearth's gateway does.
-        const QString base = base_url_.trimmed().isEmpty()
-                                 ? HearthService::instance().engine_base_url()
-                                 : base_url_;
+        const QString root = api_root(p, base_url_.trimmed().isEmpty()
+                                             ? HearthService::instance().engine_base_url()
+                                             : base_url_);
         // "ollama" is a legacy alias of this provider, and a base on Ollama's
         // own port is bare Ollama, which has no speech route — a guaranteed 404.
-        if (QUrl(normalize_llm_base(base)).port() == 11434)
+        if (QUrl(root).port() == 11434)
             return std::nullopt;
+        ep.url = root + QStringLiteral("/audio/speech");
         ep.max_input = 8000;  // hearth truncates there itself
-        ep.url = normalize_llm_base(base) + QStringLiteral("/v1/audio/speech");
+        // hearth may be remote (FINCEPT_ENGINE_BASE_URL / a stored base); only
+        // a loopback host is free to call speculatively.
+        const QString host = QUrl(root).host();
+        ep.local = host == "127.0.0.1" || host == "localhost" || host == "::1";
         // hearth picks its own default (English) Piper voice when none is named.
         ep.body = QJsonObject{{"model", "piper"}, {"response_format", "wav"}};
     } else if (p == "openai") {
-        const QString base = base_url_.trimmed().isEmpty() ? QStringLiteral("https://api.openai.com")
-                                                           : base_url_;
-        ep.url = normalize_llm_base(base) + QStringLiteral("/v1/audio/speech");
+        ep.url = api_root(p, base_url_) + QStringLiteral("/audio/speech");
         ep.max_input = 4096;  // OpenAI rejects longer input with a 400
         ep.body = QJsonObject{{"model", "gpt-4o-mini-tts"}, {"voice", "alloy"}, {"response_format", "wav"}};
     } else {
@@ -536,9 +561,6 @@ QJsonObject LlmService::build_ollama_native_request(const QString& user_message,
 QString LlmService::get_endpoint_url(const PersonaScope& persona) const {
     // Called with mutex_ held
     const QString p = eff_provider(persona);
-    // Gemini puts the model in the PATH, not the body, so a per-role model
-    // override has to reach the URL builder or it silently does nothing.
-    const QString model = eff_model(persona);
 
     // Fincept cloud LLM: disabled in this local build (stub server removed).
     // Users should configure their own provider (Anthropic, OpenAI, Ollama, etc.)
@@ -546,36 +568,17 @@ QString LlmService::get_endpoint_url(const PersonaScope& persona) const {
     if (p == "fincept")
         return {};
 
-    // Custom base_url takes priority for other providers
     const QString cfg_base = eff_base_url(persona);
-    if (!cfg_base.isEmpty()) {
-        const QString base = normalize_llm_base(cfg_base);
-        if (p == "anthropic")
-            return base + "/v1/messages";
-        return base + "/v1/chat/completions";
-    }
+    // Gemini's native API puts the model in the PATH, not the body, so a
+    // per-role model override has to reach the URL builder or it silently
+    // does nothing. A configured base means an OpenAI-compatible proxy instead.
+    if (cfg_base.isEmpty() && (p == "gemini" || p == "google"))
+        return "https://generativelanguage.googleapis.com/v1beta/models/" + eff_model(persona) + ":generateContent";
 
-    if (p == "openai")
-        return "https://api.openai.com/v1/chat/completions";
-    if (p == "anthropic")
-        return "https://api.anthropic.com/v1/messages";
-    if (p == "gemini" || p == "google")
-        return "https://generativelanguage.googleapis.com/v1beta/models/" + model + ":generateContent";
-    if (p == "groq")
-        return "https://api.groq.com/openai/v1/chat/completions";
-    if (p == "deepseek")
-        return "https://api.deepseek.com/v1/chat/completions";
-    if (p == "openrouter")
-        return "https://openrouter.ai/api/v1/chat/completions";
-    if (p == "minimax")
-        return "https://api.minimax.io/v1/chat/completions";
-    if (p == "kimi")
-        return "https://api.moonshot.ai/v1/chat/completions";
-    if (is_hearth_provider(p))
-        return "http://localhost:11434/v1/chat/completions";
-    if (p == "xai")
-        return "https://api.x.ai/v1/chat/completions";
-    return {};
+    const QString root = api_root(p, cfg_base);
+    if (root.isEmpty())
+        return {};
+    return root + (p == "anthropic" ? QStringLiteral("/messages") : QStringLiteral("/chat/completions"));
 }
 
 QMap<QString, QString> LlmService::get_headers(const PersonaScope& persona) const {
