@@ -453,6 +453,7 @@ void NewsScreen::connect_signals() {
         // to remove, since a category absent from the sample is a category the
         // breakdown cannot name however generous the prompt is.
         QPointer<NewsScreen> self = this;
+        const int request_gen = ++tldr_request_gen_;
         services::NewsService::instance().summarize_headlines(
             filtered_articles_, kBriefStoryCount, [self, scope_title](bool ok, QString summary) {
             if (!self)
@@ -486,8 +487,8 @@ void NewsScreen::connect_signals() {
             // The top half lands while the category breakdown is still being
             // written: start synthesising the read-aloud's opening now, so the
             // speaker plays at once when the brief appears.
-            [self](const QString& top) {
-                if (self && self->detail_panel_->brief_pending())
+            [self, request_gen](const QString& top) {
+                if (self && request_gen == self->tldr_request_gen_ && self->detail_panel_->brief_pending())
                     self->detail_panel_->prewarm_brief(top);
             });
     });

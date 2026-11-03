@@ -353,10 +353,6 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
             return std::nullopt;
         ep.url = root + QStringLiteral("/audio/speech");
         ep.max_input = 8000;  // hearth truncates there itself
-        // hearth may be remote (FINCEPT_ENGINE_BASE_URL / a stored base); only
-        // a loopback host is free to call speculatively.
-        const QString host = QUrl(root).host();
-        ep.local = host == "127.0.0.1" || host == "localhost" || host == "::1";
         // hearth picks its own default (English) Piper voice when none is named.
         ep.body = QJsonObject{{"model", "piper"}, {"response_format", "wav"}};
     } else if (p == "openai") {
@@ -366,6 +362,13 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     } else {
         return std::nullopt;
     }
+    // Any engine on a loopback host — hearth, or an OpenAI-compatible local
+    // server (LM Studio, vLLM) configured under "openai" — is free to call
+    // speculatively, so it gets prewarmed. That prewarm is also how a local
+    // server WITHOUT a speech route is found (404) before its speaker shows.
+    // A remote engine (incl. a remote hearth) is not: it may bill per call.
+    const QString host = QUrl(ep.url).host();
+    ep.local = host == "127.0.0.1" || host == "localhost" || host == "::1";
     ep.headers = get_headers();
     ep.headers["Content-Type"] = "application/json";
     return ep;

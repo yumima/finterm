@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`a31f8744b`](https://github.com/yumima/finterm/commit/a31f8744b) news TL;DR read-aloud: speaker/cross icon, instant start, shared toggle
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

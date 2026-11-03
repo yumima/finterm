@@ -230,6 +230,9 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // no clue why. The watchdog guarantees it clears even if a stream dies
     // without ever reporting done.
     bool tldr_in_flight_ = false;
+    /// Bumped per TL;DR request. A superseded request's early top half must not
+    /// prewarm read-aloud for a brief that will never be shown.
+    int tldr_request_gen_ = 0;
     /// One-shot: the opening brief is generated the first time a COMPLETE
     /// filtered feed lands, not on every filter change. Otherwise typing in the search box or
     /// switching category would fire an LLM request per keystroke.

@@ -6,10 +6,12 @@
 // button can start it (the news article LISTEN and the TL;DR speaker). Each
 // needs the same protocol, which used to be hand-copied per button:
 //   - idle → PREP… (synthesis launched) → STOP (audio playing) → idle;
-//   - only react to TtsService signals while THIS button owns the session —
-//     another button's start fires state_changed(false) through the service's
-//     stop(), which must reset this one, not be mistaken for its own;
-//   - a refused start flashes NO VOICE instead of stranding on PREP…;
+//   - follow only THIS button's reading: TtsService tags every edge with a
+//     session id, and the toggle records the id its launch created, so another
+//     button's reading (or the stop() that precedes it) is never mistaken for
+//     its own;
+//   - a refused start says why (the service's own reason) instead of
+//     stranding on PREP…;
 //   - an error resets to idle and puts the reason in the tooltip until the
 //     next successful start restores the normal tooltip.
 //
@@ -97,8 +99,8 @@ class ReadAloudToggle : public QObject {
         show(State::Idle);
         btn_->setToolTip(tooltip_);
         auto& tts = services::TtsService::instance();
-        connect(&tts, &services::TtsService::state_changed, this, [this](bool speaking) {
-            if (!active_)
+        connect(&tts, &services::TtsService::session_state, this, [this](int session, bool speaking) {
+            if (!active_ || session != session_)
                 return;
             if (speaking) {
                 show(State::Stop);
@@ -111,8 +113,14 @@ class ReadAloudToggle : public QObject {
         if (labels_.icons)
             connect(&ThemeManager::instance(), &ThemeManager::theme_changed, this,
                     [this](const ThemeTokens&) { show(state_); });
-        connect(&tts, &services::TtsService::error, this, [this](const QString& msg) {
-            if (!active_)
+        connect(&tts, &services::TtsService::session_error, this, [this](int session, const QString& msg) {
+            // A synchronous launch failure arrives while launch() is still on
+            // the stack, before this toggle knows the new id: keep the reason.
+            if (launching_) {
+                launch_error_ = msg;
+                return;
+            }
+            if (!active_ || session != session_)
                 return;
             active_ = false;
             show(State::Idle);
@@ -127,18 +135,24 @@ class ReadAloudToggle : public QObject {
             stop();
             return;
         }
-        if (launch()) {
+        launching_ = true;
+        launch_error_.clear();
+        const bool ok = launch();
+        launching_ = false;
+        if (ok) {
             active_ = true;
+            session_ = services::TtsService::instance().session();
             show(State::Prep);
             btn_->setToolTip(tooltip_);
             return;
         }
-        // Refused start (no voice anywhere / switched off). An icon has no room
-        // for words, so it says so in the tooltip; a text button flashes it.
-        if (labels_.icons) {
-            btn_->setToolTip(QStringLiteral("No voice available — set one up in Settings → Voice"));
-            return;
-        }
+        // Refused start. Say why — the service's own reason when it gave one
+        // (Piper failed to start, voice file vanished, read-aloud switched off).
+        btn_->setToolTip(launch_error_.isEmpty()
+                             ? QStringLiteral("No voice available — set one up in Settings → Voice")
+                             : QStringLiteral("Could not start: %1").arg(launch_error_));
+        if (labels_.icons)
+            return;  // no room for words on an icon; the tooltip carries them
         btn_->setText(QStringLiteral("NO VOICE"));
         QTimer::singleShot(1500, this, [this]() {
             if (!active_)
@@ -177,6 +191,9 @@ class ReadAloudToggle : public QObject {
     Labels labels_;
     QString tooltip_;
     bool active_ = false;
+    int session_ = -1;        ///< TtsService::session() of this toggle's reading
+    bool launching_ = false;  ///< inside launch(): errors belong to the launch
+    QString launch_error_;
     State state_ = State::Idle;
 };
 

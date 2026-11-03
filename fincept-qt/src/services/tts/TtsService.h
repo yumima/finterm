@@ -23,6 +23,7 @@
 
 #include <QByteArray>
 #include <QElapsedTimer>
+#include <QHash>
 #include <QJsonObject>
 #include <QMap>
 #include <QStringList>
@@ -77,9 +78,24 @@ class TtsService : public QObject {
     /// Stop any in-flight playback.  Idempotent.
     void stop();
 
+    /// Id of the current reading. speak()/speak_via_engine() start a new one;
+    /// read it right after a successful launch to own that reading, then follow
+    /// session_state()/session_error() for THAT id only — no guessing from the
+    /// global signals which reading an edge belongs to.
+    int session() const { return session_; }
+
   signals:
+    /// Any reading (legacy, session-blind): for consumers that mirror ALL
+    /// playback, like chat's hands-free voice mode.
     void state_changed(bool is_speaking);
     void error(const QString& message);
+    /// The same edges, tagged with the reading they belong to. speaking=true
+    /// fires once per reading (not per engine chunk).
+    void session_state(int session, bool is_speaking);
+    void session_error(int session, const QString& message);
+    /// An engine was found unusable (404 / unreachable): speaker buttons
+    /// gated on engine_or_local_available() should re-check.
+    void availability_changed();
 
   private:
     TtsService();
@@ -92,6 +108,21 @@ class TtsService : public QObject {
     bool stream_mode_ = false;        ///< proc_ is the piper→player streaming pipeline (no WAV)
     bool stream_started_ = false;     ///< the streaming pipeline reported it launched
     QByteArray stream_out_;           ///< accumulated streaming-mode stdout (status/fatal) for diagnostics
+
+    int session_ = 0;
+    bool announced_ = false;  ///< speaking=true already emitted for session_
+    /// Emit state_changed + session_state; true at most once per reading.
+    void set_speaking(bool speaking);
+    /// Emit error + session_error.
+    void fail(const QString& message);
+
+    /// Engine speech URLs known not to work: 404 (no route — for the rest of
+    /// the run) or unreachable (refused / timed out — for a minute). Checked
+    /// before showing a speaker or calling the engine, so a dead hearth or an
+    /// OpenAI-compatible server without speech is not hit on every click.
+    QHash<QString, qint64> engine_unusable_until_;  ///< url → epoch ms
+    bool engine_usable(const QString& url) const;
+    void mark_engine_failed(const QString& url, int http_status);
 
     QNetworkAccessManager* nam_ = nullptr;
     QNetworkReply* reply_ = nullptr;  ///< in-flight engine /audio/speech request

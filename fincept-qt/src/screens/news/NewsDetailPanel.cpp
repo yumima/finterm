@@ -127,6 +127,11 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
         tldr_listen_btn_,
         {QStringLiteral("Listen"), QStringLiteral("Stop"), QStringLiteral("Preparing"), /*icons=*/true},
         QStringLiteral("Read the TL;DR aloud (voice from the configured LLM engine)"));
+    // A prewarm that finds the engine dead (or route-less) lands after the
+    // brief rendered on a cache hit: re-check, so the speaker goes away rather
+    // than offering a voice that is not there.
+    connect(&services::TtsService::instance(), &services::TtsService::availability_changed, this,
+            [this]() { sync_tldr_listen(); });
     connect(tldr_listen_btn_, &QPushButton::clicked, this, [this]() {
         if (tldr_text_.trimmed().isEmpty() && !tldr_listen_->active())
             return;
@@ -1269,8 +1274,8 @@ QString NewsDetailPanel::tldr_plain_text() const {
 void NewsDetailPanel::prewarm_brief(const QString& partial) {
     // The same summary the finished brief will render — split() drops any
     // category tail — so the opening sentences match what the click speaks.
-    if (services::TtsService::instance().engine_or_local_available())
-        services::TtsService::instance().prewarm_engine(spoken_text(brief::split(partial).first));
+    // prewarm_engine() does its own gating (engine local, usable, not off).
+    services::TtsService::instance().prewarm_engine(spoken_text(brief::split(partial).first));
 }
 
 void NewsDetailPanel::sync_tldr_listen() {
