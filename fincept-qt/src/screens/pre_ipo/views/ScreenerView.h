@@ -29,12 +29,12 @@ class ScreenerView : public QWidget {
     void rebuild_table();
     bool passes_filter(const pre_ipo::PrivateCompany& c) const;
 
-    QLineEdit*    search_         = nullptr;
-    QTableWidget* table_          = nullptr;
-    QPushButton*  filter_has_marks_ = nullptr;
-    QPushButton*  filter_filed_     = nullptr;
-    QPushButton*  filter_ai_        = nullptr;
-    QPushButton*  filter_fintech_   = nullptr;
+    QLineEdit* search_ = nullptr;
+    QTableWidget* table_ = nullptr;
+    QPushButton* filter_has_marks_ = nullptr;
+    QPushButton* filter_filed_ = nullptr;
+    QPushButton* filter_ai_ = nullptr;
+    QPushButton* filter_fintech_ = nullptr;
 
     QVector<pre_ipo::PrivateCompany> companies_;
     QString search_text_;

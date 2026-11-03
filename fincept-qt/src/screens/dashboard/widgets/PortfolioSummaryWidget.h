@@ -40,7 +40,7 @@ class PortfolioSummaryWidget : public BaseWidget {
     struct Holding {
         QString symbol;
         double shares = 0;
-        double avg_cost = 0;   // instrument currency, as the exchange prints it
+        double avg_cost = 0; // instrument currency, as the exchange prints it
         // Instrument→portfolio-currency multiplier. This widget recomputes
         // value/cost/day-P&L from live quotes rather than reusing the
         // summary's totals, so it needs the same rate the portfolio screen
@@ -81,12 +81,12 @@ class PortfolioSummaryWidget : public BaseWidget {
     void rebuild_from_cache();
 
     // Summary labels
-    QLabel* total_value_lbl_   = nullptr;
-    QLabel* day_pnl_lbl_       = nullptr;
-    QLabel* day_chg_pct_lbl_   = nullptr;
-    QLabel* total_pnl_lbl_     = nullptr;
+    QLabel* total_value_lbl_ = nullptr;
+    QLabel* day_pnl_lbl_ = nullptr;
+    QLabel* day_chg_pct_lbl_ = nullptr;
+    QLabel* total_pnl_lbl_ = nullptr;
     QLabel* total_chg_pct_lbl_ = nullptr;
-    QLabel* num_holdings_lbl_  = nullptr;
+    QLabel* num_holdings_lbl_ = nullptr;
 
     // Holdings list layout
     QVBoxLayout* list_layout_ = nullptr;
@@ -129,15 +129,15 @@ class PortfolioSummaryWidget : public BaseWidget {
     /// that "still loading" needs to be sayable.
     enum class AftState { Idle, Loading, Failed };
     void set_aft_header_state(AftState state);
-    QLabel*  aft_header_ = nullptr;
+    QLabel* aft_header_ = nullptr;
     AftState aft_state_ = AftState::Idle;
-    QString  aft_error_;
+    QString aft_error_;
 
     struct AftQuote {
-        double pct = 0;       // move against the last regular close
-        double price = 0;     // the extended-hours print itself
-        double regular = 0;   // the close it is measured against
-        QString session;      // "PRE" or "POST" — whichever field supplied the price
+        double pct = 0;     // move against the last regular close
+        double price = 0;   // the extended-hours print itself
+        double regular = 0; // the close it is measured against
+        QString session;    // "PRE" or "POST" — whichever field supplied the price
         // When this symbol's value last arrived. Values persist across
         // refreshes that don't mention them, so the row has to be able to say
         // how old the number it is showing actually is.
@@ -147,7 +147,7 @@ class PortfolioSummaryWidget : public BaseWidget {
     // Bumped per fetch so a reply that lands after a portfolio switch can't
     // paint another book's after-hours moves onto this one.
     quint64 aft_gen_ = 0;
-    bool    aft_in_flight_ = false;
+    bool aft_in_flight_ = false;
     /// Symbols the last fetch covered. Holdings that arrive after a fetch, or
     /// a portfolio switch, otherwise leave the new rows blank forever — the
     /// same hole the Portfolio screen's heatmap documents.
@@ -157,9 +157,9 @@ class PortfolioSummaryWidget : public BaseWidget {
     // ── Portfolio selection ──────────────────────────────────────────────────
     QComboBox* portfolio_combo_ = nullptr;
     QVector<portfolio::Portfolio> portfolios_;
-    QString selected_id_;             // id of the portfolio currently shown
+    QString selected_id_;                // id of the portfolio currently shown
     bool suppress_combo_signal_ = false; // guard against programmatic combo edits
-    bool portfolios_loaded_ = false;  // false until first portfolios_loaded()
+    bool portfolios_loaded_ = false;     // false until first portfolios_loaded()
 };
 
 } // namespace fincept::screens::widgets

@@ -3,14 +3,13 @@
 
 #include "ui/theme/Theme.h"
 
-#include <QMouseEvent>
-#include <QTimeZone>
-#include <QToolTip>
-
 #include <QDateTime>
 #include <QFontMetrics>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
+#include <QTimeZone>
+#include <QToolTip>
 
 #include <algorithm>
 #include <cmath>
@@ -25,23 +24,23 @@ namespace {
 // The two series carry their scale in the header line rather than in axis
 // gutters, which keeps every number inside a band of its own: header, plot,
 // quarter labels. Nothing floats in a margin.
-constexpr int kMarginSide   = 10;
-constexpr int kHeaderH      = 15;   // "bars: … (±x%)" / "line: … (±y%)"
-constexpr int kFooterH      = 18;   // quarter ticks
-constexpr int kMinColumnPx  = 26;
-constexpr int kLabelH       = 12;
-constexpr double kDotR      = 3.2;
-constexpr double kLabelGap  = kDotR + 5.0;   // clears the marker, not just its centre
+constexpr int kMarginSide = 10;
+constexpr int kHeaderH = 15; // "bars: … (±x%)" / "line: … (±y%)"
+constexpr int kFooterH = 18; // quarter ticks
+constexpr int kMinColumnPx = 26;
+constexpr int kLabelH = 12;
+constexpr double kDotR = 3.2;
+constexpr double kLabelGap = kDotR + 5.0; // clears the marker, not just its centre
 // Fraction of the half-height the data may use. The remainder is headroom so
 // an extreme point is never welded to the frame — and it is capped further
 // below so a label always fits above the tallest point without flipping.
-constexpr double kDataFill  = 0.84;
+constexpr double kDataFill = 0.84;
 
 // The two series' colours, named once. The hover text describes the lines by
 // colour, so a literal drifting between the painter and the tooltip would have
 // the tooltip confidently pointing at the wrong line.
-const QString kLineColor = QStringLiteral("#22d3ee");   // realised move
-const QString kBandColor = QStringLiteral("#a855f7");   // the size forecast
+const QString kLineColor = QStringLiteral("#22d3ee"); // realised move
+const QString kBandColor = QStringLiteral("#a855f7"); // the size forecast
 
 QString pct_label(double v, int dp = 0) {
     return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', dp));
@@ -93,8 +92,8 @@ QVector<EarningsReactionChart::Column> EarningsReactionChart::columns() const {
             // price, which is what carries the curve up to today.
             if (!m.has_value() && !p.move_since_last_pct.has_value())
                 continue;
-            cols.append({p.timestamp, m, std::nullopt, true, p.move_since_last_pct, next_expected_,
-                         std::nullopt, std::nullopt});
+            cols.append({p.timestamp, m, std::nullopt, true, p.move_since_last_pct, next_expected_, std::nullopt,
+                         std::nullopt});
             continue;
         }
         // A quarter with neither number is a blank slot in the series, not a
@@ -107,11 +106,11 @@ QVector<EarningsReactionChart::Column> EarningsReactionChart::columns() const {
         // beside the chart shows "→x%" for the same quarter, and a point that
         // vanishes with no explanation reads as missing data rather than as a
         // number that has deliberately not been counted yet.
-        Column c{p.timestamp, m, p.reaction_pct, false, p.reaction_live_pct, std::nullopt,
-                 std::nullopt, std::nullopt};
+        Column c{p.timestamp, m, p.reaction_pct, false, p.reaction_live_pct, std::nullopt, std::nullopt, std::nullopt};
         // Exact timestamp: forecast_record() is built from the same rows.
         for (const auto& f : forecasts_) {
-            if (f.timestamp != p.timestamp) continue;
+            if (f.timestamp != p.timestamp)
+                continue;
             c.expected = f.expected_move_pct;
             c.p_beat = f.p_beat;
             c.beat = f.beat;
@@ -127,19 +126,18 @@ double EarningsReactionChart::axis_extent(const QVector<double>& values) {
         return 1.0;
     QVector<double> mags;
     mags.reserve(values.size());
-    for (double v : values) mags.append(std::abs(v));
+    for (double v : values)
+        mags.append(std::abs(v));
     std::sort(mags.begin(), mags.end());
     // 80th percentile, so a single blow-out quarter is clipped rather than
     // compressing every other bar into the zero line.
-    const int idx = std::min(mags.size() - 1,
-                             static_cast<qsizetype>(std::ceil(mags.size() * 0.8)) - 1);
+    const int idx = std::min(mags.size() - 1, static_cast<qsizetype>(std::ceil(mags.size() * 0.8)) - 1);
     const double p80 = mags[std::max<qsizetype>(0, idx)];
     return p80 > 1e-6 ? p80 : (mags.last() > 1e-6 ? mags.last() : 1.0);
 }
 
 QRect EarningsReactionChart::plot_rect() const {
-    return QRect(kMarginSide, kHeaderH, width() - 2 * kMarginSide,
-                 height() - kHeaderH - kFooterH);
+    return QRect(kMarginSide, kHeaderH, width() - 2 * kMarginSide, height() - kHeaderH - kFooterH);
 }
 
 int EarningsReactionChart::column_at(double x, const QVector<Column>& cols) const {
@@ -152,11 +150,9 @@ int EarningsReactionChart::column_at(double x, const QVector<Column>& cols) cons
 }
 
 QString EarningsReactionChart::tooltip_for(const Column& c) const {
-    const QString metric_name = metric_ == ReactionMetric::Surprise
-                                    ? QStringLiteral("Surprise vs consensus")
-                                : metric_ == ReactionMetric::QoQ
-                                    ? QStringLiteral("EPS vs prior quarter")
-                                    : QStringLiteral("EPS vs year-ago quarter");
+    const QString metric_name = metric_ == ReactionMetric::Surprise ? QStringLiteral("Surprise vs consensus")
+                                : metric_ == ReactionMetric::QoQ    ? QStringLiteral("EPS vs prior quarter")
+                                                                    : QStringLiteral("EPS vs year-ago quarter");
 
     QStringList rows;
     // These are ANNOUNCEMENT timestamps (they carry a real time of day), not
@@ -167,8 +163,9 @@ QString EarningsReactionChart::tooltip_for(const Column& c) const {
     const auto when =
         // EVENT-STAMP: earnings announcement — ET, the session it names.
         QDateTime::fromSecsSinceEpoch(c.timestamp).toTimeZone(QTimeZone("America/New_York"));
-    rows << QString("<b>%1</b>").arg(c.projected ? QString("Next report · %1").arg(when.toString("d MMM yyyy"))
-                                                 : when.toString("d MMM yyyy"));
+    rows << QString("<b>%1</b>")
+                .arg(c.projected ? QString("Next report · %1").arg(when.toString("d MMM yyyy"))
+                                 : when.toString("d MMM yyyy"));
 
     if (c.metric)
         rows << QString("Bar — %1: <b>%2</b>").arg(metric_name, pct_label(*c.metric, 1));
@@ -203,8 +200,8 @@ QString EarningsReactionChart::tooltip_for(const Column& c) const {
         rows << line;
     }
     if (c.p_beat) {
-        QString line = QString("Beat probability before the print: <b>%1%</b>")
-                           .arg(QString::number(*c.p_beat * 100.0, 'f', 0));
+        QString line =
+            QString("Beat probability before the print: <b>%1%</b>").arg(QString::number(*c.p_beat * 100.0, 'f', 0));
         if (c.beat.has_value())
             line += *c.beat ? QStringLiteral(" — it beat") : QStringLiteral(" — it missed");
         rows << line;
@@ -264,16 +261,20 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
 
     QVector<double> metric_vals, reaction_vals;
     for (const auto& c : cols) {
-        if (c.metric) metric_vals.append(*c.metric);
-        if (c.reaction) reaction_vals.append(*c.reaction);
+        if (c.metric)
+            metric_vals.append(*c.metric);
+        if (c.reaction)
+            reaction_vals.append(*c.reaction);
         // The live move shares the price axis, so it has to size it too —
         // otherwise a big inter-print drift would be drawn off the top. Only
         // the projected column's is DRAWN, though, and only drawn values may
         // stretch the axis: a still-open reaction is carried for the tooltip
         // alone and would otherwise squeeze the line for a point nobody sees.
-        if (c.projected && c.live_move) reaction_vals.append(*c.live_move);
+        if (c.projected && c.live_move)
+            reaction_vals.append(*c.live_move);
         // The band shares the price axis and must fit on it.
-        if (c.expected) reaction_vals.append(*c.expected);
+        if (c.expected)
+            reaction_vals.append(*c.expected);
     }
     const double m_ext = axis_extent(metric_vals);
     const double r_ext = axis_extent(reaction_vals);
@@ -294,12 +295,12 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     p.drawText(header, Qt::AlignLeft | Qt::AlignVCenter,
                QString("bars: %1  (±%2%)").arg(metric_name, QString::number(m_ext, 'f', 0)));
     p.setPen(line_col);
-    const bool has_live = std::any_of(cols.begin(), cols.end(),
-                                      [](const Column& c) { return c.projected && c.live_move; });
-    p.drawText(header, Qt::AlignRight | Qt::AlignVCenter,
-               QString("line: next-session move%1 · band: expected move  (±%2%)")
-                   .arg(has_live ? QStringLiteral(", ending at price now") : QString(),
-                        QString::number(r_ext, 'f', 1)));
+    const bool has_live =
+        std::any_of(cols.begin(), cols.end(), [](const Column& c) { return c.projected && c.live_move; });
+    p.drawText(
+        header, Qt::AlignRight | Qt::AlignVCenter,
+        QString("line: next-session move%1 · band: expected move  (±%2%)")
+            .arg(has_live ? QStringLiteral(", ending at price now") : QString(), QString::number(r_ext, 'f', 1)));
 
     // ── Zero line ────────────────────────────────────────────────────────────
     p.setPen(QPen(grid, 1));
@@ -318,7 +319,8 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         auto flush = [&]() {
             if (top.size() >= 2) {
                 QPolygonF poly = top;
-                for (int k = bottom.size() - 1; k >= 0; --k) poly << bottom[k];
+                for (int k = bottom.size() - 1; k >= 0; --k)
+                    poly << bottom[k];
                 p.setPen(Qt::NoPen);
                 p.setBrush(fill);
                 p.drawPolygon(poly);
@@ -333,10 +335,13 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
             bottom.clear();
         };
         for (int i = 0; i < cols.size(); ++i) {
-            if (!cols[i].expected) { flush(); continue; }
+            if (!cols[i].expected) {
+                flush();
+                continue;
+            }
             const double b = std::clamp(*cols[i].expected / r_ext, 0.0, 1.0);
             const double cx = cx_of(plot, col_w, i);
-            top    << QPointF(cx, zero_y - b * span);
+            top << QPointF(cx, zero_y - b * span);
             bottom << QPointF(cx, zero_y + b * span);
         }
         flush();
@@ -345,7 +350,8 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
 
     // ── Bars: the selected earnings metric ───────────────────────────────────
     for (int i = 0; i < cols.size(); ++i) {
-        if (!cols[i].metric) continue;
+        if (!cols[i].metric)
+            continue;
         const double v = *cols[i].metric;
         const bool clipped = std::abs(v) > m_ext;
         const double scaled = std::clamp(v / m_ext, -1.0, 1.0);
@@ -390,7 +396,7 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     QVector<double> dot_vals;
     for (int i = 0; i < cols.size(); ++i) {
         if (!cols[i].reaction) {
-            started = false;      // a gap breaks the line rather than bridging it
+            started = false; // a gap breaks the line rather than bridging it
             continue;
         }
         const double v = *cols[i].reaction;
@@ -409,7 +415,7 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
         // chevron in the headroom marks the clip; the value label (when the
         // columns are wide enough) carries the real number.
         if (std::abs(v) > r_ext) {
-            const double dir = v >= 0 ? -1.0 : 1.0;   // screen-y: up is negative
+            const double dir = v >= 0 ? -1.0 : 1.0; // screen-y: up is negative
             QPainterPath chev;
             chev.moveTo(pt.x() - 4.0, pt.y() + dir * 4.0);
             chev.lineTo(pt.x(), pt.y() + dir * 9.0);
@@ -427,7 +433,8 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     QPointF live_pt;
     bool have_live = false;
     for (int i = 0; i < cols.size(); ++i) {
-        if (!cols[i].projected || !cols[i].live_move) continue;
+        if (!cols[i].projected || !cols[i].live_move)
+            continue;
         const double scaled = std::clamp(*cols[i].live_move / r_ext, -1.0, 1.0);
         live_pt = QPointF(cx_of(plot, col_w, i), zero_y - scaled * span);
         have_live = true;
@@ -458,19 +465,18 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     for (int i = 0; i < cols.size(); ++i) {
         // The trailing column is always labelled — it is the one the reader
         // is standing in, and thinning it away would be the worst omission.
-        if (i % tick_step != 0 && !cols[i].projected) continue;
+        if (i % tick_step != 0 && !cols[i].projected)
+            continue;
         const double cx = cx_of(plot, col_w, i);
         // Announcement timestamps → ET, same rationale as the tooltip above.
         const auto when =
             // EVENT-STAMP: earnings announcement — ET, matching the tab beside it.
             QDateTime::fromSecsSinceEpoch(cols[i].timestamp).toTimeZone(QTimeZone("America/New_York"));
-        const QString tick = cols[i].projected
-                                 ? (cols[i].metric ? when.toString("MMM yy") + QStringLiteral(" est")
-                                                   : QStringLiteral("now"))
-                                 : when.toString("MMM yy");
+        const QString tick = cols[i].projected ? (cols[i].metric ? when.toString("MMM yy") + QStringLiteral(" est")
+                                                                 : QStringLiteral("now"))
+                                               : when.toString("MMM yy");
         p.setPen(cols[i].projected ? QColor(ui::colors::AMBER()) : text_dim);
-        p.drawText(QRectF(cx - col_w / 2.0, plot.bottom() + 2, col_w, kFooterH - 2),
-                   Qt::AlignCenter, tick);
+        p.drawText(QRectF(cx - col_w / 2.0, plot.bottom() + 2, col_w, kFooterH - 2), Qt::AlignCenter, tick);
     }
 
     // ── Value labels on the line ─────────────────────────────────────────────
@@ -481,7 +487,8 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     for (int i = 0; i < cols.size(); ++i) {
         // The live point is labelled like the rest, so the reader can read
         // "where are we now" off the same axis as the finished prints.
-        if (!cols[i].reaction && !(cols[i].projected && cols[i].live_move)) continue;
+        if (!cols[i].reaction && !(cols[i].projected && cols[i].live_move))
+            continue;
         const double v = cols[i].reaction ? *cols[i].reaction : *cols[i].live_move;
         const double scaled = std::clamp(v / r_ext, -1.0, 1.0);
         const double y = zero_y - scaled * span;
@@ -496,8 +503,7 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
             top = y + kLabelGap;
         else if (top + kLabelH > plot.bottom())
             top = y - kLabelH - kLabelGap;
-        const double left = std::clamp(cx_of(plot, col_w, i) - w / 2.0,
-                                       static_cast<double>(plot.left()),
+        const double left = std::clamp(cx_of(plot, col_w, i) - w / 2.0, static_cast<double>(plot.left()),
                                        static_cast<double>(plot.right()) - w);
         const QRectF lbl_rect(left, top, w, kLabelH);
 

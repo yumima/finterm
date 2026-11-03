@@ -23,8 +23,8 @@ SessionGuard::SessionGuard(QObject* parent) : QObject(parent) {
 
 void SessionGuard::start() {
     if (!timer_.isActive()) {
-        net_failures_ = 0;                      // fresh back-off budget for this session
-        timer_.setInterval(PULSE_INTERVAL_MS);  // restore normal cadence (start() re-arms after a back-off)
+        net_failures_ = 0;                     // fresh back-off budget for this session
+        timer_.setInterval(PULSE_INTERVAL_MS); // restore normal cadence (start() re-arms after a back-off)
         check_pulse();
         timer_.start();
     }

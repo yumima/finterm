@@ -110,7 +110,7 @@ static const QString kStyle =
         .arg(colors::BORDER_DIM())     // %8
         .arg(colors::BORDER_BRIGHT())  // %9
         .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::TEXT_SECONDARY())       // %11
+        .arg(colors::TEXT_SECONDARY()) // %11
         .arg(colors::BG_HOVER())       // %12
         .arg(colors::CYAN())           // %13
         .arg(colors::NEGATIVE())       // %14
@@ -936,8 +936,7 @@ void AltInvestmentsScreen::run_analysis(const QString& command, const QJsonObjec
     QPointer<AltInvestmentsScreen> self = this;
 
     services::python_cli::PythonCliService::instance().run(
-        QStringLiteral("Analytics/alternateInvestment/cli.py"),
-        {command, QStringLiteral("--data"), data_json},
+        QStringLiteral("Analytics/alternateInvestment/cli.py"), {command, QStringLiteral("--data"), data_json},
         [self, command, cache_key](const services::python_cli::CliResult& r) {
             if (!self)
                 return;
@@ -957,9 +956,8 @@ void AltInvestmentsScreen::run_analysis(const QString& command, const QJsonObjec
             }
 
             fincept::CacheManager::instance().put(
-                cache_key,
-                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
-                10 * 60, "alt_investments");
+                cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), 10 * 60,
+                "alt_investments");
 
             self->display_verdict(obj, command);
             LOG_INFO("AltInvestments", "Analysis complete: " + command);

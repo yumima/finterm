@@ -1,12 +1,12 @@
 // src/screens/relationship_map/RelationshipMapScreen.cpp
 #include "screens/relationship_map/RelationshipMapScreen.h"
-#include "ui/SearchFailedText.h"
 
 #include "core/events/EventBus.h"
 #include "core/session/ScreenStateManager.h"
 #include "python/PythonWorker.h"
 #include "screens/relationship_map/RelationshipGraphScene.h"
 #include "services/relationship_map/RelationshipMapService.h"
+#include "ui/SearchFailedText.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
@@ -62,11 +62,9 @@ static QString to_yfinance_symbol(const QString& symbol, const QString& exchange
         return symbol + (it != m.end() ? it.value() : ".PA");
     }
     static const QHash<QString, QString> s = {
-        {"HKEX", ".HK"}, {"TSE", ".T"},
-        {"KRX", ".KS"}, {"SGX", ".SI"}, {"ASX", ".AX"}, {"IDX", ".JK"},
-        {"XETR", ".DE"}, {"FWB", ".F"}, {"LSE", ".L"}, {"BME", ".MC"},
-        {"MIL", ".MI"}, {"SIX", ".SW"}, {"VIE", ".VI"}, {"TSX", ".TO"},
-        {"TSXV", ".V"}, {"BMFBOVESPA", ".SA"}, {"BMV", ".MX"}, {"BIST", ".IS"},
+        {"HKEX", ".HK"}, {"TSE", ".T"},  {"KRX", ".KS"}, {"SGX", ".SI"},        {"ASX", ".AX"}, {"IDX", ".JK"},
+        {"XETR", ".DE"}, {"FWB", ".F"},  {"LSE", ".L"},  {"BME", ".MC"},        {"MIL", ".MI"}, {"SIX", ".SW"},
+        {"VIE", ".VI"},  {"TSX", ".TO"}, {"TSXV", ".V"}, {"BMFBOVESPA", ".SA"}, {"BMV", ".MX"}, {"BIST", ".IS"},
     };
     auto it = s.find(exchange.toUpper());
     return it != s.end() ? symbol + it.value() : symbol;
@@ -166,9 +164,11 @@ void RelationshipMapScreen::build_ui() {
     search_dropdown_->hide();
     search_dropdown_->raise();
     auto select_dropdown_item = [this](QListWidgetItem* item) {
-        if (!item) return;
+        if (!item)
+            return;
         QString symbol = item->data(Qt::UserRole).toString();
-        if (symbol.isEmpty()) return;
+        if (symbol.isEmpty())
+            return;
         search_input_focused_ = false;
         search_input_->blockSignals(true);
         search_input_->setText(symbol);
@@ -176,8 +176,8 @@ void RelationshipMapScreen::build_ui() {
         hide_dropdown();
         on_search();
     };
-    connect(search_dropdown_, &QListWidget::itemClicked,    this, select_dropdown_item);
-    connect(search_dropdown_, &QListWidget::itemActivated,  this, select_dropdown_item);
+    connect(search_dropdown_, &QListWidget::itemClicked, this, select_dropdown_item);
+    connect(search_dropdown_, &QListWidget::itemActivated, this, select_dropdown_item);
 
     // Debounce timer
     search_debounce_ = new QTimer(this);
@@ -205,13 +205,13 @@ void RelationshipMapScreen::build_ui() {
     fit_btn->setCursor(Qt::PointingHandCursor);
     fit_btn->setFixedHeight(28);
     fit_btn->setToolTip("Fit graph to view (or press Home)");
-    fit_btn->setStyleSheet(
-        QString("QPushButton { background: transparent; color: %1; border: 1px solid %2; "
-                "padding: 0 10px; font-size: 10px; %3 }"
-                "QPushButton:hover { color: %4; border-color: %4; }")
-            .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(), MF(), colors::TEXT_PRIMARY()));
+    fit_btn->setStyleSheet(QString("QPushButton { background: transparent; color: %1; border: 1px solid %2; "
+                                   "padding: 0 10px; font-size: 10px; %3 }"
+                                   "QPushButton:hover { color: %4; border-color: %4; }")
+                               .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(), MF(), colors::TEXT_PRIMARY()));
     connect(fit_btn, &QPushButton::clicked, this, [this]() {
-        if (view_) view_->fit_to_content();
+        if (view_)
+            view_->fit_to_content();
     });
     hhl->addWidget(fit_btn);
 
@@ -330,11 +330,9 @@ void RelationshipMapScreen::build_ui() {
     root->addWidget(status);
 
     // Center card click → navigate to equity research
-    connect(scene_, &relmap::RelationshipGraphScene::center_card_clicked,
-            this, [](const QString& ticker) {
-                fincept::EventBus::instance().publish("equity_research.load_symbol",
-                    {{"symbol", ticker}, {"type", "equity"}});
-            });
+    connect(scene_, &relmap::RelationshipGraphScene::center_card_clicked, this, [](const QString& ticker) {
+        fincept::EventBus::instance().publish("equity_research.load_symbol", {{"symbol", ticker}, {"type", "equity"}});
+    });
 }
 
 // ── Filter Panel ─────────────────────────────────────────────────────────────
@@ -371,15 +369,15 @@ QWidget* RelationshipMapScreen::build_filter_panel() {
         vl->addWidget(cb);
     };
 
-    make_check("Peers",        filters_.show_peers,         NodeCategory::Peer);
-    make_check("Institutional",filters_.show_institutional, NodeCategory::Institutional);
+    make_check("Peers", filters_.show_peers, NodeCategory::Peer);
+    make_check("Institutional", filters_.show_institutional, NodeCategory::Institutional);
     make_check("Mutual Funds", filters_.show_institutional, NodeCategory::MutualFund);
-    make_check("Insiders",     filters_.show_insiders,      NodeCategory::Insider);
-    make_check("Officers",     filters_.show_officers,      NodeCategory::Officer);
-    make_check("Analysts",     filters_.show_analysts,      NodeCategory::Analyst);
-    make_check("Metrics",      filters_.show_metrics,       NodeCategory::Metrics);
-    make_check("Events",       filters_.show_events,        NodeCategory::Event);
-    make_check("Supply Chain", filters_.show_supply_chain,  NodeCategory::SupplyChain);
+    make_check("Insiders", filters_.show_insiders, NodeCategory::Insider);
+    make_check("Officers", filters_.show_officers, NodeCategory::Officer);
+    make_check("Analysts", filters_.show_analysts, NodeCategory::Analyst);
+    make_check("Metrics", filters_.show_metrics, NodeCategory::Metrics);
+    make_check("Events", filters_.show_events, NodeCategory::Event);
+    make_check("Supply Chain", filters_.show_supply_chain, NodeCategory::SupplyChain);
 
     vl->addStretch();
     return panel;
@@ -498,7 +496,8 @@ void RelationshipMapScreen::on_search() {
     // If the autocomplete dropdown is open, prefer the selected/first result.
     if (!search_dropdown_->isHidden() && search_dropdown_->count() > 0) {
         QListWidgetItem* chosen = search_dropdown_->currentItem();
-        if (!chosen) chosen = search_dropdown_->item(0);
+        if (!chosen)
+            chosen = search_dropdown_->item(0);
         if (chosen) {
             QString symbol = chosen->data(Qt::UserRole).toString();
             if (!symbol.isEmpty()) {
@@ -561,15 +560,17 @@ void RelationshipMapScreen::fire_asset_search(const QString& query) {
     // not the retired HTTP /market/search stub. type=stock keeps this to equities.
     QJsonObject payload;
     payload["query"] = query;
-    payload["type"]  = QStringLiteral("stock");
+    payload["type"] = QStringLiteral("stock");
     payload["limit"] = kMaxSearchResults;
 
     QPointer<RelationshipMapScreen> self = this;
     python::PythonWorker::instance().submit(
         "search", payload,
         [self, query](bool ok, QJsonObject result, QString) {
-            if (!self) return;
-            if (self->pending_query_ != query) return;
+            if (!self)
+                return;
+            if (self->pending_query_ != query)
+                return;
             // A failed search says so (read_search_reply) — not the last query's
             // matches, and not an empty list that reads as "no such ticker".
             const auto reply = fincept::ui::read_search_reply(ok, result);
@@ -589,8 +590,8 @@ void RelationshipMapScreen::on_asset_results(const QJsonArray& results, const QS
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(8, 4, 8, 4);
         auto* lbl = new QLabel(failure.isEmpty() ? QStringLiteral("No results found") : failure);
-        lbl->setStyleSheet(QString("color:%1;font-size:12px;%2;background:transparent;")
-                               .arg(ui::colors::TEXT_TERTIARY.get(), MF()));
+        lbl->setStyleSheet(
+            QString("color:%1;font-size:12px;%2;background:transparent;").arg(ui::colors::TEXT_TERTIARY.get(), MF()));
         rl->addWidget(lbl);
         item->setSizeHint(QSize(0, 28));
         search_dropdown_->setItemWidget(item, row);
@@ -600,13 +601,14 @@ void RelationshipMapScreen::on_asset_results(const QJsonArray& results, const QS
 
     for (const auto& val : results) {
         auto obj = val.toObject();
-        QString symbol   = obj["symbol"].toString();
-        QString name     = obj["name"].toString();
+        QString symbol = obj["symbol"].toString();
+        QString name = obj["name"].toString();
         QString exchange = obj["exchange"].toString();
-        QString country  = obj["country"].toString();
-        QString type     = obj["type"].toString("stock");
+        QString country = obj["country"].toString();
+        QString type = obj["type"].toString("stock");
 
-        if (symbol.isEmpty()) continue;
+        if (symbol.isEmpty())
+            continue;
 
         QString yf_symbol = to_yfinance_symbol(symbol, exchange, country);
 
@@ -626,8 +628,8 @@ void RelationshipMapScreen::on_asset_results(const QJsonArray& results, const QS
         hl->addWidget(sym_lbl);
 
         auto* name_lbl = new QLabel(name);
-        name_lbl->setStyleSheet(QString("color:%1;font-size:12px;%2;background:transparent;")
-                                    .arg(ui::colors::TEXT_SECONDARY.get(), MF()));
+        name_lbl->setStyleSheet(
+            QString("color:%1;font-size:12px;%2;background:transparent;").arg(ui::colors::TEXT_SECONDARY.get(), MF()));
         name_lbl->setMaximumWidth(180);
         hl->addWidget(name_lbl, 1);
 
@@ -654,7 +656,10 @@ void RelationshipMapScreen::on_asset_results(const QJsonArray& results, const QS
 }
 
 void RelationshipMapScreen::show_dropdown() {
-    if (search_dropdown_->count() == 0) { hide_dropdown(); return; }
+    if (search_dropdown_->count() == 0) {
+        hide_dropdown();
+        return;
+    }
     // Position below the search input, as a child of this widget
     QPoint pos = search_input_->mapTo(this, QPoint(0, search_input_->height()));
     search_dropdown_->move(pos);
@@ -686,8 +691,7 @@ void RelationshipMapScreen::on_data_ready(const RelationshipData& payload) {
     // otherwise repaint our graph with the wrong company. pending_ticker_
     // empty means we have no outstanding request (initial state, or after
     // load), so we still accept the first payload in that case.
-    if (!pending_ticker_.isEmpty()
-        && payload.company.ticker.toUpper() != pending_ticker_.toUpper())
+    if (!pending_ticker_.isEmpty() && payload.company.ticker.toUpper() != pending_ticker_.toUpper())
         return;
 
     current_data_ = payload;
@@ -758,7 +762,8 @@ void RelationshipMapScreen::on_node_selected() {
         detail_title_->setText(label.isEmpty() ? "NODE" : label);
         detail_category_->setText(category_text);
         detail_category_->setStyleSheet(
-            QString("color: %1; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; %2").arg(colors::AMBER(), MF()));
+            QString("color: %1; font-size: 9px; font-weight: 700; letter-spacing: 0.5px; %2")
+                .arg(colors::AMBER(), MF()));
 
         // Clear and repopulate properties
         auto* layout = detail_props_container_->layout();
@@ -811,7 +816,8 @@ void RelationshipMapScreen::on_node_selected() {
                 if (p.ticker == label) {
                     auto add_prop = [&](const QString& key, const QString& val) {
                         auto* row = new QLabel(QString("%1:  %2").arg(key, val));
-                        row->setStyleSheet(QString("color: %1; font-size: 10px; %2").arg(colors::TEXT_SECONDARY(), MF()));
+                        row->setStyleSheet(
+                            QString("color: %1; font-size: 10px; %2").arg(colors::TEXT_SECONDARY(), MF()));
                         layout->addWidget(row);
                     };
                     // Peer rows carry no currency field — no symbol is assumed.
@@ -839,9 +845,8 @@ void RelationshipMapScreen::update_status_bar() {
     int node_count = scene_->items().size(); // approximate
     // No peer data source is wired (Yahoo has no peers API) — say so rather
     // than a bare "0 PEERS".
-    const QString peers_txt = current_data_.peers.isEmpty()
-                                  ? QStringLiteral("PEERS UNAVAILABLE")
-                                  : QString("%1 PEERS").arg(current_data_.peers.size());
+    const QString peers_txt = current_data_.peers.isEmpty() ? QStringLiteral("PEERS UNAVAILABLE")
+                                                            : QString("%1 PEERS").arg(current_data_.peers.size());
     status_nodes_->setText(QString("%1 ITEMS | %2 | %3 HOLDERS")
                                .arg(node_count)
                                .arg(peers_txt)
@@ -882,12 +887,15 @@ void RelationshipMapScreen::restore_state(const QVariantMap& state) {
 
 void RelationshipMapScreen::set_symbol(const QString& ticker) {
     const QString upper = ticker.trimmed().toUpper();
-    if (upper.isEmpty()) return;
+    if (upper.isEmpty())
+        return;
     // Skip if the graph already reflects this ticker — guards against
     // EquityResearchScreen's load_symbol path firing repeatedly on signal
     // re-emission from the cache.
-    if (upper == loaded_ticker_.toUpper()) return;
-    if (!search_input_) return;
+    if (upper == loaded_ticker_.toUpper())
+        return;
+    if (!search_input_)
+        return;
     search_input_->blockSignals(true);
     search_input_->setText(upper);
     search_input_->blockSignals(false);
@@ -895,8 +903,10 @@ void RelationshipMapScreen::set_symbol(const QString& ticker) {
 }
 
 void RelationshipMapScreen::set_embedded_mode(bool on) {
-    if (header_bar_) header_bar_->setVisible(!on);
-    if (status_bar_) status_bar_->setVisible(!on);
+    if (header_bar_)
+        header_bar_->setVisible(!on);
+    if (status_bar_)
+        status_bar_->setVisible(!on);
 }
 
 } // namespace fincept::screens

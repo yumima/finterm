@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QDeadlineTimer>
 #include <QHash>
 #include <QJsonObject>
 #include <QLocalSocket>
@@ -7,9 +8,8 @@
 #include <QPointer>
 #include <QProcess>
 #include <QString>
-#include <QDeadlineTimer>
-#include <QVector>
 #include <QTimer>
+#include <QVector>
 
 #include <functional>
 
@@ -48,12 +48,11 @@ class PythonWorker : public QObject {
     /// Idempotent; no-op if already starting or running.
     void warm_up() { ensure_started(); }
 
-    void submit(const QString& action, const QJsonObject& payload, Callback cb,
-                int timeout_ms = 0);
+    void submit(const QString& action, const QJsonObject& payload, Callback cb, int timeout_ms = 0);
 
     static constexpr int kNetworkActionTimeoutMs = 10'000;
-    static constexpr int kMaxMergedTimeoutMs = 20'000;   // a merged background request's budget cap
-    static constexpr int kBackgroundBackoffMs = 5'000;   // pause after a failed background sweep
+    static constexpr int kMaxMergedTimeoutMs = 20'000; // a merged background request's budget cap
+    static constexpr int kBackgroundBackoffMs = 5'000; // pause after a failed background sweep
 
     /// The daemon sends an action's {"error": …} as ok:false WITH its body
     /// (yfinance_data._reply_for). The body says whether it was a refusal
@@ -71,21 +70,21 @@ class PythonWorker : public QObject {
 
     // Declare Pending before any method that uses it.
     struct Pending {
-        QString     action;
+        QString action;
         QJsonObject payload;
-        Callback    cb;
-        QVector<Callback> also;   // callers merged into this background request
-        QTimer*     deadline = nullptr;
+        Callback cb;
+        QVector<Callback> also; // callers merged into this background request
+        QTimer* deadline = nullptr;
     };
 
     void ensure_started();
     void launch_process();
     void on_process_finished(int exit_code, QProcess::ExitStatus status);
     void on_process_error(QProcess::ProcessError err);
-    void on_ready_read();          // stdout: ready handshake only
-    void on_socket_data();         // socket: all response frames
-    void try_drain_frames();       // parse frames from socket_buf_
-    void dispatch_queued();        // called after socket connects
+    void on_ready_read();                             // stdout: ready handshake only
+    void on_socket_data();                            // socket: all response frames
+    void try_drain_frames();                          // parse frames from socket_buf_
+    void dispatch_queued();                           // called after socket connects
     void on_background_complete(bool failed = false); // send next queued background action (backs off after a failure)
     void send_to_daemon(int id, Pending p);
     void fail_all_pending(const QString& reason);
@@ -96,22 +95,22 @@ class PythonWorker : public QObject {
     static void answer(Pending& p, bool ok, const QJsonObject& result, const QString& err);
     QTimer* make_deadline(int id, const QString& action, int timeout_ms);
 
-    QProcess*      proc_          = nullptr;
-    QLocalSocket*  socket_        = nullptr;
-    QString        socket_path_;
-    bool           ready_         = false;
-    bool           shutting_down_ = false;
-    int            restart_count_ = 0;
-    static constexpr int kMaxRestarts    = 5;
+    QProcess* proc_ = nullptr;
+    QLocalSocket* socket_ = nullptr;
+    QString socket_path_;
+    bool ready_ = false;
+    bool shutting_down_ = false;
+    int restart_count_ = 0;
+    static constexpr int kMaxRestarts = 5;
     static constexpr int kReadyTimeoutMs = 15'000;
 
-    QHash<int, Pending>          in_flight_;
-    QDeadlineTimer               bg_backoff_{0};   // no background sends until it expires (monotonic)
+    QHash<int, Pending> in_flight_;
+    QDeadlineTimer bg_backoff_{0}; // no background sends until it expires (monotonic)
     QVector<QPair<int, Pending>> queue_;
     int next_id_ = 1;
 
-    QByteArray read_buf_;    // stdout handshake buffer
-    QByteArray socket_buf_;  // socket response buffer
+    QByteArray read_buf_;   // stdout handshake buffer
+    QByteArray socket_buf_; // socket response buffer
 
     QTimer ready_watchdog_;
 };

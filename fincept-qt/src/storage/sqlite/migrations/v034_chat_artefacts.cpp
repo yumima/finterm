@@ -36,20 +36,20 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 }
 
 static Result<void> apply_v034(QSqlDatabase& db) {
-    if (auto r = sql(db,
-            "CREATE TABLE IF NOT EXISTS chat_artefacts ("
-            "  id TEXT PRIMARY KEY,"
-            "  kind TEXT NOT NULL,"
-            "  title TEXT NOT NULL,"
-            "  payload_json TEXT NOT NULL,"
-            "  source_request_id TEXT,"
-            "  source_agent_id TEXT,"
-            "  source_skill TEXT,"
-            "  source_args_json TEXT,"
-            "  status TEXT NOT NULL DEFAULT 'final',"
-            "  created_at TEXT NOT NULL DEFAULT (datetime('now')),"
-            "  updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
-            ")"); r.is_err()) {
+    if (auto r = sql(db, "CREATE TABLE IF NOT EXISTS chat_artefacts ("
+                         "  id TEXT PRIMARY KEY,"
+                         "  kind TEXT NOT NULL,"
+                         "  title TEXT NOT NULL,"
+                         "  payload_json TEXT NOT NULL,"
+                         "  source_request_id TEXT,"
+                         "  source_agent_id TEXT,"
+                         "  source_skill TEXT,"
+                         "  source_args_json TEXT,"
+                         "  status TEXT NOT NULL DEFAULT 'final',"
+                         "  created_at TEXT NOT NULL DEFAULT (datetime('now')),"
+                         "  updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
+                         ")");
+        r.is_err()) {
         return r;
     }
     sql(db, "CREATE INDEX IF NOT EXISTS idx_chat_artefacts_created_at "

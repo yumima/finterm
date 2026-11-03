@@ -65,10 +65,10 @@ void analysis_not_supported(const QString& what, const std::function<void(bool, 
 
 // Inverse standard normal CDF (Acklam's rational approximation, |err| < 1.2e-9).
 double inv_norm_cdf(double p) {
-    static const double a[] = {-3.969683028665376e+01, 2.209460984245205e+02, -2.759285104469687e+02,
+    static const double a[] = {-3.969683028665376e+01, 2.209460984245205e+02,  -2.759285104469687e+02,
                                1.383577518672690e+02,  -3.066479806614716e+01, 2.506628277459239e+00};
     static const double b[] = {-5.447609879822406e+01, 1.615858368580409e+02, -1.556989798598866e+02,
-                               6.680131188771972e+01,  -1.328068155288572e+01};
+                               6.680131188771972e+01, -1.328068155288572e+01};
     static const double c[] = {-7.784894002430293e-03, -3.223964580411365e-01, -2.400758277161838e+00,
                                -2.549732539343734e+00, 4.374664141464968e+00,  2.938163982698783e+00};
     static const double d[] = {7.784695709041462e-03, 3.224671290700398e-01, 2.445134137142996e+00,
@@ -325,12 +325,7 @@ void register_analytics_nodes(NodeRegistry& registry) {
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::RiskData}},
         .parameters =
             {
-                {"method",
-                 "Method",
-                 "select",
-                 "historical_var",
-                 {"historical_var", "parametric_var"},
-                 ""},
+                {"method", "Method", "select", "historical_var", {"historical_var", "parametric_var"}, ""},
                 {"confidence", "Confidence Level", "number", 0.95, {}, ""},
                 {"horizon", "Horizon (days)", "number", 1, {}, ""},
             },
@@ -774,7 +769,8 @@ void register_analytics_nodes(NodeRegistry& registry) {
                     bool ok = false;
                     const double c = tok.trimmed().toDouble(&ok);
                     if (!ok || !(c > 0.0 && c < 1.0)) {
-                        cb(false, {}, QString("Monte Carlo: invalid confidence level '%1' (use 0-1)").arg(tok.trimmed()));
+                        cb(false, {},
+                           QString("Monte Carlo: invalid confidence level '%1' (use 0-1)").arg(tok.trimmed()));
                         return;
                     }
                     levels.append(c);
@@ -833,9 +829,8 @@ void register_analytics_nodes(NodeRegistry& registry) {
                     return final_prices[idx];
                 };
                 for (double c : levels) {
-                    intervals.append(QJsonObject{{"confidence", c},
-                                                 {"lower", quantile((1.0 - c) / 2.0)},
-                                                 {"upper", quantile((1.0 + c) / 2.0)}});
+                    intervals.append(QJsonObject{
+                        {"confidence", c}, {"lower", quantile((1.0 - c) / 2.0)}, {"upper", quantile((1.0 + c) / 2.0)}});
                 }
                 out["confidence_intervals"] = intervals; // two-sided, on final price
                 out["min"] = final_prices.first();
@@ -905,8 +900,9 @@ void register_analytics_nodes(NodeRegistry& registry) {
         .type_id = "analytics.regime_detection",
         .display_name = "Regime Detection",
         .category = "Analytics",
-        .description = "Classify market regime (bull/bear/sideways/high-vol) with a rolling-volatility + moving-average "
-                       "heuristic",
+        .description =
+            "Classify market regime (bull/bear/sideways/high-vol) with a rolling-volatility + moving-average "
+            "heuristic",
         .icon_text = "A",
         .accent_color = "#7c3aed",
         .version = 1,

@@ -72,10 +72,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Financial Snapshot");
         add("table", {}, {{"rows", "5"}, {"cols", "3"}});
         add("heading", "Valuation");
-        add("chart", {},
-            {{"chart_type", "bar"},
-             {"title", "Valuation Scenarios"},
-             {"labels", "Bear,Base,Bull"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Valuation Scenarios"}, {"labels", "Bear,Base,Bull"}});
         add("heading", "Key Risks");
         add("list", "Risk 1\nRisk 2\nRisk 3");
         add("heading", "Recommendation");
@@ -92,9 +89,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Financial Highlights");
         add("table", {}, {{"rows", "6"}, {"cols", "4"}});
         add("heading", "Earnings History");
-        add("chart", {},
-            {{"chart_type", "bar"},
-             {"title", "Revenue vs Net Income"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Revenue vs Net Income"}});
         add("heading", "Valuation Metrics");
         add("table", {}, {{"rows", "5"}, {"cols", "3"}});
         add("heading", "Investment Thesis");
@@ -112,8 +107,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Holdings Summary");
         add("table", {}, {{"rows", "8"}, {"cols", "6"}});
         add("heading", "Portfolio Performance");
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "Portfolio Value"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "Portfolio Value"}});
         add("heading", "Asset Allocation");
         add("chart", {},
             {{"chart_type", "pie"}, {"title", "Allocation"}, {"labels", "Equities,Fixed Income,Crypto,Cash"}});
@@ -147,11 +141,11 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("table", {}, {{"rows", "8"}, {"cols", "6"}});
         add("heading", "Annual Income Projection");
         add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Monthly Dividend Income"},
+            {{"chart_type", "bar"},
+             {"title", "Monthly Dividend Income"},
              {"labels", "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec"}});
         add("heading", "Yield by Holding");
-        add("chart", {},
-            {{"chart_type", "pie"}, {"title", "Income Contribution"}});
+        add("chart", {}, {{"chart_type", "pie"}, {"title", "Income Contribution"}});
         add("heading", "Dividend Calendar");
         add("table", {}, {{"rows", "8"}, {"cols", "4"}});
         add("heading", "Growth Targets");
@@ -167,8 +161,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("market_data", {}, {{"symbol", "DX-Y.NYB"}});
         add("divider");
         add("heading", "Sector Performance");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Sector Returns Today"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Sector Returns Today"}});
         add("heading", "Top Movers");
         add("table", {}, {{"rows", "7"}, {"cols", "4"}});
         add("heading", "Key Events & News");
@@ -184,13 +177,11 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Trade Log");
         add("table", {}, {{"rows", "10"}, {"cols", "8"}});
         add("heading", "P&L Summary");
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "Cumulative P&L"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "Cumulative P&L"}});
         add("heading", "Statistics");
         add("table", {}, {{"rows", "7"}, {"cols", "2"}});
         add("heading", "Win/Loss Breakdown");
-        add("chart", {},
-            {{"chart_type", "pie"}, {"title", "Win vs Loss"}, {"labels", "Wins,Losses"}});
+        add("chart", {}, {{"chart_type", "pie"}, {"title", "Win vs Loss"}, {"labels", "Wins,Losses"}});
         add("heading", "Best Trades");
         add("table", {}, {{"rows", "4"}, {"cols", "5"}});
         add("heading", "Worst Trades");
@@ -250,12 +241,10 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("text", "Industry dynamics, total addressable market, and competitive landscape.");
         add("heading", "Financial Analysis");
         add("table", {}, {{"rows", "8"}, {"cols", "5"}});
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Revenue & EPS Growth"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Revenue & EPS Growth"}});
         add("heading", "Valuation");
         add("table", {}, {{"rows", "5"}, {"cols", "4"}});
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Valuation vs Peers"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Valuation vs Peers"}});
         add("heading", "Investment Thesis");
         add("list", "Catalyst 1\nCatalyst 2\nCatalyst 3");
         add("heading", "Risks");
@@ -271,8 +260,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Results vs Estimates");
         add("table", {}, {{"rows", "5"}, {"cols", "4"}});
         add("heading", "Revenue Breakdown");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Revenue by Segment"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Revenue by Segment"}});
         add("heading", "Margin Analysis");
         add("table", {}, {{"rows", "4"}, {"cols", "3"}});
         add("heading", "Guidance");
@@ -294,8 +282,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Comparable Transactions");
         add("table", {}, {{"rows", "7"}, {"cols", "5"}});
         add("heading", "Synergy Analysis");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Synergy Build-Up ($M)"}, {"labels", "Yr1,Yr2,Yr3,Yr4"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Synergy Build-Up ($M)"}, {"labels", "Yr1,Yr2,Yr3,Yr4"}});
         add("heading", "Valuation Bridge");
         add("table", {}, {{"rows", "5"}, {"cols", "3"}});
         add("heading", "Key Risks");
@@ -310,8 +297,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Sector Overview");
         add("text", "Define the sector, key sub-industries, and economic significance.");
         add("heading", "Market Size & Growth");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Market Size ($B)"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Market Size ($B)"}});
         add("heading", "Key Players");
         add("table", {}, {{"rows", "8"}, {"cols", "4"}});
         add("heading", "Competitive Dynamics");
@@ -319,8 +305,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Structural Trends");
         add("list", "Trend 1\nTrend 2\nTrend 3\nTrend 4");
         add("heading", "Valuation Comparison");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "P/E Ratio by Company"}, {"labels", "Co1,Co2,Co3,Co4,Co5"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "P/E Ratio by Company"}, {"labels", "Co1,Co2,Co3,Co4,Co5"}});
         add("heading", "Risks & Headwinds");
         add("list", "Regulatory pressure\nTechnology disruption\nCyclicality\nGeopolitical exposure");
         add("heading", "Investment Opportunities");
@@ -332,17 +317,16 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Global Snapshot");
         add("table", {}, {{"rows", "6"}, {"cols", "4"}});
         add("heading", "GDP Growth");
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "GDP Growth Rate (%)"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "GDP Growth Rate (%)"}});
         add("heading", "Inflation");
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "CPI YoY (%)"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "CPI YoY (%)"}});
         add("heading", "Labour Market");
         add("table", {}, {{"rows", "4"}, {"cols", "3"}});
         add("heading", "Central Bank Policy");
         add("table", {}, {{"rows", "6"}, {"cols", "4"}});
         add("heading", "Key Risks to Outlook");
-        add("list", "Geopolitical escalation\nCredit tightening\nChina slowdown\nEnergy price shock\nElection uncertainty");
+        add("list",
+            "Geopolitical escalation\nCredit tightening\nChina slowdown\nEnergy price shock\nElection uncertainty");
         add("heading", "Outlook");
         add("text", "Macro outlook summary and base-case scenario for the next 6–12 months.");
 
@@ -355,8 +339,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("text", "Government stability, rule of law, corruption index, and geopolitical exposure.");
         add("heading", "Economic Risk");
         add("table", {}, {{"rows", "6"}, {"cols", "3"}});
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "GDP Growth vs Inflation"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "GDP Growth vs Inflation"}});
         add("heading", "Financial Risk");
         add("table", {}, {{"rows", "5"}, {"cols", "3"}});
         add("heading", "Market Risk");
@@ -371,13 +354,11 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Rate Decisions");
         add("table", {}, {{"rows", "7"}, {"cols", "4"}});
         add("heading", "Rate Path");
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "Policy Rate (%)"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "Policy Rate (%)"}});
         add("heading", "Forward Guidance Summary");
         add("text", "Summarise the forward guidance from major central banks.");
         add("heading", "Balance Sheet");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Balance Sheet Size ($T)"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Balance Sheet Size ($T)"}});
         add("heading", "Market Implications");
         add("text", "Impact on equities, bonds, FX, and commodities.");
         add("heading", "Key Upcoming Events");
@@ -392,16 +373,18 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Tokenomics");
         add("table", {}, {{"rows", "7"}, {"cols", "2"}});
         add("chart", {},
-            {{"chart_type", "pie"}, {"title", "Token Distribution"}, {"labels", "Team,Investors,Community,Treasury,Public"}});
+            {{"chart_type", "pie"},
+             {"title", "Token Distribution"},
+             {"labels", "Team,Investors,Community,Treasury,Public"}});
         add("heading", "On-Chain Metrics");
         add("table", {}, {{"rows", "6"}, {"cols", "3"}});
         add("heading", "Price History");
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "Price (USD)"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "Price (USD)"}});
         add("heading", "Competitive Landscape");
         add("text", "Key competitors and differentiation.");
         add("heading", "Risks");
-        add("list", "Regulatory risk\nSmart contract bugs\nCompetitor displacement\nLiquidity risk\nTeam/execution risk");
+        add("list",
+            "Regulatory risk\nSmart contract bugs\nCompetitor displacement\nLiquidity risk\nTeam/execution risk");
         add("heading", "Investment Thesis");
         add("text", "Thesis, catalysts, and price targets.");
         add("quote", "Crypto assets are highly volatile. This is not financial advice.");
@@ -414,11 +397,9 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Key Metrics");
         add("table", {}, {{"rows", "7"}, {"cols", "3"}});
         add("heading", "TVL History");
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "Total Value Locked ($M)"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "Total Value Locked ($M)"}});
         add("heading", "Revenue & Fees");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Monthly Protocol Revenue ($K)"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Monthly Protocol Revenue ($K)"}});
         add("heading", "Governance & Token");
         add("text", "Token utility, governance rights, staking mechanics, and emission schedule.");
         add("heading", "Risks");
@@ -436,11 +417,9 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("market_data", {}, {{"symbol", "ETH-USD"}});
         add("market_data", {}, {{"symbol", "SOL-USD"}});
         add("heading", "Allocation");
-        add("chart", {},
-            {{"chart_type", "pie"}, {"title", "Portfolio Allocation"}});
+        add("chart", {}, {{"chart_type", "pie"}, {"title", "Portfolio Allocation"}});
         add("heading", "Performance");
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "Portfolio Value (USD)"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "Portfolio Value (USD)"}});
         add("heading", "Notes");
         add("text", "Rebalancing notes, conviction levels, and next moves.");
 
@@ -455,8 +434,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("table", {}, {{"rows", "5"}, {"cols", "4"}});
         add("heading", "Yield Analysis");
         add("chart", {},
-            {{"chart_type", "line"}, {"title", "Yield vs Benchmark"},
-             {"labels", "Jan,Feb,Mar,Apr,May,Jun,Jul"}});
+            {{"chart_type", "line"}, {"title", "Yield vs Benchmark"}, {"labels", "Jan,Feb,Mar,Apr,May,Jun,Jul"}});
         add("heading", "Duration & Convexity");
         add("table", {}, {{"rows", "4"}, {"cols", "2"}});
         add("heading", "Comparable Bonds");
@@ -468,13 +446,11 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         doc.metadata.title = "Yield Curve Analysis";
         add("heading", "Yield Curve Shape");
         add("chart", {},
-            {{"chart_type", "line"}, {"title", "US Treasury Yield Curve"},
-             {"labels", "3M,6M,1Y,2Y,3Y,5Y,10Y,30Y"}});
+            {{"chart_type", "line"}, {"title", "US Treasury Yield Curve"}, {"labels", "3M,6M,1Y,2Y,3Y,5Y,10Y,30Y"}});
         add("heading", "Key Spreads");
         add("table", {}, {{"rows", "5"}, {"cols", "3"}});
         add("heading", "Historical Comparison");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "10Y-2Y Spread (bps)"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "10Y-2Y Spread (bps)"}});
         add("heading", "Duration & Convexity");
         add("table", {}, {{"rows", "4"}, {"cols", "3"}});
         add("heading", "Macro Drivers");
@@ -493,11 +469,9 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Performance Summary");
         add("table", {}, {{"rows", "8"}, {"cols", "2"}});
         add("heading", "Equity Curve");
-        add("chart", {},
-            {{"chart_type", "line"}, {"title", "Strategy vs Benchmark"}});
+        add("chart", {}, {{"chart_type", "line"}, {"title", "Strategy vs Benchmark"}});
         add("heading", "Drawdown Analysis");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Monthly Drawdowns (%)"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Monthly Drawdowns (%)"}});
         add("heading", "Factor Exposure");
         add("table", {}, {{"rows", "6"}, {"cols", "3"}});
         add("heading", "Stress Tests");
@@ -520,8 +494,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("text", "Paste or describe key pairwise correlations between holdings.");
         add("heading", "Concentration Risk");
         add("chart", {},
-            {{"chart_type", "pie"}, {"title", "Position Concentration"},
-             {"labels", "Pos1,Pos2,Pos3,Pos4,Pos5,Other"}});
+            {{"chart_type", "pie"}, {"title", "Position Concentration"}, {"labels", "Pos1,Pos2,Pos3,Pos4,Pos5,Other"}});
         add("heading", "Liquidity Risk");
         add("table", {}, {{"rows", "5"}, {"cols", "3"}});
         add("heading", "Recommendations");
@@ -536,17 +509,13 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("heading", "Key Performance Indicators");
         add("table", {}, {{"rows", "8"}, {"cols", "4"}});
         add("heading", "Revenue");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Revenue ($M)"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Revenue ($M)"}});
         add("heading", "Cost Breakdown");
-        add("chart", {},
-            {{"chart_type", "pie"}, {"title", "Cost Structure"}, {"labels", "COGS,R&D,S&M,G&A"}});
+        add("chart", {}, {{"chart_type", "pie"}, {"title", "Cost Structure"}, {"labels", "COGS,R&D,S&M,G&A"}});
         add("heading", "Department Performance");
         add("table", {}, {{"rows", "6"}, {"cols", "4"}});
         add("heading", "Targets vs Actuals");
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Target vs Actual"},
-             {"labels", "Jan,Feb,Mar,Apr,May,Jun"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Target vs Actual"}, {"labels", "Jan,Feb,Mar,Apr,May,Jun"}});
         add("heading", "Issues & Risks");
         add("list", "Issue 1\nIssue 2\nIssue 3");
         add("heading", "Next Period Targets");
@@ -574,8 +543,7 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
         add("toc");
         add("heading", "Income Statement");
         add("table", {}, {{"rows", "12"}, {"cols", "4"}});
-        add("chart", {},
-            {{"chart_type", "bar"}, {"title", "Revenue & Net Income"}});
+        add("chart", {}, {{"chart_type", "bar"}, {"title", "Revenue & Net Income"}});
         add("page_break");
         add("heading", "Balance Sheet");
         add("table", {}, {{"rows", "14"}, {"cols", "3"}});

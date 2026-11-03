@@ -17,7 +17,7 @@ namespace fincept::services::alpha_arena {
 
 struct ActionResult {
     bool success = false;
-    QJsonObject data;  // engine response (top-level JSON)
+    QJsonObject data; // engine response (top-level JSON)
     QString error;
 };
 

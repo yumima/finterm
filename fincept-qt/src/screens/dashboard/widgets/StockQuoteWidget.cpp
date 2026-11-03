@@ -1,14 +1,12 @@
 #include "screens/dashboard/widgets/StockQuoteWidget.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
-#include <QtNumeric>
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
-
 #include <QFrame>
+#include <QtNumeric>
 
 namespace fincept::screens::widgets {
 
@@ -98,8 +96,8 @@ void StockQuoteWidget::apply_styles() {
     price_label_->setStyleSheet(QString("color: %1; font-size: 28px; font-weight: bold; background: transparent;")
                                     .arg(ui::colors::TEXT_PRIMARY()));
     arrow_label_->setStyleSheet("background: transparent;");
-    change_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                                     .arg(ui::colors::TEXT_SECONDARY()));
+    change_label_->setStyleSheet(
+        QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     ticker_label_->setStyleSheet(
         QString("color: %1; font-size: 14px; font-weight: bold; background: transparent;").arg(ui::colors::AMBER()));
     sep_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
@@ -107,11 +105,10 @@ void StockQuoteWidget::apply_styles() {
     for (auto* cell : stat_cells_)
         cell->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : stat_labels_)
-        lbl->setStyleSheet(
-            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     for (auto* val : stat_values_)
-        val->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                               .arg(ui::colors::TEXT_PRIMARY()));
+        val->setStyleSheet(
+            QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
 }
 
 void StockQuoteWidget::on_theme_changed() {
@@ -153,7 +150,6 @@ void StockQuoteWidget::refresh_data() {
     datahub::DataHub::instance().request(QStringLiteral("market:quote:") + symbol_);
 }
 
-
 void StockQuoteWidget::hub_resubscribe() {
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
@@ -185,7 +181,6 @@ void StockQuoteWidget::hub_unsubscribe_all() {
     hub_active_ = false;
 }
 
-
 void StockQuoteWidget::populate(const services::QuoteData& q) {
     has_data_ = true;
     price_label_->setText(QString("$%1").arg(q.price, 0, 'f', 2));
@@ -204,8 +199,7 @@ void StockQuoteWidget::populate(const services::QuoteData& q) {
                                         .arg(q.change, 0, 'f', 2)
                                         .arg(positive ? "+" : "")
                                         .arg(q.change_pct, 0, 'f', 2));
-    change_label_->setStyleSheet(
-        QString("color: %1; font-weight: bold; background: transparent;").arg(color));
+    change_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;").arg(color));
 
     price_label_->setStyleSheet(
         QString("color: %1; font-size: 28px; font-weight: bold; background: transparent;").arg(color));

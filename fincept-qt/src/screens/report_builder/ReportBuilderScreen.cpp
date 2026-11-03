@@ -15,8 +15,6 @@
 #include "services/report_builder/ReportBuilderService.h"
 #include "ui/theme/Theme.h"
 
-#include <cmath>
-
 #include <QComboBox>
 #include <QDateTime>
 #include <QDialog>
@@ -40,6 +38,8 @@
 #include <QTextDocument>
 #include <QTextFrame>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 namespace fincept::screens {
 
@@ -82,8 +82,7 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
     // ── Component toolbar wiring ─────────────────────────────────────────
     connect(comp_toolbar_, &ComponentToolbar::new_report_requested, this, &ReportBuilderScreen::on_new);
     connect(comp_toolbar_, &ComponentToolbar::open_report_requested, this, &ReportBuilderScreen::on_open);
-    connect(comp_toolbar_, &ComponentToolbar::recent_reports_requested, this,
-            &ReportBuilderScreen::show_recent_dialog);
+    connect(comp_toolbar_, &ComponentToolbar::recent_reports_requested, this, &ReportBuilderScreen::show_recent_dialog);
     connect(comp_toolbar_, &ComponentToolbar::templates_requested, this, &ReportBuilderScreen::show_template_dialog);
     connect(comp_toolbar_, &ComponentToolbar::theme_requested, this, &ReportBuilderScreen::show_theme_dialog);
     connect(comp_toolbar_, &ComponentToolbar::metadata_requested, this, &ReportBuilderScreen::show_metadata_dialog);
@@ -114,229 +113,237 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
         Service::instance().update_component(comps[idx].id, content, comps[idx].config);
     });
 
-    connect(properties_, &PropertiesPanel::config_changed, this,
-            [this](int idx, const QString& key, const QString& val) {
-                auto& svc = Service::instance();
-                auto comps = svc.components();
-                if (idx < 0 || idx >= comps.size())
-                    return;
-                const int comp_id = comps[idx].id;
-                const QString comp_type = comps[idx].type;
+    connect(
+        properties_, &PropertiesPanel::config_changed, this, [this](int idx, const QString& key, const QString& val) {
+            auto& svc = Service::instance();
+            auto comps = svc.components();
+            if (idx < 0 || idx >= comps.size())
+                return;
+            const int comp_id = comps[idx].id;
+            const QString comp_type = comps[idx].type;
 
-                // ── stats_block: fetch real fundamentals via get_info ─────
-                if (comp_type == "stats_block" && key == "fetch_ticker") {
-                    QString sym = val;
-                    auto loading_cfg = comps[idx].config;
-                    loading_cfg["fetch_ticker"] = "";
-                    loading_cfg["data"] = "(Loading " + sym + "...)";
-                    svc.update_component(comp_id, comps[idx].content, loading_cfg);
+            // ── stats_block: fetch real fundamentals via get_info ─────
+            if (comp_type == "stats_block" && key == "fetch_ticker") {
+                QString sym = val;
+                auto loading_cfg = comps[idx].config;
+                loading_cfg["fetch_ticker"] = "";
+                loading_cfg["data"] = "(Loading " + sym + "...)";
+                svc.update_component(comp_id, comps[idx].content, loading_cfg);
 
-                    QPointer<ReportBuilderScreen> self = this;
-                    fincept::services::MarketDataService::instance().fetch_info(
-                        sym, [self, comp_id, sym](bool ok, fincept::services::InfoData info) {
-                            if (!self)
-                                return;
-                            QMetaObject::invokeMethod(
-                                self,
-                                [self, comp_id, sym, ok, info]() {
-                                    if (!self)
-                                        return;
-                                    auto& s = Service::instance();
-                                    int idx2 = s.index_of(comp_id);
-                                    if (idx2 < 0)
-                                        return;
-                                    auto comps2 = s.components();
-                                    QStringList lines;
-                                    // InfoData carries NaN for a field the vendor
-                                    // did not supply. `v != 0` is TRUE for NaN, so
-                                    // these printed a literal "nan" — and when the
-                                    // financial_ratios call fails while get_info
-                                    // succeeds, that is every ratio line at once.
-                                    auto fmt_dbl = [](double v, int dec = 2) -> QString {
-                                        return std::isfinite(v) ? QString::number(v, 'f', dec) : "—";
-                                    };
-                                    auto fmt_pct = [](double v) -> QString {
-                                        return std::isfinite(v) ? QString::number(v * 100, 'f', 2) + "%" : "—";
-                                    };
-                                    auto fmt_mcap = [](double v) -> QString {
-                                        if (!std::isfinite(v) || v <= 0) return QString("—");
-                                        if (v >= 1e12) return QString::number(v / 1e12, 'f', 2) + "T";
-                                        if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
-                                        if (v >= 1e6) return QString::number(v / 1e6, 'f', 2) + "M";
-                                        return QString::number(v, 'f', 0);
-                                    };
-                                    auto fmt_vol = [](double v) -> QString {
-                                        if (!std::isfinite(v) || v <= 0) return QString("—");
-                                        if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
-                                        if (v >= 1e6) return QString::number(v / 1e6, 'f', 2) + "M";
-                                        if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
-                                        return QString::number(v, 'f', 0);
-                                    };
-
-                                    if (!ok) {
-                                        lines << "Error: Could not fetch data for " + sym;
-                                    } else {
-                                        if (!info.name.isEmpty()) lines << "Company: " + info.name;
-                                        if (!info.sector.isEmpty()) lines << "Sector: " + info.sector;
-                                        if (!info.industry.isEmpty()) lines << "Industry: " + info.industry;
-                                        if (!info.country.isEmpty()) lines << "Country: " + info.country;
-                                        lines << "Market Cap: " + fmt_mcap(info.market_cap);
-                                        lines << "P/E Ratio: " + fmt_dbl(info.pe_ratio);
-                                        lines << "Forward P/E: " + fmt_dbl(info.forward_pe);
-                                        lines << "Price/Book: " + fmt_dbl(info.price_to_book);
-                                        lines << "Dividend Yield: " + fmt_pct(info.dividend_yield);
-                                        lines << "Beta: " + fmt_dbl(info.beta);
-                                        lines << "52W High: " + fmt_dbl(info.week52_high);
-                                        lines << "52W Low: " + fmt_dbl(info.week52_low);
-                                        lines << "Avg Volume: " + fmt_vol(info.avg_volume);
-                                        lines << "ROE: " + fmt_pct(info.roe);
-                                        lines << "Profit Margin: " + fmt_pct(info.profit_margin);
-                                        if (std::isfinite(info.debt_to_equity))
-                                            lines << "Debt/Equity: " + fmt_dbl(info.debt_to_equity);
-                                        if (std::isfinite(info.current_ratio))
-                                            lines << "Current Ratio: " + fmt_dbl(info.current_ratio);
-                                        if (std::isfinite(info.eps)) lines << "Rev/Share: " + fmt_dbl(info.eps);
-                                    }
-                                    auto cfg = comps2[idx2].config;
-                                    cfg["data"] = lines.join("\n");
-                                    cfg["fetch_ticker"] = "";
-                                    s.update_component(comp_id, comps2[idx2].content, cfg);
-                                },
-                                Qt::QueuedConnection);
-                        });
-                    return;
-                }
-
-                // ── chart: hub-driven 6mo/1d history fetch ─────────────────
-                if (comp_type == "chart" && key == "fetch_history") {
-                    QString sym = val;
-                    auto cfg = comps[idx].config;
-                    cfg["fetch_history"] = "";
-                    cfg["data"] = "";
-                    svc.update_component(comp_id, comps[idx].content, cfg);
-
-                    const QString topic = QStringLiteral("market:history:") + sym + QStringLiteral(":6mo:1d");
-                    auto& hub = fincept::datahub::DataHub::instance();
-                    QPointer<ReportBuilderScreen> self = this;
-
-                    auto apply = [self, comp_id, sym](const QVector<fincept::services::HistoryPoint>& history) {
+                QPointer<ReportBuilderScreen> self = this;
+                fincept::services::MarketDataService::instance().fetch_info(
+                    sym, [self, comp_id, sym](bool ok, fincept::services::InfoData info) {
                         if (!self)
                             return;
-                        auto& s = Service::instance();
-                        int idx2 = s.index_of(comp_id);
-                        if (idx2 < 0)
-                            return;
-                        auto comps2 = s.components();
-                        if (history.isEmpty()) {
-                            auto cfg2 = comps2[idx2].config;
-                            cfg2["data"] = "";
-                            s.update_component(comp_id, comps2[idx2].content, cfg2);
-                            return;
-                        }
-                        QStringList pts, lbls;
-                        int step = qMax(1, history.size() / 20);
-                        for (int i = 0; i < history.size(); i += step) {
-                            const auto& pt = history[i];
-                            pts << QString::number(pt.close, 'f', 2);
-                            // Bar stamps, decoded on the exchange's calendar. This
-                            // had no timezone at all, so it fell to the viewer's
-                            // local zone and every label in an exported report was
-                            // a day early for anyone west of the exchange — in a
-                            // document read without the chart beside it.
-                            lbls << pt.date().toString("MMM d");
-                        }
-                        if ((history.size() - 1) % step != 0) {
-                            pts << QString::number(history.last().close, 'f', 2);
-                            lbls << history.last().date().toString("MMM d");
-                        }
-                        auto cfg2 = comps2[idx2].config;
-                        cfg2["data"] = pts.join(",");
-                        cfg2["labels"] = lbls.join(",");
-                        if (cfg2.value("title").isEmpty() || cfg2.value("title") == "Chart")
-                            cfg2["title"] = sym + " (6mo)";
-                        s.update_component(comp_id, comps2[idx2].content, cfg2);
-                    };
+                        QMetaObject::invokeMethod(
+                            self,
+                            [self, comp_id, sym, ok, info]() {
+                                if (!self)
+                                    return;
+                                auto& s = Service::instance();
+                                int idx2 = s.index_of(comp_id);
+                                if (idx2 < 0)
+                                    return;
+                                auto comps2 = s.components();
+                                QStringList lines;
+                                // InfoData carries NaN for a field the vendor
+                                // did not supply. `v != 0` is TRUE for NaN, so
+                                // these printed a literal "nan" — and when the
+                                // financial_ratios call fails while get_info
+                                // succeeds, that is every ratio line at once.
+                                auto fmt_dbl = [](double v, int dec = 2) -> QString {
+                                    return std::isfinite(v) ? QString::number(v, 'f', dec) : "—";
+                                };
+                                auto fmt_pct = [](double v) -> QString {
+                                    return std::isfinite(v) ? QString::number(v * 100, 'f', 2) + "%" : "—";
+                                };
+                                auto fmt_mcap = [](double v) -> QString {
+                                    if (!std::isfinite(v) || v <= 0)
+                                        return QString("—");
+                                    if (v >= 1e12)
+                                        return QString::number(v / 1e12, 'f', 2) + "T";
+                                    if (v >= 1e9)
+                                        return QString::number(v / 1e9, 'f', 2) + "B";
+                                    if (v >= 1e6)
+                                        return QString::number(v / 1e6, 'f', 2) + "M";
+                                    return QString::number(v, 'f', 0);
+                                };
+                                auto fmt_vol = [](double v) -> QString {
+                                    if (!std::isfinite(v) || v <= 0)
+                                        return QString("—");
+                                    if (v >= 1e9)
+                                        return QString::number(v / 1e9, 'f', 2) + "B";
+                                    if (v >= 1e6)
+                                        return QString::number(v / 1e6, 'f', 2) + "M";
+                                    if (v >= 1e3)
+                                        return QString::number(v / 1e3, 'f', 1) + "K";
+                                    return QString::number(v, 'f', 0);
+                                };
 
-                    QVariant cached = hub.peek(topic);
-                    if (cached.isValid() && cached.canConvert<QVector<fincept::services::HistoryPoint>>()) {
-                        apply(cached.value<QVector<fincept::services::HistoryPoint>>());
+                                if (!ok) {
+                                    lines << "Error: Could not fetch data for " + sym;
+                                } else {
+                                    if (!info.name.isEmpty())
+                                        lines << "Company: " + info.name;
+                                    if (!info.sector.isEmpty())
+                                        lines << "Sector: " + info.sector;
+                                    if (!info.industry.isEmpty())
+                                        lines << "Industry: " + info.industry;
+                                    if (!info.country.isEmpty())
+                                        lines << "Country: " + info.country;
+                                    lines << "Market Cap: " + fmt_mcap(info.market_cap);
+                                    lines << "P/E Ratio: " + fmt_dbl(info.pe_ratio);
+                                    lines << "Forward P/E: " + fmt_dbl(info.forward_pe);
+                                    lines << "Price/Book: " + fmt_dbl(info.price_to_book);
+                                    lines << "Dividend Yield: " + fmt_pct(info.dividend_yield);
+                                    lines << "Beta: " + fmt_dbl(info.beta);
+                                    lines << "52W High: " + fmt_dbl(info.week52_high);
+                                    lines << "52W Low: " + fmt_dbl(info.week52_low);
+                                    lines << "Avg Volume: " + fmt_vol(info.avg_volume);
+                                    lines << "ROE: " + fmt_pct(info.roe);
+                                    lines << "Profit Margin: " + fmt_pct(info.profit_margin);
+                                    if (std::isfinite(info.debt_to_equity))
+                                        lines << "Debt/Equity: " + fmt_dbl(info.debt_to_equity);
+                                    if (std::isfinite(info.current_ratio))
+                                        lines << "Current Ratio: " + fmt_dbl(info.current_ratio);
+                                    if (std::isfinite(info.eps))
+                                        lines << "Rev/Share: " + fmt_dbl(info.eps);
+                                }
+                                auto cfg = comps2[idx2].config;
+                                cfg["data"] = lines.join("\n");
+                                cfg["fetch_ticker"] = "";
+                                s.update_component(comp_id, comps2[idx2].content, cfg);
+                            },
+                            Qt::QueuedConnection);
+                    });
+                return;
+            }
+
+            // ── chart: hub-driven 6mo/1d history fetch ─────────────────
+            if (comp_type == "chart" && key == "fetch_history") {
+                QString sym = val;
+                auto cfg = comps[idx].config;
+                cfg["fetch_history"] = "";
+                cfg["data"] = "";
+                svc.update_component(comp_id, comps[idx].content, cfg);
+
+                const QString topic = QStringLiteral("market:history:") + sym + QStringLiteral(":6mo:1d");
+                auto& hub = fincept::datahub::DataHub::instance();
+                QPointer<ReportBuilderScreen> self = this;
+
+                auto apply = [self, comp_id, sym](const QVector<fincept::services::HistoryPoint>& history) {
+                    if (!self)
+                        return;
+                    auto& s = Service::instance();
+                    int idx2 = s.index_of(comp_id);
+                    if (idx2 < 0)
+                        return;
+                    auto comps2 = s.components();
+                    if (history.isEmpty()) {
+                        auto cfg2 = comps2[idx2].config;
+                        cfg2["data"] = "";
+                        s.update_component(comp_id, comps2[idx2].content, cfg2);
                         return;
                     }
+                    QStringList pts, lbls;
+                    int step = qMax(1, history.size() / 20);
+                    for (int i = 0; i < history.size(); i += step) {
+                        const auto& pt = history[i];
+                        pts << QString::number(pt.close, 'f', 2);
+                        // Bar stamps, decoded on the exchange's calendar. This
+                        // had no timezone at all, so it fell to the viewer's
+                        // local zone and every label in an exported report was
+                        // a day early for anyone west of the exchange — in a
+                        // document read without the chart beside it.
+                        lbls << pt.date().toString("MMM d");
+                    }
+                    if ((history.size() - 1) % step != 0) {
+                        pts << QString::number(history.last().close, 'f', 2);
+                        lbls << history.last().date().toString("MMM d");
+                    }
+                    auto cfg2 = comps2[idx2].config;
+                    cfg2["data"] = pts.join(",");
+                    cfg2["labels"] = lbls.join(",");
+                    if (cfg2.value("title").isEmpty() || cfg2.value("title") == "Chart")
+                        cfg2["title"] = sym + " (6mo)";
+                    s.update_component(comp_id, comps2[idx2].content, cfg2);
+                };
 
-                    hub.subscribe<QVector<fincept::services::HistoryPoint>>(
-                        this, topic,
-                        [self, topic, apply](const QVector<fincept::services::HistoryPoint>& history) {
-                            if (!self)
-                                return;
-                            apply(history);
-                            fincept::datahub::DataHub::instance().unsubscribe(self, topic);
-                        });
-                    hub.request(topic, /*force=*/true);
+                QVariant cached = hub.peek(topic);
+                if (cached.isValid() && cached.canConvert<QVector<fincept::services::HistoryPoint>>()) {
+                    apply(cached.value<QVector<fincept::services::HistoryPoint>>());
                     return;
                 }
 
-                // ── market_data: hub-driven quote fetch ───────────────────
-                if (comp_type == "market_data" && key == "status" && val == "loading") {
-                    auto cfg = comps[idx].config;
-                    QString sym = cfg.value("symbol", "");
-                    if (sym.isEmpty())
-                        return;
-                    cfg["status"] = "loading";
-                    svc.update_component(comp_id, comps[idx].content, cfg);
-
-                    const QString topic = QStringLiteral("market:quote:") + sym;
-                    auto& hub = fincept::datahub::DataHub::instance();
-                    QPointer<ReportBuilderScreen> self = this;
-
-                    auto apply = [self, comp_id](const fincept::services::QuoteData& q) {
+                hub.subscribe<QVector<fincept::services::HistoryPoint>>(
+                    this, topic, [self, topic, apply](const QVector<fincept::services::HistoryPoint>& history) {
                         if (!self)
                             return;
-                        auto& s = Service::instance();
-                        int idx2 = s.index_of(comp_id);
-                        if (idx2 < 0)
-                            return;
-                        auto comps2 = s.components();
-                        auto cfg2 = comps2[idx2].config;
-                        // Unknown fields stay empty (the canvas skips them) —
-                        // change/change_pct are NaN when the feed had no
-                        // previous close, and must not print "nan" or 0.00.
-                        auto num2 = [](double v) {
-                            return std::isfinite(v) ? QString::number(v, 'f', 2) : QString();
-                        };
-                        cfg2["price"] = q.price > 0 ? num2(q.price) : QString();
-                        cfg2["change"] = num2(q.change);
-                        cfg2["change_pct"] = num2(q.change_pct);
-                        cfg2["name"] = q.name;
-                        cfg2["high"] = q.high > 0 ? QString::number(q.high, 'f', 2) : "";
-                        cfg2["low"] = q.low > 0 ? QString::number(q.low, 'f', 2) : "";
-                        cfg2["volume"] = (std::isfinite(q.volume) && q.volume > 0)
-                                             ? QString::number(q.volume, 'f', 0) : "";
-                        cfg2["status"] = "ok";
-                        s.update_component(comp_id, comps2[idx2].content, cfg2);
-                    };
+                        apply(history);
+                        fincept::datahub::DataHub::instance().unsubscribe(self, topic);
+                    });
+                hub.request(topic, /*force=*/true);
+                return;
+            }
 
-                    QVariant cached = hub.peek(topic);
-                    if (cached.isValid() && cached.canConvert<fincept::services::QuoteData>()) {
-                        apply(cached.value<fincept::services::QuoteData>());
+            // ── market_data: hub-driven quote fetch ───────────────────
+            if (comp_type == "market_data" && key == "status" && val == "loading") {
+                auto cfg = comps[idx].config;
+                QString sym = cfg.value("symbol", "");
+                if (sym.isEmpty())
+                    return;
+                cfg["status"] = "loading";
+                svc.update_component(comp_id, comps[idx].content, cfg);
+
+                const QString topic = QStringLiteral("market:quote:") + sym;
+                auto& hub = fincept::datahub::DataHub::instance();
+                QPointer<ReportBuilderScreen> self = this;
+
+                auto apply = [self, comp_id](const fincept::services::QuoteData& q) {
+                    if (!self)
                         return;
-                    }
-                    hub.subscribe<fincept::services::QuoteData>(
-                        this, topic,
-                        [self, topic, apply](const fincept::services::QuoteData& q) {
-                            if (!self)
-                                return;
-                            apply(q);
-                            fincept::datahub::DataHub::instance().unsubscribe(self, topic);
-                        });
-                    hub.request(topic, /*force=*/true);
+                    auto& s = Service::instance();
+                    int idx2 = s.index_of(comp_id);
+                    if (idx2 < 0)
+                        return;
+                    auto comps2 = s.components();
+                    auto cfg2 = comps2[idx2].config;
+                    // Unknown fields stay empty (the canvas skips them) —
+                    // change/change_pct are NaN when the feed had no
+                    // previous close, and must not print "nan" or 0.00.
+                    auto num2 = [](double v) { return std::isfinite(v) ? QString::number(v, 'f', 2) : QString(); };
+                    cfg2["price"] = q.price > 0 ? num2(q.price) : QString();
+                    cfg2["change"] = num2(q.change);
+                    cfg2["change_pct"] = num2(q.change_pct);
+                    cfg2["name"] = q.name;
+                    cfg2["high"] = q.high > 0 ? QString::number(q.high, 'f', 2) : "";
+                    cfg2["low"] = q.low > 0 ? QString::number(q.low, 'f', 2) : "";
+                    cfg2["volume"] = (std::isfinite(q.volume) && q.volume > 0) ? QString::number(q.volume, 'f', 0) : "";
+                    cfg2["status"] = "ok";
+                    s.update_component(comp_id, comps2[idx2].content, cfg2);
+                };
+
+                QVariant cached = hub.peek(topic);
+                if (cached.isValid() && cached.canConvert<fincept::services::QuoteData>()) {
+                    apply(cached.value<fincept::services::QuoteData>());
                     return;
                 }
+                hub.subscribe<fincept::services::QuoteData>(
+                    this, topic, [self, topic, apply](const fincept::services::QuoteData& q) {
+                        if (!self)
+                            return;
+                        apply(q);
+                        fincept::datahub::DataHub::instance().unsubscribe(self, topic);
+                    });
+                hub.request(topic, /*force=*/true);
+                return;
+            }
 
-                // Generic single-key config patch.
-                QMap<QString, QString> patch;
-                patch[key] = val;
-                svc.patch_component(comp_id, nullptr, patch);
-            });
+            // Generic single-key config patch.
+            QMap<QString, QString> patch;
+            patch[key] = val;
+            svc.patch_component(comp_id, nullptr, patch);
+        });
 
     connect(properties_, &PropertiesPanel::duplicate_requested, this, &ReportBuilderScreen::duplicate_at);
     connect(properties_, &PropertiesPanel::delete_requested, this, &ReportBuilderScreen::remove_component_at);
@@ -461,8 +468,12 @@ QWidget* ReportBuilderScreen::build_toolbar() {
 
 // ── Side-panel collapse ──────────────────────────────────────────────────────
 
-void ReportBuilderScreen::on_toggle_left() { apply_left_collapsed(!left_collapsed_, /*animate=*/true); }
-void ReportBuilderScreen::on_toggle_right() { apply_right_collapsed(!right_collapsed_, /*animate=*/true); }
+void ReportBuilderScreen::on_toggle_left() {
+    apply_left_collapsed(!left_collapsed_, /*animate=*/true);
+}
+void ReportBuilderScreen::on_toggle_right() {
+    apply_right_collapsed(!right_collapsed_, /*animate=*/true);
+}
 
 void ReportBuilderScreen::apply_left_collapsed(bool collapsed, bool animate) {
     left_collapsed_ = collapsed;
@@ -699,15 +710,14 @@ void ReportBuilderScreen::show_recent_dialog() {
     auto* dlg = new QDialog(this);
     dlg->setWindowTitle("Recent Reports");
     dlg->setMinimumWidth(500);
-    dlg->setStyleSheet(
-        QString("QDialog { background: %1; color: %2; }"
-                "QListWidget { background: %3; color: %2; border: 1px solid %4; }"
-                "QListWidget::item { padding: 6px; }"
-                "QListWidget::item:selected { background: %5; }"
-                "QPushButton { background: %3; color: %2; border: 1px solid %4; padding: 6px 16px; }"
-                "QPushButton:hover { background: %5; }")
-            .arg(ui::colors::DARK(), ui::colors::WHITE(), ui::colors::PANEL(), ui::colors::BORDER(),
-                 ui::colors::BG_RAISED()));
+    dlg->setStyleSheet(QString("QDialog { background: %1; color: %2; }"
+                               "QListWidget { background: %3; color: %2; border: 1px solid %4; }"
+                               "QListWidget::item { padding: 6px; }"
+                               "QListWidget::item:selected { background: %5; }"
+                               "QPushButton { background: %3; color: %2; border: 1px solid %4; padding: 6px 16px; }"
+                               "QPushButton:hover { background: %5; }")
+                           .arg(ui::colors::DARK(), ui::colors::WHITE(), ui::colors::PANEL(), ui::colors::BORDER(),
+                                ui::colors::BG_RAISED()));
 
     auto* vl = new QVBoxLayout(dlg);
     auto* lbl = new QLabel("Select a report to open:");
@@ -819,7 +829,8 @@ void ReportBuilderScreen::show_template_dialog() {
     lvl->setSpacing(6);
 
     auto* pick_lbl = new QLabel("Choose a template:");
-    pick_lbl->setStyleSheet(QString("color: %1; font-size: 12px; font-weight: bold;").arg(ui::colors::TEXT_SECONDARY()));
+    pick_lbl->setStyleSheet(
+        QString("color: %1; font-size: 12px; font-weight: bold;").arg(ui::colors::TEXT_SECONDARY()));
     lvl->addWidget(pick_lbl);
 
     auto* list = new QListWidget;
@@ -952,14 +963,13 @@ void ReportBuilderScreen::show_metadata_dialog() {
     auto* dlg = new QDialog(this);
     dlg->setWindowTitle("Report Metadata");
     dlg->setMinimumWidth(420);
-    dlg->setStyleSheet(
-        QString("QDialog { background: %1; color: %2; }"
-                "QLineEdit { background: %3; color: %2; border: 1px solid %4; padding: 4px; }"
-                "QLabel { background: transparent; color: %2; }"
-                "QPushButton { background: %3; color: %2; border: 1px solid %4; padding: 6px 16px; }"
-                "QPushButton:hover { background: %5; }")
-            .arg(ui::colors::DARK(), ui::colors::WHITE(), ui::colors::PANEL(), ui::colors::BORDER(),
-                 ui::colors::BG_RAISED()));
+    dlg->setStyleSheet(QString("QDialog { background: %1; color: %2; }"
+                               "QLineEdit { background: %3; color: %2; border: 1px solid %4; padding: 4px; }"
+                               "QLabel { background: transparent; color: %2; }"
+                               "QPushButton { background: %3; color: %2; border: 1px solid %4; padding: 6px 16px; }"
+                               "QPushButton:hover { background: %5; }")
+                           .arg(ui::colors::DARK(), ui::colors::WHITE(), ui::colors::PANEL(), ui::colors::BORDER(),
+                                ui::colors::BG_RAISED()));
 
     auto* vl = new QVBoxLayout(dlg);
     auto* form = new QFormLayout;
@@ -1061,14 +1071,13 @@ void ReportBuilderScreen::on_open() {
     QString path =
         // .fincept is the extension reports were saved with before the
         // rebrand; still opened so existing reports keep working.
-        QFileDialog::getOpenFileName(this, "Open Report", "",
-                                     "finterm Report (*.finterm *.fincept);;JSON (*.json)");
+        QFileDialog::getOpenFileName(this, "Open Report", "", "finterm Report (*.finterm *.fincept);;JSON (*.json)");
     if (path.isEmpty())
         return;
     auto r = Service::instance().load_from(path);
     if (r.is_err())
-        QMessageBox::warning(this, "Open Report", "Could not open file:\n" + path + "\n\n" +
-                                                       QString::fromStdString(r.error()));
+        QMessageBox::warning(this, "Open Report",
+                             "Could not open file:\n" + path + "\n\n" + QString::fromStdString(r.error()));
 }
 
 void ReportBuilderScreen::on_save() {
@@ -1095,8 +1104,8 @@ void ReportBuilderScreen::on_save() {
     }
     auto r = svc.save_to(path);
     if (r.is_err()) {
-        QMessageBox::warning(this, "Save Report", "Could not save to:\n" + path + "\n\n" +
-                                                      QString::fromStdString(r.error()));
+        QMessageBox::warning(this, "Save Report",
+                             "Could not save to:\n" + path + "\n\n" + QString::fromStdString(r.error()));
         return;
     }
     services::FileManagerService::instance().import_file(path, "report_builder");
@@ -1115,8 +1124,8 @@ void ReportBuilderScreen::on_export_pdf() {
     printer.setPageMargins(QMarginsF(15, 20, 15, 20), QPageLayout::Millimeter);
 
     bool has_header = !m.header_left.isEmpty() || !m.header_center.isEmpty() || !m.header_right.isEmpty();
-    bool has_footer = !m.footer_left.isEmpty() || !m.footer_center.isEmpty() || !m.footer_right.isEmpty() ||
-                      m.show_page_numbers;
+    bool has_footer =
+        !m.footer_left.isEmpty() || !m.footer_center.isEmpty() || !m.footer_right.isEmpty() || m.show_page_numbers;
 
     if (!has_header && !has_footer) {
         canvas_->text_edit()->document()->print(&printer);
@@ -1178,8 +1187,7 @@ void ReportBuilderScreen::on_export_pdf() {
             painter.save();
             double content_top = has_header ? 20 : 0;
             double content_bottom = has_footer ? page_rect.height() - 20 : page_rect.height();
-            painter.setClipRect(
-                QRectF(page_rect.left(), content_top, page_rect.width(), content_bottom - content_top));
+            painter.setClipRect(QRectF(page_rect.left(), content_top, page_rect.width(), content_bottom - content_top));
             painter.translate(0, -(page - 1) * page_rect.height() + content_top);
             doc->drawContents(&painter);
             painter.restore();
@@ -1215,7 +1223,9 @@ void ReportBuilderScreen::showEvent(QShowEvent* e) {
     rebind_from_service();
 }
 
-void ReportBuilderScreen::hideEvent(QHideEvent* e) { QWidget::hideEvent(e); }
+void ReportBuilderScreen::hideEvent(QHideEvent* e) {
+    QWidget::hideEvent(e);
+}
 
 // ── IStatefulScreen ──────────────────────────────────────────────────────────
 

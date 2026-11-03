@@ -23,11 +23,15 @@ bool matches_query(const ComponentMeta& m, const QString& query) {
     if (query.isEmpty())
         return true;
     const QString q = query.toLower();
-    if (m.title.toLower().contains(q)) return true;
-    if (m.description.toLower().contains(q)) return true;
-    if (m.id.toLower().contains(q)) return true;
+    if (m.title.toLower().contains(q))
+        return true;
+    if (m.description.toLower().contains(q))
+        return true;
+    if (m.id.toLower().contains(q))
+        return true;
     for (const QString& tag : m.tags) {
-        if (tag.toLower().contains(q)) return true;
+        if (tag.toLower().contains(q))
+            return true;
     }
     return false;
 }
@@ -65,10 +69,9 @@ void ComponentBrowserDialog::build_ui() {
     search_ = new QLineEdit(header);
     search_->setPlaceholderText("Search components…");
     search_->setClearButtonEnabled(true);
-    search_->setStyleSheet(
-        "QLineEdit{background:#0b1220;border:1px solid #374151;border-radius:3px;"
-        "color:#f3f4f6;padding:6px 10px;min-width:280px;}"
-        "QLineEdit:focus{border-color:#d97706;}");
+    search_->setStyleSheet("QLineEdit{background:#0b1220;border:1px solid #374151;border-radius:3px;"
+                           "color:#f3f4f6;padding:6px 10px;min-width:280px;}"
+                           "QLineEdit:focus{border-color:#d97706;}");
     connect(search_, &QLineEdit::textChanged, this, &ComponentBrowserDialog::on_search_changed);
     hl->addWidget(search_);
 
@@ -97,8 +100,7 @@ void ComponentBrowserDialog::build_ui() {
     for (const QString& c : ComponentCatalog::instance().categories())
         category_list_->addItem(c);
     category_list_->setCurrentRow(0);
-    connect(category_list_, &QListWidget::currentRowChanged, this,
-            &ComponentBrowserDialog::on_category_changed);
+    connect(category_list_, &QListWidget::currentRowChanged, this, &ComponentBrowserDialog::on_category_changed);
     sl->addWidget(category_list_);
 
     scroll_ = new QScrollArea(split);
@@ -139,9 +141,7 @@ void ComponentBrowserDialog::rebuild_cards() {
             emit component_chosen(id);
             accept();
         });
-        connect(card, &ComponentCard::selected_changed, this, [this](const QString& id) {
-            selected_id_ = id;
-        });
+        connect(card, &ComponentCard::selected_changed, this, [this](const QString& id) { selected_id_ = id; });
         grid_layout_->addWidget(card, row, col);
         if (++col >= kCardsPerRow) {
             col = 0;

@@ -44,38 +44,38 @@ inline constexpr double kMaxPlausibleRatio = 2.0;
 
 /// Is `target` close enough to `price_now` to be a forecast rather than a slip?
 inline bool plausible_target(double target, double price_now) {
-    return price_now > 0.0 && target > 0.0 &&
-           target >= price_now / kMaxPlausibleRatio &&
+    return price_now > 0.0 && target > 0.0 && target >= price_now / kMaxPlausibleRatio &&
            target <= price_now * kMaxPlausibleRatio;
 }
 
 /// The same bound stated as a percentage move: −50% … +100%.
 inline bool plausible_move_pct(double pct) {
-    return pct >= (1.0 / kMaxPlausibleRatio - 1.0) * 100.0 &&
-           pct <= (kMaxPlausibleRatio - 1.0) * 100.0;
+    return pct >= (1.0 / kMaxPlausibleRatio - 1.0) * 100.0 && pct <= (kMaxPlausibleRatio - 1.0) * 100.0;
 }
 
 inline QString bucket_direction(double pct, double flat_band = kFlatBandPct) {
-    if (pct > flat_band) return QStringLiteral("up");
-    if (pct < -flat_band) return QStringLiteral("down");
+    if (pct > flat_band)
+        return QStringLiteral("up");
+    if (pct < -flat_band)
+        return QStringLiteral("down");
     return QStringLiteral("flat");
 }
 
 /// One coherent forecast, derived from whatever the model actually returned.
 struct Forecast {
-    double  target_price = 0.0;
-    double  predicted_pct = 0.0;
+    double target_price = 0.0;
+    double predicted_pct = 0.0;
     QString direction = QStringLiteral("flat");
     /// The model's own figures contradicted each other by more than rounding.
     /// Carried so the tab can say so — it is the cheapest available signal that
     /// the model was sloppy on this run, and it vanishes once reconciled.
-    bool    incoherent = false;
+    bool incoherent = false;
     /// Nothing usable was returned: no target, no percentage, no anchor price —
     /// or every figure offered was outside kMaxPlausibleMovePct. The caller MUST
     /// check this and decline to record; a Forecast that is empty carries a
     /// direction of "flat", and storing that would put a call the model never
     /// made into a track record that is then graded against real closes.
-    bool    empty = true;
+    bool empty = true;
 };
 
 /// Reconcile a model's target / percentage / direction against the price we
@@ -96,31 +96,29 @@ struct Forecast {
 /// MISSING field and for a genuine zero alike, and the two mean opposite things
 /// here. "the model said flat" contradicts an 8% target and must be reported;
 /// "the model said nothing" has nothing to contradict.
-inline Forecast reconcile(double price_now, double stated_target,
-                          std::optional<double> stated_pct,
+inline Forecast reconcile(double price_now, double stated_target, std::optional<double> stated_pct,
                           double flat_band = kFlatBandPct) {
     Forecast f;
     if (!(price_now > 0.0))
-        return f;   // no anchor; nothing here can be made coherent
+        return f; // no anchor; nothing here can be made coherent
 
     const auto from_pct = [&](double pct) {
         f.predicted_pct = pct;
-        f.target_price  = price_now * (1.0 + pct / 100.0);
+        f.target_price = price_now * (1.0 + pct / 100.0);
         f.empty = false;
     };
 
     if (stated_target > 0.0) {
         const double derived = (stated_target - price_now) / price_now * 100.0;
         if (plausible_target(stated_target, price_now)) {
-            f.target_price  = stated_target;
+            f.target_price = stated_target;
             f.predicted_pct = derived;
             f.empty = false;
             // Rounding is fine — a model quoting "+3.2%" against a target that
             // works out to 3.24% has not contradicted itself. Half a point, or
             // a tenth of the move on a big call, has.
             if (stated_pct)
-                f.incoherent = std::abs(*stated_pct - derived) >
-                               std::max(0.5, 0.10 * std::abs(derived));
+                f.incoherent = std::abs(*stated_pct - derived) > std::max(0.5, 0.10 * std::abs(derived));
         } else if (stated_pct && plausible_move_pct(*stated_pct)) {
             // The target is not a forecast. Fall back to the percentage, which
             // is the model's other claim about the same move, and say the two

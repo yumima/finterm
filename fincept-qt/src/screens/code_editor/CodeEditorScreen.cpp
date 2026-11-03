@@ -248,7 +248,8 @@ void CellWidget::build_ui() {
                 " font-family:%4; font-size:12px; font-weight:700; letter-spacing:0.5px;"
                 " padding:0 10px; text-align:left; }"
                 "QPushButton:hover { background:%5; }")
-            .arg(colors::BG_RAISED(), colors::POSITIVE(), colors::BORDER_DIM(), fonts::DATA_FAMILY, colors::BG_HOVER()));
+            .arg(colors::BG_RAISED(), colors::POSITIVE(), colors::BORDER_DIM(), fonts::DATA_FAMILY,
+                 colors::BG_HOVER()));
     output_toggle_->setVisible(false);
     connect(output_toggle_, &QPushButton::clicked, this, [this]() {
         output_collapsed_ = !output_collapsed_;
@@ -290,8 +291,8 @@ void CellWidget::build_ui() {
     insert_btn->setStyleSheet(QString("QPushButton { color:%1; font-family:%2; font-size:12px; font-weight:700;"
                                       " background:%3; border:1px solid %4; }"
                                       "QPushButton:hover { background:%5; color:%6; border-color:%5; }")
-                                  .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY, colors::BG_SURFACE(), colors::BORDER_DIM(),
-                                       colors::AMBER_DIM(), colors::AMBER()));
+                                  .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY, colors::BG_SURFACE(),
+                                       colors::BORDER_DIM(), colors::AMBER_DIM(), colors::AMBER()));
     connect(insert_btn, &QPushButton::clicked, this, [this]() { emit insert_below_requested(cell_id_); });
     insert_layout->addWidget(insert_btn);
 
@@ -513,9 +514,10 @@ void CellWidget::update_gutter() {
                                           .arg(fonts::TINY));
     } else {
         gutter_number_->setText(QString("[%1]").arg(index_ + 1));
-        gutter_number_->setStyleSheet(QString("color:%1; font-family:%2; font-size:%3px; font-weight:700;")
-                                          .arg(selected_ ? colors::AMBER() : colors::TEXT_SECONDARY(), fonts::DATA_FAMILY)
-                                          .arg(fonts::TINY));
+        gutter_number_->setStyleSheet(
+            QString("color:%1; font-family:%2; font-size:%3px; font-weight:700;")
+                .arg(selected_ ? colors::AMBER() : colors::TEXT_SECONDARY(), fonts::DATA_FAMILY)
+                .arg(fonts::TINY));
     }
 
     if (cell_type_ == "markdown") {
@@ -544,27 +546,28 @@ void CellWidget::render_markdown() {
     // Convert basic markdown to HTML for rendering
     // Handles: headers, bold, italic, code blocks, inline code, lists, links, horizontal rules
     QString html;
-    html += QString("<style>"
-                    "body { color:%1; font-family:%2; font-size:%3px; }"
-                    "h1 { color:%4; font-size:20px; font-weight:700; margin:8px 0 4px; border-bottom:1px solid %5; "
-                    "padding-bottom:4px; }"
-                    "h2 { color:%4; font-size:17px; font-weight:700; margin:8px 0 4px; }"
-                    "h3 { color:%4; font-size:15px; font-weight:700; margin:6px 0 3px; }"
-                    "h4 { color:%6; font-size:14px; font-weight:600; margin:4px 0 2px; }"
-                    "code { background:%7; color:%4; padding:2px 4px; font-family:%2; }"
-                    "pre { background:%7; color:%1; padding:8px; font-family:%2; font-size:13px;"
-                    "      border-left:2px solid %5; margin:6px 0; }"
-                    "a { color:%8; }"
-                    "strong { color:%1; font-weight:700; }"
-                    "em { color:%6; font-style:italic; }"
-                    "ul, ol { margin:4px 0; padding-left:20px; }"
-                    "li { margin:2px 0; }"
-                    "hr { border:none; border-top:1px solid %5; margin:8px 0; }"
-                    "blockquote { border-left:3px solid %4; padding-left:10px; color:%6; margin:6px 0; }"
-                    "</style>")
-                .arg(colors::TEXT_PRIMARY(), fonts::DATA_FAMILY)
-                .arg(fonts::DATA)
-                .arg(colors::AMBER(), colors::BORDER_MED(), colors::TEXT_SECONDARY(), colors::BG_RAISED(), colors::CYAN());
+    html +=
+        QString("<style>"
+                "body { color:%1; font-family:%2; font-size:%3px; }"
+                "h1 { color:%4; font-size:20px; font-weight:700; margin:8px 0 4px; border-bottom:1px solid %5; "
+                "padding-bottom:4px; }"
+                "h2 { color:%4; font-size:17px; font-weight:700; margin:8px 0 4px; }"
+                "h3 { color:%4; font-size:15px; font-weight:700; margin:6px 0 3px; }"
+                "h4 { color:%6; font-size:14px; font-weight:600; margin:4px 0 2px; }"
+                "code { background:%7; color:%4; padding:2px 4px; font-family:%2; }"
+                "pre { background:%7; color:%1; padding:8px; font-family:%2; font-size:13px;"
+                "      border-left:2px solid %5; margin:6px 0; }"
+                "a { color:%8; }"
+                "strong { color:%1; font-weight:700; }"
+                "em { color:%6; font-style:italic; }"
+                "ul, ol { margin:4px 0; padding-left:20px; }"
+                "li { margin:2px 0; }"
+                "hr { border:none; border-top:1px solid %5; margin:8px 0; }"
+                "blockquote { border-left:3px solid %4; padding-left:10px; color:%6; margin:6px 0; }"
+                "</style>")
+            .arg(colors::TEXT_PRIMARY(), fonts::DATA_FAMILY)
+            .arg(fonts::DATA)
+            .arg(colors::AMBER(), colors::BORDER_MED(), colors::TEXT_SECONDARY(), colors::BG_RAISED(), colors::CYAN());
 
     bool in_code_block = false;
     QString code_block;
@@ -716,17 +719,17 @@ CellNavigator::CellNavigator(QWidget* parent) : QWidget(parent) {
     layout->addWidget(header);
 
     list_ = new QListWidget(this);
-    list_->setStyleSheet(
-        QString("QListWidget { background:%1; border:none; outline:none;"
-                " font-family:%2; font-size:%3px; }"
-                "QListWidget::item { color:%4; padding:6px 10px;"
-                " border-bottom:1px solid %5; }"
-                "QListWidget::item:selected { background:%6; color:%7;"
-                " border-left:2px solid %7; }"
-                "QListWidget::item:hover { background:%8; }")
-            .arg(colors::BG_SURFACE(), fonts::DATA_FAMILY)
-            .arg(fonts::TINY)
-            .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(), colors::BG_HOVER(), colors::AMBER(), colors::BG_HOVER()));
+    list_->setStyleSheet(QString("QListWidget { background:%1; border:none; outline:none;"
+                                 " font-family:%2; font-size:%3px; }"
+                                 "QListWidget::item { color:%4; padding:6px 10px;"
+                                 " border-bottom:1px solid %5; }"
+                                 "QListWidget::item:selected { background:%6; color:%7;"
+                                 " border-left:2px solid %7; }"
+                                 "QListWidget::item:hover { background:%8; }")
+                             .arg(colors::BG_SURFACE(), fonts::DATA_FAMILY)
+                             .arg(fonts::TINY)
+                             .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(), colors::BG_HOVER(), colors::AMBER(),
+                                  colors::BG_HOVER()));
     list_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     list_->setTextElideMode(Qt::ElideRight);
     list_->setWordWrap(false);
@@ -963,7 +966,8 @@ QWidget* CodeEditorScreen::build_toolbar() {
 QWidget* CodeEditorScreen::build_status_bar() {
     auto* bar = new QWidget(this);
     bar->setFixedHeight(24);
-    bar->setStyleSheet(QString("background:%1; border-top:1px solid %2;").arg(colors::BG_RAISED(), colors::BORDER_DIM()));
+    bar->setStyleSheet(
+        QString("background:%1; border-top:1px solid %2;").arg(colors::BG_RAISED(), colors::BORDER_DIM()));
 
     auto* hl = new QHBoxLayout(bar);
     hl->setContentsMargins(10, 0, 10, 0);

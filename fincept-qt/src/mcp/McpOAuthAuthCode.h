@@ -32,13 +32,13 @@
 namespace fincept::mcp {
 
 struct AuthCodeConfig {
-    QString server_id;                ///< Used to namespace SecureStorage keys.
-    QString authorization_url;        ///< OAuth authorization endpoint.
-    QString token_url;                ///< OAuth token endpoint.
-    QString registration_url;         ///< Optional RFC 7591 DCR endpoint.
-    QString scope;                    ///< Space-separated scopes.
-    int callback_port = 47823;        ///< Localhost port for the redirect URI.
-    int browser_wait_seconds = 300;   ///< How long to wait for the callback.
+    QString server_id;              ///< Used to namespace SecureStorage keys.
+    QString authorization_url;      ///< OAuth authorization endpoint.
+    QString token_url;              ///< OAuth token endpoint.
+    QString registration_url;       ///< Optional RFC 7591 DCR endpoint.
+    QString scope;                  ///< Space-separated scopes.
+    int callback_port = 47823;      ///< Localhost port for the redirect URI.
+    int browser_wait_seconds = 300; ///< How long to wait for the callback.
 };
 
 class McpOAuthAuthCode {

@@ -1,7 +1,6 @@
 #include "services/notifications/NotificationService.h"
 
 #include "auth/AuthManager.h"
-
 #include "core/logging/Logger.h"
 #include "storage/repositories/SettingsRepository.h"
 

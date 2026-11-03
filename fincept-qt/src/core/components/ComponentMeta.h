@@ -14,12 +14,12 @@ namespace fincept {
 /// is *not* stored in the catalogue file — it's read live from
 /// PopularityTracker at query time, so sort order reflects actual usage.
 struct ComponentMeta {
-    QString id;           // matches DockScreenRouter screen id
-    QString title;        // human-readable, e.g. "Equity Trading"
-    QString category;     // "Trading", "Markets", "Research", etc.
-    QString description;  // one-line summary; empty allowed
-    QStringList tags;     // searchable keywords; empty allowed
-    int popularity = 0;   // use count, filled by ComponentCatalog::list_for_ui
+    QString id;          // matches DockScreenRouter screen id
+    QString title;       // human-readable, e.g. "Equity Trading"
+    QString category;    // "Trading", "Markets", "Research", etc.
+    QString description; // one-line summary; empty allowed
+    QStringList tags;    // searchable keywords; empty allowed
+    int popularity = 0;  // use count, filled by ComponentCatalog::list_for_ui
 
     bool is_valid() const { return !id.isEmpty() && !title.isEmpty(); }
 

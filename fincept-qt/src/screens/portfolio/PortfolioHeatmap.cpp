@@ -47,16 +47,15 @@ void PortfolioHeatmap::build_ui() {
     title->setCursor(Qt::PointingHandCursor);
     title->setFlat(true);
     title->setToolTip(QStringLiteral("Click to view the full portfolio (clears any selected symbol)"));
-    title->setStyleSheet(
-        QString("QPushButton { color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;"
-                "  background:transparent; border:0; padding:0; text-align:left; }"
-                "QPushButton:hover { color:%2; }")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
+    title->setStyleSheet(QString("QPushButton { color:%1; font-size:12px; font-weight:700; letter-spacing:1.5px;"
+                                 "  background:transparent; border:0; padding:0; text-align:left; }"
+                                 "QPushButton:hover { color:%2; }")
+                             .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
     connect(title, &QPushButton::clicked, this, [this]() {
         if (!selected_symbol_.isEmpty()) {
             const QString prev = selected_symbol_;
             selected_symbol_.clear();
-            restyle_selection(prev, QString());  // touch only the un-highlighted block
+            restyle_selection(prev, QString()); // touch only the un-highlighted block
             update_detail();
         }
         emit portfolio_view_requested();
@@ -82,22 +81,21 @@ void PortfolioHeatmap::build_ui() {
         return btn;
     };
 
-    pnl_btn_    = make_mode_btn("PNL");
+    pnl_btn_ = make_mode_btn("PNL");
     weight_btn_ = make_mode_btn("WT");
-    day_btn_    = make_mode_btn("DAY");
-    aft_btn_    = make_mode_btn("AFT");
-    aft_btn_->setToolTip(QStringLiteral(
-        "After-hours / pre-market change for each symbol. "
-        "Live from the yfinance daemon — refreshed each time you switch "
-        "to AFT mode. Click AFT again to re-fetch."));
+    day_btn_ = make_mode_btn("DAY");
+    aft_btn_ = make_mode_btn("AFT");
+    aft_btn_->setToolTip(QStringLiteral("After-hours / pre-market change for each symbol. "
+                                        "Live from the yfinance daemon — refreshed each time you switch "
+                                        "to AFT mode. Click AFT again to re-fetch."));
     pnl_btn_->setChecked(true);
 
     auto set_mode = [this](portfolio::HeatmapMode m) {
         mode_ = m;
-        pnl_btn_->setChecked   (m == portfolio::HeatmapMode::Pnl);
+        pnl_btn_->setChecked(m == portfolio::HeatmapMode::Pnl);
         weight_btn_->setChecked(m == portfolio::HeatmapMode::Weight);
-        day_btn_->setChecked   (m == portfolio::HeatmapMode::DayChange);
-        aft_btn_->setChecked   (m == portfolio::HeatmapMode::Aft);
+        day_btn_->setChecked(m == portfolio::HeatmapMode::DayChange);
+        aft_btn_->setChecked(m == portfolio::HeatmapMode::Aft);
         aft_status_->setVisible(m == portfolio::HeatmapMode::Aft);
         if (m == portfolio::HeatmapMode::Aft) {
             fetch_aft_quotes();
@@ -111,10 +109,10 @@ void PortfolioHeatmap::build_ui() {
         }
         emit mode_changed(m);
     };
-    connect(pnl_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Pnl); });
+    connect(pnl_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Pnl); });
     connect(weight_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Weight); });
-    connect(day_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::DayChange); });
-    connect(aft_btn_,    &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Aft); });
+    connect(day_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::DayChange); });
+    connect(aft_btn_, &QPushButton::clicked, this, [=]() { set_mode(portfolio::HeatmapMode::Aft); });
 
     layout->addLayout(mode_row);
 
@@ -144,8 +142,8 @@ void PortfolioHeatmap::build_ui() {
 
     // Selected holding detail
     detail_panel_ = new QWidget(this);
-    detail_panel_->setStyleSheet(
-        QString("background:%1; border:1px solid %2; padding:4px;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    detail_panel_->setStyleSheet(QString("background:%1; border:1px solid %2; padding:4px;")
+                                     .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
     detail_panel_->setVisible(false);
 
     auto* dp_layout = new QVBoxLayout(detail_panel_);
@@ -181,8 +179,8 @@ void PortfolioHeatmap::build_ui() {
 
     // Portfolio-level detail (shown when no symbol is selected)
     portfolio_panel_ = new QWidget(this);
-    portfolio_panel_->setStyleSheet(
-        QString("background:%1; border:1px solid %2; padding:4px;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    portfolio_panel_->setStyleSheet(QString("background:%1; border:1px solid %2; padding:4px;")
+                                        .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
     portfolio_panel_->setVisible(false);
 
     auto* pp_layout = new QVBoxLayout(portfolio_panel_);
@@ -205,14 +203,14 @@ void PortfolioHeatmap::build_ui() {
         pp_layout->addLayout(row);
     };
 
-    add_pfund_row(pfund_tgt_low_,   "TGT LOW");
-    add_pfund_row(pfund_tgt_mean_,  "TGT MEAN");
-    add_pfund_row(pfund_tgt_high_,  "TGT HIGH");
+    add_pfund_row(pfund_tgt_low_, "TGT LOW");
+    add_pfund_row(pfund_tgt_mean_, "TGT MEAN");
+    add_pfund_row(pfund_tgt_high_, "TGT HIGH");
     add_pfund_row(pfund_consensus_, "CONSENSUS");
-    add_pfund_row(pfund_pe_,        "P/E");
-    add_pfund_row(pfund_yield_,     "YIELD");
-    add_pfund_row(pfund_beta_,      "BETA");
-    add_pfund_row(pfund_breadth_,   "BREADTH");
+    add_pfund_row(pfund_pe_, "P/E");
+    add_pfund_row(pfund_yield_, "YIELD");
+    add_pfund_row(pfund_beta_, "BETA");
+    add_pfund_row(pfund_breadth_, "BREADTH");
 
     layout->addWidget(portfolio_panel_);
 
@@ -417,56 +415,54 @@ QPushButton* PortfolioHeatmap::create_block_widget(const QString& symbol) {
     block->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(block, &QWidget::customContextMenuRequested, this,
             [this, btn = QPointer<QPushButton>(block), symbol](const QPoint& pos) {
-        if (!btn) return;
-        // Parent menu to the heatmap widget, NOT the block button.  Parenting
-        // to btn means Qt calls delete on the stack-allocated menu when btn is
-        // destroyed via deleteLater() inside the nested event loop opened by
-        // exec() — that double-frees a stack address → SIGABRT.
-        QMenu menu(this);
-        // Solid background — without this the menu inherits a transparent
-        // style from the heatmap block (which is itself styled with rgba
-        // colors), making the popup hard to read against the panels
-        // behind it.
-        menu.setStyleSheet(QString(
-            "QMenu { background:%1; color:%2; border:1px solid %3; padding:4px; }"
-            "QMenu::item { padding:6px 20px 6px 12px; font-size:12px; }"
-            "QMenu::item:selected { background:%4; color:%5; }"
-            "QMenu::item:disabled { color:%6; }"
-            "QMenu::item[data='danger'] { color:%7; }"
-            "QMenu::separator { height:1px; background:%3; margin:3px 0; }")
-            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),
-                 ui::colors::AMBER_DIM(), ui::colors::AMBER(), ui::colors::AMBER(),
-                 ui::colors::NEGATIVE()));
+                if (!btn)
+                    return;
+                // Parent menu to the heatmap widget, NOT the block button.  Parenting
+                // to btn means Qt calls delete on the stack-allocated menu when btn is
+                // destroyed via deleteLater() inside the nested event loop opened by
+                // exec() — that double-frees a stack address → SIGABRT.
+                QMenu menu(this);
+                // Solid background — without this the menu inherits a transparent
+                // style from the heatmap block (which is itself styled with rgba
+                // colors), making the popup hard to read against the panels
+                // behind it.
+                menu.setStyleSheet(QString("QMenu { background:%1; color:%2; border:1px solid %3; padding:4px; }"
+                                           "QMenu::item { padding:6px 20px 6px 12px; font-size:12px; }"
+                                           "QMenu::item:selected { background:%4; color:%5; }"
+                                           "QMenu::item:disabled { color:%6; }"
+                                           "QMenu::item[data='danger'] { color:%7; }"
+                                           "QMenu::separator { height:1px; background:%3; margin:3px 0; }")
+                                       .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
+                                            ui::colors::BORDER_MED(), ui::colors::AMBER_DIM(), ui::colors::AMBER(),
+                                            ui::colors::AMBER(), ui::colors::NEGATIVE()));
 
-        auto* sym_label = menu.addAction(symbol);
-        sym_label->setEnabled(false);
-        sym_label->setFont([] {
-            QFont f;
-            f.setBold(true);
-            f.setPointSize(10);
-            return f;
-        }());
-        menu.addSeparator();
+                auto* sym_label = menu.addAction(symbol);
+                sym_label->setEnabled(false);
+                sym_label->setFont([] {
+                    QFont f;
+                    f.setBold(true);
+                    f.setPointSize(10);
+                    return f;
+                }());
+                menu.addSeparator();
 
-        auto* research_act = menu.addAction("Open in Equity Research");
-        menu.addSeparator();
-        auto* edit_act = menu.addAction("Edit Transaction");
-        auto* delete_act = menu.addAction("Close / Delete Position");
-        delete_act->setData("danger");
+                auto* research_act = menu.addAction("Open in Equity Research");
+                menu.addSeparator();
+                auto* edit_act = menu.addAction("Edit Transaction");
+                auto* delete_act = menu.addAction("Close / Delete Position");
+                delete_act->setData("danger");
 
-        connect(research_act, &QAction::triggered, this, [symbol]() {
-            EventBus::instance().publish("nav.split_alongside",
-                                         QVariantMap{{"screen_id", "equity_research"}});
-            EventBus::instance().publish("equity_research.load_symbol",
-                                         QVariantMap{{"symbol", symbol}});
-        });
-        connect(edit_act, &QAction::triggered, this,
-                [this, symbol]() { emit edit_transaction_requested(symbol); });
-        connect(delete_act, &QAction::triggered, this,
-                [this, symbol]() { emit delete_position_requested(symbol); });
+                connect(research_act, &QAction::triggered, this, [symbol]() {
+                    EventBus::instance().publish("nav.split_alongside", QVariantMap{{"screen_id", "equity_research"}});
+                    EventBus::instance().publish("equity_research.load_symbol", QVariantMap{{"symbol", symbol}});
+                });
+                connect(edit_act, &QAction::triggered, this,
+                        [this, symbol]() { emit edit_transaction_requested(symbol); });
+                connect(delete_act, &QAction::triggered, this,
+                        [this, symbol]() { emit delete_position_requested(symbol); });
 
-        menu.exec(btn->mapToGlobal(pos));
-    });
+                menu.exec(btn->mapToGlobal(pos));
+            });
 
     return block;
 }
@@ -505,7 +501,7 @@ void PortfolioHeatmap::update_block_appearance(QPushButton* block, const portfol
         case portfolio::HeatmapMode::Aft: {
             const auto it = aft_quotes_.find(h.symbol);
             if (it == aft_quotes_.end()) {
-                chg_str = QStringLiteral("—");  // matches gray tile from block_color
+                chg_str = QStringLiteral("—"); // matches gray tile from block_color
             } else {
                 const double v = it.value();
                 chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
@@ -529,9 +525,11 @@ void PortfolioHeatmap::restyle_selection(const QString& prev, const QString& nex
     if (prev == next)
         return;
     auto restyle_one = [this](const QString& sym) {
-        if (sym.isEmpty()) return;
+        if (sym.isEmpty())
+            return;
         const auto it = block_widgets_.constFind(sym);
-        if (it == block_widgets_.constEnd() || !it.value()) return;
+        if (it == block_widgets_.constEnd() || !it.value())
+            return;
         for (const auto& h : holdings_) {
             if (h.symbol == sym) {
                 update_block_appearance(it.value(), h);
@@ -550,7 +548,7 @@ void PortfolioHeatmap::rebuild_blocks() {
     if (auto* old_layout = blocks_container_->layout()) {
         QLayoutItem* item;
         while ((item = old_layout->takeAt(0)) != nullptr)
-            delete item;  // owns only the QLayoutItem wrapper, not the widget
+            delete item; // owns only the QLayoutItem wrapper, not the widget
         delete old_layout;
     }
 
@@ -578,7 +576,7 @@ void PortfolioHeatmap::rebuild_blocks() {
     }
 
     // Drop orphaned blocks (positions that were removed from the portfolio).
-    for (auto it = block_widgets_.begin(); it != block_widgets_.end(); ) {
+    for (auto it = block_widgets_.begin(); it != block_widgets_.end();) {
         if (!current_syms.contains(it.key())) {
             if (it.value())
                 it.value()->deleteLater();
@@ -646,10 +644,14 @@ void PortfolioHeatmap::update_portfolio_detail() {
     // they carry its code (a hardcoded "$" mislabelled every non-USD book).
     const QString ccy = currency_.isEmpty() ? QString() : currency_ + QLatin1Char(' ');
     auto fmt_nav = [&ccy](double v) -> QString {
-        if (v <= 0) return QStringLiteral("--");
-        if (v >= 1e9) return QString("%1%2B").arg(ccy, QString::number(v / 1e9, 'f', 2));
-        if (v >= 1e6) return QString("%1%2M").arg(ccy, QString::number(v / 1e6, 'f', 2));
-        if (v >= 1e3) return QString("%1%2K").arg(ccy, QString::number(v / 1e3, 'f', 1));
+        if (v <= 0)
+            return QStringLiteral("--");
+        if (v >= 1e9)
+            return QString("%1%2B").arg(ccy, QString::number(v / 1e9, 'f', 2));
+        if (v >= 1e6)
+            return QString("%1%2M").arg(ccy, QString::number(v / 1e6, 'f', 2));
+        if (v >= 1e3)
+            return QString("%1%2K").arg(ccy, QString::number(v / 1e3, 'f', 1));
         return QString("%1%2").arg(ccy, QString::number(v, 'f', 2));
     };
 
@@ -674,12 +676,11 @@ void PortfolioHeatmap::update_portfolio_detail() {
 
     // Consensus — color-coded by sentiment.
     if (!f.consensus.isEmpty()) {
-        const char* c_col = (f.consensus == "Strong Buy" || f.consensus == "Buy") ? ui::colors::POSITIVE
-                          : (f.consensus == "Sell" || f.consensus == "Strong Sell") ? ui::colors::NEGATIVE
-                          : ui::colors::WARNING;
+        const char* c_col = (f.consensus == "Strong Buy" || f.consensus == "Buy")     ? ui::colors::POSITIVE
+                            : (f.consensus == "Sell" || f.consensus == "Strong Sell") ? ui::colors::NEGATIVE
+                                                                                      : ui::colors::WARNING;
         pfund_consensus_->setText(f.consensus);
-        pfund_consensus_->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:700;").arg(c_col));
+        pfund_consensus_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(c_col));
     } else {
         pfund_consensus_->setText(QStringLiteral("--"));
         pfund_consensus_->setStyleSheet(
@@ -688,13 +689,11 @@ void PortfolioHeatmap::update_portfolio_detail() {
 
     // P/E
     pfund_pe_->setText(f.pe_ratio > 0 ? QString("%1×").arg(QString::number(f.pe_ratio, 'f', 1)) : "--");
-    pfund_pe_->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::CYAN()));
+    pfund_pe_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::CYAN()));
 
     // Dividend yield as %
     pfund_yield_->setText(f.div_yield > 0 ? QString("%1%").arg(QString::number(f.div_yield * 100.0, 'f', 2)) : "--");
-    pfund_yield_->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::CYAN()));
+    pfund_yield_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::CYAN()));
 
     // Beta from already-computed metrics
     if (metrics_.beta.has_value()) {
@@ -702,8 +701,7 @@ void PortfolioHeatmap::update_portfolio_detail() {
         const char* b_col = b > 1.2 ? ui::colors::NEGATIVE : b < 0.8 ? ui::colors::POSITIVE : ui::colors::WARNING;
         pfund_beta_->setText(QString::number(b, 'f', 2));
         pfund_beta_->setToolTip(QStringLiteral("Beta vs %1").arg(metrics_.beta_benchmark));
-        pfund_beta_->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:700;").arg(b_col));
+        pfund_beta_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(b_col));
     } else {
         pfund_beta_->setText(QStringLiteral("--"));
         pfund_beta_->setStyleSheet(
@@ -713,17 +711,18 @@ void PortfolioHeatmap::update_portfolio_detail() {
     // Breadth — count gainers / losers from existing holdings data.
     int gainers = 0, losers = 0;
     for (const auto& h : holdings_) {
-        if      (h.day_change_percent > 0) ++gainers;
-        else if (h.day_change_percent < 0) ++losers;
+        if (h.day_change_percent > 0)
+            ++gainers;
+        else if (h.day_change_percent < 0)
+            ++losers;
     }
-    pfund_breadth_->setText(
-        QString("▲ %1  ▼ %2").arg(gainers).arg(losers));
+    pfund_breadth_->setText(QString("▲ %1  ▼ %2").arg(gainers).arg(losers));
     pfund_breadth_->setStyleSheet(
         QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
 }
 
 void PortfolioHeatmap::set_portfolio_fundamentals(const QString& /*portfolio_id*/,
-                                                   const portfolio::PortfolioFundamentals& f) {
+                                                  const portfolio::PortfolioFundamentals& f) {
     fundamentals_ = f;
     // Only repopulate if the portfolio panel is currently visible (no stock selected).
     if (selected_symbol_.isEmpty())
@@ -814,9 +813,8 @@ void PortfolioHeatmap::refresh_theme() {
     detail_panel_->setStyleSheet(panel_ss);
     portfolio_panel_->setStyleSheet(panel_ss);
 
-    aft_status_->setStyleSheet(
-        QString("color:%1; font-size:10px;")
-            .arg(aft_status_error_ ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY()));
+    aft_status_->setStyleSheet(QString("color:%1; font-size:10px;")
+                                   .arg(aft_status_error_ ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY()));
 
     // Repaint portfolio panel data labels with current theme colours.
     if (selected_symbol_.isEmpty())
@@ -836,7 +834,8 @@ void PortfolioHeatmap::set_aft_status(const QString& text, const QString& color,
 QStringList PortfolioHeatmap::holding_symbols() const {
     QStringList out;
     out.reserve(holdings_.size());
-    for (const auto& h : holdings_) out << h.symbol;
+    for (const auto& h : holdings_)
+        out << h.symbol;
     return out;
 }
 
@@ -873,11 +872,12 @@ void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
         return;
 
     QJsonArray syms;
-    for (const auto& h : holdings_) syms.append(h.symbol);
+    for (const auto& h : holdings_)
+        syms.append(h.symbol);
 
     const quint64 my_gen = ++aft_gen_;
     QPointer<PortfolioHeatmap> guard(this);
-    aft_in_flight_       = true;
+    aft_in_flight_ = true;
     aft_fetched_symbols_ = holding_symbols();
 
     // Wipe stale quotes immediately so blocks render gray ("loading") until
@@ -894,7 +894,8 @@ void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
     python::PythonWorker::instance().submit(
         QStringLiteral("extended_hours"), payload,
         [guard, my_gen, is_retry](bool ok, QJsonObject result, QString err) {
-            if (!guard || my_gen != guard->aft_gen_) return;  // superseded or destroyed
+            if (!guard || my_gen != guard->aft_gen_)
+                return; // superseded or destroyed
             guard->aft_in_flight_ = false;
             if (!ok) {
                 // One automatic retry. A first-of-session extended-hours call
@@ -933,16 +934,17 @@ void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
             for (const auto& v : rows) {
                 const auto o = v.toObject();
                 const QString sym = o.value(QStringLiteral("symbol")).toString();
-                if (sym.isEmpty()) continue;
+                if (sym.isEmpty())
+                    continue;
                 const auto q = exthours::quote_from_row(o, in_pre);
-                if (!q || !exthours::pairing_is_sound(*q, now_secs)) continue;
+                if (!q || !exthours::pairing_is_sound(*q, now_secs))
+                    continue;
                 guard->aft_quotes_.insert(sym, q->pct);
             }
-            guard->set_aft_status(
-                guard->aft_quotes_.isEmpty()
-                    ? QStringLiteral("no extended-hours quotes")
-                    : QString("yfinance · %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")),
-                ui::colors::TEXT_SECONDARY());
+            guard->set_aft_status(guard->aft_quotes_.isEmpty()
+                                      ? QStringLiteral("no extended-hours quotes")
+                                      : QString("yfinance · %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")),
+                                  ui::colors::TEXT_SECONDARY());
             guard->refresh_block_appearances();
         },
         kAftFetchTimeoutMs);

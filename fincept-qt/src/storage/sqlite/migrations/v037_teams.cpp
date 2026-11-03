@@ -48,26 +48,26 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 }
 
 static Result<void> apply_v037(QSqlDatabase& db) {
-    if (auto r = sql(db,
-            "CREATE TABLE IF NOT EXISTS teams ("
-            "  id TEXT PRIMARY KEY,"
-            "  name TEXT NOT NULL UNIQUE,"
-            "  coordinator_agent_id TEXT NOT NULL,"
-            "  strategy TEXT NOT NULL DEFAULT 'sequential',"
-            "  description TEXT,"
-            "  created_at TEXT NOT NULL DEFAULT (datetime('now')),"
-            "  updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
-            ")"); r.is_err())
+    if (auto r = sql(db, "CREATE TABLE IF NOT EXISTS teams ("
+                         "  id TEXT PRIMARY KEY,"
+                         "  name TEXT NOT NULL UNIQUE,"
+                         "  coordinator_agent_id TEXT NOT NULL,"
+                         "  strategy TEXT NOT NULL DEFAULT 'sequential',"
+                         "  description TEXT,"
+                         "  created_at TEXT NOT NULL DEFAULT (datetime('now')),"
+                         "  updated_at TEXT NOT NULL DEFAULT (datetime('now'))"
+                         ")");
+        r.is_err())
         return r;
-    if (auto r = sql(db,
-            "CREATE TABLE IF NOT EXISTS team_members ("
-            "  team_id TEXT NOT NULL,"
-            "  agent_id TEXT NOT NULL,"
-            "  position INTEGER NOT NULL DEFAULT 0,"
-            "  created_at TEXT NOT NULL DEFAULT (datetime('now')),"
-            "  PRIMARY KEY (team_id, agent_id),"
-            "  FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE"
-            ")"); r.is_err())
+    if (auto r = sql(db, "CREATE TABLE IF NOT EXISTS team_members ("
+                         "  team_id TEXT NOT NULL,"
+                         "  agent_id TEXT NOT NULL,"
+                         "  position INTEGER NOT NULL DEFAULT 0,"
+                         "  created_at TEXT NOT NULL DEFAULT (datetime('now')),"
+                         "  PRIMARY KEY (team_id, agent_id),"
+                         "  FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE"
+                         ")");
+        r.is_err())
         return r;
     auto warn_on_fail = [&db](const char* stmt) {
         if (auto r = sql(db, stmt); r.is_err())

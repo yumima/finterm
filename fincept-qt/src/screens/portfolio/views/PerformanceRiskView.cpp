@@ -91,13 +91,13 @@ void PerformanceRiskView::build_ui() {
     cards_layout->setContentsMargins(12, 8, 12, 8);
     cards_layout->setSpacing(8);
 
-    sharpe_card_ = add_metric_card(cards_layout, "SHARPE RATIO (ARITH)",
-                                   "Mean daily excess return / sd × √252", ui::colors::CYAN);
+    sharpe_card_ =
+        add_metric_card(cards_layout, "SHARPE RATIO (ARITH)", "Mean daily excess return / sd × √252", ui::colors::CYAN);
     sortino_card_ = add_metric_card(cards_layout, "SORTINO RATIO", "Downside risk-adjusted return", ui::colors::CYAN);
     // The benchmark is named once known (set in update_metrics): the book's
     // base-currency index when loaded, else SPY.
-    beta_card_ = add_metric_card(cards_layout, "BETA", "OLS regression vs benchmark daily returns",
-                                 ui::colors::WARNING);
+    beta_card_ =
+        add_metric_card(cards_layout, "BETA", "OLS regression vs benchmark daily returns", ui::colors::WARNING);
     alpha_card_ = add_metric_card(cards_layout, "ALPHA", "Annualised OLS alpha vs benchmark", ui::colors::POSITIVE);
     vol_card_ = add_metric_card(cards_layout, "VOLATILITY", "Annualised from one-session returns", ui::colors::AMBER);
     drawdown_card_ =
@@ -114,8 +114,8 @@ PerformanceRiskView::MetricCard PerformanceRiskView::add_metric_card(QLayout* pa
                                                                      const QString& desc, const char* color) {
 
     auto* card = new QWidget(this);
-    card->setStyleSheet(
-        QString("background:%1; border:1px solid %2; padding:8px;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    card->setStyleSheet(QString("background:%1; border:1px solid %2; padding:8px;")
+                            .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
 
     auto* cl = new QVBoxLayout(card);
     cl->setContentsMargins(10, 8, 10, 8);
@@ -209,8 +209,8 @@ void PerformanceRiskView::update_chart() {
     // used to be drawn here as if it were history.
     if (filtered.size() < 2) {
         chart->setTitleBrush(QColor(ui::colors::TEXT_SECONDARY()));
-        chart->setTitle(tr("Insufficient NAV history for %1 — needs at least two daily snapshots")
-                            .arg(current_period_));
+        chart->setTitle(
+            tr("Insufficient NAV history for %1 — needs at least two daily snapshots").arg(current_period_));
         return;
     }
 
@@ -298,23 +298,20 @@ void PerformanceRiskView::update_metrics() {
     // honestly renders as a dash with the reason in its tooltip — a dash is
     // information; a fabricated number is a trap.
     auto fmt = [](double v, int dp = 2) { return QString::number(v, 'f', dp); };
-    const QString need_history =
-        tr("Not enough daily NAV history yet (%1 return observations so far).\n"
-           "The series grows one point per day; a backfill from the transaction\n"
-           "log fills it immediately.")
-            .arg(metrics_.return_days);
+    const QString need_history = tr("Not enough daily NAV history yet (%1 return observations so far).\n"
+                                    "The series grows one point per day; a backfill from the transaction\n"
+                                    "log fills it immediately.")
+                                     .arg(metrics_.return_days);
 
-    auto set_card = [&](MetricCard& card, const std::optional<double>& v, const QString& text,
-                        const char* color) {
+    auto set_card = [&](MetricCard& card, const std::optional<double>& v, const QString& text, const char* color) {
         if (v.has_value()) {
             card.value->setText(text);
-            card.value->setStyleSheet(
-                QString("color:%1; font-size:18px; font-weight:700; border:none;").arg(color));
+            card.value->setStyleSheet(QString("color:%1; font-size:18px; font-weight:700; border:none;").arg(color));
             card.value->setToolTip(QString());
         } else {
             card.value->setText(QStringLiteral("—"));
-            card.value->setStyleSheet(QString("color:%1; font-size:18px; font-weight:700; border:none;")
-                                          .arg(ui::colors::TEXT_SECONDARY()));
+            card.value->setStyleSheet(
+                QString("color:%1; font-size:18px; font-weight:700; border:none;").arg(ui::colors::TEXT_SECONDARY()));
             card.value->setToolTip(need_history);
         }
     };
@@ -344,15 +341,13 @@ void PerformanceRiskView::update_metrics() {
     set_card(alpha_card_, m.alpha,
              m.alpha ? QString("%1%2%").arg(*m.alpha >= 0 ? "+" : "").arg(fmt(*m.alpha, 1)) : QString(),
              m.alpha && *m.alpha >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
-    set_card(vol_card_, m.volatility,
-             m.volatility ? QString("%1%").arg(fmt(*m.volatility, 1)) : QString(), ui::colors::AMBER);
-    set_card(drawdown_card_, m.max_drawdown,
-             m.max_drawdown ? QString("%1%").arg(fmt(*m.max_drawdown, 1)) : QString(),
+    set_card(vol_card_, m.volatility, m.volatility ? QString("%1%").arg(fmt(*m.volatility, 1)) : QString(),
+             ui::colors::AMBER);
+    set_card(drawdown_card_, m.max_drawdown, m.max_drawdown ? QString("%1%").arg(fmt(*m.max_drawdown, 1)) : QString(),
              ui::colors::NEGATIVE);
-    set_card(var_card_, m.var_95,
-             m.var_95 ? QString("%1 %2").arg(currency_, fmt(*m.var_95)) : QString(), ui::colors::NEGATIVE);
-    set_card(cvar_card_, m.cvar_95,
-             m.cvar_95 ? QString("%1 %2").arg(currency_, fmt(*m.cvar_95)) : QString(),
+    set_card(var_card_, m.var_95, m.var_95 ? QString("%1 %2").arg(currency_, fmt(*m.var_95)) : QString(),
+             ui::colors::NEGATIVE);
+    set_card(cvar_card_, m.cvar_95, m.cvar_95 ? QString("%1 %2").arg(currency_, fmt(*m.cvar_95)) : QString(),
              ui::colors::NEGATIVE);
     // Historical VaR needs enough returns to resolve its 5% tail. set_card()
     // above already reset each tooltip (empty with a value, need_history

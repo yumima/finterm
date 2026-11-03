@@ -48,8 +48,7 @@ static Result<void> add_column_if_missing(QSqlDatabase& db, const char* ddl) {
     if (q.exec(ddl))
         return Result<void>::ok();
     const std::string err = q.lastError().text().toStdString();
-    if (err.find("duplicate column") != std::string::npos ||
-        err.find("already exists") != std::string::npos) {
+    if (err.find("duplicate column") != std::string::npos || err.find("already exists") != std::string::npos) {
         return Result<void>::ok();
     }
     return Result<void>::err(err);
@@ -64,17 +63,11 @@ static Result<void> apply_v033(QSqlDatabase& db) {
         return Result<void>::ok();
     }
 
-    if (auto r = add_column_if_missing(
-            db, "ALTER TABLE mcp_servers ADD COLUMN auth_token_url TEXT");
-        r.is_err())
+    if (auto r = add_column_if_missing(db, "ALTER TABLE mcp_servers ADD COLUMN auth_token_url TEXT"); r.is_err())
         return r;
-    if (auto r = add_column_if_missing(
-            db, "ALTER TABLE mcp_servers ADD COLUMN auth_scope TEXT");
-        r.is_err())
+    if (auto r = add_column_if_missing(db, "ALTER TABLE mcp_servers ADD COLUMN auth_scope TEXT"); r.is_err())
         return r;
-    if (auto r = add_column_if_missing(
-            db, "ALTER TABLE mcp_servers ADD COLUMN oauth_grant_type TEXT");
-        r.is_err())
+    if (auto r = add_column_if_missing(db, "ALTER TABLE mcp_servers ADD COLUMN oauth_grant_type TEXT"); r.is_err())
         return r;
 
     return Result<void>::ok();

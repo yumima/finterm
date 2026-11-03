@@ -30,8 +30,7 @@ QString fmt_pnl(double v) {
 }
 } // namespace
 
-TodayPnLWidget::TodayPnLWidget(const QJsonObject& cfg, QWidget* parent)
-    : BaseWidget("TODAY P&L", parent) {
+TodayPnLWidget::TodayPnLWidget(const QJsonObject& cfg, QWidget* parent) : BaseWidget("TODAY P&L", parent) {
     auto* vl = content_layout();
     vl->setContentsMargins(10, 8, 10, 8);
     vl->setSpacing(6);
@@ -179,27 +178,22 @@ void TodayPnLWidget::populate(const QVector<trading::BrokerPosition>& rows) {
         }
     }
 
-    const QColor total_col =
-        total_pnl >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
+    const QColor total_col = total_pnl >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
     total_pnl_label_->setText(fmt_pnl(total_pnl));
     total_pnl_label_->setStyleSheet(
-        QString("color:%1;font-size:24px;font-weight:700;background:transparent;padding:4px 0;")
-            .arg(total_col.name()));
+        QString("color:%1;font-size:24px;font-weight:700;background:transparent;padding:4px 0;").arg(total_col.name()));
 
     day_pnl_value_->setText(any_day_reported ? fmt_pnl(day_pnl) : QStringLiteral("—"));
-    day_pnl_value_->setToolTip(any_day_reported
-                                   ? QString()
-                                   : QStringLiteral("This broker's API does not report a day P&L."));
-    day_pnl_value_->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
-            .arg(!any_day_reported ? ui::colors::TEXT_SECONDARY()
-                 : day_pnl >= 0    ? ui::colors::POSITIVE()
-                                   : ui::colors::NEGATIVE()));
+    day_pnl_value_->setToolTip(any_day_reported ? QString()
+                                                : QStringLiteral("This broker's API does not report a day P&L."));
+    day_pnl_value_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
+                                      .arg(!any_day_reported ? ui::colors::TEXT_SECONDARY()
+                                           : day_pnl >= 0    ? ui::colors::POSITIVE()
+                                                             : ui::colors::NEGATIVE()));
 
     realized_pnl_value_->setText(fmt_pnl(realized));
-    realized_pnl_value_->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
-            .arg(realized >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
+    realized_pnl_value_->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
+                                           .arg(realized >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
 
     positions_value_->setText(QString::number(open_positions));
 
@@ -244,8 +238,7 @@ void TodayPnLWidget::on_theme_changed() {
 
 void TodayPnLWidget::apply_styles() {
     header_hint_->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;padding:2px 0;")
-            .arg(ui::colors::TEXT_SECONDARY()));
+        QString("color:%1;font-size:12px;background:transparent;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
 
     const QString row_label_css =
         QString("color:%1;font-size:12px;background:transparent;").arg(ui::colors::TEXT_SECONDARY());
@@ -257,8 +250,7 @@ void TodayPnLWidget::apply_styles() {
         positions_label_->setStyleSheet(row_label_css);
     if (positions_value_)
         positions_value_->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
-                .arg(ui::colors::TEXT_PRIMARY()));
+            QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(ui::colors::TEXT_PRIMARY()));
 }
 
 } // namespace fincept::screens::widgets

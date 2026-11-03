@@ -60,9 +60,7 @@ void SymbolChip::contextMenuEvent(QContextMenuEvent* e) {
     QMenu menu(this);
 
     auto* copy = menu.addAction("Copy Ticker");
-    connect(copy, &QAction::triggered, this, [this]() {
-        QApplication::clipboard()->setText(ref_.symbol);
-    });
+    connect(copy, &QAction::triggered, this, [this]() { QApplication::clipboard()->setText(ref_.symbol); });
 
     auto* remove = menu.addAction("Remove Pin");
     connect(remove, &QAction::triggered, this, [this]() {
@@ -73,9 +71,8 @@ void SymbolChip::contextMenuEvent(QContextMenuEvent* e) {
     menu.addSeparator();
     auto& registry = SymbolGroupRegistry::instance();
     for (SymbolGroup g : registry.enabled_groups()) {
-        auto* act = menu.addAction(QStringLiteral("Broadcast to %1  (%2)")
-                                       .arg(registry.name(g))
-                                       .arg(symbol_group_letter(g)));
+        auto* act =
+            menu.addAction(QStringLiteral("Broadcast to %1  (%2)").arg(registry.name(g)).arg(symbol_group_letter(g)));
         connect(act, &QAction::triggered, this, [this, g]() { broadcast_to_group(g); });
     }
     menu.exec(e->globalPos());
@@ -89,7 +86,7 @@ void SymbolChip::paintEvent(QPaintEvent*) {
     QPainterPath path;
     path.addRoundedRect(r, r.height() / 2.0, r.height() / 2.0);
     p.fillPath(path, QColor("#1f2937")); // slate-800
-    p.setPen(QColor("#d97706")); // amber border — echoes Bloomberg's amber
+    p.setPen(QColor("#d97706"));         // amber border — echoes Bloomberg's amber
     p.drawPath(path);
 
     p.setPen(QColor("#f3f4f6"));

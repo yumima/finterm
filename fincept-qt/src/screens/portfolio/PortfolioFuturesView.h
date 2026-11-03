@@ -5,8 +5,8 @@
 #include <QDateTime>
 #include <QHash>
 #include <QHideEvent>
-#include <QSet>
 #include <QLabel>
+#include <QSet>
 #include <QShowEvent>
 #include <QString>
 #include <QTableWidget>
@@ -44,12 +44,12 @@ class PortfolioFuturesView : public QWidget {
 
   private:
     struct ExtQuote {
-        double  regular = 0;
-        double  ext_price = 0;
-        double  ext_change = 0;
-        double  ext_change_pct = 0;
-        QString session;        // "REGULAR" / "PRE" / "POST" / "CLOSED"
-        bool    has_ext = false;
+        double regular = 0;
+        double ext_price = 0;
+        double ext_change = 0;
+        double ext_change_pct = 0;
+        QString session; // "REGULAR" / "PRE" / "POST" / "CLOSED"
+        bool has_ext = false;
     };
 
     void build_ui();
@@ -66,37 +66,37 @@ class PortfolioFuturesView : public QWidget {
     /// symbol→ExtQuote map; symbols not in the current holdings are
     /// silently ignored by populate_extended.
     QString ext_cache_path() const;
-    void    save_ext_cache() const;
-    void    load_ext_cache();
+    void save_ext_cache() const;
+    void load_ext_cache();
 
     portfolio::PortfolioSummary summary_;
-    QString                     currency_ = "USD";
+    QString currency_ = "USD";
 
-    QTableWidget* futures_table_  = nullptr;
+    QTableWidget* futures_table_ = nullptr;
     QTableWidget* extended_table_ = nullptr;
-    QLabel*       futures_status_ = nullptr;
-    QLabel*       extended_status_ = nullptr;
+    QLabel* futures_status_ = nullptr;
+    QLabel* extended_status_ = nullptr;
 
-    QHash<QString, services::QuoteData> fut_quotes_;   // keyed by quote_symbol()
-    QDateTime                fut_last_update_;
-    QSet<QString>            fut_subscribed_;    // topics currently held on the hub
+    QHash<QString, services::QuoteData> fut_quotes_; // keyed by quote_symbol()
+    QDateTime fut_last_update_;
+    QSet<QString> fut_subscribed_; // topics currently held on the hub
     QHash<QString, ExtQuote> ext_quotes_;
-    quint64                  ext_gen_ = 0;
+    quint64 ext_gen_ = 0;
     // Suppresses timer-driven refresh while one is already in flight.
     // Without this guard a slow yfinance response (>20 s) lets the
     // 20 s tick fire repeatedly, stacking requests on the daemon. The
     // ext_gen_ epoch only drops *responses*; this drops *requests*.
     // set_summary still proceeds even when true — its callers explicitly
     // want fresh data for newly-arrived holdings.
-    bool                     ext_in_flight_ = false;
+    bool ext_in_flight_ = false;
 
     // Periodic refresh of the extended-hours table while the view is
     // visible. The futures table above ticks with the DataHub quote
     // stream instead; the timer is
     // started in showEvent and stopped in hideEvent so no work happens
     // when the view isn't on screen.
-    QTimer*                  ext_refresh_timer_ = nullptr;
-    static constexpr int     kExtRefreshIntervalMs = 20'000;
+    QTimer* ext_refresh_timer_ = nullptr;
+    static constexpr int kExtRefreshIntervalMs = 20'000;
 };
 
 } // namespace fincept::screens

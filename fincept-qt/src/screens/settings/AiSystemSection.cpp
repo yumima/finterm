@@ -9,28 +9,32 @@
 
 #include <QApplication>
 #include <QClipboard>
+#include <QColor>
 #include <QDialog>
 #include <QFile>
+#include <QFutureWatcher>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QInputDialog>
-#include <QColor>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QPlainTextEdit>
 #include <QPointer>
 #include <QProgressBar>
-#include <QtConcurrent/QtConcurrent>
-#include <QFutureWatcher>
 #include <QVBoxLayout>
+#include <QtConcurrent/QtConcurrent>
 
 namespace fincept::screens {
 
 namespace {
 constexpr int kRecentTracesLimit = 50;
 
-QString format_usd(double v) { return QStringLiteral("$%1").arg(QString::number(v, 'f', 2)); }
-QString format_ms(int v) { return QStringLiteral("%1 ms").arg(v); }
+QString format_usd(double v) {
+    return QStringLiteral("$%1").arg(QString::number(v, 'f', 2));
+}
+QString format_ms(int v) {
+    return QStringLiteral("%1 ms").arg(v);
+}
 } // namespace
 
 AiSystemSection::AiSystemSection(QWidget* parent) : QWidget(parent) {
@@ -54,27 +58,21 @@ void AiSystemSection::build_ui() {
     // SettingsRepository directly — the InlineCompletionController
     // re-reads the flag on every keystroke, so the change is live
     // without restart.
-    inline_completion_cb_ = new QCheckBox(QStringLiteral(
-        "Enable inline (ghost-text) completion in chat composer"));
-    inline_completion_cb_->setToolTip(QStringLiteral(
-        "After ~450 ms idle, finterm asks the active LLM for a "
-        "continuation and shows it in italic gray.  Tab accepts; "
-        "any other key dismisses.  Off by default — latency is "
-        "API-bound until a fast local model is configured."));
+    inline_completion_cb_ = new QCheckBox(QStringLiteral("Enable inline (ghost-text) completion in chat composer"));
+    inline_completion_cb_->setToolTip(QStringLiteral("After ~450 ms idle, finterm asks the active LLM for a "
+                                                     "continuation and shows it in italic gray.  Tab accepts; "
+                                                     "any other key dismisses.  Off by default — latency is "
+                                                     "API-bound until a fast local model is configured."));
     {
         auto r = SettingsRepository::instance().get(QStringLiteral("inline_completion.enabled"));
         const QString v = r.is_ok() ? r.value().trimmed().toLower() : QString();
-        inline_completion_cb_->setChecked(v == QStringLiteral("true")
-                                          || v == QStringLiteral("1")
-                                          || v == QStringLiteral("yes"));
+        inline_completion_cb_->setChecked(v == QStringLiteral("true") || v == QStringLiteral("1") ||
+                                          v == QStringLiteral("yes"));
     }
-    connect(inline_completion_cb_, &QCheckBox::toggled, this,
-            [](bool on) {
-                SettingsRepository::instance().set(
-                    QStringLiteral("inline_completion.enabled"),
-                    on ? QStringLiteral("true") : QStringLiteral("false"),
-                    QStringLiteral("ai"));
-            });
+    connect(inline_completion_cb_, &QCheckBox::toggled, this, [](bool on) {
+        SettingsRepository::instance().set(QStringLiteral("inline_completion.enabled"),
+                                           on ? QStringLiteral("true") : QStringLiteral("false"), QStringLiteral("ai"));
+    });
 
     auto* hdr_row = new QHBoxLayout;
     hdr_row->addWidget(refresh_btn_);
@@ -94,17 +92,15 @@ void AiSystemSection::build_ui() {
     root->addWidget(traces_lbl);
     traces_table_ = new QTableWidget(this);
     traces_table_->setColumnCount(6);
-    traces_table_->setHorizontalHeaderLabels(
-        {QStringLiteral("Started"), QStringLiteral("Agent"),
-         QStringLiteral("Status"), QStringLiteral("Latency"),
-         QStringLiteral("Cost"), QStringLiteral("Source")});
+    traces_table_->setHorizontalHeaderLabels({QStringLiteral("Started"), QStringLiteral("Agent"),
+                                              QStringLiteral("Status"), QStringLiteral("Latency"),
+                                              QStringLiteral("Cost"), QStringLiteral("Source")});
     traces_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     traces_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     traces_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     traces_table_->verticalHeader()->setVisible(false);
     traces_table_->setToolTip(QStringLiteral("Double-click a row to see the full trace."));
-    connect(traces_table_, &QTableWidget::cellDoubleClicked,
-            this, &AiSystemSection::on_trace_double_clicked);
+    connect(traces_table_, &QTableWidget::cellDoubleClicked, this, &AiSystemSection::on_trace_double_clicked);
     root->addWidget(traces_table_, 2);
 
     // ── Tool kill-switch ─────────────────────────────────────────────
@@ -145,17 +141,17 @@ void AiSystemSection::reload() {
     load_killswitch();
 }
 
-void AiSystemSection::on_refresh() { reload(); }
+void AiSystemSection::on_refresh() {
+    reload();
+}
 
 void AiSystemSection::load_spend(const Result<QVector<AgentTraceRow>>& traces) {
     auto& budget = services::BudgetService::instance();
     auto total = budget.spend_today_total();
     if (total.is_ok()) {
-        spend_total_lbl_->setText(
-            QStringLiteral("Today's total spend: <b>%1</b>").arg(format_usd(total.value())));
+        spend_total_lbl_->setText(QStringLiteral("Today's total spend: <b>%1</b>").arg(format_usd(total.value())));
     } else {
-        spend_total_lbl_->setText(
-            QStringLiteral("Today's total spend: <i>(unavailable)</i>"));
+        spend_total_lbl_->setText(QStringLiteral("Today's total spend: <i>(unavailable)</i>"));
     }
 
     // Per-agent breakdown — derived from the trace tail (passed in by
@@ -173,16 +169,14 @@ void AiSystemSection::load_spend(const Result<QVector<AgentTraceRow>>& traces) {
     QStringList parts;
     for (auto it = sum.constBegin(); it != sum.constEnd(); ++it)
         parts.append(QStringLiteral("%1 %2").arg(it.key(), format_usd(it.value())));
-    spend_by_agent_lbl_->setText(
-        parts.isEmpty()
-            ? QStringLiteral("By agent: (no spend yet)")
-            : QStringLiteral("By agent (recent): ") + parts.join(QStringLiteral(", ")));
+    spend_by_agent_lbl_->setText(parts.isEmpty()
+                                     ? QStringLiteral("By agent: (no spend yet)")
+                                     : QStringLiteral("By agent (recent): ") + parts.join(QStringLiteral(", ")));
 }
 
 void AiSystemSection::load_traces(const Result<QVector<AgentTraceRow>>& r) {
     if (r.is_err()) {
-        show_status(QStringLiteral("Failed to load traces: %1")
-                        .arg(QString::fromStdString(r.error())), true);
+        show_status(QStringLiteral("Failed to load traces: %1").arg(QString::fromStdString(r.error())), true);
         return;
     }
     const auto& rows = r.value();
@@ -197,10 +191,8 @@ void AiSystemSection::load_traces(const Result<QVector<AgentTraceRow>>& r) {
         traces_table_->setItem(i, 0, started);
         traces_table_->setItem(i, 1, new QTableWidgetItem(t.agent_id));
         traces_table_->setItem(i, 2, new QTableWidgetItem(t.status));
-        traces_table_->setItem(i, 3, new QTableWidgetItem(
-                                          t.latency_ms ? format_ms(*t.latency_ms) : QString()));
-        traces_table_->setItem(i, 4, new QTableWidgetItem(
-                                          t.cost_usd ? format_usd(*t.cost_usd) : QString()));
+        traces_table_->setItem(i, 3, new QTableWidgetItem(t.latency_ms ? format_ms(*t.latency_ms) : QString()));
+        traces_table_->setItem(i, 4, new QTableWidgetItem(t.cost_usd ? format_usd(*t.cost_usd) : QString()));
         traces_table_->setItem(i, 5, new QTableWidgetItem(t.source));
     }
 }
@@ -208,8 +200,7 @@ void AiSystemSection::load_traces(const Result<QVector<AgentTraceRow>>& r) {
 void AiSystemSection::load_killswitch() {
     auto r = ToolKillswitchRepository::instance().list_all();
     if (r.is_err()) {
-        show_status(QStringLiteral("Failed to load kill-switch: %1")
-                        .arg(QString::fromStdString(r.error())), true);
+        show_status(QStringLiteral("Failed to load kill-switch: %1").arg(QString::fromStdString(r.error())), true);
         return;
     }
     const auto& rows = r.value();
@@ -223,20 +214,19 @@ void AiSystemSection::load_killswitch() {
 
 void AiSystemSection::on_disable_tool() {
     bool ok = false;
-    const QString tool = QInputDialog::getText(
-        this, QStringLiteral("Disable tool"),
-        QStringLiteral("Wire-form name (e.g. int__get_news, mcp-fetch__fetch):"),
-        QLineEdit::Normal, QString(), &ok).trimmed();
+    const QString tool = QInputDialog::getText(this, QStringLiteral("Disable tool"),
+                                               QStringLiteral("Wire-form name (e.g. int__get_news, mcp-fetch__fetch):"),
+                                               QLineEdit::Normal, QString(), &ok)
+                             .trimmed();
     if (!ok || tool.isEmpty())
         return;
-    const QString reason = QInputDialog::getText(
-        this, QStringLiteral("Reason"),
-        QStringLiteral("Reason (shown in refusal message — optional):"),
-        QLineEdit::Normal).trimmed();
+    const QString reason =
+        QInputDialog::getText(this, QStringLiteral("Reason"),
+                              QStringLiteral("Reason (shown in refusal message — optional):"), QLineEdit::Normal)
+            .trimmed();
     auto r = ToolKillswitchRepository::instance().disable(tool, reason);
     if (r.is_err()) {
-        show_status(QStringLiteral("Failed to disable: %1")
-                        .arg(QString::fromStdString(r.error())), true);
+        show_status(QStringLiteral("Failed to disable: %1").arg(QString::fromStdString(r.error())), true);
         return;
     }
     show_status(QStringLiteral("Disabled %1").arg(tool));
@@ -255,8 +245,7 @@ void AiSystemSection::on_enable_tool() {
     const QString tool = item->text();
     auto r = ToolKillswitchRepository::instance().enable(tool);
     if (r.is_err()) {
-        show_status(QStringLiteral("Failed to enable: %1")
-                        .arg(QString::fromStdString(r.error())), true);
+        show_status(QStringLiteral("Failed to enable: %1").arg(QString::fromStdString(r.error())), true);
         return;
     }
     show_status(QStringLiteral("Re-enabled %1").arg(tool));
@@ -275,8 +264,7 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
     if (r.is_err() || !r.value().has_value()) {
         show_status(QStringLiteral("Failed to load trace %1: %2")
                         .arg(request_id.left(8),
-                             r.is_err() ? QString::fromStdString(r.error())
-                                        : QStringLiteral("(not found)")),
+                             r.is_err() ? QString::fromStdString(r.error()) : QStringLiteral("(not found)")),
                     true);
         return;
     }
@@ -339,9 +327,8 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
         // Pretty-print for readability.  Failure (malformed JSON) falls
         // back to the raw string.
         const QJsonDocument doc = QJsonDocument::fromJson(t.config_json.toUtf8());
-        const QString pretty = doc.isObject() || doc.isArray()
-            ? QString::fromUtf8(doc.toJson(QJsonDocument::Indented))
-            : t.config_json;
+        const QString pretty =
+            doc.isObject() || doc.isArray() ? QString::fromUtf8(doc.toJson(QJsonDocument::Indented)) : t.config_json;
         add_text_block(QStringLiteral("Config"), pretty);
     }
 
@@ -358,9 +345,8 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
             root->addWidget(new QLabel(QStringLiteral("<b>Tool calls (%1)</b>").arg(tcs.size())));
             auto* tbl = new QTableWidget;
             tbl->setColumnCount(4);
-            tbl->setHorizontalHeaderLabels(
-                {QStringLiteral("#"), QStringLiteral("Tool"),
-                 QStringLiteral("Duration"), QStringLiteral("Result preview")});
+            tbl->setHorizontalHeaderLabels({QStringLiteral("#"), QStringLiteral("Tool"), QStringLiteral("Duration"),
+                                            QStringLiteral("Result preview")});
             tbl->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
             tbl->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
             tbl->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -372,9 +358,7 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
                 tbl->setItem(i, 0, new QTableWidgetItem(QString::number(i + 1)));
                 tbl->setItem(i, 1, new QTableWidgetItem(tc.value(QStringLiteral("name")).toString()));
                 const auto dur = tc.value(QStringLiteral("duration_ms"));
-                tbl->setItem(i, 2, new QTableWidgetItem(
-                                       dur.isDouble() ? format_ms(dur.toInt())
-                                                      : QStringLiteral("—")));
+                tbl->setItem(i, 2, new QTableWidgetItem(dur.isDouble() ? format_ms(dur.toInt()) : QStringLiteral("—")));
                 const QString preview = tc.value(QStringLiteral("result_preview")).toString();
                 auto* prev_item = new QTableWidgetItem(preview);
                 prev_item->setToolTip(preview);
@@ -398,10 +382,9 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
             root->addWidget(new QLabel(QStringLiteral("<b>Prior feedback</b>")));
             QStringList parts;
             for (const auto& f : prior.value()) {
-                parts.append(QStringLiteral("%1: %2%3")
-                                 .arg(f.created_at, f.verdict,
-                                      f.note.isEmpty() ? QString()
-                                                       : QStringLiteral(" — ") + f.note));
+                parts.append(
+                    QStringLiteral("%1: %2%3")
+                        .arg(f.created_at, f.verdict, f.note.isEmpty() ? QString() : QStringLiteral(" — ") + f.note));
             }
             auto* p = new QLabel(parts.join("\n"));
             p->setWordWrap(true);
@@ -416,27 +399,21 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
     connect(close_btn, &QPushButton::clicked, &dlg, &QDialog::accept);
     auto record_feedback = [this, &dlg, &t](const QString& verdict) {
         bool ok = false;
-        const QString note = QInputDialog::getText(
-            &dlg, QStringLiteral("Mark ") + verdict,
-            QStringLiteral("Optional note (what was wrong / right):"),
-            QLineEdit::Normal, QString(), &ok);
+        const QString note = QInputDialog::getText(&dlg, QStringLiteral("Mark ") + verdict,
+                                                   QStringLiteral("Optional note (what was wrong / right):"),
+                                                   QLineEdit::Normal, QString(), &ok);
         if (!ok)
             return;
         auto r = AgentFeedbackRepository::instance().create(t.request_id, verdict, note);
         if (r.is_err()) {
-            show_status(QStringLiteral("Failed to save feedback: %1")
-                            .arg(QString::fromStdString(r.error())), true);
+            show_status(QStringLiteral("Failed to save feedback: %1").arg(QString::fromStdString(r.error())), true);
             return;
         }
         show_status(QStringLiteral("Recorded %1 for %2").arg(verdict, t.request_id.left(8)));
         dlg.accept();
     };
-    connect(mark_wrong, &QPushButton::clicked, this, [record_feedback]() {
-        record_feedback(QStringLiteral("wrong"));
-    });
-    connect(mark_right, &QPushButton::clicked, this, [record_feedback]() {
-        record_feedback(QStringLiteral("right"));
-    });
+    connect(mark_wrong, &QPushButton::clicked, this, [record_feedback]() { record_feedback(QStringLiteral("wrong")); });
+    connect(mark_right, &QPushButton::clicked, this, [record_feedback]() { record_feedback(QStringLiteral("right")); });
 
     // Track 7C — "Propose SKILL.md fix" closes the feedback loop.
     // Shown only when the trace was a slash-dispatched skill turn
@@ -445,19 +422,14 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
     QPushButton* propose_btn = nullptr;
     {
         const QJsonDocument cd = QJsonDocument::fromJson(t.config_json.toUtf8());
-        const QString skill = cd.isObject()
-                                  ? cd.object().value(QStringLiteral("skill")).toString()
-                                  : QString();
+        const QString skill = cd.isObject() ? cd.object().value(QStringLiteral("skill")).toString() : QString();
         if (!skill.isEmpty()) {
             propose_btn = new QPushButton(QStringLiteral("🧠 Propose SKILL.md fix"));
-            propose_btn->setToolTip(
-                QStringLiteral("Send this turn + the current SKILL.md to the "
-                               "active LLM and ask for a proposed revision.  "
-                               "Output is shown for review — nothing is written "
-                               "to disk automatically."));
-            connect(propose_btn, &QPushButton::clicked, this, [this, t]() {
-                on_propose_skill_fix(t);
-            });
+            propose_btn->setToolTip(QStringLiteral("Send this turn + the current SKILL.md to the "
+                                                   "active LLM and ask for a proposed revision.  "
+                                                   "Output is shown for review — nothing is written "
+                                                   "to disk automatically."));
+            connect(propose_btn, &QPushButton::clicked, this, [this, t]() { on_propose_skill_fix(t); });
         }
     }
 
@@ -479,10 +451,9 @@ void AiSystemSection::on_propose_skill_fix(const AgentTraceRow& trace) {
     // model sees it.  Empty note is fine — the model still has the
     // full query + response.
     bool ok = false;
-    const QString note = QInputDialog::getText(
-        this, QStringLiteral("Propose SKILL.md fix"),
-        QStringLiteral("What went wrong? (one line, optional):"),
-        QLineEdit::Normal, QString(), &ok);
+    const QString note = QInputDialog::getText(this, QStringLiteral("Propose SKILL.md fix"),
+                                               QStringLiteral("What went wrong? (one line, optional):"),
+                                               QLineEdit::Normal, QString(), &ok);
     if (!ok)
         return;
 
@@ -494,9 +465,8 @@ void AiSystemSection::on_propose_skill_fix(const AgentTraceRow& trace) {
     progress_raw->setModal(true);
     progress_raw->setAttribute(Qt::WA_DeleteOnClose);
     auto* pl = new QVBoxLayout(progress_raw);
-    pl->addWidget(new QLabel(QStringLiteral(
-        "Sending the trace + current SKILL.md to the active LLM…\n"
-        "This usually takes 5-15 seconds.")));
+    pl->addWidget(new QLabel(QStringLiteral("Sending the trace + current SKILL.md to the active LLM…\n"
+                                            "This usually takes 5-15 seconds.")));
     auto* bar = new QProgressBar;
     bar->setRange(0, 0);
     pl->addWidget(bar);
@@ -506,28 +476,25 @@ void AiSystemSection::on_propose_skill_fix(const AgentTraceRow& trace) {
     auto* watcher = new QFutureWatcher<Result<services::SkillProposal>>(this);
     QPointer<AiSystemSection> self = this;
     QPointer<QDialog> progress = progress_raw;
-    connect(watcher, &QFutureWatcher<Result<services::SkillProposal>>::finished, this,
-            [self, watcher, progress]() {
-                // Read the result BEFORE scheduling deletion — the
-                // current event loop iteration still has the watcher
-                // live, but reordering reads more obviously safe.
-                const auto r = watcher->result();
-                watcher->deleteLater();
-                if (progress)
-                    progress->close();
-                if (self)
-                    self->show_proposal_dialog(r);
-            });
-    auto future = QtConcurrent::run([trace, note]() {
-        return services::SkillProposalService::instance().propose(trace, note);
+    connect(watcher, &QFutureWatcher<Result<services::SkillProposal>>::finished, this, [self, watcher, progress]() {
+        // Read the result BEFORE scheduling deletion — the
+        // current event loop iteration still has the watcher
+        // live, but reordering reads more obviously safe.
+        const auto r = watcher->result();
+        watcher->deleteLater();
+        if (progress)
+            progress->close();
+        if (self)
+            self->show_proposal_dialog(r);
     });
+    auto future =
+        QtConcurrent::run([trace, note]() { return services::SkillProposalService::instance().propose(trace, note); });
     watcher->setFuture(future);
 }
 
 void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>& r) {
     if (r.is_err()) {
-        show_status(QStringLiteral("Propose-fix failed: %1")
-                        .arg(QString::fromStdString(r.error())), true);
+        show_status(QStringLiteral("Propose-fix failed: %1").arg(QString::fromStdString(r.error())), true);
         return;
     }
     const auto& p = r.value();
@@ -538,8 +505,8 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
     dlg->resize(800, 700);
 
     auto* root = new QVBoxLayout(dlg);
-    auto* header = new QLabel(QStringLiteral("<b>Skill:</b> %1<br><b>Path:</b> <code>%2</code>")
-                                  .arg(p.skill_name, p.skill_path));
+    auto* header =
+        new QLabel(QStringLiteral("<b>Skill:</b> %1<br><b>Path:</b> <code>%2</code>").arg(p.skill_name, p.skill_path));
     header->setTextInteractionFlags(Qt::TextSelectableByMouse);
     root->addWidget(header);
 
@@ -561,9 +528,7 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
     auto* copy_btn = new QPushButton(QStringLiteral("Copy to clipboard"));
     auto* save_btn = new QPushButton(QStringLiteral("Overwrite SKILL.md…"));
     auto* close_btn = new QPushButton(QStringLiteral("Close"));
-    connect(copy_btn, &QPushButton::clicked, dlg, [p]() {
-        QApplication::clipboard()->setText(p.proposed_content);
-    });
+    connect(copy_btn, &QPushButton::clicked, dlg, [p]() { QApplication::clipboard()->setText(p.proposed_content); });
     // Capture `this` via QPointer — the dialog has WA_DeleteOnClose
     // and can outlive a screen tab-switch that destroys this section.
     // Calling show_status() through a dangling raw `this` would
@@ -574,15 +539,14 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
         // Hard confirm before any disk write — SKILL.md is a
         // checked-in file and an accidental overwrite is annoying
         // to undo without git.
-        const QString confirm = QStringLiteral(
-            "Overwrite %1?\n\nThe current SKILL.md will be replaced "
-            "with the proposed content.  Recover with `git diff` / "
-            "`git checkout` if needed.").arg(p.skill_path);
+        const QString confirm = QStringLiteral("Overwrite %1?\n\nThe current SKILL.md will be replaced "
+                                               "with the proposed content.  Recover with `git diff` / "
+                                               "`git checkout` if needed.")
+                                    .arg(p.skill_path);
         bool ok = false;
-        const QString typed = QInputDialog::getText(
-            dlg, QStringLiteral("Confirm overwrite"),
-            confirm + QStringLiteral("\n\nType 'overwrite' to confirm:"),
-            QLineEdit::Normal, QString(), &ok);
+        const QString typed = QInputDialog::getText(dlg, QStringLiteral("Confirm overwrite"),
+                                                    confirm + QStringLiteral("\n\nType 'overwrite' to confirm:"),
+                                                    QLineEdit::Normal, QString(), &ok);
         if (!ok || typed != QStringLiteral("overwrite"))
             return;
         // Atomic write: write to <path>.tmp then rename over the
@@ -633,8 +597,7 @@ void AiSystemSection::show_proposal_dialog(const Result<services::SkillProposal>
 
 void AiSystemSection::show_status(const QString& msg, bool error) {
     status_lbl_->setText(msg);
-    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;")
-                                     : QStringLiteral("color: #393;"));
+    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;") : QStringLiteral("color: #393;"));
 }
 
 } // namespace fincept::screens

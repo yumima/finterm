@@ -8,10 +8,9 @@
 #include <QApplication>
 #include <QMetaObject>
 #include <QPromise>
-
-#include <algorithm>
 #include <QTimer>
 
+#include <algorithm>
 #include <atomic>
 #include <memory>
 
@@ -73,8 +72,7 @@ std::vector<Resource> McpProvider::list_resources() const {
     result.reserve(static_cast<std::size_t>(resources_.size()));
     for (auto it = resources_.cbegin(); it != resources_.cend(); ++it)
         result.push_back(it.value());
-    std::sort(result.begin(), result.end(),
-              [](const Resource& a, const Resource& b) { return a.uri < b.uri; });
+    std::sort(result.begin(), result.end(), [](const Resource& a, const Resource& b) { return a.uri < b.uri; });
     return result;
 }
 
@@ -138,8 +136,7 @@ std::vector<Prompt> McpProvider::list_prompts() const {
     result.reserve(static_cast<std::size_t>(prompts_.size()));
     for (auto it = prompts_.cbegin(); it != prompts_.cend(); ++it)
         result.push_back(it.value());
-    std::sort(result.begin(), result.end(),
-              [](const Prompt& a, const Prompt& b) { return a.name < b.name; });
+    std::sort(result.begin(), result.end(), [](const Prompt& a, const Prompt& b) { return a.name < b.name; });
     return result;
 }
 
@@ -333,11 +330,8 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
 
         if (ctx.on_elicit) {
             ElicitRequest req;
-            req.prompt = QStringLiteral(
-                "%1 is %2authorization-gated.  Allow execution?")
-                .arg(name,
-                     is_destructive ? QStringLiteral("destructive and ")
-                                    : QStringLiteral(""));
+            req.prompt = QStringLiteral("%1 is %2authorization-gated.  Allow execution?")
+                             .arg(name, is_destructive ? QStringLiteral("destructive and ") : QStringLiteral(""));
             req.schema = QJsonObject{
                 {"type", "boolean"},
                 {"description", QStringLiteral("True to allow, false to deny")},
@@ -368,14 +362,12 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
                 LOG_WARN(TAG, QString("Tool '%1' denied by auth gate (required=%2, destructive=%3)")
                                   .arg(name, auth_level_str(auth_required))
                                   .arg(is_destructive ? "true" : "false"));
-                return fail_now(
-                    QString("Tool '%1' requires user authorization").arg(name));
+                return fail_now(QString("Tool '%1' requires user authorization").arg(name));
             }
         } else if (auth_required >= AuthLevel::Verified) {
             LOG_WARN(TAG, QString("Tool '%1' blocked: no auth gate installed (required=%2)")
                               .arg(name, auth_level_str(auth_required)));
-            return fail_now(
-                "Tool requires confirmation but no authorisation hook is installed");
+            return fail_now("Tool requires confirmation but no authorisation hook is installed");
         } else if (is_destructive) {
             LOG_INFO(TAG, QString("Tool '%1' is destructive (advisory; install McpProvider::"
                                   "set_auth_checker or wire ctx.on_elicit to gate)")
@@ -450,16 +442,15 @@ QFuture<ToolResult> McpProvider::call_tool_async(const QString& name, const QJso
         auto* watchdog = new QTimer;
         watchdog->setSingleShot(true);
         watchdog->moveToThread(qApp->thread());
-        QObject::connect(watchdog, &QTimer::timeout, watchdog,
-                         [promise, cancelled, watchdog, name]() {
-                             if (!promise->future().isFinished()) {
-                                 cancelled->store(true);
-                                 LOG_WARN(TAG, QString("Tool '%1' timed out").arg(name));
-                                 promise->addResult(ToolResult::fail("Tool '" + name + "' timed out"));
-                                 promise->finish();
-                             }
-                             watchdog->deleteLater();
-                         });
+        QObject::connect(watchdog, &QTimer::timeout, watchdog, [promise, cancelled, watchdog, name]() {
+            if (!promise->future().isFinished()) {
+                cancelled->store(true);
+                LOG_WARN(TAG, QString("Tool '%1' timed out").arg(name));
+                promise->addResult(ToolResult::fail("Tool '" + name + "' timed out"));
+                promise->finish();
+            }
+            watchdog->deleteLater();
+        });
         QMetaObject::invokeMethod(
             watchdog, [watchdog, ms = ctx.timeout_ms]() { watchdog->start(ms); }, Qt::QueuedConnection);
 

@@ -35,12 +35,12 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 }
 
 static Result<void> apply_v030(QSqlDatabase& db) {
-    if (auto r = sql(db,
-            "CREATE TABLE IF NOT EXISTS tool_killswitch ("
-            "  tool_name TEXT PRIMARY KEY,"
-            "  reason TEXT,"
-            "  disabled_at TEXT NOT NULL DEFAULT (datetime('now'))"
-            ")"); r.is_err()) {
+    if (auto r = sql(db, "CREATE TABLE IF NOT EXISTS tool_killswitch ("
+                         "  tool_name TEXT PRIMARY KEY,"
+                         "  reason TEXT,"
+                         "  disabled_at TEXT NOT NULL DEFAULT (datetime('now'))"
+                         ")");
+        r.is_err()) {
         return r;
     }
     LOG_INFO(kTag, "tool_killswitch table ready");

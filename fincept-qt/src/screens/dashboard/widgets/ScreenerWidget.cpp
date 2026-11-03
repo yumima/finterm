@@ -1,10 +1,9 @@
 #include "screens/dashboard/widgets/ScreenerWidget.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -149,8 +148,8 @@ void ScreenerWidget::style_row(Row& row, bool alt) {
 
 void ScreenerWidget::apply_styles() {
     filter_bar_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
-    filter_lbl_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                                   .arg(ui::colors::TEXT_SECONDARY()));
+    filter_lbl_->setStyleSheet(
+        QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     filter_combo_->setStyleSheet(
         QString("QComboBox { background: %1; color: %2; border: 1px solid %3; font-size: 10px; padding: 2px 6px; }"
                 "QComboBox::drop-down { border: none; }"
@@ -158,15 +157,14 @@ void ScreenerWidget::apply_styles() {
             .arg(ui::colors::BG_BASE())
             .arg(ui::colors::TEXT_PRIMARY())
             .arg(ui::colors::BORDER_MED()));
-    count_lbl_->setStyleSheet(
-        QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    count_lbl_->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 
     header_->setStyleSheet(QString("background: %1; border-bottom: 1px solid %2;")
                                .arg(ui::colors::BG_RAISED())
                                .arg(ui::colors::BORDER_DIM()));
     for (auto* lbl : header_labels_) {
-        lbl->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                               .arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(
+            QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     }
 
     scroll_->setStyleSheet(
@@ -208,9 +206,8 @@ void ScreenerWidget::refresh_data() {
     topics.reserve(kScreenerSymbols.size());
     for (const auto& sym : kScreenerSymbols)
         topics.append(QStringLiteral("market:quote:") + sym);
-    hub.request(topics, /*force=*/true);  // user-triggered: bypass min_interval
+    hub.request(topics, /*force=*/true); // user-triggered: bypass min_interval
 }
-
 
 void ScreenerWidget::hub_subscribe_all() {
     auto& hub = datahub::DataHub::instance();
@@ -259,7 +256,6 @@ void ScreenerWidget::rebuild_all_quotes() {
     }
     apply_filter();
 }
-
 
 void ScreenerWidget::apply_filter() {
     if (all_quotes_.isEmpty())

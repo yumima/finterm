@@ -20,10 +20,10 @@ AiConfigSection::AiConfigSection(QWidget* parent) : QWidget(parent) {
     tabs_ = new QTabWidget();
     tabs_->setDocumentMode(true);
     tabs_->setStyleSheet(QString("QTabWidget::pane{border:none;}"
-                                "QTabBar::tab{background:transparent;color:%1;padding:8px 16px;"
-                                "font-size:12px;font-weight:600;border-bottom:2px solid transparent;}"
-                                "QTabBar::tab:selected{color:%2;border-bottom:2px solid %2;}"
-                                "QTabBar::tab:hover{color:%2;}")
+                                 "QTabBar::tab{background:transparent;color:%1;padding:8px 16px;"
+                                 "font-size:12px;font-weight:600;border-bottom:2px solid transparent;}"
+                                 "QTabBar::tab:selected{color:%2;border-bottom:2px solid %2;}"
+                                 "QTabBar::tab:hover{color:%2;}")
                              .arg(ui::colors::TEXT_DIM())
                              .arg(ui::colors::AMBER()));
 

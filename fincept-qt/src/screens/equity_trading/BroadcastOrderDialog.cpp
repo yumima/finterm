@@ -28,8 +28,8 @@ BroadcastOrderDialog::BroadcastOrderDialog(const trading::UnifiedOrder& order, Q
                           "QLabel#resultOk { color: %5; font-size: 11px; }"
                           "QLabel#resultErr { color: %6; font-size: 11px; }"
                           "QPushButton { padding: 8px 16px; font-weight: 700; font-size: 12px; border-radius: 2px; }")
-                      .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::AMBER(),
-                           colors::TEXT_SECONDARY(), colors::POSITIVE(), colors::NEGATIVE()));
+                      .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::AMBER(), colors::TEXT_SECONDARY(),
+                           colors::POSITIVE(), colors::NEGATIVE()));
     setup_ui();
 }
 
@@ -69,8 +69,8 @@ void BroadcastOrderDialog::setup_ui() {
     // Scrollable account list
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
-    scroll->setStyleSheet(QString("QScrollArea { border: 1px solid %1; background: %2; }")
-                              .arg(colors::BORDER_MED(), colors::BG_BASE()));
+    scroll->setStyleSheet(
+        QString("QScrollArea { border: 1px solid %1; background: %2; }").arg(colors::BORDER_MED(), colors::BG_BASE()));
 
     auto* list_widget = new QWidget(this);
     auto* list_layout = new QVBoxLayout(list_widget);
@@ -132,8 +132,8 @@ void BroadcastOrderDialog::setup_ui() {
     btn_row->addStretch();
 
     auto* cancel_btn = new QPushButton("CANCEL");
-    cancel_btn->setStyleSheet(QString("QPushButton { background: %1; color: %2; }")
-                                  .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY()));
+    cancel_btn->setStyleSheet(
+        QString("QPushButton { background: %1; color: %2; }").arg(colors::BG_RAISED(), colors::TEXT_PRIMARY()));
     connect(cancel_btn, &QPushButton::clicked, this, &QDialog::reject);
     btn_row->addWidget(cancel_btn);
 

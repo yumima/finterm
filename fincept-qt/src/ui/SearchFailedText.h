@@ -13,13 +13,12 @@
 namespace fincept::ui {
 
 inline QString search_failed_text(bool transient = true) {
-    return transient ? QStringLiteral("Search failed — no answer. Try again.")
-                     : QStringLiteral("Search failed.");
+    return transient ? QStringLiteral("Search failed — no answer. Try again.") : QStringLiteral("Search failed.");
 }
 
 struct SearchReply {
     QJsonArray results;
-    QString    failure;   // empty when the search answered (even with no matches)
+    QString failure; // empty when the search answered (even with no matches)
 };
 
 /// The daemon's "search" reply: results under "_value" (flat array) or

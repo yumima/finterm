@@ -27,9 +27,11 @@ QString role_short(const QStringList& roles) {
     for (const QString& r : roles) {
         if (r.compare(QLatin1String("Director"), Qt::CaseInsensitive) == 0)
             out << QStringLiteral("Dir");
-        else if (r.contains(QLatin1String("Chief Executive"), Qt::CaseInsensitive) || r.startsWith(QLatin1String("CEO")))
+        else if (r.contains(QLatin1String("Chief Executive"), Qt::CaseInsensitive) ||
+                 r.startsWith(QLatin1String("CEO")))
             out << QStringLiteral("CEO");
-        else if (r.contains(QLatin1String("Chief Financial"), Qt::CaseInsensitive) || r.startsWith(QLatin1String("CFO")))
+        else if (r.contains(QLatin1String("Chief Financial"), Qt::CaseInsensitive) ||
+                 r.startsWith(QLatin1String("CFO")))
             out << QStringLiteral("CFO");
         else if (r.contains(QLatin1String("General Counsel"), Qt::CaseInsensitive))
             out << QStringLiteral("GC");
@@ -69,8 +71,7 @@ InsidersPanel::InsidersPanel(QWidget* parent) : QWidget(parent) {
     table_ = make_table({QStringLiteral("Traded"), QStringLiteral("Filed"), QStringLiteral("Insider"),
                          QStringLiteral("Role"), QStringLiteral("Action"), QStringLiteral("Shares"),
                          QStringLiteral("Price"), QStringLiteral("Value"), QStringLiteral("Held after"),
-                         QStringLiteral("10b5-1"), QStringLiteral("1w"), QStringLiteral("1m"),
-                         QStringLiteral("3m")});
+                         QStringLiteral("10b5-1"), QStringLiteral("1w"), QStringLiteral("1m"), QStringLiteral("3m")});
     table_->setMinimumHeight(80);
     connect(table_, &QTableWidget::cellDoubleClicked, this, [this](int row, int) {
         auto* it = table_->item(row, 0);
@@ -118,8 +119,8 @@ void InsidersPanel::render() {
         timeline_->set_transactions({}, {});
         const bool pending = loading_ && s.edgar_error.isEmpty();
         timeline_->set_empty_text(pending ? QStringLiteral("Reading Form 4 filings from EDGAR — each "
-                                                            "filing is its own document, so a busy "
-                                                            "issuer takes a minute.")
+                                                           "filing is its own document, so a busy "
+                                                           "issuer takes a minute.")
                                   : s.edgar_error.isEmpty() ? QString()
                                                             : QStringLiteral("EDGAR: ") + s.edgar_error);
         title_note_->setText(pending ? QStringLiteral("loading…") : QString());
@@ -131,15 +132,18 @@ void InsidersPanel::render() {
     timeline_->set_transactions(s.transactions, clusters);
     int open_market = 0;
     for (const auto& t : s.transactions)
-        if (t.open_market && !t.derivative) ++open_market;
-    timeline_->set_empty_text(
-        s.transactions.isEmpty()
-            ? QStringLiteral("No Form 4 filings in the last %1 months.").arg(s.window_months)
-            : QStringLiteral("%1 filings, none of them open-market buys or sells — all grants, "
-                             "option exercises or tax withholding.").arg(s.transactions.size()));
+        if (t.open_market && !t.derivative)
+            ++open_market;
+    timeline_->set_empty_text(s.transactions.isEmpty()
+                                  ? QStringLiteral("No Form 4 filings in the last %1 months.").arg(s.window_months)
+                                  : QStringLiteral("%1 filings, none of them open-market buys or sells — all grants, "
+                                                   "option exercises or tax withholding.")
+                                        .arg(s.transactions.size()));
 
     QString note = QStringLiteral("%1 months · %2 open-market of %3 rows")
-                       .arg(s.window_months).arg(open_market).arg(s.transactions.size());
+                       .arg(s.window_months)
+                       .arg(open_market)
+                       .arg(s.transactions.size());
     if (!clusters.isEmpty()) {
         const auto& c = clusters.first();
         note += QStringLiteral(" · <span style='color:%1;'>cluster: %2 insiders bought %3–%4</span>")
@@ -174,9 +178,8 @@ void InsidersPanel::render() {
         table_->setItem(i, 0, traded);
         table_->setItem(i, 1, cell(date_or_dash(t.filed_date), ui::colors::TEXT_SECONDARY()));
         auto* who = cell(t.insider);
-        who->setToolTip(ui::tooltip_wrap(t.roles.isEmpty() ? t.insider
-                                                           : t.insider + QStringLiteral(" — ") +
-                                                                 t.roles.join(QStringLiteral(", "))));
+        who->setToolTip(ui::tooltip_wrap(
+            t.roles.isEmpty() ? t.insider : t.insider + QStringLiteral(" — ") + t.roles.join(QStringLiteral(", "))));
         table_->setItem(i, 2, who);
         table_->setItem(i, 3, cell(role_short(t.roles), ui::colors::TEXT_SECONDARY()));
 
@@ -187,9 +190,9 @@ void InsidersPanel::render() {
             action += QStringLiteral(" (deriv)");
         auto* act = cell(action, colour);
         if (t.acquired && t.ten_percent_owner && t.open_market)
-            act->setToolTip(ui::tooltip_wrap(QStringLiteral(
-                "Bought by a 10% beneficial owner — a holder, not an insider in the sense the "
-                "evidence is about. Shown, not scored: their purchase ranking inverts.")));
+            act->setToolTip(ui::tooltip_wrap(
+                QStringLiteral("Bought by a 10% beneficial owner — a holder, not an insider in the sense the "
+                               "evidence is about. Shown, not scored: their purchase ranking inverts.")));
         table_->setItem(i, 4, act);
 
         table_->setItem(i, 5, num_cell(compact_or_dash(t.shares), colour));
@@ -197,26 +200,26 @@ void InsidersPanel::render() {
         table_->setItem(i, 7, num_cell(compact_or_dash(t.value), colour));
         table_->setItem(i, 8, num_cell(compact_or_dash(t.shares_held_after), ui::colors::TEXT_SECONDARY()));
 
-        auto* plan = cell(!t.plan_10b5_1 ? fmt::placeholder()
-                                         : *t.plan_10b5_1 ? QStringLiteral("plan") : QStringLiteral("no"),
+        auto* plan = cell(!t.plan_10b5_1   ? fmt::placeholder()
+                          : *t.plan_10b5_1 ? QStringLiteral("plan")
+                                           : QStringLiteral("no"),
                           ui::colors::TEXT_SECONDARY(), Qt::AlignCenter);
         plan->setToolTip(ui::tooltip_wrap(
             !t.plan_10b5_1 ? QStringLiteral("The 10b5-1 checkbox exists on filings since 2023; this one predates it.")
-                           : *t.plan_10b5_1
-                                 ? QStringLiteral("Made under a written 10b5-1 plan — decided months before it printed, so not scored.")
-                                 : QStringLiteral("Not a plan trade.")));
+            : *t.plan_10b5_1
+                ? QStringLiteral("Made under a written 10b5-1 plan — decided months before it printed, so not scored.")
+                : QStringLiteral("Not a plan trade.")));
         table_->setItem(i, 9, plan);
 
         auto ret = [&](const std::optional<double>& v, const QDate& due) {
             auto* it = num_cell(v ? pct_or_dash(v, 1, true) : fmt::placeholder(), signed_colour(v));
             if (!v) {
                 it->setToolTip(ui::tooltip_wrap(
-                    !t.open_market || t.derivative
-                        ? QStringLiteral("Returns are computed for open-market trades only.")
-                        : due > QDate::currentDate()
-                              ? QStringLiteral("Not yet — the window ends %1.").arg(due.toString(QStringLiteral("d MMM")))
-                              : s.returns_ok ? QStringLiteral("No close on file for this window.")
-                                             : QStringLiteral("Price history not loaded yet.")));
+                    !t.open_market || t.derivative ? QStringLiteral("Returns are computed for open-market trades only.")
+                    : due > QDate::currentDate()
+                        ? QStringLiteral("Not yet — the window ends %1.").arg(due.toString(QStringLiteral("d MMM")))
+                    : s.returns_ok ? QStringLiteral("No close on file for this window.")
+                                   : QStringLiteral("Price history not loaded yet.")));
             }
             return it;
         };

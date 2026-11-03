@@ -106,7 +106,7 @@ QWidget* AlgoTradingScreen::build_top_bar() {
     hl->addWidget(div);
 
     // Tab buttons
-    QStringList tabs   = {"BUILDER", "MY STRATEGIES", "SCANNER", "DASHBOARD"};
+    QStringList tabs = {"BUILDER", "MY STRATEGIES", "SCANNER", "DASHBOARD"};
     QStringList colors = {"#FF6B35", "#00E5FF", "#FFC400", "#00D66F"};
 
     for (int i = 0; i < tabs.size(); ++i) {
@@ -146,8 +146,9 @@ QWidget* AlgoTradingScreen::build_status_bar() {
     auto* hl = new QHBoxLayout(bar);
     hl->setContentsMargins(12, 0, 12, 0);
     hl->setSpacing(16);
-    auto s =
-        QString("color:%1; font-size:12px; font-family:%2;").arg(ui::colors::TEXT_SECONDARY()).arg(ui::fonts::DATA_FAMILY);
+    auto s = QString("color:%1; font-size:12px; font-family:%2;")
+                 .arg(ui::colors::TEXT_SECONDARY())
+                 .arg(ui::fonts::DATA_FAMILY);
     auto* l1 = new QLabel("ENGINE:", bar);
     l1->setStyleSheet(s);
     auto* v1 = new QLabel("ALGO v1.0", bar);
@@ -184,20 +185,18 @@ void AlgoTradingScreen::update_tab_buttons() {
     QStringList colors = {"#FF6B35", "#00E5FF", "#FFC400", "#00D66F"};
     for (int i = 0; i < tab_buttons_.size(); ++i) {
         bool active = (i == active_tab_);
-        tab_buttons_[i]->setStyleSheet(
-            active
-                ? QString("QPushButton { color:%1; font-size:12px; font-family:%2;"
-                          " padding:4px 12px; border:none; border-bottom:2px solid %1;"
-                          " background:transparent; font-weight:700; }")
-                      .arg(colors[i])
-                      .arg(ui::fonts::DATA_FAMILY())
-                : QString("QPushButton { color:%1; font-size:12px; font-family:%2;"
-                          " padding:4px 12px; border:none;"
-                          " background:transparent; font-weight:400; }"
-                          "QPushButton:hover { color:%3; }")
-                      .arg(ui::colors::TEXT_SECONDARY())
-                      .arg(ui::fonts::DATA_FAMILY())
-                      .arg(colors[i]));
+        tab_buttons_[i]->setStyleSheet(active ? QString("QPushButton { color:%1; font-size:12px; font-family:%2;"
+                                                        " padding:4px 12px; border:none; border-bottom:2px solid %1;"
+                                                        " background:transparent; font-weight:700; }")
+                                                    .arg(colors[i])
+                                                    .arg(ui::fonts::DATA_FAMILY())
+                                              : QString("QPushButton { color:%1; font-size:12px; font-family:%2;"
+                                                        " padding:4px 12px; border:none;"
+                                                        " background:transparent; font-weight:400; }"
+                                                        "QPushButton:hover { color:%3; }")
+                                                    .arg(ui::colors::TEXT_SECONDARY())
+                                                    .arg(ui::fonts::DATA_FAMILY())
+                                                    .arg(colors[i]));
     }
 }
 

@@ -4,6 +4,8 @@
 #include "ai_chat/LlmService.h"
 #include "auth/AuthManager.h"
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/TopicPolicy.h"
 #include "mcp/McpManager.h"
 #include "mcp/McpProvider.h"
 #include "mcp/McpService.h"
@@ -17,28 +19,25 @@
 #include "storage/repositories/LlmConfigRepository.h"
 #include "storage/repositories/LlmProfileRepository.h"
 
-#    include "datahub/DataHub.h"
-#    include "datahub/TopicPolicy.h"
-
 #include <QCoreApplication>
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QHash>
 #include <QHostAddress>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QMutex>
 #include <QMutexLocker>
+#include <QPointer>
+#include <QProcess>
 #include <QRandomGenerator>
 #include <QSet>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QThread>
-#include <QtConcurrent/QtConcurrent>
-#include <QElapsedTimer>
-#include <QJsonArray>
-#include <QJsonDocument>
-#include <QPointer>
-#include <QProcess>
 #include <QUuid>
 #include <QVariant>
+#include <QtConcurrent/QtConcurrent>
 
 #include <memory>
 
@@ -167,13 +166,20 @@ constexpr qint64 kBridgeMaxBody = 1 << 20;
 // whole ~474-tool catalog.
 const QStringList& default_agent_tool_globs() {
     static const QStringList g = {
-        QStringLiteral("int__get_quote"),         QStringLiteral("int__get_candles"),
-        QStringLiteral("int__get_news"),          QStringLiteral("int__search_news"),
-        QStringLiteral("int__get_top_news"),      QStringLiteral("int__get_news_summary"),
-        QStringLiteral("int__get_watchlists"),    QStringLiteral("int__list_portfolios"),
-        QStringLiteral("int__get_portfolio"),     QStringLiteral("int__get_holdings"),
-        QStringLiteral("int__get_transactions"),  QStringLiteral("int__get_equity_*"),
-        QStringLiteral("int__edgar_search_filings"), QStringLiteral("int__edgar_get_financials"),
+        QStringLiteral("int__get_quote"),
+        QStringLiteral("int__get_candles"),
+        QStringLiteral("int__get_news"),
+        QStringLiteral("int__search_news"),
+        QStringLiteral("int__get_top_news"),
+        QStringLiteral("int__get_news_summary"),
+        QStringLiteral("int__get_watchlists"),
+        QStringLiteral("int__list_portfolios"),
+        QStringLiteral("int__get_portfolio"),
+        QStringLiteral("int__get_holdings"),
+        QStringLiteral("int__get_transactions"),
+        QStringLiteral("int__get_equity_*"),
+        QStringLiteral("int__edgar_search_filings"),
+        QStringLiteral("int__edgar_get_financials"),
         QStringLiteral("int__edgar_get_financial_metrics"),
     };
     return g;
@@ -207,8 +213,8 @@ class TerminalToolBridge {
 
     /// Authorise `wire_names` for one dispatch; returns the session token.
     QString open_session(const QSet<QString>& wire_names) {
-        const QString token = QUuid::createUuid().toString(QUuid::Id128) +
-                              QString::number(QRandomGenerator::system()->generate64(), 16);
+        const QString token =
+            QUuid::createUuid().toString(QUuid::Id128) + QString::number(QRandomGenerator::system()->generate64(), 16);
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         QMutexLocker lock(&mutex_);
         for (auto it = sessions_.begin(); it != sessions_.end();) {
@@ -248,9 +254,10 @@ class TerminalToolBridge {
     static void reply(QTcpSocket* sock, int code, const QJsonObject& body) {
         const QByteArray payload = QJsonDocument(body).toJson(QJsonDocument::Compact);
         const char* reason = code == 200 ? "OK" : code == 403 ? "Forbidden" : code == 404 ? "Not Found" : "Bad Request";
-        QByteArray head = QByteArray("HTTP/1.1 ") + QByteArray::number(code) + ' ' + reason +
-                          "\r\nContent-Type: application/json\r\nContent-Length: " +
-                          QByteArray::number(payload.size()) + "\r\nConnection: close\r\n\r\n";
+        QByteArray head =
+            QByteArray("HTTP/1.1 ") + QByteArray::number(code) + ' ' + reason +
+            "\r\nContent-Type: application/json\r\nContent-Length: " + QByteArray::number(payload.size()) +
+            "\r\nConnection: close\r\n\r\n";
         sock->write(head + payload);
         sock->disconnectFromHost();
     }
@@ -311,8 +318,9 @@ class TerminalToolBridge {
         const QJsonObject args = req.value("args").toObject();
         if (!allowed.contains(tool)) {
             LOG_WARN("AgentToolBridge", "refused tool not granted to this agent: " + tool);
-            reply(sock, 200, {{"success", false},
-                              {"error", QStringLiteral("tool '%1' is not available to this agent").arg(tool)}});
+            reply(
+                sock, 200,
+                {{"success", false}, {"error", QStringLiteral("tool '%1' is not available to this agent").arg(tool)}});
             return;
         }
         QPointer<QTcpSocket> guard(sock);
@@ -339,8 +347,12 @@ class TerminalToolBridge {
 // Actions whose Python handler builds agents that consume terminal_tools.
 bool action_uses_terminal_tools(const QString& action) {
     static const QSet<QString> k = {
-        QStringLiteral("run"),           QStringLiteral("stock_analysis"), QStringLiteral("portfolio_rebal"),
-        QStringLiteral("risk_assessment"), QStringLiteral("execute_query"), QStringLiteral("execute_multi_query"),
+        QStringLiteral("run"),
+        QStringLiteral("stock_analysis"),
+        QStringLiteral("portfolio_rebal"),
+        QStringLiteral("risk_assessment"),
+        QStringLiteral("execute_query"),
+        QStringLiteral("execute_multi_query"),
     };
     return k.contains(action);
 }
@@ -382,8 +394,8 @@ void attach_terminal_tools(QJsonObject& config) {
         wire_names.insert(wire);
     }
     if (dropped_destructive > 0)
-        LOG_INFO("AgentService", QString("agent tools: withheld %1 mutating tool(s) from unattended agent")
-                                     .arg(dropped_destructive));
+        LOG_INFO("AgentService",
+                 QString("agent tools: withheld %1 mutating tool(s) from unattended agent").arg(dropped_destructive));
     if (defs.isEmpty()) {
         if (explicit_allow)
             LOG_WARN("AgentService", "agent allow_tools matched no registered read-only tool: " + globs.join(", "));
@@ -506,8 +518,7 @@ QJsonObject AgentService::build_payload(const QString& action, const QJsonObject
             uid = config["user_id"].toString();
         } else {
             const auto& session = auth::AuthManager::instance().session();
-            uid = session.user_info.id > 0 ? QString::number(session.user_info.id)
-                                           : QStringLiteral("guest");
+            uid = session.user_info.id > 0 ? QString::number(session.user_info.id) : QStringLiteral("guest");
         }
         enriched_params["user_id"] = uid;
     }
@@ -621,14 +632,14 @@ void AgentService::run_python_stdin(const QString& action, const QJsonObject& pa
 
     connect(proc, &QProcess::errorOccurred, this,
             [self, proc, action, on_result, timer, done_emitted](QProcess::ProcessError) {
-        QString err = proc->errorString();
-        proc->deleteLater();
-        if (!self || *done_emitted)
-            return;
-        *done_emitted = true;
-        LOG_ERROR("AgentService", QString("%1 process error: %2").arg(action, err));
-        on_result(false, QJsonObject{{"error", "Process error: " + err}});
-    });
+                QString err = proc->errorString();
+                proc->deleteLater();
+                if (!self || *done_emitted)
+                    return;
+                *done_emitted = true;
+                LOG_ERROR("AgentService", QString("%1 process error: %2").arg(action, err));
+                on_result(false, QJsonObject{{"error", "Process error: " + err}});
+            });
 
     LOG_INFO("AgentService", QString("Running %1 via stdin (%2 bytes)").arg(action).arg(payload_bytes.size()));
     proc->start(python_path, {script_path, "--stdin"});
@@ -796,16 +807,19 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
         const QString reason = QString::fromStdString(bcheck.error());
         LOG_WARN("AgentService", QString("budget refusal [%1]: %2").arg(req_id.left(8), reason));
         QPointer<AgentService> self = this;
-        QMetaObject::invokeMethod(this, [self, req_id, reason]() {
-            if (!self)
-                return;
-            AgentExecutionResult r;
-            r.request_id = req_id;
-            r.success = false;
-            r.error = reason;
-            emit self->agent_result(r);
-            self->publish_agent_result(r, /*final=*/true);
-        }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(
+            this,
+            [self, req_id, reason]() {
+                if (!self)
+                    return;
+                AgentExecutionResult r;
+                r.request_id = req_id;
+                r.success = false;
+                r.error = reason;
+                emit self->agent_result(r);
+                self->publish_agent_result(r, /*final=*/true);
+            },
+            Qt::QueuedConnection);
         return req_id;
     }
 
@@ -820,8 +834,8 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
         c.query = query;
         c.config = config;
         if (auto r = AgentTraceRepository::instance().create(c); r.is_err())
-            LOG_WARN("AgentService", QString("trace create failed for %1: %2")
-                                         .arg(req_id, QString::fromStdString(r.error())));
+            LOG_WARN("AgentService",
+                     QString("trace create failed for %1: %2").arg(req_id, QString::fromStdString(r.error())));
     }
 
     QJsonObject params;
@@ -830,8 +844,7 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
     // Capture predecessor_id once so the finish callback can wire
     // the supersedes_id link on the freshly-emitted artefact (Track
     // 106).  Empty for non-rerun dispatches.
-    const QString predecessor_id =
-        config.value(QStringLiteral("artefact_predecessor_id")).toString();
+    const QString predecessor_id = config.value(QStringLiteral("artefact_predecessor_id")).toString();
 
     QPointer<AgentService> self = this;
     run_python_stdin("run", params, config, [self, req_id, predecessor_id](bool ok, QJsonObject result) {
@@ -883,12 +896,11 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
             // the column NULL (UI shows "(no tool log)").
             const auto v_tc = result.value(QStringLiteral("tool_calls"));
             if (v_tc.isArray()) {
-                f.tool_calls_json = QString::fromUtf8(
-                    QJsonDocument(v_tc.toArray()).toJson(QJsonDocument::Compact));
+                f.tool_calls_json = QString::fromUtf8(QJsonDocument(v_tc.toArray()).toJson(QJsonDocument::Compact));
             }
             if (auto fr = AgentTraceRepository::instance().finish(f); fr.is_err())
-                LOG_WARN("AgentService", QString("trace finish failed for %1: %2")
-                                             .arg(req_id, QString::fromStdString(fr.error())));
+                LOG_WARN("AgentService",
+                         QString("trace finish failed for %1: %2").arg(req_id, QString::fromStdString(fr.error())));
         }
 
         // Track 106: if this was a re-run dispatch, find the most
@@ -897,15 +909,14 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
         // agent didn't call emit_artefact, latest_for_request
         // returns nullopt and we just skip.
         if (r.success && !predecessor_id.isEmpty()) {
-            auto latest = fincept::ChatArtefactRepository::instance()
-                              .latest_for_request(req_id);
+            auto latest = fincept::ChatArtefactRepository::instance().latest_for_request(req_id);
             if (latest.is_ok() && latest.value().has_value()) {
                 const QString new_id = latest.value()->id;
-                if (auto sr = fincept::ChatArtefactRepository::instance()
-                                  .set_supersedes(new_id, predecessor_id);
+                if (auto sr = fincept::ChatArtefactRepository::instance().set_supersedes(new_id, predecessor_id);
                     sr.is_err()) {
-                    LOG_WARN("AgentService", QString("set_supersedes failed for %1: %2")
-                                                 .arg(new_id, QString::fromStdString(sr.error())));
+                    LOG_WARN(
+                        "AgentService",
+                        QString("set_supersedes failed for %1: %2").arg(new_id, QString::fromStdString(sr.error())));
                 }
             }
         }
@@ -1145,15 +1156,14 @@ QString AgentService::run_team(const QString& query, const QJsonObject& team_con
         const QString team_name = team_config.value(QStringLiteral("name")).toString();
         AgentTraceCreate c;
         c.request_id = req_id;
-        c.agent_id = team_name.isEmpty() ? QStringLiteral("team:unknown")
-                                         : (QStringLiteral("team:") + team_name);
+        c.agent_id = team_name.isEmpty() ? QStringLiteral("team:unknown") : (QStringLiteral("team:") + team_name);
         c.runtime = QStringLiteral("agno");
         c.source = QStringLiteral("chat_team");
         c.query = query;
         c.config = team_config;
         if (auto r = AgentTraceRepository::instance().create(c); r.is_err())
-            LOG_WARN("AgentService", QString("trace create failed for team %1: %2")
-                                         .arg(req_id, QString::fromStdString(r.error())));
+            LOG_WARN("AgentService",
+                     QString("trace create failed for team %1: %2").arg(req_id, QString::fromStdString(r.error())));
     }
 
     QJsonObject params;
@@ -1239,73 +1249,78 @@ QString AgentService::run_team(const QString& query, const QJsonObject& team_con
                 }
             });
 
-    connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-            [self, proc, accumulated, final_json, done_emitted, timer, req_id](int exit_code, QProcess::ExitStatus) {
-                int elapsed = timer->elapsed();
-                QString remaining = QString::fromUtf8(proc->readAllStandardOutput());
-                QString stderr_str = QString::fromUtf8(proc->readAllStandardError());
-                proc->deleteLater();
+    connect(
+        proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+        [self, proc, accumulated, final_json, done_emitted, timer, req_id](int exit_code, QProcess::ExitStatus) {
+            int elapsed = timer->elapsed();
+            QString remaining = QString::fromUtf8(proc->readAllStandardOutput());
+            QString stderr_str = QString::fromUtf8(proc->readAllStandardError());
+            proc->deleteLater();
 
-                if (!self || *done_emitted)
-                    return;
-                *done_emitted = true;
+            if (!self || *done_emitted)
+                return;
+            *done_emitted = true;
 
-                for (const QString& line : remaining.split('\n')) {
-                    QString t = line.trimmed();
-                    if (t.startsWith('{'))
-                        *final_json = t;
-                }
+            for (const QString& line : remaining.split('\n')) {
+                QString t = line.trimmed();
+                if (t.startsWith('{'))
+                    *final_json = t;
+            }
 
-                AgentExecutionResult r;
-                r.request_id = req_id;
-                r.execution_time_ms = elapsed;
+            AgentExecutionResult r;
+            r.request_id = req_id;
+            r.execution_time_ms = elapsed;
 
-                QJsonDocument doc = QJsonDocument::fromJson(final_json->toUtf8());
-                if (!doc.isNull() && doc.object()["success"].toBool()) {
-                    QString json_response = doc.object()["response"].toString();
-                    r.success = true;
-                    r.response = json_response.isEmpty() ? accumulated->trimmed() : json_response;
-                } else if (!accumulated->trimmed().isEmpty()) {
-                    r.success = true;
-                    r.response = accumulated->trimmed();
-                } else {
-                    r.success = false;
-                    r.error = exit_code != 0 ? stderr_str.left(500) : "No response from team";
-                }
+            QJsonDocument doc = QJsonDocument::fromJson(final_json->toUtf8());
+            if (!doc.isNull() && doc.object()["success"].toBool()) {
+                QString json_response = doc.object()["response"].toString();
+                r.success = true;
+                r.response = json_response.isEmpty() ? accumulated->trimmed() : json_response;
+            } else if (!accumulated->trimmed().isEmpty()) {
+                r.success = true;
+                r.response = accumulated->trimmed();
+            } else {
+                r.success = false;
+                r.error = exit_code != 0 ? stderr_str.left(500) : "No response from team";
+            }
 
-                LOG_INFO("AgentService", QString("Team completed in %1ms").arg(elapsed));
+            LOG_INFO("AgentService", QString("Team completed in %1ms").arg(elapsed));
 
-                // Finish the trace row + propagate tool_calls_json
-                // (Track 96 parity for team dispatches).
-                {
-                    AgentTraceFinish f;
-                    f.request_id = req_id;
-                    f.success = r.success;
-                    f.response = r.response;
-                    f.error = r.error;
-                    f.latency_ms = elapsed;
-                    if (!doc.isNull()) {
-                        const QJsonObject obj = doc.object();
-                        const auto v_ti = obj.value(QStringLiteral("tokens_in"));
-                        if (v_ti.isDouble()) f.tokens_in = v_ti.toInt();
-                        const auto v_to = obj.value(QStringLiteral("tokens_out"));
-                        if (v_to.isDouble()) f.tokens_out = v_to.toInt();
-                        const auto v_cost = obj.value(QStringLiteral("cost_usd"));
-                        if (v_cost.isDouble()) f.cost_usd = v_cost.toDouble();
-                        const auto v_tc = obj.value(QStringLiteral("tool_calls"));
-                        if (v_tc.isArray()) {
-                            f.tool_calls_json = QString::fromUtf8(
-                                QJsonDocument(v_tc.toArray()).toJson(QJsonDocument::Compact));
-                        }
+            // Finish the trace row + propagate tool_calls_json
+            // (Track 96 parity for team dispatches).
+            {
+                AgentTraceFinish f;
+                f.request_id = req_id;
+                f.success = r.success;
+                f.response = r.response;
+                f.error = r.error;
+                f.latency_ms = elapsed;
+                if (!doc.isNull()) {
+                    const QJsonObject obj = doc.object();
+                    const auto v_ti = obj.value(QStringLiteral("tokens_in"));
+                    if (v_ti.isDouble())
+                        f.tokens_in = v_ti.toInt();
+                    const auto v_to = obj.value(QStringLiteral("tokens_out"));
+                    if (v_to.isDouble())
+                        f.tokens_out = v_to.toInt();
+                    const auto v_cost = obj.value(QStringLiteral("cost_usd"));
+                    if (v_cost.isDouble())
+                        f.cost_usd = v_cost.toDouble();
+                    const auto v_tc = obj.value(QStringLiteral("tool_calls"));
+                    if (v_tc.isArray()) {
+                        f.tool_calls_json =
+                            QString::fromUtf8(QJsonDocument(v_tc.toArray()).toJson(QJsonDocument::Compact));
                     }
-                    if (auto fr = AgentTraceRepository::instance().finish(f); fr.is_err())
-                        LOG_WARN("AgentService", QString("trace finish failed for team %1: %2")
-                                                     .arg(req_id, QString::fromStdString(fr.error())));
                 }
+                if (auto fr = AgentTraceRepository::instance().finish(f); fr.is_err())
+                    LOG_WARN(
+                        "AgentService",
+                        QString("trace finish failed for team %1: %2").arg(req_id, QString::fromStdString(fr.error())));
+            }
 
-                emit self->agent_stream_done(r);
-                self->publish_agent_result(r, /*final=*/true);
-            });
+            emit self->agent_stream_done(r);
+            self->publish_agent_result(r, /*final=*/true);
+        });
 
     connect(proc, &QProcess::errorOccurred, this, [self, proc, done_emitted, timer, req_id](QProcess::ProcessError) {
         QString err = proc->errorString();
@@ -1863,8 +1878,8 @@ QString AgentService::create_portfolio_plan(const QJsonObject& goals, const QJso
 
 // ── Memory & Knowledge ───────────────────────────────────────────────────────
 
-void AgentService::store_memory(const QString& content, const QString& memory_type,
-                                const QJsonObject& metadata, const QString& agent_id) {
+void AgentService::store_memory(const QString& content, const QString& memory_type, const QJsonObject& metadata,
+                                const QString& agent_id) {
     QJsonObject params;
     params["content"] = content;
     params["memory_type"] = memory_type;
@@ -2115,11 +2130,8 @@ QStringList AgentService::topic_patterns() const {
     // pull-through `refresh()`. Patterns are declared so set_policy_pattern()
     // entries bind to this producer for introspection/stats.
     return {
-        QStringLiteral("agent:output:*"),
-        QStringLiteral("agent:stream:*"),
-        QStringLiteral("agent:status:*"),
-        QStringLiteral("agent:routing:*"),
-        QStringLiteral("agent:error:*"),
+        QStringLiteral("agent:output:*"),  QStringLiteral("agent:stream:*"), QStringLiteral("agent:status:*"),
+        QStringLiteral("agent:routing:*"), QStringLiteral("agent:error:*"),
     };
 }
 
@@ -2133,7 +2145,8 @@ int AgentService::max_requests_per_sec() const {
 }
 
 void AgentService::ensure_registered_with_hub() {
-    if (hub_registered_) return;
+    if (hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
     hub.register_producer(this);
 
@@ -2184,30 +2197,29 @@ void AgentService::install_default_tool_handlers() {
     // Tool handlers run on a worker thread; calling LlmService::chat
     // blocks that thread, which is what the ctx.sample() contract
     // promises.
-    mcp::McpProvider::instance().set_default_sample_handler(
-        [](const mcp::SampleRequest& req) -> mcp::SampleResponse {
-            mcp::SampleResponse out;
-            auto& llm = ai_chat::LlmService::instance();
-            if (!llm.is_configured()) {
-                out.error = "no LLM configured (Settings → LLM Config)";
-                return out;
-            }
-            // Map the request into LlmService::chat's shape.  System
-            // prompt becomes a synthesised history; the request prompt
-            // is the user message.
-            std::vector<ai_chat::ConversationMessage> history;
-            if (!req.system_prompt.isEmpty())
-                history.push_back({"system", req.system_prompt});
-
-            ai_chat::LlmResponse resp = llm.chat(req.prompt, history, /*use_tools=*/false);
-            if (!resp.error.isEmpty()) {
-                out.error = resp.error;
-                return out;
-            }
-            out.text = resp.content;
-            out.model = llm.active_model();
+    mcp::McpProvider::instance().set_default_sample_handler([](const mcp::SampleRequest& req) -> mcp::SampleResponse {
+        mcp::SampleResponse out;
+        auto& llm = ai_chat::LlmService::instance();
+        if (!llm.is_configured()) {
+            out.error = "no LLM configured (Settings → LLM Config)";
             return out;
-        });
+        }
+        // Map the request into LlmService::chat's shape.  System
+        // prompt becomes a synthesised history; the request prompt
+        // is the user message.
+        std::vector<ai_chat::ConversationMessage> history;
+        if (!req.system_prompt.isEmpty())
+            history.push_back({"system", req.system_prompt});
+
+        ai_chat::LlmResponse resp = llm.chat(req.prompt, history, /*use_tools=*/false);
+        if (!resp.error.isEmpty()) {
+            out.error = resp.error;
+            return out;
+        }
+        out.text = resp.content;
+        out.model = llm.active_model();
+        return out;
+    });
 
     // on_elicit — routes to ElicitBridge which blocks the worker
     // thread until the ElicitPrompter (mounted by MainWindow) shows a
@@ -2215,9 +2227,7 @@ void AgentService::install_default_tool_handlers() {
     // bridge itself returns the "no surface mounted" error, so we
     // get one code path for both cases.
     mcp::McpProvider::instance().set_default_elicit_handler(
-        [](const mcp::ElicitRequest& req) -> mcp::ElicitResponse {
-            return ElicitBridge::instance().request(req);
-        });
+        [](const mcp::ElicitRequest& req) -> mcp::ElicitResponse { return ElicitBridge::instance().request(req); });
 
     // Server-initiated MCP requests (Track 4C).  External MCP servers
     // can fire `sampling/createMessage` and `elicitation/create` at us
@@ -2238,10 +2248,8 @@ void AgentService::install_default_tool_handlers() {
                 for (const auto& m : msgs) {
                     const QJsonObject mo = m.toObject();
                     const QString role = mo.value(QStringLiteral("role")).toString();
-                    const QString text = mo.value(QStringLiteral("content"))
-                                             .toObject()
-                                             .value(QStringLiteral("text"))
-                                             .toString();
+                    const QString text =
+                        mo.value(QStringLiteral("content")).toObject().value(QStringLiteral("text")).toString();
                     if (!text.isEmpty())
                         parts.append("[" + role + "] " + text);
                 }
@@ -2289,7 +2297,8 @@ void AgentService::install_default_tool_handlers() {
 }
 
 void AgentService::publish_agent_result(const AgentExecutionResult& r, bool final) {
-    if (!hub_registered_ || r.request_id.isEmpty()) return;
+    if (!hub_registered_ || r.request_id.isEmpty())
+        return;
     QJsonObject obj{
         {"request_id", r.request_id},
         {"success", r.success},
@@ -2308,21 +2317,22 @@ void AgentService::publish_agent_result(const AgentExecutionResult& r, bool fina
 }
 
 void AgentService::publish_agent_token(const QString& run_id, const QString& token) {
-    if (!hub_registered_ || run_id.isEmpty()) return;
+    if (!hub_registered_ || run_id.isEmpty())
+        return;
     QJsonObject obj{{"request_id", run_id}, {"token", token}};
-    fincept::datahub::DataHub::instance().publish(
-        QStringLiteral("agent:stream:") + run_id, QVariant(obj));
+    fincept::datahub::DataHub::instance().publish(QStringLiteral("agent:stream:") + run_id, QVariant(obj));
 }
 
 void AgentService::publish_agent_status(const QString& run_id, const QString& status) {
-    if (!hub_registered_ || run_id.isEmpty()) return;
+    if (!hub_registered_ || run_id.isEmpty())
+        return;
     QJsonObject obj{{"request_id", run_id}, {"status", status}};
-    fincept::datahub::DataHub::instance().publish(
-        QStringLiteral("agent:status:") + run_id, QVariant(obj));
+    fincept::datahub::DataHub::instance().publish(QStringLiteral("agent:status:") + run_id, QVariant(obj));
 }
 
 void AgentService::publish_routing_result(const RoutingResult& r) {
-    if (!hub_registered_ || r.request_id.isEmpty()) return;
+    if (!hub_registered_ || r.request_id.isEmpty())
+        return;
     QJsonObject obj{
         {"request_id", r.request_id},
         {"success", r.success},
@@ -2331,16 +2341,14 @@ void AgentService::publish_routing_result(const RoutingResult& r) {
         {"match_score", r.has_match_score ? QJsonValue(r.match_score) : QJsonValue()},
         {"score_basis", r.score_basis},
     };
-    fincept::datahub::DataHub::instance().publish(
-        QStringLiteral("agent:routing:") + r.request_id, QVariant(obj));
+    fincept::datahub::DataHub::instance().publish(QStringLiteral("agent:routing:") + r.request_id, QVariant(obj));
 }
 
 void AgentService::publish_agent_error(const QString& context, const QString& message) {
-    if (!hub_registered_) return;
+    if (!hub_registered_)
+        return;
     QJsonObject obj{{"context", context}, {"message", message}};
-    fincept::datahub::DataHub::instance().publish(
-        QStringLiteral("agent:error:") + context, QVariant(obj));
+    fincept::datahub::DataHub::instance().publish(QStringLiteral("agent:error:") + context, QVariant(obj));
 }
-
 
 } // namespace fincept::services

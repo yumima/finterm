@@ -5,9 +5,6 @@
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolDragSource.h"
-
-#include <QApplication>
-#include <QMouseEvent>
 #include "screens/equity_trading/AccountManagementDialog.h"
 #include "screens/equity_trading/BroadcastOrderDialog.h"
 #include "screens/equity_trading/EquityBottomPanel.h"
@@ -28,6 +25,7 @@
 #include "ui/theme/StyleSheets.h"
 #include "ui/theme/Theme.h"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCompleter>
@@ -44,6 +42,7 @@
 #include <QJsonObject>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QPushButton>
 #include <QRadioButton>
@@ -52,10 +51,9 @@
 #include <QStringListModel>
 #include <QTableWidget>
 #include <QVBoxLayout>
+#include <QtConcurrent/QtConcurrent>
 
 #include <memory>
-
-#include <QtConcurrent/QtConcurrent>
 
 namespace fincept::screens {
 
@@ -172,10 +170,10 @@ void EquityTradingScreen::hideEvent(QHideEvent* event) {
         market_clock_timer_->stop();
 
     ScreenStateManager::instance().save_direct("equity_trading", {
-        {"focused_account_id", focused_account_id_},
-        {"selected_symbol", selected_symbol_},
-        {"selected_exchange", selected_exchange_},
-    });
+                                                                     {"focused_account_id", focused_account_id_},
+                                                                     {"selected_symbol", selected_symbol_},
+                                                                     {"selected_exchange", selected_exchange_},
+                                                                 });
     LOG_INFO(TAG, "Screen hidden — data streams paused");
 }
 
@@ -253,7 +251,8 @@ void EquityTradingScreen::setup_ui() {
     // Connection status indicator (aggregate)
     conn_label_ = new QLabel("○ NO ACCOUNTS");
     conn_label_->setObjectName("eqConnLabel");
-    conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_SECONDARY()));
+    conn_label_->setStyleSheet(
+        QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_SECONDARY()));
     cmd_layout->addWidget(conn_label_);
 
     // Accounts management button (replaces api_btn_)
@@ -345,7 +344,8 @@ void EquityTradingScreen::setup_ui() {
     connect(orderbook_, &EquityOrderBook::price_clicked, this, &EquityTradingScreen::on_ob_price_clicked);
     connect(bottom_panel_, &EquityBottomPanel::cancel_order_requested, this, &EquityTradingScreen::on_cancel_order);
     connect(bottom_panel_, &EquityBottomPanel::modify_order_requested, this, &EquityTradingScreen::async_modify_order);
-    connect(bottom_panel_, &EquityBottomPanel::import_holdings_requested, this, &EquityTradingScreen::on_import_holdings_requested);
+    connect(bottom_panel_, &EquityBottomPanel::import_holdings_requested, this,
+            &EquityTradingScreen::on_import_holdings_requested);
     connect(chart_, &EquityChart::timeframe_changed, this, [this](const QString& tf) {
         auto* stream = DataStreamManager::instance().stream_for(focused_account_id_);
         if (stream)
@@ -393,32 +393,19 @@ void EquityTradingScreen::update_clock() {
 
 void EquityTradingScreen::connect_data_stream_signals() {
     auto& dsm = DataStreamManager::instance();
-    connect(&dsm, &DataStreamManager::quote_updated,
-            this, &EquityTradingScreen::on_stream_quote_updated);
-    connect(&dsm, &DataStreamManager::watchlist_updated,
-            this, &EquityTradingScreen::on_stream_watchlist_updated);
-    connect(&dsm, &DataStreamManager::positions_updated,
-            this, &EquityTradingScreen::on_stream_positions_updated);
-    connect(&dsm, &DataStreamManager::holdings_updated,
-            this, &EquityTradingScreen::on_stream_holdings_updated);
-    connect(&dsm, &DataStreamManager::orders_updated,
-            this, &EquityTradingScreen::on_stream_orders_updated);
-    connect(&dsm, &DataStreamManager::funds_updated,
-            this, &EquityTradingScreen::on_stream_funds_updated);
-    connect(&dsm, &DataStreamManager::candles_fetched,
-            this, &EquityTradingScreen::on_stream_candles_fetched);
-    connect(&dsm, &DataStreamManager::orderbook_fetched,
-            this, &EquityTradingScreen::on_stream_orderbook_fetched);
-    connect(&dsm, &DataStreamManager::time_sales_fetched,
-            this, &EquityTradingScreen::on_stream_time_sales_fetched);
-    connect(&dsm, &DataStreamManager::latest_trade_fetched,
-            this, &EquityTradingScreen::on_stream_latest_trade_fetched);
-    connect(&dsm, &DataStreamManager::calendar_fetched,
-            this, &EquityTradingScreen::on_stream_calendar_fetched);
-    connect(&dsm, &DataStreamManager::clock_fetched,
-            this, &EquityTradingScreen::on_stream_clock_fetched);
-    connect(&dsm, &DataStreamManager::token_expired,
-            this, &EquityTradingScreen::handle_token_expired);
+    connect(&dsm, &DataStreamManager::quote_updated, this, &EquityTradingScreen::on_stream_quote_updated);
+    connect(&dsm, &DataStreamManager::watchlist_updated, this, &EquityTradingScreen::on_stream_watchlist_updated);
+    connect(&dsm, &DataStreamManager::positions_updated, this, &EquityTradingScreen::on_stream_positions_updated);
+    connect(&dsm, &DataStreamManager::holdings_updated, this, &EquityTradingScreen::on_stream_holdings_updated);
+    connect(&dsm, &DataStreamManager::orders_updated, this, &EquityTradingScreen::on_stream_orders_updated);
+    connect(&dsm, &DataStreamManager::funds_updated, this, &EquityTradingScreen::on_stream_funds_updated);
+    connect(&dsm, &DataStreamManager::candles_fetched, this, &EquityTradingScreen::on_stream_candles_fetched);
+    connect(&dsm, &DataStreamManager::orderbook_fetched, this, &EquityTradingScreen::on_stream_orderbook_fetched);
+    connect(&dsm, &DataStreamManager::time_sales_fetched, this, &EquityTradingScreen::on_stream_time_sales_fetched);
+    connect(&dsm, &DataStreamManager::latest_trade_fetched, this, &EquityTradingScreen::on_stream_latest_trade_fetched);
+    connect(&dsm, &DataStreamManager::calendar_fetched, this, &EquityTradingScreen::on_stream_calendar_fetched);
+    connect(&dsm, &DataStreamManager::clock_fetched, this, &EquityTradingScreen::on_stream_clock_fetched);
+    connect(&dsm, &DataStreamManager::token_expired, this, &EquityTradingScreen::handle_token_expired);
 }
 
 // ============================================================================
@@ -523,9 +510,7 @@ void EquityTradingScreen::update_account_menu() {
         auto* broker = BrokerRegistry::instance().get(acct.broker_id);
         const QString broker_name = broker ? broker->profile().display_name : acct.broker_id;
         const QString text = QString("%1 [%2]").arg(acct.display_name, broker_name);
-        auto* action = account_menu_->addAction(text, this, [this, id = acct.account_id]() {
-            on_account_changed(id);
-        });
+        auto* action = account_menu_->addAction(text, this, [this, id = acct.account_id]() { on_account_changed(id); });
         if (acct.account_id == focused_account_id_)
             action->setCheckable(true), action->setChecked(true);
     }
@@ -545,16 +530,19 @@ void EquityTradingScreen::update_connection_status() {
     }
     if (accounts.isEmpty()) {
         conn_label_->setText("○ NO ACCOUNTS");
-        conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_SECONDARY()));
+        conn_label_->setStyleSheet(
+            QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_SECONDARY()));
     } else if (connected == accounts.size()) {
         conn_label_->setText(QString("● %1/%2 CONNECTED").arg(connected).arg(accounts.size()));
-        conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::POSITIVE()));
+        conn_label_->setStyleSheet(
+            QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::POSITIVE()));
     } else if (connected > 0) {
         conn_label_->setText(QString("◐ %1/%2 CONNECTED").arg(connected).arg(accounts.size()));
         conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::WARNING()));
     } else {
         conn_label_->setText(QString("○ 0/%1 CONNECTED").arg(accounts.size()));
-        conn_label_->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_SECONDARY()));
+        conn_label_->setStyleSheet(
+            QString("color: %1; font-size: 10px; font-weight: 700;").arg(ui::colors::TEXT_SECONDARY()));
     }
 }
 
@@ -563,12 +551,12 @@ void EquityTradingScreen::update_connection_status() {
 // ============================================================================
 
 void EquityTradingScreen::on_stream_quote_updated(const QString& account_id, const QString& symbol,
-                                                   const BrokerQuote& quote) {
+                                                  const BrokerQuote& quote) {
     // Update UI only for focused account's selected symbol
     if (account_id == focused_account_id_ && symbol == selected_symbol_) {
         current_price_ = quote.ltp;
-        ticker_bar_->update_quote(quote.ltp, quote.change, quote.change_pct, quote.high, quote.low,
-                                  quote.volume, quote.bid, quote.ask);
+        ticker_bar_->update_quote(quote.ltp, quote.change, quote.change_pct, quote.high, quote.low, quote.volume,
+                                  quote.bid, quote.ask);
         order_entry_->set_current_price(quote.ltp);
     }
 
@@ -586,8 +574,7 @@ void EquityTradingScreen::on_stream_quote_updated(const QString& account_id, con
     }
 }
 
-void EquityTradingScreen::on_stream_watchlist_updated(const QString& account_id,
-                                                       const QVector<BrokerQuote>& quotes) {
+void EquityTradingScreen::on_stream_watchlist_updated(const QString& account_id, const QVector<BrokerQuote>& quotes) {
     if (account_id == focused_account_id_)
         watchlist_->update_quotes(quotes);
 
@@ -609,19 +596,18 @@ void EquityTradingScreen::on_stream_watchlist_updated(const QString& account_id,
 }
 
 void EquityTradingScreen::on_stream_positions_updated(const QString& account_id,
-                                                       const QVector<BrokerPosition>& positions) {
+                                                      const QVector<BrokerPosition>& positions) {
     if (account_id == focused_account_id_)
         bottom_panel_->set_positions(positions);
 }
 
 void EquityTradingScreen::on_stream_holdings_updated(const QString& account_id,
-                                                      const QVector<BrokerHolding>& holdings) {
+                                                     const QVector<BrokerHolding>& holdings) {
     if (account_id == focused_account_id_)
         bottom_panel_->set_holdings(holdings);
 }
 
-void EquityTradingScreen::on_stream_orders_updated(const QString& account_id,
-                                                    const QVector<BrokerOrderInfo>& orders) {
+void EquityTradingScreen::on_stream_orders_updated(const QString& account_id, const QVector<BrokerOrderInfo>& orders) {
     if (account_id == focused_account_id_)
         bottom_panel_->set_orders(orders);
 }
@@ -633,34 +619,31 @@ void EquityTradingScreen::on_stream_funds_updated(const QString& account_id, con
     }
 }
 
-void EquityTradingScreen::on_stream_candles_fetched(const QString& account_id,
-                                                     const QVector<BrokerCandle>& candles) {
+void EquityTradingScreen::on_stream_candles_fetched(const QString& account_id, const QVector<BrokerCandle>& candles) {
     if (account_id == focused_account_id_)
         chart_->set_candles(candles);
 }
 
 void EquityTradingScreen::on_stream_orderbook_fetched(const QString& account_id,
-                                                       const QVector<QPair<double, double>>& bids,
-                                                       const QVector<QPair<double, double>>& asks,
-                                                       double spread, double spread_pct) {
+                                                      const QVector<QPair<double, double>>& bids,
+                                                      const QVector<QPair<double, double>>& asks, double spread,
+                                                      double spread_pct) {
     if (account_id == focused_account_id_)
         orderbook_->set_data(bids, asks, spread, spread_pct);
 }
 
-void EquityTradingScreen::on_stream_time_sales_fetched(const QString& account_id,
-                                                        const QVector<BrokerTrade>& trades) {
+void EquityTradingScreen::on_stream_time_sales_fetched(const QString& account_id, const QVector<BrokerTrade>& trades) {
     if (account_id == focused_account_id_)
         bottom_panel_->set_time_sales(trades);
 }
 
-void EquityTradingScreen::on_stream_latest_trade_fetched(const QString& account_id,
-                                                          const BrokerTrade& trade) {
+void EquityTradingScreen::on_stream_latest_trade_fetched(const QString& account_id, const BrokerTrade& trade) {
     if (account_id == focused_account_id_)
         bottom_panel_->prepend_trade(trade);
 }
 
 void EquityTradingScreen::on_stream_calendar_fetched(const QString& account_id,
-                                                      const QVector<MarketCalendarDay>& days) {
+                                                     const QVector<MarketCalendarDay>& days) {
     if (account_id == focused_account_id_)
         bottom_panel_->set_calendar(days);
 }
@@ -779,8 +762,7 @@ void EquityTradingScreen::switch_symbol(const QString& symbol) {
     // News, Derivatives, SurfaceAnalytics) follow. `this` as source suppresses
     // the echo back into this screen.
     if (link_group_ != SymbolGroup::None) {
-        SymbolContext::instance().set_group_symbol(
-            link_group_, SymbolRef::equity(symbol, selected_exchange_), this);
+        SymbolContext::instance().set_group_symbol(link_group_, SymbolRef::equity(symbol, selected_exchange_), this);
     }
 
     auto* stream = DataStreamManager::instance().stream_for(focused_account_id_);
@@ -960,7 +942,8 @@ void EquityTradingScreen::on_order_submitted(const UnifiedOrder& order) {
             bottom_panel_->set_paper_orders(orders_list);
             bottom_panel_->set_paper_trades(trades);
             bottom_panel_->set_paper_stats(stats);
-        } catch (...) {}
+        } catch (...) {
+        }
     } else {
         // Route to live broker via account-aware UnifiedTrading
         // Safety: capture account_id by value at click time (immutable per order lifecycle)
@@ -1012,7 +995,8 @@ void EquityTradingScreen::on_cancel_order(const QString& order_id) {
                 bottom_panel_->set_paper_orders(orders);
                 bottom_panel_->set_paper_trades(trades);
                 bottom_panel_->set_paper_stats(stats);
-            } catch (...) {}
+            } catch (...) {
+            }
         }
     } else {
         const QString acct_id = focused_account_id_;
@@ -1070,12 +1054,10 @@ void EquityTradingScreen::async_modify_order(const QString& order_id, double qty
 // symbols match the format the portfolio screen's price engine (yfinance) expects.
 static QString yfinance_symbol_for(const QString& symbol, const QString& exchange) {
     static const QHash<QString, QString> suffix_map = {
-        {"HKEX", ".HK"},       {"TSE", ".T"},
-        {"KRX", ".KS"},        {"SGX", ".SI"},  {"ASX", ".AX"},  {"IDX", ".JK"},
-        {"MYX", ".KL"},        {"SET", ".BK"},  {"PSE", ".PS"},  {"XETR", ".DE"},
-        {"FWB", ".F"},         {"LSE", ".L"},   {"BME", ".MC"},  {"MIL", ".MI"},
-        {"SIX", ".SW"},        {"TSX", ".TO"},  {"TSXV", ".V"},  {"BMFBOVESPA", ".SA"},
-        {"BIST", ".IS"},       {"EGX", ".CA"},
+        {"HKEX", ".HK"}, {"TSE", ".T"},  {"KRX", ".KS"},        {"SGX", ".SI"},  {"ASX", ".AX"},
+        {"IDX", ".JK"},  {"MYX", ".KL"}, {"SET", ".BK"},        {"PSE", ".PS"},  {"XETR", ".DE"},
+        {"FWB", ".F"},   {"LSE", ".L"},  {"BME", ".MC"},        {"MIL", ".MI"},  {"SIX", ".SW"},
+        {"TSX", ".TO"},  {"TSXV", ".V"}, {"BMFBOVESPA", ".SA"}, {"BIST", ".IS"}, {"EGX", ".CA"},
     };
     const QString sym = symbol.trimmed().toUpper();
     const auto it = suffix_map.find(exchange.trimmed().toUpper());
@@ -1095,9 +1077,8 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
     const QString broker_id = account.broker_id;
     auto* broker = trading::BrokerRegistry::instance().get(broker_id);
     const QString default_currency = (broker ? broker->profile().currency : QStringLiteral("USD"));
-    const QString suggested_name = account.display_name.isEmpty()
-                                       ? QString("%1 Holdings").arg(broker_id.toUpper())
-                                       : QString("%1 - Holdings").arg(account.display_name);
+    const QString suggested_name = account.display_name.isEmpty() ? QString("%1 Holdings").arg(broker_id.toUpper())
+                                                                  : QString("%1 - Holdings").arg(account.display_name);
 
     QDialog dlg(this);
     dlg.setWindowTitle("Import holdings into portfolio");
@@ -1112,8 +1093,7 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
                                     "(e.g. LSE→.L, XETR→.DE). Edit the <i>Yahoo Ticker</i> column "
                                     "if any symbol needs a manual override.")
                                 .arg(holdings.size())
-                                .arg(account.display_name.isEmpty() ? broker_id.toUpper()
-                                                                    : account.display_name));
+                                .arg(account.display_name.isEmpty() ? broker_id.toUpper() : account.display_name));
     info->setTextFormat(Qt::RichText);
     info->setWordWrap(true);
     v->addWidget(info);
@@ -1240,21 +1220,22 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
     auto& ps = fincept::services::PortfolioService::instance();
     QPointer<QComboBox> combo_guard = existing_combo;
     QPointer<QRadioButton> existing_guard = mode_existing;
-    auto conn = QObject::connect(
-        &ps, &fincept::services::PortfolioService::portfolios_loaded, &dlg,
-        [combo_guard, existing_guard](const QVector<fincept::portfolio::Portfolio>& list) {
-            if (!combo_guard) return;
-            combo_guard->clear();
-            if (list.isEmpty()) {
-                combo_guard->addItem("(no portfolios yet)");
-                combo_guard->setEnabled(false);
-                if (existing_guard) existing_guard->setEnabled(false);
-            } else {
-                for (const auto& p : list)
-                    combo_guard->addItem(QString("%1 (%2)").arg(p.name, p.currency), p.id);
-                combo_guard->setEnabled(true);
-            }
-        });
+    auto conn = QObject::connect(&ps, &fincept::services::PortfolioService::portfolios_loaded, &dlg,
+                                 [combo_guard, existing_guard](const QVector<fincept::portfolio::Portfolio>& list) {
+                                     if (!combo_guard)
+                                         return;
+                                     combo_guard->clear();
+                                     if (list.isEmpty()) {
+                                         combo_guard->addItem("(no portfolios yet)");
+                                         combo_guard->setEnabled(false);
+                                         if (existing_guard)
+                                             existing_guard->setEnabled(false);
+                                     } else {
+                                         for (const auto& p : list)
+                                             combo_guard->addItem(QString("%1 (%2)").arg(p.name, p.currency), p.id);
+                                         combo_guard->setEnabled(true);
+                                     }
+                                 });
     ps.load_portfolios();
 
     QObject::connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
@@ -1305,9 +1286,8 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
             QMessageBox::warning(this, "Import Holdings", "Portfolio name is required.");
             return;
         }
-        const QString currency = currency_input->text().trimmed().isEmpty()
-                                     ? default_currency
-                                     : currency_input->text().trimmed().toUpper();
+        const QString currency =
+            currency_input->text().trimmed().isEmpty() ? default_currency : currency_input->text().trimmed().toUpper();
         QPointer<EquityTradingScreen> self = this;
         auto once = std::make_shared<QMetaObject::Connection>();
         const int count = rows.size();
@@ -1317,10 +1297,9 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
                                 return;
                             QObject::disconnect(*once);
                             do_add_assets(p.id);
-                            QMessageBox::information(self, "Import Holdings",
-                                                     QString("Imported %1 holdings into portfolio \"%2\".")
-                                                         .arg(count)
-                                                         .arg(p.name));
+                            QMessageBox::information(
+                                self, "Import Holdings",
+                                QString("Imported %1 holdings into portfolio \"%2\".").arg(count).arg(p.name));
                         });
         ps.create_portfolio(name, account.display_name, currency, "Imported from " + broker_id.toUpper());
     } else {
@@ -1330,8 +1309,7 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
             return;
         }
         do_add_assets(pid);
-        QMessageBox::information(this, "Import Holdings",
-                                 QString("Imported %1 holdings.").arg(rows.size()));
+        QMessageBox::information(this, "Import Holdings", QString("Imported %1 holdings.").arg(rows.size()));
     }
 }
 

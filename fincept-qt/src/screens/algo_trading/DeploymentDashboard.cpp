@@ -224,10 +224,9 @@ QWidget* DeploymentDashboard::build_deployment_card(const AlgoDeployment& d, QWi
     win_bar->setRange(0, 100);
     win_bar->setValue(static_cast<int>(d.win_rate));
     win_bar->setTextVisible(false);
-    win_bar->setStyleSheet(
-        QString("QProgressBar { background: %1; border: none; border-radius: 2px; }"
-                "QProgressBar::chunk { background: %2; border-radius: 2px; }")
-            .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::POSITIVE()));
+    win_bar->setStyleSheet(QString("QProgressBar { background: %1; border: none; border-radius: 2px; }"
+                                   "QProgressBar::chunk { background: %2; border-radius: 2px; }")
+                               .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::POSITIVE()));
     vl->addWidget(win_bar);
 
     // ── Error message if any ────────────────────────────────────────────────
@@ -296,11 +295,12 @@ void DeploymentDashboard::update_summary(const QVector<AlgoDeployment>& deployme
 
     if (total_pnl_) {
         total_pnl_->setText(QString("%1$%2").arg(pnl_sum >= 0 ? "+" : "-").arg(std::abs(pnl_sum), 0, 'f', 2));
-        total_pnl_->setStyleSheet(QString("color: %1; font-size: %2px; font-weight: 700; %3"
-                                          " background: transparent; border: none;")
-                                      .arg(pnl_sum >= 0 ? fincept::ui::colors::POSITIVE() : fincept::ui::colors::NEGATIVE())
-                                      .arg(fincept::ui::fonts::TITLE)
-                                      .arg(kMonoFont()));
+        total_pnl_->setStyleSheet(
+            QString("color: %1; font-size: %2px; font-weight: 700; %3"
+                    " background: transparent; border: none;")
+                .arg(pnl_sum >= 0 ? fincept::ui::colors::POSITIVE() : fincept::ui::colors::NEGATIVE())
+                .arg(fincept::ui::fonts::TITLE)
+                .arg(kMonoFont()));
     }
 
     if (total_trades_)
@@ -351,9 +351,8 @@ void DeploymentDashboard::build_ui() {
     equity_placeholder_ = new QFrame(content);
     equity_placeholder_->setFixedHeight(140);
     equity_placeholder_->setFrameShape(QFrame::NoFrame);
-    equity_placeholder_->setStyleSheet(
-        QString("QFrame { background: %1; border: 1px solid %2; }")
-            .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_DIM()));
+    equity_placeholder_->setStyleSheet(QString("QFrame { background: %1; border: 1px solid %2; }")
+                                           .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_DIM()));
     {
         auto* eq_vl = new QVBoxLayout(equity_placeholder_);
         eq_vl->setContentsMargins(12, 8, 12, 8);
@@ -370,11 +369,10 @@ void DeploymentDashboard::build_ui() {
 
         auto* eq_hint = new QLabel("Select a deployment to view curve", equity_placeholder_);
         eq_hint->setAlignment(Qt::AlignCenter);
-        eq_hint->setStyleSheet(
-            QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                .arg(fincept::ui::colors::TEXT_SECONDARY())
-                .arg(fincept::ui::fonts::SMALL)
-                .arg(kMonoFont()));
+        eq_hint->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
+                                   .arg(fincept::ui::colors::TEXT_SECONDARY())
+                                   .arg(fincept::ui::fonts::SMALL)
+                                   .arg(kMonoFont()));
         eq_vl->addWidget(eq_hint);
         eq_vl->addStretch();
     }
@@ -387,14 +385,14 @@ void DeploymentDashboard::build_ui() {
     auto* refresh_btn = new QPushButton("REFRESH", content);
     refresh_btn->setCursor(Qt::PointingHandCursor);
     refresh_btn->setFixedHeight(30);
-    refresh_btn->setStyleSheet(
-        QString("QPushButton { background: %1; color: %2; border: 1px solid %3;"
-                " font-size: %4px; font-weight: 700; %5 padding: 4px 16px; }"
-                "QPushButton:hover { background: %6; color: %7; }")
-            .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::BORDER_DIM())
-            .arg(fincept::ui::fonts::TINY)
-            .arg(kMonoFont())
-            .arg(fincept::ui::colors::BG_HOVER(), fincept::ui::colors::TEXT_PRIMARY()));
+    refresh_btn->setStyleSheet(QString("QPushButton { background: %1; color: %2; border: 1px solid %3;"
+                                       " font-size: %4px; font-weight: 700; %5 padding: 4px 16px; }"
+                                       "QPushButton:hover { background: %6; color: %7; }")
+                                   .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::TEXT_SECONDARY(),
+                                        fincept::ui::colors::BORDER_DIM())
+                                   .arg(fincept::ui::fonts::TINY)
+                                   .arg(kMonoFont())
+                                   .arg(fincept::ui::colors::BG_HOVER(), fincept::ui::colors::TEXT_PRIMARY()));
     connect(refresh_btn, &QPushButton::clicked, this, []() { AlgoTradingService::instance().list_deployments(); });
     control_bar->addWidget(refresh_btn);
 

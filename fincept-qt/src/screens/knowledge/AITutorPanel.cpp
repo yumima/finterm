@@ -7,8 +7,8 @@
 #include "ui/theme/Theme.h"
 
 #include <QFrame>
-#include <QHash>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QLabel>
 #include <QLineEdit>
 #include <QPointer>
@@ -28,8 +28,8 @@ QString chip_ss() {
                    " padding: 4px 9px; font-size: 10px; font-weight: bold; letter-spacing: 0.5px; %4 }"
                    "QPushButton:hover { color: %5; border-color: %5; background: %6; }"
                    "QPushButton:disabled { color: %7; border-color: %3; }")
-        .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER(), ui::colors::ACCENT_BG(), ui::colors::TEXT_SECONDARY());
+        .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER(),
+             ui::colors::ACCENT_BG(), ui::colors::TEXT_SECONDARY());
 }
 
 QString thread_view_ss() {
@@ -48,8 +48,8 @@ QString input_ss() {
                    " padding: 7px 10px; font-size: 12px; %4 }"
                    "QLineEdit:focus { border-color: %5; }"
                    "QLineEdit:disabled { color: %6; }")
-        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER(), ui::colors::TEXT_SECONDARY());
+        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER(),
+             ui::colors::TEXT_SECONDARY());
 }
 
 // The user's real holdings (summed quantity per symbol across all
@@ -89,8 +89,12 @@ QString real_holdings_summary() {
 } // namespace
 
 AITutorPanel::AITutorPanel(const KnowledgeEntry& entry, QWidget* parent)
-    : QWidget(parent), entry_id_(entry.id), entry_title_(entry.title), entry_subtitle_(entry.subtitle),
-      entry_body_(ContentLoader::instance().load_body(entry.id)), abbreviation_(entry.abbreviation) {
+    : QWidget(parent),
+      entry_id_(entry.id),
+      entry_title_(entry.title),
+      entry_subtitle_(entry.subtitle),
+      entry_body_(ContentLoader::instance().load_body(entry.id)),
+      abbreviation_(entry.abbreviation) {
 
     setStyleSheet(QString("background: %1;").arg(ui::colors::BG_SURFACE()));
 
@@ -100,8 +104,8 @@ AITutorPanel::AITutorPanel(const KnowledgeEntry& entry, QWidget* parent)
 
     // Status header with model + entry context. Always visible at top.
     status_ = new QLabel("", this);
-    status_->setStyleSheet(QString("color: %1; background: transparent; font-size: 10px; %2")
-                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
+    status_->setStyleSheet(
+        QString("color: %1; background: transparent; font-size: 10px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO));
     status_->setWordWrap(true);
     vl->addWidget(status_);
 
@@ -121,9 +125,9 @@ AITutorPanel::AITutorPanel(const KnowledgeEntry& entry, QWidget* parent)
                                      " padding: 6px 14px; font-size: 11px; font-weight: bold; %4 }"
                                      "QPushButton:hover { color: %5; border-color: %5; background: %6; }"
                                      "QPushButton:disabled { color: %7; }")
-                                 .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(),
-                                      ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER(),
-                                      ui::colors::ACCENT_BG(), ui::colors::TEXT_SECONDARY()));
+                                 .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM(),
+                                      MONO, ui::colors::AMBER(), ui::colors::ACCENT_BG(),
+                                      ui::colors::TEXT_SECONDARY()));
     row->addWidget(send_btn_);
     vl->addLayout(row);
 
@@ -188,9 +192,7 @@ QString AITutorPanel::build_system_prompt() const {
                 "know, say so and suggest opening the relevant finterm screen.\n\n"
                 "The user is currently reading the '%1' entry%2. Use this body as your authoritative source:\n\n"
                 "----- BEGIN ENTRY BODY -----\n%3\n----- END ENTRY BODY -----")
-            .arg(entry_title_,
-                 abbreviation_.isEmpty() ? QString{} : QString(" (%1)").arg(abbreviation_),
-                 entry_body_);
+            .arg(entry_title_, abbreviation_.isEmpty() ? QString{} : QString(" (%1)").arg(abbreviation_), entry_body_);
     return sys;
 }
 
@@ -233,9 +235,8 @@ void AITutorPanel::send_user_message(const QString& text) {
 
     auto& svc = ai_chat::LlmService::instance();
     if (!svc.is_configured()) {
-        append_message("assistant",
-                       "*LLM is not configured. Open Settings → AI to add an API key for one of the "
-                       "supported providers.*");
+        append_message("assistant", "*LLM is not configured. Open Settings → AI to add an API key for one of the "
+                                    "supported providers.*");
         return;
     }
 
@@ -295,9 +296,8 @@ void AITutorPanel::send_user_message(const QString& text) {
                 return;
             QString note;
             if (!resp.success)
-                note = QStringLiteral("Error: %1").arg(resp.error.isEmpty()
-                                                           ? QStringLiteral("the model returned no answer.")
-                                                           : resp.error);
+                note = QStringLiteral("Error: %1")
+                           .arg(resp.error.isEmpty() ? QStringLiteral("the model returned no answer.") : resp.error);
             else if (resp.fell_back && !resp.model_used.isEmpty())
                 note = QStringLiteral("(Answered by %1 via %2 — fell back after a quota limit.)")
                            .arg(resp.model_used, resp.provider_used);

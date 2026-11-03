@@ -88,21 +88,21 @@ void EquityBottomPanel::setup_holdings_tab() {
         cv->setContentsMargins(0, 0, 0, 0);
         cv->setSpacing(1);
         auto* cap = new QLabel(caption);
-        cap->setStyleSheet(QString("color:%1;font-size:12px;letter-spacing:0.5px;")
-                               .arg(fincept::ui::colors::TEXT_SECONDARY()));
+        cap->setStyleSheet(
+            QString("color:%1;font-size:12px;letter-spacing:0.5px;").arg(fincept::ui::colors::TEXT_SECONDARY()));
         auto* val = new QLabel("--");
-        val->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;")
-                               .arg(fincept::ui::colors::TEXT_PRIMARY()));
+        val->setStyleSheet(
+            QString("color:%1;font-size:13px;font-weight:700;").arg(fincept::ui::colors::TEXT_PRIMARY()));
         cv->addWidget(cap);
         cv->addWidget(val);
         strip_layout->addWidget(cell);
         return val;
     };
-    holdings_count_label_     = make_stat("HOLDINGS");
-    holdings_invested_label_  = make_stat("INVESTED");
-    holdings_current_label_   = make_stat("CURRENT");
-    holdings_pnl_label_       = make_stat("TOTAL P&L");
-    holdings_pnl_pct_label_   = make_stat("RETURN %");
+    holdings_count_label_ = make_stat("HOLDINGS");
+    holdings_invested_label_ = make_stat("INVESTED");
+    holdings_current_label_ = make_stat("CURRENT");
+    holdings_pnl_label_ = make_stat("TOTAL P&L");
+    holdings_pnl_pct_label_ = make_stat("RETURN %");
     strip_layout->addStretch(1);
 
     holdings_import_btn_ = new QPushButton("IMPORT TO PORTFOLIO");
@@ -113,9 +113,8 @@ void EquityBottomPanel::setup_holdings_tab() {
                 "font-size:12px;font-weight:700;letter-spacing:0.5px;}"
                 "QPushButton:hover{background:%4;color:#000;}"
                 "QPushButton:disabled{color:%5;border-color:%3;}")
-            .arg(fincept::ui::colors::PANEL(), fincept::ui::colors::ORANGE(),
-                 fincept::ui::colors::BORDER(), fincept::ui::colors::ORANGE(),
-                 fincept::ui::colors::TEXT_SECONDARY()));
+            .arg(fincept::ui::colors::PANEL(), fincept::ui::colors::ORANGE(), fincept::ui::colors::BORDER(),
+                 fincept::ui::colors::ORANGE(), fincept::ui::colors::TEXT_SECONDARY()));
     connect(holdings_import_btn_, &QPushButton::clicked, this, [this]() {
         if (!last_holdings_.isEmpty())
             emit import_holdings_requested(last_holdings_);
@@ -371,8 +370,8 @@ void EquityBottomPanel::set_holdings(const QVector<trading::BrokerHolding>& hold
         pct_item->setForeground(h.pnl_pct >= 0 ? pos_color : neg_color);
 
         total_invested += h.invested_value;
-        total_current  += h.current_value;
-        total_pnl      += h.pnl;
+        total_current += h.current_value;
+        total_pnl += h.pnl;
     }
 
     const double total_pct = total_invested > 0 ? (total_pnl / total_invested) * 100.0 : 0.0;
@@ -384,17 +383,15 @@ void EquityBottomPanel::set_holdings(const QVector<trading::BrokerHolding>& hold
     if (holdings_current_label_)
         holdings_current_label_->setText(QString::number(total_current, 'f', 2));
     if (holdings_pnl_label_) {
-        holdings_pnl_label_->setText(QString("%1%2")
-                                         .arg(total_pnl >= 0 ? "+" : "")
-                                         .arg(QString::number(total_pnl, 'f', 2)));
+        holdings_pnl_label_->setText(
+            QString("%1%2").arg(total_pnl >= 0 ? "+" : "").arg(QString::number(total_pnl, 'f', 2)));
         holdings_pnl_label_->setStyleSheet(
             QString("color:%1;font-size:13px;font-weight:700;")
                 .arg(total_pnl >= 0 ? fincept::ui::colors::POSITIVE() : fincept::ui::colors::NEGATIVE()));
     }
     if (holdings_pnl_pct_label_) {
-        holdings_pnl_pct_label_->setText(QString("%1%2%")
-                                             .arg(total_pct >= 0 ? "+" : "")
-                                             .arg(QString::number(total_pct, 'f', 2)));
+        holdings_pnl_pct_label_->setText(
+            QString("%1%2%").arg(total_pct >= 0 ? "+" : "").arg(QString::number(total_pct, 'f', 2)));
         holdings_pnl_pct_label_->setStyleSheet(
             QString("color:%1;font-size:13px;font-weight:700;")
                 .arg(total_pct >= 0 ? fincept::ui::colors::POSITIVE() : fincept::ui::colors::NEGATIVE()));

@@ -3,9 +3,9 @@
 #include "trading/brokers/BrokerHttp.h"
 
 #include <QDateTime>
-#include <QTimeZone>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QTimeZone>
 #include <QUrlQuery>
 
 namespace fincept::trading {

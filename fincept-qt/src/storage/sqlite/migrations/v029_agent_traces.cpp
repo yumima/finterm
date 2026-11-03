@@ -35,24 +35,25 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 
 static Result<void> apply_v029(QSqlDatabase& db) {
     if (auto r = sql(db,
-            "CREATE TABLE IF NOT EXISTS agent_traces ("
-            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "  request_id TEXT NOT NULL UNIQUE,"
-            "  agent_id TEXT,"
-            "  runtime TEXT,"        // anthropic | local | agno | unknown
-            "  source TEXT,"         // chat | chat_slash | scheduler | api | ...
-            "  query TEXT,"
-            "  config_json TEXT,"
-            "  started_at TEXT NOT NULL DEFAULT (datetime('now')),"
-            "  finished_at TEXT,"
-            "  status TEXT NOT NULL DEFAULT 'in_progress',"  // in_progress|success|error
-            "  response TEXT,"
-            "  error TEXT,"
-            "  latency_ms INTEGER,"
-            "  tokens_in INTEGER,"
-            "  tokens_out INTEGER,"
-            "  cost_usd REAL"
-            ")"); r.is_err()) {
+                     "CREATE TABLE IF NOT EXISTS agent_traces ("
+                     "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                     "  request_id TEXT NOT NULL UNIQUE,"
+                     "  agent_id TEXT,"
+                     "  runtime TEXT," // anthropic | local | agno | unknown
+                     "  source TEXT,"  // chat | chat_slash | scheduler | api | ...
+                     "  query TEXT,"
+                     "  config_json TEXT,"
+                     "  started_at TEXT NOT NULL DEFAULT (datetime('now')),"
+                     "  finished_at TEXT,"
+                     "  status TEXT NOT NULL DEFAULT 'in_progress'," // in_progress|success|error
+                     "  response TEXT,"
+                     "  error TEXT,"
+                     "  latency_ms INTEGER,"
+                     "  tokens_in INTEGER,"
+                     "  tokens_out INTEGER,"
+                     "  cost_usd REAL"
+                     ")");
+        r.is_err()) {
         return r;
     }
 

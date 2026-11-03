@@ -1,10 +1,9 @@
 #include "screens/dashboard/widgets/PerformanceWidget.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QFrame>
 
@@ -50,18 +49,15 @@ PerformanceWidget::PerformanceWidget(QWidget* parent)
 
     apply_styles();
     set_loading(true);
-
 }
 
 void PerformanceWidget::apply_styles() {
     for (const auto& mr : rows_) {
         mr.row_widget->setStyleSheet(QString("border-bottom: 1px solid %1;").arg(ui::colors::BORDER_DIM()));
-        mr.label->setStyleSheet(
-            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
-        mr.period->setStyleSheet(
-            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
-        mr.value->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                                    .arg(ui::colors::TEXT_PRIMARY()));
+        mr.label->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        mr.period->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        mr.value->setStyleSheet(
+            QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
     }
 }
 
@@ -87,9 +83,8 @@ void PerformanceWidget::refresh_data() {
     topics.reserve(kPerfSymbols.size());
     for (const auto& sym : kPerfSymbols)
         topics.append(QStringLiteral("market:quote:") + sym);
-    hub.request(topics, /*force=*/true);  // user-triggered: bypass min_interval
+    hub.request(topics, /*force=*/true); // user-triggered: bypass min_interval
 }
-
 
 void PerformanceWidget::hub_subscribe_all() {
     auto& hub = datahub::DataHub::instance();
@@ -123,7 +118,6 @@ void PerformanceWidget::rebuild_from_cache() {
         populate(quotes);
 }
 
-
 void PerformanceWidget::populate(const QVector<services::QuoteData>& quotes) {
     // Build lookup by symbol
     QMap<QString, const services::QuoteData*> map;
@@ -139,8 +133,7 @@ void PerformanceWidget::populate(const QVector<services::QuoteData>& quotes) {
         QString color = val > 0   ? ui::colors::POSITIVE()
                         : val < 0 ? ui::colors::NEGATIVE()
                                   : ui::colors::TEXT_PRIMARY();
-        rows_[idx].value->setStyleSheet(
-            QString("color: %1; font-weight: bold; background: transparent;").arg(color));
+        rows_[idx].value->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;").arg(color));
     };
 
     // S&P 500 daily
@@ -170,8 +163,7 @@ void PerformanceWidget::populate(const QVector<services::QuoteData>& quotes) {
             QString color = vix > 25   ? ui::colors::NEGATIVE()
                             : vix > 18 ? ui::colors::WARNING()
                                        : ui::colors::POSITIVE();
-            rows_[6].value->setStyleSheet(
-                QString("color: %1; font-weight: bold; background: transparent;").arg(color));
+            rows_[6].value->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;").arg(color));
         }
     }
 

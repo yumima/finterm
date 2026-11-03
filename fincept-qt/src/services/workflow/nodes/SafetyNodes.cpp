@@ -5,7 +5,6 @@
 #include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
-
 #include <QTimeZone>
 
 #include <cmath>
@@ -28,8 +27,8 @@ std::optional<double> num_field(const QJsonObject& obj, const char* key) {
 }
 
 // Route a check to its fail branch because required inputs are missing.
-void fail_closed_missing(QJsonObject obj, const char* passed_key, const char* failures_key,
-                         const QStringList& missing, const std::function<void(bool, QJsonValue, QString)>& cb) {
+void fail_closed_missing(QJsonObject obj, const char* passed_key, const char* failures_key, const QStringList& missing,
+                         const std::function<void(bool, QJsonValue, QString)>& cb) {
     obj[QLatin1String(passed_key)] = false;
     obj["_branch"] = "false";
     QJsonArray fa;

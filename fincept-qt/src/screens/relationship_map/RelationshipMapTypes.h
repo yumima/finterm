@@ -30,40 +30,68 @@ enum class NodeCategory {
 
 inline QString category_label(NodeCategory c) {
     switch (c) {
-        case NodeCategory::Company:      return "COMPANY";
-        case NodeCategory::Peer:         return "PEER";
-        case NodeCategory::Institutional:return "INSTITUTIONAL";
-        case NodeCategory::MutualFund:   return "MUTUAL FUND";
-        case NodeCategory::Insider:      return "INSIDER";
-        case NodeCategory::Officer:      return "OFFICER";
-        case NodeCategory::Analyst:      return "ANALYST";
-        case NodeCategory::Governance:   return "GOVERNANCE";
-        case NodeCategory::Technicals:   return "TECHNICALS";
-        case NodeCategory::ShortInterest:return "SHORT INTEREST";
-        case NodeCategory::Earnings:     return "EARNINGS";
-        case NodeCategory::Event:        return "EVENT";
-        case NodeCategory::SupplyChain:  return "SUPPLY CHAIN";
-        case NodeCategory::Metrics:      return "METRICS";
+        case NodeCategory::Company:
+            return "COMPANY";
+        case NodeCategory::Peer:
+            return "PEER";
+        case NodeCategory::Institutional:
+            return "INSTITUTIONAL";
+        case NodeCategory::MutualFund:
+            return "MUTUAL FUND";
+        case NodeCategory::Insider:
+            return "INSIDER";
+        case NodeCategory::Officer:
+            return "OFFICER";
+        case NodeCategory::Analyst:
+            return "ANALYST";
+        case NodeCategory::Governance:
+            return "GOVERNANCE";
+        case NodeCategory::Technicals:
+            return "TECHNICALS";
+        case NodeCategory::ShortInterest:
+            return "SHORT INTEREST";
+        case NodeCategory::Earnings:
+            return "EARNINGS";
+        case NodeCategory::Event:
+            return "EVENT";
+        case NodeCategory::SupplyChain:
+            return "SUPPLY CHAIN";
+        case NodeCategory::Metrics:
+            return "METRICS";
     }
     return "UNKNOWN";
 }
 
 inline QColor category_color(NodeCategory c) {
     switch (c) {
-        case NodeCategory::Company:      return QColor("#d97706"); // amber
-        case NodeCategory::Peer:         return QColor("#2563eb"); // blue
-        case NodeCategory::Institutional:return QColor("#16a34a"); // green
-        case NodeCategory::MutualFund:   return QColor("#059669"); // emerald
-        case NodeCategory::Insider:      return QColor("#0891b2"); // cyan
-        case NodeCategory::Officer:      return QColor("#0e7490"); // dark cyan
-        case NodeCategory::Analyst:      return QColor("#7c3aed"); // violet
-        case NodeCategory::Governance:   return QColor("#be123c"); // rose
-        case NodeCategory::Technicals:   return QColor("#0369a1"); // sky
-        case NodeCategory::ShortInterest:return QColor("#dc2626"); // red
-        case NodeCategory::Earnings:     return QColor("#ea580c"); // orange
-        case NodeCategory::Event:        return QColor("#b45309"); // amber-dark
-        case NodeCategory::SupplyChain:  return QColor("#ca8a04"); // yellow
-        case NodeCategory::Metrics:      return QColor("#525252"); // neutral
+        case NodeCategory::Company:
+            return QColor("#d97706"); // amber
+        case NodeCategory::Peer:
+            return QColor("#2563eb"); // blue
+        case NodeCategory::Institutional:
+            return QColor("#16a34a"); // green
+        case NodeCategory::MutualFund:
+            return QColor("#059669"); // emerald
+        case NodeCategory::Insider:
+            return QColor("#0891b2"); // cyan
+        case NodeCategory::Officer:
+            return QColor("#0e7490"); // dark cyan
+        case NodeCategory::Analyst:
+            return QColor("#7c3aed"); // violet
+        case NodeCategory::Governance:
+            return QColor("#be123c"); // rose
+        case NodeCategory::Technicals:
+            return QColor("#0369a1"); // sky
+        case NodeCategory::ShortInterest:
+            return QColor("#dc2626"); // red
+        case NodeCategory::Earnings:
+            return QColor("#ea580c"); // orange
+        case NodeCategory::Event:
+            return QColor("#b45309"); // amber-dark
+        case NodeCategory::SupplyChain:
+            return QColor("#ca8a04"); // yellow
+        case NodeCategory::Metrics:
+            return QColor("#525252"); // neutral
     }
     return QColor("#525252");
 }
@@ -150,7 +178,7 @@ struct CompanyInfo {
 };
 
 struct GovernanceRisk {
-    int audit_risk = 0;           // 1-10
+    int audit_risk = 0; // 1-10
     int board_risk = 0;
     int compensation_risk = 0;
     int shareholder_rights_risk = 0;
@@ -171,8 +199,8 @@ struct Technicals {
 
 struct ShortInterest {
     double shares_short = 0;
-    double short_ratio = 0;       // days to cover
-    double short_pct_float = 0;   // 0-1
+    double short_ratio = 0;     // days to cover
+    double short_pct_float = 0; // 0-1
     double float_shares = 0;
 };
 
@@ -204,7 +232,7 @@ struct AnalystTargets {
 };
 
 struct RecommendationSnapshot {
-    QString period;   // "0m", "-1m", "-2m", "-3m"
+    QString period; // "0m", "-1m", "-2m", "-3m"
     int strong_buy = 0;
     int buy = 0;
     int hold = 0;
@@ -217,7 +245,7 @@ struct AnalystUpgrade {
     QString firm;
     QString to_grade;
     QString from_grade;
-    QString action;       // "up", "down", "main", "reit"
+    QString action; // "up", "down", "main", "reit"
     double price_target = 0;
     double prior_target = 0;
 };

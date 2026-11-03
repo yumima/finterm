@@ -76,7 +76,8 @@ static QWidget* make_result_card(const NodeExecutionResult& result) {
 
     // Node ID (truncated)
     auto* id_lbl = new QLabel(result.node_id.left(8) + "…");
-    id_lbl->setStyleSheet(QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_SECONDARY()));
+    id_lbl->setStyleSheet(
+        QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_SECONDARY()));
     id_lbl->setToolTip(result.node_id);
     hl->addWidget(id_lbl);
 
@@ -84,7 +85,8 @@ static QWidget* make_result_card(const NodeExecutionResult& result) {
 
     // Duration
     auto* dur_lbl = new QLabel(format_duration(result.duration_ms));
-    dur_lbl->setStyleSheet(QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_SECONDARY()));
+    dur_lbl->setStyleSheet(
+        QString("color: %1; font-family: Consolas; font-size: 9px;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(dur_lbl);
 
     vl->addWidget(header_row);
@@ -170,7 +172,8 @@ static QWidget* make_result_card(const NodeExecutionResult& result) {
         auto* val = new QLabel(value_to_string(result.output));
         val->setWordWrap(true);
         val->setTextInteractionFlags(Qt::TextSelectableByMouse);
-        val->setStyleSheet(QString("color: %1; font-family: Consolas; font-size: 10px;").arg(ui::colors::TEXT_PRIMARY()));
+        val->setStyleSheet(
+            QString("color: %1; font-family: Consolas; font-size: 10px;").arg(ui::colors::TEXT_PRIMARY()));
         vl->addWidget(val);
     }
 

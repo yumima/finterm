@@ -23,9 +23,9 @@ QString tab_button_ss(bool active) {
     // border (the "selected chip" look). Inactive = bright primary text on a
     // subtle raised bg with a visible mid-gray border, so it reads as a
     // tappable button rather than a faint label.
-    const QString fg     = active ? ui::colors::AMBER()     : ui::colors::TEXT_PRIMARY();
-    const QString bg     = active ? ui::colors::BG_RAISED() : ui::colors::BG_SURFACE();
-    const QString border = active ? ui::colors::AMBER()     : ui::colors::BORDER_BRIGHT();
+    const QString fg = active ? ui::colors::AMBER() : ui::colors::TEXT_PRIMARY();
+    const QString bg = active ? ui::colors::BG_RAISED() : ui::colors::BG_SURFACE();
+    const QString border = active ? ui::colors::AMBER() : ui::colors::BORDER_BRIGHT();
     return QString("QToolButton { color: %1; background: %2; border: 1px solid %3;"
                    " padding: 3px 9px; font-size: 10px; font-weight: bold;"
                    " letter-spacing: 1px; %4 }"
@@ -118,9 +118,13 @@ void GroupedPane::addSubPane(const QString& tab_label, QWidget* widget) {
     connect(btn, &QToolButton::clicked, this, [this, idx]() { setActiveIndex(idx, /*persist*/ true); });
 }
 
-int GroupedPane::subPaneCount() const { return stack_->count(); }
+int GroupedPane::subPaneCount() const {
+    return stack_->count();
+}
 
-QWidget* GroupedPane::currentSubPane() const { return stack_->currentWidget(); }
+QWidget* GroupedPane::currentSubPane() const {
+    return stack_->currentWidget();
+}
 
 void GroupedPane::showSubPane(QWidget* widget) {
     const int idx = stack_->indexOf(widget);

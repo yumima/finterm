@@ -23,19 +23,17 @@
 #include "services/markets/MarketDataService.h"
 
 #include <QDate>
-#include <QJsonObject>
+#include <QDeadlineTimer>
 #include <QHash>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QSet>
-
-#include <QDeadlineTimer>
-
-#include <functional>
 #include <QString>
 #include <QStringList>
 #include <QVector>
 #include <QWidget>
 
+#include <functional>
 #include <limits>
 
 class QComboBox;
@@ -76,8 +74,8 @@ class IpoWatchView : public QWidget {
     /// EFFECT, 424B4, RW, DRS…), newest first.
     struct LadderStep {
         QString form;
-        QDate   date;
-        QString url;   // EDGAR document, empty when the accession is unknown
+        QDate date;
+        QString url; // EDGAR document, empty when the accession is unknown
     };
 
     /// When the deal is expected to price, and what that rests on. Kinds
@@ -93,11 +91,11 @@ class IpoWatchView : public QWidget {
     ///   priced / withdrawn — terminal
     struct Projection {
         QString kind;
-        QDate   date, lo, hi;
-        double  share = std::numeric_limits<double>::quiet_NaN();
+        QDate date, lo, hi;
+        double share = std::numeric_limits<double>::quiet_NaN();
         QString basis;
-        int     comps_at_risk = 0, comps_priced = 0, comps_withdrawn = 0, comps_pending = 0;
-        int     age_days = -1;
+        int comps_at_risk = 0, comps_priced = 0, comps_withdrawn = 0, comps_pending = 0;
+        int age_days = -1;
         bool firm() const { return kind == "scheduled" || kind == "imminent"; }
     };
 
@@ -112,37 +110,37 @@ class IpoWatchView : public QWidget {
         // `date` is the event that defines the row for its status — expected
         // (upcoming), first public filing (filed), pricing (priced),
         // withdrawal (withdrawn). The explicit fields below say which is which.
-        QDate   date;
+        QDate date;
         QString date_raw;
-        QDate   filed_date;       // first public S-1/F-1 (Nasdaq filedDate)
-        QDate   expected_date;    // Nasdaq expectedPriceDate (upcoming only)
-        QDate   priced_date;
-        QDate   withdrawn_date;
-        bool    priced_from_edgar    = false;  // 424B4 seen before Nasdaq moved it
-        bool    withdrawn_from_edgar = false;  // RW seen before Nasdaq moved it
-        QString price_range;      // e.g. "15.00-17.00" or "17.00" for priced
-        bool    range_from_overview = false;   // filed deal: range from Nasdaq's deal page
-        QString final_price_raw;  // priced only
-        double  final_price = 0;  // priced only — parsed dollars
+        QDate filed_date;    // first public S-1/F-1 (Nasdaq filedDate)
+        QDate expected_date; // Nasdaq expectedPriceDate (upcoming only)
+        QDate priced_date;
+        QDate withdrawn_date;
+        bool priced_from_edgar = false;    // 424B4 seen before Nasdaq moved it
+        bool withdrawn_from_edgar = false; // RW seen before Nasdaq moved it
+        QString price_range;               // e.g. "15.00-17.00" or "17.00" for priced
+        bool range_from_overview = false;  // filed deal: range from Nasdaq's deal page
+        QString final_price_raw;           // priced only
+        double final_price = 0;            // priced only — parsed dollars
         QString shares_raw;
-        double  shares       = 0;
-        double  overallot    = 0; // greenshoe shares, 0 = unknown
-        QString deal_size;        // display string ($170M / $1.2B)
-        double  deal_size_dollars = 0;
-        QString bookrunner;       // Nasdaq's feed carries none; kept for search
+        double shares = 0;
+        double overallot = 0; // greenshoe shares, 0 = unknown
+        QString deal_size;    // display string ($170M / $1.2B)
+        double deal_size_dollars = 0;
+        QString bookrunner; // Nasdaq's feed carries none; kept for search
         QStringList all_bookrunners;
-        QString status;           // "upcoming" | "filed" | "priced" | "withdrawn"
-        bool    spac = false;
+        QString status; // "upcoming" | "filed" | "priced" | "withdrawn"
+        bool spac = false;
         // EDGAR (enrich pass)
         QString cik;
-        int     lockup_days = 0;  // prospectus term; 0 = not on file
-        QString stage;            // on_file | listing | certified | effective | priced | withdrawn | unknown
-        QDate   stage_date;
-        QDate   last_filing_date;
+        int lockup_days = 0; // prospectus term; 0 = not on file
+        QString stage;       // on_file | listing | certified | effective | priced | withdrawn | unknown
+        QDate stage_date;
+        QDate last_filing_date;
         QVector<LadderStep> ladder;
-        bool    edgar_known = false;
-        bool    edgar_failed = false;   // SEC was asked and did not answer (no stale copy)
-        bool    edgar_skipped = false;  // first filed too long ago to be read
+        bool edgar_known = false;
+        bool edgar_failed = false;  // SEC was asked and did not answer (no stale copy)
+        bool edgar_skipped = false; // first filed too long ago to be read
         Projection proj;
         /// The date the pipeline is ordered and windowed by: the projected
         /// pricing date (or the window start) for a pending deal; the event
@@ -150,11 +148,11 @@ class IpoWatchView : public QWidget {
         QDate when() const;
         bool pending() const { return status == "upcoming" || status == "filed"; }
         // Performance enrichment via yfinance batch_quotes — pre-fetched on load.
-        bool   perf_fetched = false;
-        double last_price   = 0;
-        double pop_pct      = 0;  // (last - final) / final * 100, priced only
+        bool perf_fetched = false;
+        double last_price = 0;
+        double pop_pct = 0; // (last - final) / final * 100, priced only
         // Company profile via yfinance batch_info — pre-fetched on load too.
-        bool    profile_fetched = false;
+        bool profile_fetched = false;
         QString sector;
         QString industry;
         QString website;
@@ -164,10 +162,10 @@ class IpoWatchView : public QWidget {
     /// term (Nasdaq overview) or the 180-day convention where none is on file.
     struct Lockup {
         QString ticker, company;
-        QDate   priced, expiry;
-        int     days = 0;
-        bool    assumed = false;
-        double  shares_offered = 0, final_price = 0;
+        QDate priced, expiry;
+        int days = 0;
+        bool assumed = false;
+        double shares_offered = 0, final_price = 0;
     };
 
     /// Filter state.
@@ -189,17 +187,23 @@ class IpoWatchView : public QWidget {
     /// signals PreIpoService::signal_list() computes (consensus mark moves,
     /// S-1 amendment bursts, IPO-readiness jumps). Rows click through to the
     /// private dossier.
-    enum Lens { LensCalendar = 0, LensPerformance, LensWatchlist, LensLockups,
-                LensPrivate, LensSignals, LensCount };
-    enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_3Months,
-                      TW_6Months, TW_12Months, TW_Past30Days };
+    enum Lens { LensCalendar = 0, LensPerformance, LensWatchlist, LensLockups, LensPrivate, LensSignals, LensCount };
+    enum TimeWindow { TW_AllUpcoming = 0, TW_ThisWeek, TW_30Days, TW_3Months, TW_6Months, TW_12Months, TW_Past30Days };
     // Tab indexes for the two detail-rail tab bars — kept in sync with the
     // addTab order in build_detail_rail. Use these instead of magic numbers
     // so reorders are caught at compile time.
-    enum FactTab  { FT_Deal = 0, FT_Business, FT_Leadership, FT_Fundamentals,
-                    FT_News, FT_Holders, FT_Filings, FT_Funding, FT_Pipeline };
-    enum ChartTab { CT_Price = 0, CT_Revenue, CT_NetIncome, CT_Margins,
-                    CT_Range, CT_Lockup, CT_Timeline };
+    enum FactTab {
+        FT_Deal = 0,
+        FT_Business,
+        FT_Leadership,
+        FT_Fundamentals,
+        FT_News,
+        FT_Holders,
+        FT_Filings,
+        FT_Funding,
+        FT_Pipeline
+    };
+    enum ChartTab { CT_Price = 0, CT_Revenue, CT_NetIncome, CT_Margins, CT_Range, CT_Lockup, CT_Timeline };
 
     static const char* lens_label(Lens l);
 
@@ -224,24 +228,24 @@ class IpoWatchView : public QWidget {
     void enrich_with_profiles();      // queues priced tickers for profiles (sector/industry)
     // Yahoo is asked for IPO tickers in chunks, one at a time (run_pump).
     struct ChunkPump {
-        QStringList   queue;       // waiting, in order
-        QSet<QString> queued;      // = queue, for O(1) membership
-        QSet<QString> requested;   // asked (or waiting) — not re-queued; cleared on refresh / wake
-        QSet<QString> inflight;    // the chunk being asked now
-        bool    busy = false;      // a chunk is out, or the gap after it runs
-        quint64 gen = 0;           // bumped on send and on reply/give-up: a stale reply or watchdog is ignored
-        QDeadlineTimer cooldown{0};   // after a refusal: no chunk before it expires
-        bool    cooldown_wake = false; // a resume is already scheduled
-        bool add(const QString& ticker);   // false when already asked / waiting
+        QStringList queue;               // waiting, in order
+        QSet<QString> queued;            // = queue, for O(1) membership
+        QSet<QString> requested;         // asked (or waiting) — not re-queued; cleared on refresh / wake
+        QSet<QString> inflight;          // the chunk being asked now
+        bool busy = false;               // a chunk is out, or the gap after it runs
+        quint64 gen = 0;                 // bumped on send and on reply/give-up: a stale reply or watchdog is ignored
+        QDeadlineTimer cooldown{0};      // after a refusal: no chunk before it expires
+        bool cooldown_wake = false;      // a resume is already scheduled
+        bool add(const QString& ticker); // false when already asked / waiting
     };
     /// fetch(syms, done) asks for one chunk; done(refused, retry) reports it:
     /// `retry` tickers are asked again later, `refused` stops the chain.
-    using ChunkDone  = std::function<void(bool refused, const QSet<QString>& retry)>;
+    using ChunkDone = std::function<void(bool refused, const QSet<QString>& retry)>;
     using ChunkFetch = std::function<void(const QStringList& syms, ChunkDone done)>;
     void run_pump(ChunkPump* p, const char* what, ChunkFetch fetch, std::function<void()> on_drain);
 
     // ── Rendering ───────────────────────────────────────────────────────────
-    void render();                  // dispatch by active_lens_
+    void render(); // dispatch by active_lens_
     void render_calendar();
     void render_performance();
     void render_watchlist();
@@ -279,14 +283,14 @@ class IpoWatchView : public QWidget {
     QString build_holders_html(const Entry& e) const;
     QString build_filings_html(const Entry& e) const;
     QString build_funding_html(const Entry& e) const;
-    void    rebuild_price_chart(const Entry& e);     // mutates price_chart_view_
-    void    rebuild_revenue_chart(const Entry& e);   // mutates revenue_chart_view_
-    void    rebuild_netincome_chart(const Entry& e); // mutates netincome_chart_view_
-    void    rebuild_margins_chart(const Entry& e);   // mutates margins_chart_view_
+    void rebuild_price_chart(const Entry& e);     // mutates price_chart_view_
+    void rebuild_revenue_chart(const Entry& e);   // mutates revenue_chart_view_
+    void rebuild_netincome_chart(const Entry& e); // mutates netincome_chart_view_
+    void rebuild_margins_chart(const Entry& e);   // mutates margins_chart_view_
     /// Private-company $/share trend from N-PORT fund marks, drawn into the
     /// PRICE chart host. Returns true iff a trend line was plotted (≥2 quarters);
     /// false when only a placeholder was shown (caller hides the tab).
-    bool    rebuild_fundmark_chart(const pre_ipo::PrivateCompany& c);
+    bool rebuild_fundmark_chart(const pre_ipo::PrivateCompany& c);
 
     /// Holds the EDGAR dossier read until the reader stops moving. This pane
     /// renders on every selection change, so arrowing down a sixty-row list
@@ -294,7 +298,7 @@ class IpoWatchView : public QWidget {
     /// and every Python slot in the app occupied for minutes, for companies
     /// nobody stopped on.
     class QTimer* dossier_debounce_ = nullptr;
-    QString       dossier_pending_id_;
+    QString dossier_pending_id_;
 
     // Lazy fetchers fired from render_detail when their tab data is missing.
     void fetch_ipo_extras_for_detail(const Entry& e);
@@ -308,7 +312,7 @@ class IpoWatchView : public QWidget {
     /// stays name-keyed while routing stays id-keyed.
     void fetch_wikipedia_for_private(const QString& title, const QString& company_id);
     void fetch_s1_funding_for_detail(const Entry& e);
-    QVector<int> filtered_indices() const;     // applies filter chips + search
+    QVector<int> filtered_indices() const; // applies filter chips + search
     /// `apply_status` — set false from the PERFORMANCE lens, which is by
     /// definition "priced only" and shouldn't be silently emptied when the
     /// default status chip is UPCOMING.
@@ -352,17 +356,17 @@ class IpoWatchView : public QWidget {
     /// Passing a share count to format_money prefixes it with '$'.
     static QString format_count(double n);
     static QString format_deal_size(const QString& price_range, const QString& shares);
-    static double  parse_price_mid(const QString& price_range, bool* ok = nullptr);
-    static double  parse_shares(const QString& shares);
+    static double parse_price_mid(const QString& price_range, bool* ok = nullptr);
+    static double parse_shares(const QString& shares);
 
     // ── State ───────────────────────────────────────────────────────────────
     QVector<Entry> entries_;
     QVector<Lockup> lockups_;
-    bool    calendar_inflight_ = false;
-    bool    enrich_inflight_   = false;
-    bool    enriched_          = false;   // EDGAR stage present in entries_
-    quint64 calendar_gen_      = 0;       // bumped per refresh; stale fast replies dropped
-    quint64 enrich_applied_gen_ = 0;      // gen at which the last enrich reply was applied
+    bool calendar_inflight_ = false;
+    bool enrich_inflight_ = false;
+    bool enriched_ = false;          // EDGAR stage present in entries_
+    quint64 calendar_gen_ = 0;       // bumped per refresh; stale fast replies dropped
+    quint64 enrich_applied_gen_ = 0; // gen at which the last enrich reply was applied
     ChunkPump quote_pump_, profile_pump_;
     QStringList calendar_errors_;
     QString status_text() const;
@@ -375,25 +379,25 @@ class IpoWatchView : public QWidget {
     // FILINGS uses `filings_cache_`; Wikipedia fallback for the BUSINESS
     // tab lives in `wiki_cache_`.
     QHash<QString, services::MarketDataService::IpoExtras> ipo_extras_;
-    QSet<QString>                                          ipo_extras_inflight_;
+    QSet<QString> ipo_extras_inflight_;
     QHash<QString, QVector<services::MarketDataService::SecFiling>> filings_cache_;
-    QSet<QString>                                          filings_inflight_;
-    QHash<QString, qint64>                                 filings_failed_at_; // retry after a minute
-    QSet<QString>                                          filings_retry_pending_; // one 61 s re-render each
-    quint64                                                filings_gen_ = 0;       // bumped on a wake reset
+    QSet<QString> filings_inflight_;
+    QHash<QString, qint64> filings_failed_at_; // retry after a minute
+    QSet<QString> filings_retry_pending_;      // one 61 s re-render each
+    quint64 filings_gen_ = 0;                  // bumped on a wake reset
     bool filings_failed(const QString& ticker) const;
     QHash<QString, services::MarketDataService::WikipediaSummary> wiki_cache_;
-    QSet<QString>                                          wiki_inflight_;
+    QSet<QString> wiki_inflight_;
     // "wiki tried but failed" set — keep so we don't repeatedly hit the
     // REST API for pre-IPO companies that simply have no Wikipedia page.
-    QSet<QString>                                          wiki_misses_;
+    QSet<QString> wiki_misses_;
     // Parsed S-1 "Recent Sales of Unregistered Securities" sections — the
     // free, public surrogate for the funding-round history that NPM / Hiive
     // sell. Keyed by ticker; misses kept separately so we don't re-parse
     // huge S-1 documents when the section is genuinely absent.
     QHash<QString, services::MarketDataService::S1Funding> s1_cache_;
-    QSet<QString>                                          s1_inflight_;
-    QSet<QString>                                          s1_misses_;
+    QSet<QString> s1_inflight_;
+    QSet<QString> s1_misses_;
     // Lazy per-symbol price history cache for the detail rail's price-since-IPO
     // sparkline. Keyed by ticker. Presence in `history_cache_` means the fetch
     // returned (even if empty = "yfinance had nothing"); presence in
@@ -401,7 +405,7 @@ class IpoWatchView : public QWidget {
     // re-issue it. They are mutually exclusive: callback drops from inflight
     // and writes to the cache atomically.
     QHash<QString, QVector<double>> history_cache_;
-    QSet<QString>                   history_inflight_;
+    QSet<QString> history_inflight_;
     /// Currently shown in the detail rail: a ticker for a listed entry, or a
     /// PrivateCompany::id for a private dossier. Every path that blanks the
     /// rail clears it, which is what makes it safe to route asynchronous
@@ -410,93 +414,93 @@ class IpoWatchView : public QWidget {
     /// from then on; automatic weighting stops.
     bool splitter_user_sized_ = false;
     QString detail_symbol_;
-    QString detail_deal_id_;   // the open dossier's deal (tickers repeat across re-filings)
+    QString detail_deal_id_; // the open dossier's deal (tickers repeat across re-filings)
     // Starred-ticker set, persisted under SettingsRepository key
     // `ipo_watch.starred`. Each entry is either the ticker (preferred) or
     // company name for upcoming deals with no ticker yet — see starred_key().
     QSet<QString> starred_;
-    Lens       active_lens_   = LensCalendar;
-    TimeWindow time_window_   = TW_AllUpcoming;
+    Lens active_lens_ = LensCalendar;
+    TimeWindow time_window_ = TW_AllUpcoming;
     // Default to UPCOMING because the screen's primary value is forward
     // pipeline research — past priced deals are the COMPS context, not the
     // headline. User can flip to ALL / PRICED via the status chip.
-    QString    status_filter_ = "upcoming"; // all | upcoming (pipeline) | priced | withdrawn
-    QString    exch_filter_   = "all";     // all | NYSE | NASDAQ | …
-    QString    size_filter_   = "all";     // all | <100M | 100-500M | 500M+
-    QString    type_filter_   = "all";     // all | operating | spac
+    QString status_filter_ = "upcoming"; // all | upcoming (pipeline) | priced | withdrawn
+    QString exch_filter_ = "all";        // all | NYSE | NASDAQ | …
+    QString size_filter_ = "all";        // all | <100M | 100-500M | 500M+
+    QString type_filter_ = "all";        // all | operating | spac
     /// Exchange chip match. Nasdaq's feed names NYSE American "NYSE MKT", so
     /// "AMEX" never matched by substring and "NYSE" swallowed it.
     bool exchange_matches(const QString& exch) const;
-    QString    search_query_;
+    QString search_query_;
 
     // ── Widgets ─────────────────────────────────────────────────────────────
-    QLabel*       title_lbl_   = nullptr;
-    QPushButton*  lens_btns_[LensCount] = {nullptr};
-    QPushButton*  refresh_btn_ = nullptr;
-    QLabel*       status_lbl_  = nullptr;
+    QLabel* title_lbl_ = nullptr;
+    QPushButton* lens_btns_[LensCount] = {nullptr};
+    QPushButton* refresh_btn_ = nullptr;
+    QLabel* status_lbl_ = nullptr;
 
     // KPI strip cells (left to right)
-    QWidget* kpi_strip_   = nullptr;
-    QLabel*  kpi_week_    = nullptr;
-    QLabel*  kpi_month_   = nullptr;
-    QLabel*  kpi_pop_     = nullptr;
-    QLabel*  kpi_above_   = nullptr;
-    QLabel*  kpi_in_      = nullptr;
-    QLabel*  kpi_below_   = nullptr;
+    QWidget* kpi_strip_ = nullptr;
+    QLabel* kpi_week_ = nullptr;
+    QLabel* kpi_month_ = nullptr;
+    QLabel* kpi_pop_ = nullptr;
+    QLabel* kpi_above_ = nullptr;
+    QLabel* kpi_in_ = nullptr;
+    QLabel* kpi_below_ = nullptr;
 
     // Filter chips
-    QWidget*   filter_row_  = nullptr;
+    QWidget* filter_row_ = nullptr;
     QComboBox* status_chip_ = nullptr;
     QComboBox* window_chip_ = nullptr;
-    QComboBox* exch_chip_   = nullptr;
-    QComboBox* size_chip_   = nullptr;
-    QComboBox* type_chip_   = nullptr;
-    QLineEdit* search_      = nullptr;
+    QComboBox* exch_chip_ = nullptr;
+    QComboBox* size_chip_ = nullptr;
+    QComboBox* type_chip_ = nullptr;
+    QLineEdit* search_ = nullptr;
 
     // Workspace + detail
-    QSplitter*    splitter_      = nullptr;
-    QTableWidget* table_         = nullptr;  // single table; columns/rows change per lens
+    QSplitter* splitter_ = nullptr;
+    QTableWidget* table_ = nullptr; // single table; columns/rows change per lens
 
     // ── Detail rail (3-pane Bloomberg-style) ────────────────────────────────
     // Outer splitter children: [table_, middle_pane_, right_pane_]
     // middle_pane_ vertical: [tabs_facts_, tabs_charts_]
     // right_pane_  vertical: [right_top_, right_bottom_]
-    QWidget*      middle_pane_   = nullptr;
-    QWidget*      right_pane_    = nullptr;
-    QLabel*       header_lbl_    = nullptr;  // company name + chips above the tabs
+    QWidget* middle_pane_ = nullptr;
+    QWidget* right_pane_ = nullptr;
+    QLabel* header_lbl_ = nullptr; // company name + chips above the tabs
     /// "Open in Equity Research →" — only visible when a priced row is
     /// selected. Publishes the same EventBus pair PortfolioBlotter uses
     /// (`nav.split_alongside` + `equity_research.load_symbol`), so the full
     /// Equity Research screen docks alongside IPO Watch with the ticker
     /// already loaded.
-    QPushButton*  er_btn_        = nullptr;
+    QPushButton* er_btn_ = nullptr;
 
-    QTabWidget*   tabs_facts_    = nullptr;
-    QLabel*       page_deal_     = nullptr;
-    QLabel*       page_business_ = nullptr;
-    QLabel*       page_leader_   = nullptr;
-    QLabel*       page_fund_     = nullptr;
-    QLabel*       page_pipeline_ = nullptr;
-    QLabel*       page_news_     = nullptr;
-    QLabel*       page_holders_  = nullptr;
-    QLabel*       page_filings_  = nullptr;
-    QLabel*       page_funding_  = nullptr;
+    QTabWidget* tabs_facts_ = nullptr;
+    QLabel* page_deal_ = nullptr;
+    QLabel* page_business_ = nullptr;
+    QLabel* page_leader_ = nullptr;
+    QLabel* page_fund_ = nullptr;
+    QLabel* page_pipeline_ = nullptr;
+    QLabel* page_news_ = nullptr;
+    QLabel* page_holders_ = nullptr;
+    QLabel* page_filings_ = nullptr;
+    QLabel* page_funding_ = nullptr;
 
-    QTabWidget*   tabs_charts_   = nullptr;
-    QWidget*      page_price_chart_host_     = nullptr; // QVBoxLayout host for the QChartView
-    QWidget*      page_revenue_chart_host_   = nullptr; // QVBoxLayout host for revenue bar chart
-    QWidget*      page_netincome_chart_host_ = nullptr; // QVBoxLayout host for net-income bar chart
-    QWidget*      page_margins_chart_host_   = nullptr; // QVBoxLayout host for multi-line margin chart
-    QChartView*   price_chart_view_          = nullptr; // recreated each render
-    QChartView*   revenue_chart_view_        = nullptr;
-    QChartView*   netincome_chart_view_      = nullptr;
-    QChartView*   margins_chart_view_        = nullptr;
-    QLabel*       page_range_    = nullptr;
-    QLabel*       page_lockup_   = nullptr;
-    QLabel*       page_timeline_ = nullptr;
+    QTabWidget* tabs_charts_ = nullptr;
+    QWidget* page_price_chart_host_ = nullptr;     // QVBoxLayout host for the QChartView
+    QWidget* page_revenue_chart_host_ = nullptr;   // QVBoxLayout host for revenue bar chart
+    QWidget* page_netincome_chart_host_ = nullptr; // QVBoxLayout host for net-income bar chart
+    QWidget* page_margins_chart_host_ = nullptr;   // QVBoxLayout host for multi-line margin chart
+    QChartView* price_chart_view_ = nullptr;       // recreated each render
+    QChartView* revenue_chart_view_ = nullptr;
+    QChartView* netincome_chart_view_ = nullptr;
+    QChartView* margins_chart_view_ = nullptr;
+    QLabel* page_range_ = nullptr;
+    QLabel* page_lockup_ = nullptr;
+    QLabel* page_timeline_ = nullptr;
 
-    QLabel*       right_top_     = nullptr;  // sector heat + comps
-    QLabel*       right_bottom_  = nullptr;  // research links
+    QLabel* right_top_ = nullptr;    // sector heat + comps
+    QLabel* right_bottom_ = nullptr; // research links
 };
 
 } // namespace fincept::screens::widgets

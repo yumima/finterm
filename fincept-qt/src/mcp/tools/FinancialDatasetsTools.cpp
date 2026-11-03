@@ -65,15 +65,12 @@ QString fd_api_key() {
 /// Async GET helper.  Calls `done` exactly once with the parsed JSON
 /// object or an error.  Auth header X-API-KEY is sourced from
 /// SecureStorage; missing key short-circuits to a clear error.
-void fd_get(const QString& path,
-            const QHash<QString, QString>& params,
-            std::function<void(Result<QJsonObject>)> done) {
+void fd_get(const QString& path, const QHash<QString, QString>& params, std::function<void(Result<QJsonObject>)> done) {
     const QString api_key = fd_api_key();
     if (api_key.isEmpty()) {
-        done(Result<QJsonObject>::err(
-            "financialdatasets.ai API key not configured.  Add it under "
-            "Settings → Credentials → Financial Datasets "
-            "(free tier at financialdatasets.ai)"));
+        done(Result<QJsonObject>::err("financialdatasets.ai API key not configured.  Add it under "
+                                      "Settings → Credentials → Financial Datasets "
+                                      "(free tier at financialdatasets.ai)"));
         return;
     }
 
@@ -98,34 +95,29 @@ void fd_get(const QString& path,
             reply->abort();
     });
 
-    QObject::connect(reply, &QNetworkReply::finished, reply,
-                     [reply, done = std::move(done), path]() {
-                         const QByteArray body = reply->readAll();
-                         const int status =
-                             reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-                         const auto err = reply->error();
-                         reply->deleteLater();
+    QObject::connect(reply, &QNetworkReply::finished, reply, [reply, done = std::move(done), path]() {
+        const QByteArray body = reply->readAll();
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto err = reply->error();
+        reply->deleteLater();
 
-                         if (err != QNetworkReply::NoError) {
-                             done(Result<QJsonObject>::err(
-                                 QString("network error %1 on %2 (status=%3): %4")
-                                     .arg(static_cast<int>(err))
-                                     .arg(path)
-                                     .arg(status)
-                                     .arg(QString::fromUtf8(body).left(200))
-                                     .toStdString()));
-                             return;
-                         }
-                         QJsonParseError perr;
-                         const QJsonDocument doc = QJsonDocument::fromJson(body, &perr);
-                         if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
-                             done(Result<QJsonObject>::err(
-                                 ("invalid JSON response: " + perr.errorString())
-                                     .toStdString()));
-                             return;
-                         }
-                         done(Result<QJsonObject>::ok(doc.object()));
-                     });
+        if (err != QNetworkReply::NoError) {
+            done(Result<QJsonObject>::err(QString("network error %1 on %2 (status=%3): %4")
+                                              .arg(static_cast<int>(err))
+                                              .arg(path)
+                                              .arg(status)
+                                              .arg(QString::fromUtf8(body).left(200))
+                                              .toStdString()));
+            return;
+        }
+        QJsonParseError perr;
+        const QJsonDocument doc = QJsonDocument::fromJson(body, &perr);
+        if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
+            done(Result<QJsonObject>::err(("invalid JSON response: " + perr.errorString()).toStdString()));
+            return;
+        }
+        done(Result<QJsonObject>::ok(doc.object()));
+    });
 }
 
 /// Glue: bridge fd_get's callback to a QPromise<ToolResult>.
@@ -161,18 +153,14 @@ std::vector<ToolDef> get_financial_datasets_tools() {
         t.category = "finance";
         t.default_timeout_ms = kRequestTimeoutMs;
         t.input_schema.properties = QJsonObject{
-            {"ticker", QJsonObject{{"type", "string"},
-                                   {"description", "Ticker symbol (e.g. AAPL)"}}},
-            {"filing_type", QJsonObject{{"type", "string"},
-                                        {"description", "10-K | 10-Q | 8-K"}}},
-            {"item", QJsonObject{{"type", "string"},
-                                 {"description", "Section identifier (e.g. \"1A\", \"7\")"}}},
-            {"year", QJsonObject{{"type", "integer"},
-                                 {"description", "Filing year (optional; defaults to latest)"}}},
+            {"ticker", QJsonObject{{"type", "string"}, {"description", "Ticker symbol (e.g. AAPL)"}}},
+            {"filing_type", QJsonObject{{"type", "string"}, {"description", "10-K | 10-Q | 8-K"}}},
+            {"item", QJsonObject{{"type", "string"}, {"description", "Section identifier (e.g. \"1A\", \"7\")"}}},
+            {"year", QJsonObject{{"type", "integer"}, {"description", "Filing year (optional; defaults to latest)"}}},
         };
         t.input_schema.required = {"ticker", "filing_type", "item"};
         t.async_handler = [](const QJsonObject& args, ToolContext /*ctx*/,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             std::shared_ptr<QPromise<ToolResult>> promise) {
             QHash<QString, QString> params{
                 {"ticker", req_string(args, "ticker").toUpper()},
                 {"filing_type", req_string(args, "filing_type")},
@@ -195,14 +183,12 @@ std::vector<ToolDef> get_financial_datasets_tools() {
         t.category = "finance";
         t.default_timeout_ms = kRequestTimeoutMs;
         t.input_schema.properties = QJsonObject{
-            {"ticker", QJsonObject{{"type", "string"},
-                                   {"description", "Ticker symbol"}}},
-            {"limit", QJsonObject{{"type", "integer"},
-                                  {"description", "Max rows (default 100)"}}},
+            {"ticker", QJsonObject{{"type", "string"}, {"description", "Ticker symbol"}}},
+            {"limit", QJsonObject{{"type", "integer"}, {"description", "Max rows (default 100)"}}},
         };
         t.input_schema.required = {"ticker"};
         t.async_handler = [](const QJsonObject& args, ToolContext /*ctx*/,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             std::shared_ptr<QPromise<ToolResult>> promise) {
             QHash<QString, QString> params{
                 {"ticker", req_string(args, "ticker").toUpper()},
             };
@@ -222,16 +208,14 @@ std::vector<ToolDef> get_financial_datasets_tools() {
         t.category = "finance";
         t.default_timeout_ms = kRequestTimeoutMs;
         t.input_schema.properties = QJsonObject{
-            {"ticker", QJsonObject{{"type", "string"},
-                                   {"description", "Ticker (omit for filer-based query)"}}},
+            {"ticker", QJsonObject{{"type", "string"}, {"description", "Ticker (omit for filer-based query)"}}},
             {"investor", QJsonObject{{"type", "string"},
                                      {"description", "Investor/filer name "
                                                      "(e.g. \"Berkshire Hathaway\")"}}},
-            {"limit", QJsonObject{{"type", "integer"},
-                                  {"description", "Max rows (default 100)"}}},
+            {"limit", QJsonObject{{"type", "integer"}, {"description", "Max rows (default 100)"}}},
         };
         t.async_handler = [](const QJsonObject& args, ToolContext /*ctx*/,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             std::shared_ptr<QPromise<ToolResult>> promise) {
             QHash<QString, QString> params;
             const QString ticker = req_string(args, "ticker").toUpper();
             if (!ticker.isEmpty())
@@ -241,10 +225,8 @@ std::vector<ToolDef> get_financial_datasets_tools() {
                 params.insert("investor", investor);
             const int limit = args.value("limit").toInt(100);
             params.insert("limit", QString::number(limit));
-            if (params.isEmpty() ||
-                (params.size() == 1 && params.contains("limit"))) {
-                promise->addResult(ToolResult::fail(
-                    "Provide at least one of `ticker` or `investor`."));
+            if (params.isEmpty() || (params.size() == 1 && params.contains("limit"))) {
+                promise->addResult(ToolResult::fail("Provide at least one of `ticker` or `investor`."));
                 promise->finish();
                 return;
             }
@@ -263,21 +245,17 @@ std::vector<ToolDef> get_financial_datasets_tools() {
         t.category = "finance";
         t.default_timeout_ms = kRequestTimeoutMs;
         t.input_schema.properties = QJsonObject{
-            {"ticker", QJsonObject{{"type", "string"},
-                                   {"description", "Ticker symbol"}}},
-            {"period", QJsonObject{{"type", "string"},
-                                   {"description", "annual | quarterly (default annual)"}}},
-            {"limit", QJsonObject{{"type", "integer"},
-                                  {"description", "Max periods (default 5)"}}},
+            {"ticker", QJsonObject{{"type", "string"}, {"description", "Ticker symbol"}}},
+            {"period", QJsonObject{{"type", "string"}, {"description", "annual | quarterly (default annual)"}}},
+            {"limit", QJsonObject{{"type", "integer"}, {"description", "Max periods (default 5)"}}},
         };
         t.input_schema.required = {"ticker"};
         t.async_handler = [](const QJsonObject& args, ToolContext /*ctx*/,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             std::shared_ptr<QPromise<ToolResult>> promise) {
             QHash<QString, QString> params{
                 {"ticker", req_string(args, "ticker").toUpper()},
-                {"period", req_string(args, "period").isEmpty()
-                               ? QStringLiteral("annual")
-                               : req_string(args, "period")},
+                {"period",
+                 req_string(args, "period").isEmpty() ? QStringLiteral("annual") : req_string(args, "period")},
             };
             const int limit = args.value("limit").toInt(5);
             params.insert("limit", QString::number(limit));
@@ -297,21 +275,17 @@ std::vector<ToolDef> get_financial_datasets_tools() {
         t.category = "finance";
         t.default_timeout_ms = kRequestTimeoutMs;
         t.input_schema.properties = QJsonObject{
-            {"ticker", QJsonObject{{"type", "string"},
-                                   {"description", "Ticker symbol"}}},
-            {"period", QJsonObject{{"type", "string"},
-                                   {"description", "annual | quarterly"}}},
-            {"limit", QJsonObject{{"type", "integer"},
-                                  {"description", "Max periods (default 5)"}}},
+            {"ticker", QJsonObject{{"type", "string"}, {"description", "Ticker symbol"}}},
+            {"period", QJsonObject{{"type", "string"}, {"description", "annual | quarterly"}}},
+            {"limit", QJsonObject{{"type", "integer"}, {"description", "Max periods (default 5)"}}},
         };
         t.input_schema.required = {"ticker"};
         t.async_handler = [](const QJsonObject& args, ToolContext /*ctx*/,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             std::shared_ptr<QPromise<ToolResult>> promise) {
             QHash<QString, QString> params{
                 {"ticker", req_string(args, "ticker").toUpper()},
-                {"period", req_string(args, "period").isEmpty()
-                               ? QStringLiteral("quarterly")
-                               : req_string(args, "period")},
+                {"period",
+                 req_string(args, "period").isEmpty() ? QStringLiteral("quarterly") : req_string(args, "period")},
             };
             const int limit = args.value("limit").toInt(5);
             params.insert("limit", QString::number(limit));
@@ -331,14 +305,12 @@ std::vector<ToolDef> get_financial_datasets_tools() {
         t.category = "finance";
         t.default_timeout_ms = kRequestTimeoutMs;
         t.input_schema.properties = QJsonObject{
-            {"ticker", QJsonObject{{"type", "string"},
-                                   {"description", "Ticker symbol"}}},
-            {"limit", QJsonObject{{"type", "integer"},
-                                  {"description", "Max past quarters (default 8)"}}},
+            {"ticker", QJsonObject{{"type", "string"}, {"description", "Ticker symbol"}}},
+            {"limit", QJsonObject{{"type", "integer"}, {"description", "Max past quarters (default 8)"}}},
         };
         t.input_schema.required = {"ticker"};
         t.async_handler = [](const QJsonObject& args, ToolContext /*ctx*/,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             std::shared_ptr<QPromise<ToolResult>> promise) {
             QHash<QString, QString> params{
                 {"ticker", req_string(args, "ticker").toUpper()},
             };

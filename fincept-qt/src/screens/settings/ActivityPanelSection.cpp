@@ -1,12 +1,12 @@
 #include "screens/settings/ActivityPanelSection.h"
 
 #include <QDateTime>
-#include <QTimeZone>
 #include <QDialog>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonDocument>
 #include <QPlainTextEdit>
+#include <QTimeZone>
 #include <QVBoxLayout>
 
 namespace fincept::screens {
@@ -27,8 +27,12 @@ constexpr int kActColCost = 4;
 constexpr int kActColSource = 5;
 constexpr int kActColCount = 6;
 
-QString act_format_usd(double v) { return QStringLiteral("$%1").arg(QString::number(v, 'f', 2)); }
-QString act_format_ms(int v)     { return QStringLiteral("%1 ms").arg(v); }
+QString act_format_usd(double v) {
+    return QStringLiteral("$%1").arg(QString::number(v, 'f', 2));
+}
+QString act_format_ms(int v) {
+    return QStringLiteral("%1 ms").arg(v);
+}
 
 } // anonymous namespace
 
@@ -54,7 +58,7 @@ QString ActivityPanelSection::elapsed(const QString& started_at_iso) {
     // SQLite datetime('now') gives "YYYY-MM-DD HH:MM:SS" in UTC.
     // QDateTime needs a TimeSpec hint to parse correctly.
     QDateTime started = QDateTime::fromString(started_at_iso, "yyyy-MM-dd HH:mm:ss");
-    started.setTimeZone(QTimeZone::UTC);   // setTimeSpec is deprecated in Qt 6
+    started.setTimeZone(QTimeZone::UTC); // setTimeSpec is deprecated in Qt 6
     if (!started.isValid())
         return QStringLiteral("?");
     const qint64 secs = started.secsTo(QDateTime::currentDateTimeUtc());
@@ -72,9 +76,9 @@ void ActivityPanelSection::build_ui() {
     root->setContentsMargins(16, 16, 16, 16);
     root->setSpacing(12);
 
-    auto* hdr = new QLabel(QStringLiteral(
-        "<b>Activity</b> — what the agent is doing right now and what it just finished.  "
-        "Auto-refreshes every 3 s while this panel is open."));
+    auto* hdr =
+        new QLabel(QStringLiteral("<b>Activity</b> — what the agent is doing right now and what it just finished.  "
+                                  "Auto-refreshes every 3 s while this panel is open."));
     hdr->setWordWrap(true);
     root->addWidget(hdr);
 
@@ -91,33 +95,29 @@ void ActivityPanelSection::build_ui() {
     root->addWidget(in_flight_lbl);
     in_flight_table_ = new QTableWidget(this);
     in_flight_table_->setColumnCount(kActColCount);
-    in_flight_table_->setHorizontalHeaderLabels(
-        {QStringLiteral("Started"), QStringLiteral("Agent"),
-         QStringLiteral("Elapsed"), QStringLiteral("Latency"),
-         QStringLiteral("Cost"), QStringLiteral("Source")});
+    in_flight_table_->setHorizontalHeaderLabels({QStringLiteral("Started"), QStringLiteral("Agent"),
+                                                 QStringLiteral("Elapsed"), QStringLiteral("Latency"),
+                                                 QStringLiteral("Cost"), QStringLiteral("Source")});
     in_flight_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     in_flight_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     in_flight_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     in_flight_table_->verticalHeader()->setVisible(false);
     in_flight_table_->setToolTip(QStringLiteral("Double-click a row to view the trace."));
-    connect(in_flight_table_, &QTableWidget::cellDoubleClicked,
-            this, &ActivityPanelSection::on_view_trace);
+    connect(in_flight_table_, &QTableWidget::cellDoubleClicked, this, &ActivityPanelSection::on_view_trace);
     root->addWidget(in_flight_table_, 1);
 
     auto* recent_lbl = new QLabel(QStringLiteral("<b>Recently finished</b>"));
     root->addWidget(recent_lbl);
     recent_table_ = new QTableWidget(this);
     recent_table_->setColumnCount(kActColCount);
-    recent_table_->setHorizontalHeaderLabels(
-        {QStringLiteral("Started"), QStringLiteral("Agent"),
-         QStringLiteral("Status"), QStringLiteral("Latency"),
-         QStringLiteral("Cost"), QStringLiteral("Source")});
+    recent_table_->setHorizontalHeaderLabels({QStringLiteral("Started"), QStringLiteral("Agent"),
+                                              QStringLiteral("Status"), QStringLiteral("Latency"),
+                                              QStringLiteral("Cost"), QStringLiteral("Source")});
     recent_table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     recent_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     recent_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     recent_table_->verticalHeader()->setVisible(false);
-    connect(recent_table_, &QTableWidget::cellDoubleClicked,
-            this, &ActivityPanelSection::on_view_trace);
+    connect(recent_table_, &QTableWidget::cellDoubleClicked, this, &ActivityPanelSection::on_view_trace);
     root->addWidget(recent_table_, 1);
 }
 
@@ -139,8 +139,7 @@ void ActivityPanelSection::populate(const QVector<AgentTraceRow>& rows) {
         else if (recent.size() < kRecentRows)
             recent.append(t);
     }
-    summary_lbl_->setText(QStringLiteral(
-        "%1 in flight · %2 recent (top %3 of last %4 traces)")
+    summary_lbl_->setText(QStringLiteral("%1 in flight · %2 recent (top %3 of last %4 traces)")
                               .arg(in_flight.size())
                               .arg(recent.size())
                               .arg(kRecentRows)
@@ -154,10 +153,10 @@ void ActivityPanelSection::populate(const QVector<AgentTraceRow>& rows) {
         in_flight_table_->setItem(i, kActColStarted, started);
         in_flight_table_->setItem(i, kActColAgent, new QTableWidgetItem(t.agent_id));
         in_flight_table_->setItem(i, kActColStatus, new QTableWidgetItem(elapsed(t.started_at)));
-        in_flight_table_->setItem(i, kActColLatency, new QTableWidgetItem(
-            t.latency_ms ? act_format_ms(*t.latency_ms) : QString()));
-        in_flight_table_->setItem(i, kActColCost, new QTableWidgetItem(
-            t.cost_usd ? act_format_usd(*t.cost_usd) : QString()));
+        in_flight_table_->setItem(i, kActColLatency,
+                                  new QTableWidgetItem(t.latency_ms ? act_format_ms(*t.latency_ms) : QString()));
+        in_flight_table_->setItem(i, kActColCost,
+                                  new QTableWidgetItem(t.cost_usd ? act_format_usd(*t.cost_usd) : QString()));
         in_flight_table_->setItem(i, kActColSource, new QTableWidgetItem(t.source));
     }
 
@@ -169,10 +168,10 @@ void ActivityPanelSection::populate(const QVector<AgentTraceRow>& rows) {
         recent_table_->setItem(i, kActColStarted, started);
         recent_table_->setItem(i, kActColAgent, new QTableWidgetItem(t.agent_id));
         recent_table_->setItem(i, kActColStatus, new QTableWidgetItem(t.status));
-        recent_table_->setItem(i, kActColLatency, new QTableWidgetItem(
-            t.latency_ms ? act_format_ms(*t.latency_ms) : QString()));
-        recent_table_->setItem(i, kActColCost, new QTableWidgetItem(
-            t.cost_usd ? act_format_usd(*t.cost_usd) : QString()));
+        recent_table_->setItem(i, kActColLatency,
+                               new QTableWidgetItem(t.latency_ms ? act_format_ms(*t.latency_ms) : QString()));
+        recent_table_->setItem(i, kActColCost,
+                               new QTableWidgetItem(t.cost_usd ? act_format_usd(*t.cost_usd) : QString()));
         recent_table_->setItem(i, kActColSource, new QTableWidgetItem(t.source));
     }
 }
@@ -204,10 +203,9 @@ void ActivityPanelSection::show_trace_dialog(const AgentTraceRow& t) {
     auto* root = new QVBoxLayout(&dlg);
     root->setContentsMargins(16, 16, 16, 16);
 
-    auto* meta = new QLabel(QStringLiteral(
-        "<b>%1</b> · agent: %2 · status: %3 · runtime: %4 · source: %5 · started: %6")
-                                .arg(t.request_id.left(12), t.agent_id, t.status,
-                                     t.runtime, t.source, t.started_at));
+    auto* meta =
+        new QLabel(QStringLiteral("<b>%1</b> · agent: %2 · status: %3 · runtime: %4 · source: %5 · started: %6")
+                       .arg(t.request_id.left(12), t.agent_id, t.status, t.runtime, t.source, t.started_at));
     meta->setWordWrap(true);
     root->addWidget(meta);
 

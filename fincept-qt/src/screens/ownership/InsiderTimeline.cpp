@@ -56,8 +56,10 @@ void InsiderTimeline::set_transactions(const QVector<ownership::InsiderTransacti
                              t.shares ? fmt::format_compact(*t.shares) : fmt::placeholder(),
                              t.price ? fmt::format_money(*t.price) : fmt::placeholder(), why);
         marks_.push_back(m);
-        if (!first_.isValid() || t.date < first_) first_ = t.date;
-        if (!last_.isValid() || t.date > last_) last_ = t.date;
+        if (!first_.isValid() || t.date < first_)
+            first_ = t.date;
+        if (!last_.isValid() || t.date > last_)
+            last_ = t.date;
     }
     // Room on the right so the newest bar is not on the edge, and a floor on
     // the span so a single week does not stretch across the whole widget.
@@ -88,8 +90,8 @@ void InsiderTimeline::paintEvent(QPaintEvent*) {
 
     if (marks_.isEmpty() || !first_.isValid()) {
         p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
-        p.drawText(rect().adjusted(kPadX, kPadY, -kPadX, -kPadY),
-                   Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap, empty_text_);
+        p.drawText(rect().adjusted(kPadX, kPadY, -kPadX, -kPadY), Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap,
+                   empty_text_);
         return;
     }
 
@@ -144,7 +146,10 @@ bool InsiderTimeline::event(QEvent* e) {
         int best = -1, best_dx = 1 << 30;
         for (int i = 0; i < marks_.size(); ++i) {
             const int dx = std::abs(x_for(marks_[i].date, plot) + 3 - he->pos().x());
-            if (dx < best_dx) { best_dx = dx; best = i; }
+            if (dx < best_dx) {
+                best_dx = dx;
+                best = i;
+            }
         }
         if (best >= 0 && best_dx < 14) {
             QToolTip::showText(he->globalPos(), ui::tooltip_wrap(marks_[best].tooltip), this);

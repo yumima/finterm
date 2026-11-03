@@ -1,16 +1,15 @@
 #include "services/markets/MarketDataService.h"
 
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
+#include "datahub/TopicPolicy.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
-#include "storage/cache/CacheManager.h"
 #include "services/markets/SecIdentity.h"
+#include "storage/cache/CacheManager.h"
 #include "storage/secure/SecureStorage.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
-#    include "datahub/TopicPolicy.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -18,12 +17,11 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QSet>
+#include <QTimer>
+#include <QUrl>
 #include <QtNumeric>
 
 #include <cmath>
-#include <QTimer>
-#include <QUrl>
-
 #include <memory>
 
 namespace fincept::services {
@@ -50,12 +48,10 @@ MarketDataService& MarketDataService::instance() {
 
 MarketDataService::MarketDataService() {}
 
-
 // ── DataHub Producer integration ────────────────────────────────────────────
 
 QStringList MarketDataService::topic_patterns() const {
-    return {QStringLiteral("market:quote:*"), QStringLiteral("market:sparkline:*"),
-            QStringLiteral("market:history:*")};
+    return {QStringLiteral("market:quote:*"), QStringLiteral("market:sparkline:*"), QStringLiteral("market:history:*")};
 }
 
 int MarketDataService::max_requests_per_sec() const {
@@ -75,13 +71,18 @@ void MarketDataService::refresh(const QStringList& topics) {
     // — they're still used by report builder and other one-shot paths.
     static const QString kQuote = QStringLiteral("market:quote:");
     static const QString kSpark = QStringLiteral("market:sparkline:");
-    static const QString kHist  = QStringLiteral("market:history:");
+    static const QString kHist = QStringLiteral("market:history:");
 
     const qint64 refresh_t0 = QDateTime::currentMSecsSinceEpoch();
 
     QStringList quote_syms;
     QStringList spark_syms;
-    struct HistReq { QString topic; QString symbol; QString period; QString interval; };
+    struct HistReq {
+        QString topic;
+        QString symbol;
+        QString period;
+        QString interval;
+    };
     QVector<HistReq> hist_reqs;
     for (const auto& t : topics) {
         if (t.startsWith(kQuote)) {
@@ -105,12 +106,14 @@ void MarketDataService::refresh(const QStringList& topics) {
     QJsonObject payload;
     if (!quote_syms.isEmpty()) {
         QJsonArray arr;
-        for (const auto& s : quote_syms) arr.append(s);
+        for (const auto& s : quote_syms)
+            arr.append(s);
         payload["quotes"] = arr;
     }
     if (!spark_syms.isEmpty()) {
         QJsonArray arr;
-        for (const auto& s : spark_syms) arr.append(s);
+        for (const auto& s : spark_syms)
+            arr.append(s);
         payload["sparklines"] = arr;
     }
     if (!hist_reqs.isEmpty()) {
@@ -126,7 +129,7 @@ void MarketDataService::refresh(const QStringList& topics) {
     }
 
     if (payload.isEmpty()) {
-        return;  // Nothing to fetch — hub guarantees this won't happen in practice.
+        return; // Nothing to fetch — hub guarantees this won't happen in practice.
     }
 
     QPointer<MarketDataService> self = this;
@@ -143,8 +146,7 @@ void MarketDataService::refresh(const QStringList& topics) {
             const qint64 elapsed = QDateTime::currentMSecsSinceEpoch() - refresh_t0;
 
             if (!ok) {
-                LOG_WARN("MarketData",
-                         QString("batch_all failed in %1ms: %2").arg(elapsed).arg(err.left(200)));
+                LOG_WARN("MarketData", QString("batch_all failed in %1ms: %2").arg(elapsed).arg(err.left(200)));
                 return;
             }
 
@@ -175,18 +177,18 @@ void MarketDataService::refresh(const QStringList& topics) {
                 if (q.isEmpty() || q.contains("error") || !want_quotes.contains(q["symbol"].toString()))
                     continue;
                 QuoteData qd{};
-                qd.symbol     = q["symbol"].toString();
-                qd.name       = q["name"].toString(q["symbol"].toString());
-                qd.price      = q["price"].toDouble();
-                qd.change     = q["change"].toDouble(qQNaN());
+                qd.symbol = q["symbol"].toString();
+                qd.name = q["name"].toString(q["symbol"].toString());
+                qd.price = q["price"].toDouble();
+                qd.change = q["change"].toDouble(qQNaN());
                 qd.change_pct = q["change_percent"].toDouble(qQNaN());
-                qd.high       = q["high"].toDouble();
-                qd.low        = q["low"].toDouble();
-                qd.volume     = q["volume"].toDouble(qQNaN());
-                qd.bid        = q["bid"].toDouble();
-                qd.ask        = q["ask"].toDouble();
-                qd.bid_size   = q["bid_size"].toDouble();
-                qd.ask_size   = q["ask_size"].toDouble();
+                qd.high = q["high"].toDouble();
+                qd.low = q["low"].toDouble();
+                qd.volume = q["volume"].toDouble(qQNaN());
+                qd.bid = q["bid"].toDouble();
+                qd.ask = q["ask"].toDouble();
+                qd.bid_size = q["bid_size"].toDouble();
+                qd.ask_size = q["ask_size"].toDouble();
                 // A symbol already waiting to be stored/published (merged
                 // refreshes answer every caller with the same union, or an
                 // older reply not yet drained) is replaced by this one — the
@@ -196,8 +198,8 @@ void MarketDataService::refresh(const QStringList& topics) {
                     self->refresh_pending_quotes_[at.value() - self->refresh_pending_quote_base_] = qd;
                     continue;
                 }
-                self->refresh_pending_quote_at_.insert(
-                    qd.symbol, self->refresh_pending_quote_base_ + self->refresh_pending_quotes_.size());
+                self->refresh_pending_quote_at_.insert(qd.symbol, self->refresh_pending_quote_base_ +
+                                                                      self->refresh_pending_quotes_.size());
                 self->refresh_pending_quotes_.append(qd);
                 ++quotes_parsed;
             }
@@ -219,8 +221,13 @@ void MarketDataService::refresh(const QStringList& topics) {
                 // pending lists are short (tens), so a scan is fine.
                 bool replaced = false;
                 for (auto& pending : self->refresh_pending_sparks_)
-                    if (pending.symbol == ps.symbol) { pending = std::move(ps); replaced = true; break; }
-                if (!replaced) self->refresh_pending_sparks_.append(std::move(ps));
+                    if (pending.symbol == ps.symbol) {
+                        pending = std::move(ps);
+                        replaced = true;
+                        break;
+                    }
+                if (!replaced)
+                    self->refresh_pending_sparks_.append(std::move(ps));
                 ++sparks_parsed;
             }
 
@@ -229,14 +236,13 @@ void MarketDataService::refresh(const QStringList& topics) {
             int hists_parsed = 0;
             for (const auto& hv : hists) {
                 const QJsonObject h = hv.toObject();
-                if (h.contains("error") ||
-                    !want_hists.contains(h.value("symbol").toString() + QLatin1Char('|') +
-                                         h.value("period").toString() + QLatin1Char('|') +
-                                         h.value("interval").toString()))
+                if (h.contains("error") || !want_hists.contains(h.value("symbol").toString() + QLatin1Char('|') +
+                                                                h.value("period").toString() + QLatin1Char('|') +
+                                                                h.value("interval").toString()))
                     continue;
                 PendingHistory ph;
-                ph.symbol   = h.value("symbol").toString();
-                ph.period   = h.value("period").toString();
+                ph.symbol = h.value("symbol").toString();
+                ph.period = h.value("period").toString();
                 ph.interval = h.value("interval").toString();
                 const QJsonArray pts = h.value("points").toArray();
                 ph.points.reserve(pts.size());
@@ -253,38 +259,40 @@ void MarketDataService::refresh(const QStringList& topics) {
                 }
                 bool replaced = false;
                 for (auto& pending : self->refresh_pending_hists_)
-                    if (pending.symbol == ph.symbol && pending.period == ph.period &&
-                        pending.interval == ph.interval) {
+                    if (pending.symbol == ph.symbol && pending.period == ph.period && pending.interval == ph.interval) {
                         pending = std::move(ph);
                         replaced = true;
                         break;
                     }
-                if (!replaced) self->refresh_pending_hists_.append(std::move(ph));
+                if (!replaced)
+                    self->refresh_pending_hists_.append(std::move(ph));
                 ++hists_parsed;
             }
 
             self->refresh_quotes_total_ += quotes_parsed;
             self->refresh_sparks_total_ += sparks_parsed;
-            self->refresh_hists_total_  += hists_parsed;
+            self->refresh_hists_total_ += hists_parsed;
             if (self->refresh_started_ms_ == 0)
                 self->refresh_started_ms_ = refresh_t0;
 
-            LOG_INFO("MarketData",
-                     QString("batch_all parsed in %1ms: queued quotes=%2/%3 sparks=%4/%5 hists=%6/%7 "
-                             "(draining %8/chunk)")
-                         .arg(elapsed)
-                         .arg(quotes_parsed).arg(quote_syms.size())
-                         .arg(sparks_parsed).arg(spark_syms.size())
-                         .arg(hists_parsed).arg(hist_reqs.size())
-                         .arg(kRefreshChunkSize));
+            LOG_INFO("MarketData", QString("batch_all parsed in %1ms: queued quotes=%2/%3 sparks=%4/%5 hists=%6/%7 "
+                                           "(draining %8/chunk)")
+                                       .arg(elapsed)
+                                       .arg(quotes_parsed)
+                                       .arg(quote_syms.size())
+                                       .arg(sparks_parsed)
+                                       .arg(spark_syms.size())
+                                       .arg(hists_parsed)
+                                       .arg(hist_reqs.size())
+                                       .arg(kRefreshChunkSize));
 
             if (!self->refresh_drain_scheduled_ &&
-                (!self->refresh_pending_quotes_.isEmpty() ||
-                 !self->refresh_pending_sparks_.isEmpty() ||
+                (!self->refresh_pending_quotes_.isEmpty() || !self->refresh_pending_sparks_.isEmpty() ||
                  !self->refresh_pending_hists_.isEmpty())) {
                 self->refresh_drain_scheduled_ = true;
                 QTimer::singleShot(0, self.data(), [self]() {
-                    if (self) self->drain_refresh_chunk();
+                    if (self)
+                        self->drain_refresh_chunk();
                 });
             }
         },
@@ -306,20 +314,20 @@ void MarketDataService::drain_refresh_chunk() {
     while (budget > 0 && !refresh_pending_quotes_.isEmpty()) {
         const QuoteData qd = refresh_pending_quotes_.takeFirst();
         refresh_pending_quote_at_.remove(qd.symbol);
-        ++refresh_pending_quote_base_;   // positions are absolute: no reindex on takeFirst
+        ++refresh_pending_quote_base_; // positions are absolute: no reindex on takeFirst
         QJsonObject co;
-        co["symbol"]     = qd.symbol;
-        co["name"]       = qd.name;
-        co["price"]      = qd.price;
-        co["change"]     = qd.change;
+        co["symbol"] = qd.symbol;
+        co["name"] = qd.name;
+        co["price"] = qd.price;
+        co["change"] = qd.change;
         co["change_pct"] = qd.change_pct;
-        co["high"]       = qd.high;
-        co["low"]        = qd.low;
-        co["volume"]     = qd.volume;
-        co["bid"]        = qd.bid;
-        co["ask"]        = qd.ask;
-        co["bid_size"]   = qd.bid_size;
-        co["ask_size"]   = qd.ask_size;
+        co["high"] = qd.high;
+        co["low"] = qd.low;
+        co["volume"] = qd.volume;
+        co["bid"] = qd.bid;
+        co["ask"] = qd.ask;
+        co["bid_size"] = qd.bid_size;
+        co["ask_size"] = qd.ask_size;
         store_quote_entries(qd.symbol, co);
         publish_quote_to_hub(qd);
         --budget;
@@ -339,48 +347,42 @@ void MarketDataService::drain_refresh_chunk() {
         --budget;
     }
 
-    const bool anything_left = !refresh_pending_quotes_.isEmpty() ||
-                               !refresh_pending_sparks_.isEmpty() ||
-                               !refresh_pending_hists_.isEmpty();
+    const bool anything_left =
+        !refresh_pending_quotes_.isEmpty() || !refresh_pending_sparks_.isEmpty() || !refresh_pending_hists_.isEmpty();
     if (anything_left) {
         refresh_drain_scheduled_ = true;
         QPointer<MarketDataService> self = this;
         QTimer::singleShot(0, this, [self]() {
-            if (self) self->drain_refresh_chunk();
+            if (self)
+                self->drain_refresh_chunk();
         });
     } else if (refresh_quotes_total_ + refresh_sparks_total_ + refresh_hists_total_ > 0) {
-        const qint64 total_ms =
-            QDateTime::currentMSecsSinceEpoch() - refresh_started_ms_;
-        LOG_INFO("MarketData",
-                 QString("batch_all drain complete: quotes=%1 sparks=%2 hists=%3 in %4ms total")
-                     .arg(refresh_quotes_total_)
-                     .arg(refresh_sparks_total_)
-                     .arg(refresh_hists_total_)
-                     .arg(total_ms));
+        const qint64 total_ms = QDateTime::currentMSecsSinceEpoch() - refresh_started_ms_;
+        LOG_INFO("MarketData", QString("batch_all drain complete: quotes=%1 sparks=%2 hists=%3 in %4ms total")
+                                   .arg(refresh_quotes_total_)
+                                   .arg(refresh_sparks_total_)
+                                   .arg(refresh_hists_total_)
+                                   .arg(total_ms));
         refresh_quotes_total_ = 0;
         refresh_sparks_total_ = 0;
-        refresh_hists_total_  = 0;
-        refresh_started_ms_   = 0;
+        refresh_hists_total_ = 0;
+        refresh_started_ms_ = 0;
     }
 }
 
 void MarketDataService::publish_quote_to_hub(const QuoteData& q) {
-    datahub::DataHub::instance().publish(
-        QStringLiteral("market:quote:") + q.symbol,
-        QVariant::fromValue(q));
+    datahub::DataHub::instance().publish(QStringLiteral("market:quote:") + q.symbol, QVariant::fromValue(q));
 }
 
-void MarketDataService::publish_history_to_hub(const QString& symbol, const QString& period,
-                                               const QString& interval,
+void MarketDataService::publish_history_to_hub(const QString& symbol, const QString& period, const QString& interval,
                                                const QVector<HistoryPoint>& points) {
-    const QString topic = QStringLiteral("market:history:") + symbol + QLatin1Char(':') + period +
-                          QLatin1Char(':') + interval;
+    const QString topic =
+        QStringLiteral("market:history:") + symbol + QLatin1Char(':') + period + QLatin1Char(':') + interval;
     datahub::DataHub::instance().publish(topic, QVariant::fromValue(points));
 }
 
 void MarketDataService::publish_sparkline_to_hub(const QString& symbol, const QVector<double>& points) {
-    datahub::DataHub::instance().publish(QStringLiteral("market:sparkline:") + symbol,
-                                         QVariant::fromValue(points));
+    datahub::DataHub::instance().publish(QStringLiteral("market:sparkline:") + symbol, QVariant::fromValue(points));
 }
 
 void MarketDataService::ensure_registered_with_hub() {
@@ -416,8 +418,7 @@ void MarketDataService::ensure_registered_with_hub() {
     hub.set_policy_pattern(QStringLiteral("market:history:*"), hist_p);
 
     hub_registered_ = true;
-    LOG_INFO("DataHub",
-             "MarketDataService registered (quote:*, sparkline:*, history:*)");
+    LOG_INFO("DataHub", "MarketDataService registered (quote:*, sparkline:*, history:*)");
 
     // Cold-start hydration is deferred to the next event-loop tick so it
     // never competes with the LockScreen for input handling during the
@@ -439,8 +440,7 @@ void MarketDataService::ensure_registered_with_hub() {
 void MarketDataService::store_quote_entries(const QString& symbol, const QJsonObject& full) {
     // 30s key holds the live snapshot including bid/ask.
     fincept::CacheManager::instance().put(
-        "market:" + symbol,
-        QVariant(QString::fromUtf8(QJsonDocument(full).toJson(QJsonDocument::Compact))),
+        "market:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(full).toJson(QJsonDocument::Compact))),
         kQuoteCacheTtlSec, "market_data");
 
     // 7d "last-known" key is a cold-start fallback. Order-book fields
@@ -457,8 +457,7 @@ void MarketDataService::store_quote_entries(const QString& symbol, const QJsonOb
     // A payload stamp is only as good as every writer remembering it, and the
     // bug this whole path exists to fix was exactly one writer forgetting.
     fincept::CacheManager::instance().put(
-        "market_last:" + symbol,
-        QVariant(QString::fromUtf8(QJsonDocument(lon).toJson(QJsonDocument::Compact))),
+        "market_last:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(lon).toJson(QJsonDocument::Compact))),
         kQuoteLastKnownTtlSec, "market_data");
 }
 
@@ -495,21 +494,21 @@ void MarketDataService::hydrate_quotes_from_cache() {
         // tick look changed and defeat that. The age gate above is what keeps
         // a stale price off the screen.
         QuoteData qd{};
-        qd.symbol     = o.value("symbol").toString(sym);
-        qd.name       = o.value("name").toString(qd.symbol);
-        qd.price      = o.value("price").toDouble();
-        qd.change     = o.value("change").toDouble(qQNaN());
+        qd.symbol = o.value("symbol").toString(sym);
+        qd.name = o.value("name").toString(qd.symbol);
+        qd.price = o.value("price").toDouble();
+        qd.change = o.value("change").toDouble(qQNaN());
         qd.change_pct = o.value("change_pct").toDouble(qQNaN());
-        qd.high       = o.value("high").toDouble();
-        qd.low        = o.value("low").toDouble();
-        qd.volume     = o.value("volume").toDouble(qQNaN());
+        qd.high = o.value("high").toDouble();
+        qd.low = o.value("low").toDouble();
+        qd.volume = o.value("volume").toDouble(qQNaN());
         hydrate_pending_.append(qd);
     }
     hydrate_pending_total_ = hydrate_pending_.size();
-    LOG_INFO("DataHub",
-             QString("MarketDataService hydration queued %1 quote(s) — "
-                     "publishing in chunks of %2 to keep input responsive")
-                 .arg(hydrate_pending_total_).arg(kHydrateChunkSize));
+    LOG_INFO("DataHub", QString("MarketDataService hydration queued %1 quote(s) — "
+                                "publishing in chunks of %2 to keep input responsive")
+                            .arg(hydrate_pending_total_)
+                            .arg(kHydrateChunkSize));
     if (!hydrate_pending_.isEmpty())
         QTimer::singleShot(0, this, [this]() { hydrate_next_chunk(); });
 }
@@ -530,12 +529,10 @@ void MarketDataService::hydrate_next_chunk() {
         QTimer::singleShot(0, this, [this]() { hydrate_next_chunk(); });
     } else if (hydrate_pending_total_ > 0) {
         LOG_INFO("DataHub",
-                 QString("MarketDataService hydration complete (%1 quote(s) published)")
-                     .arg(hydrate_pending_total_));
+                 QString("MarketDataService hydration complete (%1 quote(s) published)").arg(hydrate_pending_total_));
         hydrate_pending_total_ = 0;
     }
 }
-
 
 // ── Cache invalidation ──────────────────────────────────────────────────────
 
@@ -579,18 +576,18 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
             }
             const QJsonObject o = QJsonDocument::fromJson(it.value().toUtf8()).object();
             QuoteData qd{};
-            qd.symbol     = o["symbol"].toString();
-            qd.name       = o["name"].toString();
-            qd.price      = o["price"].toDouble();
-            qd.change     = o["change"].toDouble(qQNaN());
+            qd.symbol = o["symbol"].toString();
+            qd.name = o["name"].toString();
+            qd.price = o["price"].toDouble();
+            qd.change = o["change"].toDouble(qQNaN());
             qd.change_pct = o["change_pct"].toDouble(qQNaN());
-            qd.high       = o["high"].toDouble();
-            qd.low        = o["low"].toDouble();
-            qd.volume     = o["volume"].toDouble(qQNaN());
-            qd.bid        = o["bid"].toDouble();
-            qd.ask        = o["ask"].toDouble();
-            qd.bid_size   = o["bid_size"].toDouble();
-            qd.ask_size   = o["ask_size"].toDouble();
+            qd.high = o["high"].toDouble();
+            qd.low = o["low"].toDouble();
+            qd.volume = o["volume"].toDouble(qQNaN());
+            qd.bid = o["bid"].toDouble();
+            qd.ask = o["ask"].toDouble();
+            qd.bid_size = o["bid_size"].toDouble();
+            qd.ask_size = o["ask_size"].toDouble();
             cached_results.append(qd);
         }
         if (!cached_results.isEmpty()) {
@@ -633,7 +630,8 @@ void MarketDataService::flush_batch() {
     // Persistent yfinance daemon — same import is reused across refreshes,
     // saving the ~1.5s pandas/yfinance cold-import per call.
     QJsonArray syms_arr;
-    for (const auto& s : all_symbols) syms_arr.append(s);
+    for (const auto& s : all_symbols)
+        syms_arr.append(s);
     QJsonObject payload;
     payload["symbols"] = syms_arr;
 
@@ -645,23 +643,23 @@ void MarketDataService::flush_batch() {
             // caller.
             const QSet<QString> mine(all_symbols.begin(), all_symbols.end());
             QVector<QuoteData> all_quotes;
-            QSet<QString> refused_syms;   // rows Yahoo refused (transient)
+            QSet<QString> refused_syms; // rows Yahoo refused (transient)
 
             if (ok) {
                 auto parse_quote = [](const QJsonObject& q) -> QuoteData {
                     QuoteData qd{};
-                    qd.symbol     = q["symbol"].toString();
-                    qd.name       = q["name"].toString(q["symbol"].toString());
-                    qd.price      = q["price"].toDouble();
-                    qd.change     = q["change"].toDouble(qQNaN());
+                    qd.symbol = q["symbol"].toString();
+                    qd.name = q["name"].toString(q["symbol"].toString());
+                    qd.price = q["price"].toDouble();
+                    qd.change = q["change"].toDouble(qQNaN());
                     qd.change_pct = q["change_percent"].toDouble(qQNaN());
-                    qd.high       = q["high"].toDouble();
-                    qd.low        = q["low"].toDouble();
-                    qd.volume     = q["volume"].toDouble(qQNaN());
-                    qd.bid        = q["bid"].toDouble();
-                    qd.ask        = q["ask"].toDouble();
-                    qd.bid_size   = q["bid_size"].toDouble();
-                    qd.ask_size   = q["ask_size"].toDouble();
+                    qd.high = q["high"].toDouble();
+                    qd.low = q["low"].toDouble();
+                    qd.volume = q["volume"].toDouble(qQNaN());
+                    qd.bid = q["bid"].toDouble();
+                    qd.ask = q["ask"].toDouble();
+                    qd.bid_size = q["bid_size"].toDouble();
+                    qd.ask_size = q["ask_size"].toDouble();
                     return qd;
                 };
 
@@ -685,9 +683,8 @@ void MarketDataService::flush_batch() {
                 // Daemon's batch_quotes returns a flat list; PythonWorker
                 // wraps it under "_value". Fall back to "quotes" for forward
                 // compatibility if the daemon ever returns a wrapped shape.
-                const QJsonArray quotes = result.contains("_value")
-                                              ? result.value("_value").toArray()
-                                              : result.value("quotes").toArray();
+                const QJsonArray quotes =
+                    result.contains("_value") ? result.value("_value").toArray() : result.value("quotes").toArray();
                 for (const auto& v : quotes) {
                     auto q = v.toObject();
                     if (q.value("transient").toBool())
@@ -718,18 +715,18 @@ void MarketDataService::flush_batch() {
                         if (!cv.isNull()) {
                             const QJsonObject o = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
                             QuoteData qd{};
-                            qd.symbol     = o["symbol"].toString();
-                            qd.name       = o["name"].toString();
-                            qd.price      = o["price"].toDouble();
-                            qd.change     = o["change"].toDouble(qQNaN());
+                            qd.symbol = o["symbol"].toString();
+                            qd.name = o["name"].toString();
+                            qd.price = o["price"].toDouble();
+                            qd.change = o["change"].toDouble(qQNaN());
                             qd.change_pct = o["change_pct"].toDouble(qQNaN());
-                            qd.high       = o["high"].toDouble();
-                            qd.low        = o["low"].toDouble();
-                            qd.volume     = o["volume"].toDouble(qQNaN());
-                            qd.bid        = o["bid"].toDouble();
-                            qd.ask        = o["ask"].toDouble();
-                            qd.bid_size   = o["bid_size"].toDouble();
-                            qd.ask_size   = o["ask_size"].toDouble();
+                            qd.high = o["high"].toDouble();
+                            qd.low = o["low"].toDouble();
+                            qd.volume = o["volume"].toDouble(qQNaN());
+                            qd.bid = o["bid"].toDouble();
+                            qd.ask = o["ask"].toDouble();
+                            qd.bid_size = o["bid_size"].toDouble();
+                            qd.ask_size = o["ask_size"].toDouble();
                             stale.append(qd);
                         }
                     }
@@ -759,7 +756,8 @@ void MarketDataService::fetch_news(const QString& symbol, int count, NewsCallbac
     QJsonObject payload;
     payload["symbol"] = symbol;
     payload["count"] = count;
-    python::PythonWorker::instance().submit("news", payload,
+    python::PythonWorker::instance().submit(
+        "news", payload,
         [cb](bool ok, QJsonObject result, QString err) {
             // The daemon's own failure is in the payload: {"error": ..., "articles": []}.
             if (ok && !result.value("error").toString().isEmpty()) {
@@ -770,8 +768,9 @@ void MarketDataService::fetch_news(const QString& symbol, int count, NewsCallbac
                 LOG_WARN("MarketData", "News fetch failed: " + err);
                 const bool limited = err.contains(QLatin1String("Rate limited"), Qt::CaseInsensitive) ||
                                      err.contains(QLatin1String("Too Many Requests"), Qt::CaseInsensitive);
-                cb(false, {}, limited ? QStringLiteral("Yahoo is rate-limiting this machine")
-                                      : (err.isEmpty() ? QStringLiteral("news fetch failed") : err.left(120)));
+                cb(false, {},
+                   limited ? QStringLiteral("Yahoo is rate-limiting this machine")
+                           : (err.isEmpty() ? QStringLiteral("news fetch failed") : err.left(120)));
                 return;
             }
             // Daemon returns {articles: [...]} for news.
@@ -803,15 +802,14 @@ void MarketDataService::fetch_orderbook(const QString& symbol, OrderbookCallback
             // the only failure mode that reaches here is daemon-level (timeout,
             // process crash), captured by `ok=false`.
             if (!ok) {
-                LOG_WARN("MarketData",
-                         "Orderbook fetch failed for " + symbol + ": " + err.left(200));
+                LOG_WARN("MarketData", "Orderbook fetch failed for " + symbol + ": " + err.left(200));
                 cb(false, {});
                 return;
             }
             OrderbookData ob;
-            ob.symbol   = result["symbol"].toString(symbol);
-            ob.bid      = result["bid"].toDouble();
-            ob.ask      = result["ask"].toDouble();
+            ob.symbol = result["symbol"].toString(symbol);
+            ob.bid = result["bid"].toDouble();
+            ob.ask = result["ask"].toDouble();
             ob.bid_size = result["bid_size"].toDouble();
             ob.ask_size = result["ask_size"].toDouble();
             cb(true, ob);
@@ -850,97 +848,96 @@ void MarketDataService::fetch_info(const QString& symbol, InfoCallback cb) {
     // ── Call 1: get_info via daemon ───────────────────────────────────────────
     QJsonObject info_payload;
     info_payload["symbol"] = symbol;
-    python::PythonWorker::instance().submit("info", info_payload,
-                                         [shared, symbol, try_complete](bool ok, QJsonObject o, QString /*err*/) {
-                                             shared->info_done = true;
-                                             if (!ok || o.contains("error")) {
-                                                 // A daemon-side {"error"} arrives as ok:false WITH its body,
-                                                 // which says whether it was a refusal; no body (timeout, no
-                                                 // daemon) counts as one.
-                                                 shared->info.info_transient =
-                                                     python::PythonWorker::reply_is_transient(ok, o);
-                                                 LOG_WARN("MarketData", "get_info failed for " + symbol +
-                                                                            (shared->info.info_transient ? " (transient)" : ""));
-                                                 try_complete();
-                                                 return;
-                                             }
-                                             shared->info.symbol = o["symbol"].toString(symbol);
-                                             shared->info.name = o["company_name"].toString();
-                                             // The daemon's get_info defaults missing string fields to "N/A"
-                                             // for human display. The C++ side prefers an empty QString so
-                                             // callers can branch on `.isEmpty()` instead of doing the
-                                             // sentinel check at every consumer.
-                                             auto scrub = [](const QJsonValue& v) {
-                                                 QString s = v.toString();
-                                                 return s == "N/A" ? QString() : s;
-                                             };
-                                             shared->info.sector = scrub(o["sector"]);
-                                             shared->info.industry = scrub(o["industry"]);
-                                             shared->info.country = scrub(o["country"]);
-                                             shared->info.currency = scrub(o["currency"]);
-                                             shared->info.market_cap = num(o, "market_cap");
-                                             shared->info.beta = num(o, "beta");
-                                             shared->info.week52_high = num(o, "fifty_two_week_high");
-                                             shared->info.week52_low = num(o, "fifty_two_week_low");
-                                             shared->info.avg_volume = num(o, "average_volume");
-                                             // Symmetric with the ratios callback
-                                             // below: the two run in parallel with
-                                             // independent cache entries and can
-                                             // disagree, so neither may clear a
-                                             // value the other supplied.
-                                             if (const double rps = num(o, "revenue_per_share");
-                                                 std::isfinite(rps))
-                                                 shared->info.eps = rps;
-                                             shared->info.description = scrub(o["description"]);
-                                             shared->info.website = scrub(o["website"]);
-                                             shared->info.employees = o["employees"].toInt();
-                                             const QJsonArray off_arr = o["officers"].toArray();
-                                             for (const auto& v : off_arr) {
-                                                 const QJsonObject obj = v.toObject();
-                                                 OfficerInfo co;
-                                                 co.name  = obj["name"].toString();
-                                                 co.title = obj["title"].toString();
-                                                 if (!co.name.isEmpty())
-                                                     shared->info.officers.append(co);
-                                             }
-                                             shared->info_ok = true;
-                                             shared->info.info_answered = true;
-                                             try_complete();
-                                         },
-                                         python::PythonWorker::kNetworkActionTimeoutMs);
+    python::PythonWorker::instance().submit(
+        "info", info_payload,
+        [shared, symbol, try_complete](bool ok, QJsonObject o, QString /*err*/) {
+            shared->info_done = true;
+            if (!ok || o.contains("error")) {
+                // A daemon-side {"error"} arrives as ok:false WITH its body,
+                // which says whether it was a refusal; no body (timeout, no
+                // daemon) counts as one.
+                shared->info.info_transient = python::PythonWorker::reply_is_transient(ok, o);
+                LOG_WARN("MarketData",
+                         "get_info failed for " + symbol + (shared->info.info_transient ? " (transient)" : ""));
+                try_complete();
+                return;
+            }
+            shared->info.symbol = o["symbol"].toString(symbol);
+            shared->info.name = o["company_name"].toString();
+            // The daemon's get_info defaults missing string fields to "N/A"
+            // for human display. The C++ side prefers an empty QString so
+            // callers can branch on `.isEmpty()` instead of doing the
+            // sentinel check at every consumer.
+            auto scrub = [](const QJsonValue& v) {
+                QString s = v.toString();
+                return s == "N/A" ? QString() : s;
+            };
+            shared->info.sector = scrub(o["sector"]);
+            shared->info.industry = scrub(o["industry"]);
+            shared->info.country = scrub(o["country"]);
+            shared->info.currency = scrub(o["currency"]);
+            shared->info.market_cap = num(o, "market_cap");
+            shared->info.beta = num(o, "beta");
+            shared->info.week52_high = num(o, "fifty_two_week_high");
+            shared->info.week52_low = num(o, "fifty_two_week_low");
+            shared->info.avg_volume = num(o, "average_volume");
+            // Symmetric with the ratios callback
+            // below: the two run in parallel with
+            // independent cache entries and can
+            // disagree, so neither may clear a
+            // value the other supplied.
+            if (const double rps = num(o, "revenue_per_share"); std::isfinite(rps))
+                shared->info.eps = rps;
+            shared->info.description = scrub(o["description"]);
+            shared->info.website = scrub(o["website"]);
+            shared->info.employees = o["employees"].toInt();
+            const QJsonArray off_arr = o["officers"].toArray();
+            for (const auto& v : off_arr) {
+                const QJsonObject obj = v.toObject();
+                OfficerInfo co;
+                co.name = obj["name"].toString();
+                co.title = obj["title"].toString();
+                if (!co.name.isEmpty())
+                    shared->info.officers.append(co);
+            }
+            shared->info_ok = true;
+            shared->info.info_answered = true;
+            try_complete();
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 
     // ── Call 2: financial_ratios via daemon ───────────────────────────────────
     QJsonObject ratios_payload;
     ratios_payload["symbol"] = symbol;
-    python::PythonWorker::instance().submit("financial_ratios", ratios_payload,
-                                         [shared, symbol, try_complete](bool ok, QJsonObject o, QString /*err*/) {
-                                             shared->ratios_done = true;
-                                             if (!ok || o.contains("error")) {
-                                                 LOG_WARN("MarketData", "financial_ratios failed for " + symbol);
-                                                 try_complete();
-                                                 return;
-                                             }
-                                             shared->info.pe_ratio = num(o, "peRatio");
-                                             shared->info.forward_pe = num(o, "forwardPE");
-                                             shared->info.price_to_book = num(o, "priceToBook");
-                                             shared->info.dividend_yield = num(o, "dividendYield");
-                                             shared->info.roe = num(o, "returnOnEquity");
-                                             shared->info.profit_margin = num(o, "profitMargin");
-                                             shared->info.debt_to_equity = num(o, "debtToEquity");
-                                             shared->info.current_ratio = num(o, "currentRatio");
-                                             // get_info runs in PARALLEL with this
-                                             // and already set eps from its own
-                                             // revenue_per_share. Only overwrite
-                                             // with a real number — whichever reply
-                                             // lands second must not clear a value
-                                             // the other one supplied.
-                                             if (const double rps = num(o, "revenuePerShare");
-                                                 std::isfinite(rps))
-                                                 shared->info.eps = rps;
-                                             shared->ratios_ok = true;
-                                             try_complete();
-                                         },
-                                         python::PythonWorker::kNetworkActionTimeoutMs);
+    python::PythonWorker::instance().submit(
+        "financial_ratios", ratios_payload,
+        [shared, symbol, try_complete](bool ok, QJsonObject o, QString /*err*/) {
+            shared->ratios_done = true;
+            if (!ok || o.contains("error")) {
+                LOG_WARN("MarketData", "financial_ratios failed for " + symbol);
+                try_complete();
+                return;
+            }
+            shared->info.pe_ratio = num(o, "peRatio");
+            shared->info.forward_pe = num(o, "forwardPE");
+            shared->info.price_to_book = num(o, "priceToBook");
+            shared->info.dividend_yield = num(o, "dividendYield");
+            shared->info.roe = num(o, "returnOnEquity");
+            shared->info.profit_margin = num(o, "profitMargin");
+            shared->info.debt_to_equity = num(o, "debtToEquity");
+            shared->info.current_ratio = num(o, "currentRatio");
+            // get_info runs in PARALLEL with this
+            // and already set eps from its own
+            // revenue_per_share. Only overwrite
+            // with a real number — whichever reply
+            // lands second must not clear a value
+            // the other one supplied.
+            if (const double rps = num(o, "revenuePerShare"); std::isfinite(rps))
+                shared->info.eps = rps;
+            shared->ratios_ok = true;
+            try_complete();
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 // ── History fetch (OHLCV) ────────────────────────────────────────────────────
@@ -952,35 +949,36 @@ void MarketDataService::fetch_history(const QString& symbol, const QString& peri
     payload["period"] = period;
     payload["interval"] = interval;
 
-    python::PythonWorker::instance().submit("historical_period", payload,
+    python::PythonWorker::instance().submit(
+        "historical_period", payload,
         [cb, symbol](bool ok, QJsonObject result, QString err) {
-        if (!ok) {
-            LOG_WARN("MarketData", "History fetch failed for " + symbol + ": " + err);
-            cb(false, {});
-            return;
-        }
-        // Daemon returns a flat list; wrapped under _value. A failed fetch
-        // (a Yahoo 429 included) arrives as ok:false — the daemon raises for
-        // historical_period — so an empty list here is a real "no bars".
-        const QJsonArray points = result.value("_value").toArray();
+            if (!ok) {
+                LOG_WARN("MarketData", "History fetch failed for " + symbol + ": " + err);
+                cb(false, {});
+                return;
+            }
+            // Daemon returns a flat list; wrapped under _value. A failed fetch
+            // (a Yahoo 429 included) arrives as ok:false — the daemon raises for
+            // historical_period — so an empty list here is a real "no bars".
+            const QJsonArray points = result.value("_value").toArray();
 
-        QVector<HistoryPoint> history;
-        for (const auto& v : points) {
-            QJsonObject o = v.toObject();
-            HistoryPoint pt;
-            pt.timestamp = static_cast<qint64>(o["timestamp"].toDouble());
-            pt.open = o["open"].toDouble();
-            pt.high = o["high"].toDouble();
-            pt.low = o["low"].toDouble();
-            pt.close = o["close"].toDouble();
-            pt.volume = static_cast<qint64>(o["volume"].toDouble());
-            history.append(pt);
-        }
+            QVector<HistoryPoint> history;
+            for (const auto& v : points) {
+                QJsonObject o = v.toObject();
+                HistoryPoint pt;
+                pt.timestamp = static_cast<qint64>(o["timestamp"].toDouble());
+                pt.open = o["open"].toDouble();
+                pt.high = o["high"].toDouble();
+                pt.low = o["low"].toDouble();
+                pt.close = o["close"].toDouble();
+                pt.volume = static_cast<qint64>(o["volume"].toDouble());
+                history.append(pt);
+            }
 
-        LOG_INFO("MarketData", QString("Fetched %1 history points for %2").arg(history.size()).arg(symbol));
-        cb(true, history);
-    },
-    python::PythonWorker::kNetworkActionTimeoutMs);
+            LOG_INFO("MarketData", QString("Fetched %1 history points for %2").arg(history.size()).arg(symbol));
+            cb(true, history);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 // ── Batch company-profile lookup (sector / industry / market cap / …) ───────
@@ -1004,14 +1002,14 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
     auto parse_cached = [](const QString& raw, const QString& sym) -> CompanyProfile {
         const QJsonObject o = QJsonDocument::fromJson(raw.toUtf8()).object();
         CompanyProfile p;
-        p.symbol     = sym;
-        p.long_name  = o["long_name"].toString();
-        p.sector     = o["sector"].toString();
-        p.industry   = o["industry"].toString();
-        p.website    = o["website"].toString();
-        p.country    = o["country"].toString();
+        p.symbol = sym;
+        p.long_name = o["long_name"].toString();
+        p.sector = o["sector"].toString();
+        p.industry = o["industry"].toString();
+        p.website = o["website"].toString();
+        p.country = o["country"].toString();
         p.market_cap = o["market_cap"].toDouble();
-        p.employees  = o["employees"].toInt();
+        p.employees = o["employees"].toInt();
         return p;
     };
 
@@ -1041,7 +1039,8 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
     }
 
     QJsonArray syms_arr;
-    for (const auto& s : missing) syms_arr.append(s);
+    for (const auto& s : missing)
+        syms_arr.append(s);
     QJsonObject payload;
     payload["symbols"] = syms_arr;
 
@@ -1069,14 +1068,14 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
                 cb(false, out);
                 return;
             }
-            const QJsonArray rows = result.contains("_value")
-                                        ? result.value("_value").toArray()
-                                        : result.value("profiles").toArray();
+            const QJsonArray rows =
+                result.contains("_value") ? result.value("_value").toArray() : result.value("profiles").toArray();
             for (const auto& v : rows) {
                 const QJsonObject o = v.toObject();
                 CompanyProfile p;
-                p.symbol     = o["symbol"].toString();
-                if (p.symbol.isEmpty()) continue;
+                p.symbol = o["symbol"].toString();
+                if (p.symbol.isEmpty())
+                    continue;
                 if (o.contains("error")) {
                     if (o.value("transient").toBool()) {
                         // Refused for this ticker: said so, not left out (a
@@ -1093,11 +1092,11 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
                     // is not an answer: reported as `failed`, not cached (the
                     // next session asks again).
                     if (o.value("not_found").toBool()) {
-                        fincept::CacheManager::instance().put(
-                            "ipo_info:" + p.symbol, QVariant(QStringLiteral("{\"none\":true}")),
-                            // An hour, not a day: a deal priced last night
-                            // is unknown to Yahoo until it starts trading.
-                            60 * 60, "ipo_info");
+                        fincept::CacheManager::instance().put("ipo_info:" + p.symbol,
+                                                              QVariant(QStringLiteral("{\"none\":true}")),
+                                                              // An hour, not a day: a deal priced last night
+                                                              // is unknown to Yahoo until it starts trading.
+                                                              60 * 60, "ipo_info");
                         CompanyProfile none;
                         none.symbol = p.symbol;
                         none.known_none = true;
@@ -1110,28 +1109,28 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
                     }
                     continue;
                 }
-                p.long_name  = o["long_name"].toString();
-                p.sector     = o["sector"].toString();
-                p.industry   = o["industry"].toString();
-                p.website    = o["website"].toString();
-                p.country    = o["country"].toString();
+                p.long_name = o["long_name"].toString();
+                p.sector = o["sector"].toString();
+                p.industry = o["industry"].toString();
+                p.website = o["website"].toString();
+                p.country = o["country"].toString();
                 p.market_cap = o["market_cap"].toDouble();
-                p.employees  = o["employees"].toInt();
+                p.employees = o["employees"].toInt();
                 out.append(p);
 
                 // Cache for 7 days — sector rarely changes.
                 QJsonObject co;
-                co["long_name"]  = p.long_name;
-                co["sector"]     = p.sector;
-                co["industry"]   = p.industry;
-                co["website"]    = p.website;
-                co["country"]    = p.country;
+                co["long_name"] = p.long_name;
+                co["sector"] = p.sector;
+                co["industry"] = p.industry;
+                co["website"] = p.website;
+                co["country"] = p.country;
                 co["market_cap"] = p.market_cap;
-                co["employees"]  = p.employees;
+                co["employees"] = p.employees;
                 fincept::CacheManager::instance().put(
                     "ipo_info:" + p.symbol,
-                    QVariant(QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact))),
-                    kProfileCacheTtlSec, "ipo_info");
+                    QVariant(QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact))), kProfileCacheTtlSec,
+                    "ipo_info");
             }
             LOG_INFO("MarketData",
                      QString("fetch_company_profiles: %1 cached, %2 fresh").arg(cached_out.size()).arg(missing.size()));
@@ -1153,22 +1152,23 @@ void MarketDataService::fetch_top_movers(int count, TopMoversCallback cb) {
         for (const auto& v : arr) {
             const auto o = v.toObject();
             QuoteData q;
-            q.symbol     = o["symbol"].toString();
-            q.name       = o["name"].toString();
-            q.price      = o["price"].toDouble();
-            q.change     = o["change"].toDouble(qQNaN());
+            q.symbol = o["symbol"].toString();
+            q.name = o["name"].toString();
+            q.price = o["price"].toDouble();
+            q.change = o["change"].toDouble(qQNaN());
             q.change_pct = o["change_pct"].toDouble(qQNaN());
-            q.high       = o["high"].toDouble();
-            q.low        = o["low"].toDouble();
-            q.volume     = o["volume"].toDouble(qQNaN());
-            if (!q.symbol.isEmpty()) out.append(q);
+            q.high = o["high"].toDouble();
+            q.low = o["low"].toDouble();
+            q.volume = o["volume"].toDouble(qQNaN());
+            if (!q.symbol.isEmpty())
+                out.append(q);
         }
         return out;
     };
     auto parse = [parse_side](const QJsonObject& o) -> TopMovers {
         TopMovers tm;
         tm.gainers = parse_side(o["gainers"].toArray());
-        tm.losers  = parse_side(o["losers"].toArray());
+        tm.losers = parse_side(o["losers"].toArray());
         return tm;
     };
     auto cached = fincept::CacheManager::instance().try_get(cache_key);
@@ -1202,14 +1202,17 @@ void MarketDataService::fetch_top_movers(int count, TopMoversCallback cb) {
 // from IpoWatchView when a row is selected — see render_detail.
 
 namespace {
-constexpr int kIpoExtrasCacheTtlSec  = 15 * 60;        // 15 min — news + financials change slowly
-constexpr int kSecFilingsCacheTtlSec = 60 * 60;        // 1h — new SEC filings are infrequent
-constexpr int kSecCikMapTtlSec       = 7 * 24 * 60 * 60; // 7d — SEC publishes weekly
-constexpr int kWikipediaCacheTtlSec  = 7 * 24 * 60 * 60; // 7d — descriptions stable
+constexpr int kIpoExtrasCacheTtlSec = 15 * 60;          // 15 min — news + financials change slowly
+constexpr int kSecFilingsCacheTtlSec = 60 * 60;         // 1h — new SEC filings are infrequent
+constexpr int kSecCikMapTtlSec = 7 * 24 * 60 * 60;      // 7d — SEC publishes weekly
+constexpr int kWikipediaCacheTtlSec = 7 * 24 * 60 * 60; // 7d — descriptions stable
 } // namespace
 
 void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallback cb) {
-    if (symbol.isEmpty()) { cb(false, {}); return; }
+    if (symbol.isEmpty()) {
+        cb(false, {});
+        return;
+    }
 
     // 15-minute CacheManager TTL so flipping between rows doesn't re-hit the
     // daemon on every click. The detail rail invalidates this cache on
@@ -1217,7 +1220,7 @@ void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallbac
     // CacheManager entry stays so subsequent same-session opens are fast.
     const QString cache_key = "ipo_extras:" + symbol;
     auto cached = fincept::CacheManager::instance().try_get(cache_key);
-    auto parse  = [](const QJsonObject& o, const QString& sym) -> IpoExtras {
+    auto parse = [](const QJsonObject& o, const QString& sym) -> IpoExtras {
         IpoExtras ex;
         ex.symbol = sym;
         auto parse_series = [](const QJsonArray& a) {
@@ -1225,43 +1228,47 @@ void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallbac
             for (const auto& v : a) {
                 const auto r = v.toObject();
                 FinancialPoint p;
-                p.date  = r["date"].toString();
+                p.date = r["date"].toString();
                 p.value = r["value"].toDouble();
-                if (!p.date.isEmpty()) out.append(p);
+                if (!p.date.isEmpty())
+                    out.append(p);
             }
             return out;
         };
-        ex.quarterly_revenue       = parse_series(o["quarterly_revenue"].toArray());
-        ex.quarterly_net_income    = parse_series(o["quarterly_net_income"].toArray());
-        ex.annual_revenue          = parse_series(o["annual_revenue"].toArray());
-        ex.annual_net_income       = parse_series(o["annual_net_income"].toArray());
-        ex.annual_gross_profit     = parse_series(o["annual_gross_profit"].toArray());
+        ex.quarterly_revenue = parse_series(o["quarterly_revenue"].toArray());
+        ex.quarterly_net_income = parse_series(o["quarterly_net_income"].toArray());
+        ex.annual_revenue = parse_series(o["annual_revenue"].toArray());
+        ex.annual_net_income = parse_series(o["annual_net_income"].toArray());
+        ex.annual_gross_profit = parse_series(o["annual_gross_profit"].toArray());
         ex.annual_operating_income = parse_series(o["annual_operating_income"].toArray());
         for (const auto& v : o["institutional_holders"].toArray()) {
             const auto r = v.toObject();
             InstitutionalHolder h;
             h.holder = r["holder"].toString();
-            h.pct    = r["pct"].toDouble();
+            h.pct = r["pct"].toDouble();
             h.shares = r["shares"].toDouble();
-            h.value  = r["value"].toDouble();
-            h.date   = r["date"].toString();
-            if (!h.holder.isEmpty()) ex.institutional_holders.append(h);
+            h.value = r["value"].toDouble();
+            h.date = r["date"].toString();
+            if (!h.holder.isEmpty())
+                ex.institutional_holders.append(h);
         }
         for (const auto& v : o["major_holders"].toArray()) {
             const auto r = v.toObject();
             MajorHolderRow m;
             m.label = r["label"].toString();
             m.value = r["value"].toDouble();
-            if (!m.label.isEmpty()) ex.major_holders.append(m);
+            if (!m.label.isEmpty())
+                ex.major_holders.append(m);
         }
         for (const auto& v : o["news"].toArray()) {
             const auto r = v.toObject();
             NewsItem n;
-            n.title     = r["title"].toString();
-            n.link      = r["link"].toString();
+            n.title = r["title"].toString();
+            n.link = r["link"].toString();
             n.publisher = r["publisher"].toString();
-            n.ts        = r["ts"].toString();
-            if (!n.title.isEmpty()) ex.news.append(n);
+            n.ts = r["ts"].toString();
+            if (!n.title.isEmpty())
+                ex.news.append(n);
         }
         return ex;
     };
@@ -1282,8 +1289,7 @@ void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallbac
                 return;
             }
             const QString raw = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-            fincept::CacheManager::instance().put("ipo_extras:" + symbol, raw,
-                                                  kIpoExtrasCacheTtlSec, "ipo_extras");
+            fincept::CacheManager::instance().put("ipo_extras:" + symbol, raw, kIpoExtrasCacheTtlSec, "ipo_extras");
             cb(true, parse(result, symbol));
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -1352,8 +1358,7 @@ SecContact sec_contact() {
 }
 
 QByteArray sec_user_agent(const SecContact& c) {
-    return c.email.isEmpty() ? QByteArray(kProjectUserAgent)
-                             : QStringLiteral("finterm (%1)").arg(c.email).toUtf8();
+    return c.email.isEmpty() ? QByteArray(kProjectUserAgent) : QStringLiteral("finterm (%1)").arg(c.email).toUtf8();
 }
 
 // A refusal that the CONTACT explains (none sent, or the keyring could not be
@@ -1383,7 +1388,10 @@ QString sec_failure(const SecContact& sent, const QString& error) {
 } // namespace
 
 void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallback cb) {
-    if (ticker.isEmpty()) { cb(false, {}); return; }
+    if (ticker.isEmpty()) {
+        cb(false, {});
+        return;
+    }
     const QString tkr = ticker.toUpper();
 
     // Inner closure runs once the CIK map is loaded — looks up the ticker,
@@ -1397,26 +1405,28 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         }
         const int cik = it.value();
         const QString cik_padded = QString("%1").arg(cik, 10, 10, QChar('0'));
-        const QString cache_key  = "sec_filings:" + tkr;
+        const QString cache_key = "sec_filings:" + tkr;
         auto cached = fincept::CacheManager::instance().try_get(cache_key);
-        auto parse  = [cik_padded](const QJsonObject& root) -> QVector<SecFiling> {
+        auto parse = [cik_padded](const QJsonObject& root) -> QVector<SecFiling> {
             QVector<SecFiling> out;
             const auto recent = root["filings"].toObject()["recent"].toObject();
-            const auto forms       = recent["form"].toArray();
-            const auto dates       = recent["filingDate"].toArray();
-            const auto accessions  = recent["accessionNumber"].toArray();
-            const auto primary     = recent["primaryDocument"].toArray();
+            const auto forms = recent["form"].toArray();
+            const auto dates = recent["filingDate"].toArray();
+            const auto accessions = recent["accessionNumber"].toArray();
+            const auto primary = recent["primaryDocument"].toArray();
             const int n = std::min({forms.size(), dates.size(), accessions.size(), primary.size()});
             for (int i = 0; i < std::min(n, 25); ++i) {
                 SecFiling f;
-                f.form        = forms.at(i).toString();
+                f.form = forms.at(i).toString();
                 f.filing_date = dates.at(i).toString();
-                f.accession   = accessions.at(i).toString();
+                f.accession = accessions.at(i).toString();
                 f.primary_doc = primary.at(i).toString();
                 // EDGAR doc URL: https://www.sec.gov/Archives/edgar/data/{cik}/{accession-no-dashes}/{primary_doc}
-                QString acc_nd = f.accession; acc_nd.remove('-');
+                QString acc_nd = f.accession;
+                acc_nd.remove('-');
                 f.url = QString("https://www.sec.gov/Archives/edgar/data/%1/%2/%3")
-                            .arg(cik_padded.toInt()).arg(acc_nd, f.primary_doc);
+                            .arg(cik_padded.toInt())
+                            .arg(acc_nd, f.primary_doc);
                 out.append(f);
             }
             return out;
@@ -1432,27 +1442,29 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         QHash<QByteArray, QByteArray> headers;
         const SecContact contact = sec_contact();
         headers["User-Agent"] = sec_user_agent(contact);
-        fincept::HttpClient::instance().get(url, headers,
-            [cb, parse, tkr, self_ptr, contact](Result<QJsonDocument> res) {
-                if (!self_ptr) return;
+        fincept::HttpClient::instance().get(
+            url, headers, [cb, parse, tkr, self_ptr, contact](Result<QJsonDocument> res) {
+                if (!self_ptr)
+                    return;
                 if (!res.is_ok() || !res.value().isObject()) {
-                    const QString err = res.is_ok() ? QStringLiteral("not a JSON object")
-                                                    : QString::fromStdString(res.error());
+                    const QString err =
+                        res.is_ok() ? QStringLiteral("not a JSON object") : QString::fromStdString(res.error());
                     sec_refused(contact, err);
                     LOG_WARN("MarketData", "SEC submissions fetch failed for " + tkr + sec_failure(contact, err));
                     cb(false, {});
                     return;
                 }
                 const auto obj = res.value().object();
-                const QString raw = QString::fromUtf8(
-                    QJsonDocument(obj).toJson(QJsonDocument::Compact));
-                fincept::CacheManager::instance().put("sec_filings:" + tkr, raw,
-                                                      kSecFilingsCacheTtlSec, "sec");
+                const QString raw = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+                fincept::CacheManager::instance().put("sec_filings:" + tkr, raw, kSecFilingsCacheTtlSec, "sec");
                 cb(true, parse(obj));
             });
     };
 
-    if (sec_cik_loaded_) { with_cik_map(); return; }
+    if (sec_cik_loaded_) {
+        with_cik_map();
+        return;
+    }
     // A failed ticker map is a FAILED fetch, not "this company has no CIK": the
     // reader must see an error, not an empty filings list read as fact.
     sec_cik_waiters_.append([with_cik_map, cb](bool loaded) {
@@ -1462,7 +1474,8 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         }
         with_cik_map();
     });
-    if (sec_cik_loading_) return;
+    if (sec_cik_loading_)
+        return;
     sec_cik_loading_ = true;
 
     // Try CacheManager first — the company_tickers.json mapping has a 7-day
@@ -1471,7 +1484,8 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         sec_cik_loaded_ = ok;
         sec_cik_loading_ = false;
         auto waiters = std::move(sec_cik_waiters_);
-        for (auto& w : waiters) w(ok);
+        for (auto& w : waiters)
+            w(ok);
     };
     auto populate_from_json = [this](const QJsonDocument& doc) {
         // company_tickers.json is keyed by row index (strings "0","1",…); each
@@ -1480,8 +1494,9 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
             const auto v = it.value().toObject();
             const QString t = v["ticker"].toString().toUpper();
-            const int cik   = v["cik_str"].toInt();
-            if (!t.isEmpty() && cik > 0) sec_cik_map_.insert(t, cik);
+            const int cik = v["cik_str"].toInt();
+            if (!t.isEmpty() && cik > 0)
+                sec_cik_map_.insert(t, cik);
         }
     };
 
@@ -1501,10 +1516,11 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
     fincept::HttpClient::instance().get(
         "https://www.sec.gov/files/company_tickers.json", headers,
         [self_ptr, populate_from_json, fire_waiters, contact](Result<QJsonDocument> res) {
-            if (!self_ptr) return;
+            if (!self_ptr)
+                return;
             if (!res.is_ok() || !res.value().isObject()) {
-                const QString err = res.is_ok() ? QStringLiteral("not a JSON object")
-                                                : QString::fromStdString(res.error());
+                const QString err =
+                    res.is_ok() ? QStringLiteral("not a JSON object") : QString::fromStdString(res.error());
                 sec_refused(contact, err);
                 LOG_WARN("MarketData", "SEC company_tickers.json fetch failed" + sec_failure(contact, err));
                 fire_waiters(false);
@@ -1519,7 +1535,10 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
 
 // ── Wikipedia summary ──────────────────────────────────────────────────────
 void MarketDataService::fetch_wikipedia_summary(const QString& title_query, WikipediaCallback cb) {
-    if (title_query.isEmpty()) { cb(false, {}); return; }
+    if (title_query.isEmpty()) {
+        cb(false, {});
+        return;
+    }
     // Wikipedia accepts underscored titles. We don't try to disambiguate —
     // if the article doesn't exist verbatim the REST API returns a 404.
     QString title = title_query;
@@ -1527,10 +1546,10 @@ void MarketDataService::fetch_wikipedia_summary(const QString& title_query, Wiki
     const QString cache_key = "wiki:" + title;
     auto parse = [title_query](const QJsonObject& o) -> WikipediaSummary {
         WikipediaSummary s;
-        s.title       = o["title"].toString(title_query);
+        s.title = o["title"].toString(title_query);
         s.description = o["description"].toString();
-        s.extract     = o["extract"].toString();
-        s.url         = o["content_urls"].toObject()["desktop"].toObject()["page"].toString();
+        s.extract = o["extract"].toString();
+        s.url = o["content_urls"].toObject()["desktop"].toObject()["page"].toString();
         return s;
     };
     auto cached = fincept::CacheManager::instance().try_get(cache_key);
@@ -1539,32 +1558,33 @@ void MarketDataService::fetch_wikipedia_summary(const QString& title_query, Wiki
         cb(!obj.isEmpty(), parse(obj));
         return;
     }
-    const QString url = "https://en.wikipedia.org/api/rest_v1/page/summary/" +
-                        QUrl::toPercentEncoding(title);
+    const QString url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + QUrl::toPercentEncoding(title);
     QHash<QByteArray, QByteArray> headers;
-    headers["User-Agent"] = kProjectUserAgent;  // the tool, never the user's address
-    fincept::HttpClient::instance().get(url, headers,
-        [cb, parse, cache_key](Result<QJsonDocument> res) {
-            if (!res.is_ok() || !res.value().isObject()) {
-                cb(false, {});
-                return;
-            }
-            const auto obj = res.value().object();
-            // The REST summary endpoint returns 404 with a `{type: "...not_found"}`
-            // body for missing pages — treat as a soft miss, not an error.
-            if (obj.contains("type") && obj["type"].toString().contains("not_found")) {
-                cb(false, {});
-                return;
-            }
-            const QString raw = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-            fincept::CacheManager::instance().put(cache_key, raw, kWikipediaCacheTtlSec, "wikipedia");
-            cb(true, parse(obj));
-        });
+    headers["User-Agent"] = kProjectUserAgent; // the tool, never the user's address
+    fincept::HttpClient::instance().get(url, headers, [cb, parse, cache_key](Result<QJsonDocument> res) {
+        if (!res.is_ok() || !res.value().isObject()) {
+            cb(false, {});
+            return;
+        }
+        const auto obj = res.value().object();
+        // The REST summary endpoint returns 404 with a `{type: "...not_found"}`
+        // body for missing pages — treat as a soft miss, not an error.
+        if (obj.contains("type") && obj["type"].toString().contains("not_found")) {
+            cb(false, {});
+            return;
+        }
+        const QString raw = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
+        fincept::CacheManager::instance().put(cache_key, raw, kWikipediaCacheTtlSec, "wikipedia");
+        cb(true, parse(obj));
+    });
 }
 
 // ── S-1 funding-history extractor ──────────────────────────────────────────
 void MarketDataService::fetch_s1_funding(const QString& s1_url, S1FundingCallback cb) {
-    if (s1_url.isEmpty()) { cb(false, {}); return; }
+    if (s1_url.isEmpty()) {
+        cb(false, {});
+        return;
+    }
     // 24h CacheManager TTL — S-1s never change once filed (amendments are new
     // documents with new URLs), so the value is effectively immutable. A
     // shorter TTL would just waste daemon round-trips.
@@ -1572,23 +1592,25 @@ void MarketDataService::fetch_s1_funding(const QString& s1_url, S1FundingCallbac
     const QString cache_key = "s1_funding:" + s1_url;
     auto parse = [](const QJsonObject& o) -> S1Funding {
         S1Funding f;
-        f.source_url             = o["url"].toString();
-        f.section_text           = o["section_text"].toString();
+        f.source_url = o["url"].toString();
+        f.section_text = o["section_text"].toString();
         f.principal_stockholders = o["principal_stockholders"].toString();
-        f.use_of_proceeds        = o["use_of_proceeds"].toString();
-        f.underwriters           = o["underwriters"].toString();
-        f.selected_financials    = o["selected_financials"].toString();
+        f.use_of_proceeds = o["use_of_proceeds"].toString();
+        f.underwriters = o["underwriters"].toString();
+        f.selected_financials = o["selected_financials"].toString();
         for (const auto& v : o["risk_factors"].toArray()) {
             const QString s = v.toString().trimmed();
-            if (!s.isEmpty()) f.risk_factors.append(s);
+            if (!s.isEmpty())
+                f.risk_factors.append(s);
         }
         for (const auto& v : o["rounds"].toArray()) {
             const auto r = v.toObject();
             S1Funding::Round rd;
-            rd.date    = r["date"].toString();
-            rd.amount  = r["amount"].toString();
+            rd.date = r["date"].toString();
+            rd.amount = r["amount"].toString();
             rd.context = r["context"].toString();
-            if (!rd.amount.isEmpty()) f.rounds.append(rd);
+            if (!rd.amount.isEmpty())
+                f.rounds.append(rd);
         }
         return f;
     };
@@ -1609,8 +1631,7 @@ void MarketDataService::fetch_s1_funding(const QString& s1_url, S1FundingCallbac
                 return;
             }
             const QString raw = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-            fincept::CacheManager::instance().put("s1_funding:" + s1_url, raw,
-                                                  kS1CacheTtlSec, "sec");
+            fincept::CacheManager::instance().put("s1_funding:" + s1_url, raw, kS1CacheTtlSec, "sec");
             cb(true, parse(result));
         },
         // S-1 documents are heavy (typically 2-5MB, sometimes 10-20MB).
@@ -1730,38 +1751,41 @@ void MarketDataService::fetch_sparklines(const QStringList& symbols, SparklineCa
     }
 
     QJsonArray syms_arr;
-    for (const auto& s : symbols) syms_arr.append(s);
+    for (const auto& s : symbols)
+        syms_arr.append(s);
     QJsonObject payload;
     payload["symbols"] = syms_arr;
 
     // Only this caller's symbols: PythonWorker may answer with a merged
     // request's union.
     const QSet<QString> mine(symbols.begin(), symbols.end());
-    python::PythonWorker::instance().submit("batch_sparklines", payload,
+    python::PythonWorker::instance().submit(
+        "batch_sparklines", payload,
         [cb, mine](bool ok, QJsonObject obj, QString err) {
-        // "No data" (an answer, not a refusal) is an empty success, as it
-        // was before the daemon sent {"error"} bodies as failed replies.
-        if (!ok && obj.contains("error") && !python::PythonWorker::reply_is_transient(ok, obj)) {
-            cb(true, {});
-            return;
-        }
-        if (!ok) {
-            LOG_WARN("MarketData", "Sparklines failed: " + err.left(200));
-            cb(false, {});
-            return;
-        }
-        QHash<QString, QVector<double>> out;
-        for (auto it = obj.begin(); it != obj.end(); ++it) {
-            if (it.key() == "_value" || !mine.contains(it.key())) continue;
-            QVector<double> prices;
-            for (const auto& v : it.value().toArray())
-                prices.append(v.toDouble());
-            if (!prices.isEmpty())
-                out[it.key()] = prices;
-        }
-        cb(true, out);
-    },
-    python::PythonWorker::kNetworkActionTimeoutMs);
+            // "No data" (an answer, not a refusal) is an empty success, as it
+            // was before the daemon sent {"error"} bodies as failed replies.
+            if (!ok && obj.contains("error") && !python::PythonWorker::reply_is_transient(ok, obj)) {
+                cb(true, {});
+                return;
+            }
+            if (!ok) {
+                LOG_WARN("MarketData", "Sparklines failed: " + err.left(200));
+                cb(false, {});
+                return;
+            }
+            QHash<QString, QVector<double>> out;
+            for (auto it = obj.begin(); it != obj.end(); ++it) {
+                if (it.key() == "_value" || !mine.contains(it.key()))
+                    continue;
+                QVector<double> prices;
+                for (const auto& v : it.value().toArray())
+                    prices.append(v.toDouble());
+                if (!prices.isEmpty())
+                    out[it.key()] = prices;
+            }
+            cb(true, out);
+        },
+        python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
 } // namespace fincept::services

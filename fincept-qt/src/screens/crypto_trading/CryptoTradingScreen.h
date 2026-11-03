@@ -122,10 +122,9 @@ class CryptoTradingScreen : public QWidget, public IStatefulScreen {
     QString portfolio_id_;
     trading::PtPortfolio portfolio_;
 
-
     // Async fetch guards
     std::atomic<bool> candles_fetching_{false};
-    std::atomic<int> live_inflight_{0};  // counts async_fetch_live_* tasks still running
+    std::atomic<int> live_inflight_{0}; // counts async_fetch_live_* tasks still running
     std::atomic<bool> paper_bookkeeping_in_flight_{false};
 
     // Startup gate — ensures daemon-dependent fetches fire exactly once,
@@ -135,7 +134,7 @@ class CryptoTradingScreen : public QWidget, public IStatefulScreen {
     // WS/REST mode edge detection — when WS transitions online we stop REST
     // polling; when it drops we restart it. tri-state: -1 = unknown.
     int last_ws_state_ = -1;
-    int last_ws_status_label_state_ = -1;  // separate from last_ws_state_ since update_clock is 1Hz
+    int last_ws_status_label_state_ = -1; // separate from last_ws_state_ since update_clock is 1Hz
     void apply_feed_mode(bool ws_connected);
 
     QStringList watchlist_symbols_ = {

@@ -18,15 +18,15 @@ struct TeamRow {
     QString id;
     QString name;
     QString coordinator_agent_id;
-    QString mode;              ///< agno coordination mode: "coordinate" | "route" | "collaborate"
+    QString mode; ///< agno coordination mode: "coordinate" | "route" | "collaborate"
     QString description;
     QString created_at;
     QString updated_at;
-    QStringList member_agent_ids;   ///< In position order; filled by get / list_all
+    QStringList member_agent_ids; ///< In position order; filled by get / list_all
 };
 
 struct TeamCreate {
-    QString id;            ///< kebab-case slug; required
+    QString id; ///< kebab-case slug; required
     QString name;
     QString coordinator_agent_id;
     QString mode = "coordinate";

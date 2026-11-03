@@ -56,7 +56,7 @@ struct LedgerPosition {
     // rather than at today's. Sum to realized_pnl / dividend_income.
     QVector<QPair<QString, double>> realized_events;
     QVector<QPair<QString, double>> dividend_events;
-    QStringList warnings;       // inconsistencies found during replay (oversell, bad split)
+    QStringList warnings; // inconsistencies found during replay (oversell, bad split)
 
     bool is_open(double epsilon = 1e-9) const { return quantity > epsilon; }
 };

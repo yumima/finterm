@@ -49,9 +49,8 @@ QPushButton* chip(const QString& text, const QString& key) {
                              "padding:2px 10px;font-size:12px;}"
                              "QPushButton:checked{color:%3;border-color:%4;background:%5;}"
                              "QPushButton:hover{color:%3;}")
-                         .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
-                              ui::colors::TEXT_PRIMARY(), ui::colors::AMBER(),
-                              ui::colors::BG_RAISED()));
+                         .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY(),
+                              ui::colors::AMBER(), ui::colors::BG_RAISED()));
     return b;
 }
 
@@ -89,19 +88,17 @@ HoldersTable::HoldersTable(QWidget* parent) : QWidget(parent) {
     sort_ = new QComboBox;
     sort_->addItem(QStringLiteral("by position size"), false);
     sort_->addItem(QStringLiteral("by % of their book (books ≥ $1B)"), true);
-    sort_->setToolTip(ui::tooltip_wrap(QStringLiteral(
-        "Position size is who owns the most of this company. Weight is how much of the "
-        "filer's own book this is — a different question, answered with a floor on book size "
-        "so that a two-person adviser with one name in the account does not outrank Berkshire.")));
-    connect(sort_, &QComboBox::activated, this,
-            [this](int i) { emit sort_requested(sort_->itemData(i).toBool()); });
+    sort_->setToolTip(ui::tooltip_wrap(
+        QStringLiteral("Position size is who owns the most of this company. Weight is how much of the "
+                       "filer's own book this is — a different question, answered with a floor on book size "
+                       "so that a two-person adviser with one name in the account does not outrank Berkshire.")));
+    connect(sort_, &QComboBox::activated, this, [this](int i) { emit sort_requested(sort_->itemData(i).toBool()); });
     bar->addWidget(sort_);
     root->addLayout(bar);
 
     table_ = make_table({QStringLiteral("Holder"), QStringLiteral("Type"), QStringLiteral("Shares"),
                          QStringLiteral("% out"), QStringLiteral("Δ shares"), QStringLiteral("Δ %"),
-                         QStringLiteral("% of their book"), QStringLiteral("Book"),
-                         QStringLiteral("As of")});
+                         QStringLiteral("% of their book"), QStringLiteral("Book"), QStringLiteral("As of")});
     table_->setMinimumHeight(90);
     connect(table_, &QTableWidget::cellClicked, this, [this](int r, int) {
         auto* it = table_->item(r, 0);
@@ -149,18 +146,18 @@ void HoldersTable::render() {
 
     if (!s.holders_ok) {
         table_->setRowCount(0);
-        title_note_->setText(loading_ && s.holders_error.isEmpty()
-                                 ? QStringLiteral("reading the 13F index…")
-                                 : s.holders_error.isEmpty()
-                                       ? QStringLiteral("no 13F index built — build one from the OWNERSHIP screen")
-                                       : s.holders_error.left(140));
+        title_note_->setText(loading_ && s.holders_error.isEmpty() ? QStringLiteral("reading the 13F index…")
+                             : s.holders_error.isEmpty()
+                                 ? QStringLiteral("no 13F index built — build one from the OWNERSHIP screen")
+                                 : s.holders_error.left(140));
         foot_->clear();
         return;
     }
 
     title_note_->setText(QStringLiteral("%1 filers · Q%2 %3 · filed by %4")
                              .arg(QLocale().toString(sum.holder_count))
-                             .arg((sum.quarter.month() - 1) / 3 + 1).arg(sum.quarter.year())
+                             .arg((sum.quarter.month() - 1) / 3 + 1)
+                             .arg(sum.quarter.year())
                              .arg(sum.filed_by().toString(QStringLiteral("d MMM yyyy"))));
 
     // Stakes by filer name, so a 13D/13G can sit on the holder's row. The
@@ -179,8 +176,7 @@ void HoldersTable::render() {
     for (const auto& h : s.holders) {
         if (filter_ == QLatin1String("focused") && !h.is_focused())
             continue;
-        if (filter_ != QLatin1String("all") && filter_ != QLatin1String("focused") &&
-            h.action != filter_)
+        if (filter_ != QLatin1String("all") && filter_ != QLatin1String("focused") && h.action != filter_)
             continue;
         rows.push_back(&h);
     }
@@ -214,9 +210,10 @@ void HoldersTable::render() {
         tier->setToolTip(ui::tooltip_wrap(
             h.tier == QLatin1String("index")
                 ? QStringLiteral("A named passive complex. Its quarterly change is an index rebalance, not a view.")
-                : h.tier == QLatin1String("broad")
-                      ? QStringLiteral("A book of a thousand or more names — tracking a benchmark or running client mandates, not expressing a view on this company.")
-                      : QStringLiteral("A book narrow enough that a position in it is a decision.")));
+            : h.tier == QLatin1String("broad")
+                ? QStringLiteral("A book of a thousand or more names — tracking a benchmark or running client "
+                                 "mandates, not expressing a view on this company.")
+                : QStringLiteral("A book narrow enough that a position in it is a decision.")));
         table_->setItem(i, 1, tier);
 
         table_->setItem(i, 2, num_cell(compact_or_dash(h.shares)));
@@ -238,21 +235,19 @@ void HoldersTable::render() {
             delta = QStringLiteral("held");
         auto* d = num_cell(delta, col);
         if (h.action == QLatin1String("first seen"))
-            d->setToolTip(ui::tooltip_wrap(QStringLiteral(
-                "No prior-quarter filing from this filer, so an opening position cannot be told "
-                "apart from a first appearance.")));
+            d->setToolTip(ui::tooltip_wrap(
+                QStringLiteral("No prior-quarter filing from this filer, so an opening position cannot be told "
+                               "apart from a first appearance.")));
         table_->setItem(i, 4, d);
-        table_->setItem(i, 5, num_cell(h.pct_change ? pct_or_dash(h.pct_change, 1, true)
-                                                    : fmt::placeholder(), col));
-        table_->setItem(i, 6, num_cell(pct_or_dash(h.weight, 2),
-                                       h.weight && *h.weight >= 0.05 ? ui::colors::AMBER() : QString()));
+        table_->setItem(i, 5, num_cell(h.pct_change ? pct_or_dash(h.pct_change, 1, true) : fmt::placeholder(), col));
+        table_->setItem(
+            i, 6, num_cell(pct_or_dash(h.weight, 2), h.weight && *h.weight >= 0.05 ? ui::colors::AMBER() : QString()));
         table_->setItem(i, 7, num_cell(compact_or_dash(h.book_total)));
-        auto* asof = cell(QStringLiteral("Q%1 %2")
-                              .arg((sum.quarter.month() - 1) / 3 + 1).arg(sum.quarter.year()),
+        auto* asof = cell(QStringLiteral("Q%1 %2").arg((sum.quarter.month() - 1) / 3 + 1).arg(sum.quarter.year()),
                           ui::colors::TEXT_SECONDARY());
-        asof->setToolTip(ui::tooltip_wrap(QStringLiteral(
-            "Quarter end the position was reported for. 13F is due 45 days later; the SEC data "
-            "sets carry no per-filing date.")));
+        asof->setToolTip(ui::tooltip_wrap(
+            QStringLiteral("Quarter end the position was reported for. 13F is due 45 days later; the SEC data "
+                           "sets carry no per-filing date.")));
         table_->setItem(i, 8, asof);
     }
     table_->setUpdatesEnabled(true);
@@ -263,8 +258,7 @@ void HoldersTable::render() {
     notes << QStringLiteral("showing %1 of %2 filers%3")
                  .arg(rows.size())
                  .arg(QLocale().toString(sum.holder_count))
-                 .arg(filter_ == QLatin1String("all") ? QString()
-                                                      : QStringLiteral(" (filtered)"));
+                 .arg(filter_ == QLatin1String("all") ? QString() : QStringLiteral(" (filtered)"));
     if (sum.option_holders > 0)
         notes << QStringLiteral("%1 hold options only — not counted as long").arg(sum.option_holders);
     if (sum.sort == QLatin1String("weight"))

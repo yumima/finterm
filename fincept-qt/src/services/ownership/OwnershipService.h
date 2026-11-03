@@ -22,9 +22,10 @@
 
 #include <QHash>
 #include <QObject>
-#include <optional>
 #include <QSet>
 #include <QString>
+
+#include <optional>
 
 class QTimer;
 
@@ -190,17 +191,17 @@ class OwnershipService : public QObject {
     /// Holdings and watchlist symbols, gathered on the GUI thread.
     QStringList own_symbols() const;
 
-    bool    form4_scanning_ = false;
+    bool form4_scanning_ = false;
     QString form4_status_;
     QTimer* form4_timer_ = nullptr;
-    int     form4_passes_ = 0;
+    int form4_passes_ = 0;
 
     QVector<ownership::Manager> firm_results_;
     QHash<QString, ownership::ManagerBook> books_;
     QSet<QString> books_in_flight_;
     QSet<QString> pricing_in_flight_;
 
-    bool    index_busy_ = false;
+    bool index_busy_ = false;
     mutable bool index_probed_ = false;
     mutable bool index_probing_ = false;
     mutable QString index_status_;

@@ -86,11 +86,11 @@ TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) {
     pvl->setSpacing(6);
 
     pvl->addWidget(section_heading("1", "LICENSE"));
-    pvl->addWidget(body_text(
-        "finterm is licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0). "
-        "The full license text is in the LICENSE file in the repository root and at "
-        "https://www.gnu.org/licenses/agpl-3.0.html. By using, modifying, or distributing this software you "
-        "agree to comply with the license."));
+    pvl->addWidget(
+        body_text("finterm is licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0). "
+                  "The full license text is in the LICENSE file in the repository root and at "
+                  "https://www.gnu.org/licenses/agpl-3.0.html. By using, modifying, or distributing this software you "
+                  "agree to comply with the license."));
 
     pvl->addWidget(section_heading("2", "NO WARRANTY"));
     pvl->addWidget(body_text(
@@ -117,9 +117,9 @@ TermsScreen::TermsScreen(QWidget* parent) : QWidget(parent) {
         "rate limits and usage rules."));
 
     pvl->addWidget(section_heading("5", "NO COMMERCIAL SUPPORT"));
-    pvl->addWidget(body_text(
-        "This is a community open-source project. There is no commercial support, no SLA, no help desk, no "
-        "guaranteed response time. Use GitHub issues / discussions for community-level help."));
+    pvl->addWidget(
+        body_text("This is a community open-source project. There is no commercial support, no SLA, no help desk, no "
+                  "guaranteed response time. Use GitHub issues / discussions for community-level help."));
 
     pvl->addWidget(section_heading("6", "ACCEPTABLE USE"));
     pvl->addWidget(body_text("You agree to:"));

@@ -22,10 +22,10 @@ namespace fincept::services {
 /// Eurex/ICE/HKEX/CFFEX index futures, so FTSE, DAX, CAC, EURO STOXX, Hang
 /// Seng and the China indices have no futures quote and get none.
 struct IndexFuture {
-    QString index;       // "^GSPC"
-    QString proxy;       // "ES=F" — the continuous symbol; the quote reads one contract month
-    QString root;        // "ES" — what the reader calls it
-    QString name;        // "E-mini S&P 500"
+    QString index; // "^GSPC"
+    QString proxy; // "ES=F" — the continuous symbol; the quote reads one contract month
+    QString root;  // "ES" — what the reader calls it
+    QString name;  // "E-mini S&P 500"
 };
 
 /// The future quoted for an index, or nullptr when it has none.
@@ -33,13 +33,13 @@ const IndexFuture* index_future_for(const QString& index);
 
 struct IndexFutureQuote {
     QString index;
-    QString contract;      // the contract month quoted, "ESZ26.CME"
-    double price = 0;      // last print
-    double change = 0;     // since the previous close
+    QString contract;  // the contract month quoted, "ESZ26.CME"
+    double price = 0;  // last print
+    double change = 0; // since the previous close
     double pct = 0;
-    double ref_price = 0;  // the contract's previous close (Yahoo's own "previous close")
-    QDate ref_date;        // the CME trading day that close ended
-    qint64 ts = 0;         // end of the last bar
+    double ref_price = 0; // the contract's previous close (Yahoo's own "previous close")
+    QDate ref_date;       // the CME trading day that close ended
+    qint64 ts = 0;        // end of the last bar
 };
 
 /// Every index future in ONE request whatever `indices` holds, so all callers

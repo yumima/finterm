@@ -18,7 +18,7 @@
 #include <QVBoxLayout>
 
 #ifdef FINCEPT_HAS_QXLSX
-#include <xlsxdocument.h>
+#    include <xlsxdocument.h>
 #endif
 
 namespace fincept::screens {
@@ -112,7 +112,8 @@ void ExcelScreen::build_ui() {
 QWidget* ExcelScreen::build_toolbar() {
     auto* bar = new QWidget(this);
     bar->setFixedHeight(40);
-    bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;").arg(colors::BORDER_MED(), colors::TEXT_DIM()));
+    bar->setStyleSheet(
+        QString("background:%1; border-bottom:1px solid %2;").arg(colors::BORDER_MED(), colors::TEXT_DIM()));
 
     auto* hl = new QHBoxLayout(bar);
     hl->setContentsMargins(12, 0, 12, 0);
@@ -128,12 +129,12 @@ QWidget* ExcelScreen::build_toolbar() {
     auto make_btn = [&](const QString& text, const QString& tooltip = {}) -> QPushButton* {
         auto* btn = new QPushButton(text, bar);
         btn->setToolTip(tooltip);
-        btn->setStyleSheet(
-            QString("QPushButton { background:%3; color:%4; border:none;"
-                    " font-family:%1; font-size:12px; font-weight:600; padding:6px 12px; }"
-                    "QPushButton:hover { background:%5; }"
-                    "QPushButton:pressed { background:%2; }")
-                .arg(fonts::DATA_FAMILY, kAccent(), colors::TEXT_SECONDARY(), colors::TEXT_PRIMARY(), colors::TEXT_SECONDARY()));
+        btn->setStyleSheet(QString("QPushButton { background:%3; color:%4; border:none;"
+                                   " font-family:%1; font-size:12px; font-weight:600; padding:6px 12px; }"
+                                   "QPushButton:hover { background:%5; }"
+                                   "QPushButton:pressed { background:%2; }")
+                               .arg(fonts::DATA_FAMILY, kAccent(), colors::TEXT_SECONDARY(), colors::TEXT_PRIMARY(),
+                                    colors::TEXT_SECONDARY()));
         return btn;
     };
 
@@ -164,10 +165,11 @@ QWidget* ExcelScreen::build_toolbar() {
     hl->addWidget(rename_btn);
 
     auto* del_btn = make_btn("DELETE", "Delete current sheet");
-    del_btn->setStyleSheet(QString("QPushButton { background:%2; color:%3; border:none;"
-                                   " font-family:%1; font-size:12px; font-weight:600; padding:6px 12px; }"
-                                   "QPushButton:hover { background:%4; }")
-                               .arg(fonts::DATA_FAMILY, colors::TEXT_SECONDARY(), colors::TEXT_PRIMARY(), colors::NEGATIVE()));
+    del_btn->setStyleSheet(
+        QString("QPushButton { background:%2; color:%3; border:none;"
+                " font-family:%1; font-size:12px; font-weight:600; padding:6px 12px; }"
+                "QPushButton:hover { background:%4; }")
+            .arg(fonts::DATA_FAMILY, colors::TEXT_SECONDARY(), colors::TEXT_PRIMARY(), colors::NEGATIVE()));
     connect(del_btn, &QPushButton::clicked, this, &ExcelScreen::on_delete_sheet);
     hl->addWidget(del_btn);
 
@@ -246,9 +248,9 @@ void ExcelScreen::on_import() {
     services::FileManagerService::instance().import_file(path, "excel");
 #else
     QMessageBox::information(this, "Excel Import",
-        "Excel (.xlsx) import requires Qt6 private headers.\n"
-        "This build was compiled without QXlsx support.\n\n"
-        "CSV files can still be imported via the toolbar.");
+                             "Excel (.xlsx) import requires Qt6 private headers.\n"
+                             "This build was compiled without QXlsx support.\n\n"
+                             "CSV files can still be imported via the toolbar.");
 #endif
 }
 
@@ -313,9 +315,9 @@ void ExcelScreen::on_export() {
     }
 #else
     QMessageBox::information(this, "Excel Export",
-        "Excel (.xlsx) export requires Qt6 private headers.\n"
-        "This build was compiled without QXlsx support.\n\n"
-        "CSV export is still available via the toolbar.");
+                             "Excel (.xlsx) export requires Qt6 private headers.\n"
+                             "This build was compiled without QXlsx support.\n\n"
+                             "CSV export is still available via the toolbar.");
 #endif
 }
 

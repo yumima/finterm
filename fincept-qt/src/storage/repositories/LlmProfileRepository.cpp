@@ -13,7 +13,9 @@
 namespace fincept {
 
 namespace {
-QVariant null_text() { return QVariant(QMetaType(QMetaType::QString)); }
+QVariant null_text() {
+    return QVariant(QMetaType(QMetaType::QString));
+}
 } // namespace
 
 // ── Singleton ────────────────────────────────────────────────────────────────
@@ -73,8 +75,7 @@ Result<void> LlmProfileRepository::save_profile(const LlmProfile& p) {
 
     // Caller may leave runtime blank — derive from provider so the
     // saved row always has a usable dispatch tag.
-    const QString runtime =
-        p.runtime.isEmpty() ? ai_chat::runtime_for_provider(p.provider) : p.runtime;
+    const QString runtime = p.runtime.isEmpty() ? ai_chat::runtime_for_provider(p.provider) : p.runtime;
 
     return exec_write("INSERT OR REPLACE INTO llm_profiles "
                       "  (id, name, provider, model_id, api_key, base_url, "

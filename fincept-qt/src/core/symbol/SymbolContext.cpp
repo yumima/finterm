@@ -39,8 +39,7 @@ void SymbolContext::set_group_symbol(SymbolGroup g, const SymbolRef& ref, QObjec
         return; // no-op
 
     groups_[g] = ref;
-    LOG_DEBUG("SymbolContext",
-              QString("Group %1 → %2").arg(symbol_group_letter(g)).arg(ref.display()));
+    LOG_DEBUG("SymbolContext", QString("Group %1 → %2").arg(symbol_group_letter(g)).arg(ref.display()));
     emit group_symbol_changed(g, ref, source);
 }
 

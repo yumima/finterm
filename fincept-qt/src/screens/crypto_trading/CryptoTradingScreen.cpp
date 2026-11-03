@@ -444,30 +444,28 @@ void CryptoTradingScreen::hub_subscribe_topics() {
     //    pattern matches the primary topic too, but duplicate delivery is
     //    harmless (pending_tickers_ is latest-wins per symbol).
     const QString ticker_pattern = QStringLiteral("ws:") + exch + QStringLiteral(":ticker:*");
-    hub.subscribe_pattern(this, ticker_pattern,
-                          [self](const QString& /*topic*/, const QVariant& v) {
-                              if (!self || !v.canConvert<fincept::trading::TickerData>())
-                                  return;
-                              const auto t = v.value<fincept::trading::TickerData>();
-                              if (t.symbol.isEmpty())
-                                  return;
-                              self->pending_tickers_[t.symbol] = t;
-                          });
+    hub.subscribe_pattern(this, ticker_pattern, [self](const QString& /*topic*/, const QVariant& v) {
+        if (!self || !v.canConvert<fincept::trading::TickerData>())
+            return;
+        const auto t = v.value<fincept::trading::TickerData>();
+        if (t.symbol.isEmpty())
+            return;
+        self->pending_tickers_[t.symbol] = t;
+    });
 
     // 5. Candles — subscribe pattern for the primary symbol across all
     //    intervals (the chart's current timeframe may change during the
     //    session; a pattern sub avoids having to resubscribe on every
     //    timeframe change). Filter by the exact symbol in the slot.
-    const QString ohlc_pattern = QStringLiteral("ws:") + exch + QStringLiteral(":ohlc:") + primary +
-                                 QStringLiteral(":*");
-    hub.subscribe_pattern(this, ohlc_pattern,
-                          [self, primary](const QString& /*topic*/, const QVariant& v) {
-                              if (!self || self->selected_symbol_ != primary)
-                                  return;
-                              if (!v.canConvert<fincept::trading::Candle>())
-                                  return;
-                              self->pending_candles_.append(v.value<fincept::trading::Candle>());
-                          });
+    const QString ohlc_pattern =
+        QStringLiteral("ws:") + exch + QStringLiteral(":ohlc:") + primary + QStringLiteral(":*");
+    hub.subscribe_pattern(this, ohlc_pattern, [self, primary](const QString& /*topic*/, const QVariant& v) {
+        if (!self || self->selected_symbol_ != primary)
+            return;
+        if (!v.canConvert<fincept::trading::Candle>())
+            return;
+        self->pending_candles_.append(v.value<fincept::trading::Candle>());
+    });
 
     LOG_INFO(TAG, QString("DataHub subscriptions attached: %1 / %2").arg(exch, primary));
 }
@@ -529,7 +527,8 @@ void CryptoTradingScreen::load_portfolio() {
             if (existing) {
                 portfolio = *existing;
             } else {
-                portfolio = pt_create_portfolio("Crypto Paper", DEFAULT_PAPER_BALANCE, "USD", 1.0, "cross", 0.001, exch);
+                portfolio =
+                    pt_create_portfolio("Crypto Paper", DEFAULT_PAPER_BALANCE, "USD", 1.0, "cross", 0.001, exch);
             }
         } catch (const std::exception& e) {
             LOG_ERROR("CryptoTradingScreen", QString("load_portfolio failed: %1").arg(e.what()));
@@ -668,7 +667,7 @@ void CryptoTradingScreen::on_exchange_changed(const QString& exchange) {
     has_pending_primary_ = false;
     pending_candles_.clear();
     pending_trades_.clear();
-    last_ws_state_ = -1;  // re-evaluate feed mode after new stream connects
+    last_ws_state_ = -1; // re-evaluate feed mode after new stream connects
 
     // Reset fetch guards — a prior in-flight fetch from the old exchange must
     // not suppress the first fetch against the new exchange.
@@ -777,7 +776,12 @@ void CryptoTradingScreen::on_order_submitted(const QString& side, const QString&
                                              double stop_price, double sl, double tp) {
     LOG_INFO(TAG, QString("Order submit: mode=%1 %2 %3 qty=%4 px=%5 stop=%6 sl=%7 tp=%8 sym=%9")
                       .arg(trading_mode_ == TradingMode::Paper ? "PAPER" : "LIVE", side, order_type)
-                      .arg(qty).arg(price).arg(stop_price).arg(sl).arg(tp).arg(selected_symbol_));
+                      .arg(qty)
+                      .arg(price)
+                      .arg(stop_price)
+                      .arg(sl)
+                      .arg(tp)
+                      .arg(selected_symbol_));
     try {
         if (trading_mode_ == TradingMode::Paper) {
             auto ticker = ExchangeService::instance().get_cached_price(selected_symbol_);
@@ -787,9 +791,9 @@ void CryptoTradingScreen::on_order_submitted(const QString& side, const QString&
                 // placeholder. Reject when no live price is available.
                 if (!(ticker.last > 0)) {
                     LOG_WARN(TAG, "Paper market order rejected: no market price available for " + selected_symbol_);
-                    fincept::ui::ToastService::instance().post(
-                        fincept::ui::ToastService::Severity::Warning,
-                        "No market price available — cannot fill market order", "crypto_trading");
+                    fincept::ui::ToastService::instance().post(fincept::ui::ToastService::Severity::Warning,
+                                                               "No market price available — cannot fill market order",
+                                                               "crypto_trading");
                     return;
                 }
                 price_opt = ticker.last;
@@ -832,7 +836,8 @@ void CryptoTradingScreen::on_order_submitted(const QString& side, const QString&
 }
 
 void CryptoTradingScreen::on_cancel_order(const QString& order_id) {
-    LOG_INFO(TAG, QString("Cancel order: %1 (%2)").arg(order_id, trading_mode_ == TradingMode::Paper ? "paper" : "live"));
+    LOG_INFO(TAG,
+             QString("Cancel order: %1 (%2)").arg(order_id, trading_mode_ == TradingMode::Paper ? "paper" : "live"));
     if (trading_mode_ == TradingMode::Paper) {
         try {
             pt_cancel_order(order_id);
@@ -906,15 +911,21 @@ void CryptoTradingScreen::apply_feed_mode(bool ws_connected) {
     last_ws_state_ = desired;
 
     if (ws_connected) {
-        if (ticker_timer_ && ticker_timer_->isActive()) ticker_timer_->stop();
-        if (ob_timer_ && ob_timer_->isActive()) ob_timer_->stop();
-        if (portfolio_timer_ && portfolio_timer_->isActive()) portfolio_timer_->stop();
+        if (ticker_timer_ && ticker_timer_->isActive())
+            ticker_timer_->stop();
+        if (ob_timer_ && ob_timer_->isActive())
+            ob_timer_->stop();
+        if (portfolio_timer_ && portfolio_timer_->isActive())
+            portfolio_timer_->stop();
         LOG_INFO(TAG, "WS connected — REST polling paused (watchlist poll kept running)");
     } else {
         if (isVisible()) {
-            if (ticker_timer_ && !ticker_timer_->isActive()) ticker_timer_->start();
-            if (ob_timer_ && !ob_timer_->isActive()) ob_timer_->start();
-            if (portfolio_timer_ && !portfolio_timer_->isActive()) portfolio_timer_->start();
+            if (ticker_timer_ && !ticker_timer_->isActive())
+                ticker_timer_->start();
+            if (ob_timer_ && !ob_timer_->isActive())
+                ob_timer_->start();
+            if (portfolio_timer_ && !portfolio_timer_->isActive())
+                portfolio_timer_->start();
             LOG_WARN(TAG, "WS disconnected — REST polling resumed");
         }
     }
@@ -1014,20 +1025,23 @@ void CryptoTradingScreen::flush_ws_updates() {
                     }
 
                     if (!self)
-                        return;  // widget destroyed — nothing to reset
-                    QMetaObject::invokeMethod(self, [self, r]() {
-                        if (!self)
-                            return;
-                        self->paper_bookkeeping_in_flight_.store(false);
-                        self->bottom_panel_->set_positions(r.positions);
-                        if (r.fill_occurred) {
-                            self->portfolio_ = r.portfolio;
-                            self->order_entry_->set_balance(r.portfolio.balance);
-                            self->bottom_panel_->set_orders(r.orders);
-                            self->bottom_panel_->set_trades(r.trades);
-                            self->bottom_panel_->set_stats(r.stats);
-                        }
-                    }, Qt::QueuedConnection);
+                        return; // widget destroyed — nothing to reset
+                    QMetaObject::invokeMethod(
+                        self,
+                        [self, r]() {
+                            if (!self)
+                                return;
+                            self->paper_bookkeeping_in_flight_.store(false);
+                            self->bottom_panel_->set_positions(r.positions);
+                            if (r.fill_occurred) {
+                                self->portfolio_ = r.portfolio;
+                                self->order_entry_->set_balance(r.portfolio.balance);
+                                self->bottom_panel_->set_orders(r.orders);
+                                self->bottom_panel_->set_trades(r.trades);
+                                self->bottom_panel_->set_stats(r.stats);
+                            }
+                        },
+                        Qt::QueuedConnection);
                 });
             }
         }
@@ -1136,16 +1150,19 @@ void CryptoTradingScreen::refresh_portfolio() {
         }
         if (!self || !s.ok)
             return;
-        QMetaObject::invokeMethod(self, [self, s]() {
-            if (!self)
-                return;
-            self->portfolio_ = s.portfolio;
-            self->order_entry_->set_balance(s.portfolio.balance);
-            self->bottom_panel_->set_positions(s.positions);
-            self->bottom_panel_->set_orders(s.orders);
-            self->bottom_panel_->set_trades(s.trades);
-            self->bottom_panel_->set_stats(s.stats);
-        }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(
+            self,
+            [self, s]() {
+                if (!self)
+                    return;
+                self->portfolio_ = s.portfolio;
+                self->order_entry_->set_balance(s.portfolio.balance);
+                self->bottom_panel_->set_positions(s.positions);
+                self->bottom_panel_->set_orders(s.orders);
+                self->bottom_panel_->set_trades(s.trades);
+                self->bottom_panel_->set_stats(s.stats);
+            },
+            Qt::QueuedConnection);
     });
 }
 

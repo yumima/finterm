@@ -30,19 +30,19 @@ namespace fincept::services {
 
 /// Resolved slash command — what AgentService::run_agent dispatches.
 struct ResolvedSlash {
-    QString command;     ///< original command without leading "/"
-    QString agent_id;    ///< matches agent_configs.id
-    QString skill;       ///< matches a SKILL.md directory name
-    QJsonObject args;    ///< positional + flag args
+    QString command;  ///< original command without leading "/"
+    QString agent_id; ///< matches agent_configs.id
+    QString skill;    ///< matches a SKILL.md directory name
+    QJsonObject args; ///< positional + flag args
 };
 
 /// One row in the registry.
 struct SlashCommandSpec {
-    QString command;          ///< "comps", "dcf", "earnings" — no leading "/"
+    QString command; ///< "comps", "dcf", "earnings" — no leading "/"
     QString agent_id;
     QString skill;
-    QStringList positional;   ///< ordered arg keys for positional tokens
-    QString help;             ///< one-line user-facing description
+    QStringList positional; ///< ordered arg keys for positional tokens
+    QString help;           ///< one-line user-facing description
     /// Suggested follow-up commands (each one a template the user
     /// can run next).  The chat surface renders these as clickable
     /// chips after a successful dispatch.  Use `{ticker}` etc. as
@@ -63,9 +63,7 @@ class SlashCommandService {
 
     /// Lower-level: split a "/cmd a b --k=v" string into command + tokens.
     /// Exposed for tests + the chat composer's autocomplete.
-    static bool parse_tokens(const QString& input,
-                             QString& out_command,
-                             QStringList& out_positional,
+    static bool parse_tokens(const QString& input, QString& out_command, QStringList& out_positional,
                              QJsonObject& out_flags);
 
     /// All registered specs.  Used by /help and the chat composer's

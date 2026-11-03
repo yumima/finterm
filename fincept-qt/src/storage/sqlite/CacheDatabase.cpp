@@ -75,9 +75,8 @@ Result<void> CacheDatabase::apply_pragmas() {
     // corruption on power loss — now that cache.db also holds tab_sessions and
     // screen_state, durability matters more than the marginal write gain of OFF.
     const char* pragmas[] = {
-        "PRAGMA journal_mode = WAL",      "PRAGMA synchronous = NORMAL",
-        "PRAGMA cache_size = -10000",     "PRAGMA temp_store = MEMORY",
-        "PRAGMA mmap_size = 134217728",   "PRAGMA busy_timeout = 3000",
+        "PRAGMA journal_mode = WAL", "PRAGMA synchronous = NORMAL", "PRAGMA cache_size = -10000",
+        "PRAGMA temp_store = MEMORY", "PRAGMA mmap_size = 134217728", "PRAGMA busy_timeout = 3000",
         // cache.db sees the most write churn (quote TTL refresh, tab session
         // snapshots, screen state) — capping WAL growth matters more here
         // than for the main DB. See Database::apply_pragmas() for rationale.

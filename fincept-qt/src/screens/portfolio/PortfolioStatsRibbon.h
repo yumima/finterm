@@ -26,7 +26,7 @@ class PortfolioStatsRibbon : public QWidget {
     struct HeroCell {
         QWidget* container = nullptr;
         QLabel* label = nullptr;
-        QLabel* value = nullptr;   // rich text — holds both value and sub
+        QLabel* value = nullptr; // rich text — holds both value and sub
     };
 
     // Compact cell — secondary row. Single-line "LABEL  value" chip.

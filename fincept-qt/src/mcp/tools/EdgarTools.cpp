@@ -54,12 +54,15 @@ static ToolResult run_edgar(const QStringList& args) {
                     // a success flag — treat either signal as a failure so it is
                     // surfaced (and not cached) instead of returned as data.
                     const QJsonValue ev = obj.value("error");
-                    const bool has_error = obj.contains("error") && !ev.isNull() && !(ev.isString() && ev.toString().isEmpty()) &&
+                    const bool has_error = obj.contains("error") && !ev.isNull() &&
+                                           !(ev.isString() && ev.toString().isEmpty()) &&
                                            !(ev.isBool() && !ev.toBool());
                     if (obj.value("success").toBool(true) == false || has_error)
                         error = ev.isString() ? ev.toString()
-                                              : (ev.isUndefined() || ev.isNull()) ? QStringLiteral("unknown error")
-                                                                                  : QString::fromUtf8(QJsonDocument(QJsonObject{{"error", ev}}).toJson(QJsonDocument::Compact));
+                                : (ev.isUndefined() || ev.isNull())
+                                    ? QStringLiteral("unknown error")
+                                    : QString::fromUtf8(
+                                          QJsonDocument(QJsonObject{{"error", ev}}).toJson(QJsonDocument::Compact));
                     else
                         result = obj;
                 }

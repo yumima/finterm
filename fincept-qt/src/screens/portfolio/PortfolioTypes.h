@@ -99,8 +99,8 @@ struct HoldingWithQuote {
     // market_value / cost_basis / P&L aggregates are converted. Before this,
     // AAPL (USD) and RY.TO (CAD) were summed as bare numbers and the result
     // labelled with the portfolio currency.
-    QString currency;      // empty = unknown (treated as the portfolio currency)
-    double fx_rate = 1.0;  // instrument → portfolio currency multiplier
+    QString currency;     // empty = unknown (treated as the portfolio currency)
+    double fx_rate = 1.0; // instrument → portfolio currency multiplier
 
     // Price provenance. price_known=false means there is NO price at all —
     // no live quote and nothing cached (cold start offline, delisted symbol).
@@ -134,7 +134,7 @@ struct HoldingWithQuote {
 /// from ten seconds ago "≈", so one Yahoo 429 on the portfolio's own quote
 /// fetch put ≈ on every LAST while the hub was delivering fresh prices.
 inline bool is_current_print(const QDateTime& written_at, const QDateTime& now = QDateTime::currentDateTime()) {
-    return written_at.isValid() && written_at <= now.addSecs(60) &&   // a little clock skew, not the future
+    return written_at.isValid() && written_at <= now.addSecs(60) && // a little clock skew, not the future
            written_at.toLocalTime().date() == now.toLocalTime().date();
 }
 
@@ -215,9 +215,7 @@ struct PortfolioSummary {
     QStringList fx_unknown_symbols;
     /// Totals leave out whole holdings (no price, or no FX conversion).
     bool book_incomplete() const { return !unpriced_symbols.isEmpty() || !fx_unknown_symbols.isEmpty(); }
-    bool valuation_partial() const {
-        return book_incomplete() || !stale_symbols.isEmpty();
-    }
+    bool valuation_partial() const { return book_incomplete() || !stale_symbols.isEmpty(); }
     /// Every holding is left out: the totals are unknown, not 0.
     bool nothing_valued() const {
         if (holdings.isEmpty())
@@ -399,13 +397,13 @@ struct PortfolioSnapshot {
 // a score (strong_buy=1 … strong_sell=5), takes the MV-weighted average, and
 // maps back to a display string.
 struct PortfolioFundamentals {
-    double tgt_low   = 0;  // weighted analyst low-target NAV
-    double tgt_mean  = 0;  // weighted analyst mean-target NAV
-    double tgt_high  = 0;  // weighted analyst high-target NAV
-    double pe_ratio  = 0;  // weighted trailing P/E
-    double div_yield = 0;  // weighted dividend yield (fraction, e.g. 0.014)
-    QString consensus;     // "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell"
-    bool has_analyst_data = false;  // false until at least one fetch returns
+    double tgt_low = 0;            // weighted analyst low-target NAV
+    double tgt_mean = 0;           // weighted analyst mean-target NAV
+    double tgt_high = 0;           // weighted analyst high-target NAV
+    double pe_ratio = 0;           // weighted trailing P/E
+    double div_yield = 0;          // weighted dividend yield (fraction, e.g. 0.014)
+    QString consensus;             // "Strong Buy" | "Buy" | "Hold" | "Sell" | "Strong Sell"
+    bool has_analyst_data = false; // false until at least one fetch returns
 };
 
 // ── Enums ────────────────────────────────────────────────────────────────────

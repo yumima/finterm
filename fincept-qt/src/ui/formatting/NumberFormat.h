@@ -1,5 +1,6 @@
 #pragma once
 #include "core/util/BarTime.h"
+
 #include <QDateTime>
 #include <QLocale>
 #include <QString>
@@ -81,19 +82,17 @@ inline QString format_compact(double v, int dp = 1) {
     if (a < 1e3)
         return sign + QString::number(static_cast<qint64>(a));
 
-    double  scale  = a >= 1e12 ? 1e12 : a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : 1e3;
-    QString suffix = scale >= 1e12 ? QStringLiteral("T")
-                   : scale >= 1e9  ? QStringLiteral("B")
-                   : scale >= 1e6  ? QStringLiteral("M")
-                                   : QStringLiteral("K");
+    double scale = a >= 1e12 ? 1e12 : a >= 1e9 ? 1e9 : a >= 1e6 ? 1e6 : 1e3;
+    QString suffix = scale >= 1e12  ? QStringLiteral("T")
+                     : scale >= 1e9 ? QStringLiteral("B")
+                     : scale >= 1e6 ? QStringLiteral("M")
+                                    : QStringLiteral("K");
     // Tier-boundary rollover: if rounding the mantissa to `dp` decimals carries
     // it to 1000 (e.g. 999_950 -> "1.0M", not "1000.0K"), step up one tier.
     const double pw = std::pow(10.0, dp);
     if (scale < 1e12 && std::round(a / scale * pw) / pw >= 1000.0) {
         scale *= 1000.0;
-        suffix = scale >= 1e12 ? QStringLiteral("T")
-               : scale >= 1e9  ? QStringLiteral("B")
-                               : QStringLiteral("M");
+        suffix = scale >= 1e12 ? QStringLiteral("T") : scale >= 1e9 ? QStringLiteral("B") : QStringLiteral("M");
     }
     return sign + QString::number(a / scale, 'f', dp) + suffix;
 }
@@ -115,9 +114,8 @@ namespace detail {
 /// (e.g. "CHF 1,234.50") so we never silently mislabel a currency.
 inline QString currency_symbol(const QString& code) {
     const QString c = code.toUpper();
-    if (c == QLatin1String("USD") || c == QLatin1String("AUD") ||
-        c == QLatin1String("CAD") || c == QLatin1String("NZD") ||
-        c == QLatin1String("HKD") || c == QLatin1String("SGD"))
+    if (c == QLatin1String("USD") || c == QLatin1String("AUD") || c == QLatin1String("CAD") ||
+        c == QLatin1String("NZD") || c == QLatin1String("HKD") || c == QLatin1String("SGD"))
         return QStringLiteral("$");
     if (c == QLatin1String("EUR"))
         return QStringLiteral("€");
@@ -125,8 +123,7 @@ inline QString currency_symbol(const QString& code) {
         return QStringLiteral("£");
     if (c == QLatin1String("INR"))
         return QStringLiteral("₹");
-    if (c == QLatin1String("JPY") || c == QLatin1String("CNY") ||
-        c == QLatin1String("RMB"))
+    if (c == QLatin1String("JPY") || c == QLatin1String("CNY") || c == QLatin1String("RMB"))
         return QStringLiteral("¥");
     if (c == QLatin1String("KRW"))
         return QStringLiteral("₩");
@@ -148,8 +145,7 @@ inline QString currency_symbol(const QString& code) {
 ///
 /// `currency` is an ISO-ish code resolved via the symbol map; unknown codes fall
 /// back to "<CODE> ". NaN/inf yield placeholder(). Zero renders as "$0.00".
-inline QString format_money(double v, const QString& currency = QStringLiteral("USD"),
-                            bool compact = false) {
+inline QString format_money(double v, const QString& currency = QStringLiteral("USD"), bool compact = false) {
     if (!std::isfinite(v))
         return placeholder();
     const QString sym = detail::currency_symbol(currency);
@@ -182,11 +178,11 @@ inline QString format_percent(double v, int dp = 2, bool with_sign = false) {
 
 /// Standard date / datetime renderings so screens stop each picking their own.
 enum class DateStyle {
-    Date,         ///< "2026-06-16"            (ISO date)
-    DateTime,     ///< "2026-06-16 14:05"      (ISO date + 24h HH:mm)
-    DateTimeSec,  ///< "2026-06-16 14:05:09"
-    Time,         ///< "14:05"
-    Compact,      ///< "16 Jun 26"             (compact human date)
+    Date,        ///< "2026-06-16"            (ISO date)
+    DateTime,    ///< "2026-06-16 14:05"      (ISO date + 24h HH:mm)
+    DateTimeSec, ///< "2026-06-16 14:05:09"
+    Time,        ///< "14:05"
+    Compact,     ///< "16 Jun 26"             (compact human date)
 };
 
 /// Render a QDateTime in one of the standard styles. Invalid/null datetimes
@@ -196,16 +192,16 @@ inline QString format_datetime(const QDateTime& dt, DateStyle style = DateStyle:
     if (!dt.isValid())
         return placeholder();
     switch (style) {
-    case DateStyle::Date:
-        return dt.toString(QStringLiteral("yyyy-MM-dd"));
-    case DateStyle::DateTime:
-        return dt.toString(QStringLiteral("yyyy-MM-dd HH:mm"));
-    case DateStyle::DateTimeSec:
-        return dt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
-    case DateStyle::Time:
-        return dt.toString(QStringLiteral("HH:mm"));
-    case DateStyle::Compact:
-        return dt.toString(QStringLiteral("dd MMM yy"));
+        case DateStyle::Date:
+            return dt.toString(QStringLiteral("yyyy-MM-dd"));
+        case DateStyle::DateTime:
+            return dt.toString(QStringLiteral("yyyy-MM-dd HH:mm"));
+        case DateStyle::DateTimeSec:
+            return dt.toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
+        case DateStyle::Time:
+            return dt.toString(QStringLiteral("HH:mm"));
+        case DateStyle::Compact:
+            return dt.toString(QStringLiteral("dd MMM yy"));
     }
     return placeholder();
 }

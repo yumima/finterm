@@ -64,7 +64,7 @@ QJsonObject quote_to_json(const services::equity::QuoteData& q) {
     // (datetime.now() in yfinance_data.py), not the exchange's last-trade
     // time — labelled as such so a model never reports it as the market time.
     // The daemon does not supply the market time, so none is claimed.
-    const QString fetched_iso =  // EVENT-STAMP: quote fetch instant, reported as ISO UTC
+    const QString fetched_iso = // EVENT-STAMP: quote fetch instant, reported as ISO UTC
         q.timestamp > 0 ? QDateTime::fromSecsSinceEpoch(q.timestamp).toUTC().toString(Qt::ISODate) : QString();
     return QJsonObject{
         {"symbol", q.symbol},
@@ -122,7 +122,7 @@ QJsonObject info_to_json(const services::equity::StockInfo& i) {
         {"revenue_growth", i.revenue_growth},
         {"shares_outstanding", i.shares_outstanding},
         {"float_shares", i.float_shares},
-        {"held_insiders_pct", fraction_to_pct(i.held_insiders_pct)}, // percent (0-100)
+        {"held_insiders_pct", fraction_to_pct(i.held_insiders_pct)},         // percent (0-100)
         {"held_institutions_pct", fraction_to_pct(i.held_institutions_pct)}, // percent (0-100)
         {"short_ratio", i.short_ratio},
         {"short_pct_of_float", fraction_to_pct(i.short_pct_of_float)}, // percent (0-100)
@@ -141,9 +141,8 @@ QJsonObject info_to_json(const services::equity::StockInfo& i) {
         // would contradict the tab for the same stock. The scale travels with
         // the value rather than living only in a tooltip a model never sees.
         {"recommendation_mean", i.recommendation_mean},
-        {"recommendation_mean_scale",
-         QStringLiteral("1=strong buy … 5=strong sell (vendor orientation; the "
-                        "Overview panel shows 6 minus this, so that 5=strong buy)")},
+        {"recommendation_mean_scale", QStringLiteral("1=strong buy … 5=strong sell (vendor orientation; the "
+                                                     "Overview panel shows 6 minus this, so that 5=strong buy)")},
         {"recommendation_key", i.recommendation_key},
         {"analyst_count", i.analyst_count},
     };
@@ -174,11 +173,16 @@ QJsonArray financials_section_to_json(const QVector<QPair<QString, QJsonObject>>
 const char* tech_signal_str(services::equity::TechSignal s) {
     using TS = services::equity::TechSignal;
     switch (s) {
-        case TS::StrongBuy:  return "strong_buy";
-        case TS::Buy:        return "buy";
-        case TS::Neutral:    return "neutral";
-        case TS::Sell:       return "sell";
-        case TS::StrongSell: return "strong_sell";
+        case TS::StrongBuy:
+            return "strong_buy";
+        case TS::Buy:
+            return "buy";
+        case TS::Neutral:
+            return "neutral";
+        case TS::Sell:
+            return "sell";
+        case TS::StrongSell:
+            return "strong_sell";
     }
     return "neutral";
 }
@@ -280,44 +284,77 @@ QJsonArray news_to_json(const QVector<services::equity::NewsArticle>& xs) {
 
 // Hand-curated talipp catalogue mirrored from EquityTalippTab::categories().
 // Kept in this TU to avoid pulling the UI header into the tools layer.
-struct TalippEntry { const char* id; const char* label; const char* data_type; const char* category; };
+struct TalippEntry {
+    const char* id;
+    const char* label;
+    const char* data_type;
+    const char* category;
+};
 static const TalippEntry kTalipp[] = {
     // trend
-    {"sma","SMA","prices","trend"}, {"ema","EMA","prices","trend"}, {"wma","WMA","prices","trend"},
-    {"dema","DEMA","prices","trend"}, {"tema","TEMA","prices","trend"}, {"hma","HMA","prices","trend"},
-    {"kama","KAMA","prices","trend"}, {"alma","ALMA","prices","trend"}, {"t3","T3","prices","trend"},
-    {"zlema","ZLEMA","prices","trend"},
+    {"sma", "SMA", "prices", "trend"},
+    {"ema", "EMA", "prices", "trend"},
+    {"wma", "WMA", "prices", "trend"},
+    {"dema", "DEMA", "prices", "trend"},
+    {"tema", "TEMA", "prices", "trend"},
+    {"hma", "HMA", "prices", "trend"},
+    {"kama", "KAMA", "prices", "trend"},
+    {"alma", "ALMA", "prices", "trend"},
+    {"t3", "T3", "prices", "trend"},
+    {"zlema", "ZLEMA", "prices", "trend"},
     // trend advanced
-    {"adx","ADX","ohlcv","trend_advanced"}, {"aroon","Aroon","ohlcv","trend_advanced"},
-    {"ichimoku","Ichimoku","ohlcv","trend_advanced"}, {"parabolic_sar","Parabolic SAR","ohlcv","trend_advanced"},
-    {"supertrend","SuperTrend","ohlcv","trend_advanced"},
+    {"adx", "ADX", "ohlcv", "trend_advanced"},
+    {"aroon", "Aroon", "ohlcv", "trend_advanced"},
+    {"ichimoku", "Ichimoku", "ohlcv", "trend_advanced"},
+    {"parabolic_sar", "Parabolic SAR", "ohlcv", "trend_advanced"},
+    {"supertrend", "SuperTrend", "ohlcv", "trend_advanced"},
     // momentum
-    {"rsi","RSI","prices","momentum"}, {"macd","MACD","prices","momentum"},
-    {"stoch","Stochastic","ohlcv","momentum"}, {"stoch_rsi","StochRSI","prices","momentum"},
-    {"cci","CCI","ohlcv","momentum"}, {"roc","ROC","prices","momentum"},
-    {"tsi","TSI","prices","momentum"}, {"williams","Williams %R","ohlcv","momentum"},
+    {"rsi", "RSI", "prices", "momentum"},
+    {"macd", "MACD", "prices", "momentum"},
+    {"stoch", "Stochastic", "ohlcv", "momentum"},
+    {"stoch_rsi", "StochRSI", "prices", "momentum"},
+    {"cci", "CCI", "ohlcv", "momentum"},
+    {"roc", "ROC", "prices", "momentum"},
+    {"tsi", "TSI", "prices", "momentum"},
+    {"williams", "Williams %R", "ohlcv", "momentum"},
     // volatility
-    {"atr","ATR","ohlcv","volatility"}, {"bb","Bollinger Bands","prices","volatility"},
-    {"keltner","Keltner Channels","ohlcv","volatility"}, {"donchian","Donchian Channels","ohlcv","volatility"},
-    {"chandelier_stop","Chandelier Stop","ohlcv","volatility"}, {"natr","NATR","ohlcv","volatility"},
+    {"atr", "ATR", "ohlcv", "volatility"},
+    {"bb", "Bollinger Bands", "prices", "volatility"},
+    {"keltner", "Keltner Channels", "ohlcv", "volatility"},
+    {"donchian", "Donchian Channels", "ohlcv", "volatility"},
+    {"chandelier_stop", "Chandelier Stop", "ohlcv", "volatility"},
+    {"natr", "NATR", "ohlcv", "volatility"},
     // volume
-    {"obv","OBV","ohlcv","volume"}, {"vwap","VWAP","ohlcv","volume"},
-    {"vwma","VWMA","ohlcv","volume"}, {"mfi","MFI","ohlcv","volume"},
-    {"chaikin_osc","Chaikin Osc","ohlcv","volume"}, {"force_index","Force Index","ohlcv","volume"},
+    {"obv", "OBV", "ohlcv", "volume"},
+    {"vwap", "VWAP", "ohlcv", "volume"},
+    {"vwma", "VWMA", "ohlcv", "volume"},
+    {"mfi", "MFI", "ohlcv", "volume"},
+    {"chaikin_osc", "Chaikin Osc", "ohlcv", "volume"},
+    {"force_index", "Force Index", "ohlcv", "volume"},
     // specialized
-    {"ao","Awesome Osc","ohlcv","specialized"}, {"accu_dist","Accum/Dist","ohlcv","specialized"},
-    {"bop","Balance of Pwr","ohlcv","specialized"}, {"chop","CHOP","ohlcv","specialized"},
-    {"coppock_curve","Coppock Curve","prices","specialized"}, {"dpo","DPO","prices","specialized"},
-    {"emv","EMV","ohlcv","specialized"}, {"ibs","IBS","ohlcv","specialized"},
-    {"kst","KST","prices","specialized"}, {"kvo","KVO","ohlcv","specialized"},
-    {"mass_index","Mass Index","ohlcv","specialized"}, {"mcginley","McGinley","prices","specialized"},
-    {"mean_dev","Mean Dev","prices","specialized"}, {"smma","SMMA","prices","specialized"},
-    {"sobv","Smoothed OBV","ohlcv","specialized"}, {"stc","STC","prices","specialized"},
-    {"std_dev","Std Dev","prices","specialized"}, {"trix","TRIX","prices","specialized"},
-    {"ttm","TTM Squeeze","ohlcv","specialized"}, {"uo","Ultimate Osc","ohlcv","specialized"},
-    {"vtx","Vortex","ohlcv","specialized"}, {"zigzag","ZigZag","ohlcv","specialized"},
+    {"ao", "Awesome Osc", "ohlcv", "specialized"},
+    {"accu_dist", "Accum/Dist", "ohlcv", "specialized"},
+    {"bop", "Balance of Pwr", "ohlcv", "specialized"},
+    {"chop", "CHOP", "ohlcv", "specialized"},
+    {"coppock_curve", "Coppock Curve", "prices", "specialized"},
+    {"dpo", "DPO", "prices", "specialized"},
+    {"emv", "EMV", "ohlcv", "specialized"},
+    {"ibs", "IBS", "ohlcv", "specialized"},
+    {"kst", "KST", "prices", "specialized"},
+    {"kvo", "KVO", "ohlcv", "specialized"},
+    {"mass_index", "Mass Index", "ohlcv", "specialized"},
+    {"mcginley", "McGinley", "prices", "specialized"},
+    {"mean_dev", "Mean Dev", "prices", "specialized"},
+    {"smma", "SMMA", "prices", "specialized"},
+    {"sobv", "Smoothed OBV", "ohlcv", "specialized"},
+    {"stc", "STC", "prices", "specialized"},
+    {"std_dev", "Std Dev", "prices", "specialized"},
+    {"trix", "TRIX", "prices", "specialized"},
+    {"ttm", "TTM Squeeze", "ohlcv", "specialized"},
+    {"uo", "Ultimate Osc", "ohlcv", "specialized"},
+    {"vtx", "Vortex", "ohlcv", "specialized"},
+    {"zigzag", "ZigZag", "ohlcv", "specialized"},
 };
-
 
 /// The ER Earnings tab's outlook as JSON. Absent values are omitted rather
 /// than zeroed — "no options data" and "options price no move" differ.
@@ -325,11 +362,15 @@ QJsonObject earnings_outlook_to_json(const services::equity::EarningsAnalysis& a
     using namespace services::equity;
     const EarningsOutlook o = evaluate_outlook(a);
     auto put = [](QJsonObject& obj, const char* k, const std::optional<double>& v) {
-        if (v.has_value()) obj[QLatin1String(k)] = *v;
+        if (v.has_value())
+            obj[QLatin1String(k)] = *v;
     };
-    QJsonObject out{{"symbol", a.symbol}, {"has_earnings", o.valid}, {"headline", o.headline},
+    QJsonObject out{{"symbol", a.symbol},
+                    {"has_earnings", o.valid},
+                    {"headline", o.headline},
                     {"direction_call", "none — not predictable from pre-print data"}};
-    if (!o.valid) return out;
+    if (!o.valid)
+        return out;
     QJsonObject next;
     if (a.next.timestamp) {
         next["timestamp"] = static_cast<qint64>(*a.next.timestamp);
@@ -368,10 +409,13 @@ QJsonObject earnings_outlook_to_json(const services::equity::EarningsAnalysis& a
 
     QJsonArray scen;
     for (const auto& sc : o.scenarios) {
-        QJsonObject j{{"outcome", sc.label}, {"eps_vs_consensus", sc.range},
-                      {"probability", sc.probability}, {"move_multiple_of_expected", sc.move_multiple},
+        QJsonObject j{{"outcome", sc.label},
+                      {"eps_vs_consensus", sc.range},
+                      {"probability", sc.probability},
+                      {"move_multiple_of_expected", sc.move_multiple},
                       {"pooled_rise_rate", sc.up_rate}};
-        if (o.expected_move_pct) j["typical_move_pct"] = sc.typical_move_pct;
+        if (o.expected_move_pct)
+            j["typical_move_pct"] = sc.typical_move_pct;
         scen.append(j);
     }
     out["if_eps_lands"] = scen;
@@ -392,44 +436,39 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.description = "Search for tradable equity symbols matching a query (ticker, name, fragment).";
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
-        t.input_schema = ToolSchemaBuilder()
-            .string("query", "Search query").required().length(1, 128)
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+        t.input_schema = ToolSchemaBuilder().string("query", "Search query").required().length(1, 128).build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString q = args["query"].toString();
             auto* svc = &services::equity::EquityResearchService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, q](auto resolve) {
-                    // search_symbols_for ignores a blank query (no callback):
-                    // answer it here rather than hang the tool call.
-                    if (q.trimmed().isEmpty()) {
-                        resolve(ToolResult::fail(QStringLiteral("empty query")));
-                        return;
-                    }
-                    // Answered to this call alone (search_symbols_for), so
-                    // another caller's search can't resolve or fail it.
-                    svc->search_symbols_for(q, [resolve](QString, QVector<services::equity::SearchResult> rs,
-                                                         QString error) {
-                        if (!error.isEmpty()) {
-                            resolve(ToolResult::fail(error));
-                            return;
-                        }
-                        QJsonArray arr;
-                        for (const auto& r : rs) {
-                            arr.append(QJsonObject{
-                                {"symbol", r.symbol},
-                                {"name", r.name},
-                                {"exchange", r.exchange},
-                                {"type", r.type},
-                                {"currency", r.currency},
-                                {"industry", r.industry},
-                            });
-                        }
-                        resolve(ToolResult::ok_data(arr));
-                    });
-                });
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, q](auto resolve) {
+                // search_symbols_for ignores a blank query (no callback):
+                // answer it here rather than hang the tool call.
+                if (q.trimmed().isEmpty()) {
+                    resolve(ToolResult::fail(QStringLiteral("empty query")));
+                    return;
+                }
+                // Answered to this call alone (search_symbols_for), so
+                // another caller's search can't resolve or fail it.
+                svc->search_symbols_for(q,
+                                        [resolve](QString, QVector<services::equity::SearchResult> rs, QString error) {
+                                            if (!error.isEmpty()) {
+                                                resolve(ToolResult::fail(error));
+                                                return;
+                                            }
+                                            QJsonArray arr;
+                                            for (const auto& r : rs) {
+                                                arr.append(QJsonObject{
+                                                    {"symbol", r.symbol},
+                                                    {"name", r.name},
+                                                    {"exchange", r.exchange},
+                                                    {"type", r.type},
+                                                    {"currency", r.currency},
+                                                    {"industry", r.industry},
+                                                });
+                                            }
+                                            resolve(ToolResult::ok_data(arr));
+                                        });
+            });
         };
         tools.push_back(std::move(t));
     }
@@ -445,73 +484,78 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
-            .string("symbol", "Ticker symbol (e.g. AAPL)").required().length(1, 32)
-            .string("period", "Historical period (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, max)")
-                .default_str("1y").length(1, 8)
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             .string("symbol", "Ticker symbol (e.g. AAPL)")
+                             .required()
+                             .length(1, 32)
+                             .string("period", "Historical period (1d, 5d, 1mo, 3mo, 6mo, 1y, 2y, 5y, max)")
+                             .default_str("1y")
+                             .length(1, 8)
+                             .build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString().toUpper();
             const QString period = args["period"].toString("1y");
             auto* svc = &services::equity::EquityResearchService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, sym, period](auto resolve) {
-                    struct State {
-                        QJsonObject quote;
-                        QJsonObject info;
-                        QJsonArray candles;
-                        bool got_quote = false;
-                        bool got_info = false;
-                        bool got_hist = false;
-                    };
-                    auto state = std::make_shared<State>();
-                    auto* holder = new QObject(svc);
-                    auto try_finish = [resolve, holder, state, sym]() {
-                        if (state->got_quote && state->got_info && state->got_hist) {
-                            resolve(ToolResult::ok_data(QJsonObject{
-                                {"symbol", sym},
-                                {"quote", state->quote},
-                                {"info", state->info},
-                                {"historical", state->candles},
-                            }));
-                            holder->deleteLater();
-                        }
-                    };
-                    QObject::connect(svc, &services::equity::EquityResearchService::quote_loaded, holder,
-                                      [sym, state, try_finish](services::equity::QuoteData q) {
-                                          if (q.symbol.toUpper() != sym) return;
-                                          state->quote = quote_to_json(q);
-                                          state->got_quote = true;
-                                          try_finish();
-                                      });
-                    QObject::connect(svc, &services::equity::EquityResearchService::info_loaded, holder,
-                                      [sym, state, try_finish](services::equity::StockInfo i) {
-                                          if (i.symbol.toUpper() != sym) return;
-                                          state->info = info_to_json(i);
-                                          state->got_info = true;
-                                          try_finish();
-                                      });
-                    QObject::connect(svc, &services::equity::EquityResearchService::historical_loaded, holder,
-                                      [sym, period, state, try_finish](QString s, QString p, QVector<services::equity::Candle> cs) {
-                                          // A refresh-timer reload of the default period must not
-                                          // stand in for the period this call asked for.
-                                          if (s.toUpper() != sym || p != period) return;
-                                          state->candles = candles_to_json(cs);
-                                          state->got_hist = true;
-                                          try_finish();
-                                      });
-                    QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [sym, resolve, holder](QString s, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). The service
-                                          // is shared, so an error for ANOTHER symbol (the user's own
-                                          // tab, a concurrent tool call) must not fail this call.
-                                          if (!s.isEmpty() && s.toUpper() != sym) return;
-                                          resolve(ToolResult::fail(msg));
-                                          holder->deleteLater();
-                                      });
-                    svc->load_symbol(sym, period);
-                });
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, sym, period](auto resolve) {
+                struct State {
+                    QJsonObject quote;
+                    QJsonObject info;
+                    QJsonArray candles;
+                    bool got_quote = false;
+                    bool got_info = false;
+                    bool got_hist = false;
+                };
+                auto state = std::make_shared<State>();
+                auto* holder = new QObject(svc);
+                auto try_finish = [resolve, holder, state, sym]() {
+                    if (state->got_quote && state->got_info && state->got_hist) {
+                        resolve(ToolResult::ok_data(QJsonObject{
+                            {"symbol", sym},
+                            {"quote", state->quote},
+                            {"info", state->info},
+                            {"historical", state->candles},
+                        }));
+                        holder->deleteLater();
+                    }
+                };
+                QObject::connect(svc, &services::equity::EquityResearchService::quote_loaded, holder,
+                                 [sym, state, try_finish](services::equity::QuoteData q) {
+                                     if (q.symbol.toUpper() != sym)
+                                         return;
+                                     state->quote = quote_to_json(q);
+                                     state->got_quote = true;
+                                     try_finish();
+                                 });
+                QObject::connect(svc, &services::equity::EquityResearchService::info_loaded, holder,
+                                 [sym, state, try_finish](services::equity::StockInfo i) {
+                                     if (i.symbol.toUpper() != sym)
+                                         return;
+                                     state->info = info_to_json(i);
+                                     state->got_info = true;
+                                     try_finish();
+                                 });
+                QObject::connect(
+                    svc, &services::equity::EquityResearchService::historical_loaded, holder,
+                    [sym, period, state, try_finish](QString s, QString p, QVector<services::equity::Candle> cs) {
+                        // A refresh-timer reload of the default period must not
+                        // stand in for the period this call asked for.
+                        if (s.toUpper() != sym || p != period)
+                            return;
+                        state->candles = candles_to_json(cs);
+                        state->got_hist = true;
+                        try_finish();
+                    });
+                QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
+                                 [sym, resolve, holder](QString s, QString, QString msg) {
+                                     // finterm's signal: (symbol, context, message). The service
+                                     // is shared, so an error for ANOTHER symbol (the user's own
+                                     // tab, a concurrent tool call) must not fail this call.
+                                     if (!s.isEmpty() && s.toUpper() != sym)
+                                         return;
+                                     resolve(ToolResult::fail(msg));
+                                     holder->deleteLater();
+                                 });
+                svc->load_symbol(sym, period);
+            });
         };
         tools.push_back(std::move(t));
     }
@@ -525,71 +569,80 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
-            .string("symbol", "Ticker symbol").required().length(1, 32)
-            .string("period", "Historical period (only used for historical)").default_str("1y").length(1, 8)
-            .build();
+                             .string("symbol", "Ticker symbol")
+                             .required()
+                             .length(1, 32)
+                             .string("period", "Historical period (only used for historical)")
+                             .default_str("1y")
+                             .length(1, 8)
+                             .build();
         t.async_handler = [which](const QJsonObject& args, ToolContext ctx,
-                                   std::shared_ptr<QPromise<ToolResult>> promise) {
+                                  std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString().toUpper();
             const QString period = args["period"].toString("1y");
             auto* svc = &services::equity::EquityResearchService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, sym, period, which](auto resolve) {
-                    auto* holder = new QObject(svc);
-                    if (which == 'q') {
-                        QObject::connect(svc, &services::equity::EquityResearchService::quote_loaded, holder,
-                                          [sym, resolve, holder](services::equity::QuoteData q) {
-                                              if (q.symbol.toUpper() != sym) return;
-                                              resolve(ToolResult::ok_data(quote_to_json(q)));
-                                              holder->deleteLater();
-                                          });
-                    } else if (which == 'i') {
-                        QObject::connect(svc, &services::equity::EquityResearchService::info_loaded, holder,
-                                          [sym, resolve, holder](services::equity::StockInfo i) {
-                                              if (i.symbol.toUpper() != sym) return;
-                                              resolve(ToolResult::ok_data(info_to_json(i)));
-                                              holder->deleteLater();
-                                          });
-                    } else { // 'h'
-                        QObject::connect(svc, &services::equity::EquityResearchService::historical_loaded, holder,
-                                          [sym, period, resolve, holder](QString s, QString p, QVector<services::equity::Candle> cs) {
-                                              if (s.toUpper() != sym || p != period) return;
-                                              resolve(ToolResult::ok_data(QJsonObject{
-                                                  {"symbol", s},
-                                                  {"period", p},
-                                                  {"candles", candles_to_json(cs)},
-                                                  {"count", static_cast<int>(cs.size())},
-                                              }));
-                                              holder->deleteLater();
-                                          });
-                    }
-                    QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [sym, resolve, holder](QString s, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). The service
-                                          // is shared, so an error for ANOTHER symbol (the user's own
-                                          // tab, a concurrent tool call) must not fail this call.
-                                          if (!s.isEmpty() && s.toUpper() != sym) return;
-                                          resolve(ToolResult::fail(msg));
-                                          holder->deleteLater();
-                                      });
-                    svc->load_symbol(sym, period);
-                });
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, sym, period, which](auto resolve) {
+                auto* holder = new QObject(svc);
+                if (which == 'q') {
+                    QObject::connect(svc, &services::equity::EquityResearchService::quote_loaded, holder,
+                                     [sym, resolve, holder](services::equity::QuoteData q) {
+                                         if (q.symbol.toUpper() != sym)
+                                             return;
+                                         resolve(ToolResult::ok_data(quote_to_json(q)));
+                                         holder->deleteLater();
+                                     });
+                } else if (which == 'i') {
+                    QObject::connect(svc, &services::equity::EquityResearchService::info_loaded, holder,
+                                     [sym, resolve, holder](services::equity::StockInfo i) {
+                                         if (i.symbol.toUpper() != sym)
+                                             return;
+                                         resolve(ToolResult::ok_data(info_to_json(i)));
+                                         holder->deleteLater();
+                                     });
+                } else { // 'h'
+                    QObject::connect(
+                        svc, &services::equity::EquityResearchService::historical_loaded, holder,
+                        [sym, period, resolve, holder](QString s, QString p, QVector<services::equity::Candle> cs) {
+                            if (s.toUpper() != sym || p != period)
+                                return;
+                            resolve(ToolResult::ok_data(QJsonObject{
+                                {"symbol", s},
+                                {"period", p},
+                                {"candles", candles_to_json(cs)},
+                                {"count", static_cast<int>(cs.size())},
+                            }));
+                            holder->deleteLater();
+                        });
+                }
+                QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
+                                 [sym, resolve, holder](QString s, QString, QString msg) {
+                                     // finterm's signal: (symbol, context, message). The service
+                                     // is shared, so an error for ANOTHER symbol (the user's own
+                                     // tab, a concurrent tool call) must not fail this call.
+                                     if (!s.isEmpty() && s.toUpper() != sym)
+                                         return;
+                                     resolve(ToolResult::fail(msg));
+                                     holder->deleteLater();
+                                 });
+                svc->load_symbol(sym, period);
+            });
         };
         return t;
     };
 
     // ── 3-5. get_equity_quote / get_equity_info / get_equity_historical ─
     tools.push_back(make_single("get_equity_quote",
-                                  "Get current quote (price/change/volume) for a symbol. fetched_at is when "
-                                  "finterm fetched it, not the exchange's last-trade time.", 'q'));
+                                "Get current quote (price/change/volume) for a symbol. fetched_at is when "
+                                "finterm fetched it, not the exchange's last-trade time.",
+                                'q'));
     tools.push_back(make_single("get_equity_info",
-                                  "Get full company info + valuation + analyst targets for a symbol. Units: "
-                                  "held_insiders_pct, held_institutions_pct and short_pct_of_float are "
-                                  "percents (0-100); *_margins, roe, roa, revenue_growth and "
-                                  "earnings_growth are vendor fractions (0.25 = 25%). null = not supplied.", 'i'));
-    tools.push_back(make_single("get_equity_historical",
-                                  "Get OHLCV historical candles for a symbol over a period.", 'h'));
+                                "Get full company info + valuation + analyst targets for a symbol. Units: "
+                                "held_insiders_pct, held_institutions_pct and short_pct_of_float are "
+                                "percents (0-100); *_margins, roe, roa, revenue_growth and "
+                                "earnings_growth are vendor fractions (0.25 = 25%). null = not supplied.",
+                                'i'));
+    tools.push_back(
+        make_single("get_equity_historical", "Get OHLCV historical candles for a symbol over a period.", 'h'));
 
     // ── 6. get_equity_financials ────────────────────────────────────────
     {
@@ -602,48 +655,45 @@ std::vector<ToolDef> get_equity_research_tools() {
                         "reported quarters (zero when fewer than four are available).";
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
-        t.input_schema = ToolSchemaBuilder()
-            .string("symbol", "Ticker symbol").required().length(1, 32)
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+        t.input_schema = ToolSchemaBuilder().string("symbol", "Ticker symbol").required().length(1, 32).build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString().toUpper();
             auto* svc = &services::equity::EquityResearchService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, sym](auto resolve) {
-                    auto* holder = new QObject(svc);
-                    QObject::connect(svc, &services::equity::EquityResearchService::financials_loaded, holder,
-                                      [sym, resolve, holder](services::equity::FinancialsData f) {
-                                          if (f.symbol.toUpper() != sym) return;
-                                          resolve(ToolResult::ok_data(QJsonObject{
-                                              {"symbol", f.symbol},
-                                              // Name the basis in the payload, not just the
-                                              // description: an agent reading these columns
-                                              // has no other way to tell years from quarters.
-                                              {"basis", "annual"},
-                                              {"income_statement", financials_section_to_json(f.income_statement)},
-                                              {"balance_sheet", financials_section_to_json(f.balance_sheet)},
-                                              {"cash_flow", financials_section_to_json(f.cash_flow)},
-                                              {"ttm_revenue", f.ttm_revenue},
-                                              {"ttm_net_income", f.ttm_net_income},
-                                              {"ttm_operating_income", f.ttm_operating_income},
-                                              {"ttm_ebitda", f.ttm_ebitda},
-                                              {"ttm_period", f.ttm_period},
-                                          }));
-                                          holder->deleteLater();
-                                      });
-                    QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [sym, resolve, holder](QString s, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). The service
-                                          // is shared, so an error for ANOTHER symbol (the user's own
-                                          // tab, a concurrent tool call) must not fail this call.
-                                          if (!s.isEmpty() && s.toUpper() != sym) return;
-                                          resolve(ToolResult::fail(msg));
-                                          holder->deleteLater();
-                                      });
-                    svc->fetch_financials(sym);
-                });
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, sym](auto resolve) {
+                auto* holder = new QObject(svc);
+                QObject::connect(svc, &services::equity::EquityResearchService::financials_loaded, holder,
+                                 [sym, resolve, holder](services::equity::FinancialsData f) {
+                                     if (f.symbol.toUpper() != sym)
+                                         return;
+                                     resolve(ToolResult::ok_data(QJsonObject{
+                                         {"symbol", f.symbol},
+                                         // Name the basis in the payload, not just the
+                                         // description: an agent reading these columns
+                                         // has no other way to tell years from quarters.
+                                         {"basis", "annual"},
+                                         {"income_statement", financials_section_to_json(f.income_statement)},
+                                         {"balance_sheet", financials_section_to_json(f.balance_sheet)},
+                                         {"cash_flow", financials_section_to_json(f.cash_flow)},
+                                         {"ttm_revenue", f.ttm_revenue},
+                                         {"ttm_net_income", f.ttm_net_income},
+                                         {"ttm_operating_income", f.ttm_operating_income},
+                                         {"ttm_ebitda", f.ttm_ebitda},
+                                         {"ttm_period", f.ttm_period},
+                                     }));
+                                     holder->deleteLater();
+                                 });
+                QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
+                                 [sym, resolve, holder](QString s, QString, QString msg) {
+                                     // finterm's signal: (symbol, context, message). The service
+                                     // is shared, so an error for ANOTHER symbol (the user's own
+                                     // tab, a concurrent tool call) must not fail this call.
+                                     if (!s.isEmpty() && s.toUpper() != sym)
+                                         return;
+                                     resolve(ToolResult::fail(msg));
+                                     holder->deleteLater();
+                                 });
+                svc->fetch_financials(sym);
+            });
         };
         tools.push_back(std::move(t));
     }
@@ -652,61 +702,60 @@ std::vector<ToolDef> get_equity_research_tools() {
     {
         ToolDef t;
         t.name = "get_equity_technicals";
-        t.description =
-            "Technical indicators (trend/momentum/volatility/volume) and the overall trend they "
-            "describe. This is a description of price action that has already happened, not a "
-            "forecast and not a trade recommendation: measured over 178 large caps and twelve "
-            "years, it agrees with the trend already in place ~96% of the time and with the "
-            "direction of the next 40 days ~53% \xe2\x80\x94 no better than chance. Treat the "
-            "signal values as a description of price action "
-            "that has already happened; do not present them to a user as trade advice.";
+        t.description = "Technical indicators (trend/momentum/volatility/volume) and the overall trend they "
+                        "describe. This is a description of price action that has already happened, not a "
+                        "forecast and not a trade recommendation: measured over 178 large caps and twelve "
+                        "years, it agrees with the trend already in place ~96% of the time and with the "
+                        "direction of the next 40 days ~53% \xe2\x80\x94 no better than chance. Treat the "
+                        "signal values as a description of price action "
+                        "that has already happened; do not present them to a user as trade advice.";
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
-        t.input_schema = ToolSchemaBuilder()
-            .string("symbol", "Ticker symbol").required().length(1, 32)
-            .string("period",
-                    "Daily history for the indicator calc. Anything under 2y is raised to 2y so "
-                    "the 50/200-period averages, MACD and ADX are warmed up — without them no "
-                    "rating is produced at all. The window actually used comes back as "
-                    "`period_used`, and since every indicator reads the latest bar with a fixed "
-                    "lookback, all sub-2y requests return the same rating.")
-                .default_str("1y").length(1, 8)
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+        t.input_schema =
+            ToolSchemaBuilder()
+                .string("symbol", "Ticker symbol")
+                .required()
+                .length(1, 32)
+                .string("period", "Daily history for the indicator calc. Anything under 2y is raised to 2y so "
+                                  "the 50/200-period averages, MACD and ADX are warmed up — without them no "
+                                  "rating is produced at all. The window actually used comes back as "
+                                  "`period_used`, and since every indicator reads the latest bar with a fixed "
+                                  "lookback, all sub-2y requests return the same rating.")
+                .default_str("1y")
+                .length(1, 8)
+                .build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString().toUpper();
             const QString period = args["period"].toString("1y");
             auto* svc = &services::equity::EquityResearchService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, sym, period](auto resolve) {
-                    auto* holder = new QObject(svc);
-                    // Match on the full identity, not the symbol alone. The UI
-                    // can have a weekly fetch for the same symbol in flight
-                    // (same floored period), and a symbol-only match would
-                    // resolve this daily request with weekly-bar indicators.
-                    const QString want_period =
-                        services::equity::EquityResearchService::technicals_history_period(
-                            period, QStringLiteral("1d"));
-                    QObject::connect(svc, &services::equity::EquityResearchService::technicals_loaded, holder,
-                                      [sym, want_period, resolve, holder](services::equity::TechnicalsData td) {
-                                          if (td.symbol.toUpper() != sym || td.period != want_period ||
-                                              td.interval != QLatin1String("1d"))
-                                              return;
-                                          resolve(ToolResult::ok_data(technicals_to_json(td)));
-                                          holder->deleteLater();
-                                      });
-                    QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [sym, resolve, holder](QString s, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). The service
-                                          // is shared, so an error for ANOTHER symbol (the user's own
-                                          // tab, a concurrent tool call) must not fail this call.
-                                          if (!s.isEmpty() && s.toUpper() != sym) return;
-                                          resolve(ToolResult::fail(msg));
-                                          holder->deleteLater();
-                                      });
-                    svc->fetch_technicals(sym, period);
-                });
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, sym, period](auto resolve) {
+                auto* holder = new QObject(svc);
+                // Match on the full identity, not the symbol alone. The UI
+                // can have a weekly fetch for the same symbol in flight
+                // (same floored period), and a symbol-only match would
+                // resolve this daily request with weekly-bar indicators.
+                const QString want_period =
+                    services::equity::EquityResearchService::technicals_history_period(period, QStringLiteral("1d"));
+                QObject::connect(svc, &services::equity::EquityResearchService::technicals_loaded, holder,
+                                 [sym, want_period, resolve, holder](services::equity::TechnicalsData td) {
+                                     if (td.symbol.toUpper() != sym || td.period != want_period ||
+                                         td.interval != QLatin1String("1d"))
+                                         return;
+                                     resolve(ToolResult::ok_data(technicals_to_json(td)));
+                                     holder->deleteLater();
+                                 });
+                QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
+                                 [sym, resolve, holder](QString s, QString, QString msg) {
+                                     // finterm's signal: (symbol, context, message). The service
+                                     // is shared, so an error for ANOTHER symbol (the user's own
+                                     // tab, a concurrent tool call) must not fail this call.
+                                     if (!s.isEmpty() && s.toUpper() != sym)
+                                         return;
+                                     resolve(ToolResult::fail(msg));
+                                     holder->deleteLater();
+                                 });
+                svc->fetch_technicals(sym, period);
+            });
         };
         tools.push_back(std::move(t));
     }
@@ -719,39 +768,40 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
-            .string("symbol", "Anchor symbol").required().length(1, 32)
-            .array("peer_symbols", "List of peer ticker symbols", QJsonObject{{"type", "string"}})
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             .string("symbol", "Anchor symbol")
+                             .required()
+                             .length(1, 32)
+                             .array("peer_symbols", "List of peer ticker symbols", QJsonObject{{"type", "string"}})
+                             .build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString().toUpper();
             QStringList peers;
             for (const auto& v : args["peer_symbols"].toArray())
                 peers.append(v.toString().toUpper());
             auto* svc = &services::equity::EquityResearchService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, sym, peers](auto resolve) {
-                    auto* holder = new QObject(svc);
-                    QObject::connect(svc, &services::equity::EquityResearchService::peers_loaded, holder,
-                                      [sym, resolve, holder](QString s, QVector<services::equity::PeerData> ps) {
-                                          // The anchor symbol routes the emission: another caller's
-                                          // peer fetch must not resolve this one with its data.
-                                          if (s.toUpper() != sym) return;
-                                          resolve(ToolResult::ok_data(peers_to_json(ps)));
-                                          holder->deleteLater();
-                                      });
-                    QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [sym, resolve, holder](QString s, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). The service
-                                          // is shared, so an error for ANOTHER symbol (the user's own
-                                          // tab, a concurrent tool call) must not fail this call.
-                                          if (!s.isEmpty() && s.toUpper() != sym) return;
-                                          resolve(ToolResult::fail(msg));
-                                          holder->deleteLater();
-                                      });
-                    svc->fetch_peers(sym, peers);
-                });
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, sym, peers](auto resolve) {
+                auto* holder = new QObject(svc);
+                QObject::connect(svc, &services::equity::EquityResearchService::peers_loaded, holder,
+                                 [sym, resolve, holder](QString s, QVector<services::equity::PeerData> ps) {
+                                     // The anchor symbol routes the emission: another caller's
+                                     // peer fetch must not resolve this one with its data.
+                                     if (s.toUpper() != sym)
+                                         return;
+                                     resolve(ToolResult::ok_data(peers_to_json(ps)));
+                                     holder->deleteLater();
+                                 });
+                QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
+                                 [sym, resolve, holder](QString s, QString, QString msg) {
+                                     // finterm's signal: (symbol, context, message). The service
+                                     // is shared, so an error for ANOTHER symbol (the user's own
+                                     // tab, a concurrent tool call) must not fail this call.
+                                     if (!s.isEmpty() && s.toUpper() != sym)
+                                         return;
+                                     resolve(ToolResult::fail(msg));
+                                     holder->deleteLater();
+                                 });
+                svc->fetch_peers(sym, peers);
+            });
         };
         tools.push_back(std::move(t));
     }
@@ -764,39 +814,42 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
-            .string("symbol", "Ticker symbol").required().length(1, 32)
-            .integer("count", "Max articles").default_int(20).between(1, 100)
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             .string("symbol", "Ticker symbol")
+                             .required()
+                             .length(1, 32)
+                             .integer("count", "Max articles")
+                             .default_int(20)
+                             .between(1, 100)
+                             .build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString().toUpper();
             const int count = args["count"].toInt(20);
             auto* svc = &services::equity::EquityResearchService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, sym, count](auto resolve) {
-                    auto* holder = new QObject(svc);
-                    QObject::connect(svc, &services::equity::EquityResearchService::news_loaded, holder,
-                                      [sym, resolve, holder](QString s, QVector<services::equity::NewsArticle> as) {
-                                          if (s.toUpper() != sym) return;
-                                          resolve(ToolResult::ok_data(QJsonObject{
-                                              {"symbol", s},
-                                              {"articles", news_to_json(as)},
-                                              {"count", static_cast<int>(as.size())},
-                                          }));
-                                          holder->deleteLater();
-                                      });
-                    QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [sym, resolve, holder](QString s, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). The service
-                                          // is shared, so an error for ANOTHER symbol (the user's own
-                                          // tab, a concurrent tool call) must not fail this call.
-                                          if (!s.isEmpty() && s.toUpper() != sym) return;
-                                          resolve(ToolResult::fail(msg));
-                                          holder->deleteLater();
-                                      });
-                    svc->fetch_news(sym, count);
-                });
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, sym, count](auto resolve) {
+                auto* holder = new QObject(svc);
+                QObject::connect(svc, &services::equity::EquityResearchService::news_loaded, holder,
+                                 [sym, resolve, holder](QString s, QVector<services::equity::NewsArticle> as) {
+                                     if (s.toUpper() != sym)
+                                         return;
+                                     resolve(ToolResult::ok_data(QJsonObject{
+                                         {"symbol", s},
+                                         {"articles", news_to_json(as)},
+                                         {"count", static_cast<int>(as.size())},
+                                     }));
+                                     holder->deleteLater();
+                                 });
+                QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
+                                 [sym, resolve, holder](QString s, QString, QString msg) {
+                                     // finterm's signal: (symbol, context, message). The service
+                                     // is shared, so an error for ANOTHER symbol (the user's own
+                                     // tab, a concurrent tool call) must not fail this call.
+                                     if (!s.isEmpty() && s.toUpper() != sym)
+                                         return;
+                                     resolve(ToolResult::fail(msg));
+                                     holder->deleteLater();
+                                 });
+                svc->fetch_news(sym, count);
+            });
         };
         tools.push_back(std::move(t));
     }
@@ -809,13 +862,18 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.category = "equity-research";
         t.default_timeout_ms = kEquityResearchTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
-            .string("symbol", "Ticker symbol").required().length(1, 32)
-            .string("indicator", "Indicator id (use list_equity_talipp_indicators)").required().length(1, 32)
-            .object("params", "Indicator-specific params (e.g. {period: 20})")
-            .string("period", "Historical period").default_str("2y").length(1, 8)
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             .string("symbol", "Ticker symbol")
+                             .required()
+                             .length(1, 32)
+                             .string("indicator", "Indicator id (use list_equity_talipp_indicators)")
+                             .required()
+                             .length(1, 32)
+                             .object("params", "Indicator-specific params (e.g. {period: 20})")
+                             .string("period", "Historical period")
+                             .default_str("2y")
+                             .length(1, 8)
+                             .build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString().toUpper();
             const QString ind = args["indicator"].toString();
             const QJsonObject params = args["params"].toObject();
@@ -828,34 +886,36 @@ std::vector<ToolDef> get_equity_research_tools() {
 
             auto* svc = &services::equity::EquityResearchService::instance();
             AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, sym, ind, pmap, period](auto resolve) {
+                svc, std::move(ctx), promise, [svc, sym, ind, pmap, period](auto resolve) {
                     auto* holder = new QObject(svc);
                     QObject::connect(svc, &services::equity::EquityResearchService::talipp_result, holder,
-                                      [ind, resolve, holder](QString got_ind, QVector<double> vs,
-                                                              QVector<qint64> ts) {
-                                          if (got_ind != ind) return;
-                                          QJsonArray values;
-                                          for (double v : vs) values.append(v);
-                                          QJsonArray timestamps;
-                                          for (qint64 t : ts) timestamps.append(t);
-                                          resolve(ToolResult::ok_data(QJsonObject{
-                                              {"indicator", got_ind},
-                                              {"values", values},
-                                              {"timestamps", timestamps},
-                                              {"count", static_cast<int>(vs.size())},
-                                          }));
-                                          holder->deleteLater();
-                                      });
+                                     [ind, resolve, holder](QString got_ind, QVector<double> vs, QVector<qint64> ts) {
+                                         if (got_ind != ind)
+                                             return;
+                                         QJsonArray values;
+                                         for (double v : vs)
+                                             values.append(v);
+                                         QJsonArray timestamps;
+                                         for (qint64 t : ts)
+                                             timestamps.append(t);
+                                         resolve(ToolResult::ok_data(QJsonObject{
+                                             {"indicator", got_ind},
+                                             {"values", values},
+                                             {"timestamps", timestamps},
+                                             {"count", static_cast<int>(vs.size())},
+                                         }));
+                                         holder->deleteLater();
+                                     });
                     QObject::connect(svc, &services::equity::EquityResearchService::error_occurred, holder,
-                                      [sym, resolve, holder](QString s, QString, QString msg) {
-                                          // finterm's signal: (symbol, context, message). The service
-                                          // is shared, so an error for ANOTHER symbol (the user's own
-                                          // tab, a concurrent tool call) must not fail this call.
-                                          if (!s.isEmpty() && s.toUpper() != sym) return;
-                                          resolve(ToolResult::fail(msg));
-                                          holder->deleteLater();
-                                      });
+                                     [sym, resolve, holder](QString s, QString, QString msg) {
+                                         // finterm's signal: (symbol, context, message). The service
+                                         // is shared, so an error for ANOTHER symbol (the user's own
+                                         // tab, a concurrent tool call) must not fail this call.
+                                         if (!s.isEmpty() && s.toUpper() != sym)
+                                             return;
+                                         resolve(ToolResult::fail(msg));
+                                         holder->deleteLater();
+                                     });
                     svc->compute_talipp(sym, ind, pmap, period);
                 });
         };
@@ -868,10 +928,13 @@ std::vector<ToolDef> get_equity_research_tools() {
         t.name = "list_equity_talipp_indicators";
         t.description = "List all talipp indicators (id, label, category, data_type: 'prices' or 'ohlcv').";
         t.category = "equity-research";
-        t.input_schema = ToolSchemaBuilder()
-            .string("category", "Optional category filter (trend, trend_advanced, momentum, volatility, volume, specialized)")
-                .default_str("").length(0, 32)
-            .build();
+        t.input_schema =
+            ToolSchemaBuilder()
+                .string("category",
+                        "Optional category filter (trend, trend_advanced, momentum, volatility, volume, specialized)")
+                .default_str("")
+                .length(0, 32)
+                .build();
         t.handler = [](const QJsonObject& args) -> ToolResult {
             const QString filter = args["category"].toString();
             QJsonArray arr;
@@ -894,53 +957,51 @@ std::vector<ToolDef> get_equity_research_tools() {
     {
         ToolDef t;
         t.name = "get_equity_earnings_outlook";
-        t.description =
-            "Pre-earnings outlook for a symbol \xe2\x80\x94 the same numbers as the ER Earnings tab. "
-            "Answers three questions: how likely the company is to beat EPS consensus (a "
-            "probability calibrated walk-forward on 9,665 prints), how big the next-session move "
-            "is likely to be (with the ranges that forecast actually achieves, and the "
-            "options-implied move when one can be separated), and what each outcome \xe2\x80\x94 miss, "
-            "slight beat, solid beat, big beat \xe2\x80\x94 has typically meant for the price. It "
-            "deliberately makes NO directional call: nothing available before a print predicts "
-            "the direction better than a coin flip. Do not present the scenarios as a forecast "
-            "of direction, and note they are EPS-only (revenue and guidance also move stocks).";
+        t.description = "Pre-earnings outlook for a symbol \xe2\x80\x94 the same numbers as the ER Earnings tab. "
+                        "Answers three questions: how likely the company is to beat EPS consensus (a "
+                        "probability calibrated walk-forward on 9,665 prints), how big the next-session move "
+                        "is likely to be (with the ranges that forecast actually achieves, and the "
+                        "options-implied move when one can be separated), and what each outcome \xe2\x80\x94 miss, "
+                        "slight beat, solid beat, big beat \xe2\x80\x94 has typically meant for the price. It "
+                        "deliberately makes NO directional call: nothing available before a print predicts "
+                        "the direction better than a coin flip. Do not present the scenarios as a forecast "
+                        "of direction, and note they are EPS-only (revenue and guidance also move stocks).";
         t.category = "equity-research";
         // The daemon allows the earnings fan-out 25 s; leave room above it.
         t.default_timeout_ms = 30000;
-        t.input_schema = ToolSchemaBuilder()
-            .string("symbol", "Ticker symbol").required().length(1, 32)
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+        t.input_schema = ToolSchemaBuilder().string("symbol", "Ticker symbol").required().length(1, 32).build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString sym = args["symbol"].toString().toUpper();
             auto* svc = &services::equity::EquityResearchService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise,
-                [svc, sym](auto resolve) {
-                    auto* holder = new QObject(svc);
-                    auto done = std::make_shared<bool>(false);
-                    // Same cached query the tab reads, so a tool call while the
-                    // tab is open costs nothing and the two can never disagree.
-                    svc->subscribe_earnings_analysis(
-                        holder, sym,
-                        [resolve, holder, done](const services::query::QueryStore::State& s) {
-                            if (*done) return;
-                            const bool have = s.data.isValid() && !s.data.isNull();
-                            if (!have && s.error.isEmpty()) return;   // still loading
-                            *done = true;
-                            if (!have)
-                                resolve(ToolResult::fail(s.error));
-                            else
-                                resolve(ToolResult::ok_data(earnings_outlook_to_json(
-                                    s.data.value<services::equity::EarningsAnalysis>())));
-                            // Off the callback's stack: unsubscribing inside the
-                            // store's own dispatch would mutate what it iterates.
-                            QMetaObject::invokeMethod(holder, [holder]() {
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, sym](auto resolve) {
+                auto* holder = new QObject(svc);
+                auto done = std::make_shared<bool>(false);
+                // Same cached query the tab reads, so a tool call while the
+                // tab is open costs nothing and the two can never disagree.
+                svc->subscribe_earnings_analysis(
+                    holder, sym, [resolve, holder, done](const services::query::QueryStore::State& s) {
+                        if (*done)
+                            return;
+                        const bool have = s.data.isValid() && !s.data.isNull();
+                        if (!have && s.error.isEmpty())
+                            return; // still loading
+                        *done = true;
+                        if (!have)
+                            resolve(ToolResult::fail(s.error));
+                        else
+                            resolve(ToolResult::ok_data(
+                                earnings_outlook_to_json(s.data.value<services::equity::EarningsAnalysis>())));
+                        // Off the callback's stack: unsubscribing inside the
+                        // store's own dispatch would mutate what it iterates.
+                        QMetaObject::invokeMethod(
+                            holder,
+                            [holder]() {
                                 services::query::QueryStore::instance().unsubscribe_all(holder);
                                 holder->deleteLater();
-                            }, Qt::QueuedConnection);
-                        });
-                });
+                            },
+                            Qt::QueuedConnection);
+                    });
+            });
         };
         tools.push_back(std::move(t));
     }

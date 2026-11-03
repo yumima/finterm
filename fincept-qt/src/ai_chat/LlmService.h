@@ -84,8 +84,8 @@ struct ConversationMessage {
 // request falls back to the built-in General persona (ChatPersonas.h) — a
 // deterministic default, not whatever persona some chat surface set last.
 struct PersonaScope {
-    QString prompt;          // resolved persona system prompt
-    QStringList tool_globs;  // resolved persona tool allow-list (globs)
+    QString prompt;         // resolved persona system prompt
+    QStringList tool_globs; // resolved persona tool allow-list (globs)
     bool valid = false;
     // When false, ask a local reasoning model (hearth/Ollama qwen3) to skip its
     // chain-of-thought via the `think:false` request extension — a large latency
@@ -208,8 +208,8 @@ class LlmService : public QObject {
     struct SpeechEndpoint {
         QString url;
         QMap<QString, QString> headers;
-        QJsonObject body;  ///< model/voice/response_format — the caller adds "input"
-        int max_input = 0; ///< engine's input cap in chars (0 = none)
+        QJsonObject body;   ///< model/voice/response_format — the caller adds "input"
+        int max_input = 0;  ///< engine's input cap in chars (0 = none)
         bool local = false; ///< on this machine — free to call speculatively
     };
     std::optional<SpeechEndpoint> speech_endpoint() const;
@@ -217,7 +217,7 @@ class LlmService : public QObject {
     bool tools_enabled() const;
     bool is_configured() const;
 
-/// Build a PersonaScope target for a role, so the call goes wherever that
+    /// Build a PersonaScope target for a role, so the call goes wherever that
     /// role is bound — provider, model, key and base URL together.
     ///
     /// Order:
@@ -379,8 +379,8 @@ class LlmService : public QObject {
     /// LOCAL provider, which has no quota at all and is therefore the floor.
     PersonaScope next_quota_fallback(const PersonaScope& current) const;
 
-    QJsonObject build_gemini_request(bool use_tools, const QString& user_message, const std::vector<ConversationMessage>& history,
-                                     const PersonaScope& persona = {});
+    QJsonObject build_gemini_request(bool use_tools, const QString& user_message,
+                                     const std::vector<ConversationMessage>& history, const PersonaScope& persona = {});
     QJsonObject build_fincept_request(const QString& user_message, const std::vector<ConversationMessage>& history,
                                       bool with_tools);
 

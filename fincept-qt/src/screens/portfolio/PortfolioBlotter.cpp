@@ -2,13 +2,12 @@
 #include "screens/portfolio/PortfolioBlotter.h"
 
 #include "core/events/EventBus.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/portfolio/PortfolioSparkline.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QAction>
 #include <QHeaderView>
@@ -33,7 +32,7 @@ static const QStringList kColumns = {"SYMBOL", "QTY", "LAST", "AVG COST", "MKT V
                                      "P&L",    "L%",  "P%",   "CHG%",     "TREND",   "WT%"};
 
 // Trailing-stop severity thresholds, in percent below the peak.
-static constexpr double kStopWarnPct = 10.0; // ≥10% off the high → amber
+static constexpr double kStopWarnPct = 10.0;   // ≥10% off the high → amber
 static constexpr double kStopDangerPct = 15.0; // ≥15% off the high → red
 
 // Column indices — the sparkline is a cell *widget*, so its column is
@@ -79,21 +78,20 @@ void PortfolioBlotter::build_ui() {
                               // %5 and %6 unused, BG_HOVER never reached the
                               // hover rule — AMBER_DIM did — and the last two
                               // arguments were discarded.
-                              .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
-                                   ui::fonts::DATA_FAMILY, ui::colors::BORDER_DIM(),
-                                   ui::colors::BG_HOVER()));
+                              .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::fonts::DATA_FAMILY,
+                                   ui::colors::BORDER_DIM(), ui::colors::BG_HOVER()));
 
     // Apply the header rule directly on the header widget — the global qApp
     // stylesheet (ThemeManager.cpp) defines QHeaderView::section with
     // text_dim color, and Qt resolves header sub-controls from the header's
     // OWN stylesheet, not the parent QTableWidget's. Setting it on the table
     // is silently overridden, which is why headers stayed dim grey.
-    hdr->setStyleSheet(QString("QHeaderView::section { background:%1; color:%2; border:none;"
-                               "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                               "  padding:5px 8px; font-size:12px; font-weight:700;"
-                               "  letter-spacing:0.5px; }")
-                           .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
-                                ui::colors::AMBER(), ui::colors::BORDER_DIM()));
+    hdr->setStyleSheet(
+        QString("QHeaderView::section { background:%1; color:%2; border:none;"
+                "  border-bottom:2px solid %3; border-right:1px solid %4;"
+                "  padding:5px 8px; font-size:12px; font-weight:700;"
+                "  letter-spacing:0.5px; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::AMBER(), ui::colors::BORDER_DIM()));
 
     connect(hdr, &QHeaderView::sectionClicked, this, &PortfolioBlotter::on_header_clicked);
     connect(table_, &QTableWidget::cellClicked, this, &PortfolioBlotter::on_row_clicked);
@@ -120,7 +118,6 @@ void PortfolioBlotter::fetch_sparklines() {
 
     hub_resubscribe_sparklines();
 }
-
 
 void PortfolioBlotter::repaint_sparkline_cells() {
     for (int r = 0; r < table_->rowCount(); ++r) {
@@ -182,7 +179,6 @@ void PortfolioBlotter::hub_unsubscribe_all() {
     datahub::DataHub::instance().unsubscribe(this);
     hub_active_ = false;
 }
-
 
 void PortfolioBlotter::set_selected_symbol(const QString& symbol) {
     selected_symbol_ = symbol;
@@ -368,9 +364,9 @@ void PortfolioBlotter::populate_table() {
         // and when there is no current price to measure the drop from.
         if (h.peak_price > 0 && h.price_known) {
             const double drop = -h.drawdown_from_peak_percent; // magnitude, >= 0
-            const char* stop_color = drop >= kStopDangerPct  ? ui::colors::NEGATIVE
-                                     : drop >= kStopWarnPct  ? ui::colors::WARNING
-                                                             : ui::colors::TEXT_SECONDARY;
+            const char* stop_color = drop >= kStopDangerPct ? ui::colors::NEGATIVE
+                                     : drop >= kStopWarnPct ? ui::colors::WARNING
+                                                            : ui::colors::TEXT_SECONDARY;
             set_cell(7, QString("%1%").arg(format_value(h.drawdown_from_peak_percent)), stop_color);
         } else {
             set_cell(7, QStringLiteral("—"), ui::colors::TEXT_TERTIARY);
@@ -416,9 +412,7 @@ void PortfolioBlotter::populate_table() {
     // Restore scroll after layout settles. selectRow() above scrolls the
     // selected row into view; this puts the viewport back where the user left
     // it (an immediate set here can be clobbered by the pending relayout).
-    QTimer::singleShot(0, table_, [this, prev_scroll]() {
-        table_->verticalScrollBar()->setValue(prev_scroll);
-    });
+    QTimer::singleShot(0, table_, [this, prev_scroll]() { table_->verticalScrollBar()->setValue(prev_scroll); });
 }
 
 QString PortfolioBlotter::format_value(double v, int dp) const {
@@ -533,18 +527,16 @@ void PortfolioBlotter::refresh_theme() {
                               // %5 and %6 unused, BG_HOVER never reached the
                               // hover rule — AMBER_DIM did — and the last two
                               // arguments were discarded.
-                              .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
-                                   ui::fonts::DATA_FAMILY, ui::colors::BORDER_DIM(),
-                                   ui::colors::BG_HOVER()));
+                              .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::fonts::DATA_FAMILY,
+                                   ui::colors::BORDER_DIM(), ui::colors::BG_HOVER()));
     // See note in build constructor — header rule must live on the header
     // widget itself or the global qApp stylesheet wins.
     table_->horizontalHeader()->setStyleSheet(
         QString("QHeaderView::section { background:%1; color:%2; border:none;"
                 "  border-bottom:2px solid %3; border-right:1px solid %4;"
-                "  padding:5px 8px; font-size:" + hsz +
-                "px; font-weight:700; letter-spacing:0.5px; }")
-            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
-                 ui::colors::AMBER(), ui::colors::BORDER_DIM()));
+                "  padding:5px 8px; font-size:" +
+                hsz + "px; font-weight:700; letter-spacing:0.5px; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::AMBER(), ui::colors::BORDER_DIM()));
     populate_table();
 }
 

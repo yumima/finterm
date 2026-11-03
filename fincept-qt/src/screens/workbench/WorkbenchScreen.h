@@ -41,9 +41,7 @@ class WorkbenchScreen : public QWidget {
 
     // Each section is built lazily as the user lands on the tab.
     // Returns a widget the QStackedWidget owns.
-    QWidget* build_section_placeholder(const QString& name,
-                                       const QString& description,
-                                       const QString& cta_text);
+    QWidget* build_section_placeholder(const QString& name, const QString& description, const QString& cta_text);
     QWidget* build_chat_section();
     QWidget* build_agents_section();
     QWidget* build_teams_section();

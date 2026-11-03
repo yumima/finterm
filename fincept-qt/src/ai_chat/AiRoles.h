@@ -25,9 +25,9 @@
 namespace fincept::ai_chat {
 
 struct AiRole {
-    QString id;     ///< context_type stored in llm_profile_assignments
-    QString label;  ///< shown in Settings → AI Config → Roles
-    QString hint;   ///< one line describing what this role is asked to do
+    QString id;    ///< context_type stored in llm_profile_assignments
+    QString label; ///< shown in Settings → AI Config → Roles
+    QString hint;  ///< one line describing what this role is asked to do
 };
 
 /// Every bindable role, in the order they should appear in the UI.

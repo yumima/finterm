@@ -47,25 +47,22 @@ static Result<void> apply_v023(QSqlDatabase& db) {
 
     // SQLite ALTER TABLE ADD COLUMN is forwards-compatible across the
     // versions we target.  Default '' so existing rows pass NOT NULL.
-    if (auto r = sql(db, "ALTER TABLE llm_profiles ADD COLUMN runtime TEXT NOT NULL DEFAULT ''");
-        r.is_err()) {
+    if (auto r = sql(db, "ALTER TABLE llm_profiles ADD COLUMN runtime TEXT NOT NULL DEFAULT ''"); r.is_err()) {
         // ALTER will fail if the column already exists (re-run).  Skip.
         const std::string& err = r.error();
-        if (err.find("duplicate column") == std::string::npos &&
-            err.find("already exists") == std::string::npos) {
+        if (err.find("duplicate column") == std::string::npos && err.find("already exists") == std::string::npos) {
             return r;
         }
     }
 
     // Backfill from provider.  Idempotent: only touches blank runtimes.
-    if (auto r = sql(db,
-            "UPDATE llm_profiles SET runtime = "
-            "  CASE LOWER(provider) "
-            "    WHEN 'anthropic' THEN 'anthropic' "
-            "    WHEN 'ollama' THEN 'local' "
-            "    ELSE 'external' "
-            "  END "
-            "WHERE runtime IS NULL OR runtime = ''");
+    if (auto r = sql(db, "UPDATE llm_profiles SET runtime = "
+                         "  CASE LOWER(provider) "
+                         "    WHEN 'anthropic' THEN 'anthropic' "
+                         "    WHEN 'ollama' THEN 'local' "
+                         "    ELSE 'external' "
+                         "  END "
+                         "WHERE runtime IS NULL OR runtime = ''");
         r.is_err())
         return r;
 

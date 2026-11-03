@@ -27,9 +27,9 @@ static QString live_screen_id(const QString& id) {
     if (id == QLatin1String("crypto"))
         return QStringLiteral("crypto_trading");
     if (id == QLatin1String("fx"))
-        return QStringLiteral("markets");   // the Markets FOREX panel
+        return QStringLiteral("markets"); // the Markets FOREX panel
     if (id == QLatin1String("futures"))
-        return {};                          // the Futures board was removed
+        return {}; // the Futures board was removed
     return id;
 }
 
@@ -107,10 +107,10 @@ void ContentLoader::load(const QString& root_dir) {
 
     loaded_ = true;
     LOG_INFO("Knowledge", QString("Loaded %1 categories, %2 entries, %3 abbreviations from %4")
-                             .arg(categories_.size())
-                             .arg(entry_index_.size())
-                             .arg(abbreviations_.size())
-                             .arg(root_dir));
+                              .arg(categories_.size())
+                              .arg(entry_index_.size())
+                              .arg(abbreviations_.size())
+                              .arg(root_dir));
     emit loaded();
 }
 

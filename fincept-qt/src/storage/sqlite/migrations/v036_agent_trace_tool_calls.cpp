@@ -38,9 +38,7 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 }
 
 static Result<void> apply_v036(QSqlDatabase& db) {
-    if (auto r = sql(db,
-            "ALTER TABLE agent_traces ADD COLUMN tool_calls_json TEXT");
-        r.is_err()) {
+    if (auto r = sql(db, "ALTER TABLE agent_traces ADD COLUMN tool_calls_json TEXT"); r.is_err()) {
         // SQLite has no IF NOT EXISTS for ADD COLUMN.  If the column
         // already exists (rerun / hand-applied), pretend success — the
         // alternative is the whole migration runner halting on a

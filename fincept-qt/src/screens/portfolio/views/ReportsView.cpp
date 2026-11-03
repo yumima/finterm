@@ -161,8 +161,8 @@ void ReportsView::update_summary() {
         cl->setSpacing(2);
 
         auto* lbl = new QLabel(label);
-        lbl->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
         cl->addWidget(lbl);
 
         auto* val = new QLabel(value);
@@ -189,10 +189,11 @@ void ReportsView::update_summary() {
              ui::colors::WARNING);
     add_card(0, 2, "COST BASIS", QString("%1 %2").arg(currency_, book(fmt(summary_.total_cost_basis))),
              ui::colors::CYAN);
-    add_card(0, 3, "UNREALIZED P&L",
-             book(QString("%1%2").arg(summary_.total_unrealized_pnl >= 0 ? "+" : "")
-                      .arg(fmt(summary_.total_unrealized_pnl))),
-             tone(summary_.total_unrealized_pnl));
+    add_card(
+        0, 3, "UNREALIZED P&L",
+        book(
+            QString("%1%2").arg(summary_.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(summary_.total_unrealized_pnl))),
+        tone(summary_.total_unrealized_pnl));
 
     add_card(1, 0, "POSITIONS", QString::number(summary_.total_positions), ui::colors::TEXT_PRIMARY);
     add_card(1, 1, "GAINERS", QString::number(summary_.gainers), ui::colors::POSITIVE);
@@ -219,11 +220,10 @@ void ReportsView::update_summary() {
              summary_.total_realized_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
     add_card(2, 1, "DIVIDENDS", money(summary_.total_dividend_income, flows_approx), ui::colors::CYAN);
     add_card(2, 2, "TOTAL P&L (UNREAL. + REAL. + DIV.)",
-             QString("%1 %2").arg(currency_, summary_.total_text(
-                                                  QString("%1%2%3")
-                                                      .arg(flows_approx.isEmpty() ? stale : flows_approx,
-                                                           total_pnl >= 0 ? "+" : "")
-                                                      .arg(fmt(total_pnl)))),
+             QString("%1 %2").arg(currency_, summary_.total_text(QString("%1%2%3")
+                                                                     .arg(flows_approx.isEmpty() ? stale : flows_approx,
+                                                                          total_pnl >= 0 ? "+" : "")
+                                                                     .arg(fmt(total_pnl)))),
              tone(total_pnl));
 
     layout->addLayout(grid);
@@ -380,8 +380,9 @@ void ReportsView::update_attribution() {
         // benchmark in this comparison, so it must not say OUTPERFORM.
         const bool up = h.unrealized_pnl_percent > 5;
         const bool down = h.unrealized_pnl_percent < -5;
-        const QString status = up ? QStringLiteral("UP >5%") : down ? QStringLiteral("DOWN >5%")
-                                                                    : QStringLiteral("WITHIN ±5%");
+        const QString status = up     ? QStringLiteral("UP >5%")
+                               : down ? QStringLiteral("DOWN >5%")
+                                      : QStringLiteral("WITHIN ±5%");
         const char* status_color = up ? ui::colors::POSITIVE : down ? ui::colors::NEGATIVE : ui::colors::TEXT_TERTIARY;
 
         set(0, h.symbol, ui::colors::CYAN);

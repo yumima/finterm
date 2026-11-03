@@ -1,9 +1,9 @@
 #pragma once
-#include <QHash>
-#include <QWidget>
-
 #include "screens/IStatefulScreen.h"
 #include "screens/screener/ScreenerModel.h"
+
+#include <QHash>
+#include <QWidget>
 
 class QComboBox;
 class QDoubleSpinBox;
@@ -92,9 +92,9 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     void even_out_panes();
     void update_details_pane();
     void render_details(bool force = false);
-    int details_columns(int width) const;  // 1-3 tiles for the layout choice and the width
-    QString compose_details(int n) const;  // the write-up's head, parts and tail in n columns
-    bool open_reading(const QUrl& u);       // a further-reading link: https only
+    int details_columns(int width) const;           // 1-3 tiles for the layout choice and the width
+    QString compose_details(int n) const;           // the write-up's head, parts and tail in n columns
+    bool open_reading(const QUrl& u);               // a further-reading link: https only
     static int layout_width(const QTextBrowser* b); // its width as if no scroll bar (tiles don't flip-flop)
     QString inline_html() const;
     bool setting_up() const; // the setting-up view, on a screen that has one
@@ -108,77 +108,77 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     bool has_lists() const { return !result_.meta_only; }
     void update_empty_label();
     void update_plan_cells();
-    void open_research(const QString& sym); // a click or the menu: ER beside the list
-    void show_row_menu(const QPoint& pos); // right-click: Equity Research | Add to portfolio
+    void open_research(const QString& sym);             // a click or the menu: ER beside the list
+    void show_row_menu(const QPoint& pos);              // right-click: Equity Research | Add to portfolio
     void flash_status(const QString& text, bool error); // for a while, then the scan's status again
     void add_to_portfolio(const QString& sym);
 
-    QComboBox*    universe_ = nullptr;
-    QPushButton*  refresh_btn_ = nullptr;
-    QLabel*       status_ = nullptr;
-    bool          status_error_ = false;
-    QTimer*       flash_timer_ = nullptr; // a flashed message's lifetime
-    QString       flash_prev_;            // the status under it
-    bool          flash_prev_error_ = false;
-    QLabel*       market_ = nullptr;
-    QWidget*      progress_row_ = nullptr;
+    QComboBox* universe_ = nullptr;
+    QPushButton* refresh_btn_ = nullptr;
+    QLabel* status_ = nullptr;
+    bool status_error_ = false;
+    QTimer* flash_timer_ = nullptr; // a flashed message's lifetime
+    QString flash_prev_;            // the status under it
+    bool flash_prev_error_ = false;
+    QLabel* market_ = nullptr;
+    QWidget* progress_row_ = nullptr;
     QProgressBar* progress_ = nullptr;
-    QLabel*       progress_lbl_ = nullptr;
+    QLabel* progress_lbl_ = nullptr;
 
-    QSplitter*    split_ = nullptr;
-    QListWidget*  list_ = nullptr;
+    QSplitter* split_ = nullptr;
+    QListWidget* list_ = nullptr;
     QStackedWidget* centre_ = nullptr; // 0 = first-run explanation, 1 = the table
-    QLabel*       empty_lbl_ = nullptr;
-    QLabel*       table_title_ = nullptr;
-    QLineEdit*    filter_ = nullptr;
-    QWidget*      plan_box_ = nullptr;
-    QWidget*      view_box_ = nullptr; // Passing | Setting up
-    QPushButton*  passing_btn_ = nullptr;
-    QPushButton*  setup_btn_ = nullptr;
-    bool          setting_up_ = false;
+    QLabel* empty_lbl_ = nullptr;
+    QLabel* table_title_ = nullptr;
+    QLineEdit* filter_ = nullptr;
+    QWidget* plan_box_ = nullptr;
+    QWidget* view_box_ = nullptr; // Passing | Setting up
+    QPushButton* passing_btn_ = nullptr;
+    QPushButton* setup_btn_ = nullptr;
+    bool setting_up_ = false;
     QDoubleSpinBox* account_ = nullptr;
-    QComboBox*    risk_ = nullptr;
+    QComboBox* risk_ = nullptr;
     QTableWidget* table_ = nullptr;
     // the strategy card: every word shown, nothing behind a toggle
     // The summary card: one document sized to its laid-out height (a
     // word-wrapped QLabel's height-for-width runs short on rich text).
     QTextBrowser* band_ = nullptr;
-    QString       band_html_;       // the summary, from fill_band
-    QString       band_shown_;      // the document on screen (summary + pointer)
+    QString band_html_;  // the summary, from fill_band
+    QString band_shown_; // the document on screen (summary + pointer)
     // The right half: the full write-up, while Equity Research is not beside.
-    QWidget*      details_pane_ = nullptr; // the layout row + details_
+    QWidget* details_pane_ = nullptr; // the layout row + details_
     QTextBrowser* details_ = nullptr;
     QButtonGroup* layout_group_ = nullptr;
-    int           details_layout_ = 0;     // 0 Auto, 1 Tiles, 2 Column
-    QString       details_head_, details_tail_;
-    QStringList   details_parts_;          // 1 how it works · 2 what it did · 3 today
-    QString       details_html_;
-    QString       details_shown_;
-    QTextBrowser* inline_ = nullptr;  // centre page 2: the write-up in place of the list
-    bool          inline_on_ = false;
-    QString       inline_shown_, inline_id_;
-    bool          details_pending_ = false; // a click + activation, one request
-    bool          relayout_pending_ = false; // a write-up re-render after a resize, coalesced
-    QString       details_id_;      // whose write-up is on screen (keeps the scroll on a refresh)
-    int           band_width_ = -1; // the width the document was last laid out at
-    int           band_cap_ = -1;   // the most height it may take (the pane's 75%)
-    bool          filling_ = false;     // programmatic selection: not the reader's pick
+    int details_layout_ = 0; // 0 Auto, 1 Tiles, 2 Column
+    QString details_head_, details_tail_;
+    QStringList details_parts_; // 1 how it works · 2 what it did · 3 today
+    QString details_html_;
+    QString details_shown_;
+    QTextBrowser* inline_ = nullptr; // centre page 2: the write-up in place of the list
+    bool inline_on_ = false;
+    QString inline_shown_, inline_id_;
+    bool details_pending_ = false;   // a click + activation, one request
+    bool relayout_pending_ = false;  // a write-up re-render after a resize, coalesced
+    QString details_id_;             // whose write-up is on screen (keeps the scroll on a refresh)
+    int band_width_ = -1;            // the width the document was last laid out at
+    int band_cap_ = -1;              // the most height it may take (the pane's 75%)
+    bool filling_ = false;           // programmatic selection: not the reader's pick
     QTimer* follow_timer_ = nullptr; // keyboard browsing -> ER, debounced
-    QString       last_research_;          // last symbol sent to ER: a re-sort moving rows is not a pick
+    QString last_research_;          // last symbol sent to ER: a re-sort moving rows is not a pick
 
     screener::ScanResult result_;
     QString current_id_ = QStringLiteral("__overview__");
     bool running_ = false;
     bool shown_once_ = false;
     bool panes_set_ = false;
-    int  scan_gen_ = 0; // a reply for a universe no longer selected is dropped
+    int scan_gen_ = 0; // a reply for a universe no longer selected is dropped
     // Newest scan generation saved per cache file: a superseded scan that
     // finishes late must not overwrite a newer result for its universe.
     QHash<QString, int> saved_gen_;
     // Generation of the result on screen (-1 = a disk cache), so a superseded
     // scan for the universe selected NOW can still replace an older view.
     int displayed_gen_ = -1;
-    int name_col_ = 3, sector_col_ = 4; // where fill_table put them (the filter reads both)
+    int name_col_ = 3, sector_col_ = 4;       // where fill_table put them (the filter reads both)
     int shares_col_ = -1, position_col_ = -1; // the pullback plan's sized columns, or -1
     double account_value_ = 100'000.0;
     double risk_frac_ = 0.005;

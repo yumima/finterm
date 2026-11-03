@@ -21,11 +21,28 @@ enum class TradingMode { Paper, Live };
 
 inline const QStringList DEFAULT_WATCHLIST = {
     // US mega-caps
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM",
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "NVDA",
+    "META",
+    "TSLA",
+    "JPM",
     // China (US-listed ADRs)
-    "BABA", "PDD",  "JD",    "NIO",
+    "BABA",
+    "PDD",
+    "JD",
+    "NIO",
     // Europe (ADRs / majors)
-    "ASML", "SAP",  "NVO",   "NVS",  "UL",   "SHEL", "TTE",  "BP",
+    "ASML",
+    "SAP",
+    "NVO",
+    "NVS",
+    "UL",
+    "SHEL",
+    "TTE",
+    "BP",
 };
 
 inline const QStringList US_WATCHLIST = {

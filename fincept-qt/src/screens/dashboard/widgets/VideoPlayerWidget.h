@@ -2,7 +2,6 @@
 #include "screens/dashboard/widgets/BaseWidget.h"
 
 #include <QDateTime>
-#include <functional>
 #include <QElapsedTimer>
 #include <QLabel>
 #include <QLineEdit>
@@ -11,6 +10,8 @@
 #include <QPushButton>
 #include <QScrollArea>
 #include <QStackedWidget>
+
+#include <functional>
 
 class QMenu;
 
@@ -29,15 +30,17 @@ class QMenu;
 #endif
 
 #ifdef HAS_QT_WEBENGINE
-#    include <QtWebEngineWidgets/QWebEngineView>
-#    include <QtWebEngineCore/QWebEngineSettings>
-#    include <QtWebEngineCore/QWebEngineProfile>
+#    include <QtWebEngineCore/QWebEngineFullScreenRequest>
 #    include <QtWebEngineCore/QWebEnginePage>
 #    include <QtWebEngineCore/QWebEnginePermission>
-#    include <QtWebEngineCore/QWebEngineFullScreenRequest>
+#    include <QtWebEngineCore/QWebEngineProfile>
+#    include <QtWebEngineCore/QWebEngineSettings>
+#    include <QtWebEngineWidgets/QWebEngineView>
 #endif
 
-namespace fincept::services::video { class LiveHlsProxy; }
+namespace fincept::services::video {
+class LiveHlsProxy;
+}
 
 namespace fincept::screens::widgets {
 
@@ -129,9 +132,9 @@ class VideoRenderWidget : public QWidget {
     // frame instead of once per paint.
     void rescale_for_widget();
 
-    QImage last_image_;       ///< CPU-fallback source frame, kept across transient toImage() failures
-    QImage scaled_image_;     ///< pre-scaled / GPU-rendered, letterboxed dst size
-    QPoint scaled_origin_;    ///< top-left position to blit scaled_image_ at
+    QImage last_image_;    ///< CPU-fallback source frame, kept across transient toImage() failures
+    QImage scaled_image_;  ///< pre-scaled / GPU-rendered, letterboxed dst size
+    QPoint scaled_origin_; ///< top-left position to blit scaled_image_ at
 
     // Last decoded frame, kept so resizeEvent can re-run the GPU scaler at
     // the new widget size without waiting for the next live frame (matters
@@ -247,7 +250,7 @@ class VideoPlayerWidget : public BaseWidget {
     void enter_fullscreen();
     void exit_fullscreen();
     void build_channel_list();
-    void populate_channel_rows();    // (re)fills channel_rows_layout_ from channels_
+    void populate_channel_rows(); // (re)fills channel_rows_layout_ from channels_
     void build_player_view();
     /// Resume from Paused, picking the lightest correct recovery:
     ///   - short pauses & VOD: setSource(same) rebuilds the decoder
@@ -305,7 +308,7 @@ class VideoPlayerWidget : public BaseWidget {
     class QTimer* stall_timer_ = nullptr;
     /// Fires while want_playing_ to confirm pictures are still arriving.
     class QTimer* watchdog_ = nullptr;
-    int  reconnect_attempts_ = 0;
+    int reconnect_attempts_ = 0;
     /// Give up: stop the player, say so, and leave PLAY as the way back.
     void give_up_on_stream(const QString& why);
     /// Move this stream to the embedded (Chromium) player, which mints the
@@ -337,12 +340,12 @@ class VideoPlayerWidget : public BaseWidget {
     /// thread. The watchdog compares it tick to tick.
     quint64 frames_seen_ = 0;
     quint64 frames_at_check_ = 0;
-    qint64  position_at_check_ = -1;
-    int     starved_ticks_ = 0;
+    qint64 position_at_check_ = -1;
+    int starved_ticks_ = 0;
     /// Consecutive ticks that saw progress. The reconnect budget is refunded
     /// only after kGoodTicksToRefund of them, so a stream that plays a moment
     /// after every reconnect and dies again still runs out of attempts.
-    int     good_ticks_ = 0;
+    int good_ticks_ = 0;
     /// Reconnects stop after this many consecutive failures so a dead stream
     /// cannot retry forever; refunded only by real progress (pictures), never
     /// by a status change — a dead stream can still flicker its status.
@@ -365,7 +368,7 @@ class VideoPlayerWidget : public BaseWidget {
     /// valid while the player still holds that source — otherwise a later
     /// selection has moved on and restoring the old URL would resurrect a
     /// stream the user did not ask for.
-    QUrl    errored_source_;
+    QUrl errored_source_;
     void play_url(const QString& url, const QString& title);
     void resolve_youtube_and_play(const QString& youtube_url, const QString& title);
     QString resolve_ytdlp_program() const;
@@ -392,10 +395,10 @@ class VideoPlayerWidget : public BaseWidget {
     class QProcess* session_refresh_proc_ = nullptr;
     void set_loading(bool loading);
 
-    void load_channels();                                     // pull from SettingsRepository (+ seed defaults)
-    void save_channels(const QVector<ChannelDef>& channels);  // persist to SettingsRepository
-    void load_engine();                                       // pull video.engine ("gl"/"web", default gl)
-    void save_engine(bool web);                               // persist video.engine
+    void load_channels();                                    // pull from SettingsRepository (+ seed defaults)
+    void save_channels(const QVector<ChannelDef>& channels); // persist to SettingsRepository
+    void load_engine();                                      // pull video.engine ("gl"/"web", default gl)
+    void save_engine(bool web);                              // persist video.engine
     /// Pull video.max_height from SettingsRepository. Default 1080. Values
     /// outside the allowed set (480/720/1080) clamp to the nearest valid
     /// option so a hand-edited setting can't break stream resolution.
@@ -405,52 +408,51 @@ class VideoPlayerWidget : public BaseWidget {
     static QVector<ChannelDef> default_channels();            // first-run seed
     static void assign_colors(QVector<ChannelDef>& channels); // round-robin palette
 
-    QStackedWidget* stack_       = nullptr; // page 0 = channel list, page 1 = GL player, page 2 = WebEngine
-    QWidget*        list_page_   = nullptr;
-    QWidget*        player_page_ = nullptr;
+    QStackedWidget* stack_ = nullptr; // page 0 = channel list, page 1 = GL player, page 2 = WebEngine
+    QWidget* list_page_ = nullptr;
+    QWidget* player_page_ = nullptr;
     // Web engine mode: page 2 of stack_, loading YouTube directly in Chromium.
     // No yt-dlp, no GL pipeline, no frame callbacks — compositor does everything.
 #ifdef HAS_QT_WEBENGINE
-    QWebEngineView* web_view_          = nullptr;
-    void            build_web_view();
-    void            play_web(const QString& url, const QString& title);
-    void            play_web_video_id(const QString& video_id, const QString& title, const QString& source_url);
-    void            resolve_live_id_and_play_web(const QString& channel_url, const QString& title);
-    void            stop_web();
+    QWebEngineView* web_view_ = nullptr;
+    void build_web_view();
+    void play_web(const QString& url, const QString& title);
+    void play_web_video_id(const QString& video_id, const QString& title, const QString& source_url);
+    void resolve_live_id_and_play_web(const QString& channel_url, const QString& title);
+    void stop_web();
     /// Render a Spotify show / episode / playlist / track / album via the
     /// official open.spotify.com/embed/<type>/<id> iframe in QWebEngineView.
     /// No yt-dlp, no QMediaPlayer — Spotify's embed owns the playback UI and
     /// auth (free-tier preview vs Premium full-play). Routed through this
     /// widget so the title bar, lock-pause hook, and theme integration still
     /// apply.
-    void            play_spotify_embed(const QString& type, const QString& id,
-                                       const QString& title, const QString& source_url);
+    void play_spotify_embed(const QString& type, const QString& id, const QString& title, const QString& source_url);
     /// True while the WebEngine surface is showing a Spotify embed (vs the
     /// YouTube iframe path). Drives the lock-auto-pause / unlock-resume
     /// branch in the terminal_locked_changed handler and the visibility of
     /// the GL pause button. Cleared in stop_playback().
-    bool            web_is_spotify_    = false;
+    bool web_is_spotify_ = false;
     /// True if the Spotify embed was auto-paused by terminal-lock. Mirrors
     /// the GL pipeline's auto_paused_on_lock_ contract — we only resume
     /// what we paused, never undo a user-initiated pause.
-    bool            spotify_auto_paused_on_lock_ = false;
+    bool spotify_auto_paused_on_lock_ = false;
     // GL (yt-dlp + QPainter) is the default — works for any public stream,
     // including channels that block YouTube iframe embedding (CNBC, Yahoo, …).
     // WebEngine remains available via the config dialog for custom YouTube
     // videos. Loaded from SettingsRepository on construct.
-    bool            use_web_engine_    = false;
+    bool use_web_engine_ = false;
 #endif
     // Cap on the GL pipeline's preferred resolution — controls the height<=N
     // term in the yt-dlp -f format selector. Allowed: 480, 720, 1080.
     // Loaded on construct, mutated via the config dialog. The format chain
     // still falls back to lower resolutions if N isn't available.
-    int             max_height_        = 1080;
-    QLineEdit*      url_input_    = nullptr;
+    int max_height_ = 1080;
+    QLineEdit* url_input_ = nullptr;
     // The current channel's name, and the way to change it: a click opens the
     // channel list as a dropdown (switch_channel()) instead of BACK + pick.
-    QLabel*         now_playing_  = nullptr;
-    QMenu*          channel_menu_ = nullptr;
-    QLabel*         status_label_ = nullptr;
+    QLabel* now_playing_ = nullptr;
+    QMenu* channel_menu_ = nullptr;
+    QLabel* status_label_ = nullptr;
 
     QString pending_title_;
     QString current_url_;
@@ -468,39 +470,39 @@ class VideoPlayerWidget : public BaseWidget {
     // Emptied sources still being released (release_source_then()). A count,
     // not a flag: a reload's release and a switch's can overlap.
     int releases_pending_ = 0;
-    QPoint title_press_; // where a left press on the title began (a click, not a drag)
+    QPoint title_press_;     // where a left press on the title began (a click, not a drag)
     quint64 reload_gen_ = 0; // hard_reload_source() generation
     /// setSource(empty), then `next` once the backend reports NoMedia (250 ms
     /// backstop) — the only safe way to open a new source after an old one.
     void release_source_then(std::function<void()> next);
 
     // Widgets needing theme-aware restyling
-    QScrollArea*         scroll_                   = nullptr;
-    QVBoxLayout*         channel_rows_layout_      = nullptr; // wraps just the preset rows so we can rebuild them
+    QScrollArea* scroll_ = nullptr;
+    QVBoxLayout* channel_rows_layout_ = nullptr; // wraps just the preset rows so we can rebuild them
     QVector<QPushButton*> channel_rows_;
-    QVector<QLabel*>     channel_name_labels_;
-    QVector<QLabel*>     channel_desc_labels_;
-    QLabel*              channel_sep_              = nullptr;
-    QLabel*              custom_header_            = nullptr;
-    QPushButton*         play_btn_                 = nullptr;
-    QLabel*              helper_label_             = nullptr;
-    QLabel*              status_label_placeholder_ = nullptr;
-    QWidget*             controls_                 = nullptr;
-    QPushButton*         stop_btn_                 = nullptr;
+    QVector<QLabel*> channel_name_labels_;
+    QVector<QLabel*> channel_desc_labels_;
+    QLabel* channel_sep_ = nullptr;
+    QLabel* custom_header_ = nullptr;
+    QPushButton* play_btn_ = nullptr;
+    QLabel* helper_label_ = nullptr;
+    QLabel* status_label_placeholder_ = nullptr;
+    QWidget* controls_ = nullptr;
+    QPushButton* stop_btn_ = nullptr;
     /// Pause/resume toggle for the GL pipeline's QMediaPlayer. Hidden when
     /// the WEB engine is active (QWebEngineView's iframe is cross-origin so
     /// pause via JS is unreliable). Text flips between "⏸ PAUSE" and
     /// "▶ PLAY" via the player's playbackStateChanged signal.
-    QPushButton*         play_pause_btn_           = nullptr;
+    QPushButton* play_pause_btn_ = nullptr;
     /// Fullscreen toggle. Visible in both GL and WEB modes — entry is
     /// always via reparent-to-top-level, exit via the same button, Esc,
     /// or (WEB only) YouTube's own player chrome.
-    QPushButton*         fullscreen_btn_           = nullptr;
+    QPushButton* fullscreen_btn_ = nullptr;
     /// Currently-fullscreened surface (video_widget_ in GL mode,
     /// web_view_ in WEB mode). Null when not in fullscreen — also acts
     /// as the predicate the qApp event filter uses to short-circuit
     /// when fullscreen is inactive.
-    QWidget*             fullscreen_target_        = nullptr;
+    QWidget* fullscreen_target_ = nullptr;
     /// True when WEB fullscreen was initiated via the iframe's own
     /// requestFullscreen() (the HTML5 path, signalled by
     /// QWebEnginePage::fullScreenRequested(toggleOn=true)). In that
@@ -509,26 +511,26 @@ class VideoPlayerWidget : public BaseWidget {
     /// intercept Esc, or the page would stay in HTML5 fullscreen
     /// state with the view yanked out from under it, desyncing the
     /// next iframe-side toggle.
-    bool                 fullscreen_via_web_request_ = false;
+    bool fullscreen_via_web_request_ = false;
     /// True if the GL player was auto-paused by terminal-lock so that the
     /// follow-up unlock can resume only when we'd been the ones to pause it
     /// — never resume a user-initiated pause.
-    bool                 auto_paused_on_lock_      = false;
+    bool auto_paused_on_lock_ = false;
     /// Recorded by the playbackStateChanged lambda whenever the player
     /// enters PausedState (manual or auto).  resume_playback() compares
     /// this against now to pick between the cheap setSource(same)
     /// workaround (short pauses, VOD) and the full reset (long pauses
     /// on the live-proxy URL where the buffered segment has rolled out
     /// of the proxy's window).
-    QDateTime            paused_at_;
+    QDateTime paused_at_;
 
     QVector<ChannelDef> channels_;
 
 #ifdef HAS_QT_MULTIMEDIA
-    QMediaPlayer*      player_       = nullptr;
+    QMediaPlayer* player_ = nullptr;
     VideoRenderWidget* video_widget_ = nullptr; // plain QWidget — no native surface
-    QVideoSink*        video_sink_   = nullptr; // frame delivery pipe
-    QAudioOutput*      audio_output_ = nullptr;
+    QVideoSink* video_sink_ = nullptr;          // frame delivery pipe
+    QAudioOutput* audio_output_ = nullptr;
     /// Watches for system audio-device changes so audio_output_ can
     /// migrate to the new default sink (headset plug/unplug, BT
     /// connect, "Set as default" in pavucontrol). Without this Qt
@@ -537,19 +539,19 @@ class VideoPlayerWidget : public BaseWidget {
     /// routing — finterm gets stuck on whichever sink it first
     /// landed on, while Chrome/YouTube migrate because they specify
     /// the default sink on each stream creation. We mirror that.
-    QMediaDevices*     media_devices_ = nullptr;
+    QMediaDevices* media_devices_ = nullptr;
     // Slow poll that catches a *pure default-sink swap* — the default flips
     // while the device list is unchanged, which QMediaDevices emits no signal
     // for. The tail of every Bluetooth reconnect lands here, so without it TV
     // audio gets stuck on the old sink. Only re-routes in follow-default mode.
-    QTimer*            default_sink_poll_ = nullptr;
+    QTimer* default_sink_poll_ = nullptr;
     // Bottom-bar output-device selector. "System default" (index 0, empty
     // itemData) follows QMediaDevices::defaultAudioOutput(); any other entry
     // pins audio_output_ to that sink (id stored in pinned_audio_id_) until the
     // user re-selects. follow_system_default_ tracks which mode is active.
-    QComboBox*         audio_device_combo_    = nullptr;
-    bool               follow_system_default_ = true;
-    QByteArray         pinned_audio_id_;
+    QComboBox* audio_device_combo_ = nullptr;
+    bool follow_system_default_ = true;
+    QByteArray pinned_audio_id_;
     // Local HLS trimming proxy for live streams. Null when no live
     // playback is active. Owned (parented) by this widget — also gets
     // cleaned up automatically on destruction.
@@ -557,7 +559,7 @@ class VideoPlayerWidget : public BaseWidget {
     // Sticky flag set on play_url() entry: tells on_ytdlp_finished() whether
     // to route the resolved stream URL through the proxy (live) or
     // directly to QMediaPlayer (VOD, no proxy needed).
-    bool               current_is_live_ = false;
+    bool current_is_live_ = false;
 #endif
 };
 

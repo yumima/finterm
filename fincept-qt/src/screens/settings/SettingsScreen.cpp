@@ -3,12 +3,6 @@
 // Credentials are CredentialsSection / StoredCredentialsSection.
 
 #include "screens/settings/SettingsScreen.h"
-#include "screens/settings/SettingsStyles.h"
-#include "screens/settings/StoredCredentialsSection.h"
-#include "screens/settings/CredentialsSection.h"
-
-#include "services/notifications/NotificationFieldStore.h"
-
 
 #include "ai_chat/LlmService.h"
 #include "auth/InactivityGuard.h"
@@ -22,16 +16,20 @@
 #include "core/session/ScreenStateManager.h"
 #include "screens/devtools/DataHubInspector.h"
 #include "screens/profile/ProfileScreen.h"
-#include "screens/settings/AiConfigSection.h"
 #include "screens/settings/ActivityPanelSection.h"
+#include "screens/settings/AiConfigSection.h"
 #include "screens/settings/ArtefactsSection.h"
+#include "screens/settings/CredentialsSection.h"
 #include "screens/settings/ForumConfigSection.h"
-#include "screens/settings/SkillDiffsSection.h"
 #include "screens/settings/KeybindingsSection.h"
-#include "screens/settings/SchedulerSection.h"
 #include "screens/settings/LlmConfigSection.h"
 #include "screens/settings/PythonEnvSection.h"
+#include "screens/settings/SchedulerSection.h"
+#include "screens/settings/SettingsStyles.h"
+#include "screens/settings/SkillDiffsSection.h"
+#include "screens/settings/StoredCredentialsSection.h"
 #include "screens/settings/VoiceConfigSection.h"
+#include "services/notifications/NotificationFieldStore.h"
 #include "services/notifications/NotificationService.h"
 #include "services/stt/SpeechService.h"
 #include "storage/StorageManager.h"
@@ -71,7 +69,6 @@
 
 namespace fincept::screens {
 
-
 // ── Construction ──────────────────────────────────────────────────────────────
 
 SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
@@ -98,31 +95,31 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     sections_ = new QStackedWidget;
     credentials_ = new CredentialsSection;
     stored_credentials_ = new StoredCredentialsSection;
-    sections_->addWidget(credentials_);           // 0  API Keys
-    sections_->addWidget(build_appearance());     // 1
-    sections_->addWidget(build_notifications());  // 2
-    sections_->addWidget(build_storage());        // 3
-    sections_->addWidget(build_data_sources());   // 4
-    sections_->addWidget(build_llm_config());     // 5  AI Config (Models/Roles/Tools/Activity)
+    sections_->addWidget(credentials_);          // 0  API Keys
+    sections_->addWidget(build_appearance());    // 1
+    sections_->addWidget(build_notifications()); // 2
+    sections_->addWidget(build_storage());       // 3
+    sections_->addWidget(build_data_sources());  // 4
+    sections_->addWidget(build_llm_config());    // 5  AI Config (Models/Roles/Tools/Activity)
     // 6 and 14 were second, nav-less instances of the MCP Servers and AI
     // System pages, which live as tabs inside AI Config. Empty placeholders
     // keep the later indices stable without building those pages twice.
-    sections_->addWidget(new QWidget);            // 6  (retired)
-    sections_->addWidget(build_logging());        // 7
-    sections_->addWidget(build_security());       // 8
-    sections_->addWidget(build_profiles());       // 9  Data Profiles
-    sections_->addWidget(build_keybindings());    // 10
-    sections_->addWidget(build_python_env());     // 11
-    sections_->addWidget(build_developer());      // 12
-    sections_->addWidget(new VoiceConfigSection); // 13
-    sections_->addWidget(new QWidget);            // 14 (retired)
-    sections_->addWidget(new SchedulerSection);   // 15
-    sections_->addWidget(new ArtefactsSection);   // 16
-    sections_->addWidget(new ForumConfigSection); // 17
+    sections_->addWidget(new QWidget);              // 6  (retired)
+    sections_->addWidget(build_logging());          // 7
+    sections_->addWidget(build_security());         // 8
+    sections_->addWidget(build_profiles());         // 9  Data Profiles
+    sections_->addWidget(build_keybindings());      // 10
+    sections_->addWidget(build_python_env());       // 11
+    sections_->addWidget(build_developer());        // 12
+    sections_->addWidget(new VoiceConfigSection);   // 13
+    sections_->addWidget(new QWidget);              // 14 (retired)
+    sections_->addWidget(new SchedulerSection);     // 15
+    sections_->addWidget(new ArtefactsSection);     // 16
+    sections_->addWidget(new ForumConfigSection);   // 17
     sections_->addWidget(new ActivityPanelSection); // 18
-    sections_->addWidget(new SkillDiffsSection);  // 19
-    sections_->addWidget(new ProfileScreen);      // 20 Account
-    sections_->addWidget(stored_credentials_);    // 21 All Credentials
+    sections_->addWidget(new SkillDiffsSection);    // 19
+    sections_->addWidget(new ProfileScreen);        // 20 Account
+    sections_->addWidget(stored_credentials_);      // 21 All Credentials
 
     auto make_group = [&](const QString& text) {
         auto* lbl = new QLabel(text);
@@ -301,11 +298,9 @@ QWidget* SettingsScreen::build_appearance() {
     appearance_debounce_ = new QTimer(this);
     appearance_debounce_->setSingleShot(true);
     appearance_debounce_->setInterval(300);
-    connect(appearance_debounce_, &QTimer::timeout, this, [this]() {
-        fincept::ui::ThemeManager::instance().apply_density(app_density_->currentText());
-    });
-    connect(app_density_, &QComboBox::currentTextChanged, this,
-            [this]() { appearance_debounce_->start(); });
+    connect(appearance_debounce_, &QTimer::timeout, this,
+            [this]() { fincept::ui::ThemeManager::instance().apply_density(app_density_->currentText()); });
+    connect(app_density_, &QComboBox::currentTextChanged, this, [this]() { appearance_debounce_->start(); });
 
     vl->addSpacing(8);
     vl->addWidget(make_sep());
@@ -662,8 +657,7 @@ QWidget* SettingsScreen::build_notifications() {
             // Save fields first so provider has latest credentials
             if (!save_provider_fields(pid, pw)) {
                 pw.status_lbl->setText("Could not save a credential to the OS keyring — is it unlocked?");
-                pw.status_lbl->setStyleSheet(
-                    QString("color:%1;background:transparent;").arg(ui::colors::NEGATIVE()));
+                pw.status_lbl->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::NEGATIVE()));
                 return;
             }
             NotificationService::instance().reload_all_configs();
@@ -787,7 +781,8 @@ QWidget* SettingsScreen::build_notifications() {
         if (!failed.isEmpty()) {
             QMessageBox::warning(this, tr("Notifications"),
                                  tr("These channels' credentials could not be saved to the OS keyring "
-                                    "(is it locked?):\n\n%1").arg(failed.join(QStringLiteral(", "))));
+                                    "(is it locked?):\n\n%1")
+                                     .arg(failed.join(QStringLiteral(", "))));
             return;
         }
         LOG_INFO("Settings", "All notification providers saved");
@@ -1069,15 +1064,15 @@ QWidget* SettingsScreen::build_storage() {
         wl->setSpacing(8);
         const QString root = AppPaths::root();
         const QString user_dir = AppPaths::user();
-        auto* path_lbl = new QLabel(
-            tr("Data folder: <b>%1</b> — on this computer only, private to this account.<br>"
-               "<b>user/</b> is <b>yours</b> and the only personal part: databases (portfolios, "
-               "watchlists, notes, strategies, chats), files (report drafts, Pre-IPO overrides), "
-               "workspaces, feature data (M&amp;A, Alpha Arena) and agent memory — back up or erase "
-               "that one folder. Everything else is the app's own and holds nothing personal: "
-               "cache/ (safe to clear), market_data/ (public SEC/FINRA indexes), models/, logs/, and "
-               "the Python runtime. Credentials are not files: they live in the OS keyring.")
-                .arg(root.toHtmlEscaped()));
+        auto* path_lbl =
+            new QLabel(tr("Data folder: <b>%1</b> — on this computer only, private to this account.<br>"
+                          "<b>user/</b> is <b>yours</b> and the only personal part: databases (portfolios, "
+                          "watchlists, notes, strategies, chats), files (report drafts, Pre-IPO overrides), "
+                          "workspaces, feature data (M&amp;A, Alpha Arena) and agent memory — back up or erase "
+                          "that one folder. Everything else is the app's own and holds nothing personal: "
+                          "cache/ (safe to clear), market_data/ (public SEC/FINRA indexes), models/, logs/, and "
+                          "the Python runtime. Credentials are not files: they live in the OS keyring.")
+                           .arg(root.toHtmlEscaped()));
         path_lbl->setTextFormat(Qt::RichText);
         path_lbl->setWordWrap(true);
         path_lbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
@@ -1198,17 +1193,20 @@ QWidget* SettingsScreen::build_storage() {
         thl->setContentsMargins(12, 0, 12, 0);
         thl->setSpacing(8);
         auto* th1 = new QLabel("CATEGORY");
-        th1->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        th1->setStyleSheet(
+            QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th1, 1);
         auto* th2 = new QLabel("ENTRIES");
         th2->setFixedWidth(70);
         th2->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        th2->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        th2->setStyleSheet(
+            QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th2);
         auto* th3 = new QLabel("ACTION");
         th3->setFixedWidth(56);
         th3->setAlignment(Qt::AlignCenter);
-        th3->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        th3->setStyleSheet(
+            QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th3);
         storage_categories_->addWidget(th);
 
@@ -1279,17 +1277,20 @@ QWidget* SettingsScreen::build_storage() {
         thl->setContentsMargins(12, 0, 12, 0);
         thl->setSpacing(8);
         auto* th1 = new QLabel("STORE");
-        th1->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        th1->setStyleSheet(
+            QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th1, 1);
         auto* th2 = new QLabel("SIZE");
         th2->setFixedWidth(80);
         th2->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        th2->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        th2->setStyleSheet(
+            QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th2);
         auto* th3 = new QLabel("ACTION");
         th3->setFixedWidth(56);
         th3->setAlignment(Qt::AlignCenter);
-        th3->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        th3->setStyleSheet(
+            QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
         thl->addWidget(th3);
         bvl->addWidget(th);
 
@@ -1922,7 +1923,8 @@ QWidget* SettingsScreen::build_data_sources() {
 
         auto add_th = [&](const QString& text, int width = 0) {
             auto* lbl = new QLabel(text);
-            lbl->setStyleSheet(QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+            lbl->setStyleSheet(
+                QString("color:%1;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
             if (width > 0) {
                 lbl->setFixedWidth(width);
                 lbl->setAlignment(Qt::AlignCenter);
@@ -2249,9 +2251,8 @@ QWidget* SettingsScreen::build_logging() {
     open_folder_btn->setStyleSheet(settings_style::btn_secondary_ss());
     open_folder_btn->setFixedHeight(30);
     open_folder_btn->setFixedWidth(160);
-    connect(open_folder_btn, &QPushButton::clicked, this, []() {
-        QDesktopServices::openUrl(QUrl::fromLocalFile(AppPaths::logs()));
-    });
+    connect(open_folder_btn, &QPushButton::clicked, this,
+            []() { QDesktopServices::openUrl(QUrl::fromLocalFile(AppPaths::logs())); });
 
     auto* copy_path_btn = new QPushButton("Copy Path");
     copy_path_btn->setStyleSheet(settings_style::btn_secondary_ss());
@@ -2578,7 +2579,7 @@ QWidget* SettingsScreen::build_security() {
     sec_lock_on_minimize_ = new QCheckBox("Lock when the window is minimized");
     sec_lock_on_minimize_->setStyleSheet(settings_style::check_ss());
     vl->addWidget(make_row("Lock on Minimize", sec_lock_on_minimize_,
-                            "When on, minimizing the terminal immediately shows the PIN screen."));
+                           "When on, minimizing the terminal immediately shows the PIN screen."));
 
     vl->addSpacing(16);
 
@@ -2596,8 +2597,7 @@ QWidget* SettingsScreen::build_security() {
         repo.set("security.autolock_enabled", autolock ? "true" : "false", "security");
         repo.set("security.lock_timeout_minutes", QString::number(minutes), "security");
         if (sec_lock_on_minimize_) {
-            repo.set("security.lock_on_minimize",
-                     sec_lock_on_minimize_->isChecked() ? "true" : "false", "security");
+            repo.set("security.lock_on_minimize", sec_lock_on_minimize_->isChecked() ? "true" : "false", "security");
         }
 
         guard.set_timeout_minutes(minutes);
@@ -2616,8 +2616,8 @@ QWidget* SettingsScreen::build_security() {
 
     auto* audit_note = new QLabel("Recent security events (PIN setup, failed unlocks, inactivity locks).");
     audit_note->setWordWrap(true);
-    audit_note->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;")
-                                  .arg(ui::colors::TEXT_SECONDARY()));
+    audit_note->setStyleSheet(
+        QString("color:%1;font-size:12px;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(audit_note);
 
     sec_audit_list_ = new QListWidget;
@@ -2647,9 +2647,8 @@ void SettingsScreen::refresh_audit_log() {
     const auto events = auth::SecurityAuditLog::instance().recent(100);
     for (const auto& e : events) {
         const QString ts = e.timestamp.toString("yyyy-MM-dd hh:mm:ss");
-        const QString line = e.detail.isEmpty()
-                                 ? QString("%1  %2").arg(ts, e.event)
-                                 : QString("%1  %2  (%3)").arg(ts, e.event, e.detail);
+        const QString line = e.detail.isEmpty() ? QString("%1  %2").arg(ts, e.event)
+                                                : QString("%1  %2  (%3)").arg(ts, e.event, e.detail);
         sec_audit_list_->addItem(line);
     }
     if (events.isEmpty())
@@ -2893,13 +2892,11 @@ QWidget* SettingsScreen::build_developer() {
     title->setStyleSheet(settings_style::section_title_ss());
     vl->addWidget(title);
 
-    auto* desc = new QLabel(
-        "Live view over the in-process pub/sub layer. Shows every active topic, its "
-        "subscriber count, total publishes, and time since last publish. Refreshes "
-        "once per second while this tab is visible.");
+    auto* desc = new QLabel("Live view over the in-process pub/sub layer. Shows every active topic, its "
+                            "subscriber count, total publishes, and time since last publish. Refreshes "
+                            "once per second while this tab is visible.");
     desc->setWordWrap(true);
-    desc->setStyleSheet(QString("color:%1;font-size:12px;")
-                            .arg(ui::colors::TEXT_SECONDARY()));
+    desc->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(desc);
 
     vl->addWidget(new devtools::DataHubInspector(page), 1);

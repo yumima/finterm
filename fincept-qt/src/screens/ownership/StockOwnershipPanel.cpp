@@ -16,9 +16,9 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSplitter>
-#include <QWheelEvent>
 #include <QStackedWidget>
 #include <QVBoxLayout>
+#include <QWheelEvent>
 
 namespace fincept::screens {
 
@@ -108,9 +108,7 @@ void StockOwnershipPanel::build_ui() {
     ni->addWidget(no_index_text_, 1);
     build_btn_ = new QPushButton(QStringLiteral("BUILD 13F INDEX"));
     build_btn_->setMinimumHeight(30);
-    connect(build_btn_, &QPushButton::clicked, this, []() {
-        services::OwnershipService::instance().build_index();
-    });
+    connect(build_btn_, &QPushButton::clicked, this, []() { services::OwnershipService::instance().build_index(); });
     ni->addWidget(build_btn_);
     hh->addWidget(no_index_);
     split->addWidget(holders_host);
@@ -136,7 +134,7 @@ void StockOwnershipPanel::build_ui() {
     scroll_->setWidgetResizable(true);
     scroll_->setFrameShape(QFrame::NoFrame);
     scroll_->setWidget(stock_page_);
-    stack_->addWidget(scroll_);   // 0
+    stack_->addWidget(scroll_); // 0
     for (auto* area : stock_page_->findChildren<QAbstractScrollArea*>())
         area->viewport()->installEventFilter(this);
 
@@ -150,8 +148,8 @@ void StockOwnershipPanel::build_ui() {
     back_btn_->setStyleSheet(QString("QPushButton{color:%1;background:%2;border:1px solid %3;"
                                      "padding:4px 12px;text-align:left;font-size:12px;}"
                                      "QPushButton:hover{color:%4;}")
-                                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
-                                      ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
+                                 .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM(),
+                                      ui::colors::TEXT_PRIMARY()));
     connect(back_btn_, &QPushButton::clicked, this, [this]() { show_stock(); });
     auto* bh = new QHBoxLayout;
     bh->addWidget(back_btn_);
@@ -160,11 +158,10 @@ void StockOwnershipPanel::build_ui() {
     filer_ = new FirmDetailPanel;
     // A holding in the book is another security: open it in Equity Research
     // rather than nesting a register inside a book inside a register.
-    connect(filer_, &FirmDetailPanel::navigate_to_symbol, this, [this](const QString& ticker) {
-        emit navigate_to_screen(QStringLiteral("equity_research"), ticker);
-    });
+    connect(filer_, &FirmDetailPanel::navigate_to_symbol, this,
+            [this](const QString& ticker) { emit navigate_to_screen(QStringLiteral("equity_research"), ticker); });
     fp->addWidget(filer_, 1);
-    stack_->addWidget(filer_page_);   // 1
+    stack_->addWidget(filer_page_); // 1
 }
 
 bool StockOwnershipPanel::eventFilter(QObject* watched, QEvent* event) {
@@ -175,14 +172,13 @@ bool StockOwnershipPanel::eventFilter(QObject* watched, QEvent* event) {
             auto* we = static_cast<QWheelEvent*>(event);
             auto* bar = area->verticalScrollBar();
             const int dy = we->angleDelta().y();
-            const bool can_scroll = bar && bar->maximum() > bar->minimum() &&
-                                    ((dy < 0 && bar->value() < bar->maximum()) ||
-                                     (dy > 0 && bar->value() > bar->minimum()));
+            const bool can_scroll =
+                bar && bar->maximum() > bar->minimum() &&
+                ((dy < 0 && bar->value() < bar->maximum()) || (dy > 0 && bar->value() > bar->minimum()));
             if (!can_scroll) {
                 QWheelEvent forwarded(scroll_->viewport()->mapFromGlobal(we->globalPosition().toPoint()),
-                                      we->globalPosition(), we->pixelDelta(), we->angleDelta(),
-                                      we->buttons(), we->modifiers(), we->phase(), we->inverted(),
-                                      we->source());
+                                      we->globalPosition(), we->pixelDelta(), we->angleDelta(), we->buttons(),
+                                      we->modifiers(), we->phase(), we->inverted(), we->source());
                 QCoreApplication::sendEvent(scroll_->viewport(), &forwarded);
                 return true;
             }
@@ -256,11 +252,11 @@ void StockOwnershipPanel::render() {
     no_index_->setVisible(!ready);
     holders_->setVisible(ready);
     if (!ready) {
-        no_index_text_->setText(QStringLiteral(
-            "No 13F index yet. The holder table, the quarter-over-quarter counts, the top-10 "
-            "concentration and the short-interest ÷ 13F ratio all come from it: two quarterly SEC "
-            "data sets, around 10,600 filers and 3 million positions each, indexed locally once. "
-            "About 200 MB, a couple of minutes."));
+        no_index_text_->setText(
+            QStringLiteral("No 13F index yet. The holder table, the quarter-over-quarter counts, the top-10 "
+                           "concentration and the short-interest ÷ 13F ratio all come from it: two quarterly SEC "
+                           "data sets, around 10,600 filers and 3 million positions each, indexed locally once. "
+                           "About 200 MB, a couple of minutes."));
         build_btn_->setEnabled(!svc.index_busy());
         build_btn_->setText(svc.index_busy() ? QStringLiteral("BUILDING…") : QStringLiteral("BUILD 13F INDEX"));
     }

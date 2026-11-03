@@ -1,7 +1,7 @@
 #pragma once
-#include <QDialog>
-
 #include "screens/ownership/OwnershipTypes.h"
+
+#include <QDialog>
 
 namespace fincept::screens {
 
@@ -20,8 +20,7 @@ class Form4Dialog : public QDialog {
     Q_OBJECT
   public:
     /// @param filing every transaction reported on the one filing being shown.
-    Form4Dialog(const QVector<ownership::InsiderTransaction>& filing,
-                const QString& issuer, QWidget* parent = nullptr);
+    Form4Dialog(const QVector<ownership::InsiderTransaction>& filing, const QString& issuer, QWidget* parent = nullptr);
 };
 
 } // namespace fincept::screens

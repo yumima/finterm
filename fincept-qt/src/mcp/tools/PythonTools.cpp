@@ -58,17 +58,17 @@ std::vector<ToolDef> get_python_tools() {
     {
         ToolDef t;
         t.name = "run_python_script";
-        t.description =
-            "Execute a Python analytics script by name. IMPORTANT: only pass script names returned by "
-            "list_python_scripts — do not invent or guess script names. For market data prefer "
-            "get_quote / get_candles / edgar_* tools rather than Python scripts.";
+        t.description = "Execute a Python analytics script by name. IMPORTANT: only pass script names returned by "
+                        "list_python_scripts — do not invent or guess script names. For market data prefer "
+                        "get_quote / get_candles / edgar_* tools rather than Python scripts.";
         t.category = "analytics";
         t.input_schema.properties = QJsonObject{
-            {"script",
-             QJsonObject{{"type", "string"},
-                         {"description", "Script name (without .py) — must be a name returned by list_python_scripts"}}},
-            {"args",
-             QJsonObject{{"type", "array"}, {"items", QJsonObject{{"type", "string"}}}, {"description", "Array of string arguments to pass to the script"}}}};
+            {"script", QJsonObject{{"type", "string"},
+                                   {"description",
+                                    "Script name (without .py) — must be a name returned by list_python_scripts"}}},
+            {"args", QJsonObject{{"type", "array"},
+                                 {"items", QJsonObject{{"type", "string"}}},
+                                 {"description", "Array of string arguments to pass to the script"}}}};
         t.input_schema.required = {"script"};
         t.handler = [](const QJsonObject& args_obj) -> ToolResult {
             QString script = args_obj["script"].toString().trimmed();

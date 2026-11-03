@@ -7,6 +7,7 @@
 
 #include <QPainter>
 #include <QStyleOptionViewItem>
+
 #include <algorithm>
 
 namespace fincept::screens {
@@ -15,8 +16,8 @@ namespace fincept::screens {
 // like a book at length (warm cream on warm-dark brown). The global theme
 // TEXT_PRIMARY / TEXT_SECONDARY are cool greys tuned for data tables, which
 // read harsh against this warm-dark background.
-static const QColor kNewsTextPrimary  (0xf0, 0xe8, 0xd0);  // matches Knowledge HEAD_TEXT
-static const QColor kNewsTextSecondary(0xa8, 0x98, 0x78);  // matches Knowledge MUTED_TEXT
+static const QColor kNewsTextPrimary(0xf0, 0xe8, 0xd0);   // matches Knowledge HEAD_TEXT
+static const QColor kNewsTextSecondary(0xa8, 0x98, 0x78); // matches Knowledge MUTED_TEXT
 
 NewsFeedDelegate::NewsFeedDelegate(QObject* parent)
     : QStyledItemDelegate(parent),
@@ -68,12 +69,12 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     // QVariant[1]. Suppress locally; struct layout is fixed and QVariant
     // conversion is validated by QMetaType.
 #if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Warray-bounds"
+#    pragma GCC diagnostic push
+#    pragma GCC diagnostic ignored "-Warray-bounds"
 #endif
     auto article = index.data(ArticleRole).value<services::NewsArticle>();
 #if defined(__GNUC__) && !defined(__clang__)
-#pragma GCC diagnostic pop
+#    pragma GCC diagnostic pop
 #endif
     auto monitor_color = index.data(MonitorColorRole).toString();
     bool is_new = index.data(IsNewRole).toBool();
@@ -82,9 +83,9 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     // Background — solid deep dark to match the Knowledge column palette.
     // Hover is barely a notch above base (cool, not warm) so a cursor pass
     // doesn't turn the whole row brown; selected is a subdued amber wash.
-    static const QColor kNewsBgBase (0x13, 0x11, 0x0f);  // matches knowledge column BG
-    static const QColor kNewsBgHover(0x1c, 0x1a, 0x18);  // +9 luminance, same hue
-    static const QColor kNewsBgSel  (0x33, 0x2b, 0x22);  // selected (amber tinted)
+    static const QColor kNewsBgBase(0x13, 0x11, 0x0f);  // matches knowledge column BG
+    static const QColor kNewsBgHover(0x1c, 0x1a, 0x18); // +9 luminance, same hue
+    static const QColor kNewsBgSel(0x33, 0x2b, 0x22);   // selected (amber tinted)
     if (selected)
         painter->fillRect(rect, kNewsBgSel);
     else if (hovered)
@@ -162,8 +163,7 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
     // the user can widen for "WALL STREET JOURNAL" or narrow it down.
     painter->setFont(bold_font_);
     painter->setPen(QColor(ui::colors::CYAN()));
-    painter->drawText(QRect(x, rect.top(), source_col_width_, rect.height()),
-                      Qt::AlignVCenter | Qt::AlignLeft, source);
+    painter->drawText(QRect(x, rect.top(), source_col_width_, rect.height()), Qt::AlignVCenter | Qt::AlignLeft, source);
     x += source_col_width_ + 4;
 
     // Language badge (if not English)
@@ -211,8 +211,7 @@ void NewsFeedDelegate::paint_wire_row(QPainter* painter, const QRect& rect, cons
             const int mx = x + fm.horizontalAdvance(elided) + 6;
             painter->setFont(tiny_font_);
             painter->setPen(kNewsTextSecondary);
-            painter->drawText(QRect(mx, rect.top(), more_w - 6, rect.height()), Qt::AlignVCenter | Qt::AlignLeft,
-                              more);
+            painter->drawText(QRect(mx, rect.top(), more_w - 6, rect.height()), Qt::AlignVCenter | Qt::AlignLeft, more);
         }
     }
     x = rect.right() - right_reserve;
@@ -275,9 +274,9 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     auto velocity_text = index.data(VelocityTextRole).toString();
 
     // Card background — same deep dark + neutral hover as the wire rows.
-    static const QColor kCardBg     (0x13, 0x11, 0x0f);
-    static const QColor kCardHover  (0x1c, 0x1a, 0x18);
-    static const QColor kCardSelect (0x33, 0x2b, 0x22);
+    static const QColor kCardBg(0x13, 0x11, 0x0f);
+    static const QColor kCardHover(0x1c, 0x1a, 0x18);
+    static const QColor kCardSelect(0x33, 0x2b, 0x22);
     QColor bg = selected ? kCardSelect : (hovered ? kCardHover : kCardBg);
     painter->fillRect(rect, bg);
 
@@ -345,8 +344,7 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     if (!velocity_text.isEmpty()) {
         int vx = rect.right() - 70;
         painter->setFont(tiny_font_);
-        painter->setPen(cluster.velocity == "rising" ? QColor(ui::colors::POSITIVE())
-                                                     : kNewsTextSecondary);
+        painter->setPen(cluster.velocity == "rising" ? QColor(ui::colors::POSITIVE()) : kNewsTextSecondary);
         painter->drawText(QPoint(vx, y + 12), velocity_text);
     }
 

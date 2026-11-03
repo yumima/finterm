@@ -58,13 +58,11 @@ inline constexpr CategoryRule kCategoryRules[] = {
     {"EARNINGS", {"earnings", "quarterly results", " eps ", "guidance", nullptr}},
     {"CRYPTO", {"crypto", "bitcoin", "ethereum", "blockchain", nullptr}},
     {"DEFENSE", {"missile", "troops", "pentagon", "military", nullptr}},
-    {"ECONOMIC",
-     {" fed ", "federal reserve", "inflation", " gdp ", "interest rate", "central bank", nullptr}},
+    {"ECONOMIC", {" fed ", "federal reserve", "inflation", " gdp ", "interest rate", "central bank", nullptr}},
     {"MARKETS", {"s&p 500", "nasdaq", "dow jones", "stock market", nullptr}},
     {"ENERGY", {"energy", "crude", "opec", "natural gas", "oil price", nullptr}},
     {"TECH", {"tech", " ai ", "artificial intelligence", "semiconductor", "startup", nullptr}},
-    {"GEOPOLITICS",
-     {" nato ", "ukraine", "russia", "china", "gaza", "sanctions", "geopolit", nullptr}},
+    {"GEOPOLITICS", {" nato ", "ukraine", "russia", "china", "gaza", "sanctions", "geopolit", nullptr}},
 };
 
 /// classify() walks each keyword list until it hits the nullptr, so a list
@@ -77,8 +75,7 @@ constexpr bool all_rules_terminated() {
     }
     return true;
 }
-static_assert(all_rules_terminated(),
-              "every CategoryRule keyword list must leave a trailing nullptr");
+static_assert(all_rules_terminated(), "every CategoryRule keyword list must leave a trailing nullptr");
 
 /// Every classifiable category name, in classification order.
 ///
@@ -124,10 +121,10 @@ inline const QStringList& heading_vocabulary() {
 /// MARKETS and TECH. The two orders answer different questions and are kept
 /// apart; a test pins that they hold the same names.
 inline const QStringList& prompt_menu() {
-    static const QStringList kMenu = {
-        QStringLiteral("MARKETS"),  QStringLiteral("TECH"),     QStringLiteral("GEOPOLITICS"),
-        QStringLiteral("ENERGY"),   QStringLiteral("ECONOMIC"), QStringLiteral("CRYPTO"),
-        QStringLiteral("DEFENSE"),  QStringLiteral("EARNINGS")};
+    static const QStringList kMenu = {QStringLiteral("MARKETS"),     QStringLiteral("TECH"),
+                                      QStringLiteral("GEOPOLITICS"), QStringLiteral("ENERGY"),
+                                      QStringLiteral("ECONOMIC"),    QStringLiteral("CRYPTO"),
+                                      QStringLiteral("DEFENSE"),     QStringLiteral("EARNINGS")};
     return kMenu;
 }
 
@@ -197,8 +194,8 @@ inline QString classify(const QString& lowered, const QSet<QString>& allowed = {
 /// Fewer than two names also means "leave it alone": one name is an ordinary
 /// heading, zero means nothing recognisable.
 inline QStringList categories_in_heading(const QString& heading) {
-    static const QRegularExpression kSep(
-        QStringLiteral("\\s*(?:[,/&+]|\\band\\b)\\s*"), QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression kSep(QStringLiteral("\\s*(?:[,/&+]|\\band\\b)\\s*"),
+                                         QRegularExpression::CaseInsensitiveOption);
     // Models dress headings up: "### **DEFENSE, CRYPTO**" and "### DEFENSE,
     // CRYPTO:" are both common, and both leave the emphasis or the colon stuck
     // to a part ("**DEFENSE", "CRYPTO:") so the lookup misses and the repair is

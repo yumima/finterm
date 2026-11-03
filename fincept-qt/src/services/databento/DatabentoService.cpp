@@ -27,11 +27,11 @@ fincept::services::util::DiskCache& disk_cache() {
     return c;
 }
 
-constexpr const char* kOhlcvFile     = "ohlcv.json";
-constexpr const char* kVolFile       = "vol.json";
-constexpr const char* kFuturesFile   = "futures.json";
-constexpr const char* kDatasetsFile  = "datasets.json";
-constexpr const char* kSchemasFile   = "schemas.json";
+constexpr const char* kOhlcvFile = "ohlcv.json";
+constexpr const char* kVolFile = "vol.json";
+constexpr const char* kFuturesFile = "futures.json";
+constexpr const char* kDatasetsFile = "datasets.json";
+constexpr const char* kSchemasFile = "schemas.json";
 
 // A surface cell the provider could not compute arrives as JSON null. It
 // becomes NaN (a gap the renderers skip), never 0 — a 0 would read as a real
@@ -101,7 +101,8 @@ DatabentoService::DatabentoService() {
             }
             cached_ohlcv_ = res;
             const QFileInfo fi(disk_cache().path(QString::fromLatin1(kOhlcvFile)));
-            if (fi.exists()) last_fetch_time_ = fi.lastModified();
+            if (fi.exists())
+                last_fetch_time_ = fi.lastModified();
         }
     }
     {
@@ -114,15 +115,16 @@ DatabentoService::DatabentoService() {
             if (!symbol.isEmpty() && !raw.isEmpty()) {
                 DatabentoVolSurfaceResult res;
                 res.success = true;
-                res.vol   = parse_vol_surface(raw, symbol.toStdString(), spot);
+                res.vol = parse_vol_surface(raw, symbol.toStdString(), spot);
                 res.delta = parse_greek_surface(raw, "Delta", symbol.toStdString(), spot);
                 res.gamma = parse_greek_surface(raw, "Gamma", symbol.toStdString(), spot);
-                res.vega  = parse_greek_surface(raw, "Vega",  symbol.toStdString(), spot);
+                res.vega = parse_greek_surface(raw, "Vega", symbol.toStdString(), spot);
                 res.theta = parse_greek_surface(raw, "Theta", symbol.toStdString(), spot);
-                res.skew  = parse_skew(raw, symbol.toStdString());
+                res.skew = parse_skew(raw, symbol.toStdString());
                 cached_vol_ = res;
                 const QFileInfo fi(disk_cache().path(QString::fromLatin1(kVolFile)));
-                if (fi.exists()) last_fetch_time_ = fi.lastModified();
+                if (fi.exists())
+                    last_fetch_time_ = fi.lastModified();
             }
         }
     }
@@ -134,11 +136,12 @@ DatabentoService::DatabentoService() {
             if (!raw.isEmpty()) {
                 DatabentoFuturesResult res;
                 res.success = true;
-                res.forward  = parse_commodity_forward(raw);
+                res.forward = parse_commodity_forward(raw);
                 res.contango = parse_contango(raw);
                 cached_futures_ = res;
                 const QFileInfo fi(disk_cache().path(QString::fromLatin1(kFuturesFile)));
-                if (fi.exists()) last_fetch_time_ = fi.lastModified();
+                if (fi.exists())
+                    last_fetch_time_ = fi.lastModified();
             }
         }
     }
@@ -148,7 +151,8 @@ DatabentoService::DatabentoService() {
         if (doc.isArray()) {
             for (const auto& v : doc.array()) {
                 const QString s = v.toString();
-                if (!s.isEmpty()) cached_datasets_ << s;
+                if (!s.isEmpty())
+                    cached_datasets_ << s;
             }
         }
     }
@@ -159,8 +163,10 @@ DatabentoService::DatabentoService() {
             for (auto it = root.constBegin(); it != root.constEnd(); ++it) {
                 QStringList vals;
                 for (const auto& v : it.value().toArray())
-                    if (!v.toString().isEmpty()) vals << v.toString();
-                if (!vals.isEmpty()) cached_schemas_.insert(it.key(), vals);
+                    if (!v.toString().isEmpty())
+                        vals << v.toString();
+                if (!vals.isEmpty())
+                    cached_schemas_.insert(it.key(), vals);
             }
         }
     }
@@ -348,8 +354,8 @@ void DatabentoService::fetch_options_surface(const QString& symbol, float spot) 
         {
             QJsonObject root;
             root.insert("symbol", symbol);
-            root.insert("spot",   (double)spot);
-            root.insert("raw",    j);
+            root.insert("spot", (double)spot);
+            root.insert("raw", j);
             disk_cache().save(QString::fromLatin1(kVolFile), QJsonDocument(root));
         }
         LOG_INFO("Databento", "Vol surface ready for " + symbol);
@@ -884,7 +890,8 @@ void DatabentoService::list_datasets(std::function<void(QStringList)> cb) {
             }
             self->cached_datasets_ = out;
             QJsonArray arr;
-            for (const auto& s : out) arr.append(s);
+            for (const auto& s : out)
+                arr.append(s);
             disk_cache().save(QString::fromLatin1(kDatasetsFile), QJsonDocument(arr));
         }
         cb(out);
@@ -912,10 +919,10 @@ void DatabentoService::list_schemas(const QString& dataset, std::function<void(Q
             // accumulate across datasets the user has visited rather
             // than truncating the file every time.
             QJsonObject root;
-            for (auto it = self->cached_schemas_.constBegin();
-                 it != self->cached_schemas_.constEnd(); ++it) {
+            for (auto it = self->cached_schemas_.constBegin(); it != self->cached_schemas_.constEnd(); ++it) {
                 QJsonArray arr;
-                for (const auto& s : it.value()) arr.append(s);
+                for (const auto& s : it.value())
+                    arr.append(s);
                 root.insert(it.key(), arr);
             }
             disk_cache().save(QString::fromLatin1(kSchemasFile), QJsonDocument(root));
@@ -981,11 +988,16 @@ void DatabentoService::get_dataset_range(const QString& dataset, std::function<v
 // ── Metadata: cost estimate ────────────────────────────────────────────────
 void DatabentoService::get_cost(const DbCostQuery& q, std::function<void(DbCostResult)> cb) {
     QStringList args = {"get_cost_estimate",
-                        "dataset", q.dataset,
-                        "symbols", q.symbols.join(","),
-                        "schema", q.schema,
-                        "start_date", q.start.toString("yyyy-MM-dd"),
-                        "end_date", q.end.toString("yyyy-MM-dd")};
+                        "dataset",
+                        q.dataset,
+                        "symbols",
+                        q.symbols.join(","),
+                        "schema",
+                        q.schema,
+                        "start_date",
+                        q.start.toString("yyyy-MM-dd"),
+                        "end_date",
+                        q.end.toString("yyyy-MM-dd")};
     run_script(args, [cb](bool ok, const QJsonObject& j) {
         DbCostResult res;
         if (!ok || j["error"].toBool(false)) {
@@ -1037,8 +1049,8 @@ void DatabentoService::fetch_with_params(const DatabentoFetchParams& params) {
     // quoted. 0 travels as "unknown" and is rendered as such.
     const float spot = params.spot_override > 0.0f ? params.spot_override : 0.0f;
 
-    if (chart == "Volatility" || chart == "DeltaSurface" || chart == "GammaSurface" ||
-        chart == "VegaSurface" || chart == "ThetaSurface" || chart == "SkewSurface") {
+    if (chart == "Volatility" || chart == "DeltaSurface" || chart == "GammaSurface" || chart == "VegaSurface" ||
+        chart == "ThetaSurface" || chart == "SkewSurface") {
         fetch_options_surface(params.symbol, spot);
     } else if (chart == "LocalVolSurface") {
         fetch_local_vol(params.symbol, spot);
@@ -1055,10 +1067,9 @@ void DatabentoService::fetch_with_params(const DatabentoFetchParams& params) {
         fetch_commodity_vol(params.symbol);
     } else if (chart == "CrackSpread") {
         fetch_crack_spread();
-    } else if (chart == "Correlation" || chart == "PCA" || chart == "Drawdown" ||
-               chart == "BetaSurface" || chart == "VaR" || chart == "FactorExposure") {
-        QDate start = params.start_date.isValid() ? params.start_date
-                                                  : QDate::currentDate().addDays(-60);
+    } else if (chart == "Correlation" || chart == "PCA" || chart == "Drawdown" || chart == "BetaSurface" ||
+               chart == "VaR" || chart == "FactorExposure") {
+        QDate start = params.start_date.isValid() ? params.start_date : QDate::currentDate().addDays(-60);
         QDate end = params.end_date.isValid() ? params.end_date : QDate::currentDate();
         int days = std::max(1, (int)start.daysTo(end));
         QStringList syms = params.basket.isEmpty() ? QStringList{params.symbol} : params.basket;
@@ -1095,20 +1106,16 @@ surface::ContangoData DatabentoService::parse_contango(const QJsonObject& j) {
         QJsonArray curve = term[sym].toArray();
         // Real front-month spot only — never a fabricated $1.00 baseline (which
         // rendered every commodity as a misleading ~0% term structure).
-        const float spot_price = curve.isEmpty()
-            ? 0.0f
-            : (float)curve[0].toObject()["price"].toDouble(curve[0].toDouble());
+        const float spot_price =
+            curve.isEmpty() ? 0.0f : (float)curve[0].toObject()["price"].toDouble(curve[0].toDouble());
 
         std::vector<float> row;
         for (int i = 0; i < (int)data.contract_months.size(); i++) {
-            const float price = (i < curve.size())
-                ? (float)curve[i].toObject()["price"].toDouble(curve[i].toDouble())
-                : 0.0f;
+            const float price =
+                (i < curve.size()) ? (float)curve[i].toObject()["price"].toDouble(curve[i].toDouble()) : 0.0f;
             // A month with no real spot or no real contract price is a gap (NaN),
             // not a fabricated 0% contango.
-            row.push_back((spot_price > 0.0f && price > 0.0f)
-                              ? (price / spot_price - 1.0f) * 100.0f
-                              : kNaN);
+            row.push_back((spot_price > 0.0f && price > 0.0f) ? (price / spot_price - 1.0f) * 100.0f : kNaN);
         }
         data.z.push_back(row);
     }

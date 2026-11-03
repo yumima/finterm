@@ -25,28 +25,28 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 
 Result<void> apply_v044(QSqlDatabase& db) {
     auto r = sql(db,
-        "CREATE TABLE IF NOT EXISTS ai_predictions ("
-        "  id              INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  ticker          TEXT    NOT NULL,"
-        "  created_at      TEXT    NOT NULL,"   // ISO-8601 UTC — when predicted
-        "  model           TEXT,"               // LLM model id used
-        "  horizon_days    INTEGER NOT NULL,"   // calendar days to resolution
-        "  resolve_date    TEXT    NOT NULL,"   // YYYY-MM-DD target date
-        "  price_at_pred   REAL    NOT NULL,"   // real close at prediction time
-        "  direction       TEXT    NOT NULL,"   // 'up' | 'down' | 'flat'
-        "  target_price    REAL    DEFAULT 0,"  // predicted price at horizon
-        "  predicted_pct   REAL    DEFAULT 0,"  // predicted % move
-        "  confidence      INTEGER DEFAULT 0,"  // 0–100
-        "  recommendation  TEXT,"               // buy|accumulate|hold|reduce|sell
-        "  rationale       TEXT,"               // one-line why
-        "  analysis        TEXT,"               // full analysis prose
-        // ── resolution (filled once when the horizon passes) ──────────────────
-        "  resolved          INTEGER NOT NULL DEFAULT 0,"
-        "  price_at_resolve  REAL    DEFAULT 0,"
-        "  actual_pct        REAL    DEFAULT 0,"
-        "  correct           INTEGER DEFAULT 0,"  // 1 if the direction call hit
-        "  resolved_at       TEXT"
-        ")");
+                 "CREATE TABLE IF NOT EXISTS ai_predictions ("
+                 "  id              INTEGER PRIMARY KEY AUTOINCREMENT,"
+                 "  ticker          TEXT    NOT NULL,"
+                 "  created_at      TEXT    NOT NULL,"  // ISO-8601 UTC — when predicted
+                 "  model           TEXT,"              // LLM model id used
+                 "  horizon_days    INTEGER NOT NULL,"  // calendar days to resolution
+                 "  resolve_date    TEXT    NOT NULL,"  // YYYY-MM-DD target date
+                 "  price_at_pred   REAL    NOT NULL,"  // real close at prediction time
+                 "  direction       TEXT    NOT NULL,"  // 'up' | 'down' | 'flat'
+                 "  target_price    REAL    DEFAULT 0," // predicted price at horizon
+                 "  predicted_pct   REAL    DEFAULT 0," // predicted % move
+                 "  confidence      INTEGER DEFAULT 0," // 0–100
+                 "  recommendation  TEXT,"              // buy|accumulate|hold|reduce|sell
+                 "  rationale       TEXT,"              // one-line why
+                 "  analysis        TEXT,"              // full analysis prose
+                 // ── resolution (filled once when the horizon passes) ──────────────────
+                 "  resolved          INTEGER NOT NULL DEFAULT 0,"
+                 "  price_at_resolve  REAL    DEFAULT 0,"
+                 "  actual_pct        REAL    DEFAULT 0,"
+                 "  correct           INTEGER DEFAULT 0," // 1 if the direction call hit
+                 "  resolved_at       TEXT"
+                 ")");
     if (r.is_err())
         return r;
 

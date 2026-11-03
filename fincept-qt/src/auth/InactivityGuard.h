@@ -47,7 +47,8 @@ class InactivityGuard : public QObject {
     /// early-return and refuse to mutate state behind the lock screen.
     /// Emits terminal_locked_changed when the value actually changes.
     void set_terminal_locked(bool locked) {
-        if (terminal_locked_ == locked) return;
+        if (terminal_locked_ == locked)
+            return;
         terminal_locked_ = locked;
         emit terminal_locked_changed(locked);
     }

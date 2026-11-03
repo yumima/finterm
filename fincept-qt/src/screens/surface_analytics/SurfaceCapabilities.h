@@ -52,23 +52,37 @@ inline const char* tier_name(SurfaceTier t) {
 /// panel: a realistic-looking CDS surface invites a decision.
 inline const char* required_feed(ChartType t) {
     switch (t) {
-        case ChartType::SwaptionVol:         return "swaption vol quotes (dealer / ICAP)";
-        case ChartType::CapFloorVol:         return "cap-floor vol quotes (dealer)";
-        case ChartType::FXVol:               return "FX option vol surface (dealer)";
-        case ChartType::FXForwardPoints:     return "FX forward quotes (dealer)";
-        case ChartType::CrossCurrencyBasis:  return "cross-currency basis swap quotes (dealer)";
-        case ChartType::CDSSpread:           return "CDS quotes (Markit / dealer)";
-        case ChartType::CreditTransition:    return "rating transition matrix (S&P / Moody's)";
-        case ChartType::RecoveryRate:        return "recovery-rate study (rating agency)";
-        case ChartType::OISBasis:            return "OIS and term-rate fixings";
+        case ChartType::SwaptionVol:
+            return "swaption vol quotes (dealer / ICAP)";
+        case ChartType::CapFloorVol:
+            return "cap-floor vol quotes (dealer)";
+        case ChartType::FXVol:
+            return "FX option vol surface (dealer)";
+        case ChartType::FXForwardPoints:
+            return "FX forward quotes (dealer)";
+        case ChartType::CrossCurrencyBasis:
+            return "cross-currency basis swap quotes (dealer)";
+        case ChartType::CDSSpread:
+            return "CDS quotes (Markit / dealer)";
+        case ChartType::CreditTransition:
+            return "rating transition matrix (S&P / Moody's)";
+        case ChartType::RecoveryRate:
+            return "recovery-rate study (rating agency)";
+        case ChartType::OISBasis:
+            return "OIS and term-rate fixings";
         // ICE/BofA publish OAS by rating OR by maturity bucket, never the
         // rating x maturity grid this surface is shaped for. Half of it would
         // have to be invented, so none of it is drawn.
-        case ChartType::BondSpread:          return "a rating x maturity OAS grid";
-        case ChartType::MonetaryPolicyPath:  return "fed funds futures";
-        case ChartType::StressTestPnL:       return "a scenario set and your portfolio";
-        case ChartType::FactorExposure:      return "factor returns (Fama-French / Barra)";
-        default:                             return nullptr;
+        case ChartType::BondSpread:
+            return "a rating x maturity OAS grid";
+        case ChartType::MonetaryPolicyPath:
+            return "fed funds futures";
+        case ChartType::StressTestPnL:
+            return "a scenario set and your portfolio";
+        case ChartType::FactorExposure:
+            return "factor returns (Fama-French / Barra)";
+        default:
+            return nullptr;
     }
 }
 
@@ -101,116 +115,83 @@ struct SurfaceCapability {
 inline constexpr std::array<SurfaceCapability, 35> SURFACE_CAPABILITIES = {{
     // ── Equity Derivatives ─────────────────────────────────────────────────
     {ChartType::Volatility, SurfaceTier::COMPUTED, "OPRA.PILLAR", "definition+cbbo-1s", "parent",
-     "OPRA options definitions joined to CBBO snapshot, BS-implied vol",
-     true, true, true, true, false, true, true, false},
+     "OPRA options definitions joined to CBBO snapshot, BS-implied vol", true, true, true, true, false, true, true,
+     false},
     {ChartType::DeltaSurface, SurfaceTier::COMPUTED, "OPRA.PILLAR", "definition+cbbo-1s", "parent",
-     "Black-Scholes delta from CBBO mid",
-     true, true, true, true, false, true, true, false},
+     "Black-Scholes delta from CBBO mid", true, true, true, true, false, true, true, false},
     {ChartType::GammaSurface, SurfaceTier::COMPUTED, "OPRA.PILLAR", "definition+cbbo-1s", "parent",
-     "Black-Scholes gamma from CBBO mid",
-     true, true, true, true, false, true, true, false},
+     "Black-Scholes gamma from CBBO mid", true, true, true, true, false, true, true, false},
     {ChartType::VegaSurface, SurfaceTier::COMPUTED, "OPRA.PILLAR", "definition+cbbo-1s", "parent",
-     "Black-Scholes vega from CBBO mid",
-     true, true, true, true, false, true, true, false},
+     "Black-Scholes vega from CBBO mid", true, true, true, true, false, true, true, false},
     {ChartType::ThetaSurface, SurfaceTier::COMPUTED, "OPRA.PILLAR", "definition+cbbo-1s", "parent",
-     "Black-Scholes theta from CBBO mid",
-     true, true, true, true, false, true, true, false},
+     "Black-Scholes theta from CBBO mid", true, true, true, true, false, true, true, false},
     {ChartType::SkewSurface, SurfaceTier::COMPUTED, "OPRA.PILLAR", "definition+cbbo-1s", "parent",
-     "IV skew across delta buckets and tenors",
-     true, true, true, true, false, true, true, false},
+     "IV skew across delta buckets and tenors", true, true, true, true, false, true, true, false},
     {ChartType::LocalVolSurface, SurfaceTier::COMPUTED, "OPRA.PILLAR", "definition+cbbo-1s", "parent",
-     "Not available: Dupire local vol needs a fitted arbitrage-free IV surface (fetch returns an error)",
-     true, true, true, true, false, true, true, false},
+     "Not available: Dupire local vol needs a fitted arbitrage-free IV surface (fetch returns an error)", true, true,
+     true, true, false, true, true, false},
     // ── Fixed Income (DEMO) ─────────────────────────────────────────────────
-    {ChartType::YieldCurve, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, true},
-    {ChartType::SwaptionVol, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
-    {ChartType::CapFloorVol, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
-    {ChartType::BondSpread, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
-    {ChartType::OISBasis, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
-    {ChartType::RealYield, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
-    {ChartType::ForwardRate, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
+    {ChartType::YieldCurve, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false,
+     true, true, true},
+    {ChartType::SwaptionVol, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false,
+     true, true, false},
+    {ChartType::CapFloorVol, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false,
+     true, true, false},
+    {ChartType::BondSpread, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false,
+     true, true, false},
+    {ChartType::OISBasis, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false, true,
+     true, false},
+    {ChartType::RealYield, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false,
+     true, true, false},
+    {ChartType::ForwardRate, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false,
+     true, true, false},
     // ── FX (DEMO) ───────────────────────────────────────────────────────────
-    {ChartType::FXVol, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
-    {ChartType::FXForwardPoints, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, true},
-    {ChartType::CrossCurrencyBasis, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
+    {ChartType::FXVol, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false, true,
+     true, false},
+    {ChartType::FXForwardPoints, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false,
+     false, true, true, true},
+    {ChartType::CrossCurrencyBasis, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false,
+     false, true, true, false},
     // ── Credit (DEMO) ───────────────────────────────────────────────────────
-    {ChartType::CDSSpread, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
-    {ChartType::CreditTransition, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
-    {ChartType::RecoveryRate, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, false},
+    {ChartType::CDSSpread, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false,
+     true, true, false},
+    {ChartType::CreditTransition, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false,
+     false, true, true, false},
+    {ChartType::RecoveryRate, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false, false,
+     true, true, false},
     // ── Commodities ─────────────────────────────────────────────────────────
     {ChartType::CommodityForward, SurfaceTier::LIVE, "GLBX.MDP3", "definition+ohlcv-1d", "parent",
-     "CME futures definitions and daily settlements",
-     true, true, false, false, false, true, true, true},
+     "CME futures definitions and daily settlements", true, true, false, false, false, true, true, true},
     {ChartType::CommodityVol, SurfaceTier::COMPUTED, "GLBX.MDP3", "definition+ohlcv-1d", "parent",
-     "Daily realised vol from futures settlements",
-     true, true, false, false, false, true, true, false},
+     "Daily realised vol from futures settlements", true, true, false, false, false, true, true, false},
     {ChartType::CrackSpread, SurfaceTier::COMPUTED, "GLBX.MDP3", "ohlcv-1d", "parent",
-     "Crack/crush spreads computed from related futures",
-     true, true, false, false, false, true, true, true},
+     "Crack/crush spreads computed from related futures", true, true, false, false, false, true, true, true},
     {ChartType::ContangoBackwardation, SurfaceTier::LIVE, "GLBX.MDP3", "definition+ohlcv-1d", "parent",
-     "Term-structure shape from daily settlement curve",
-     true, true, false, false, false, true, true, true},
+     "Term-structure shape from daily settlement curve", true, true, false, false, false, true, true, true},
     // ── Risk & Portfolio ────────────────────────────────────────────────────
     {ChartType::Correlation, SurfaceTier::EQUITIES, "EQUS.MINI", "ohlcv-1d", "raw_symbol",
-     "Pairwise correlation from equities daily returns",
-     false, true, false, false, true, true, true, false},
+     "Pairwise correlation from equities daily returns", false, true, false, false, true, true, true, false},
     {ChartType::PCA, SurfaceTier::EQUITIES, "EQUS.MINI", "ohlcv-1d", "raw_symbol",
-     "Principal components of basket returns",
-     false, true, false, false, true, true, true, false},
+     "Principal components of basket returns", false, true, false, false, true, true, true, false},
     {ChartType::VaR, SurfaceTier::EQUITIES, "EQUS.MINI", "ohlcv-1d", "raw_symbol",
-     "Value-at-Risk by confidence and horizon",
-     false, true, false, false, true, true, true, false},
+     "Value-at-Risk by confidence and horizon", false, true, false, false, true, true, true, false},
     {ChartType::StressTestPnL, SurfaceTier::EQUITIES, "EQUS.MINI", "ohlcv-1d", "raw_symbol",
-     "Scenario PnL from user-defined shock vectors",
-     false, true, false, false, true, true, true, false},
+     "Scenario PnL from user-defined shock vectors", false, true, false, false, true, true, true, false},
     {ChartType::FactorExposure, SurfaceTier::EQUITIES, "EQUS.MINI", "ohlcv-1d", "raw_symbol",
-     "Factor loadings via OLS on basket returns",
-     false, true, false, false, true, true, true, false},
+     "Factor loadings via OLS on basket returns", false, true, false, false, true, true, true, false},
     {ChartType::LiquidityHeatmap, SurfaceTier::COMPUTED, "OPRA.PILLAR", "cbbo-1s+statistics", "parent",
-     "Open interest / volume across strike×expiry",
-     true, true, true, true, false, true, true, false},
+     "Open interest / volume across strike×expiry", true, true, true, true, false, true, true, false},
     {ChartType::Drawdown, SurfaceTier::EQUITIES, "EQUS.MINI", "ohlcv-1d", "raw_symbol",
-     "Rolling drawdown across windows",
-     false, true, false, false, true, true, true, false},
+     "Rolling drawdown across windows", false, true, false, false, true, true, true, false},
     {ChartType::BetaSurface, SurfaceTier::EQUITIES, "EQUS.MINI", "ohlcv-1d", "raw_symbol",
-     "Rolling beta vs SPY across horizons",
-     false, true, false, false, true, true, true, false},
+     "Rolling beta vs SPY across horizons", false, true, false, false, true, true, true, false},
     {ChartType::ImpliedDividend, SurfaceTier::COMPUTED, "OPRA.PILLAR", "definition+cbbo-1s", "parent",
-     "Implied dividend yield from put-call parity",
-     true, true, true, true, false, true, true, false},
+     "Implied dividend yield from put-call parity", true, true, true, true, false, true, true, false},
     // ── Macro (DEMO) ────────────────────────────────────────────────────────
-    {ChartType::InflationExpectations, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, true},
-    {ChartType::MonetaryPolicyPath, SurfaceTier::DEMO, "", "", "",
-     "No Databento source",
-     false, false, false, false, false, true, true, true},
+    {ChartType::InflationExpectations, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false,
+     false, true, true, true},
+    {ChartType::MonetaryPolicyPath, SurfaceTier::DEMO, "", "", "", "No Databento source", false, false, false, false,
+     false, true, true, true},
 }};
 
 inline const SurfaceCapability& capability_for(ChartType t) {

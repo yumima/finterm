@@ -117,8 +117,7 @@ void EquityOptionsTab::build_ui() {
     message_->setAlignment(Qt::AlignCenter);
     message_->setWordWrap(true);
     message_->setStyleSheet(QString("color:%1; font-size:13px; background:%2; border:1px solid %3;")
-                                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(),
-                                     ui::colors::BORDER_DIM()));
+                                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
 
     stack_->addWidget(surface_); // kSurface
     stack_->addWidget(smile_);   // kSmile
@@ -220,9 +219,8 @@ void EquityOptionsTab::on_result(const QString& symbol, bool ok, const QJsonObje
     std::sort(atm_.begin(), atm_.end(), [](const Atm& a, const Atm& b) { return a.dte < b.dte; });
 
     data_as_of_ = QDateTime::fromString(obj.value("as_of").toString(), Qt::ISODate);
-    source_label_->setText(QStringLiteral("%1 · %2")
-                               .arg(obj.value("source").toString(QStringLiteral("Yahoo Finance")),
-                                    fmt::format_datetime(data_as_of_, fmt::DateStyle::Time)));
+    source_label_->setText(QStringLiteral("%1 · %2").arg(obj.value("source").toString(QStringLiteral("Yahoo Finance")),
+                                                         fmt::format_datetime(data_as_of_, fmt::DateStyle::Time)));
     emit loaded();
 
     if (points_.empty()) {
@@ -349,7 +347,7 @@ void EquityOptionsTab::render_smile() {
             picked.push_back(dtes[i]);
     }
 
-    const QColor palette[] = {QColor(ui::colors::AMBER()),   QColor(ui::colors::CYAN()),
+    const QColor palette[] = {QColor(ui::colors::AMBER()),    QColor(ui::colors::CYAN()),
                               QColor(ui::colors::POSITIVE()), QColor(ui::colors::NEGATIVE()),
                               QColor(ui::colors::WARNING()),  QColor(ui::colors::TEXT_PRIMARY())};
     std::vector<fincept::surface::SurfaceLineWidget::Series> series;
@@ -365,8 +363,8 @@ void EquityOptionsTab::render_smile() {
         }
         series.push_back(std::move(s));
     }
-    smile_->set_series(QStringLiteral("VOLATILITY SMILE — IV BY MONEYNESS"), series,
-                       QStringLiteral("STRIKE / SPOT %"), QStringLiteral("IV %"));
+    smile_->set_series(QStringLiteral("VOLATILITY SMILE — IV BY MONEYNESS"), series, QStringLiteral("STRIKE / SPOT %"),
+                       QStringLiteral("IV %"));
 }
 
 void EquityOptionsTab::render_term() {
@@ -399,8 +397,9 @@ void EquityOptionsTab::render_table() {
         auto* iv = new QTableWidgetItem;
         iv->setData(Qt::DisplayRole, std::round(p.iv * 10000.0) / 100.0);
         table_->setItem(r, 4, iv);
-        table_->setItem(r, 5, new QTableWidgetItem(QStringLiteral("%1 / %2").arg(
-                                  QString::number(p.bid, 'f', 2), QString::number(p.ask, 'f', 2))));
+        table_->setItem(r, 5,
+                        new QTableWidgetItem(QStringLiteral("%1 / %2").arg(QString::number(p.bid, 'f', 2),
+                                                                           QString::number(p.ask, 'f', 2))));
         auto* oi = new QTableWidgetItem;
         if (p.oi >= 0)
             oi->setData(Qt::DisplayRole, p.oi);

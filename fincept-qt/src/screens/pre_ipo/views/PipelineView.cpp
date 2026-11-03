@@ -35,13 +35,11 @@ void PipelineView::build_ui() {
 
     auto* row = new QHBoxLayout;
     auto* title = new QLabel("IPO PIPELINE");
-    title->setStyleSheet(
-        QString("color:%1;font-size:14px;font-weight:800;letter-spacing:1.5px;background:transparent;")
-            .arg(colors::AMBER()));
+    title->setStyleSheet(QString("color:%1;font-size:14px;font-weight:800;letter-spacing:1.5px;background:transparent;")
+                             .arg(colors::AMBER()));
     row->addWidget(title);
     auto* sub = new QLabel("S-1, S-1/A, F-1 filers from SEC EDGAR — amendment cadence signals pricing window");
-    sub->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+    sub->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
     row->addWidget(sub);
     row->addStretch();
     count_lbl_ = new QLabel("0 filers");
@@ -53,12 +51,11 @@ void PipelineView::build_ui() {
     scroll_ = new QScrollArea;
     scroll_->setWidgetResizable(true);
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scroll_->setStyleSheet(
-        QString("QScrollArea{border:none;background:%1;}"
-                "QScrollBar:vertical{width:6px;background:transparent;}"
-                "QScrollBar::handle:vertical{background:%2;border-radius:3px;min-height:20px;}"
-                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical{height:0;}")
-            .arg(colors::BG_BASE(), colors::BORDER_MED()));
+    scroll_->setStyleSheet(QString("QScrollArea{border:none;background:%1;}"
+                                   "QScrollBar:vertical{width:6px;background:transparent;}"
+                                   "QScrollBar::handle:vertical{background:%2;border-radius:3px;min-height:20px;}"
+                                   "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical{height:0;}")
+                               .arg(colors::BG_BASE(), colors::BORDER_MED()));
 
     grid_host_ = new QWidget;
     grid_host_->setStyleSheet(QString("background:%1;").arg(colors::BG_BASE()));
@@ -66,15 +63,15 @@ void PipelineView::build_ui() {
     grid_->setContentsMargins(0, 0, 0, 0);
     grid_->setHorizontalSpacing(10);
     grid_->setVerticalSpacing(10);
-    for (int c = 0; c < kColumns; ++c) grid_->setColumnStretch(c, 1);
+    for (int c = 0; c < kColumns; ++c)
+        grid_->setColumnStretch(c, 1);
 
     scroll_->setWidget(grid_host_);
     root->addWidget(scroll_, 1);
 }
 
-void PipelineView::set_pipeline(const QVector<S1Filing>& pipeline,
-                                const QVector<PrivateCompany>& companies) {
-    pipeline_  = pipeline;
+void PipelineView::set_pipeline(const QVector<S1Filing>& pipeline, const QVector<PrivateCompany>& companies) {
+    pipeline_ = pipeline;
     companies_ = companies;
     rebuild_grid();
 }
@@ -82,25 +79,26 @@ void PipelineView::set_pipeline(const QVector<S1Filing>& pipeline,
 void PipelineView::rebuild_grid() {
     // Clear existing cards
     while (auto* item = grid_->takeAt(0)) {
-        if (item->widget()) item->widget()->deleteLater();
+        if (item->widget())
+            item->widget()->deleteLater();
         delete item;
     }
 
     QHash<QString, QString> cik_to_id;
     for (const auto& c : companies_)
-        if (!c.cik.isEmpty()) cik_to_id[c.cik] = c.id;
+        if (!c.cik.isEmpty())
+            cik_to_id[c.cik] = c.id;
 
     // Loading state when nothing's arrived yet — single placeholder card.
     if (pipeline_.isEmpty()) {
-        auto* placeholder = new QLabel(
-            "Loading SEC S-1 / F-1 filings…\n\n"
-            "First load can take ~60–90 seconds; subsequent visits load instantly from cache.");
+        auto* placeholder =
+            new QLabel("Loading SEC S-1 / F-1 filings…\n\n"
+                       "First load can take ~60–90 seconds; subsequent visits load instantly from cache.");
         placeholder->setAlignment(Qt::AlignCenter);
         placeholder->setWordWrap(true);
-        placeholder->setStyleSheet(
-            QString("color:%1;font-size:13px;padding:40px;background:%2;"
-                    "border:1px dashed %3;border-radius:4px;")
-                .arg(colors::TEXT_SECONDARY(), colors::BG_SURFACE(), colors::BORDER_DIM()));
+        placeholder->setStyleSheet(QString("color:%1;font-size:13px;padding:40px;background:%2;"
+                                           "border:1px dashed %3;border-radius:4px;")
+                                       .arg(colors::TEXT_SECONDARY(), colors::BG_SURFACE(), colors::BORDER_DIM()));
         grid_->addWidget(placeholder, 0, 0, 1, kColumns);
         count_lbl_->setText("loading…");
         return;
@@ -128,20 +126,20 @@ void PipelineView::rebuild_grid() {
     };
 
     QVector<S1Filing> sorted = pipeline_;
-    std::sort(sorted.begin(), sorted.end(),
-              [&](const S1Filing& a, const S1Filing& b) {
-                  const qint64 da = days_to_price(a);
-                  const qint64 db = days_to_price(b);
-                  if (da != db) return da < db; // soonest (most negative) first
-                  // Tiebreak: more amendments = further in pricing process
-                  if (a.amendment_count != b.amendment_count)
-                      return a.amendment_count > b.amendment_count;
-                  return a.filed_date > b.filed_date;
-              });
+    std::sort(sorted.begin(), sorted.end(), [&](const S1Filing& a, const S1Filing& b) {
+        const qint64 da = days_to_price(a);
+        const qint64 db = days_to_price(b);
+        if (da != db)
+            return da < db; // soonest (most negative) first
+        // Tiebreak: more amendments = further in pricing process
+        if (a.amendment_count != b.amendment_count)
+            return a.amendment_count > b.amendment_count;
+        return a.filed_date > b.filed_date;
+    });
 
     // Column-major layout: fill column 0 top→bottom, then column 1, then column 2.
     // The user reads down each column, so the closest IPOs occupy the left column.
-    const int total        = sorted.size();
+    const int total = sorted.size();
     const int rows_per_col = (total + kColumns - 1) / kColumns;
 
     int idx = 0;
@@ -161,10 +159,9 @@ QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) c
     auto* card = new QWidget;
     card->setCursor(Qt::PointingHandCursor);
     card->setFixedHeight(124);
-    card->setStyleSheet(
-        QString("QWidget{background:%1;border:1px solid %2;border-radius:4px;}"
-                "QWidget:hover{border-color:%3;}")
-            .arg(colors::BG_SURFACE(), colors::BORDER_DIM(), colors::AMBER()));
+    card->setStyleSheet(QString("QWidget{background:%1;border:1px solid %2;border-radius:4px;}"
+                                "QWidget:hover{border-color:%3;}")
+                            .arg(colors::BG_SURFACE(), colors::BORDER_DIM(), colors::AMBER()));
 
     auto* vl = new QVBoxLayout(card);
     vl->setContentsMargins(10, 8, 10, 8);
@@ -174,33 +171,25 @@ QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) c
     auto* row1 = new QHBoxLayout;
     row1->setSpacing(6);
     auto* name = new QLabel(s.company_name);
-    name->setStyleSheet(
-        QString("color:%1;font-size:13px;font-weight:700;background:transparent;")
-            .arg(colors::CYAN()));
+    name->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;background:transparent;").arg(colors::CYAN()));
     name->setWordWrap(true);
     row1->addWidget(name, 1);
 
     if (s.amendment_count > 0) {
         auto* amend = new QLabel("A×" + QString::number(s.amendment_count));
-        const QString amend_color = s.amendment_count >= 3
-            ? colors::AMBER() : colors::TEXT_SECONDARY();
-        amend->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:700;"
-                    "background:rgba(217,119,6,0.12);border:1px solid %1;"
-                    "border-radius:3px;padding:1px 6px;")
-                .arg(amend_color));
+        const QString amend_color = s.amendment_count >= 3 ? colors::AMBER() : colors::TEXT_SECONDARY();
+        amend->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;"
+                                     "background:rgba(217,119,6,0.12);border:1px solid %1;"
+                                     "border-radius:3px;padding:1px 6px;")
+                                 .arg(amend_color));
         row1->addWidget(amend);
     }
     vl->addLayout(row1);
 
     // Row 2: first-filed date
     const QDate today = QDate::currentDate();
-    auto* date_lbl = new QLabel(
-        s.filed_date.isValid()
-            ? "Filed " + s.filed_date.toString("MMM d, yyyy")
-            : "Filed —");
-    date_lbl->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+    auto* date_lbl = new QLabel(s.filed_date.isValid() ? "Filed " + s.filed_date.toString("MMM d, yyyy") : "Filed —");
+    date_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
     vl->addWidget(date_lbl);
 
     // Row 3: days-since-filed + window estimate
@@ -209,24 +198,26 @@ QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) c
     const int days = s.filed_date.isValid() ? static_cast<int>(s.filed_date.daysTo(today)) : -1;
     QString window = "—";
     if (days >= 0) {
-        if (days < 60)       window = "<3 mo";
-        else if (days < 120) window = "3–6 mo";
-        else if (days < 365) window = "6–12 mo";
-        else                 window = ">12 mo";
+        if (days < 60)
+            window = "<3 mo";
+        else if (days < 120)
+            window = "3–6 mo";
+        else if (days < 365)
+            window = "6–12 mo";
+        else
+            window = ">12 mo";
     }
 
     auto* dte = new QLabel(days >= 0 ? QString::number(days) + " days since file" : "—");
-    dte->setStyleSheet(
-        QString("color:%1;font-size:12px;font-family:Consolas,monospace;background:transparent;")
-            .arg(colors::TEXT_PRIMARY()));
+    dte->setStyleSheet(QString("color:%1;font-size:12px;font-family:Consolas,monospace;background:transparent;")
+                           .arg(colors::TEXT_PRIMARY()));
     row3->addWidget(dte, 1);
 
     auto* win_chip = new QLabel(window);
-    win_chip->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:600;"
-                "background:rgba(6,182,212,0.12);border:1px solid %1;"
-                "border-radius:3px;padding:1px 6px;")
-            .arg(colors::CYAN()));
+    win_chip->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;"
+                                    "background:rgba(6,182,212,0.12);border:1px solid %1;"
+                                    "border-radius:3px;padding:1px 6px;")
+                                .arg(colors::CYAN()));
     row3->addWidget(win_chip);
     vl->addLayout(row3);
 
@@ -237,16 +228,15 @@ QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) c
         if (s.filed_date.isValid() && days >= 0) {
             const int est_days = std::max(0, 90 - days);
             const QDate est_date = today.addDays(est_days);
-            date_text  = est_days == 0
-                ? QStringLiteral("Est. IPO: overdue (pricing imminent)")
-                : QString("Est. IPO: ~%1").arg(est_date.toString("MMM d, yyyy"));
+            date_text = est_days == 0 ? QStringLiteral("Est. IPO: overdue (pricing imminent)")
+                                      : QString("Est. IPO: ~%1").arg(est_date.toString("MMM d, yyyy"));
             date_color = est_days < 30 ? colors::AMBER() : colors::TEXT_SECONDARY();
         }
         if (!date_text.isEmpty()) {
             auto* est_lbl = new QLabel(date_text);
-            est_lbl->setStyleSheet(
-                QString("color:%1;font-size:12px;font-family:Consolas,monospace;"
-                        "background:transparent;").arg(date_color));
+            est_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-family:Consolas,monospace;"
+                                           "background:transparent;")
+                                       .arg(date_color));
             vl->addWidget(est_lbl);
         }
     }
@@ -267,7 +257,8 @@ QWidget* PipelineView::make_card(const S1Filing& s, const QString& company_id) c
     const QString id = company_id;
     auto* self = const_cast<PipelineView*>(this);
     QObject::connect(overlay, &QPushButton::clicked, self, [self, id] {
-        if (!id.isEmpty()) emit self->company_selected(id);
+        if (!id.isEmpty())
+            emit self->company_selected(id);
     });
 
     return card;

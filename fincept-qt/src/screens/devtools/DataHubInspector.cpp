@@ -12,10 +12,13 @@ namespace fincept::screens::devtools {
 
 namespace {
 QString format_age(qint64 ms_since_epoch) {
-    if (ms_since_epoch <= 0) return QStringLiteral("—");
+    if (ms_since_epoch <= 0)
+        return QStringLiteral("—");
     const qint64 age = QDateTime::currentMSecsSinceEpoch() - ms_since_epoch;
-    if (age < 1000) return QStringLiteral("%1 ms").arg(age);
-    if (age < 60000) return QStringLiteral("%1 s").arg(age / 1000);
+    if (age < 1000)
+        return QStringLiteral("%1 ms").arg(age);
+    if (age < 60000)
+        return QStringLiteral("%1 s").arg(age / 1000);
     return QStringLiteral("%1 m").arg(age / 60000);
 }
 } // namespace
@@ -26,8 +29,7 @@ DataHubInspector::DataHubInspector(QWidget* parent) : QWidget(parent) {
 
     table_ = new QTableWidget(this);
     table_->setColumnCount(6);
-    table_->setHorizontalHeaderLabels(
-        {"Topic", "Subs", "Publishes", "Last Publish", "Last Refresh", "State"});
+    table_->setHorizontalHeaderLabels({"Topic", "Subs", "Publishes", "Last Publish", "Last Refresh", "State"});
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setStretchLastSection(true);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -61,9 +63,12 @@ void DataHubInspector::refresh() {
         table_->setItem(row, 3, new QTableWidgetItem(format_age(s.last_publish_ms)));
         table_->setItem(row, 4, new QTableWidgetItem(format_age(s.last_refresh_request_ms)));
         QString state_label;
-        if (s.push_only) state_label = QStringLiteral("push");
-        else if (s.in_flight) state_label = QStringLiteral("in-flight");
-        else state_label = QStringLiteral("idle");
+        if (s.push_only)
+            state_label = QStringLiteral("push");
+        else if (s.in_flight)
+            state_label = QStringLiteral("in-flight");
+        else
+            state_label = QStringLiteral("idle");
         table_->setItem(row, 5, new QTableWidgetItem(state_label));
     }
 }

@@ -122,9 +122,15 @@ inline int font_px(int offset = 0) {
 /// At the default base (14px) all three return 12px — the app-wide minimum.
 /// At a larger base (e.g. 16px) they return 14px / 14px / 12px respectively,
 /// creating a readable hierarchy while still respecting the floor.
-inline QString ui_px()      { return QString::number(font_px(-2)) + "px"; }
-inline QString content_px() { return QString::number(font_px(-2)) + "px"; }
-inline QString hint_px()    { return QString::number(font_px(-2)) + "px"; }
+inline QString ui_px() {
+    return QString::number(font_px(-2)) + "px";
+}
+inline QString content_px() {
+    return QString::number(font_px(-2)) + "px";
+}
+inline QString hint_px() {
+    return QString::number(font_px(-2)) + "px";
+}
 
 } // namespace fonts
 

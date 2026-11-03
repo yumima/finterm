@@ -141,7 +141,10 @@ std::vector<UnifiedTool> McpService::list_tools_for(const QString& agent_id) {
 
     auto filtered = list_tools_for_patterns(patterns);
     LOG_INFO(TAG, QString("list_tools_for(%1): %2/%3 tools allowed by %4 pattern(s)")
-                      .arg(agent_id).arg(filtered.size()).arg(all.size()).arg(patterns.size()));
+                      .arg(agent_id)
+                      .arg(filtered.size())
+                      .arg(all.size())
+                      .arg(patterns.size()));
     return filtered;
 }
 
@@ -172,9 +175,9 @@ QJsonArray McpService::format_tools_for_openai(const QStringList& allow_globs) {
     // personas sit well under this; the cap only bites the legacy all-tools case.
     constexpr int kMaxLlmTools = 48;
     if (static_cast<int>(tools.size()) > kMaxLlmTools) {
-        LOG_WARN(TAG, QString("format_tools_for_openai: capping %1 tools → %2 for the LLM")
-                          .arg(tools.size())
-                          .arg(kMaxLlmTools));
+        LOG_WARN(
+            TAG,
+            QString("format_tools_for_openai: capping %1 tools → %2 for the LLM").arg(tools.size()).arg(kMaxLlmTools));
         tools.resize(kMaxLlmTools);
     }
 
@@ -225,8 +228,8 @@ ToolResult McpService::execute_tool(const QString& server_id, const QString& too
         if (auto rr = ToolKillswitchRepository::instance().reason_for(wire_name); rr.is_ok())
             reason = rr.value();
         const QString msg = reason.isEmpty()
-            ? QStringLiteral("Tool '%1' is disabled by the kill-switch").arg(wire_name)
-            : QStringLiteral("Tool '%1' is disabled by the kill-switch: %2").arg(wire_name, reason);
+                                ? QStringLiteral("Tool '%1' is disabled by the kill-switch").arg(wire_name)
+                                : QStringLiteral("Tool '%1' is disabled by the kill-switch: %2").arg(wire_name, reason);
         return ToolResult::fail(msg);
     }
 

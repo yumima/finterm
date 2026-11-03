@@ -23,8 +23,7 @@ class PipelineView : public QWidget {
   public:
     explicit PipelineView(QWidget* parent = nullptr);
 
-    void set_pipeline(const QVector<pre_ipo::S1Filing>& pipeline,
-                      const QVector<pre_ipo::PrivateCompany>& companies);
+    void set_pipeline(const QVector<pre_ipo::S1Filing>& pipeline, const QVector<pre_ipo::PrivateCompany>& companies);
 
   signals:
     void company_selected(QString id);
@@ -37,12 +36,12 @@ class PipelineView : public QWidget {
     void rebuild_grid();
     QWidget* make_card(const pre_ipo::S1Filing& s, const QString& company_id) const;
 
-    QGridLayout*  grid_     = nullptr;
-    QScrollArea*  scroll_   = nullptr;
-    QWidget*      grid_host_ = nullptr;
-    QLabel*       count_lbl_ = nullptr;
+    QGridLayout* grid_ = nullptr;
+    QScrollArea* scroll_ = nullptr;
+    QWidget* grid_host_ = nullptr;
+    QLabel* count_lbl_ = nullptr;
 
-    QVector<pre_ipo::S1Filing>       pipeline_;
+    QVector<pre_ipo::S1Filing> pipeline_;
     QVector<pre_ipo::PrivateCompany> companies_;
 
     static constexpr int kColumns = 3;

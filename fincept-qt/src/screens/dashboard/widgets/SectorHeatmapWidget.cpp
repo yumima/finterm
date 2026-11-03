@@ -1,10 +1,9 @@
 #include "screens/dashboard/widgets/SectorHeatmapWidget.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QFrame>
 #include <QLabel>
@@ -73,9 +72,8 @@ void SectorHeatmapWidget::refresh_data() {
     QStringList topics;
     for (const auto& sym : sector_symbols())
         topics.append(QStringLiteral("market:quote:") + sym);
-    hub.request(topics, /*force=*/true);  // user-triggered: bypass min_interval
+    hub.request(topics, /*force=*/true); // user-triggered: bypass min_interval
 }
-
 
 void SectorHeatmapWidget::hub_subscribe_all() {
     auto& hub = datahub::DataHub::instance();
@@ -125,7 +123,6 @@ void SectorHeatmapWidget::rebuild_from_cache() {
         populate(quotes);
 }
 
-
 void SectorHeatmapWidget::populate(const QVector<services::QuoteData>& quotes) {
     // Clear grid
     QLayoutItem* item;
@@ -144,26 +141,28 @@ void SectorHeatmapWidget::populate(const QVector<services::QuoteData>& quotes) {
         // Unknown change (NaN, no previous close) → neutral, untinted cell.
         const bool known = std::isfinite(q.change_pct);
         int intensity = known ? static_cast<int>(std::min(std::abs(q.change_pct) * 60.0, 200.0)) : 0;
-        QColor tint(!known ? ui::colors::TEXT_TERTIARY() : q.change_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE());
+        QColor tint(!known              ? ui::colors::TEXT_TERTIARY()
+                    : q.change_pct >= 0 ? ui::colors::POSITIVE()
+                                        : ui::colors::NEGATIVE());
         tint.setAlpha(40 + intensity);
         QString bg_color = tint.name(QColor::HexArgb);
 
-        cell->setStyleSheet(
-            QString("background: %1; border: 1px solid %2; border-radius: 2px;").arg(bg_color, ui::colors::BORDER_DIM()));
+        cell->setStyleSheet(QString("background: %1; border: 1px solid %2; border-radius: 2px;")
+                                .arg(bg_color, ui::colors::BORDER_DIM()));
 
         auto* cl = new QVBoxLayout(cell);
         cl->setContentsMargins(4, 2, 4, 2);
         cl->setSpacing(0);
 
         auto* name = new QLabel(labels.value(q.symbol, q.symbol));
-        name->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                                .arg(ui::colors::TEXT_PRIMARY()));
+        name->setStyleSheet(
+            QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
         name->setAlignment(Qt::AlignCenter);
         cl->addWidget(name);
 
         auto* chg = new QLabel(ui::formatting::format_percent(q.change_pct, 2, true));
-        chg->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                               .arg(ui::change_color(q.change_pct)));
+        chg->setStyleSheet(
+            QString("color: %1; font-weight: bold; background: transparent;").arg(ui::change_color(q.change_pct)));
         chg->setAlignment(Qt::AlignCenter);
         cl->addWidget(chg);
 

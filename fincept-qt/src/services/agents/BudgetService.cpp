@@ -24,13 +24,12 @@ double max_usd_per_day_for(const QString& agent_id) {
     if (r.is_err())
         return 0.0;
     QJsonParseError perr;
-    const QJsonDocument doc =
-        QJsonDocument::fromJson(r.value().config_json.toUtf8(), &perr);
+    const QJsonDocument doc = QJsonDocument::fromJson(r.value().config_json.toUtf8(), &perr);
     if (perr.error != QJsonParseError::NoError || !doc.isObject())
         return 0.0;
     const QJsonObject budget = doc.object().value(QStringLiteral("budget")).toObject();
     const QJsonValue cap = budget.value(QStringLiteral("max_usd_per_day"));
-    if (!cap.isDouble())  // also rejects null / undefined / non-numeric
+    if (!cap.isDouble()) // also rejects null / undefined / non-numeric
         return 0.0;
     const double v = cap.toDouble();
     return v > 0.0 ? v : 0.0;
@@ -49,7 +48,7 @@ QString start_of_local_day_utc() {
     //      ('T' = 0x54 > ' ' = 0x20), making the WHERE clause exclude
     //      every same-day trace and report $0 spent.
     const QDate today = QDate::currentDate();
-    const QDateTime local_midnight(today, QTime(0, 0));   // local by default in Qt 6
+    const QDateTime local_midnight(today, QTime(0, 0)); // local by default in Qt 6
     return local_midnight.toUTC().toString(QStringLiteral("yyyy-MM-dd HH:mm:ss"));
 }
 
@@ -63,10 +62,9 @@ BudgetService& BudgetService::instance() {
 Result<double> BudgetService::spend_today(const QString& agent_id) {
     if (agent_id.isEmpty())
         return Result<double>::ok(0.0);
-    auto r = Database::instance().execute(
-        QStringLiteral("SELECT COALESCE(SUM(cost_usd), 0.0) FROM agent_traces "
-                       "WHERE agent_id = ? AND started_at >= ?"),
-        {agent_id, start_of_local_day_utc()});
+    auto r = Database::instance().execute(QStringLiteral("SELECT COALESCE(SUM(cost_usd), 0.0) FROM agent_traces "
+                                                         "WHERE agent_id = ? AND started_at >= ?"),
+                                          {agent_id, start_of_local_day_utc()});
     if (r.is_err())
         return Result<double>::err(r.error());
     auto& q = r.value();
@@ -76,10 +74,9 @@ Result<double> BudgetService::spend_today(const QString& agent_id) {
 }
 
 Result<double> BudgetService::spend_today_total() {
-    auto r = Database::instance().execute(
-        QStringLiteral("SELECT COALESCE(SUM(cost_usd), 0.0) FROM agent_traces "
-                       "WHERE started_at >= ?"),
-        {start_of_local_day_utc()});
+    auto r = Database::instance().execute(QStringLiteral("SELECT COALESCE(SUM(cost_usd), 0.0) FROM agent_traces "
+                                                         "WHERE started_at >= ?"),
+                                          {start_of_local_day_utc()});
     if (r.is_err())
         return Result<double>::err(r.error());
     auto& q = r.value();
@@ -91,22 +88,21 @@ Result<double> BudgetService::spend_today_total() {
 Result<void> BudgetService::check_dispatch(const QString& agent_id) {
     const double cap = max_usd_per_day_for(agent_id);
     if (cap <= 0.0)
-        return Result<void>::ok();  // no cap configured
+        return Result<void>::ok(); // no cap configured
 
     auto spent_r = spend_today(agent_id);
     if (spent_r.is_err()) {
         // Fail-open on a SQL read error — same posture as the
         // kill-switch.  A transient DB hiccup shouldn't block dispatch.
         LOG_WARN(kBudgetTag, QString("budget check for %1 failed to read spend: %2 (allowing dispatch)")
-                          .arg(agent_id, QString::fromStdString(spent_r.error())));
+                                 .arg(agent_id, QString::fromStdString(spent_r.error())));
         return Result<void>::ok();
     }
     const double spent = spent_r.value();
     if (spent >= cap) {
-        return Result<void>::err(
-            QString("daily budget exceeded for agent '%1': $%2 spent today vs cap $%3")
-                .arg(agent_id, QString::number(spent, 'f', 2), QString::number(cap, 'f', 2))
-                .toStdString());
+        return Result<void>::err(QString("daily budget exceeded for agent '%1': $%2 spent today vs cap $%3")
+                                     .arg(agent_id, QString::number(spent, 'f', 2), QString::number(cap, 'f', 2))
+                                     .toStdString());
     }
     return Result<void>::ok();
 }

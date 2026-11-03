@@ -2,12 +2,11 @@
 #include "services/relationship_map/RelationshipMapService.h"
 
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "python/PythonRunner.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QFileInfo>
 #include <QJsonArray>
@@ -49,10 +48,10 @@ QString ticker_filename(const QString& ticker) {
     return s + QStringLiteral(".json");
 }
 
-}  // namespace
+} // namespace
 
 RelationshipMapService& RelationshipMapService::instance() {
-    static RelationshipMapService s;  // C++11 thread-safe local-static init
+    static RelationshipMapService s; // C++11 thread-safe local-static init
     return s;
 }
 
@@ -66,29 +65,31 @@ RelationshipMapService::RelationshipMapService() {
     // (nothing reads relmap:* before a panel navigates). The singleton lives
     // for the process lifetime, so the captured `this` can't dangle.
     QTimer::singleShot(0, [this]() {
-    const QStringList files = disk_cache().files();
-    for (const QString& fname : files) {
-        const QJsonDocument doc = disk_cache().load(fname);
-        if (!doc.isObject()) continue;
-        // Recover the ticker from the JSON (rather than parsing fname) so
-        // a corrupted filename doesn't poison the cache key. Falls back to
-        // fname stem if the payload doesn't carry company.ticker.
-        const QJsonObject root = doc.object();
-        // Pre-"peers_source" payloads carried peers from a hardcoded
-        // industry table and 0.0 for missing fields — don't replay them.
-        if (!root.contains(QStringLiteral("peers_source"))) continue;
-        QString ticker = root.value("company").toObject().value("ticker").toString();
-        if (ticker.isEmpty()) {
-            ticker = fname;
-            if (ticker.endsWith(QStringLiteral(".json"))) ticker.chop(5);
+        const QStringList files = disk_cache().files();
+        for (const QString& fname : files) {
+            const QJsonDocument doc = disk_cache().load(fname);
+            if (!doc.isObject())
+                continue;
+            // Recover the ticker from the JSON (rather than parsing fname) so
+            // a corrupted filename doesn't poison the cache key. Falls back to
+            // fname stem if the payload doesn't carry company.ticker.
+            const QJsonObject root = doc.object();
+            // Pre-"peers_source" payloads carried peers from a hardcoded
+            // industry table and 0.0 for missing fields — don't replay them.
+            if (!root.contains(QStringLiteral("peers_source")))
+                continue;
+            QString ticker = root.value("company").toObject().value("ticker").toString();
+            if (ticker.isEmpty()) {
+                ticker = fname;
+                if (ticker.endsWith(QStringLiteral(".json")))
+                    ticker.chop(5);
+            }
+            const QString blob = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+            // Use the same TTL the live fetch uses so a stale on-disk copy
+            // doesn't masquerade as fresh — CacheManager will expire it.
+            fincept::CacheManager::instance().put("relmap:" + ticker.toUpper(), QVariant(blob),
+                                                  /*ttl_sec=*/10 * 60, "relmap");
         }
-        const QString blob = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-        // Use the same TTL the live fetch uses so a stale on-disk copy
-        // doesn't masquerade as fresh — CacheManager will expire it.
-        fincept::CacheManager::instance().put("relmap:" + ticker.toUpper(),
-                                              QVariant(blob),
-                                              /*ttl_sec=*/10 * 60, "relmap");
-    }
     });
 }
 
@@ -165,112 +166,112 @@ void RelationshipMapService::parse_result(const QString& json_output) {
 
     // ── Company ──────────────────────────────────────────────────────────
     QJsonObject co = root["company"].toObject();
-    data_.company.ticker               = co["ticker"].toString();
-    data_.company.name                 = co["name"].toString();
-    data_.company.sector               = co["sector"].toString();
-    data_.company.industry             = co["industry"].toString();
-    data_.company.website              = co["website"].toString();
-    data_.company.description          = co["description"].toString();
-    data_.company.country              = co["country"].toString();
-    data_.company.exchange             = co["exchange"].toString();
-    data_.company.currency             = co["currency"].toString();
-    data_.company.employees            = co["employees"].toInt();
-    data_.company.market_cap           = num_or_nan(co["market_cap"]);
-    data_.company.current_price        = num_or_nan(co["current_price"]);
-    data_.company.previous_close       = num_or_nan(co["previous_close"]);
-    data_.company.day_change_pct       = num_or_nan(co["day_change_pct"]);
-    data_.company.pe_ratio             = num_or_nan(co["pe_ratio"]);
-    data_.company.forward_pe           = num_or_nan(co["forward_pe"]);
-    data_.company.price_to_book        = num_or_nan(co["price_to_book"]);
-    data_.company.roe                  = num_or_nan(co["roe"]);
-    data_.company.roa                  = num_or_nan(co["roa"]);
-    data_.company.revenue_growth       = num_or_nan(co["revenue_growth"]);
-    data_.company.earnings_growth      = num_or_nan(co["earnings_growth"]);
-    data_.company.profit_margins       = num_or_nan(co["profit_margins"]);
-    data_.company.revenue              = num_or_nan(co["revenue"]);
-    data_.company.ebitda               = num_or_nan(co["ebitda"]);
-    data_.company.free_cashflow        = num_or_nan(co["free_cashflow"]);
-    data_.company.operating_cashflow   = num_or_nan(co["operating_cashflow"]);
-    data_.company.total_cash           = num_or_nan(co["total_cash"]);
-    data_.company.total_debt           = num_or_nan(co["total_debt"]);
-    data_.company.insider_percent      = num_or_nan(co["insider_percent"]);
-    data_.company.institutional_percent= num_or_nan(co["institutional_percent"]);
-    data_.company.recommendation       = co["recommendation"].toString();
-    data_.company.recommendation_mean  = num_or_nan(co["recommendation_mean"]);
-    data_.company.target_high          = num_or_nan(co["target_high"]);
-    data_.company.target_low           = num_or_nan(co["target_low"]);
-    data_.company.target_mean          = num_or_nan(co["target_mean"]);
-    data_.company.target_median        = num_or_nan(co["target_median"]);
-    data_.company.analyst_count        = co["analyst_count"].toInt();
-    data_.company.dividend_yield       = num_or_nan(co["dividend_yield"]);
-    data_.company.payout_ratio         = num_or_nan(co["payout_ratio"]);
-    data_.company.trailing_eps         = num_or_nan(co["trailing_eps"]);
-    data_.company.forward_eps          = num_or_nan(co["forward_eps"]);
-    data_.company.shares_outstanding   = num_or_nan(co["shares_outstanding"]);
+    data_.company.ticker = co["ticker"].toString();
+    data_.company.name = co["name"].toString();
+    data_.company.sector = co["sector"].toString();
+    data_.company.industry = co["industry"].toString();
+    data_.company.website = co["website"].toString();
+    data_.company.description = co["description"].toString();
+    data_.company.country = co["country"].toString();
+    data_.company.exchange = co["exchange"].toString();
+    data_.company.currency = co["currency"].toString();
+    data_.company.employees = co["employees"].toInt();
+    data_.company.market_cap = num_or_nan(co["market_cap"]);
+    data_.company.current_price = num_or_nan(co["current_price"]);
+    data_.company.previous_close = num_or_nan(co["previous_close"]);
+    data_.company.day_change_pct = num_or_nan(co["day_change_pct"]);
+    data_.company.pe_ratio = num_or_nan(co["pe_ratio"]);
+    data_.company.forward_pe = num_or_nan(co["forward_pe"]);
+    data_.company.price_to_book = num_or_nan(co["price_to_book"]);
+    data_.company.roe = num_or_nan(co["roe"]);
+    data_.company.roa = num_or_nan(co["roa"]);
+    data_.company.revenue_growth = num_or_nan(co["revenue_growth"]);
+    data_.company.earnings_growth = num_or_nan(co["earnings_growth"]);
+    data_.company.profit_margins = num_or_nan(co["profit_margins"]);
+    data_.company.revenue = num_or_nan(co["revenue"]);
+    data_.company.ebitda = num_or_nan(co["ebitda"]);
+    data_.company.free_cashflow = num_or_nan(co["free_cashflow"]);
+    data_.company.operating_cashflow = num_or_nan(co["operating_cashflow"]);
+    data_.company.total_cash = num_or_nan(co["total_cash"]);
+    data_.company.total_debt = num_or_nan(co["total_debt"]);
+    data_.company.insider_percent = num_or_nan(co["insider_percent"]);
+    data_.company.institutional_percent = num_or_nan(co["institutional_percent"]);
+    data_.company.recommendation = co["recommendation"].toString();
+    data_.company.recommendation_mean = num_or_nan(co["recommendation_mean"]);
+    data_.company.target_high = num_or_nan(co["target_high"]);
+    data_.company.target_low = num_or_nan(co["target_low"]);
+    data_.company.target_mean = num_or_nan(co["target_mean"]);
+    data_.company.target_median = num_or_nan(co["target_median"]);
+    data_.company.analyst_count = co["analyst_count"].toInt();
+    data_.company.dividend_yield = num_or_nan(co["dividend_yield"]);
+    data_.company.payout_ratio = num_or_nan(co["payout_ratio"]);
+    data_.company.trailing_eps = num_or_nan(co["trailing_eps"]);
+    data_.company.forward_eps = num_or_nan(co["forward_eps"]);
+    data_.company.shares_outstanding = num_or_nan(co["shares_outstanding"]);
 
     // ── Governance ───────────────────────────────────────────────────────
     QJsonObject gov = root["governance"].toObject();
-    data_.governance.audit_risk               = gov["audit_risk"].toInt();
-    data_.governance.board_risk               = gov["board_risk"].toInt();
-    data_.governance.compensation_risk        = gov["compensation_risk"].toInt();
-    data_.governance.shareholder_rights_risk  = gov["shareholder_rights_risk"].toInt();
-    data_.governance.overall_risk             = gov["overall_risk"].toInt();
+    data_.governance.audit_risk = gov["audit_risk"].toInt();
+    data_.governance.board_risk = gov["board_risk"].toInt();
+    data_.governance.compensation_risk = gov["compensation_risk"].toInt();
+    data_.governance.shareholder_rights_risk = gov["shareholder_rights_risk"].toInt();
+    data_.governance.overall_risk = gov["overall_risk"].toInt();
 
     // ── Technicals ───────────────────────────────────────────────────────
     QJsonObject tech = root["technicals"].toObject();
-    data_.technicals.fifty_two_week_high   = num_or_nan(tech["fifty_two_week_high"]);
-    data_.technicals.fifty_two_week_low    = num_or_nan(tech["fifty_two_week_low"]);
-    data_.technicals.fifty_day_avg         = num_or_nan(tech["fifty_day_avg"]);
-    data_.technicals.two_hundred_day_avg   = num_or_nan(tech["two_hundred_day_avg"]);
-    data_.technicals.beta                  = num_or_nan(tech["beta"]);
-    data_.technicals.week52_change_pct     = num_or_nan(tech["week52_change_pct"]);
-    data_.technicals.sp500_52wk_change     = num_or_nan(tech["sp500_52wk_change"]);
-    data_.technicals.avg_volume            = tech["avg_volume"].toInt();
-    data_.technicals.avg_volume_10d        = tech["avg_volume_10d"].toInt();
+    data_.technicals.fifty_two_week_high = num_or_nan(tech["fifty_two_week_high"]);
+    data_.technicals.fifty_two_week_low = num_or_nan(tech["fifty_two_week_low"]);
+    data_.technicals.fifty_day_avg = num_or_nan(tech["fifty_day_avg"]);
+    data_.technicals.two_hundred_day_avg = num_or_nan(tech["two_hundred_day_avg"]);
+    data_.technicals.beta = num_or_nan(tech["beta"]);
+    data_.technicals.week52_change_pct = num_or_nan(tech["week52_change_pct"]);
+    data_.technicals.sp500_52wk_change = num_or_nan(tech["sp500_52wk_change"]);
+    data_.technicals.avg_volume = tech["avg_volume"].toInt();
+    data_.technicals.avg_volume_10d = tech["avg_volume_10d"].toInt();
 
     // ── Short Interest ────────────────────────────────────────────────────
     QJsonObject si = root["short_interest"].toObject();
-    data_.short_interest.shares_short     = num_or_nan(si["shares_short"]);
-    data_.short_interest.short_ratio      = num_or_nan(si["short_ratio"]);
-    data_.short_interest.short_pct_float  = num_or_nan(si["short_pct_float"]);
-    data_.short_interest.float_shares     = num_or_nan(si["float_shares"]);
+    data_.short_interest.shares_short = num_or_nan(si["shares_short"]);
+    data_.short_interest.short_ratio = num_or_nan(si["short_ratio"]);
+    data_.short_interest.short_pct_float = num_or_nan(si["short_pct_float"]);
+    data_.short_interest.float_shares = num_or_nan(si["float_shares"]);
 
     // ── Enterprise ────────────────────────────────────────────────────────
     QJsonObject ent = root["enterprise"].toObject();
     data_.enterprise.enterprise_value = num_or_nan(ent["enterprise_value"]);
-    data_.enterprise.ev_to_revenue    = num_or_nan(ent["ev_to_revenue"]);
-    data_.enterprise.ev_to_ebitda     = num_or_nan(ent["ev_to_ebitda"]);
-    data_.enterprise.peg_ratio        = num_or_nan(ent["peg_ratio"]);
-    data_.enterprise.price_to_sales   = num_or_nan(ent["price_to_sales"]);
-    data_.enterprise.book_value       = num_or_nan(ent["book_value"]);
+    data_.enterprise.ev_to_revenue = num_or_nan(ent["ev_to_revenue"]);
+    data_.enterprise.ev_to_ebitda = num_or_nan(ent["ev_to_ebitda"]);
+    data_.enterprise.peg_ratio = num_or_nan(ent["peg_ratio"]);
+    data_.enterprise.price_to_sales = num_or_nan(ent["price_to_sales"]);
+    data_.enterprise.book_value = num_or_nan(ent["book_value"]);
 
     // ── Margins & Debt ────────────────────────────────────────────────────
     QJsonObject mg = root["margins"].toObject();
-    data_.margins.gross          = num_or_nan(mg["gross"]);
-    data_.margins.operating      = num_or_nan(mg["operating"]);
-    data_.margins.ebitda         = num_or_nan(mg["ebitda"]);
-    data_.margins.net            = num_or_nan(mg["net"]);
+    data_.margins.gross = num_or_nan(mg["gross"]);
+    data_.margins.operating = num_or_nan(mg["operating"]);
+    data_.margins.ebitda = num_or_nan(mg["ebitda"]);
+    data_.margins.net = num_or_nan(mg["net"]);
     data_.margins.debt_to_equity = num_or_nan(mg["debt_to_equity"]);
-    data_.margins.current_ratio  = num_or_nan(mg["current_ratio"]);
-    data_.margins.quick_ratio    = num_or_nan(mg["quick_ratio"]);
+    data_.margins.current_ratio = num_or_nan(mg["current_ratio"]);
+    data_.margins.quick_ratio = num_or_nan(mg["quick_ratio"]);
 
     // ── Analyst Targets ───────────────────────────────────────────────────
     QJsonObject at = root["analyst_targets"].toObject();
     data_.analyst_targets.current = num_or_nan(at["current"]);
-    data_.analyst_targets.high    = num_or_nan(at["high"]);
-    data_.analyst_targets.low     = num_or_nan(at["low"]);
-    data_.analyst_targets.mean    = num_or_nan(at["mean"]);
-    data_.analyst_targets.median  = num_or_nan(at["median"]);
+    data_.analyst_targets.high = num_or_nan(at["high"]);
+    data_.analyst_targets.low = num_or_nan(at["low"]);
+    data_.analyst_targets.mean = num_or_nan(at["mean"]);
+    data_.analyst_targets.median = num_or_nan(at["median"]);
 
     // ── Recommendations Summary ───────────────────────────────────────────
     for (const auto& v : root["recommendations_summary"].toArray()) {
         QJsonObject r = v.toObject();
         RecommendationSnapshot snap;
-        snap.period      = r["period"].toString();
-        snap.strong_buy  = r["strong_buy"].toInt();
-        snap.buy         = r["buy"].toInt();
-        snap.hold        = r["hold"].toInt();
-        snap.sell        = r["sell"].toInt();
+        snap.period = r["period"].toString();
+        snap.strong_buy = r["strong_buy"].toInt();
+        snap.buy = r["buy"].toInt();
+        snap.hold = r["hold"].toInt();
+        snap.sell = r["sell"].toInt();
         snap.strong_sell = r["strong_sell"].toInt();
         data_.recommendations.append(snap);
     }
@@ -279,11 +280,11 @@ void RelationshipMapService::parse_result(const QString& json_output) {
     for (const auto& v : root["upgrades_downgrades"].toArray()) {
         QJsonObject u = v.toObject();
         AnalystUpgrade upg;
-        upg.date         = u["date"].toString();
-        upg.firm         = u["firm"].toString();
-        upg.to_grade     = u["to_grade"].toString();
-        upg.from_grade   = u["from_grade"].toString();
-        upg.action       = u["action"].toString();
+        upg.date = u["date"].toString();
+        upg.firm = u["firm"].toString();
+        upg.to_grade = u["to_grade"].toString();
+        upg.from_grade = u["from_grade"].toString();
+        upg.action = u["action"].toString();
         upg.price_target = num_or_nan(u["price_target"]);
         upg.prior_target = num_or_nan(u["prior_target"]);
         data_.upgrades_downgrades.append(upg);
@@ -293,8 +294,8 @@ void RelationshipMapService::parse_result(const QString& json_output) {
     for (const auto& v : root["officers"].toArray()) {
         QJsonObject o = v.toObject();
         CompanyOfficer off;
-        off.name      = o["name"].toString();
-        off.title     = o["title"].toString();
+        off.name = o["name"].toString();
+        off.title = o["title"].toString();
         off.total_pay = o["total_pay"].toInt();
         off.year_born = o["year_born"].toInt();
         if (!off.name.isEmpty())
@@ -303,27 +304,27 @@ void RelationshipMapService::parse_result(const QString& json_output) {
 
     // ── Calendar ──────────────────────────────────────────────────────────
     QJsonObject cal = root["calendar"].toObject();
-    data_.calendar.earnings_date    = cal["earnings_date"].toString();
-    data_.calendar.earnings_avg     = num_or_nan(cal["earnings_avg"]);
-    data_.calendar.earnings_low     = num_or_nan(cal["earnings_low"]);
-    data_.calendar.earnings_high    = num_or_nan(cal["earnings_high"]);
-    data_.calendar.revenue_avg      = num_or_nan(cal["revenue_avg"]);
-    data_.calendar.revenue_low      = num_or_nan(cal["revenue_low"]);
-    data_.calendar.revenue_high     = num_or_nan(cal["revenue_high"]);
+    data_.calendar.earnings_date = cal["earnings_date"].toString();
+    data_.calendar.earnings_avg = num_or_nan(cal["earnings_avg"]);
+    data_.calendar.earnings_low = num_or_nan(cal["earnings_low"]);
+    data_.calendar.earnings_high = num_or_nan(cal["earnings_high"]);
+    data_.calendar.revenue_avg = num_or_nan(cal["revenue_avg"]);
+    data_.calendar.revenue_low = num_or_nan(cal["revenue_low"]);
+    data_.calendar.revenue_high = num_or_nan(cal["revenue_high"]);
     data_.calendar.ex_dividend_date = cal["ex_dividend_date"].toString();
-    data_.calendar.dividend_date    = cal["dividend_date"].toString();
+    data_.calendar.dividend_date = cal["dividend_date"].toString();
 
     // ── Institutional Holders ─────────────────────────────────────────────
     for (const auto& v : root["institutional_holders"].toArray()) {
         QJsonObject h = v.toObject();
         InstitutionalHolder holder;
-        holder.name           = h["name"].toString();
-        holder.shares         = num_or_nan(h["shares"]);
-        holder.value          = num_or_nan(h["value"]);
-        holder.percentage     = num_or_nan(h["percentage"]);
+        holder.name = h["name"].toString();
+        holder.shares = num_or_nan(h["shares"]);
+        holder.value = num_or_nan(h["value"]);
+        holder.percentage = num_or_nan(h["percentage"]);
         holder.change_percent = num_or_nan(h["change_percent"]);
-        holder.fund_family    = h["fund_family"].toString();
-        holder.type           = "institutional";
+        holder.fund_family = h["fund_family"].toString();
+        holder.type = "institutional";
         if (!holder.name.isEmpty())
             data_.institutional_holders.append(holder);
     }
@@ -332,13 +333,13 @@ void RelationshipMapService::parse_result(const QString& json_output) {
     for (const auto& v : root["mutualfund_holders"].toArray()) {
         QJsonObject h = v.toObject();
         InstitutionalHolder holder;
-        holder.name           = h["name"].toString();
-        holder.shares         = num_or_nan(h["shares"]);
-        holder.value          = num_or_nan(h["value"]);
-        holder.percentage     = num_or_nan(h["percentage"]);
+        holder.name = h["name"].toString();
+        holder.shares = num_or_nan(h["shares"]);
+        holder.value = num_or_nan(h["value"]);
+        holder.percentage = num_or_nan(h["percentage"]);
         holder.change_percent = num_or_nan(h["change_percent"]);
-        holder.fund_family    = h["fund_family"].toString();
-        holder.type           = "mutualfund";
+        holder.fund_family = h["fund_family"].toString();
+        holder.type = "mutualfund";
         if (!holder.name.isEmpty())
             data_.mutualfund_holders.append(holder);
     }
@@ -347,10 +348,10 @@ void RelationshipMapService::parse_result(const QString& json_output) {
     for (const auto& v : root["insider_holders"].toArray()) {
         QJsonObject h = v.toObject();
         InsiderHolder insider;
-        insider.name             = h["name"].toString();
-        insider.title            = h["title"].toString();
-        insider.shares           = num_or_nan(h["shares"]);
-        insider.percentage       = num_or_nan(h["percentage"]);
+        insider.name = h["name"].toString();
+        insider.title = h["title"].toString();
+        insider.shares = num_or_nan(h["shares"]);
+        insider.percentage = num_or_nan(h["percentage"]);
         insider.last_transaction = h["last_transaction"].toString();
         if (!insider.name.isEmpty())
             data_.insider_holders.append(insider);
@@ -360,22 +361,22 @@ void RelationshipMapService::parse_result(const QString& json_output) {
     for (const auto& v : root["peers"].toArray()) {
         QJsonObject p = v.toObject();
         PeerCompany peer;
-        peer.ticker          = p["ticker"].toString();
-        peer.name            = p["name"].toString();
-        peer.market_cap      = num_or_nan(p["market_cap"]);
-        peer.pe_ratio        = num_or_nan(p["pe_ratio"]);
-        peer.forward_pe      = num_or_nan(p["forward_pe"]);
-        peer.roe             = num_or_nan(p["roe"]);
-        peer.revenue_growth  = num_or_nan(p["revenue_growth"]);
-        peer.profit_margins  = num_or_nan(p["profit_margins"]);
-        peer.gross_margins   = num_or_nan(p["gross_margins"]);
-        peer.current_price   = num_or_nan(p["current_price"]);
-        peer.sector          = p["sector"].toString();
-        peer.beta            = num_or_nan(p["beta"]);
-        peer.ev_to_ebitda    = num_or_nan(p["ev_to_ebitda"]);
-        peer.price_to_book   = num_or_nan(p["price_to_book"]);
-        peer.week52_change   = num_or_nan(p["week52_change"]);
-        peer.recommendation  = p["recommendation"].toString();
+        peer.ticker = p["ticker"].toString();
+        peer.name = p["name"].toString();
+        peer.market_cap = num_or_nan(p["market_cap"]);
+        peer.pe_ratio = num_or_nan(p["pe_ratio"]);
+        peer.forward_pe = num_or_nan(p["forward_pe"]);
+        peer.roe = num_or_nan(p["roe"]);
+        peer.revenue_growth = num_or_nan(p["revenue_growth"]);
+        peer.profit_margins = num_or_nan(p["profit_margins"]);
+        peer.gross_margins = num_or_nan(p["gross_margins"]);
+        peer.current_price = num_or_nan(p["current_price"]);
+        peer.sector = p["sector"].toString();
+        peer.beta = num_or_nan(p["beta"]);
+        peer.ev_to_ebitda = num_or_nan(p["ev_to_ebitda"]);
+        peer.price_to_book = num_or_nan(p["price_to_book"]);
+        peer.week52_change = num_or_nan(p["week52_change"]);
+        peer.recommendation = p["recommendation"].toString();
         if (!peer.ticker.isEmpty())
             data_.peers.append(peer);
     }
@@ -391,8 +392,7 @@ void RelationshipMapService::parse_result(const QString& json_output) {
 
     if (hub_registered_ && !data_.company.ticker.isEmpty()) {
         fincept::datahub::DataHub::instance().publish(
-            QStringLiteral("geopolitics:relationship_graph:") + data_.company.ticker,
-            QVariant::fromValue(data_));
+            QStringLiteral("geopolitics:relationship_graph:") + data_.company.ticker, QVariant::fromValue(data_));
     }
 
     LOG_INFO("RelMapService", QString("Loaded %1: %2 inst, %3 insiders, %4 peers, quality=%5%")
@@ -487,17 +487,19 @@ void RelationshipMapService::refresh(const QStringList& topics) {
     for (const auto& topic : topics) {
         const QStringList parts = topic.split(QLatin1Char(':'));
         // geopolitics:relationship_graph:<ticker>
-        if (parts.size() != 3) continue;
+        if (parts.size() != 3)
+            continue;
         fetch(parts[2]);
     }
 }
 
 int RelationshipMapService::max_requests_per_sec() const {
-    return 1;  // Heavy yfinance aggregation per call; cap at 1/sec.
+    return 1; // Heavy yfinance aggregation per call; cap at 1/sec.
 }
 
 void RelationshipMapService::ensure_registered_with_hub() {
-    if (hub_registered_) return;
+    if (hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
     hub.register_producer(this);
 

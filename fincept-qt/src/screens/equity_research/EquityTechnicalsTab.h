@@ -42,8 +42,7 @@ class EquityTechnicalsTab : public QWidget {
     void reset_panels();
     /// Render the "which bar, fetched when, stale or not" line under the
     /// rating — the only honest answer to "is this current?".
-    void update_as_of(const services::equity::TechnicalsData& data,
-                      const services::query::QueryStore::State& s);
+    void update_as_of(const services::equity::TechnicalsData& data, const services::query::QueryStore::State& s);
     void switch_period(QPushButton* btn, const QString& period);
     /// Switch the bar interval the indicators are derived from ("1d" / "1wk").
     void switch_interval(QPushButton* btn, const QString& interval);

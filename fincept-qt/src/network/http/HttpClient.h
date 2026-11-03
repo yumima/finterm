@@ -25,8 +25,7 @@ class HttpClient : public QObject {
     /// GET variant that sets additional request headers (e.g. User-Agent for
     /// SEC EDGAR, which mandates an identifying header). `extra_headers` is
     /// merged on top of build_request()'s defaults.
-    void get(const QString& url, const QHash<QByteArray, QByteArray>& extra_headers,
-             JsonCallback callback);
+    void get(const QString& url, const QHash<QByteArray, QByteArray>& extra_headers, JsonCallback callback);
     void post(const QString& url, const QJsonObject& body, JsonCallback callback);
     void put(const QString& url, const QJsonObject& body, JsonCallback callback);
     void del(const QString& url, JsonCallback callback);

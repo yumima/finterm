@@ -1,10 +1,10 @@
 #include "auth/AuthManager.h"
-#include "services/notifications/NotificationFieldStore.h"
 
 #include "auth/AuthService.h"
 #include "auth/PinManager.h"
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
+#include "services/notifications/NotificationFieldStore.h"
 #include "storage/repositories/LlmConfigRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "storage/secure/SecureStorage.h"
@@ -166,32 +166,33 @@ void AuthManager::validate_saved_session() {
 }
 
 void AuthManager::fetch_user_profile(std::function<void()> on_done) {
-    AuthService::instance().get_user_profile(session_.api_key, [this, on_done = std::move(on_done)](ApiResponse r) mutable {
-        if (!r.success && (r.status_code == 401 || r.status_code == 403)) {
-            // Do NOT clear_session() here. Auto-validation must be non-destructive:
-            // a transient, stale, or offline-induced 401/403 must never erase the
-            // stored PIN + api_key. Credentials are now per-profile in SecureStorage
-            // (see ProfileManager::secure_key_prefix), so a throwaway --profile can
-            // no longer clobber another profile's secrets — which is how a diagnostic
-            // profile once silently erased the user's credentials; this guard remains
-            // as defense-in-depth within a profile. Drop to unauthenticated and show
-            // login; only an explicit user logout erases stored secrets, and a
-            // successful re-login overwrites the (possibly stale) key.
-            LOG_WARN("Auth", "Profile fetch: api_key rejected — showing login (credentials preserved)");
-            session_.authenticated = false;
-            set_loading(false);
-            emit auth_state_changed();
-            return;
-        }
-        if (r.success) {
-            session_.user_info = UserProfile::from_json(unwrap_data(r.data));
-        } else {
-            // DB unavailable — keep cached session data
-            LOG_WARN("Auth", "Profile fetch failed — using cached data");
-            session_.authenticated = !session_.api_key.isEmpty();
-        }
-        fetch_user_subscription(std::move(on_done));
-    });
+    AuthService::instance().get_user_profile(
+        session_.api_key, [this, on_done = std::move(on_done)](ApiResponse r) mutable {
+            if (!r.success && (r.status_code == 401 || r.status_code == 403)) {
+                // Do NOT clear_session() here. Auto-validation must be non-destructive:
+                // a transient, stale, or offline-induced 401/403 must never erase the
+                // stored PIN + api_key. Credentials are now per-profile in SecureStorage
+                // (see ProfileManager::secure_key_prefix), so a throwaway --profile can
+                // no longer clobber another profile's secrets — which is how a diagnostic
+                // profile once silently erased the user's credentials; this guard remains
+                // as defense-in-depth within a profile. Drop to unauthenticated and show
+                // login; only an explicit user logout erases stored secrets, and a
+                // successful re-login overwrites the (possibly stale) key.
+                LOG_WARN("Auth", "Profile fetch: api_key rejected — showing login (credentials preserved)");
+                session_.authenticated = false;
+                set_loading(false);
+                emit auth_state_changed();
+                return;
+            }
+            if (r.success) {
+                session_.user_info = UserProfile::from_json(unwrap_data(r.data));
+            } else {
+                // DB unavailable — keep cached session data
+                LOG_WARN("Auth", "Profile fetch failed — using cached data");
+                session_.authenticated = !session_.api_key.isEmpty();
+            }
+            fetch_user_subscription(std::move(on_done));
+        });
 }
 
 // ── Shared post-auth completion ───────────────────────────────────────────────
@@ -214,9 +215,8 @@ void AuthManager::complete_auth_flow(std::function<void()> on_done) {
         // left behind by a different account must not gate (or be able to
         // unlock) this one. A PIN with no recorded owner (installs that
         // predate the binding) is adopted by whoever signs in first.
-        const QString identity = !session_.user_info.username.isEmpty()
-                                     ? session_.user_info.username
-                                     : session_.user_info.email;
+        const QString identity =
+            !session_.user_info.username.isEmpty() ? session_.user_info.username : session_.user_info.email;
         if (!identity.isEmpty()) {
             auto& store = fincept::SecureStorage::instance();
             const auto owner = store.retrieve("pin_owner");
@@ -348,9 +348,9 @@ void AuthManager::login_local(const QString& username, const QString& pin) {
         apply_tokens(api_key, session_token);
 
         session_.authenticated = true;
-        session_.api_key       = api_key;
+        session_.api_key = api_key;
         session_.session_token = session_token;
-        session_.device_id     = generate_device_id();
+        session_.device_id = generate_device_id();
 
         fetch_user_profile([this] { emit login_succeeded(); });
     });
@@ -423,7 +423,7 @@ void AuthManager::verify_mfa(const QString& email, const QString& otp) {
     // Local build: MFA is treated as a second OTP — same accept-any-6-digits logic.
     VerifyOtpRequest mfa_req;
     mfa_req.email = sanitize_input(email).toLower();
-    mfa_req.otp   = sanitize_input(otp);
+    mfa_req.otp = sanitize_input(otp);
     AuthService::instance().verify_otp(mfa_req, [this](ApiResponse r) {
         if (!r.success) {
             set_loading(false);

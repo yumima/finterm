@@ -148,12 +148,10 @@ void GovDataScreen::build_ui() {
             panel = new GovDataHKPanel(panel_stack_);
         } else if (prov.id == "universal-ckan") {
             GovProviderOptions ckan_opts;
-            ckan_opts.portal_combo_items = {"data.gov.uk", "open.canada.ca", "data.gov.au",
-                                            "data.gov.hk", "opendata.swiss", "data.gouv.fr",
-                                            "data.gov", "openafrica.net"};
-            ckan_opts.portal_combo_tooltip =
-                "This panel uses datagovuk_api.py which queries data.gov.uk.\n"
-                "The selector shows all CKAN portals covered by the universal provider.";
+            ckan_opts.portal_combo_items = {"data.gov.uk",    "open.canada.ca", "data.gov.au", "data.gov.hk",
+                                            "opendata.swiss", "data.gouv.fr",   "data.gov",    "openafrica.net"};
+            ckan_opts.portal_combo_tooltip = "This panel uses datagovuk_api.py which queries data.gov.uk.\n"
+                                             "The selector shows all CKAN portals covered by the universal provider.";
             panel = new GovDataProviderPanel(prov.script, prov.color, "Publishers", ckan_opts, panel_stack_);
         } else if (prov.id == "australia") {
             panel = new GovDataAustraliaPanel(panel_stack_);
@@ -315,9 +313,8 @@ void GovDataScreen::refresh_theme() {
     setStyleSheet(build_screen_style());
 
     const auto& t = ThemeManager::instance().tokens();
-    const QString accent_color = active_provider_color_.isEmpty()
-                                     ? QString::fromLatin1(t.accent)
-                                     : active_provider_color_;
+    const QString accent_color =
+        active_provider_color_.isEmpty() ? QString::fromLatin1(t.accent) : active_provider_color_;
     const auto ac = QColor(accent_color);
     const QString ar = QString("%1,%2,%3").arg(ac.red()).arg(ac.green()).arg(ac.blue());
 
@@ -334,17 +331,15 @@ void GovDataScreen::refresh_theme() {
         const auto& tk = ThemeManager::instance().tokens();
         const auto ac2 = QColor(tk.accent);
         const QString ar2 = QString("%1,%2,%3").arg(ac2.red()).arg(ac2.green()).arg(ac2.blue());
-        sidebar_count_->setStyleSheet(
-            QString("color:%1; background:rgba(%2,0.12); font-size:12px;"
-                    " font-weight:700; padding:1px 5px;")
-                .arg(tk.accent, ar2));
+        sidebar_count_->setStyleSheet(QString("color:%1; background:rgba(%2,0.12); font-size:12px;"
+                                              " font-weight:700; padding:1px 5px;")
+                                          .arg(tk.accent, ar2));
     }
 
     // Re-apply provider-color accent on toolbar border + subtitle
     if (!active_provider_color_.isEmpty() && header_bar_ && header_subtitle_) {
-        header_bar_->setStyleSheet(
-            QString("#govToolbar { background:%1; border-bottom:2px solid %2; }")
-                .arg(t.bg_raised, active_provider_color_));
+        header_bar_->setStyleSheet(QString("#govToolbar { background:%1; border-bottom:2px solid %2; }")
+                                       .arg(t.bg_raised, active_provider_color_));
         header_subtitle_->setStyleSheet(
             QString("color:%1; font-size:12px; background:transparent;").arg(active_provider_color_));
     }

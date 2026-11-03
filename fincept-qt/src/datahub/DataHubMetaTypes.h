@@ -16,19 +16,18 @@
 //   3. Add the matching qRegisterMetaType<T>() call in
 //      DataHubMetaTypes.cpp::register_metatypes().
 
+#include "datahub/DataHub.h"                               // SubscriptionState
 #include "screens/relationship_map/RelationshipMapTypes.h" // RelationshipData
-#include "services/dbnomics/DBnomicsModels.h"            // DbnDataPoint
-#include "services/economics/EconomicsService.h"        // EconomicsResult
-#include "services/geopolitics/GeopoliticsTypes.h"       // NewsEvent, HDXDataset, UniqueCountry, UniqueCategory
-#include "services/gov_data/GovDataService.h"           // GovDataResult
-#include "services/maritime/MaritimeTypes.h"             // VesselData
-#include "services/markets/MarketDataService.h"         // QuoteData, HistoryPoint, InfoData
-#include "services/news/NewsService.h"                  // NewsArticle
-#include "services/polymarket/PolymarketTypes.h"        // OrderBook
-#include "services/prediction/PredictionTypes.h"        // PredictionOrderBook, PredictionMarket, …
-#include "trading/TradingTypes.h"                       // TickerData, OrderBookData, Candle, TradeData, Broker*
-
-#include "datahub/DataHub.h"                             // SubscriptionState
+#include "services/dbnomics/DBnomicsModels.h"              // DbnDataPoint
+#include "services/economics/EconomicsService.h"           // EconomicsResult
+#include "services/geopolitics/GeopoliticsTypes.h"         // NewsEvent, HDXDataset, UniqueCountry, UniqueCategory
+#include "services/gov_data/GovDataService.h"              // GovDataResult
+#include "services/maritime/MaritimeTypes.h"               // VesselData
+#include "services/markets/MarketDataService.h"            // QuoteData, HistoryPoint, InfoData
+#include "services/news/NewsService.h"                     // NewsArticle
+#include "services/polymarket/PolymarketTypes.h"           // OrderBook
+#include "services/prediction/PredictionTypes.h"           // PredictionOrderBook, PredictionMarket, …
+#include "trading/TradingTypes.h"                          // TickerData, OrderBookData, Candle, TradeData, Broker*
 
 #include <QMetaType>
 

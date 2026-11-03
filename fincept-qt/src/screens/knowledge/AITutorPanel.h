@@ -24,7 +24,7 @@ class AITutorPanel : public QWidget {
 
   private:
     struct Msg {
-        QString role;     // "user" | "assistant"
+        QString role; // "user" | "assistant"
         QString content;
     };
 
@@ -38,7 +38,7 @@ class AITutorPanel : public QWidget {
     QString entry_id_;
     QString entry_title_;
     QString entry_subtitle_;
-    QString entry_body_;       ///< loaded once at construction
+    QString entry_body_; ///< loaded once at construction
     QString abbreviation_;
     QVector<Msg> thread_;
     QString streaming_buffer_;

@@ -45,7 +45,8 @@ inline double mean(const std::vector<double>& v) {
     if (v.empty())
         return 0.0;
     double s = 0.0;
-    for (double x : v) s += x;
+    for (double x : v)
+        s += x;
     return s / double(v.size());
 }
 
@@ -55,7 +56,8 @@ inline double stdev(const std::vector<double>& v) {
         return 0.0;
     const double m = mean(v);
     double ss = 0.0;
-    for (double x : v) ss += (x - m) * (x - m);
+    for (double x : v)
+        ss += (x - m) * (x - m);
     return std::sqrt(ss / double(v.size() - 1));
 }
 
@@ -124,8 +126,7 @@ inline double max_drawdown_pct(const PriceSeries& closes, int window) {
 /// shape of the distribution, and daily equity returns are not normal. NaN when
 /// the sample is too small for the quantile to mean anything — with 20 days,
 /// a 99% VaR is the worst observation and not an estimate of anything.
-inline double historical_var_pct(const std::vector<double>& returns, double confidence,
-                                 int horizon_days) {
+inline double historical_var_pct(const std::vector<double>& returns, double confidence, int horizon_days) {
     const size_t need = size_t(std::ceil(1.0 / std::max(1e-9, 1.0 - confidence))) * 2;
     if (returns.size() < std::max<size_t>(30, need))
         return std::numeric_limits<double>::quiet_NaN();
@@ -144,7 +145,7 @@ inline double historical_var_pct(const std::vector<double>& returns, double conf
 struct CorrelationResult {
     std::vector<std::string> assets;
     std::vector<std::vector<float>> z;
-    int observations = 0;   ///< overlapping return count actually used
+    int observations = 0; ///< overlapping return count actually used
 };
 CorrelationResult compute_correlation(const PriceTable& prices);
 

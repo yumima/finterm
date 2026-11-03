@@ -4,6 +4,7 @@
 
 #include <QPainter>
 #include <QPainterPath>
+
 #include <algorithm>
 
 namespace fincept::ui {
@@ -43,9 +44,7 @@ void InlineSparkline::paintEvent(QPaintEvent* /*event*/) {
             path.lineTo(x, y);
     }
 
-    const QColor col = (pts_.last() >= pts_.first())
-                           ? QColor(colors::POSITIVE())
-                           : QColor(colors::NEGATIVE());
+    const QColor col = (pts_.last() >= pts_.first()) ? QColor(colors::POSITIVE()) : QColor(colors::NEGATIVE());
     p.setRenderHint(QPainter::Antialiasing, true);
     p.setPen(QPen(col, 1.2));
     p.drawPath(path);

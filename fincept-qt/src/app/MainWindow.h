@@ -24,7 +24,7 @@ class TabBar;
 namespace fincept::screens {
 class LockScreen;
 class WorkbenchScreen;
-}
+} // namespace fincept::screens
 
 namespace fincept {
 
@@ -81,12 +81,12 @@ class MainWindow : public QMainWindow {
     // View state
     bool focus_mode_ = false;
     bool always_on_top_ = false;
-    bool locked_ = false; ///< True while lock/PIN screen is active — blocks navigation.
+    bool locked_ = false;           ///< True while lock/PIN screen is active — blocks navigation.
     bool pin_gate_cleared_ = false; ///< Set once the user has passed the PIN gate this session.
                                     ///< Prevents subsequent auth_state_changed events (profile
                                     ///< refresh, subscription fetch, focus refresh) from
                                     ///< re-locking the terminal. Reset on lock / logout.
-    bool boot_prefetched_ = false; ///< guard: the boot cache-warm runs once, after unlock.
+    bool boot_prefetched_ = false;  ///< guard: the boot cache-warm runs once, after unlock.
     AiChatBubble* chat_bubble_ = nullptr;
     QTimer* user_refresh_timer_ = nullptr;
 

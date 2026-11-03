@@ -53,7 +53,7 @@ class OffscreenVideoScaler {
     OffscreenVideoScaler();
     ~OffscreenVideoScaler();
 
-    OffscreenVideoScaler(const OffscreenVideoScaler&)            = delete;
+    OffscreenVideoScaler(const OffscreenVideoScaler&) = delete;
     OffscreenVideoScaler& operator=(const OffscreenVideoScaler&) = delete;
 
     /// True once the GL context, shaders, and textures are all set up.
@@ -84,22 +84,22 @@ class OffscreenVideoScaler {
     /// Compile and link the YUV→RGB shader program. Called once during init.
     bool build_shader();
 
-    bool init_attempted_   = false;
-    bool gl_ok_            = false;
-    bool gl_err_warned_    = false;  ///< latch: one-shot warn on glGetError, then quiet
+    bool init_attempted_ = false;
+    bool gl_ok_ = false;
+    bool gl_err_warned_ = false; ///< latch: one-shot warn on glGetError, then quiet
 
-    QOffscreenSurface*  surface_ = nullptr;
-    QOpenGLContext*     context_ = nullptr;
+    QOffscreenSurface* surface_ = nullptr;
+    QOpenGLContext* context_ = nullptr;
 
     std::unique_ptr<QOpenGLFramebufferObject> fbo_;
     QSize fbo_device_size_;
 
-    QOpenGLShaderProgram        program_;
-    QOpenGLBuffer               vbo_{QOpenGLBuffer::VertexBuffer};
-    QOpenGLVertexArrayObject    vao_;
+    QOpenGLShaderProgram program_;
+    QOpenGLBuffer vbo_{QOpenGLBuffer::VertexBuffer};
+    QOpenGLVertexArrayObject vao_;
 
-    unsigned int y_tex_  = 0;  ///< GL_R8  — luma plane, full source resolution
-    unsigned int uv_tex_ = 0;  ///< GL_RG8 — chroma plane, half resolution (NV12)
+    unsigned int y_tex_ = 0;  ///< GL_R8  — luma plane, full source resolution
+    unsigned int uv_tex_ = 0; ///< GL_RG8 — chroma plane, half resolution (NV12)
 
     // Tracked separately from FBO size: source dimensions drive these and
     // can differ (resolution changes during a stream). When they don't
@@ -108,7 +108,7 @@ class OffscreenVideoScaler {
     QSize y_tex_size_;
     QSize uv_tex_size_;
 
-    int loc_u_y_  = -1;
+    int loc_u_y_ = -1;
     int loc_u_uv_ = -1;
 };
 

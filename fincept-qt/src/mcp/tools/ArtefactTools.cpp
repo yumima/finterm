@@ -22,8 +22,7 @@ ToolResult tool_emit_artefact(const QJsonObject& args) {
         return ToolResult::fail("emit_artefact requires `kind` and `title`");
     if (!kKnownKinds.contains(kind))
         return ToolResult::fail(
-            QStringLiteral("emit_artefact: unknown kind '%1'.  Known: %2")
-                .arg(kind, kKnownKinds.join(", ")));
+            QStringLiteral("emit_artefact: unknown kind '%1'.  Known: %2").arg(kind, kKnownKinds.join(", ")));
 
     // Payload is the only required structured field — schema depends
     // on kind, but every kind has *some* payload.  Reject empty so a
@@ -54,8 +53,7 @@ ToolResult tool_emit_artefact(const QJsonObject& args) {
     data["artefact_id"] = r.value();
     data["kind"] = kind;
     data["title"] = title;
-    return ToolResult::ok(
-        QStringLiteral("Saved %1 artefact '%2'").arg(kind, title), data);
+    return ToolResult::ok(QStringLiteral("Saved %1 artefact '%2'").arg(kind, title), data);
 }
 
 } // anonymous namespace
@@ -66,43 +64,33 @@ std::vector<ToolDef> get_artefact_tools() {
 
     ToolDef t;
     t.name = "emit_artefact";
-    t.description =
-        "Publish a typed structured output (comps table, DCF model, "
-        "IC memo, report) to the artefacts store.  Use this instead of "
-        "dumping long structured content into chat.  The artefact "
-        "surfaces in the Workbench Artefacts panel where the user can "
-        "review, export, or re-run it.\n\n"
-        "Kinds: table (markdown / CSV comparable-company-style), "
-        "model (3-statement / DCF / LBO snapshot), memo (IC / "
-        "initiating-coverage / morning-note narrative), report "
-        "(multi-section research write-up).";
+    t.description = "Publish a typed structured output (comps table, DCF model, "
+                    "IC memo, report) to the artefacts store.  Use this instead of "
+                    "dumping long structured content into chat.  The artefact "
+                    "surfaces in the Workbench Artefacts panel where the user can "
+                    "review, export, or re-run it.\n\n"
+                    "Kinds: table (markdown / CSV comparable-company-style), "
+                    "model (3-statement / DCF / LBO snapshot), memo (IC / "
+                    "initiating-coverage / morning-note narrative), report "
+                    "(multi-section research write-up).";
     t.category = "artefact";
     t.input_schema.properties = QJsonObject{
-        {"kind", QJsonObject{
-                     {"type", "string"},
-                     {"enum", QJsonArray{"table", "model", "memo", "report"}},
-                     {"description", "Artefact kind"}}},
-        {"title", QJsonObject{
-                      {"type", "string"},
-                      {"description", "Short user-facing title (e.g. 'AAPL comps 2026Q1')"}}},
-        {"payload", QJsonObject{
-                        {"type", "object"},
-                        {"description",
-                         "Structured content. For `table`: {columns: [...], rows: [[...]]}. "
-                         "For `model`: {assumptions: {...}, projections: {...}}. "
-                         "For `memo`/`report`: {sections: [{heading, body}]}."}}},
-        {"source_request_id", QJsonObject{
-                                  {"type", "string"},
-                                  {"description", "Originating agent_traces.request_id (optional)"}}},
-        {"source_agent_id", QJsonObject{
-                                {"type", "string"},
-                                {"description", "Originating agent id (optional)"}}},
-        {"source_skill", QJsonObject{
-                             {"type", "string"},
-                             {"description", "Originating SKILL.md name (optional)"}}},
-        {"source_args", QJsonObject{
-                            {"type", "object"},
-                            {"description", "Slash args used to produce this artefact — feeds the re-run button"}}},
+        {"kind", QJsonObject{{"type", "string"},
+                             {"enum", QJsonArray{"table", "model", "memo", "report"}},
+                             {"description", "Artefact kind"}}},
+        {"title",
+         QJsonObject{{"type", "string"}, {"description", "Short user-facing title (e.g. 'AAPL comps 2026Q1')"}}},
+        {"payload", QJsonObject{{"type", "object"},
+                                {"description", "Structured content. For `table`: {columns: [...], rows: [[...]]}. "
+                                                "For `model`: {assumptions: {...}, projections: {...}}. "
+                                                "For `memo`/`report`: {sections: [{heading, body}]}."}}},
+        {"source_request_id",
+         QJsonObject{{"type", "string"}, {"description", "Originating agent_traces.request_id (optional)"}}},
+        {"source_agent_id", QJsonObject{{"type", "string"}, {"description", "Originating agent id (optional)"}}},
+        {"source_skill", QJsonObject{{"type", "string"}, {"description", "Originating SKILL.md name (optional)"}}},
+        {"source_args",
+         QJsonObject{{"type", "object"},
+                     {"description", "Slash args used to produce this artefact — feeds the re-run button"}}},
     };
     t.input_schema.required = {"kind", "title", "payload"};
     t.handler = tool_emit_artefact;

@@ -57,8 +57,9 @@ void EconomicsView::build_ui() {
                                              "QHeaderView::section { background:%4; color:%5; border:none;"
                                              "  border-bottom:2px solid %6; padding:3px 8px; font-size:12px;"
                                              "  font-weight:700; letter-spacing:0.5px; }")
-                                         .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
-                                              ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
+                                         .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
+                                              ui::colors::BORDER_DIM(), ui::colors::BG_SURFACE(),
+                                              ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
     ind_layout->addWidget(indicators_table_, 1);
     layout->addWidget(ind_section, 6);
 
@@ -131,8 +132,9 @@ void EconomicsView::update_indicators() {
         // hardcoded ticker map that labelled everything else "Other".
         set(1, h.sector.isEmpty() ? QStringLiteral("Sector unknown") : h.sector, ui::colors::TEXT_SECONDARY);
         set(2, QString("%1%").arg(QString::number(h.weight, 'f', 1)), ui::colors::TEXT_PRIMARY);
-        set(3, h.fx_known ? QString("%1 %2").arg(currency_).arg(QString::number(h.cost_basis, 'f', 2))
-                          : ui::formatting::placeholder(),
+        set(3,
+            h.fx_known ? QString("%1 %2").arg(currency_).arg(QString::number(h.cost_basis, 'f', 2))
+                       : ui::formatting::placeholder(),
             ui::colors::TEXT_SECONDARY);
         if (!h.valued()) {
             // No price or no FX conversion → no market value or P&L to state.

@@ -19,8 +19,7 @@ QString input_ss() {
                    " padding: 4px 6px; font-size: 12px; %4 }"
                    "QDoubleSpinBox:focus { border-color: %5; }"
                    "QDoubleSpinBox::up-button, QDoubleSpinBox::down-button { width: 0; }")
-        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER());
+        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER());
 }
 
 QString format_result(double v, const QString& fmt) {
@@ -48,8 +47,8 @@ CalculatorPanel::CalculatorPanel(const Calculator& calc, QWidget* parent) : QWid
         row->setSpacing(8);
         auto* lbl = new QLabel(label_text, this);
         lbl->setFixedWidth(120);
-        lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
-                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
+        lbl->setStyleSheet(
+            QString("color: %1; background: transparent; font-size: 11px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO));
         row->addWidget(lbl);
         auto* sb = new QDoubleSpinBox(this);
         sb->setRange(0.0, 1e12);
@@ -63,8 +62,8 @@ CalculatorPanel::CalculatorPanel(const Calculator& calc, QWidget* parent) : QWid
         return sb;
     };
 
-    num_input_ = make_input(calc_.numerator_label.isEmpty() ? "Numerator" : calc_.numerator_label,
-                            calc_.numerator_default);
+    num_input_ =
+        make_input(calc_.numerator_label.isEmpty() ? "Numerator" : calc_.numerator_label, calc_.numerator_default);
     den_input_ = make_input(calc_.denominator_label.isEmpty() ? "Denominator" : calc_.denominator_label,
                             calc_.denominator_default);
 

@@ -60,19 +60,20 @@ void ConflictMonitorPanel::build_ui() {
     events_table_->setColumnHidden(6, true);
     events_table_->verticalHeader()->setDefaultSectionSize(26);
 
-    events_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; gridline-color:%3;"
-                                         "font-family:%4; font-size:%5px; border:none; }"
-                                         "QTableWidget::item { padding:3px 8px; }"
-                                         "QTableWidget::item:selected { background:rgba(255,0,0,0.15); }"
-                                         "QHeaderView::section { background:%6; color:%7; font-weight:700;"
-                                         "padding:5px 8px; border:1px solid %3; font-family:%4; font-size:%5px; }"
-                                         "QTableWidget::item:alternate { background:%8; }")
-                                     .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM())
-                                     .arg(ui::fonts::DATA_FAMILY)
-                                     .arg(ui::fonts::SMALL)
-                                     .arg(ui::colors::BG_RAISED())
-                                     .arg(ui::colors::TEXT_SECONDARY())
-                                     .arg(ui::colors::ROW_ALT()));
+    events_table_->setStyleSheet(
+        QString("QTableWidget { background:%1; color:%2; gridline-color:%3;"
+                "font-family:%4; font-size:%5px; border:none; }"
+                "QTableWidget::item { padding:3px 8px; }"
+                "QTableWidget::item:selected { background:rgba(255,0,0,0.15); }"
+                "QHeaderView::section { background:%6; color:%7; font-weight:700;"
+                "padding:5px 8px; border:1px solid %3; font-family:%4; font-size:%5px; }"
+                "QTableWidget::item:alternate { background:%8; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM())
+            .arg(ui::fonts::DATA_FAMILY)
+            .arg(ui::fonts::SMALL)
+            .arg(ui::colors::BG_RAISED())
+            .arg(ui::colors::TEXT_SECONDARY())
+            .arg(ui::colors::ROW_ALT()));
 
     connect(events_table_, &QTableWidget::currentCellChanged, this, [this](int row, int, int, int) {
         if (row < 0 || !detail_panel_)

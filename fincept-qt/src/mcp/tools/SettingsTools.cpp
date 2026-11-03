@@ -1,10 +1,10 @@
 // SettingsTools.cpp — Settings and LLM config management (Qt port)
 
-#include "services/notifications/NotificationFieldStore.h"
 #include "mcp/tools/SettingsTools.h"
 
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
+#include "services/notifications/NotificationFieldStore.h"
 #include "storage/repositories/LlmConfigRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 
@@ -155,9 +155,8 @@ std::vector<ToolDef> get_settings_tools() {
         t.description = "Set the active LLM provider.";
         t.category = "settings";
         t.input_schema.properties = QJsonObject{
-            {"provider",
-             QJsonObject{{"type", "string"},
-                         {"description", "Provider name (openai, anthropic, ollama, groq, google)"}}}};
+            {"provider", QJsonObject{{"type", "string"},
+                                     {"description", "Provider name (openai, anthropic, ollama, groq, google)"}}}};
         t.input_schema.required = {"provider"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             QString provider = args["provider"].toString();

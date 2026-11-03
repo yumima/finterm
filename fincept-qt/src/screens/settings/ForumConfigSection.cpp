@@ -20,10 +20,9 @@ void ForumConfigSection::build_ui() {
     root->setContentsMargins(16, 16, 16, 16);
     root->setSpacing(12);
 
-    auto* hdr = new QLabel(QStringLiteral(
-        "<b>Forum</b> — point at any compatible forum backend.  Leave "
-        "empty to keep the Forum surface disabled (no outbound traffic). "
-        " A finterm-hosted forum will be the default URL once it ships."));
+    auto* hdr = new QLabel(QStringLiteral("<b>Forum</b> — point at any compatible forum backend.  Leave "
+                                          "empty to keep the Forum surface disabled (no outbound traffic). "
+                                          " A finterm-hosted forum will be the default URL once it ships."));
     hdr->setWordWrap(true);
     root->addWidget(hdr);
 
@@ -50,8 +49,7 @@ void ForumConfigSection::build_ui() {
 }
 
 void ForumConfigSection::load_current() {
-    auto r = SettingsRepository::instance().get(
-        QString::fromUtf8(services::ForumService::kBaseUrlSettingsKey));
+    auto r = SettingsRepository::instance().get(QString::fromUtf8(services::ForumService::kBaseUrlSettingsKey));
     if (r.is_ok())
         url_edit_->setText(r.value());
 }
@@ -64,23 +62,20 @@ void ForumConfigSection::on_save() {
         // response.  We don't ping the URL; user might be configuring
         // it offline.
         const QUrl parsed(val);
-        if (!parsed.isValid() || parsed.scheme().isEmpty()
-            || (parsed.scheme() != QStringLiteral("http")
-                && parsed.scheme() != QStringLiteral("https"))) {
+        if (!parsed.isValid() || parsed.scheme().isEmpty() ||
+            (parsed.scheme() != QStringLiteral("http") && parsed.scheme() != QStringLiteral("https"))) {
             show_status(QStringLiteral("URL must start with http:// or https://"), true);
             return;
         }
     }
-    auto r = SettingsRepository::instance().set(
-        QString::fromUtf8(services::ForumService::kBaseUrlSettingsKey), val, "forum");
+    auto r = SettingsRepository::instance().set(QString::fromUtf8(services::ForumService::kBaseUrlSettingsKey), val,
+                                                "forum");
     if (r.is_err()) {
-        show_status(QStringLiteral("Failed to save: %1")
-                        .arg(QString::fromStdString(r.error())), true);
+        show_status(QStringLiteral("Failed to save: %1").arg(QString::fromStdString(r.error())), true);
         return;
     }
-    show_status(val.isEmpty()
-                    ? QStringLiteral("Cleared — Forum surface disabled.")
-                    : QStringLiteral("Saved.  Forum screen will pick up the new URL on next refresh."));
+    show_status(val.isEmpty() ? QStringLiteral("Cleared — Forum surface disabled.")
+                              : QStringLiteral("Saved.  Forum screen will pick up the new URL on next refresh."));
 }
 
 void ForumConfigSection::on_clear() {
@@ -90,8 +85,7 @@ void ForumConfigSection::on_clear() {
 
 void ForumConfigSection::show_status(const QString& msg, bool error) {
     status_lbl_->setText(msg);
-    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;")
-                                     : QStringLiteral("color: #393;"));
+    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;") : QStringLiteral("color: #393;"));
 }
 
 } // namespace fincept::screens

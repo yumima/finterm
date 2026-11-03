@@ -21,18 +21,24 @@ constexpr const char* kFontPx = "12px";
 
 QString kind_label(CalendarEntry::Kind k) {
     switch (k) {
-        case CalendarEntry::Kind::Form13FDeadline: return QStringLiteral("13F due");
-        case CalendarEntry::Kind::FinraPublication: return QStringLiteral("Short interest");
-        case CalendarEntry::Kind::LockupExpiry: return QStringLiteral("Lock-up ends");
+        case CalendarEntry::Kind::Form13FDeadline:
+            return QStringLiteral("13F due");
+        case CalendarEntry::Kind::FinraPublication:
+            return QStringLiteral("Short interest");
+        case CalendarEntry::Kind::LockupExpiry:
+            return QStringLiteral("Lock-up ends");
     }
     return {};
 }
 
 QString kind_colour(CalendarEntry::Kind k) {
     switch (k) {
-        case CalendarEntry::Kind::Form13FDeadline: return ui::colors::AMBER();
-        case CalendarEntry::Kind::FinraPublication: return ui::colors::CYAN();
-        case CalendarEntry::Kind::LockupExpiry: return ui::colors::RED();
+        case CalendarEntry::Kind::Form13FDeadline:
+            return ui::colors::AMBER();
+        case CalendarEntry::Kind::FinraPublication:
+            return ui::colors::CYAN();
+        case CalendarEntry::Kind::LockupExpiry:
+            return ui::colors::RED();
     }
     return ui::colors::TEXT_PRIMARY();
 }
@@ -83,7 +89,9 @@ OwnershipCalendarWidget::OwnershipCalendarWidget(QWidget* parent)
     refresh_data();
 }
 
-void OwnershipCalendarWidget::on_theme_changed() { apply_styles(); }
+void OwnershipCalendarWidget::on_theme_changed() {
+    apply_styles();
+}
 
 bool OwnershipCalendarWidget::eventFilter(QObject* watched, QEvent* event) {
     if (event->type() == QEvent::MouseButtonRelease) {
@@ -93,8 +101,9 @@ bool OwnershipCalendarWidget::eventFilter(QObject* watched, QEvent* event) {
                 // The same two events the shell uses to open a stock: raise
                 // Equity Research, then hand it the symbol. Order matters —
                 // the screen listens only once it has been materialised.
-                EventBus::instance().publish(QStringLiteral("nav.switch_screen"),
-                                             QVariantMap{{QStringLiteral("screen_id"), QStringLiteral("equity_research")}});
+                EventBus::instance().publish(
+                    QStringLiteral("nav.switch_screen"),
+                    QVariantMap{{QStringLiteral("screen_id"), QStringLiteral("equity_research")}});
                 EventBus::instance().publish(QStringLiteral("equity_research.load_symbol"),
                                              QVariantMap{{QStringLiteral("symbol"), sym}});
                 return true;
@@ -112,7 +121,8 @@ void OwnershipCalendarWidget::apply_styles() {
     header_sep_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
     status_label_->setStyleSheet(QString("color: %1; background: transparent; padding: 6px 8px; font-size:%2;")
                                      .arg(ui::colors::TEXT_SECONDARY(), kFontPx));
-    scroll_area_->setStyleSheet(QStringLiteral("QScrollArea{background: transparent;} QScrollArea > QWidget > QWidget{background: transparent;}"));
+    scroll_area_->setStyleSheet(QStringLiteral(
+        "QScrollArea{background: transparent;} QScrollArea > QWidget > QWidget{background: transparent;}"));
     populate();
 }
 
@@ -150,20 +160,21 @@ void OwnershipCalendarWidget::populate() {
         if (!e.date.isValid())
             continue;
         auto* row = new QWidget;
-        row->setStyleSheet(QString("background: %1;").arg(alt ? ui::colors::BG_RAISED() : QStringLiteral("transparent")));
+        row->setStyleSheet(
+            QString("background: %1;").arg(alt ? ui::colors::BG_RAISED() : QStringLiteral("transparent")));
         alt = !alt;
         auto* h = new QHBoxLayout(row);
         h->setContentsMargins(8, 4, 8, 4);
         h->setSpacing(8);
 
         const int in_days = today.daysTo(e.date);
-        auto* date = new QLabel(QStringLiteral("%1  <span style='color:%2;'>%3</span>")
-                                    .arg(e.date.toString(QStringLiteral("d MMM")), ui::colors::TEXT_SECONDARY(),
-                                         in_days == 0 ? QStringLiteral("today")
-                                                      : QStringLiteral("in %1d").arg(in_days)));
+        auto* date =
+            new QLabel(QStringLiteral("%1  <span style='color:%2;'>%3</span>")
+                           .arg(e.date.toString(QStringLiteral("d MMM")), ui::colors::TEXT_SECONDARY(),
+                                in_days == 0 ? QStringLiteral("today") : QStringLiteral("in %1d").arg(in_days)));
         date->setTextFormat(Qt::RichText);
-        date->setStyleSheet(QString("color: %1; background: transparent; font-size:%2;")
-                                .arg(ui::colors::TEXT_PRIMARY(), kFontPx));
+        date->setStyleSheet(
+            QString("color: %1; background: transparent; font-size:%2;").arg(ui::colors::TEXT_PRIMARY(), kFontPx));
         h->addWidget(date, 2);
 
         auto* kind = new QLabel(kind_label(e.kind));
@@ -175,13 +186,15 @@ void OwnershipCalendarWidget::populate() {
         switch (e.kind) {
             case CalendarEntry::Kind::Form13FDeadline:
                 what = QStringLiteral("Q%1 %2 holdings must be filed — the holder tables can change")
-                           .arg((e.basis.month() - 1) / 3 + 1).arg(e.basis.year());
+                           .arg((e.basis.month() - 1) / 3 + 1)
+                           .arg(e.basis.year());
                 tip = QStringLiteral("13F is due 45 days after the quarter end (%1). Most filers use the "
                                      "whole window, so the register on every stock page moves on this day.")
                           .arg(e.basis.toString(QStringLiteral("d MMM yyyy")));
                 break;
             case CalendarEntry::Kind::FinraPublication:
-                what = QStringLiteral("FINRA publishes the %1 settlement").arg(e.basis.toString(QStringLiteral("d MMM")));
+                what =
+                    QStringLiteral("FINRA publishes the %1 settlement").arg(e.basis.toString(QStringLiteral("d MMM")));
                 tip = QStringLiteral("Firms report short positions two business days after settlement; "
                                      "FINRA publishes about eight business days after that. The short "
                                      "figures on the stock pages and the SHORT-CONSTRAINED scan refresh then.");
@@ -196,8 +209,8 @@ void OwnershipCalendarWidget::populate() {
         }
         auto* what_lbl = new QLabel(what);
         what_lbl->setTextFormat(Qt::RichText);
-        what_lbl->setStyleSheet(QString("color: %1; background: transparent; font-size:%2;")
-                                    .arg(ui::colors::TEXT_PRIMARY(), kFontPx));
+        what_lbl->setStyleSheet(
+            QString("color: %1; background: transparent; font-size:%2;").arg(ui::colors::TEXT_PRIMARY(), kFontPx));
         what_lbl->setWordWrap(true);
         h->addWidget(what_lbl, 5);
         row->setToolTip(ui::tooltip_wrap(tip));
@@ -210,8 +223,8 @@ void OwnershipCalendarWidget::populate() {
         list_layout_->insertWidget(list_layout_->count() - 1, row);
         ++shown;
     }
-    status_label_->setText(QStringLiteral("%1 events in the next %2 days · SPACs excluded from lock-ups")
-                               .arg(shown).arg(c.days));
+    status_label_->setText(
+        QStringLiteral("%1 events in the next %2 days · SPACs excluded from lock-ups").arg(shown).arg(c.days));
 }
 
 } // namespace fincept::screens::widgets

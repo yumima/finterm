@@ -5,8 +5,7 @@
 
 namespace fincept::util {
 
-VisibilityAwareTimer::VisibilityAwareTimer(QWidget* watched)
-    : QObject(watched), watched_(watched) {
+VisibilityAwareTimer::VisibilityAwareTimer(QWidget* watched) : QObject(watched), watched_(watched) {
     // Forward the QTimer's timeout to our public signal. No queued
     // connection needed — both objects live on the watched widget's
     // (typically the GUI) thread.

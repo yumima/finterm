@@ -87,64 +87,66 @@ void NewsWidget::refresh_data() {
     const qint64 token = ++refresh_token_;
     watchdog_->start(kRefreshTimeoutMs);
 
-    services::MarketDataService::instance().fetch_news("SPY", 10, [this, token](bool ok, QJsonArray articles,
-                                                                                 QString why) {
-        if (token != refresh_token_)
-            return; // superseded by watchdog or a newer click
-        watchdog_->stop();
-        set_loading(false);
-        if (ok)
-            clear_error(); // any answer retires the previous failure's message
+    services::MarketDataService::instance().fetch_news(
+        "SPY", 10, [this, token](bool ok, QJsonArray articles, QString why) {
+            if (token != refresh_token_)
+                return; // superseded by watchdog or a newer click
+            watchdog_->stop();
+            set_loading(false);
+            if (ok)
+                clear_error(); // any answer retires the previous failure's message
 
-        if (!ok) {
-            // say what happened — a refused request is not "no news"
-            const bool have_prior = news_layout_->count() > 1; // rows actually drawn (the stretch is 1)
-            finalize_refresh(why + (have_prior ? QStringLiteral(" · showing the previous headlines") : QString()));
-            if (!have_prior)
-                set_error(why + QStringLiteral(" — the feed will retry on the next refresh."));
-            LOG_WARN("NewsWidget", "fetch_news failed: " + why);
-            return;
-        }
-        if (articles.isEmpty()) {
-            // A successful answer with no articles (Yahoo had none for SPY just
-            // now). Keep prior articles, just acknowledge the click.
-            finalize_refresh(news_layout_->count() > 1 ? QStringLiteral("no articles returned · prior kept")
-                                                       : QStringLiteral("no articles returned"));
-            LOG_INFO("NewsWidget", "fetch_news returned empty array — keeping prior articles");
-            return;
-        }
+            if (!ok) {
+                // say what happened — a refused request is not "no news"
+                const bool have_prior = news_layout_->count() > 1; // rows actually drawn (the stretch is 1)
+                finalize_refresh(why + (have_prior ? QStringLiteral(" · showing the previous headlines") : QString()));
+                if (!have_prior)
+                    set_error(why + QStringLiteral(" — the feed will retry on the next refresh."));
+                LOG_WARN("NewsWidget", "fetch_news failed: " + why);
+                return;
+            }
+            if (articles.isEmpty()) {
+                // A successful answer with no articles (Yahoo had none for SPY just
+                // now). Keep prior articles, just acknowledge the click.
+                finalize_refresh(news_layout_->count() > 1 ? QStringLiteral("no articles returned · prior kept")
+                                                           : QStringLiteral("no articles returned"));
+                LOG_INFO("NewsWidget", "fetch_news returned empty array — keeping prior articles");
+                return;
+            }
 
-        // Diff against the prior populate batch so the user can tell "click
-        // did a network round-trip but Yahoo had no new items" (the common
-        // case for SPY between refreshes minutes apart — Yahoo's news feed
-        // updates roughly every 10–30 min, not on every click) from "actually
-        // fresh headlines arrived". Compute before populate() since populate
-        // overwrites last_articles_.
-        QSet<QString> prior_titles;
-        for (const auto& v : last_articles_) {
-            const auto t = v.toObject().value("title").toString();
-            if (!t.isEmpty()) prior_titles.insert(t);
-        }
-        int new_count = 0;
-        for (const auto& v : articles) {
-            const auto t = v.toObject().value("title").toString();
-            if (!t.isEmpty() && !prior_titles.contains(t)) ++new_count;
-        }
+            // Diff against the prior populate batch so the user can tell "click
+            // did a network round-trip but Yahoo had no new items" (the common
+            // case for SPY between refreshes minutes apart — Yahoo's news feed
+            // updates roughly every 10–30 min, not on every click) from "actually
+            // fresh headlines arrived". Compute before populate() since populate
+            // overwrites last_articles_.
+            QSet<QString> prior_titles;
+            for (const auto& v : last_articles_) {
+                const auto t = v.toObject().value("title").toString();
+                if (!t.isEmpty())
+                    prior_titles.insert(t);
+            }
+            int new_count = 0;
+            for (const auto& v : articles) {
+                const auto t = v.toObject().value("title").toString();
+                if (!t.isEmpty() && !prior_titles.contains(t))
+                    ++new_count;
+            }
 
-        populate(articles);
+            populate(articles);
 
-        QString outcome;
-        if (prior_titles.isEmpty()) {
-            // First populate of the session — reporting "10 new" would be
-            // noise (everything is new on a blank widget). Plain count.
-            outcome = QString::number(articles.size()) + " items";
-        } else if (new_count == 0) {
-            outcome = QString("%1 items · no changes").arg(articles.size());
-        } else {
-            outcome = QString("%1 items · %2 new").arg(articles.size()).arg(new_count);
-        }
-        finalize_refresh(outcome);
-    });
+            QString outcome;
+            if (prior_titles.isEmpty()) {
+                // First populate of the session — reporting "10 new" would be
+                // noise (everything is new on a blank widget). Plain count.
+                outcome = QString::number(articles.size()) + " items";
+            } else if (new_count == 0) {
+                outcome = QString("%1 items · no changes").arg(articles.size());
+            } else {
+                outcome = QString("%1 items · %2 new").arg(articles.size()).arg(new_count);
+            }
+            finalize_refresh(outcome);
+        });
 }
 
 void NewsWidget::finalize_refresh(const QString& outcome) {
@@ -192,8 +194,7 @@ void NewsWidget::populate(const QJsonArray& articles) {
         if (!time_str.isEmpty()) {
             auto* time_lbl = new QLabel(time_str);
             time_lbl->setFixedWidth(36);
-            time_lbl->setStyleSheet(
-                QString("color: %1; background: transparent; %2").arg(ui::colors::CYAN(), fs));
+            time_lbl->setStyleSheet(QString("color: %1; background: transparent; %2").arg(ui::colors::CYAN(), fs));
             rl->addWidget(time_lbl);
         }
 
@@ -215,15 +216,13 @@ void NewsWidget::populate(const QJsonArray& articles) {
             // underlined by default, and a feed of underlined headlines reads
             // as a wall of links rather than as news. The pointing-hand cursor
             // and the hover tooltip carry the affordance instead.
-            headline->setText(
-                QStringLiteral("<a href=\"%1\" style=\"text-decoration:none;color:%2;\">%3</a>")
-                    .arg(url.toHtmlEscaped(), ui::colors::TEXT_PRIMARY(), title.toHtmlEscaped()));
+            headline->setText(QStringLiteral("<a href=\"%1\" style=\"text-decoration:none;color:%2;\">%3</a>")
+                                  .arg(url.toHtmlEscaped(), ui::colors::TEXT_PRIMARY(), title.toHtmlEscaped()));
             headline->setToolTip(url);
             headline->setCursor(Qt::PointingHandCursor);
             // openExternalLinks would bypass the scheme check — route it
             // through open_external_link instead. Matches NewsDetailPanel.
-            connect(headline, &QLabel::linkActivated, this,
-                    [](const QString& href) { ui::open_external_link(href); });
+            connect(headline, &QLabel::linkActivated, this, [](const QString& href) { ui::open_external_link(href); });
         }
         // Anchors otherwise render in the palette's link colour, which is not
         // a terminal colour and reads as a blue misprint against the feed.
@@ -233,14 +232,12 @@ void NewsWidget::populate(const QJsonArray& articles) {
             pal.setColor(QPalette::LinkVisited, QColor(ui::colors::TEXT_SECONDARY()));
             headline->setPalette(pal);
         }
-        headline->setStyleSheet(
-            QString("color: %1; background: transparent; %2").arg(ui::colors::TEXT_PRIMARY(), fs));
+        headline->setStyleSheet(QString("color: %1; background: transparent; %2").arg(ui::colors::TEXT_PRIMARY(), fs));
         rl->addWidget(headline, 1);
 
         if (!publisher.isEmpty()) {
             auto* src = new QLabel(publisher);
-            src->setStyleSheet(
-                QString("color: %1; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY(), fs));
+            src->setStyleSheet(QString("color: %1; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY(), fs));
             rl->addWidget(src);
         }
 

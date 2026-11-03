@@ -21,13 +21,13 @@ struct ChatArtefactRow {
     QString id;
     QString kind;
     QString title;
-    QString payload_json;            ///< Structured content; schema depends on kind.
-    QString source_request_id;       ///< AgentTraceRow.request_id when produced via agent dispatch.
+    QString payload_json;      ///< Structured content; schema depends on kind.
+    QString source_request_id; ///< AgentTraceRow.request_id when produced via agent dispatch.
     QString source_agent_id;
     QString source_skill;
     QString source_args_json;
-    QString status;                  ///< "final" | "draft" | "superseded"
-    QString supersedes_id;           ///< v039: explicit predecessor link (empty/NULL for standalone or legacy rows)
+    QString status;        ///< "final" | "draft" | "superseded"
+    QString supersedes_id; ///< v039: explicit predecessor link (empty/NULL for standalone or legacy rows)
     QString created_at;
     QString updated_at;
 };
@@ -35,7 +35,7 @@ struct ChatArtefactRow {
 struct ChatArtefactCreate {
     QString kind;
     QString title;
-    QJsonObject payload;             ///< Serialised compact-JSON into payload_json.
+    QJsonObject payload; ///< Serialised compact-JSON into payload_json.
     QString source_request_id;
     QString source_agent_id;
     QString source_skill;

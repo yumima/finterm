@@ -1,6 +1,7 @@
 // src/screens/portfolio/PortfolioDetailWrapper.cpp
 #include "screens/portfolio/PortfolioDetailWrapper.h"
 
+#include "screens/portfolio/PortfolioFuturesView.h"
 #include "screens/portfolio/views/AnalyticsSectorsView.h"
 #include "screens/portfolio/views/CustomIndexView.h"
 #include "screens/portfolio/views/EconomicsView.h"
@@ -10,7 +11,6 @@
 #include "screens/portfolio/views/QuantStatsView.h"
 #include "screens/portfolio/views/ReportsView.h"
 #include "screens/portfolio/views/RiskManagementView.h"
-#include "screens/portfolio/PortfolioFuturesView.h"
 #include "ui/theme/Theme.h"
 
 #include <QHBoxLayout>
@@ -177,8 +177,7 @@ QWidget* PortfolioDetailWrapper::get_or_create_view(portfolio::DetailView view) 
     switch (view) {
         case portfolio::DetailView::AnalyticsSectors: {
             auto* asv = new AnalyticsSectorsView;
-            connect(asv, &AnalyticsSectorsView::sector_selected,
-                    this, &PortfolioDetailWrapper::sector_selected);
+            connect(asv, &AnalyticsSectorsView::sector_selected, this, &PortfolioDetailWrapper::sector_selected);
             widget = asv;
             break;
         }

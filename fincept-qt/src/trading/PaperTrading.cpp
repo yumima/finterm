@@ -182,8 +182,7 @@ void pt_cancel_order(const QString& order_id) {
         throw std::runtime_error(QString("Order not found: %1").arg(order_id).toStdString());
     const QString status = existing.value().status;
     if (status != "pending" && status != "partial")
-        throw std::runtime_error(
-            QString("Order %1 is %2 — nothing to cancel").arg(order_id, status).toStdString());
+        throw std::runtime_error(QString("Order %1 is %2 — nothing to cancel").arg(order_id, status).toStdString());
 
     auto r = repo().cancel_order(order_id);
     if (r.is_err())

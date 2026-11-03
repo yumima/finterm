@@ -38,8 +38,8 @@ struct AkCnSeries {
 // that do not sort chronologically as text, so GDP gets no date key: MIN/MAX/AVG
 // only, LATEST/CHANGE "—".
 static const QList<AkCnSeries> kAkShareSeries = {
-    {"CPI (Consumer Price Index)", "cpi", "Monthly CPI year-on-year & month-on-month", QString::fromUtf8("全国-同比增长"),
-     QString::fromUtf8("月份"), "national YoY %"},
+    {"CPI (Consumer Price Index)", "cpi", "Monthly CPI year-on-year & month-on-month",
+     QString::fromUtf8("全国-同比增长"), QString::fromUtf8("月份"), "national YoY %"},
     {"PPI (Producer Price Index)", "ppi", "Monthly PPI change rates", QString::fromUtf8("当月同比增长"),
      QString::fromUtf8("月份"), "YoY %"},
     {"GDP (Gross Domestic Product)", "gdp", "Quarterly GDP by expenditure approach",

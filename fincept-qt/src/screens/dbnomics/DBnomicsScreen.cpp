@@ -130,8 +130,9 @@ void DBnomicsScreen::build_ui() {
     // View toggle bar (36px)
     auto* toggle_bar = new QWidget(right_widget);
     toggle_bar->setFixedHeight(36);
-    toggle_bar->setStyleSheet(
-        QString("background:%1; border-bottom:1px solid %2;").arg(ui::colors::BG_RAISED()).arg(ui::colors::BORDER_MED()));
+    toggle_bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
+                                  .arg(ui::colors::BG_RAISED())
+                                  .arg(ui::colors::BORDER_MED()));
 
     auto* toggle_hl = new QHBoxLayout(toggle_bar);
     toggle_hl->setContentsMargins(8, 0, 8, 0);
@@ -321,8 +322,9 @@ void DBnomicsScreen::build_ui() {
 QWidget* DBnomicsScreen::build_toolbar() {
     auto* toolbar = new QWidget(this);
     toolbar->setFixedHeight(44);
-    toolbar->setStyleSheet(
-        QString("background:%1; border-bottom:1px solid %2;").arg(ui::colors::BG_RAISED()).arg(ui::colors::BORDER_MED()));
+    toolbar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
+                               .arg(ui::colors::BG_RAISED())
+                               .arg(ui::colors::BORDER_MED()));
 
     auto* hl = new QHBoxLayout(toolbar);
     hl->setContentsMargins(12, 0, 12, 0);

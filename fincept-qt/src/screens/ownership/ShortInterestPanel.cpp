@@ -51,8 +51,7 @@ class ShortInterestPanel::Chart : public QWidget {
         const int pad = 8, label_h = 16, axis_w = 54;
         if (rows_.isEmpty()) {
             p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
-            p.drawText(rect().adjusted(pad, pad, -pad, -pad),
-                       Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap, empty_);
+            p.drawText(rect().adjusted(pad, pad, -pad, -pad), Qt::AlignTop | Qt::AlignLeft | Qt::TextWordWrap, empty_);
             return;
         }
         const QRect plot = rect().adjusted(pad + axis_w, pad + 14, -pad, -(pad + label_h));
@@ -71,7 +70,8 @@ class ShortInterestPanel::Chart : public QWidget {
         p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
         p.drawText(QRect(pad, plot.top() - 8, axis_w - 6, 14), Qt::AlignRight | Qt::AlignVCenter, label(top));
         p.drawText(QRect(pad, mid_y - 7, axis_w - 6, 14), Qt::AlignRight | Qt::AlignVCenter, label(top / 2));
-        p.drawText(QRect(pad, plot.bottom() - 7, axis_w - 6, 14), Qt::AlignRight | Qt::AlignVCenter, QStringLiteral("0"));
+        p.drawText(QRect(pad, plot.bottom() - 7, axis_w - 6, 14), Qt::AlignRight | Qt::AlignVCenter,
+                   QStringLiteral("0"));
 
         const int n = rows_.size();
         const int slot = std::max(6, plot.width() / n);
@@ -117,18 +117,17 @@ class ShortInterestPanel::Chart : public QWidget {
                     const auto& r = rows_[b.second];
                     QToolTip::showText(
                         he->globalPos(),
-                        ui::tooltip_wrap(QStringLiteral("Settlement %1\nShares short %2%3\nDays to cover %4%5")
-                                             .arg(r.settlement.toString(QStringLiteral("d MMM yyyy")),
-                                                  compact_or_dash(r.shares_short),
-                                                  float_ && r.shares_short
-                                                      ? QStringLiteral(" (%1 of float)")
-                                                            .arg(pct_or_dash(*r.shares_short / *float_, 2))
-                                                      : QString(),
-                                                  r.days_to_cover ? QString::number(*r.days_to_cover, 'f', 1)
-                                                                  : fmt::placeholder(),
-                                                  r.change_pct ? QStringLiteral("\n%1 vs prior settlement")
-                                                                     .arg(pct_or_dash(r.change_pct, 1, true))
-                                                               : QString())),
+                        ui::tooltip_wrap(
+                            QStringLiteral("Settlement %1\nShares short %2%3\nDays to cover %4%5")
+                                .arg(r.settlement.toString(QStringLiteral("d MMM yyyy")),
+                                     compact_or_dash(r.shares_short),
+                                     float_ && r.shares_short ? QStringLiteral(" (%1 of float)")
+                                                                    .arg(pct_or_dash(*r.shares_short / *float_, 2))
+                                                              : QString(),
+                                     r.days_to_cover ? QString::number(*r.days_to_cover, 'f', 1) : fmt::placeholder(),
+                                     r.change_pct ? QStringLiteral("\n%1 vs prior settlement")
+                                                        .arg(pct_or_dash(r.change_pct, 1, true))
+                                                  : QString())),
                         this);
                     return true;
                 }
@@ -210,19 +209,19 @@ void ShortInterestPanel::set_snapshot(const OwnershipSnapshot& s, bool loading) 
     if (!hist.has_data()) {
         chart_->set({}, std::nullopt,
                     loading && hist.error.isEmpty() ? QStringLiteral("Reading FINRA short interest…")
-                                                    : hist.error.isEmpty() ? QStringLiteral("No FINRA short-interest rows.")
-                                                                           : QStringLiteral("FINRA: ") + hist.error);
+                    : hist.error.isEmpty()          ? QStringLiteral("No FINRA short-interest rows.")
+                                                    : QStringLiteral("FINRA: ") + hist.error);
         title_note_->clear();
         // The vendor's single reading as a fallback, labelled as such.
         if (s.vendor.short_pct_float || s.vendor.shares_short) {
-            figures_->setText(QStringLiteral("Vendor figure: <b>%1</b> of float short · %2 shares · days to cover %3<br>%4")
-                                  .arg(pct_or_dash(s.vendor.short_pct_float, 1),
-                                       compact_or_dash(s.vendor.shares_short),
-                                       s.vendor.short_ratio ? QString::number(*s.vendor.short_ratio, 'f', 1)
-                                                            : fmt::placeholder(),
-                                       dim(s.vendor.short_as_of.isValid()
-                                               ? QStringLiteral("as of %1").arg(s.vendor.short_as_of.toString(QStringLiteral("d MMM yyyy")))
-                                               : QString())));
+            figures_->setText(
+                QStringLiteral("Vendor figure: <b>%1</b> of float short · %2 shares · days to cover %3<br>%4")
+                    .arg(pct_or_dash(s.vendor.short_pct_float, 1), compact_or_dash(s.vendor.shares_short),
+                         s.vendor.short_ratio ? QString::number(*s.vendor.short_ratio, 'f', 1) : fmt::placeholder(),
+                         dim(s.vendor.short_as_of.isValid()
+                                 ? QStringLiteral("as of %1")
+                                       .arg(s.vendor.short_as_of.toString(QStringLiteral("d MMM yyyy")))
+                                 : QString())));
         } else {
             figures_->clear();
         }
@@ -236,28 +235,29 @@ void ShortInterestPanel::set_snapshot(const OwnershipSnapshot& s, bool loading) 
                              .arg(r->settlement.toString(QStringLiteral("d MMM yyyy")),
                                   r->published_after.toString(QStringLiteral("d MMM")))
                              .arg(hist.rows.size())
-                             .arg(hist.source == QLatin1String("finra") ? QStringLiteral("FINRA")
-                                                                        : QStringLiteral("local cache — FINRA unreachable")));
+                             .arg(hist.source == QLatin1String("finra")
+                                      ? QStringLiteral("FINRA")
+                                      : QStringLiteral("local cache — FINRA unreachable")));
 
     QStringList lines;
     lines << QStringLiteral("Shares short <b>%1</b> %2")
                  .arg(compact_or_dash(r->shares_short),
                       r->prior ? dim(QStringLiteral("(prior %1, %2)")
                                          .arg(compact_or_dash(r->prior))
-                                         .arg(r->change_pct
-                                                  ? QStringLiteral("<span style='color:%1;'>%2</span>")
-                                                        .arg(*r->change_pct > 0 ? ui::colors::RED() : ui::colors::GREEN(),
-                                                             pct_or_dash(r->change_pct, 1, true))
-                                                  : fmt::placeholder()))
+                                         .arg(r->change_pct ? QStringLiteral("<span style='color:%1;'>%2</span>")
+                                                                  .arg(*r->change_pct > 0 ? ui::colors::RED()
+                                                                                          : ui::colors::GREEN(),
+                                                                       pct_or_dash(r->change_pct, 1, true))
+                                                            : fmt::placeholder()))
                                : QString());
     if (h.si_pct_float)
-        lines << QStringLiteral("<b>%1</b> of float %2").arg(pct_or_dash(h.si_pct_float, 2),
-                                                             dim(QStringLiteral("(vendor float)")));
+        lines << QStringLiteral("<b>%1</b> of float %2")
+                     .arg(pct_or_dash(h.si_pct_float, 2), dim(QStringLiteral("(vendor float)")));
     lines << QStringLiteral("Days to cover <b>%1</b> %2")
                  .arg(r->days_to_cover ? QString::number(*r->days_to_cover, 'f', 1) : fmt::placeholder(),
-                      dim(r->avg_daily_volume ? QStringLiteral("on %1 avg daily volume")
-                                                    .arg(fmt::format_compact(*r->avg_daily_volume))
-                                              : QString()));
+                      dim(r->avg_daily_volume
+                              ? QStringLiteral("on %1 avg daily volume").arg(fmt::format_compact(*r->avg_daily_volume))
+                              : QString()));
     if (h.sirio) {
         QString sirio = QStringLiteral("Short interest ÷ 13F shares <b>%1</b>").arg(QString::number(*h.sirio, 'f', 3));
         if (s.sirio_percentile)
@@ -275,11 +275,11 @@ void ShortInterestPanel::set_snapshot(const OwnershipSnapshot& s, bool loading) 
                                        sv.as_of.toString(QStringLiteral("d MMM")))));
     }
     figures_->setText(lines.join(QStringLiteral("<br>")));
-    figures_->setToolTip(ui::tooltip_wrap(QStringLiteral(
-        "Days to cover (Hong et al. 2015) and short interest ÷ institutional shares (Drechsler & "
-        "Drechsler, a proxy for the borrow fee) are the two short-side measures that replicate. "
-        "Plain short interest as a share of float is the weakest of the three. Daily short volume "
-        "is traded flow, not a position — much of it is market-maker inventory flat by the close.")));
+    figures_->setToolTip(ui::tooltip_wrap(
+        QStringLiteral("Days to cover (Hong et al. 2015) and short interest ÷ institutional shares (Drechsler & "
+                       "Drechsler, a proxy for the borrow fee) are the two short-side measures that replicate. "
+                       "Plain short interest as a share of float is the weakest of the three. Daily short volume "
+                       "is traded flow, not a position — much of it is market-maker inventory flat by the close.")));
     foot_->setText(QStringLiteral("Firms report two business days after settlement; FINRA publishes about eight "
                                   "business days after that, so a reading is two to four weeks old on screen."));
 }

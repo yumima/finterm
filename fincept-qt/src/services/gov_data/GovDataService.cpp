@@ -2,11 +2,10 @@
 #include "services/gov_data/GovDataService.h"
 
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "python/PythonRunner.h"
 #include "storage/cache/CacheManager.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QJsonDocument>
 #include <QJsonParseError>
@@ -105,73 +104,77 @@ void GovDataService::execute(const QString& script, const QString& command, cons
     LOG_INFO("GovDataService", QString("Executing %1 %2 [%3]").arg(script, command, args.join(", ")));
 
     QPointer<GovDataService> self = this;
-    python::PythonRunner::instance().run(script, full_args, [self, script, request_id, key](python::PythonResult py_result) {
-        if (!self)
-            return;
+    python::PythonRunner::instance().run(
+        script, full_args, [self, script, request_id, key](python::PythonResult py_result) {
+            if (!self)
+                return;
 
-        GovDataResult result;
+            GovDataResult result;
 
-        if (!py_result.success) {
-            result.success = false;
-            result.error = py_result.error.isEmpty() ? QString("Script exited with code %1").arg(py_result.exit_code)
-                                                     : py_result.error;
-            LOG_ERROR("GovDataService", QString("Script failed: %1").arg(result.error));
-            emit self->result_ready(request_id, result);
-            return;
-        }
-
-        // Extract JSON from output
-        QString json_str = python::extract_json(py_result.output);
-        if (json_str.isEmpty()) {
-            result.success = false;
-            result.error = "No JSON output from script";
-            LOG_ERROR("GovDataService", "No JSON in script output");
-            emit self->result_ready(request_id, result);
-            return;
-        }
-
-        QJsonParseError parse_err;
-        QJsonDocument doc = QJsonDocument::fromJson(json_str.toUtf8(), &parse_err);
-        if (doc.isNull()) {
-            result.success = false;
-            result.error = QString("JSON parse error: %1").arg(parse_err.errorString());
-            LOG_ERROR("GovDataService", result.error);
-            emit self->result_ready(request_id, result);
-            return;
-        }
-
-        result.data = doc.object();
-
-        // Provider scripts report failure in-band ({"success": false, "error": ...}
-        // or a bare {"error": ...}). Surface that as a failure and never cache it —
-        // otherwise an error payload was served as "data" for the full cache TTL.
-        {
-            const QJsonValue ev = result.data.value("error");
-            const bool has_error = !ev.isUndefined() && !ev.isNull() &&
-                                   !(ev.isString() && ev.toString().isEmpty()) && !(ev.isBool() && !ev.toBool());
-            if (result.data.value("success").toBool(true) == false || has_error) {
+            if (!py_result.success) {
                 result.success = false;
-                result.error = ev.isString() ? ev.toString()
-                                             : QString::fromUtf8(QJsonDocument(result.data).toJson(QJsonDocument::Compact)).left(500);
-                LOG_ERROR("GovDataService", QString("Script reported error: %1").arg(result.error));
+                result.error = py_result.error.isEmpty()
+                                   ? QString("Script exited with code %1").arg(py_result.exit_code)
+                                   : py_result.error;
+                LOG_ERROR("GovDataService", QString("Script failed: %1").arg(result.error));
                 emit self->result_ready(request_id, result);
                 return;
             }
-        }
-        result.success = true;
 
-        // Cache the result
-        fincept::CacheManager::instance().put(
-            key, QVariant(QString::fromUtf8(QJsonDocument(result.data).toJson(QJsonDocument::Compact))), kCacheTtlSec,
-            "govdata");
+            // Extract JSON from output
+            QString json_str = python::extract_json(py_result.output);
+            if (json_str.isEmpty()) {
+                result.success = false;
+                result.error = "No JSON output from script";
+                LOG_ERROR("GovDataService", "No JSON in script output");
+                emit self->result_ready(request_id, result);
+                return;
+            }
 
-        LOG_INFO("GovDataService", QString("Result ready: %1").arg(request_id));
-        emit self->result_ready(request_id, result);
-        if (self->hub_registered_) {
-            const QString topic = GovDataService::hub_topic(script, request_id);
-            fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(result));
-        }
-    });
+            QJsonParseError parse_err;
+            QJsonDocument doc = QJsonDocument::fromJson(json_str.toUtf8(), &parse_err);
+            if (doc.isNull()) {
+                result.success = false;
+                result.error = QString("JSON parse error: %1").arg(parse_err.errorString());
+                LOG_ERROR("GovDataService", result.error);
+                emit self->result_ready(request_id, result);
+                return;
+            }
+
+            result.data = doc.object();
+
+            // Provider scripts report failure in-band ({"success": false, "error": ...}
+            // or a bare {"error": ...}). Surface that as a failure and never cache it —
+            // otherwise an error payload was served as "data" for the full cache TTL.
+            {
+                const QJsonValue ev = result.data.value("error");
+                const bool has_error = !ev.isUndefined() && !ev.isNull() &&
+                                       !(ev.isString() && ev.toString().isEmpty()) && !(ev.isBool() && !ev.toBool());
+                if (result.data.value("success").toBool(true) == false || has_error) {
+                    result.success = false;
+                    result.error =
+                        ev.isString()
+                            ? ev.toString()
+                            : QString::fromUtf8(QJsonDocument(result.data).toJson(QJsonDocument::Compact)).left(500);
+                    LOG_ERROR("GovDataService", QString("Script reported error: %1").arg(result.error));
+                    emit self->result_ready(request_id, result);
+                    return;
+                }
+            }
+            result.success = true;
+
+            // Cache the result
+            fincept::CacheManager::instance().put(
+                key, QVariant(QString::fromUtf8(QJsonDocument(result.data).toJson(QJsonDocument::Compact))),
+                kCacheTtlSec, "govdata");
+
+            LOG_INFO("GovDataService", QString("Result ready: %1").arg(request_id));
+            emit self->result_ready(request_id, result);
+            if (self->hub_registered_) {
+                const QString topic = GovDataService::hub_topic(script, request_id);
+                fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(result));
+            }
+        });
 }
 
 // ── DataHub producer wiring ─────────────────────────────────────────────────
@@ -202,8 +205,7 @@ void GovDataService::refresh(const QStringList& topics) {
     for (const auto& topic : topics) {
         auto it = dispatch_records_.constFind(topic);
         if (it == dispatch_records_.constEnd()) {
-            LOG_DEBUG("GovDataService",
-                      "refresh() for unknown topic (no prior execute): " + topic);
+            LOG_DEBUG("GovDataService", "refresh() for unknown topic (no prior execute): " + topic);
             continue;
         }
         const DispatchRecord rec = it.value();
@@ -217,7 +219,8 @@ int GovDataService::max_requests_per_sec() const {
 }
 
 void GovDataService::ensure_registered_with_hub() {
-    if (hub_registered_) return;
+    if (hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
     hub.register_producer(this);
 

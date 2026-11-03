@@ -88,11 +88,14 @@ class QueryStore : public QObject {
         Resolver() = default;
         explicit Resolver(Fn fn) : fn_(std::move(fn)) {}
         void operator()(QVariant value) const {
-            if (fn_) fn_(std::move(value), QDateTime::currentDateTime());
+            if (fn_)
+                fn_(std::move(value), QDateTime::currentDateTime());
         }
         void operator()(QVariant value, QDateTime fetched_at) const {
-            if (fn_) fn_(std::move(value), fetched_at.isValid() ? fetched_at : QDateTime::currentDateTime());
+            if (fn_)
+                fn_(std::move(value), fetched_at.isValid() ? fetched_at : QDateTime::currentDateTime());
         }
+
       private:
         Fn fn_;
     };
@@ -119,8 +122,8 @@ class QueryStore : public QObject {
     /// duplicate deliveries). To resubscribe with a different key on the
     /// same owner (e.g. period switch), call subscribe() with the new key —
     /// the old subscription is dropped first.
-    void subscribe(QObject* owner, const QString& key, int ttl_sec, int stale_max_sec,
-                   Callback callback, Fetcher fetcher);
+    void subscribe(QObject* owner, const QString& key, int ttl_sec, int stale_max_sec, Callback callback,
+                   Fetcher fetcher);
 
     /// Mark the cached value for `key` as discarded and kick a fresh fetch
     /// (using the most-recently-registered fetcher for this key). All
@@ -200,13 +203,13 @@ class QueryStore : public QObject {
     Q_DISABLE_COPY(QueryStore)
 
     struct Subscriber {
-        QPointer<QObject> owner;  // dead QPointer ⇒ subscription is stale
+        QPointer<QObject> owner; // dead QPointer ⇒ subscription is stale
         Callback callback;
     };
 
     struct Entry {
-        QVariant cached_value;        // null if no data
-        QDateTime fetched_at;          // when cached_value was last set
+        QVariant cached_value; // null if no data
+        QDateTime fetched_at;  // when cached_value was last set
         /// When the last fetch FAILED; cleared by a successful resolve.
         /// revalidate() holds a kMinRevalidateSec floor from this stamp, so a
         /// failing key is retried once a minute instead of on every periodic
@@ -214,12 +217,12 @@ class QueryStore : public QObject {
         /// floor turned the screen's 20s timer into a retry storm against an
         /// endpoint that was likely rate-limiting already.
         QDateTime last_failed_at;
-        QDateTime last_accessed;       // bumped on subscribe / peek / deliver;
-                                       // drives LRU eviction
+        QDateTime last_accessed; // bumped on subscribe / peek / deliver;
+                                 // drives LRU eviction
         int ttl_sec = 0;
-        int stale_max_sec = 0;         // for Round 3 SWR; ignored in Round 2
+        int stale_max_sec = 0; // for Round 3 SWR; ignored in Round 2
         bool inflight = false;
-        Fetcher pending_fetcher;       // last fetcher registered; reused on invalidate
+        Fetcher pending_fetcher; // last fetcher registered; reused on invalidate
         QVector<Subscriber> subscribers;
     };
 
@@ -231,8 +234,6 @@ class QueryStore : public QObject {
     /// live subscribers and no in-flight fetch, so eviction never disrupts
     /// the active view.
     static constexpr int kMaxEntries = 256;
-
-
 
     /// Deliver `state` to every live subscriber of `key`. Dead subscribers
     /// (owner destroyed) are pruned in the same pass.

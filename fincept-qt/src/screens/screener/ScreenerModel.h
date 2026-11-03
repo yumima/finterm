@@ -40,9 +40,9 @@ inline std::optional<double> num(const QJsonObject& o, const QString& key) {
 /// backtest could be run; only `note` is meaningful then.
 struct Evidence {
     bool tested = false;
-    std::optional<double> excess;   // per year vs the equal-weighted index, fraction
-    std::optional<double> t;        // t-stat of the monthly excess
-    std::optional<double> max_dd;   // fraction, negative
+    std::optional<double> excess; // per year vs the equal-weighted index, fraction
+    std::optional<double> t;      // t-stat of the monthly excess
+    std::optional<double> max_dd; // fraction, negative
     QVector<std::optional<double>> subperiods;
     QString note;
     // trade-simulated strategies only (the Luk pullback)
@@ -63,29 +63,29 @@ struct Example {
 
 struct Strategy {
     QString id, name, family, source, summary, rank_by;
-    QString idea, use, tested; // the thesis, how its author uses it, how the record was measured
-    QString practice;          // a paper-trading routine
+    QString idea, use, tested;                // the thesis, how its author uses it, how the record was measured
+    QString practice;                         // a paper-trading routine
     QVector<QPair<QString, QString>> reading; // books and papers: text, link
-    QString rank_key;          // the column the list is ranked by ("" = a score it does not show)
-    bool rank_asc = false;     // lowest first (volatility, P/B)
-    Example pick, miss;        // today's first pick, and the first name that missed
-    QString setups_from;       // whose setting-up list it shows ("trend_template"), or none
-    QString setup_desc;        // what that list is, in words
+    QString rank_key;                         // the column the list is ranked by ("" = a score it does not show)
+    bool rank_asc = false;                    // lowest first (volatility, P/B)
+    Example pick, miss;                       // today's first pick, and the first name that missed
+    QString setups_from;                      // whose setting-up list it shows ("trend_template"), or none
+    QString setup_desc;                       // what that list is, in words
     QStringList rules, columns, symbols;
     Evidence evidence;
 };
 
 struct ScanResult {
     QString error;
-    QString asof; // exchange date of the last bar
-    bool intraday = false;  // today's bar is still moving — not a close
-    QString prices_fetched; // "YYYY-MM-DD HH:MM ET" of the oldest price fetch used
-    int stale_prices = 0;   // names served from an older cache (their download failed)
-    QString plan_asof;      // the completed session the pullback plans are drawn from
-    int live_applied = 0;        // names whose today's bar is TradingView's quote
-    int live_on_last_close = 0;  // names without a usable quote: shown at their last real close
+    QString asof;                      // exchange date of the last bar
+    bool intraday = false;             // today's bar is still moving — not a close
+    QString prices_fetched;            // "YYYY-MM-DD HH:MM ET" of the oldest price fetch used
+    int stale_prices = 0;              // names served from an older cache (their download failed)
+    QString plan_asof;                 // the completed session the pullback plans are drawn from
+    int live_applied = 0;              // names whose today's bar is TradingView's quote
+    int live_on_last_close = 0;        // names without a usable quote: shown at their last real close
     std::optional<int> live_delay_min; // worst delay among the quotes used; nullopt = unknown
-    QString live_price_time;     // "HH:MM ET" the quoted prices are from (send time minus delay)
+    QString live_price_time;           // "HH:MM ET" the quoted prices are from (send time minus delay)
     QString basis;
     int universe_n = 0;
     int priced = 0;
@@ -94,7 +94,7 @@ struct ScanResult {
     bool above50 = false;
     bool above200 = false;
     QStringList subperiods;
-    bool meta_only = false;             // `meta`: strategies + evidence, no lists yet
+    bool meta_only = false; // `meta`: strategies + evidence, no lists yet
     QVector<Strategy> strategies;
     QHash<QString, QJsonObject> rows;
     /// A name one rule from a screen: the rule it misses and how far it is.
@@ -103,7 +103,7 @@ struct ScanResult {
         std::optional<double> gap;
     };
     QHash<QString, QVector<Setup>> setups; // by screen ("trend_template"), ranked
-    QJsonObject setups_record;              // the measured record of those lists (and of the trap)
+    QJsonObject setups_record;             // the measured record of those lists (and of the trap)
 
     const Strategy* strategy(const QString& id) const {
         for (const auto& s : strategies)
@@ -205,8 +205,7 @@ inline ScanResult parse_scan(const QJsonObject& root) {
         s.evidence.max_dd = num(eo, QStringLiteral("max_dd"));
         for (const auto& x : eo.value(QStringLiteral("subperiods")).toArray()) {
             const double d = x.toDouble(std::nan(""));
-            s.evidence.subperiods << (x.isDouble() && std::isfinite(d) ? std::optional<double>(d)
-                                                                       : std::nullopt);
+            s.evidence.subperiods << (x.isDouble() && std::isfinite(d) ? std::optional<double>(d) : std::nullopt);
         }
         s.evidence.note = eo.value(QStringLiteral("note")).toString();
         if (const auto n = num(eo, QStringLiteral("trades")))
@@ -346,8 +345,7 @@ inline QString colour_for(Kind k, const std::optional<double>& v) {
 
 /// Shares for a trade risking `risk_frac` of `account` between entry and stop.
 /// nullopt when the plan is incomplete or the stop is not below the entry.
-inline std::optional<double> position_shares(double account, double risk_frac,
-                                             const std::optional<double>& entry,
+inline std::optional<double> position_shares(double account, double risk_frac, const std::optional<double>& entry,
                                              const std::optional<double>& stop) {
     if (!entry || !stop || !(account > 0) || !(risk_frac > 0) || !(*entry > *stop))
         return std::nullopt;

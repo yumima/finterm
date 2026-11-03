@@ -41,8 +41,8 @@ static QString btn_primary() {
                    "}"
                    "QPushButton:hover { background: %1; color: %3; }"
                    "QPushButton:disabled { color: %4; background: %5; border-color: %6; }")
-        .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
-             ui::colors::BORDER_DIM());
+        .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY(),
+             ui::colors::BG_RAISED(), ui::colors::BORDER_DIM());
 }
 
 static QString link_style() {
@@ -116,12 +116,17 @@ void ForgotPasswordScreen::hideEvent(QHideEvent* event) {
     // Wipe email/OTP/new-password inputs and return to step 1 whenever the
     // screen leaves the stack — reset state must not linger.
     for (QLineEdit* w : {email_input_, otp_input_, new_password_, confirm_password_}) {
-        if (w) w->clear();
+        if (w)
+            w->clear();
     }
-    if (new_password_) new_password_->setEchoMode(QLineEdit::Password);
-    if (confirm_password_) confirm_password_->setEchoMode(QLineEdit::Password);
-    if (error_label_) error_label_->hide();
-    if (pages_) pages_->setCurrentIndex(0);
+    if (new_password_)
+        new_password_->setEchoMode(QLineEdit::Password);
+    if (confirm_password_)
+        confirm_password_->setEchoMode(QLineEdit::Password);
+    if (error_label_)
+        error_label_->hide();
+    if (pages_)
+        pages_->setCurrentIndex(0);
     QWidget::hideEvent(event);
 }
 

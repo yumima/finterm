@@ -25,9 +25,8 @@ void ElicitPrompter::ensure_mounted() {
 ElicitPrompter::ElicitPrompter() {
     // Queued: requests originate on McpProvider's worker pool; the bridge
     // blocks that worker until resolve() is called from the modal below.
-    connect(&fincept::services::ElicitBridge::instance(),
-            &fincept::services::ElicitBridge::request_received, this, &ElicitPrompter::on_request,
-            Qt::QueuedConnection);
+    connect(&fincept::services::ElicitBridge::instance(), &fincept::services::ElicitBridge::request_received, this,
+            &ElicitPrompter::on_request, Qt::QueuedConnection);
 }
 
 void ElicitPrompter::on_request(const QString& token, const fincept::mcp::ElicitRequest& req) {
@@ -40,9 +39,9 @@ void ElicitPrompter::on_request(const QString& token, const fincept::mcp::Elicit
     fincept::mcp::ElicitResponse response;
 
     if (type == QStringLiteral("boolean")) {
-        const auto btn = QMessageBox::question(anchor, QStringLiteral("Tool prompt"), req.prompt,
-                                               QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel,
-                                               QMessageBox::Cancel);
+        const auto btn =
+            QMessageBox::question(anchor, QStringLiteral("Tool prompt"), req.prompt,
+                                  QMessageBox::Yes | QMessageBox::No | QMessageBox::Cancel, QMessageBox::Cancel);
         if (btn == QMessageBox::Cancel)
             response.declined = true;
         else

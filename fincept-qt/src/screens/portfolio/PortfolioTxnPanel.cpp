@@ -39,7 +39,8 @@ void PortfolioTxnPanel::build_ui() {
     hl->addStretch();
 
     count_label_ = new QLabel;
-    count_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
+    count_label_->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
     hl->addWidget(count_label_);
 
     layout->addWidget(header);

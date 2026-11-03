@@ -63,8 +63,8 @@ void OwnershipScreen::build_ui() {
     auto* bar = new QHBoxLayout;
     bar->setSpacing(10);
     auto* title = new QLabel(QStringLiteral("OWNERSHIP"));
-    title->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;letter-spacing:2px;")
-                             .arg(ui::colors::ORANGE()));
+    title->setStyleSheet(
+        QString("color:%1;font-size:14px;font-weight:700;letter-spacing:2px;").arg(ui::colors::ORANGE()));
     bar->addWidget(title);
     auto* sub = new QLabel(QStringLiteral("Where the informed parties are acting. Every row is a stock; "
                                           "click one to open it in Equity Research."));
@@ -89,10 +89,10 @@ void OwnershipScreen::build_ui() {
     filer_search_->setClearButtonEnabled(true);
     filer_search_->setMinimumWidth(240);
     filer_search_->setMaximumWidth(300);
-    filer_search_->setToolTip(ui::tooltip_wrap(QStringLiteral(
-        "Open one 13F filer's whole disclosed equity book — what they hold, at what weight, and "
-        "what moved last quarter. A drill, not a ranking: the question starts with a firm you have "
-        "in mind.")));
+    filer_search_->setToolTip(ui::tooltip_wrap(
+        QStringLiteral("Open one 13F filer's whole disclosed equity book — what they hold, at what weight, and "
+                       "what moved last quarter. A drill, not a ranking: the question starts with a firm you have "
+                       "in mind.")));
     bar->addWidget(filer_search_);
     root->addLayout(bar);
     // The index state gets its own line: on the title bar it ran off the
@@ -149,15 +149,13 @@ void OwnershipScreen::build_ui() {
     // Appended, not inserted: saved tab indices stay valid.
     tabs_->addTab(largest_funds_, QStringLiteral("LARGEST FUNDS"));
     connect(tabs_, &QTabWidget::currentChanged, this, [this](int i) { load_tab(i); });
-    auto open = [this](const QString& sym) {
-        emit navigate_to_screen(QStringLiteral("equity_research"), sym);
-    };
+    auto open = [this](const QString& sym) { emit navigate_to_screen(QStringLiteral("equity_research"), sym); };
     connect(insider_buys_, &InsiderBuysPanel::stock_activated, this, open);
     connect(short_rank_, &ShortRankPanel::stock_activated, this, open);
     connect(movers_, &MoversPanel::stock_activated, this, open);
     connect(largest_funds_, &LargestFundsPanel::stock_activated, this, open);
 
-    stack_->addWidget(tabs_);   // 0
+    stack_->addWidget(tabs_); // 0
 
     auto* empty = new QWidget;
     auto* ev = new QVBoxLayout(empty);
@@ -166,10 +164,10 @@ void OwnershipScreen::build_ui() {
     etitle->setAlignment(Qt::AlignCenter);
     etitle->setStyleSheet(QString("color:%1;font-size:20px;font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
     ev->addWidget(etitle);
-    auto* ebody = new QLabel(QStringLiteral(
-        "The short-interest ranking and the 13F movers need the local index: two quarterly SEC 13F "
-        "data sets — around 10,600 filers and 3 million positions each — indexed once. About 200 MB, "
-        "a couple of minutes. Insider buys work without it and are on the first tab."));
+    auto* ebody = new QLabel(
+        QStringLiteral("The short-interest ranking and the 13F movers need the local index: two quarterly SEC 13F "
+                       "data sets — around 10,600 filers and 3 million positions each — indexed once. About 200 MB, "
+                       "a couple of minutes. Insider buys work without it and are on the first tab."));
     ebody->setAlignment(Qt::AlignCenter);
     ebody->setWordWrap(true);
     ebody->setMaximumWidth(640);
@@ -194,7 +192,7 @@ void OwnershipScreen::build_ui() {
     ev->addLayout(ebtnrow);
     ev->addStretch(2);
     empty_page_ = empty;
-    stack_->addWidget(empty_page_);   // 1
+    stack_->addWidget(empty_page_); // 1
 }
 
 void OwnershipScreen::show_filer(const QString& cik) {
@@ -207,7 +205,7 @@ void OwnershipScreen::show_filer(const QString& cik) {
     // highlighted when the ranking lands.
     largest_funds_->show_fund(cik);
     stack_->setCurrentIndex(0);
-    tabs_->setCurrentIndex(tabs_->indexOf(largest_funds_));   // loads the ranking if needed
+    tabs_->setCurrentIndex(tabs_->indexOf(largest_funds_)); // loads the ranking if needed
 }
 
 void OwnershipScreen::load_tab(int index) {
@@ -242,7 +240,8 @@ void OwnershipScreen::refresh_index_ui(const QString& msg) {
     filer_search_->setEnabled(ready);
     if (ready && shown_once_) {
         // The index arriving is what makes two of the scans answerable.
-        if (tabs_->currentIndex() == 1 && !svc.short_rank().loaded) short_rank_->refresh();
+        if (tabs_->currentIndex() == 1 && !svc.short_rank().loaded)
+            short_rank_->refresh();
         // An error result counts as not loaded: the usual one is "no 13F data
         // ingested yet", which the index arriving is exactly what fixes.
         if (tabs_->currentIndex() == 2 && (!svc.movers().loaded || !svc.movers().error.isEmpty()))

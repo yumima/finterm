@@ -36,7 +36,10 @@ struct FiscalSeries {
 // Single-series entries use the script's `fetch` command, which filters the
 // endpoint to one security / one total and returns {date, value}.
 static const QList<FiscalSeries> kFiscalDataSeries = {
-    {"Debt to the Penny (Total Public Debt Outstanding)", "debt-to-penny", {"--all"}, "tot_pub_debt_out_amt",
+    {"Debt to the Penny (Total Public Debt Outstanding)",
+     "debt-to-penny",
+     {"--all"},
+     "tot_pub_debt_out_amt",
      "record_date"},
     {"Avg Interest Rate — Total Interest-bearing Debt", "fetch", {"avg_rate_total"}, "value", "date"},
     {"Avg Interest Rate — Treasury Bills", "fetch", {"avg_rate_tbills"}, "value", "date"},

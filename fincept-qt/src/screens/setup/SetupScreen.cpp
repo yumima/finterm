@@ -8,7 +8,6 @@
 #include "ui/widgets/SpeedSparkline.h"
 
 #include <QDateTime>
-
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QMessageBox>
@@ -48,8 +47,7 @@ SetupScreen::SetupScreen(QWidget* parent) : QWidget(parent) {
     // Liveness: system-wide network throughput meter (starts when user clicks
     // BEGIN SETUP, stops on completion/skip/timeout).
     net_meter_ = new fincept::net::NetSpeedMeter(this);
-    connect(net_meter_, &fincept::net::NetSpeedMeter::speed_changed,
-            this, &SetupScreen::on_net_speed);
+    connect(net_meter_, &fincept::net::NetSpeedMeter::speed_changed, this, &SetupScreen::on_net_speed);
 
     // Elapsed-time ticker, drives the "Elapsed: Xm Ys" label once per second.
     elapsed_timer_ = new QTimer(this);
@@ -148,8 +146,8 @@ void SetupScreen::build_ui() {
     live_hl->setContentsMargins(0, 4, 0, 0);
     live_hl->setSpacing(12);
 
-    const QString stat_css = QString("color:%1; font-family:%2; font-size:12px;")
-                                 .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY);
+    const QString stat_css =
+        QString("color:%1; font-family:%2; font-size:12px;").arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY);
     elapsed_lbl_ = new QLabel("Elapsed: 0s", live_row_);
     elapsed_lbl_->setStyleSheet(stat_css);
     elapsed_lbl_->setFixedWidth(120);
@@ -198,8 +196,8 @@ void SetupScreen::build_ui() {
     // Install dir — small, dim, for power users
     auto* dir_label = new QLabel("Installing to: " + python::PythonSetupManager::instance().install_dir(), center);
     dir_label->setAlignment(Qt::AlignCenter);
-    dir_label->setStyleSheet(
-        QString("color:%1; font-family:%2; font-size:12px; margin-top:6px;").arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
+    dir_label->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; margin-top:6px;")
+                                 .arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     cl->addWidget(dir_label);
 
     auto* hcenter = new QHBoxLayout();
@@ -231,7 +229,8 @@ QWidget* SetupScreen::build_step_row(const QString& key, const QString& label, c
 
     auto* sub = new QLabel(sublabel, label_col);
     sub->setWordWrap(true);
-    sub->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px;").arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
+    sub->setStyleSheet(
+        QString("color:%1; font-family:%2; font-size:12px;").arg(colors::TEXT_SECONDARY(), fonts::DATA_FAMILY));
     label_vl->addWidget(sub);
 
     hl->addWidget(label_col);
@@ -419,8 +418,8 @@ void SetupScreen::on_setup_done(bool success, const QString& error) {
     if (success) {
         LOG_INFO("SetupScreen", "Python setup completed — all steps done");
         status_label_->setText("Everything is ready! Launching finterm...");
-        status_label_->setStyleSheet(
-            QString("color:%1; font-family:%2; font-size:12px; margin-top:6px;").arg(colors::GREEN(), fonts::DATA_FAMILY));
+        status_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; margin-top:6px;")
+                                         .arg(colors::GREEN(), fonts::DATA_FAMILY));
         begin_btn_->setText("LAUNCH");
         if (timeout_timer_)
             timeout_timer_->stop();
@@ -433,8 +432,8 @@ void SetupScreen::on_setup_done(bool success, const QString& error) {
         begin_btn_->setEnabled(true);
         begin_btn_->setText("RETRY SETUP");
         status_label_->setText("Something went wrong during setup. Check your internet connection and try again.");
-        status_label_->setStyleSheet(
-            QString("color:%1; font-family:%2; font-size:12px; margin-top:6px;").arg(colors::RED(), fonts::DATA_FAMILY));
+        status_label_->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px; margin-top:6px;")
+                                         .arg(colors::RED(), fonts::DATA_FAMILY));
         LOG_ERROR("SetupScreen", "Setup failed: " + error);
     }
 }
@@ -469,7 +468,8 @@ void SetupScreen::mark_step_done(const QString& key) {
     auto& s = steps_[key];
     s.bar->setValue(100);
     s.status->setText("DONE");
-    s.status->setStyleSheet(QString("color:%1; font-family:%2; font-size:12px;").arg(colors::GREEN(), fonts::DATA_FAMILY));
+    s.status->setStyleSheet(
+        QString("color:%1; font-family:%2; font-size:12px;").arg(colors::GREEN(), fonts::DATA_FAMILY));
 }
 
 void SetupScreen::prefill_completed_steps() {
@@ -478,47 +478,50 @@ void SetupScreen::prefill_completed_steps() {
     QPointer<SetupScreen> self = this;
     (void)QtConcurrent::run([self]() {
         const auto status = python::PythonSetupManager::instance().check_status();
-        QMetaObject::invokeMethod(self, [self, status]() {
-            if (!self)
-                return;
+        QMetaObject::invokeMethod(
+            self,
+            [self, status]() {
+                if (!self)
+                    return;
 
-            if (status.uv_installed)
-                self->mark_step_done("uv");
-            if (status.python_installed)
-                self->mark_step_done("python");
-            // "venv" step = both venv directories created (python exe present)
-            if (status.venv_numpy1_created && status.venv_numpy2_created)
-                self->mark_step_done("venv");
-            // package steps = packages actually installed (marker file present)
-            if (status.venv_numpy1_ready)
-                self->mark_step_done("packages-numpy1");
-            if (status.venv_numpy2_ready)
-                self->mark_step_done("packages-numpy2");
+                if (status.uv_installed)
+                    self->mark_step_done("uv");
+                if (status.python_installed)
+                    self->mark_step_done("python");
+                // "venv" step = both venv directories created (python exe present)
+                if (status.venv_numpy1_created && status.venv_numpy2_created)
+                    self->mark_step_done("venv");
+                // package steps = packages actually installed (marker file present)
+                if (status.venv_numpy1_ready)
+                    self->mark_step_done("packages-numpy1");
+                if (status.venv_numpy2_ready)
+                    self->mark_step_done("packages-numpy2");
 
-            const bool any_done = status.uv_installed || status.python_installed ||
-                                  status.venv_numpy1_created || status.venv_numpy2_created ||
-                                  status.venv_numpy1_ready || status.venv_numpy2_ready;
-            const bool all_done = status.uv_installed && status.python_installed &&
-                                  status.venv_numpy1_ready && status.venv_numpy2_ready;
+                const bool any_done = status.uv_installed || status.python_installed || status.venv_numpy1_created ||
+                                      status.venv_numpy2_created || status.venv_numpy1_ready ||
+                                      status.venv_numpy2_ready;
+                const bool all_done = status.uv_installed && status.python_installed && status.venv_numpy1_ready &&
+                                      status.venv_numpy2_ready;
 
-            self->summary_lbl_->setText({});
+                self->summary_lbl_->setText({});
 
-            if (all_done) {
-                self->subtitle_lbl_->setText("Your workspace is fully configured");
-                self->begin_btn_->setEnabled(false);
-                self->begin_btn_->setText("ALREADY COMPLETE");
-                self->status_label_->setText("Everything is installed and ready to go.");
-            } else if (any_done) {
-                self->subtitle_lbl_->setText("Finishing your workspace setup");
-                self->begin_btn_->setText("CONTINUE SETUP");
-                self->status_label_->setText(
-                    "Only the missing pieces will be downloaded. Needs an internet connection.");
-            } else {
-                self->subtitle_lbl_->setText("Getting your workspace ready");
-                self->begin_btn_->setText("BEGIN SETUP");
-                self->status_label_->setText("Takes about 3–5 minutes. Needs an internet connection.");
-            }
-        }, Qt::QueuedConnection);
+                if (all_done) {
+                    self->subtitle_lbl_->setText("Your workspace is fully configured");
+                    self->begin_btn_->setEnabled(false);
+                    self->begin_btn_->setText("ALREADY COMPLETE");
+                    self->status_label_->setText("Everything is installed and ready to go.");
+                } else if (any_done) {
+                    self->subtitle_lbl_->setText("Finishing your workspace setup");
+                    self->begin_btn_->setText("CONTINUE SETUP");
+                    self->status_label_->setText(
+                        "Only the missing pieces will be downloaded. Needs an internet connection.");
+                } else {
+                    self->subtitle_lbl_->setText("Getting your workspace ready");
+                    self->begin_btn_->setText("BEGIN SETUP");
+                    self->status_label_->setText("Takes about 3–5 minutes. Needs an internet connection.");
+                }
+            },
+            Qt::QueuedConnection);
     });
 }
 

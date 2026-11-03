@@ -1,8 +1,8 @@
 #pragma once
+#include "services/equity/EquityResearchModels.h"
+
 #include <QVector>
 #include <QWidget>
-
-#include "services/equity/EquityResearchModels.h"
 
 namespace fincept::screens {
 
@@ -45,8 +45,7 @@ class PriceRangeStrip : public QWidget {
   public:
     explicit PriceRangeStrip(QWidget* parent = nullptr);
 
-    void set_candles(const QVector<services::equity::Candle>& candles,
-                     const QString& currency_sym);
+    void set_candles(const QVector<services::equity::Candle>& candles, const QString& currency_sym);
     void clear();
 
     QSize minimumSizeHint() const override;
@@ -58,16 +57,16 @@ class PriceRangeStrip : public QWidget {
   private:
     /// Everything the strip draws, computed once per candle set.
     struct Stats {
-        bool   valid = false;
+        bool valid = false;
         double last = 0.0;
         double hi52 = 0.0, lo52 = 0.0;
-        double pct_of_range = 0.0;   ///< 0 at the 52-week low, 1 at the high
+        double pct_of_range = 0.0; ///< 0 at the 52-week low, 1 at the high
         double sma50 = 0.0, sma200 = 0.0;
-        bool   has50 = false, has200 = false;
+        bool has50 = false, has200 = false;
         /// Distance from each average in daily-return standard deviations.
         double z50 = 0.0, z200 = 0.0;
-        double daily_vol = 0.0;      ///< stdev of daily log returns
-        int    days = 0;
+        double daily_vol = 0.0; ///< stdev of daily log returns
+        int days = 0;
     };
     Stats stats_;
     QString ccy_;

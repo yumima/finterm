@@ -2,16 +2,11 @@
 #include "screens/equity_research/EquityOverviewTab.h"
 
 #include "screens/equity_research/PriceRangeStrip.h"
-
 #include "screens/knowledge/HelpHint.h"
 #include "services/equity/EquityResearchService.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#include <QJsonDocument>
-#include <QTimeZone>
-#include <QJsonObject>
 
 #include <QDateEdit>
 #include <QDateTime>
@@ -20,11 +15,14 @@
 #include <QFormLayout>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QScrollArea>
 #include <QSizePolicy>
+#include <QTimeZone>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -74,8 +72,7 @@ QFrame* make_panel(const QString& title, const char* title_color) {
 }
 
 // entry_id: if non-empty, appends a HelpHint "?" button after the key label
-QLabel* add_row(QFrame* panel, const QString& key, const char* val_color,
-                const QString& entry_id = {}) {
+QLabel* add_row(QFrame* panel, const QString& key, const char* val_color, const QString& entry_id = {}) {
     auto* hl = new QHBoxLayout;
     hl->setSpacing(4);
     hl->setContentsMargins(0, 0, 0, 0);
@@ -111,7 +108,7 @@ QLabel* add_row(QFrame* panel, const QString& key, const char* val_color,
 ResearchCandleCanvas::ResearchCandleCanvas(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(250);
     setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    setMouseTracking(true);  // receive mouseMoveEvent without a button held
+    setMouseTracking(true); // receive mouseMoveEvent without a button held
 }
 
 // 52-week band from the candle series, so it shares the chart's price basis.
@@ -140,7 +137,7 @@ void ResearchCandleCanvas::set_candles(const QVector<services::equity::Candle>& 
     candles_ = candles;
     currency_sym_ = cs;
     dirty_ = true;
-    hover_idx_ = -1;  // candles changed; previous hover index is meaningless
+    hover_idx_ = -1; // candles changed; previous hover index is meaningless
     // A non-empty fetch result means the placeholder shouldn't show again
     // until a future clear() / explicit state change. An empty result keeps
     // whatever state the caller has set (NoData / Error).
@@ -158,35 +155,40 @@ void ResearchCandleCanvas::clear() {
 }
 
 void ResearchCandleCanvas::set_placeholder_state(PlaceholderState state) {
-    if (placeholder_state_ == state) return;
+    if (placeholder_state_ == state)
+        return;
     placeholder_state_ = state;
     dirty_ = true;
     update();
 }
 
 void ResearchCandleCanvas::set_series_style(SeriesStyle style) {
-    if (series_style_ == style) return;
+    if (series_style_ == style)
+        return;
     series_style_ = style;
     dirty_ = true;
     update();
 }
 
 void ResearchCandleCanvas::set_intraday(bool on) {
-    if (intraday_ == on) return;
+    if (intraday_ == on)
+        return;
     intraday_ = on;
     dirty_ = true;
     update();
 }
 
 void ResearchCandleCanvas::set_log_scale(bool on) {
-    if (log_scale_ == on) return;
+    if (log_scale_ == on)
+        return;
     log_scale_ = on;
     dirty_ = true;
     update();
 }
 
 void ResearchCandleCanvas::set_show_volume(bool on) {
-    if (show_volume_ == on) return;
+    if (show_volume_ == on)
+        return;
     show_volume_ = on;
     dirty_ = true;
     update();
@@ -195,12 +197,20 @@ void ResearchCandleCanvas::set_show_volume(bool on) {
 void ResearchCandleCanvas::set_show_sma(int period, bool on) {
     bool* target = nullptr;
     switch (period) {
-        case 20:  target = &show_sma20_;  break;
-        case 50:  target = &show_sma50_;  break;
-        case 200: target = &show_sma200_; break;
-        default: return;
+        case 20:
+            target = &show_sma20_;
+            break;
+        case 50:
+            target = &show_sma50_;
+            break;
+        case 200:
+            target = &show_sma200_;
+            break;
+        default:
+            return;
     }
-    if (*target == on) return;
+    if (*target == on)
+        return;
     *target = on;
     dirty_ = true;
     update();
@@ -264,8 +274,8 @@ void ResearchCandleCanvas::rebuild_cache() {
             p.setPen(QColor(ui::colors::TEXT_SECONDARY()));
             p.setFont(QFont("Consolas", 11));
             const QString msg = (placeholder_state_ == PlaceholderState::Error)
-                ? "Failed to load chart \xe2\x80\x94 try again"
-                : "No data available for this period";
+                                    ? "Failed to load chart \xe2\x80\x94 try again"
+                                    : "No data available for this period";
             p.drawText(cache_.rect(), Qt::AlignCenter, msg);
         }
         return;
@@ -282,9 +292,7 @@ void ResearchCandleCanvas::rebuild_cache() {
     if (plot_w <= 0 || total_plot_h <= 0)
         return;
     const int volume_gap = show_volume_ ? 4 : 0;
-    const int volume_h = show_volume_
-                             ? qMax(36, static_cast<int>(total_plot_h * VOLUME_FRAC))
-                             : 0;
+    const int volume_h = show_volume_ ? qMax(36, static_cast<int>(total_plot_h * VOLUME_FRAC)) : 0;
     const int plot_h = total_plot_h - volume_h - volume_gap;
     if (plot_h <= 0)
         return;
@@ -309,21 +317,24 @@ void ResearchCandleCanvas::rebuild_cache() {
     if (!comparisons_.isEmpty() && count > 0) {
         const qint64 anchor_ts = candles_[start].timestamp;
         for (const auto& comp : comparisons_) {
-            if (comp.candles.isEmpty()) continue;
+            if (comp.candles.isEmpty())
+                continue;
             // Walk the same time window we'll render. Anchor index lets us
             // skip the comp's pre-window candles for the y-range too.
             int comp_anchor_idx = -1;
             for (int k = 0; k < comp.candles.size(); ++k) {
                 if (comp.candles[k].timestamp >= anchor_ts) {
-                    comp_anchor_idx = k; break;
+                    comp_anchor_idx = k;
+                    break;
                 }
             }
-            if (comp_anchor_idx < 0) continue;
+            if (comp_anchor_idx < 0)
+                continue;
             int j = comp_anchor_idx;
             for (int i = 0; i < count; ++i) {
                 const qint64 ts_i = candles_[start + i].timestamp;
-                while (j + 1 < comp.candles.size() &&
-                       comp.candles[j + 1].timestamp <= ts_i) ++j;
+                while (j + 1 < comp.candles.size() && comp.candles[j + 1].timestamp <= ts_i)
+                    ++j;
                 const double v = comp.candles[j].close;
                 if (v > 0.0) {
                     lo = std::min(lo, v);
@@ -366,8 +377,8 @@ void ResearchCandleCanvas::rebuild_cache() {
     // re-deriving the layout.
     last_plot_w_ = plot_w;
     last_plot_h_ = plot_h;
-    last_start_  = start;
-    last_count_  = count;
+    last_start_ = start;
+    last_count_ = count;
     last_slot_w_ = slot_w;
 
     const QColor bull_color(ui::colors::POSITIVE.get());
@@ -380,7 +391,10 @@ void ResearchCandleCanvas::rebuild_cache() {
         QPainterPath line;
         for (int i = 0; i < count; ++i) {
             const QPointF pt((i + 0.5) * slot_w, py(candles_[start + i].close));
-            if (i == 0) line.moveTo(pt); else line.lineTo(pt);
+            if (i == 0)
+                line.moveTo(pt);
+            else
+                line.lineTo(pt);
         }
         // Coloured by the window's net direction, as every quote screen does.
         const bool up = candles_[start + count - 1].close >= candles_[start].close;
@@ -391,8 +405,10 @@ void ResearchCandleCanvas::rebuild_cache() {
             area.lineTo(0.5 * slot_w, plot_h);
             area.closeSubpath();
             QLinearGradient g(0, 0, 0, plot_h);
-            QColor top = col; top.setAlpha(90);
-            QColor bot = col; bot.setAlpha(8);
+            QColor top = col;
+            top.setAlpha(90);
+            QColor bot = col;
+            bot.setAlpha(8);
             g.setColorAt(0, top);
             g.setColorAt(1, bot);
             p.fillPath(area, g);
@@ -430,9 +446,11 @@ void ResearchCandleCanvas::rebuild_cache() {
     // Skipped if the array is shorter than the SMA window (no value to draw).
     auto compute_sma = [&](int period) -> QVector<double> {
         QVector<double> out(candles_.size(), std::numeric_limits<double>::quiet_NaN());
-        if (static_cast<int>(candles_.size()) < period) return out;
+        if (static_cast<int>(candles_.size()) < period)
+            return out;
         double sum = 0.0;
-        for (int i = 0; i < period; ++i) sum += candles_[i].close;
+        for (int i = 0; i < period; ++i)
+            sum += candles_[i].close;
         out[period - 1] = sum / period;
         for (int i = period; i < candles_.size(); ++i) {
             sum += candles_[i].close - candles_[i - period].close;
@@ -441,25 +459,33 @@ void ResearchCandleCanvas::rebuild_cache() {
         return out;
     };
     auto draw_sma = [&](int period, const QColor& color) {
-        if (static_cast<int>(candles_.size()) < period) return;
+        if (static_cast<int>(candles_.size()) < period)
+            return;
         const auto sma = compute_sma(period);
         p.setPen(QPen(color, 1, Qt::SolidLine));
         QPainterPath path;
         bool started = false;
         for (int i = 0; i < count; ++i) {
             const double v = sma[start + i];
-            if (std::isnan(v)) continue;
+            if (std::isnan(v))
+                continue;
             const QPointF pt(static_cast<double>(i + 0.5) * slot_w, py(v));
-            if (!started) { path.moveTo(pt); started = true; }
-            else            path.lineTo(pt);
+            if (!started) {
+                path.moveTo(pt);
+                started = true;
+            } else
+                path.lineTo(pt);
         }
         if (started)
             p.drawPath(path);
     };
     p.setRenderHint(QPainter::Antialiasing, true);
-    if (show_sma20_)  draw_sma(20,  QColor("#3b82f6"));   // blue
-    if (show_sma50_)  draw_sma(50,  QColor("#a855f7"));   // purple
-    if (show_sma200_) draw_sma(200, QColor("#eab308"));   // amber
+    if (show_sma20_)
+        draw_sma(20, QColor("#3b82f6")); // blue
+    if (show_sma50_)
+        draw_sma(50, QColor("#a855f7")); // purple
+    if (show_sma200_)
+        draw_sma(200, QColor("#eab308")); // amber
 
     // ── Comparison overlays ──────────────────────────────────────────────────
     // Comparison curves render at the comp's actual closing prices on the
@@ -470,17 +496,20 @@ void ResearchCandleCanvas::rebuild_cache() {
     // read each ticker's actual price directly off the axis.
     if (!comparisons_.isEmpty() && count > 0) {
         for (const auto& comp : comparisons_) {
-            if (comp.candles.isEmpty()) continue;
+            if (comp.candles.isEmpty())
+                continue;
             // Find comp's anchor: first candle at or after candles_[start]'s
             // timestamp. Linear scan — comparisons are date-sorted ascending.
             const qint64 anchor_ts = candles_[start].timestamp;
             int comp_anchor_idx = -1;
             for (int k = 0; k < comp.candles.size(); ++k) {
                 if (comp.candles[k].timestamp >= anchor_ts) {
-                    comp_anchor_idx = k; break;
+                    comp_anchor_idx = k;
+                    break;
                 }
             }
-            if (comp_anchor_idx < 0) continue;
+            if (comp_anchor_idx < 0)
+                continue;
 
             p.setPen(QPen(comp.color, 1.5, Qt::SolidLine));
             QPainterPath path;
@@ -491,14 +520,18 @@ void ResearchCandleCanvas::rebuild_cache() {
                 // Advance j until comp.candles[j].timestamp >= ts_i (sparse
                 // matching — we paint the comp's latest known close at or
                 // before each primary candle). j only moves forward.
-                while (j + 1 < comp.candles.size() &&
-                       comp.candles[j + 1].timestamp <= ts_i) ++j;
+                while (j + 1 < comp.candles.size() && comp.candles[j + 1].timestamp <= ts_i)
+                    ++j;
                 const double y_value = comp.candles[j].close;
                 const QPointF pt(static_cast<double>(i + 0.5) * slot_w, py(y_value));
-                if (!started) { path.moveTo(pt); started = true; }
-                else            path.lineTo(pt);
+                if (!started) {
+                    path.moveTo(pt);
+                    started = true;
+                } else
+                    path.lineTo(pt);
             }
-            if (started) p.drawPath(path);
+            if (started)
+                p.drawPath(path);
         }
         // The comparison legend (color + symbol + return + price) used to
         // be painted on the canvas here. It's now an always-visible widget
@@ -513,23 +546,26 @@ void ResearchCandleCanvas::rebuild_cache() {
     // chart. Events outside the visible window are skipped.
     if (!earnings_events_.isEmpty()) {
         const qint64 first_ts = candles_[start].timestamp;
-        const qint64 last_ts  = candles_.last().timestamp;
+        const qint64 last_ts = candles_.last().timestamp;
         QPen earn_pen(QColor(255, 200, 64, 140), 1, Qt::DashLine);
         QFont earn_font("Consolas", 8, QFont::Bold);
         QFontMetrics efm(earn_font);
         for (const auto& e : earnings_events_) {
-            if (e.timestamp < first_ts || e.timestamp > last_ts) continue;
+            if (e.timestamp < first_ts || e.timestamp > last_ts)
+                continue;
             // Binary-search the visible slice for the first candle ≥ event ts.
             int lo_i = 0, hi_i = count - 1, found = -1;
             while (lo_i <= hi_i) {
                 const int mid = (lo_i + hi_i) / 2;
                 if (candles_[start + mid].timestamp >= e.timestamp) {
-                    found = mid; hi_i = mid - 1;
+                    found = mid;
+                    hi_i = mid - 1;
                 } else {
                     lo_i = mid + 1;
                 }
             }
-            if (found < 0) continue;
+            if (found < 0)
+                continue;
             const int ex = static_cast<int>((found + 0.5) * slot_w);
             p.setPen(earn_pen);
             p.drawLine(ex, 0, ex, plot_h + volume_h + volume_gap);
@@ -539,9 +575,7 @@ void ResearchCandleCanvas::rebuild_cache() {
             QString label = "E";
             if (e.has_actual && e.has_surprise) {
                 label = e.surprise_pct >= 0 ? "E+" : "E-";
-                p.setPen(QColor(e.surprise_pct >= 0
-                                    ? ui::colors::POSITIVE.get()
-                                    : ui::colors::NEGATIVE.get()));
+                p.setPen(QColor(e.surprise_pct >= 0 ? ui::colors::POSITIVE.get() : ui::colors::NEGATIVE.get()));
             }
             const int tw = efm.horizontalAdvance(label);
             p.drawText(ex - tw / 2, efm.ascent() + 2, label);
@@ -560,7 +594,8 @@ void ResearchCandleCanvas::rebuild_cache() {
         p.drawLine(0, volume_top, plot_w, volume_top);
         for (int i = 0; i < count; ++i) {
             const auto& c = candles_[start + i];
-            if (c.volume <= 0) continue;
+            if (c.volume <= 0)
+                continue;
             const int cx = static_cast<int>((i + 0.5) * slot_w);
             const bool bull = c.close >= c.open;
             QColor col = bull ? bull_color : bear_color;
@@ -592,8 +627,7 @@ void ResearchCandleCanvas::rebuild_cache() {
             price = lo + (hi - lo) * g / 6.0;
         }
         int gy = py(price);
-        QString txt = currency_sym_ + (is_large ? QString::number(price, 'f', 0)
-                                                : QString::number(price, 'f', 2));
+        QString txt = currency_sym_ + (is_large ? QString::number(price, 'f', 0) : QString::number(price, 'f', 2));
         p.drawText(plot_w + 6, gy + fm.ascent() / 2, txt);
     }
 
@@ -616,8 +650,7 @@ void ResearchCandleCanvas::rebuild_cache() {
             // A real instant: read it in market time. Multi-day intraday
             // windows lead with the weekday so a session boundary is visible.
             // EVENT-STAMP: intraday bar — ET, the session it belongs to.
-            const auto et = QDateTime::fromSecsSinceEpoch(c.timestamp)
-                                .toTimeZone(QTimeZone("America/New_York"));
+            const auto et = QDateTime::fromSecsSinceEpoch(c.timestamp).toTimeZone(QTimeZone("America/New_York"));
             label = span_sec > 86400 ? et.toString("ddd HH:mm") : et.toString("HH:mm");
         } else if (span_sec > 365LL * 86400)
             label = d.toString("MMM yy");
@@ -643,15 +676,19 @@ void ResearchCandleCanvas::rebuild_cache() {
 }
 
 void ResearchCandleCanvas::set_hover_idx(int idx) {
-    if (idx == hover_idx_) return;
+    if (idx == hover_idx_)
+        return;
     hover_idx_ = idx;
-    update();              // cached-pixmap blit + overlay, cheap
+    update(); // cached-pixmap blit + overlay, cheap
     emit hover_changed(idx);
 }
 
 void ResearchCandleCanvas::mouseMoveEvent(QMouseEvent* event) {
     QWidget::mouseMoveEvent(event);
-    if (last_count_ <= 0 || last_slot_w_ <= 0.0) { set_hover_idx(-1); return; }
+    if (last_count_ <= 0 || last_slot_w_ <= 0.0) {
+        set_hover_idx(-1);
+        return;
+    }
     const int x = event->position().toPoint().x();
     const int y = event->position().toPoint().y();
     // Outside the plot area? Drop hover.
@@ -670,11 +707,14 @@ void ResearchCandleCanvas::leaveEvent(QEvent* event) {
 }
 
 void ResearchCandleCanvas::draw_hover_overlay(QPainter& p) {
-    if (hover_idx_ < 0 || hover_idx_ >= candles_.size()) return;
-    if (last_count_ <= 0 || last_slot_w_ <= 0.0) return;
+    if (hover_idx_ < 0 || hover_idx_ >= candles_.size())
+        return;
+    if (last_count_ <= 0 || last_slot_w_ <= 0.0)
+        return;
 
     const int visible_i = hover_idx_ - last_start_;
-    if (visible_i < 0 || visible_i >= last_count_) return;
+    if (visible_i < 0 || visible_i >= last_count_)
+        return;
 
     // Only the dashed vertical crosshair lives on the canvas now. The
     // OHLC/Δ/vol/52w/SMA50 readout that used to render at the top-left of
@@ -708,7 +748,8 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     // Lockheed/RTX). Switching primary invalidates that choice, so clear
     // the running comparison set, the canvas overlay, and the chip strip.
     comp_state_.clear();
-    if (candle_canvas_) candle_canvas_->set_comparisons({});
+    if (candle_canvas_)
+        candle_canvas_->set_comparisons({});
     rebuild_comp_strip();
     emit comparisons_changed({});
     // Restore the previously-saved chart view for this ticker (period +
@@ -747,11 +788,16 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     cached_quote_.valid = false; // {} leaves valid at its default (true); force-clear
                                  // so apply_info_state() genuinely skips re-applying
                                  // this empty quote over the new symbol's "--" labels.
-    if (open_val_)       open_val_->setText(QStringLiteral("--"));
-    if (high_val_)       high_val_->setText(QStringLiteral("--"));
-    if (low_val_)        low_val_->setText(QStringLiteral("--"));
-    if (prev_close_val_) prev_close_val_->setText(QStringLiteral("--"));
-    if (vol_val_)        vol_val_->setText(QStringLiteral("--"));
+    if (open_val_)
+        open_val_->setText(QStringLiteral("--"));
+    if (high_val_)
+        high_val_->setText(QStringLiteral("--"));
+    if (low_val_)
+        low_val_->setText(QStringLiteral("--"));
+    if (prev_close_val_)
+        prev_close_val_->setText(QStringLiteral("--"));
+    if (vol_val_)
+        vol_val_->setText(QStringLiteral("--"));
 
     clear_info_panels();
     set_info_loading(true);
@@ -767,12 +813,10 @@ void EquityOverviewTab::set_symbol(const QString& symbol, bool force) {
     store.unsubscribe_all(this);
 
     auto& svc = services::equity::EquityResearchService::instance();
-    svc.subscribe_quote(this, symbol,
-        [this](const services::query::QueryStore::State& s) { apply_quote_state(s); });
-    svc.subscribe_info(this, symbol,
-        [this](const services::query::QueryStore::State& s) { apply_info_state(s); });
+    svc.subscribe_quote(this, symbol, [this](const services::query::QueryStore::State& s) { apply_quote_state(s); });
+    svc.subscribe_info(this, symbol, [this](const services::query::QueryStore::State& s) { apply_info_state(s); });
     svc.subscribe_historical(this, symbol, current_period_,
-        [this](const services::query::QueryStore::State& s) { apply_historical_state(s); });
+                             [this](const services::query::QueryStore::State& s) { apply_historical_state(s); });
     current_historical_key_ = "equity:candles:" + symbol + ":" + current_period_;
 
     // Speculatively warm the most-likely-next periods. yfinance's
@@ -883,24 +927,24 @@ QWidget* EquityOverviewTab::build_trading_panel() {
 
 QWidget* EquityOverviewTab::build_valuation_panel() {
     auto* p = make_panel("VALUATION", CYAN);
-    mktcap_val_ = add_row(p, "MARKET CAP", CYAN,  "market-cap");
-    pe_val_     = add_row(p, "P/E RATIO",  YELLOW,"pe-ratio");
-    fwd_pe_val_ = add_row(p, "FWD P/E",    YELLOW,"pe-ratio");
-    peg_val_    = add_row(p, "PEG RATIO",  YELLOW,"peg-ratio");
-    pb_val_     = add_row(p, "P/B RATIO",  CYAN,  "pb-ratio");
-    div_val_    = add_row(p, "DIV YIELD",  ui::colors::POSITIVE, "dividend-yield");
-    beta_val_   = add_row(p, "BETA",       ui::colors::TEXT_PRIMARY, "beta");
+    mktcap_val_ = add_row(p, "MARKET CAP", CYAN, "market-cap");
+    pe_val_ = add_row(p, "P/E RATIO", YELLOW, "pe-ratio");
+    fwd_pe_val_ = add_row(p, "FWD P/E", YELLOW, "pe-ratio");
+    peg_val_ = add_row(p, "PEG RATIO", YELLOW, "peg-ratio");
+    pb_val_ = add_row(p, "P/B RATIO", CYAN, "pb-ratio");
+    div_val_ = add_row(p, "DIV YIELD", ui::colors::POSITIVE, "dividend-yield");
+    beta_val_ = add_row(p, "BETA", ui::colors::TEXT_PRIMARY, "beta");
     static_cast<QVBoxLayout*>(p->layout())->addStretch();
     return p;
 }
 
 QWidget* EquityOverviewTab::build_share_stats_panel() {
     auto* p = make_panel("SHARE STATS", PURPLE);
-    shares_out_val_  = add_row(p, "SHARES OUT",    CYAN, "market-cap");
-    float_val_       = add_row(p, "FLOAT",         CYAN, "float");
-    insiders_val_    = add_row(p, "INSIDERS",      YELLOW);
-    institutions_val_= add_row(p, "INSTITUTIONS",  YELLOW);
-    short_pct_val_   = add_row(p, "SHORT %",       ui::colors::NEGATIVE, "short-interest");
+    shares_out_val_ = add_row(p, "SHARES OUT", CYAN, "market-cap");
+    float_val_ = add_row(p, "FLOAT", CYAN, "float");
+    insiders_val_ = add_row(p, "INSIDERS", YELLOW);
+    institutions_val_ = add_row(p, "INSTITUTIONS", YELLOW);
+    short_pct_val_ = add_row(p, "SHORT %", ui::colors::NEGATIVE, "short-interest");
     static_cast<QVBoxLayout*>(p->layout())->addStretch();
     return p;
 }
@@ -981,8 +1025,7 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     btn_custom_->setCursor(Qt::PointingHandCursor);
     btn_custom_->setStyleSheet(btn_style_inactive);
     sync_custom_tooltip();
-    connect(btn_custom_, &QPushButton::clicked, this,
-            [this]() { open_custom_range_picker(); });
+    connect(btn_custom_, &QPushButton::clicked, this, [this]() { open_custom_range_picker(); });
     btn_row->addWidget(btn_custom_);
 
     // Canvas first — the chart toggles need candle_canvas_ to wire callbacks.
@@ -994,81 +1037,77 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     // (they live on the canvas, which we don't rebuild).
     btn_row->addSpacing(12);
 
-    auto make_toggle = [&](const QString& label, const QString& tooltip,
-                            const QString& accent,
-                            std::function<void(bool)> on_toggle,
-                            bool initial = false) -> QPushButton* {
+    auto make_toggle = [&](const QString& label, const QString& tooltip, const QString& accent,
+                           std::function<void(bool)> on_toggle, bool initial = false) -> QPushButton* {
         auto* b = new QPushButton(label);
         b->setCheckable(true);
         b->setChecked(initial);
         b->setCursor(Qt::PointingHandCursor);
         b->setToolTip(tooltip);
-        const QString ss = QString(
-            "QPushButton{background:transparent;color:%1;border:1px solid %2;"
-            "border-radius:2px;padding:3px 8px;font-size:11px;font-weight:700;"
-            "font-family:'Consolas',monospace;}"
-            "QPushButton:hover{border-color:%3;background:%4;}"
-            "QPushButton:checked{background:%3;color:%5;border-color:%3;}")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), accent,
-                 ui::colors::BG_RAISED(), ui::colors::BG_BASE());
+        const QString ss = QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                                   "border-radius:2px;padding:3px 8px;font-size:11px;font-weight:700;"
+                                   "font-family:'Consolas',monospace;}"
+                                   "QPushButton:hover{border-color:%3;background:%4;}"
+                                   "QPushButton:checked{background:%3;color:%5;border-color:%3;}")
+                               .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), accent,
+                                    ui::colors::BG_RAISED(), ui::colors::BG_BASE());
         b->setStyleSheet(ss);
         QObject::connect(b, &QPushButton::toggled, this, on_toggle);
         btn_row->addWidget(b);
         return b;
     };
 
-    btn_log_ = make_toggle("LOG", "Log-scale price axis (better for long periods)",
-                ui::colors::AMBER(),
-                [this](bool on) {
-                    if (candle_canvas_) candle_canvas_->set_log_scale(on);
-                    save_chart_view();
-                });
-    btn_vol_ = make_toggle("VOL", "Volume subchart under candles",
-                ui::colors::AMBER(),
-                [this](bool on) {
-                    if (candle_canvas_) candle_canvas_->set_show_volume(on);
-                    save_chart_view();
-                });
+    btn_log_ =
+        make_toggle("LOG", "Log-scale price axis (better for long periods)", ui::colors::AMBER(), [this](bool on) {
+            if (candle_canvas_)
+                candle_canvas_->set_log_scale(on);
+            save_chart_view();
+        });
+    btn_vol_ = make_toggle("VOL", "Volume subchart under candles", ui::colors::AMBER(), [this](bool on) {
+        if (candle_canvas_)
+            candle_canvas_->set_show_volume(on);
+        save_chart_view();
+    });
     btn_row->addSpacing(8);
-    btn_sma20_ = make_toggle("SMA20", "20-day simple moving average overlay", "#3b82f6",
-                [this](bool on) {
-                    if (candle_canvas_) candle_canvas_->set_show_sma(20, on);
-                    save_chart_view();
-                });
-    btn_sma50_ = make_toggle("SMA50", "50-day simple moving average overlay", "#a855f7",
-                [this](bool on) {
-                    if (candle_canvas_) candle_canvas_->set_show_sma(50, on);
-                    save_chart_view();
-                });
-    btn_sma200_= make_toggle("SMA200", "200-day simple moving average overlay", "#eab308",
-                [this](bool on) {
-                    if (candle_canvas_) candle_canvas_->set_show_sma(200, on);
-                    save_chart_view();
-                });
+    btn_sma20_ = make_toggle("SMA20", "20-day simple moving average overlay", "#3b82f6", [this](bool on) {
+        if (candle_canvas_)
+            candle_canvas_->set_show_sma(20, on);
+        save_chart_view();
+    });
+    btn_sma50_ = make_toggle("SMA50", "50-day simple moving average overlay", "#a855f7", [this](bool on) {
+        if (candle_canvas_)
+            candle_canvas_->set_show_sma(50, on);
+        save_chart_view();
+    });
+    btn_sma200_ = make_toggle("SMA200", "200-day simple moving average overlay", "#eab308", [this](bool on) {
+        if (candle_canvas_)
+            candle_canvas_->set_show_sma(200, on);
+        save_chart_view();
+    });
     btn_row->addSpacing(8);
-    btn_earn_ = make_toggle("EARN", "Earnings markers — vertical lines on report dates",
-                ui::colors::AMBER(),
-                [this](bool on) {
-                    show_earnings_ = on;
-                    refresh_earnings_subscription();
-                    save_chart_view();
-                });
+    btn_earn_ =
+        make_toggle("EARN", "Earnings markers — vertical lines on report dates", ui::colors::AMBER(), [this](bool on) {
+            show_earnings_ = on;
+            refresh_earnings_subscription();
+            save_chart_view();
+        });
 
     btn_row->addSpacing(8);
     btn_comp_ = new QPushButton(QStringLiteral("COMP"));
     btn_comp_->setCursor(Qt::PointingHandCursor);
     btn_comp_->setToolTip("Comparison overlays — click to focus the ticker input");
-    btn_comp_->setStyleSheet(QString(
-        "QPushButton{background:transparent;color:%1;border:1px solid %2;"
-        "border-radius:2px;padding:3px 8px;font-size:11px;font-weight:700;"
-        "font-family:'Consolas',monospace;}"
-        "QPushButton:hover{border-color:%3;background:%4;}")
-        .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
-             ui::colors::CYAN(), ui::colors::BG_RAISED()));
+    btn_comp_->setStyleSheet(
+        QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                "border-radius:2px;padding:3px 8px;font-size:11px;font-weight:700;"
+                "font-family:'Consolas',monospace;}"
+                "QPushButton:hover{border-color:%3;background:%4;}")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::CYAN(), ui::colors::BG_RAISED()));
     // Click the COMP label → focus the inline input. Keeps the keyboard
     // shortcut (C) cheap: also just focus the input.
-    connect(btn_comp_, &QPushButton::clicked, this,
-            [this]() { if (comp_input_) comp_input_->setFocus(); });
+    connect(btn_comp_, &QPushButton::clicked, this, [this]() {
+        if (comp_input_)
+            comp_input_->setFocus();
+    });
     btn_row->addWidget(btn_comp_);
 
     // Inline ticker input stays on the button row (Enter adds a comparison).
@@ -1077,17 +1116,16 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     comp_input_ = new QLineEdit;
     comp_input_->setMaxLength(12);
     comp_input_->setFixedWidth(80);
-    comp_input_->setStyleSheet(QString(
-        "QLineEdit{background:%1;color:%2;border:1px solid %3;border-radius:2px;"
-        "padding:2px 6px;font-size:11px;font-family:'Consolas',monospace;}"
-        "QLineEdit:focus{border-color:%4;}"
-        "QLineEdit:disabled{color:%5;background:transparent;}")
-        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(),
-             ui::colors::BORDER_DIM(), ui::colors::CYAN(),
-             ui::colors::TEXT_SECONDARY()));
+    comp_input_->setStyleSheet(QString("QLineEdit{background:%1;color:%2;border:1px solid %3;border-radius:2px;"
+                                       "padding:2px 6px;font-size:11px;font-family:'Consolas',monospace;}"
+                                       "QLineEdit:focus{border-color:%4;}"
+                                       "QLineEdit:disabled{color:%5;background:transparent;}")
+                                   .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
+                                        ui::colors::CYAN(), ui::colors::TEXT_SECONDARY()));
     connect(comp_input_, &QLineEdit::returnPressed, this, [this]() {
         const QString sym = comp_input_->text().trimmed().toUpper();
-        if (sym.isEmpty()) return;
+        if (sym.isEmpty())
+            return;
         comp_input_->clear();
         add_comparison(sym);
     });
@@ -1116,19 +1154,18 @@ QWidget* EquityOverviewTab::build_chart_panel() {
     // Initial colors are set below via the same setPalette path.
     auto make_stat = [&](QLabel*& target, const QColor& initial) {
         target = new QLabel();
-        target->setStyleSheet(QStringLiteral(
-            "QLabel{font-family:'Consolas',monospace;font-size:11px;"
-            "background:transparent;border:0;}"));
+        target->setStyleSheet(QStringLiteral("QLabel{font-family:'Consolas',monospace;font-size:11px;"
+                                             "background:transparent;border:0;}"));
         QPalette pal = target->palette();
         pal.setColor(QPalette::WindowText, initial);
         target->setPalette(pal);
         primary_row->addWidget(target);
     };
-    make_stat(primary_date_lbl_,  QColor(ui::colors::TEXT_PRIMARY()));
-    make_stat(primary_ohlc_lbl_,  QColor(ui::colors::TEXT_PRIMARY()));
+    make_stat(primary_date_lbl_, QColor(ui::colors::TEXT_PRIMARY()));
+    make_stat(primary_ohlc_lbl_, QColor(ui::colors::TEXT_PRIMARY()));
     make_stat(primary_delta_lbl_, QColor(ui::colors::TEXT_SECONDARY()));
-    make_stat(primary_vol_lbl_,   QColor(ui::colors::TEXT_SECONDARY()));
-    make_stat(primary_52w_lbl_,   QColor(ui::colors::TEXT_SECONDARY()));
+    make_stat(primary_vol_lbl_, QColor(ui::colors::TEXT_SECONDARY()));
+    make_stat(primary_52w_lbl_, QColor(ui::colors::TEXT_SECONDARY()));
     make_stat(primary_sma50_lbl_, QColor(ui::colors::TEXT_SECONDARY()));
     primary_row->addStretch();
     vl->addWidget(primary_row_widget);
@@ -1157,11 +1194,9 @@ QWidget* EquityOverviewTab::build_chart_panel() {
 
     // Canvas → tab hover updates. Crosshair-moved → recompute both the
     // permanent primary stats strip AND the comp chip labels in lockstep.
-    connect(candle_canvas_, &ResearchCandleCanvas::hover_changed,
-            this, &EquityOverviewTab::update_primary_stats_row);
-    connect(candle_canvas_, &ResearchCandleCanvas::hover_changed,
-            this, &EquityOverviewTab::update_comp_chip_labels);
-    update_primary_stats_row(-1);  // initial state (will repopulate when candles load)
+    connect(candle_canvas_, &ResearchCandleCanvas::hover_changed, this, &EquityOverviewTab::update_primary_stats_row);
+    connect(candle_canvas_, &ResearchCandleCanvas::hover_changed, this, &EquityOverviewTab::update_comp_chip_labels);
+    update_primary_stats_row(-1); // initial state (will repopulate when candles load)
 
     return p;
 }
@@ -1219,7 +1254,8 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
             .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
 
     for (auto* b : {btn_1m_, btn_3m_, btn_6m_, btn_1y_, btn_5y_, btn_custom_})
-        if (b) b->setStyleSheet(b == btn ? active : inactive);
+        if (b)
+            b->setStyleSheet(b == btn ? active : inactive);
     active_period_btn_ = btn;
 
     // Clear the canvas + show the overlay so the user gets immediate visual
@@ -1263,29 +1299,28 @@ void EquityOverviewTab::switch_period(QPushButton* btn, const QString& period) {
 }
 
 void EquityOverviewTab::save_chart_view() const {
-    if (restoring_view_) return;
-    if (current_symbol_.isEmpty()) return;
+    if (restoring_view_)
+        return;
+    if (current_symbol_.isEmpty())
+        return;
     // Read overlay state from the button check marks rather than mirroring
     // it on the tab. Those bools live on the canvas (ResearchCandleCanvas)
     // and accessors aren't exposed — buttons are the single source of truth
     // for what the user has toggled.
     QJsonObject view;
-    view.insert("period",  current_period_);
-    view.insert("log",     btn_log_    ? btn_log_->isChecked()    : false);
-    view.insert("vol",     btn_vol_    ? btn_vol_->isChecked()    : false);
-    view.insert("sma20",   btn_sma20_  ? btn_sma20_->isChecked()  : false);
-    view.insert("sma50",   btn_sma50_  ? btn_sma50_->isChecked()  : false);
-    view.insert("sma200",  btn_sma200_ ? btn_sma200_->isChecked() : false);
-    view.insert("earn",    show_earnings_);
-    const QString blob = QString::fromUtf8(
-        QJsonDocument(view).toJson(QJsonDocument::Compact));
-    fincept::SettingsRepository::instance().set(
-        "er.chart_view." + current_symbol_, blob);
+    view.insert("period", current_period_);
+    view.insert("log", btn_log_ ? btn_log_->isChecked() : false);
+    view.insert("vol", btn_vol_ ? btn_vol_->isChecked() : false);
+    view.insert("sma20", btn_sma20_ ? btn_sma20_->isChecked() : false);
+    view.insert("sma50", btn_sma50_ ? btn_sma50_->isChecked() : false);
+    view.insert("sma200", btn_sma200_ ? btn_sma200_->isChecked() : false);
+    view.insert("earn", show_earnings_);
+    const QString blob = QString::fromUtf8(QJsonDocument(view).toJson(QJsonDocument::Compact));
+    fincept::SettingsRepository::instance().set("er.chart_view." + current_symbol_, blob);
 }
 
 void EquityOverviewTab::load_chart_view(const QString& symbol) {
-    auto r = fincept::SettingsRepository::instance().get(
-        "er.chart_view." + symbol);
+    auto r = fincept::SettingsRepository::instance().get("er.chart_view." + symbol);
     if (!r.is_ok() || r.value().isEmpty()) {
         // No saved view for this symbol — keep the previous tab's settings.
         // (We don't reset toggles to off; users typically want their chart
@@ -1293,7 +1328,8 @@ void EquityOverviewTab::load_chart_view(const QString& symbol) {
         return;
     }
     const auto doc = QJsonDocument::fromJson(r.value().toUtf8());
-    if (!doc.isObject()) return;
+    if (!doc.isObject())
+        return;
     const auto v = doc.object();
 
     restoring_view_ = true;
@@ -1301,26 +1337,33 @@ void EquityOverviewTab::load_chart_view(const QString& symbol) {
     current_period_ = period;
 
     auto apply = [](QPushButton* b, bool on) {
-        if (b && b->isChecked() != on) b->setChecked(on);
+        if (b && b->isChecked() != on)
+            b->setChecked(on);
     };
-    apply(btn_log_,    v.value("log").toBool(false));
-    apply(btn_vol_,    v.value("vol").toBool(false));
-    apply(btn_sma20_,  v.value("sma20").toBool(false));
-    apply(btn_sma50_,  v.value("sma50").toBool(false));
+    apply(btn_log_, v.value("log").toBool(false));
+    apply(btn_vol_, v.value("vol").toBool(false));
+    apply(btn_sma20_, v.value("sma20").toBool(false));
+    apply(btn_sma50_, v.value("sma50").toBool(false));
     apply(btn_sma200_, v.value("sma200").toBool(false));
-    apply(btn_earn_,   v.value("earn").toBool(false));
+    apply(btn_earn_, v.value("earn").toBool(false));
 
     // Reflect the saved period in the active-button highlight. The set of
     // fixed period buttons may not include the saved period (e.g. saved
     // value was a "range:…" custom). In that case the CUSTOM button takes the
     // active style and its tooltip carries the restored window.
     QPushButton* match = nullptr;
-    if      (period == "1mo") match = btn_1m_;
-    else if (period == "3mo") match = btn_3m_;
-    else if (period == "6mo") match = btn_6m_;
-    else if (period == "1y")  match = btn_1y_;
-    else if (period == "5y")  match = btn_5y_;
-    else if (period.startsWith("range:")) match = btn_custom_;
+    if (period == "1mo")
+        match = btn_1m_;
+    else if (period == "3mo")
+        match = btn_3m_;
+    else if (period == "6mo")
+        match = btn_6m_;
+    else if (period == "1y")
+        match = btn_1y_;
+    else if (period == "5y")
+        match = btn_5y_;
+    else if (period.startsWith("range:"))
+        match = btn_custom_;
     // The restore path also changes current_period_, so the tooltip has to
     // follow it here too — otherwise it keeps advertising the window from
     // whichever ticker was open before.
@@ -1330,14 +1373,14 @@ void EquityOverviewTab::load_chart_view(const QString& symbol) {
         QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
                 "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
                 "QPushButton:hover{border-color:%3;background:%4;}")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
-                 ui::colors::AMBER(), ui::colors::BG_RAISED());
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(), ui::colors::BG_RAISED());
     auto active_ss =
         QString("QPushButton{background:%1;color:%2;border:1px solid %1;"
                 "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
             .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
     for (auto* b : {btn_1m_, btn_3m_, btn_6m_, btn_1y_, btn_5y_, btn_custom_})
-        if (b) b->setStyleSheet(b == match ? active_ss : inactive_ss);
+        if (b)
+            b->setStyleSheet(b == match ? active_ss : inactive_ss);
     active_period_btn_ = match;
 
     restoring_view_ = false;
@@ -1360,11 +1403,15 @@ static const QVector<QColor>& comp_palette() {
 
 void EquityOverviewTab::add_comparison(const QString& symbol) {
     const QString sym = symbol.trimmed().toUpper();
-    if (sym.isEmpty()) return;
-    if (sym == current_symbol_) return;               // pointless self-comp
+    if (sym.isEmpty())
+        return;
+    if (sym == current_symbol_)
+        return; // pointless self-comp
     for (const auto& c : comp_state_)
-        if (c.symbol == sym) return;                  // already added
-    if (comp_state_.size() >= kMaxComparisons) return;
+        if (c.symbol == sym)
+            return; // already added
+    if (comp_state_.size() >= kMaxComparisons)
+        return;
 
     const QColor color = comp_palette().at(comp_state_.size() % comp_palette().size());
     comp_state_.append({sym, color, {}});
@@ -1373,13 +1420,15 @@ void EquityOverviewTab::add_comparison(const QString& symbol) {
     // Notify external surfaces (Peers checkbox column) so they can mirror.
     QStringList syms;
     syms.reserve(comp_state_.size());
-    for (const auto& c : comp_state_) syms.append(c.symbol);
+    for (const auto& c : comp_state_)
+        syms.append(c.symbol);
     emit comparisons_changed(syms);
 }
 
 void EquityOverviewTab::remove_comparison(const QString& symbol) {
     const QString sym = symbol.trimmed().toUpper();
-    if (sym.isEmpty()) return;
+    if (sym.isEmpty())
+        return;
     bool removed = false;
     for (int j = 0; j < comp_state_.size(); ++j) {
         if (comp_state_[j].symbol == sym) {
@@ -1388,24 +1437,29 @@ void EquityOverviewTab::remove_comparison(const QString& symbol) {
             break;
         }
     }
-    if (!removed) return;
+    if (!removed)
+        return;
     refresh_comparisons();
     rebuild_comp_strip();
     QStringList syms;
     syms.reserve(comp_state_.size());
-    for (const auto& c : comp_state_) syms.append(c.symbol);
+    for (const auto& c : comp_state_)
+        syms.append(c.symbol);
     emit comparisons_changed(syms);
 }
 
 void EquityOverviewTab::rebuild_comp_strip() {
-    if (!comp_chips_) return;
+    if (!comp_chips_)
+        return;
     // Tear down existing chip widgets. Skip the trailing addStretch item so
     // it survives across rebuilds — without that, the strip would no longer
     // pin chips to the left after the first rebuild.
     while (comp_chips_->count() > 0) {
         QLayoutItem* it = comp_chips_->itemAt(0);
-        if (!it) break;
-        if (!it->widget()) break;            // trailing stretch — leave it
+        if (!it)
+            break;
+        if (!it->widget())
+            break; // trailing stretch — leave it
         comp_chips_->takeAt(0);
         it->widget()->deleteLater();
         delete it;
@@ -1419,13 +1473,12 @@ void EquityOverviewTab::rebuild_comp_strip() {
     //     update_comp_chip_labels() — cheaper than swapping multiple
     //     widgets, and lets hover updates avoid touching the layout.
     for (int i = 0; i < comp_state_.size(); ++i) {
-        const QString sym        = comp_state_[i].symbol;
+        const QString sym = comp_state_[i].symbol;
         const QString color_name = comp_state_[i].color.name();
 
         auto* chip = new QFrame;
-        chip->setStyleSheet(QString(
-            "QFrame{background:%1;border:1px solid %2;border-radius:2px;}")
-            .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+        chip->setStyleSheet(QString("QFrame{background:%1;border:1px solid %2;border-radius:2px;}")
+                                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
         auto* hl = new QHBoxLayout(chip);
         hl->setContentsMargins(2, 1, 6, 1);
         hl->setSpacing(4);
@@ -1434,19 +1487,16 @@ void EquityOverviewTab::rebuild_comp_strip() {
         rm->setCursor(Qt::PointingHandCursor);
         rm->setToolTip("Remove from comparison");
         rm->setFixedSize(16, 16);
-        rm->setStyleSheet(QString(
-            "QPushButton{background:transparent;color:%1;border:0;"
-            "padding:0;font-size:11px;font-weight:700;}"
-            "QPushButton:hover{color:%2;}")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::NEGATIVE()));
+        rm->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:0;"
+                                  "padding:0;font-size:11px;font-weight:700;}"
+                                  "QPushButton:hover{color:%2;}")
+                              .arg(ui::colors::TEXT_SECONDARY(), ui::colors::NEGATIVE()));
         // Route through the public remove_comparison path so the chip ✕
         // shares the same removal + comparisons_changed emission as the
         // Peers-tab checkbox uncheck. deleteLater (via rebuild_comp_strip)
         // is safe because the connect's receiver context is `this` (the
         // tab) and deleteLater defers to the next event-loop tick.
-        connect(rm, &QPushButton::clicked, this, [this, sym]() {
-            remove_comparison(sym);
-        });
+        connect(rm, &QPushButton::clicked, this, [this, sym]() { remove_comparison(sym); });
         hl->addWidget(rm);
 
         auto* swatch = new QLabel;
@@ -1455,10 +1505,9 @@ void EquityOverviewTab::rebuild_comp_strip() {
         hl->addWidget(swatch);
 
         auto* lbl = new QLabel(sym);
-        lbl->setStyleSheet(QString(
-            "color:%1;font-weight:700;font-size:11px;font-family:'Consolas',monospace;"
-            "background:transparent;border:0;")
-            .arg(ui::colors::TEXT_PRIMARY()));
+        lbl->setStyleSheet(QString("color:%1;font-weight:700;font-size:11px;font-family:'Consolas',monospace;"
+                                   "background:transparent;border:0;")
+                               .arg(ui::colors::TEXT_PRIMARY()));
         hl->addWidget(lbl);
         comp_chip_labels_.insert(sym, lbl);
 
@@ -1466,29 +1515,26 @@ void EquityOverviewTab::rebuild_comp_strip() {
         comp_chips_->insertWidget(comp_chips_->count() - 1, chip);
     }
     refresh_comp_input_state();
-    update_comp_chip_labels(-1);  // populate with full-window/static values
+    update_comp_chip_labels(-1); // populate with full-window/static values
 }
 
 void EquityOverviewTab::update_comp_chip_labels(int hover_idx) {
-    if (comp_chip_labels_.isEmpty()) return;
+    if (comp_chip_labels_.isEmpty())
+        return;
 
     // Currency follows the primary ticker — comp prices are still in their
     // own currency on the chart, but for the chip label we accept the primary
     // symbol for the prefix glyph because the chip row already lives inside
     // the primary's context (one ER tab is one primary). Falls back to $ when
     // we haven't learned the currency yet.
-    const QString cur_sym = current_currency_.isEmpty()
-                                ? QStringLiteral("$")
-                                : currency_symbol(current_currency_);
+    const QString cur_sym = current_currency_.isEmpty() ? QStringLiteral("$") : currency_symbol(current_currency_);
 
-    auto fmt_price = [](double v) {
-        return (v >= 1000.0 ? QString::number(v, 'f', 0)
-                            : QString::number(v, 'f', 2));
-    };
+    auto fmt_price = [](double v) { return (v >= 1000.0 ? QString::number(v, 'f', 0) : QString::number(v, 'f', 2)); };
 
     for (const auto& cs : comp_state_) {
         QLabel* lbl = comp_chip_labels_.value(cs.symbol, nullptr);
-        if (!lbl) continue;
+        if (!lbl)
+            continue;
         if (cs.candles.isEmpty()) {
             lbl->setText(cs.symbol + QStringLiteral(" loading…"));
             continue;
@@ -1501,10 +1547,10 @@ void EquityOverviewTab::update_comp_chip_labels(int hover_idx) {
         // candle at-or-after the visible-window-start timestamp, and the
         // price is comp's close at-or-before the hovered candle.
         const auto& comp_candles = cs.candles;
-        const int   n            = comp_candles.size();
+        const int n = comp_candles.size();
 
         double anchor_c = comp_candles.first().close;
-        double price_c  = comp_candles.last().close;
+        double price_c = comp_candles.last().close;
 
         if (hover_idx >= 0 && hover_idx < cached_candles_.size() && !cached_candles_.isEmpty()) {
             // Resolve "visible window" via cached_candles_ — the tab's
@@ -1524,30 +1570,28 @@ void EquityOverviewTab::update_comp_chip_labels(int hover_idx) {
                 }
             }
             const qint64 hover_ts = cached_candles_[hover_idx].timestamp;
-            int          j        = -1;
+            int j = -1;
             for (int k = 0; k < n; ++k) {
-                if (comp_candles[k].timestamp > hover_ts) break;
+                if (comp_candles[k].timestamp > hover_ts)
+                    break;
                 j = k;
             }
-            if (j >= 0) price_c = comp_candles[j].close;
+            if (j >= 0)
+                price_c = comp_candles[j].close;
         }
 
-        const double pct = (anchor_c > 0.0)
-                               ? (price_c - anchor_c) / anchor_c * 100.0
-                               : 0.0;
+        const double pct = (anchor_c > 0.0) ? (price_c - anchor_c) / anchor_c * 100.0 : 0.0;
         const QString sign = pct >= 0 ? QStringLiteral("+") : QString();
-        lbl->setText(QString("%1: %2%3%  %4%5")
-                         .arg(cs.symbol, sign,
-                              QString::number(pct, 'f', 1),
-                              cur_sym,
-                              fmt_price(price_c)));
+        lbl->setText(
+            QString("%1: %2%3%  %4%5").arg(cs.symbol, sign, QString::number(pct, 'f', 1), cur_sym, fmt_price(price_c)));
     }
 }
 
 void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
     // Pre-construction guard — build_chart_panel hasn't created the labels
     // yet on the very first set_symbol() path during constructor wiring.
-    if (!primary_date_lbl_) return;
+    if (!primary_date_lbl_)
+        return;
 
     if (cached_candles_.isEmpty()) {
         primary_date_lbl_->clear();
@@ -1560,15 +1604,18 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
         return;
     }
 
-    const int n   = cached_candles_.size();
+    const int n = cached_candles_.size();
     const int idx = (hover_idx >= 0 && hover_idx < n) ? hover_idx : n - 1;
     const auto& c = cached_candles_[idx];
 
     auto fmt_p = [](double v) { return QString::number(v, 'f', 2); };
     auto fmt_v = [](double v) -> QString {
-        if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
-        if (v >= 1e6) return QString::number(v / 1e6, 'f', 1) + "M";
-        if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
+        if (v >= 1e9)
+            return QString::number(v / 1e9, 'f', 2) + "B";
+        if (v >= 1e6)
+            return QString::number(v / 1e6, 'f', 1) + "M";
+        if (v >= 1e3)
+            return QString::number(v / 1e3, 'f', 1) + "K";
         return QString::number(v, 'f', 0);
     };
     // Lambda to flip a label's foreground via palette (cheaper than
@@ -1583,22 +1630,19 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
     // every exchange east of Greenwich, while the same file's OHLC tooltip
     // twenty lines up already used bar_date correctly.
     primary_date_lbl_->setText(c.date().toString("ddd dd MMM yyyy"));
-    primary_ohlc_lbl_->setText(QString("O %1  H %2  L %3  C %4")
-                                   .arg(fmt_p(c.open), fmt_p(c.high),
-                                        fmt_p(c.low),  fmt_p(c.close)));
+    primary_ohlc_lbl_->setText(
+        QString("O %1  H %2  L %3  C %4").arg(fmt_p(c.open), fmt_p(c.high), fmt_p(c.low), fmt_p(c.close)));
 
     // Δ vs previous close (or open if it's the first candle).
     const double prev_close = (idx > 0) ? cached_candles_[idx - 1].close : c.open;
-    const double dchg       = c.close - prev_close;
-    const double dpct       = (prev_close != 0.0) ? (dchg / prev_close * 100.0) : 0.0;
+    const double dchg = c.close - prev_close;
+    const double dpct = (prev_close != 0.0) ? (dchg / prev_close * 100.0) : 0.0;
     primary_delta_lbl_->setText(QString("Δ %1%2 (%3%4%)")
                                     .arg(dchg >= 0 ? "+" : "")
                                     .arg(fmt_p(dchg))
                                     .arg(dpct >= 0 ? "+" : "")
                                     .arg(dpct, 0, 'f', 2));
-    set_fg(primary_delta_lbl_,
-           dchg >= 0 ? QColor(ui::colors::POSITIVE.get())
-                     : QColor(ui::colors::NEGATIVE.get()));
+    set_fg(primary_delta_lbl_, dchg >= 0 ? QColor(ui::colors::POSITIVE.get()) : QColor(ui::colors::NEGATIVE.get()));
 
     primary_vol_lbl_->setText(QStringLiteral("Vol ") + fmt_v(c.volume));
 
@@ -1613,22 +1657,18 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
         // Which basis this actually used depends on whether the loaded window
         // spans a year; say the one that was used rather than assuming.
         primary_52w_lbl_->setToolTip(
-            derived_hi > 0.0
-                ? QStringLiteral(
-                      "Distance from the 52-week high of the ADJUSTED series drawn on "
-                      "this chart — basis-consistent with the crosshair's close.\n"
-                      "The 52 WEEK RANGE panel quotes the raw band instead, to match "
-                      "the quote header and the analyst targets.")
-                : QStringLiteral(
-                      "The loaded window is shorter than a year, so this uses the "
-                      "vendor's RAW 52-week high — measured against an adjusted "
-                      "close, and identical to the 52 WEEK RANGE panel.\n"
-                      "Select 1Y or longer for a basis-consistent figure."));
+            derived_hi > 0.0 ? QStringLiteral("Distance from the 52-week high of the ADJUSTED series drawn on "
+                                              "this chart — basis-consistent with the crosshair's close.\n"
+                                              "The 52 WEEK RANGE panel quotes the raw band instead, to match "
+                                              "the quote header and the analyst targets.")
+                             : QStringLiteral("The loaded window is shorter than a year, so this uses the "
+                                              "vendor's RAW 52-week high — measured against an adjusted "
+                                              "close, and identical to the 52 WEEK RANGE panel.\n"
+                                              "Select 1Y or longer for a basis-consistent figure."));
         // Green when close to the high (within 5%), dim otherwise. Always
         // negative for normal data so we don't bother with a "+" prefix.
         set_fg(primary_52w_lbl_,
-               off_high > -5.0 ? QColor(ui::colors::POSITIVE.get())
-                               : QColor(ui::colors::TEXT_SECONDARY()));
+               off_high > -5.0 ? QColor(ui::colors::POSITIVE.get()) : QColor(ui::colors::TEXT_SECONDARY()));
     } else {
         primary_52w_lbl_->clear();
         primary_52w_lbl_->setToolTip({});
@@ -1636,19 +1676,17 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
 
     // SMA50 delta — needs at least 50 candles ending at idx.
     if (n >= 50) {
-        double    sum = 0.0;
-        const int s   = qMax(0, idx - 49);
-        for (int k = s; k <= idx; ++k) sum += cached_candles_[k].close;
+        double sum = 0.0;
+        const int s = qMax(0, idx - 49);
+        for (int k = s; k <= idx; ++k)
+            sum += cached_candles_[k].close;
         const int win = idx - s + 1;
         if (win >= 50) {
-            const double sma     = sum / win;
+            const double sma = sum / win;
             const double off_sma = (c.close - sma) / sma * 100.0;
-            primary_sma50_lbl_->setText(QString("SMA50 %1%2%")
-                                            .arg(off_sma >= 0 ? "+" : "")
-                                            .arg(off_sma, 0, 'f', 1));
+            primary_sma50_lbl_->setText(QString("SMA50 %1%2%").arg(off_sma >= 0 ? "+" : "").arg(off_sma, 0, 'f', 1));
             set_fg(primary_sma50_lbl_,
-                   off_sma >= 0 ? QColor(ui::colors::POSITIVE.get())
-                                : QColor(ui::colors::NEGATIVE.get()));
+                   off_sma >= 0 ? QColor(ui::colors::POSITIVE.get()) : QColor(ui::colors::NEGATIVE.get()));
         } else {
             primary_sma50_lbl_->clear();
         }
@@ -1658,7 +1696,8 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
 }
 
 void EquityOverviewTab::refresh_comp_input_state() {
-    if (!comp_input_) return;
+    if (!comp_input_)
+        return;
     const bool at_max = comp_state_.size() >= kMaxComparisons;
     comp_input_->setEnabled(!at_max);
     comp_input_->setPlaceholderText(at_max ? QStringLiteral("(max %1)").arg(kMaxComparisons)
@@ -1666,7 +1705,8 @@ void EquityOverviewTab::refresh_comp_input_state() {
 }
 
 void EquityOverviewTab::refresh_comparisons() {
-    if (!candle_canvas_) return;
+    if (!candle_canvas_)
+        return;
     if (comp_state_.isEmpty()) {
         candle_canvas_->set_comparisons({});
         return;
@@ -1690,29 +1730,36 @@ void EquityOverviewTab::refresh_comparisons() {
     const QString primary_at_fetch = current_symbol_;
     for (int i = 0; i < comp_state_.size(); ++i) {
         const QString sym = comp_state_[i].symbol;
-        svc.subscribe_historical(
-            this, sym, period_at_fetch,
-            [this, sym, period_at_fetch, primary_at_fetch, push_to_canvas]
-            (const services::query::QueryStore::State& s) {
-                // Drop stale callbacks (primary or period changed mid-flight).
-                if (primary_at_fetch != current_symbol_) return;
-                if (period_at_fetch != current_period_) return;
-                if (!candle_canvas_) return;
-                if (!s.data.isValid() || s.data.isNull()) return;
-                const auto candles = s.data.value<QVector<services::equity::Candle>>();
-                if (candles.isEmpty()) return;
-                // Update the running CompState entry — by symbol, since
-                // index could have shifted if the user removed a chip
-                // mid-flight. Re-push the whole list so the canvas keeps
-                // all currently-loaded series visible.
-                for (auto& cs : comp_state_) {
-                    if (cs.symbol == sym) { cs.candles = candles; break; }
-                }
-                push_to_canvas();
-                // The chip-row label for this symbol still says "loading…"
-                // until we recompute with the fresh candles.
-                update_comp_chip_labels(-1);
-            });
+        svc.subscribe_historical(this, sym, period_at_fetch,
+                                 [this, sym, period_at_fetch, primary_at_fetch,
+                                  push_to_canvas](const services::query::QueryStore::State& s) {
+                                     // Drop stale callbacks (primary or period changed mid-flight).
+                                     if (primary_at_fetch != current_symbol_)
+                                         return;
+                                     if (period_at_fetch != current_period_)
+                                         return;
+                                     if (!candle_canvas_)
+                                         return;
+                                     if (!s.data.isValid() || s.data.isNull())
+                                         return;
+                                     const auto candles = s.data.value<QVector<services::equity::Candle>>();
+                                     if (candles.isEmpty())
+                                         return;
+                                     // Update the running CompState entry — by symbol, since
+                                     // index could have shifted if the user removed a chip
+                                     // mid-flight. Re-push the whole list so the canvas keeps
+                                     // all currently-loaded series visible.
+                                     for (auto& cs : comp_state_) {
+                                         if (cs.symbol == sym) {
+                                             cs.candles = candles;
+                                             break;
+                                         }
+                                     }
+                                     push_to_canvas();
+                                     // The chip-row label for this symbol still says "loading…"
+                                     // until we recompute with the fresh candles.
+                                     update_comp_chip_labels(-1);
+                                 });
     }
 }
 
@@ -1727,33 +1774,51 @@ void EquityOverviewTab::refresh_comparisons() {
 void EquityOverviewTab::shortcut_set_period(int slot) {
     QPushButton* b = nullptr;
     switch (slot) {
-        case 1: b = btn_1m_;  break;
-        case 2: b = btn_3m_;  break;
-        case 3: b = btn_6m_;  break;
-        case 4: b = btn_1y_;  break;
-        case 5: b = btn_5y_;  break;
-        default: return;
+        case 1:
+            b = btn_1m_;
+            break;
+        case 2:
+            b = btn_3m_;
+            break;
+        case 3:
+            b = btn_6m_;
+            break;
+        case 4:
+            b = btn_1y_;
+            break;
+        case 5:
+            b = btn_5y_;
+            break;
+        default:
+            return;
     }
-    if (b) b->click();
+    if (b)
+        b->click();
 }
 
 void EquityOverviewTab::shortcut_toggle_log() {
-    if (btn_log_) btn_log_->toggle();
+    if (btn_log_)
+        btn_log_->toggle();
 }
 void EquityOverviewTab::shortcut_toggle_volume() {
-    if (btn_vol_) btn_vol_->toggle();
+    if (btn_vol_)
+        btn_vol_->toggle();
 }
 void EquityOverviewTab::shortcut_toggle_sma50() {
-    if (btn_sma50_) btn_sma50_->toggle();
+    if (btn_sma50_)
+        btn_sma50_->toggle();
 }
 void EquityOverviewTab::shortcut_toggle_earnings() {
-    if (btn_earn_) btn_earn_->toggle();
+    if (btn_earn_)
+        btn_earn_->toggle();
 }
 void EquityOverviewTab::shortcut_open_comparison() {
-    if (comp_input_) comp_input_->setFocus();
+    if (comp_input_)
+        comp_input_->setFocus();
 }
 void EquityOverviewTab::shortcut_open_range_picker() {
-    if (btn_custom_) btn_custom_->click();
+    if (btn_custom_)
+        btn_custom_->click();
 }
 
 void EquityOverviewTab::open_custom_range_picker() {
@@ -1770,7 +1835,7 @@ void EquityOverviewTab::open_custom_range_picker() {
 
     const QDate today = QDate::currentDate();
     auto* start_edit = new QDateEdit(today.addDays(-90), &dlg);
-    auto* end_edit   = new QDateEdit(today, &dlg);
+    auto* end_edit = new QDateEdit(today, &dlg);
     for (auto* de : {start_edit, end_edit}) {
         de->setCalendarPopup(true);
         de->setDisplayFormat("yyyy-MM-dd");
@@ -1781,29 +1846,30 @@ void EquityOverviewTab::open_custom_range_picker() {
         de->setMinimumDate(QDate(1990, 1, 1));
     }
     fl->addRow("Start", start_edit);
-    fl->addRow("End",   end_edit);
+    fl->addRow("End", end_edit);
 
-    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel,
-                                          Qt::Horizontal, &dlg);
+    auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, Qt::Horizontal, &dlg);
     fl->addRow(buttons);
     connect(buttons, &QDialogButtonBox::accepted, &dlg, &QDialog::accept);
     connect(buttons, &QDialogButtonBox::rejected, &dlg, &QDialog::reject);
 
-    if (dlg.exec() != QDialog::Accepted) return;
+    if (dlg.exec() != QDialog::Accepted)
+        return;
 
     QDate start = start_edit->date();
-    QDate end   = end_edit->date();
+    QDate end = end_edit->date();
     // Swap if user picked backwards — keeps the daemon path safe and the
     // resulting candle vector non-empty.
-    if (start > end) std::swap(start, end);
-    if (start == end) return;   // degenerate — yfinance returns 0 candles
+    if (start > end)
+        std::swap(start, end);
+    if (start == end)
+        return; // degenerate — yfinance returns 0 candles
 
     // Encode as "range:YYYY-MM-DD:YYYY-MM-DD". get_historical_period in
     // yfinance_data.py decodes this back to ticker.history(start=, end=).
     // QueryStore caches by key, so re-picking the same window in the same
     // session hits cache.
-    const QString range = "range:" + start.toString(Qt::ISODate) + ":" +
-                          end.toString(Qt::ISODate);
+    const QString range = "range:" + start.toString(Qt::ISODate) + ":" + end.toString(Qt::ISODate);
     switch_period(btn_custom_, range);
 }
 
@@ -1834,25 +1900,24 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
     // What was missing is that only the technical badge said so: the gauge
     // prints its own hit rates, this one asserted a verdict with no horizon
     // and no provenance at all, and the asymmetry read as a contradiction.
-    p->setToolTip(QStringLiteral(
-        "Sell-side analyst consensus, as published by the data vendor — not "
-        "computed here. Targets are twelve-month price objectives; the badge is "
-        "the vendor's summary of the individual ratings behind them.\n\n"
-        "CONSENSUS is the mean of the individual ratings on a 1–5 scale where 5 "
-        "is Strong Buy — the orientation Bloomberg's ANR standardises every "
-        "contributor onto. The vendor publishes this figure INVERTED (its 1 is "
-        "Strong Buy), so the number here is 6 minus the raw value; compare it "
-        "against a vendor screen with that in mind.\n\n"
-        "One discipline this consensus does NOT have: Bloomberg drops a "
-        "contributor from ANR once its rating is a year stale. The vendor "
-        "applies no such rule and publishes no per-analyst dates, so a rating "
-        "here may rest partly on views nobody has revisited in some time.\n\n"
-        "This is a fundamental view, and it is measuring something different "
-        "from the STRONG BUY … STRONG SELL verdict on the Technicals tab, which "
-        "describes the trend currently in the price. The two routinely disagree, "
-        "and most sharply when price has moved a long way from where analysts "
-        "last set their targets. That gap is information; it is not an error in "
-        "either reading."));
+    p->setToolTip(QStringLiteral("Sell-side analyst consensus, as published by the data vendor — not "
+                                 "computed here. Targets are twelve-month price objectives; the badge is "
+                                 "the vendor's summary of the individual ratings behind them.\n\n"
+                                 "CONSENSUS is the mean of the individual ratings on a 1–5 scale where 5 "
+                                 "is Strong Buy — the orientation Bloomberg's ANR standardises every "
+                                 "contributor onto. The vendor publishes this figure INVERTED (its 1 is "
+                                 "Strong Buy), so the number here is 6 minus the raw value; compare it "
+                                 "against a vendor screen with that in mind.\n\n"
+                                 "One discipline this consensus does NOT have: Bloomberg drops a "
+                                 "contributor from ANR once its rating is a year stale. The vendor "
+                                 "applies no such rule and publishes no per-analyst dates, so a rating "
+                                 "here may rest partly on views nobody has revisited in some time.\n\n"
+                                 "This is a fundamental view, and it is measuring something different "
+                                 "from the STRONG BUY … STRONG SELL verdict on the Technicals tab, which "
+                                 "describes the trend currently in the price. The two routinely disagree, "
+                                 "and most sharply when price has moved a long way from where analysts "
+                                 "last set their targets. That gap is information; it is not an error in "
+                                 "either reading."));
     target_high_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     target_mean_val_ = add_row(p, "MEAN", YELLOW);
     target_low_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
@@ -1874,14 +1939,14 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
     // thinks to hover.
     horizon_note_ = new QLabel(QStringLiteral("12-month targets · sell-side consensus"));
     horizon_note_->setWordWrap(true);
-    horizon_note_->setStyleSheet(QString("color:%1;font-size:10px;background:transparent;border:0;")
-                                     .arg(ui::colors::TEXT_SECONDARY()));
+    horizon_note_->setStyleSheet(
+        QString("color:%1;font-size:10px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
     static_cast<QVBoxLayout*>(p->layout())->addWidget(horizon_note_);
 
     targets_note_ = new QLabel;
     targets_note_->setWordWrap(true);
-    targets_note_->setStyleSheet(QString("color:%1;font-size:10px;background:transparent;border:0;")
-                                     .arg(ui::colors::TEXT_SECONDARY()));
+    targets_note_->setStyleSheet(
+        QString("color:%1;font-size:10px;background:transparent;border:0;").arg(ui::colors::TEXT_SECONDARY()));
     targets_note_->hide();
     static_cast<QVBoxLayout*>(p->layout())->addWidget(targets_note_);
 
@@ -1891,12 +1956,11 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
 
 QWidget* EquityOverviewTab::build_52w_panel() {
     auto* p = make_panel("52 WEEK RANGE", YELLOW);
-    p->setToolTip(QStringLiteral(
-        "Unadjusted (raw) prices, the same basis as the quote header and the "
-        "analyst targets — so all three can be compared directly.\n\n"
-        "The chart and its crosshair use split/dividend-ADJUSTED prices, which "
-        "answer a different question (total return). For a dividend payer the "
-        "two bands differ by roughly the cumulative yield over the year."));
+    p->setToolTip(QStringLiteral("Unadjusted (raw) prices, the same basis as the quote header and the "
+                                 "analyst targets — so all three can be compared directly.\n\n"
+                                 "The chart and its crosshair use split/dividend-ADJUSTED prices, which "
+                                 "answer a different question (total return). For a dividend payer the "
+                                 "two bands differ by roughly the cumulative yield over the year."));
     w52h_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     w52l_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
     avg_vol_val_ = add_row(p, "AVG VOL", CYAN);
@@ -2003,18 +2067,39 @@ void EquityOverviewTab::clear_info_panels() {
     // partial clear is worse than none, because the labels that DO reset stop
     // contradicting the ones that do not, and the panel then reads as a
     // coherent picture of the wrong company.
-    for (QLabel* l : {mktcap_val_, pe_val_, fwd_pe_val_, peg_val_, pb_val_,
-                      div_val_, beta_val_,
-                      shares_out_val_, float_val_, insiders_val_,
-                      institutions_val_, short_pct_val_,
-                      w52h_val_, w52l_val_, avg_vol_val_,
-                      target_high_val_, target_mean_val_, target_low_val_,
-                      analyst_count_val_, rec_consensus_val_,
-                      gross_margin_val_, op_margin_val_, profit_margin_val_,
-                      roa_val_, roe_val_,
-                      rev_growth_val_, earnings_growth_val_,
-                      cash_val_, debt_val_, free_cf_val_,
-                      company_emp_, company_web_, company_currency_}) {
+    for (QLabel* l : {mktcap_val_,
+                      pe_val_,
+                      fwd_pe_val_,
+                      peg_val_,
+                      pb_val_,
+                      div_val_,
+                      beta_val_,
+                      shares_out_val_,
+                      float_val_,
+                      insiders_val_,
+                      institutions_val_,
+                      short_pct_val_,
+                      w52h_val_,
+                      w52l_val_,
+                      avg_vol_val_,
+                      target_high_val_,
+                      target_mean_val_,
+                      target_low_val_,
+                      analyst_count_val_,
+                      rec_consensus_val_,
+                      gross_margin_val_,
+                      op_margin_val_,
+                      profit_margin_val_,
+                      roa_val_,
+                      roe_val_,
+                      rev_growth_val_,
+                      earnings_growth_val_,
+                      cash_val_,
+                      debt_val_,
+                      free_cf_val_,
+                      company_emp_,
+                      company_web_,
+                      company_currency_}) {
         if (l)
             l->setText(ui::formatting::placeholder());
     }
@@ -2043,8 +2128,7 @@ void EquityOverviewTab::refresh_target_rows() {
     // next to "+14% from here". Both sides are raw prices: targets are quoted
     // raw and the live quote is raw, so they compare like with like. (The
     // chart's series is split/dividend-adjusted and must NOT be used here.)
-    const double ref_px = std::isfinite(cached_quote_.price) ? cached_quote_.price
-                                                             : info.current_price;
+    const double ref_px = std::isfinite(cached_quote_.price) ? cached_quote_.price : info.current_price;
     const auto target_text = [&](double t) {
         if (!std::isfinite(t))
             return ui::formatting::placeholder();
@@ -2072,8 +2156,7 @@ void EquityOverviewTab::refresh_target_rows() {
     if (rec_consensus_val_) {
         const double m = info.recommendation_mean;
         const bool sane = std::isfinite(m) && m >= 1.0 && m <= 5.0;
-        rec_consensus_val_->setText(sane ? QString("%1 / 5").arg(6.0 - m, 0, 'f', 1)
-                                         : ui::formatting::placeholder());
+        rec_consensus_val_->setText(sane ? QString("%1 / 5").arg(6.0 - m, 0, 'f', 1) : ui::formatting::placeholder());
     }
 }
 
@@ -2108,8 +2191,7 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
     if (s.fetched_at.isValid())
         info_as_of_ = s.fetched_at;
     const bool has_data = s.data.isValid() && !s.data.isNull();
-    const auto info = has_data ? s.data.value<services::equity::StockInfo>()
-                               : services::equity::StockInfo{};
+    const auto info = has_data ? s.data.value<services::equity::StockInfo>() : services::equity::StockInfo{};
     if (!has_data || !info.valid) {
         // Nothing to show. A failure says so over the panels rather than
         // leaving "—", which reads as a company with no targets and no 52-week
@@ -2194,12 +2276,11 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
     // case is genuinely "nobody covers this". Saying which is the difference
     // between "no upside published" and "go look somewhere else".
     if (targets_note_) {
-        const bool have_targets = std::isfinite(info.target_mean) ||
-                                  std::isfinite(info.target_high) ||
-                                  std::isfinite(info.target_low);
+        const bool have_targets =
+            std::isfinite(info.target_mean) || std::isfinite(info.target_high) || std::isfinite(info.target_low);
         const QString qt = info.quote_type.toUpper();
-        const bool is_fund = qt == "ETF" || qt == "MUTUALFUND" || qt == "INDEX" ||
-                             qt == "CRYPTOCURRENCY" || qt == "CURRENCY";
+        const bool is_fund =
+            qt == "ETF" || qt == "MUTUALFUND" || qt == "INDEX" || qt == "CRYPTOCURRENCY" || qt == "CURRENCY";
         // Plural nouns, not qt.toLower() + "s" — that produced "indexs",
         // "cryptocurrencys" and "currencys" for three of the five values.
         static const QHash<QString, QString> kFundNoun = {
@@ -2213,7 +2294,8 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
             targets_note_->hide();
         } else if (is_fund) {
             targets_note_->setText(QStringLiteral("Analysts do not publish price targets "
-                                                  "for %1.").arg(kFundNoun.value(qt, qt.toLower())));
+                                                  "for %1.")
+                                       .arg(kFundNoun.value(qt, qt.toLower())));
             targets_note_->show();
         } else if (!std::isfinite(info.profit_margins) && info.recommendation_key.isEmpty()) {
             // Discriminate on a field only Yahoo's financialData module
@@ -2311,7 +2393,8 @@ void EquityOverviewTab::apply_historical_state(const services::query::QueryStore
 }
 
 void EquityOverviewTab::apply_earnings_state(const services::query::QueryStore::State& s) {
-    if (!candle_canvas_) return;
+    if (!candle_canvas_)
+        return;
     if (!s.error.isEmpty() || !s.data.isValid() || s.data.isNull()) {
         candle_canvas_->set_earnings_events({});
         return;
@@ -2328,13 +2411,12 @@ void EquityOverviewTab::refresh_earnings_subscription() {
         store.unsubscribe(this, current_earnings_key_);
     current_earnings_key_.clear();
     if (candle_canvas_)
-        candle_canvas_->set_earnings_events({});  // clear any prior
+        candle_canvas_->set_earnings_events({}); // clear any prior
 
     if (!show_earnings_ || current_symbol_.isEmpty())
         return;
     services::equity::EquityResearchService::instance().subscribe_earnings(
-        this, current_symbol_,
-        [this](const services::query::QueryStore::State& st) { apply_earnings_state(st); });
+        this, current_symbol_, [this](const services::query::QueryStore::State& st) { apply_earnings_state(st); });
     current_earnings_key_ = "equity:earnings:" + current_symbol_;
 }
 
@@ -2351,7 +2433,7 @@ void EquityOverviewTab::rebuild_chart(const QVector<services::equity::Candle>& c
 
 QString EquityOverviewTab::fmt_large(double v) {
     if (!std::isfinite(v))
-        return ui::formatting::placeholder();   // absent ≠ 0 (FLOAT, AVG VOL)
+        return ui::formatting::placeholder(); // absent ≠ 0 (FLOAT, AVG VOL)
     bool neg = v < 0;
     double av = qAbs(v);
     QString s;

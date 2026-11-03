@@ -136,10 +136,10 @@ class LiveHlsProxy : public QObject {
     bool cache_is_fresh() const;
 
     /// Tunables.
-    static constexpr int kEdgeSegmentsToKeep   = 6;     ///< trimmed playlist size
-    static constexpr int kRefreshIntervalMs    = 4000;  ///< background fetch period
-    static constexpr int kFetchTimeoutMs       = 30000; ///< per-fetch timeout
-    static constexpr int kMaxCacheAgeMs        = 30000; ///< drop cache after this without a successful refresh
+    static constexpr int kEdgeSegmentsToKeep = 6;   ///< trimmed playlist size
+    static constexpr int kRefreshIntervalMs = 4000; ///< background fetch period
+    static constexpr int kFetchTimeoutMs = 30000;   ///< per-fetch timeout
+    static constexpr int kMaxCacheAgeMs = 30000;    ///< drop cache after this without a successful refresh
     /// How old a playback session is allowed to get before it is replaced.
     ///
     /// Measured 2026-08-19 on youtube.com/watch?v=QB5BNdBFujE: segments answer
@@ -153,34 +153,34 @@ class LiveHlsProxy : public QObject {
     /// Lower is safer and costs one more yt-dlp run per interval; higher risks
     /// the old session dying before its replacement lands, which the viewer
     /// sees as the freeze this exists to remove.
-    static constexpr int kSessionMaxAgeMs      = 14000;
+    static constexpr int kSessionMaxAgeMs = 14000;
 
-    QTcpServer*           server_         = nullptr;
-    QNetworkAccessManager* netman_        = nullptr;
-    QTimer*               refresh_timer_  = nullptr;
-    QNetworkReply*        in_flight_      = nullptr;  ///< most recent upstream fetch, may be running
-    QUrl                  upstream_url_;
+    QTcpServer* server_ = nullptr;
+    QNetworkAccessManager* netman_ = nullptr;
+    QTimer* refresh_timer_ = nullptr;
+    QNetworkReply* in_flight_ = nullptr; ///< most recent upstream fetch, may be running
+    QUrl upstream_url_;
     /// Age of the CURRENT playback session — reset by set_upstream(), not by
     /// a manifest refetch, because refetching does not renew the session.
-    QElapsedTimer         session_age_;
+    QElapsedTimer session_age_;
     /// When the owner was last asked to re-resolve. Throttles the ask to one
     /// per kRefreshAskGapMs rather than one per session: a resolve can fail
     /// (yt-dlp error, no network), and a one-shot latch would then never ask
     /// again, leaving the session to die with only the player-side watchdog
     /// to notice. Invalid until the first ask.
-    QElapsedTimer         refresh_asked_at_;
+    QElapsedTimer refresh_asked_at_;
     /// Gap between repeat asks while the session is still over-age.
-    static constexpr int  kRefreshAskGapMs = 6000;
-    QUrl                  local_url_;
-    QByteArray            trimmed_cache_;
+    static constexpr int kRefreshAskGapMs = 6000;
+    QUrl local_url_;
+    QByteArray trimmed_cache_;
     /// Age of trimmed_cache_. Invalid (i.e., !isValid()) until first
     /// successful refresh.
-    QElapsedTimer         cache_age_;
-    QString               last_error_;
-    bool                  first_ready_emitted_ = false;
+    QElapsedTimer cache_age_;
+    QString last_error_;
+    bool first_ready_emitted_ = false;
     /// Latched once we emit upstream_error due to stale cache, so we
     /// don't spam the signal on every subsequent client request.
-    bool                  stale_error_emitted_ = false;
+    bool stale_error_emitted_ = false;
 };
 
 } // namespace fincept::services::video

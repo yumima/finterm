@@ -44,63 +44,54 @@ static Result<void> apply_v042(QSqlDatabase& db) {
     {
         // Step 1: trailing /v1/ → remove 4 chars
         QSqlQuery fix1(db);
-        fix1.prepare(
-            "UPDATE llm_configs "
-            "SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 4), "
-            "    updated_at = datetime('now') "
-            "WHERE provider = 'ollama' AND base_url LIKE '%/v1/'");
+        fix1.prepare("UPDATE llm_configs "
+                     "SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 4), "
+                     "    updated_at = datetime('now') "
+                     "WHERE provider = 'ollama' AND base_url LIKE '%/v1/'");
         if (!fix1.exec())
             return Result<void>::err(fix1.lastError().text().toStdString());
 
         // Step 2: trailing /v1 (without slash) → remove 3 chars
         QSqlQuery fix2(db);
-        fix2.prepare(
-            "UPDATE llm_configs "
-            "SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 3), "
-            "    updated_at = datetime('now') "
-            "WHERE provider = 'ollama' AND base_url LIKE '%/v1'");
+        fix2.prepare("UPDATE llm_configs "
+                     "SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 3), "
+                     "    updated_at = datetime('now') "
+                     "WHERE provider = 'ollama' AND base_url LIKE '%/v1'");
         if (!fix2.exec())
             return Result<void>::err(fix2.lastError().text().toStdString());
 
         // Step 3: any remaining trailing slash
         QSqlQuery fix3(db);
-        fix3.prepare(
-            "UPDATE llm_configs "
-            "SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 1), "
-            "    updated_at = datetime('now') "
-            "WHERE provider = 'ollama' AND base_url LIKE '%/'");
+        fix3.prepare("UPDATE llm_configs "
+                     "SET base_url = SUBSTR(base_url, 1, LENGTH(base_url) - 1), "
+                     "    updated_at = datetime('now') "
+                     "WHERE provider = 'ollama' AND base_url LIKE '%/'");
         if (!fix3.exec())
             return Result<void>::err(fix3.lastError().text().toStdString());
 
         const int affected = fix1.numRowsAffected() + fix2.numRowsAffected() + fix3.numRowsAffected();
         if (affected > 0)
-            LOG_INFO(kMig042Tag,
-                QString("stripped /v1 suffix from ollama base_url (%1 step(s))")
-                    .arg(affected));
+            LOG_INFO(kMig042Tag, QString("stripped /v1 suffix from ollama base_url (%1 step(s))").arg(affected));
     }
 
     // 2. If no active provider exists but exactly one ollama row does, make it
     //    active so LLM Config UI shows a ✓ and LlmService uses it directly.
     {
         QSqlQuery active_count(db);
-        active_count.prepare(
-            "SELECT COUNT(*) FROM llm_configs WHERE is_active = 1");
+        active_count.prepare("SELECT COUNT(*) FROM llm_configs WHERE is_active = 1");
         if (!active_count.exec() || !active_count.next())
             return Result<void>::ok();
         if (active_count.value(0).toInt() > 0)
             return Result<void>::ok(); // already have an active row — done
 
         QSqlQuery ollama_count(db);
-        ollama_count.prepare(
-            "SELECT COUNT(*) FROM llm_configs WHERE provider = 'ollama'");
+        ollama_count.prepare("SELECT COUNT(*) FROM llm_configs WHERE provider = 'ollama'");
         if (!ollama_count.exec() || !ollama_count.next())
             return Result<void>::ok();
         if (ollama_count.value(0).toInt() != 1)
             return Result<void>::ok(); // ambiguous — don't guess
 
-        if (auto r = sql_exec(db,
-                "UPDATE llm_configs SET is_active = 1 WHERE provider = 'ollama'");
-            r.is_err())
+        if (auto r = sql_exec(db, "UPDATE llm_configs SET is_active = 1 WHERE provider = 'ollama'"); r.is_err())
             return r;
         LOG_INFO(kMig042Tag, "activated the sole ollama row as the active provider");
     }

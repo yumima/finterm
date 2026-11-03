@@ -11,9 +11,9 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QPointer>
-#include <QUuid>
-#include <QSqlQuery>
 #include <QSqlDatabase>
+#include <QSqlQuery>
+#include <QUuid>
 
 namespace fincept::services::algo {
 
@@ -135,8 +135,7 @@ static QVector<AlgoStrategy> parse_strategies(const QJsonArray& arr) {
 
 void AlgoTradingService::list_strategies() {
     // Fast path: read pre-generated registry_index.json directly — no Python spawn needed
-    const QString json_path =
-        python::PythonRunner::instance().scripts_dir() + "/strategies/registry_index.json";
+    const QString json_path = python::PythonRunner::instance().scripts_dir() + "/strategies/registry_index.json";
     QFile f(json_path);
     if (f.open(QIODevice::ReadOnly)) {
         auto doc = QJsonDocument::fromJson(f.readAll());

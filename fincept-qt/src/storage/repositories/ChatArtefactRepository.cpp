@@ -32,10 +32,9 @@ ChatArtefactRow map_row(QSqlQuery& q) {
     return r;
 }
 
-constexpr const char* kCols =
-    "id, kind, title, payload_json, "
-    "source_request_id, source_agent_id, source_skill, source_args_json, "
-    "status, supersedes_id, created_at, updated_at";
+constexpr const char* kCols = "id, kind, title, payload_json, "
+                              "source_request_id, source_agent_id, source_skill, source_args_json, "
+                              "status, supersedes_id, created_at, updated_at";
 
 QString serialise_json(const QJsonObject& obj) {
     return QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
@@ -50,21 +49,24 @@ ChatArtefactRepository& ChatArtefactRepository::instance() {
 
 Result<QString> ChatArtefactRepository::create(const ChatArtefactCreate& c) {
     if (c.kind.isEmpty() || c.title.isEmpty())
-        return Result<QString>::err(
-            "ChatArtefactRepository::create: kind and title are required");
+        return Result<QString>::err("ChatArtefactRepository::create: kind and title are required");
 
     const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const QString sql = QStringLiteral(
-        "INSERT INTO chat_artefacts "
-        "(id, kind, title, payload_json, source_request_id, source_agent_id, "
-        " source_skill, source_args_json, status) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    const QString sql = QStringLiteral("INSERT INTO chat_artefacts "
+                                       "(id, kind, title, payload_json, source_request_id, source_agent_id, "
+                                       " source_skill, source_args_json, status) "
+                                       "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
     auto r = Database::instance().execute(sql, {
-        id, c.kind, c.title, serialise_json(c.payload),
-        c.source_request_id, c.source_agent_id, c.source_skill,
-        serialise_json(c.source_args),
-        c.status.isEmpty() ? QStringLiteral("final") : c.status,
-    });
+                                                   id,
+                                                   c.kind,
+                                                   c.title,
+                                                   serialise_json(c.payload),
+                                                   c.source_request_id,
+                                                   c.source_agent_id,
+                                                   c.source_skill,
+                                                   serialise_json(c.source_args),
+                                                   c.status.isEmpty() ? QStringLiteral("final") : c.status,
+                                               });
     if (r.is_err())
         return Result<QString>::err(r.error());
     return Result<QString>::ok(id);
@@ -73,24 +75,21 @@ Result<QString> ChatArtefactRepository::create(const ChatArtefactCreate& c) {
 Result<void> ChatArtefactRepository::update_payload(const QString& id, const QJsonObject& payload) {
     if (id.isEmpty())
         return Result<void>::err("update_payload: empty id");
-    auto r = Database::instance().execute(
-        QStringLiteral("UPDATE chat_artefacts "
-                       "SET payload_json = ?, updated_at = datetime('now') "
-                       "WHERE id = ?"),
-        {serialise_json(payload), id});
+    auto r = Database::instance().execute(QStringLiteral("UPDATE chat_artefacts "
+                                                         "SET payload_json = ?, updated_at = datetime('now') "
+                                                         "WHERE id = ?"),
+                                          {serialise_json(payload), id});
     if (r.is_err())
         return Result<void>::err(r.error());
     return Result<void>::ok();
 }
 
-Result<void> ChatArtefactRepository::set_supersedes(const QString& artefact_id,
-                                                    const QString& predecessor_id) {
+Result<void> ChatArtefactRepository::set_supersedes(const QString& artefact_id, const QString& predecessor_id) {
     if (artefact_id.isEmpty())
         return Result<void>::err("set_supersedes: empty artefact_id");
-    auto r = Database::instance().execute(
-        QStringLiteral("UPDATE chat_artefacts SET supersedes_id = ?, "
-                       "updated_at = datetime('now') WHERE id = ?"),
-        {predecessor_id, artefact_id});
+    auto r = Database::instance().execute(QStringLiteral("UPDATE chat_artefacts SET supersedes_id = ?, "
+                                                         "updated_at = datetime('now') WHERE id = ?"),
+                                          {predecessor_id, artefact_id});
     if (r.is_err())
         return Result<void>::err(r.error());
     return Result<void>::ok();
@@ -100,10 +99,10 @@ Result<std::optional<ChatArtefactRow>> ChatArtefactRepository::latest_for_reques
     using Out = Result<std::optional<ChatArtefactRow>>;
     if (request_id.isEmpty())
         return Out::ok(std::nullopt);
-    const QString sql = QStringLiteral(
-        "SELECT %1 FROM chat_artefacts "
-        "WHERE source_request_id = ? "
-        "ORDER BY created_at DESC LIMIT 1").arg(kCols);
+    const QString sql = QStringLiteral("SELECT %1 FROM chat_artefacts "
+                                       "WHERE source_request_id = ? "
+                                       "ORDER BY created_at DESC LIMIT 1")
+                            .arg(kCols);
     auto r = Database::instance().execute(sql, {request_id});
     if (r.is_err())
         return Out::err(r.error());
@@ -116,11 +115,10 @@ Result<std::optional<ChatArtefactRow>> ChatArtefactRepository::latest_for_reques
 Result<void> ChatArtefactRepository::mark_superseded(const QString& id) {
     if (id.isEmpty())
         return Result<void>::err("mark_superseded: empty id");
-    auto r = Database::instance().execute(
-        QStringLiteral("UPDATE chat_artefacts "
-                       "SET status = 'superseded', updated_at = datetime('now') "
-                       "WHERE id = ?"),
-        {id});
+    auto r = Database::instance().execute(QStringLiteral("UPDATE chat_artefacts "
+                                                         "SET status = 'superseded', updated_at = datetime('now') "
+                                                         "WHERE id = ?"),
+                                          {id});
     if (r.is_err())
         return Result<void>::err(r.error());
     return Result<void>::ok();
@@ -128,9 +126,9 @@ Result<void> ChatArtefactRepository::mark_superseded(const QString& id) {
 
 Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_recent(int limit) {
     const int n = std::clamp(limit, 1, kMaxListLimit);
-    const QString sql = QStringLiteral(
-        "SELECT %1 FROM chat_artefacts "
-        "ORDER BY created_at DESC LIMIT ?").arg(kCols);
+    const QString sql = QStringLiteral("SELECT %1 FROM chat_artefacts "
+                                       "ORDER BY created_at DESC LIMIT ?")
+                            .arg(kCols);
     auto r = Database::instance().execute(sql, {n});
     if (r.is_err())
         return Result<QVector<ChatArtefactRow>>::err(r.error());
@@ -142,9 +140,9 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_recent(int limit) 
 }
 
 Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_by_request(const QString& request_id) {
-    const QString sql = QStringLiteral(
-        "SELECT %1 FROM chat_artefacts WHERE source_request_id = ? "
-        "ORDER BY created_at DESC").arg(kCols);
+    const QString sql = QStringLiteral("SELECT %1 FROM chat_artefacts WHERE source_request_id = ? "
+                                       "ORDER BY created_at DESC")
+                            .arg(kCols);
     auto r = Database::instance().execute(sql, {request_id});
     if (r.is_err())
         return Result<QVector<ChatArtefactRow>>::err(r.error());
@@ -156,8 +154,7 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_by_request(const Q
 }
 
 Result<std::optional<ChatArtefactRow>> ChatArtefactRepository::get(const QString& id) {
-    const QString sql = QStringLiteral(
-        "SELECT %1 FROM chat_artefacts WHERE id = ?").arg(kCols);
+    const QString sql = QStringLiteral("SELECT %1 FROM chat_artefacts WHERE id = ?").arg(kCols);
     auto r = Database::instance().execute(sql, {id});
     if (r.is_err())
         return Result<std::optional<ChatArtefactRow>>::err(r.error());
@@ -182,9 +179,7 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_lineage_for(const 
     // an explicit supersedes_id chain, prefer that.  Walk both
     // directions (back via supersedes_id, forward via "who supersedes
     // me?") so the seed isn't required to be the head of the chain.
-    auto has_supersedes = [this](const ChatArtefactRow& row) {
-        return !row.supersedes_id.isEmpty();
-    };
+    auto has_supersedes = [this](const ChatArtefactRow& row) { return !row.supersedes_id.isEmpty(); };
     if (has_supersedes(a)) {
         // Walk backward through supersedes_id pointers, then forward
         // by finding rows that point at any link in the chain.  In
@@ -211,14 +206,15 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_lineage_for(const 
         QStringList placeholders;
         for (int i = 0; i < visited_list.size(); ++i)
             placeholders.append(QStringLiteral("?"));
-        const QString fwd_sql = QStringLiteral(
-            "SELECT %1 FROM chat_artefacts "
-            "WHERE supersedes_id IN (%2) AND id NOT IN (%2) "
-            "ORDER BY created_at DESC")
+        const QString fwd_sql = QStringLiteral("SELECT %1 FROM chat_artefacts "
+                                               "WHERE supersedes_id IN (%2) AND id NOT IN (%2) "
+                                               "ORDER BY created_at DESC")
                                     .arg(kCols, placeholders.join(QStringLiteral(",")));
         QVariantList params;
-        for (const QString& v : visited_list) params.append(v);
-        for (const QString& v : visited_list) params.append(v);
+        for (const QString& v : visited_list)
+            params.append(v);
+        for (const QString& v : visited_list)
+            params.append(v);
         auto fwd = Database::instance().execute(fwd_sql, params);
         if (fwd.is_ok()) {
             auto& q = fwd.value();
@@ -232,9 +228,7 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_lineage_for(const 
         }
         // Sort by created_at DESC for stable rendering.
         std::sort(chain.begin(), chain.end(),
-                  [](const ChatArtefactRow& l, const ChatArtefactRow& r) {
-                      return l.created_at > r.created_at;
-                  });
+                  [](const ChatArtefactRow& l, const ChatArtefactRow& r) { return l.created_at > r.created_at; });
         return Out::ok(std::move(chain));
     }
 
@@ -242,8 +236,7 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_lineage_for(const 
     // (other rows supersede this one).  If yes, walk forward.
     {
         auto fwd = Database::instance().execute(
-            QStringLiteral("SELECT id FROM chat_artefacts WHERE supersedes_id = ? LIMIT 1"),
-            {a.id});
+            QStringLiteral("SELECT id FROM chat_artefacts WHERE supersedes_id = ? LIMIT 1"), {a.id});
         if (fwd.is_ok() && fwd.value().next()) {
             // Seed has at least one successor — recurse from the
             // most-recent successor so the head-finding logic above
@@ -265,12 +258,11 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_lineage_for(const 
     // rows could have NULL.  `=` would evaluate UNKNOWN there and
     // exclude the seed row from its own lineage; `IS` groups
     // correctly.
-    const QString sql = QStringLiteral(
-        "SELECT %1 FROM chat_artefacts "
-        "WHERE source_agent_id IS ? AND source_skill IS ? AND source_args_json IS ? "
-        "ORDER BY created_at DESC").arg(kCols);
-    auto r = Database::instance().execute(sql, {
-        a.source_agent_id, a.source_skill, a.source_args_json});
+    const QString sql = QStringLiteral("SELECT %1 FROM chat_artefacts "
+                                       "WHERE source_agent_id IS ? AND source_skill IS ? AND source_args_json IS ? "
+                                       "ORDER BY created_at DESC")
+                            .arg(kCols);
+    auto r = Database::instance().execute(sql, {a.source_agent_id, a.source_skill, a.source_args_json});
     if (r.is_err())
         return Out::err(r.error());
     QVector<ChatArtefactRow> rows;

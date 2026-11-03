@@ -1,34 +1,31 @@
 // src/screens/equity_research/EquityResearchScreen.cpp
 #include "screens/equity_research/EquityResearchScreen.h"
-#include "ui/SearchFailedText.h"
-
-#include "screens/ownership/StockOwnershipPanel.h"
 
 #include "core/events/EventBus.h"
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
-#include "services/app_context/AppContextService.h"
 #include "core/symbol/SymbolDragSource.h"
 #include "screens/equity_research/EquityAiTab.h"
 #include "screens/equity_research/EquityAnalysisTab.h"
 #include "screens/equity_research/EquityEarningsTab.h"
 #include "screens/equity_research/EquityFinancialsTab.h"
 #include "screens/equity_research/EquityNewsTab.h"
+#include "screens/equity_research/EquityOptionsTab.h"
 #include "screens/equity_research/EquityOverviewTab.h"
 #include "screens/equity_research/EquityPeersTab.h"
-#include "screens/equity_research/EquityOptionsTab.h"
 #include "screens/equity_research/EquityTalippTab.h"
 #include "screens/equity_research/EquityTechnicalsTab.h"
+#include "screens/ownership/StockOwnershipPanel.h"
 #include "screens/relationship_map/RelationshipMapScreen.h"
+#include "services/app_context/AppContextService.h"
 #include "services/equity/EquityResearchService.h"
 #include "services/finnhub/FinnhubLiveTicks.h"
 #include "services/finnhub/FinnhubService.h"
 #include "services/markets/MarketDataService.h"
 #include "services/query/QueryStore.h"
+#include "ui/SearchFailedText.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#include <cmath>
 
 #include <QApplication>
 #include <QFontMetrics>
@@ -45,6 +42,8 @@
 #include <QTimeZone>
 #include <QVBoxLayout>
 
+#include <cmath>
+
 namespace fincept::screens {
 
 namespace {
@@ -53,11 +52,11 @@ namespace {
 // the symbol (used by activation handlers); the rest are read by the
 // delegate below for richer rendering. Kept anonymous-namespace local to
 // this translation unit — only the popup uses them.
-constexpr int kRoleSymbol   = Qt::UserRole;
-constexpr int kRoleName     = Qt::UserRole + 1;
+constexpr int kRoleSymbol = Qt::UserRole;
+constexpr int kRoleName = Qt::UserRole + 1;
 constexpr int kRoleExchange = Qt::UserRole + 2;
 constexpr int kRoleCurrency = Qt::UserRole + 3;
-constexpr int kRoleType     = Qt::UserRole + 4;
+constexpr int kRoleType = Qt::UserRole + 4;
 
 // Custom row painter for the inline ticker-search popup. Renders each
 // match as:
@@ -76,21 +75,20 @@ class SearchResultDelegate : public QStyledItemDelegate {
         return {0, fm.height() + 10};
     }
 
-    void paint(QPainter* p, const QStyleOptionViewItem& opt,
-               const QModelIndex& idx) const override {
+    void paint(QPainter* p, const QStyleOptionViewItem& opt, const QModelIndex& idx) const override {
         p->save();
 
         // Selection background — let the default style draw the highlight
         // rectangle so the popup's QSS theming continues to control colors.
         QStyleOptionViewItem o(opt);
         initStyleOption(&o, idx);
-        o.text.clear();   // suppress the default text-paint
+        o.text.clear(); // suppress the default text-paint
         QStyledItemDelegate::paint(p, o, idx);
 
-        const QString sym  = idx.data(kRoleSymbol).toString();
+        const QString sym = idx.data(kRoleSymbol).toString();
         const QString name = idx.data(kRoleName).toString();
         const QString exch = idx.data(kRoleExchange).toString();
-        const QString ccy  = idx.data(kRoleCurrency).toString();
+        const QString ccy = idx.data(kRoleCurrency).toString();
         const QString type = idx.data(kRoleType).toString().toUpper();
 
         QRect r = opt.rect.adjusted(8, 0, -8, 0);
@@ -103,10 +101,11 @@ class SearchResultDelegate : public QStyledItemDelegate {
         p->setFont(chip_font);
 
         auto draw_chip = [&](const QString& text, const QColor& color) {
-            if (text.isEmpty()) return;
+            if (text.isEmpty())
+                return;
             const int tw = chip_fm.horizontalAdvance(text);
-            const QRect cr(r.right() - tw - 8, r.top() + (r.height() - chip_fm.height()) / 2 - 1,
-                           tw + 8, chip_fm.height() + 2);
+            const QRect cr(r.right() - tw - 8, r.top() + (r.height() - chip_fm.height()) / 2 - 1, tw + 8,
+                           chip_fm.height() + 2);
             // Background fill is omitted on purpose — keeps the popup looking
             // flat and avoids fighting selection highlight. Just coloured text.
             p->setPen(color);
@@ -118,7 +117,7 @@ class SearchResultDelegate : public QStyledItemDelegate {
         if (!type.isEmpty() && type != "EQUITY" && type != "STOCK")
             draw_chip("[" + type + "]", dim);
         draw_chip(ccy, dim);
-        draw_chip(exch, QColor(0xC8, 0x9B, 0x3C));   // muted amber
+        draw_chip(exch, QColor(0xC8, 0x9B, 0x3C)); // muted amber
 
         // ── Left side: symbol bold amber, then name in primary text colour.
         QFont sym_font = opt.font;
@@ -133,8 +132,7 @@ class SearchResultDelegate : public QStyledItemDelegate {
         QFont name_font = opt.font;
         p->setFont(name_font);
         p->setPen(opt.palette.color(QPalette::Text));
-        const QString elided = QFontMetrics(name_font).elidedText(
-            name, Qt::ElideRight, name_rect.width());
+        const QString elided = QFontMetrics(name_font).elidedText(name, Qt::ElideRight, name_rect.width());
         p->drawText(name_rect, Qt::AlignVCenter | Qt::AlignLeft, elided);
 
         p->restore();
@@ -150,7 +148,8 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(20 * 1000); // 20s quote refresh
     connect(refresh_timer_, &QTimer::timeout, this, [this]() {
-        if (current_symbol_.isEmpty()) return;
+        if (current_symbol_.isEmpty())
+            return;
         // The tab panels read through QueryStore, which nothing was
         // re-kicking — so the Overview tab's OHLC, chart, financials, news
         // and peers sat on their first-load values for as long as the symbol
@@ -188,12 +187,18 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     // Trailing-argument-drop: Qt allows zero-arg lambda slots on signals
     // with any number of arguments, which sidesteps name churn in the
     // service's payload structs.
-    connect(&svc, &services::equity::EquityResearchService::quote_loaded, this,
-            [this]() { mark_tab_loaded(overview_tab_); mark_tab_loaded(analysis_tab_); });
-    connect(&svc, &services::equity::EquityResearchService::info_loaded, this,
-            [this]() { mark_tab_loaded(overview_tab_); mark_tab_loaded(analysis_tab_); });
-    connect(&svc, &services::equity::EquityResearchService::historical_loaded, this,
-            [this]() { mark_tab_loaded(overview_tab_); mark_tab_loaded(analysis_tab_); });
+    connect(&svc, &services::equity::EquityResearchService::quote_loaded, this, [this]() {
+        mark_tab_loaded(overview_tab_);
+        mark_tab_loaded(analysis_tab_);
+    });
+    connect(&svc, &services::equity::EquityResearchService::info_loaded, this, [this]() {
+        mark_tab_loaded(overview_tab_);
+        mark_tab_loaded(analysis_tab_);
+    });
+    connect(&svc, &services::equity::EquityResearchService::historical_loaded, this, [this]() {
+        mark_tab_loaded(overview_tab_);
+        mark_tab_loaded(analysis_tab_);
+    });
     connect(&svc, &services::equity::EquityResearchService::financials_loaded, this,
             [this]() { mark_tab_loaded(financials_tab_); });
     connect(&svc, &services::equity::EquityResearchService::technicals_loaded, this,
@@ -214,8 +219,7 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     // bell without the user needing to click anything.
     mkt_status_timer_ = new QTimer(this);
     mkt_status_timer_->setInterval(30 * 1000);
-    connect(mkt_status_timer_, &QTimer::timeout, this,
-            &EquityResearchScreen::update_market_status_badge);
+    connect(mkt_status_timer_, &QTimer::timeout, this, &EquityResearchScreen::update_market_status_badge);
     mkt_status_timer_->start();
 
     // Finnhub live-tick stream — pushes price updates in <200ms instead of
@@ -224,19 +228,21 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     // Ticks are throttled to ~3 Hz here: liquid US names print dozens of
     // trades per second and a label setText per tick is wasteful — the
     // user can't read updates faster than the eye refresh anyway.
-    connect(&services::finnhub::FinnhubLiveTicks::instance(),
-            &services::finnhub::FinnhubLiveTicks::tick, this,
+    connect(&services::finnhub::FinnhubLiveTicks::instance(), &services::finnhub::FinnhubLiveTicks::tick, this,
             [this](QString sym, double price, qint64 /*ts_ms*/, qint64 /*size*/) {
-                if (sym != current_symbol_) return;
-                if (!price_label_ || !change_label_) return;
+                if (sym != current_symbol_)
+                    return;
+                if (!price_label_ || !change_label_)
+                    return;
                 // Throttle: skip if a tick landed in the last 300ms.
                 static qint64 s_last_paint_ms = 0;
                 const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
-                if (now_ms - s_last_paint_ms < 300) return;
+                if (now_ms - s_last_paint_ms < 300)
+                    return;
                 s_last_paint_ms = now_ms;
 
-                const QString cs = EquityOverviewTab::currency_symbol(
-                    current_currency_.isEmpty() ? "USD" : current_currency_);
+                const QString cs =
+                    EquityOverviewTab::currency_symbol(current_currency_.isEmpty() ? "USD" : current_currency_);
                 price_label_->setText(QString("%1%2").arg(cs).arg(price, 0, 'f', 2));
                 // Deliberately does NOT touch the freshness chip: a live
                 // price tick updates this one label, not the panel's OHLC,
@@ -265,20 +271,40 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
     auto bind_period = [this](const QString& key, int slot) {
         auto* sc = new QShortcut(QKeySequence(key), this);
         sc->setContext(Qt::WidgetWithChildrenShortcut);
-        connect(sc, &QShortcut::activated, this,
-                [this, slot]() { if (overview_tab_) overview_tab_->shortcut_set_period(slot); });
+        connect(sc, &QShortcut::activated, this, [this, slot]() {
+            if (overview_tab_)
+                overview_tab_->shortcut_set_period(slot);
+        });
     };
     bind_period("1", 1);
     bind_period("2", 2);
     bind_period("3", 3);
     bind_period("4", 4);
     bind_period("5", 5);
-    bind("L", [this]() { if (overview_tab_) overview_tab_->shortcut_toggle_log(); });
-    bind("V", [this]() { if (overview_tab_) overview_tab_->shortcut_toggle_volume(); });
-    bind("S", [this]() { if (overview_tab_) overview_tab_->shortcut_toggle_sma50(); });
-    bind("E", [this]() { if (overview_tab_) overview_tab_->shortcut_toggle_earnings(); });
-    bind("C", [this]() { if (overview_tab_) overview_tab_->shortcut_open_comparison(); });
-    bind("D", [this]() { if (overview_tab_) overview_tab_->shortcut_open_range_picker(); });
+    bind("L", [this]() {
+        if (overview_tab_)
+            overview_tab_->shortcut_toggle_log();
+    });
+    bind("V", [this]() {
+        if (overview_tab_)
+            overview_tab_->shortcut_toggle_volume();
+    });
+    bind("S", [this]() {
+        if (overview_tab_)
+            overview_tab_->shortcut_toggle_sma50();
+    });
+    bind("E", [this]() {
+        if (overview_tab_)
+            overview_tab_->shortcut_toggle_earnings();
+    });
+    bind("C", [this]() {
+        if (overview_tab_)
+            overview_tab_->shortcut_open_comparison();
+    });
+    bind("D", [this]() {
+        if (overview_tab_)
+            overview_tab_->shortcut_open_range_picker();
+    });
     bind("/", [this]() {
         if (inline_search_input_) {
             inline_search_input_->setFocus();
@@ -421,12 +447,12 @@ void EquityResearchScreen::build_ui() {
     // on every mutation (including chip-✕ removals and the implicit clear
     // on primary-symbol switch) so the Peers checkbox column stays in sync
     // even when the user mutates the set elsewhere.
-    connect(peers_tab_, &EquityPeersTab::add_to_comparison_requested,
-            overview_tab_, &EquityOverviewTab::add_comparison);
-    connect(peers_tab_, &EquityPeersTab::remove_from_comparison_requested,
-            overview_tab_, &EquityOverviewTab::remove_comparison);
-    connect(overview_tab_, &EquityOverviewTab::comparisons_changed,
-            peers_tab_, &EquityPeersTab::set_active_comparisons);
+    connect(peers_tab_, &EquityPeersTab::add_to_comparison_requested, overview_tab_,
+            &EquityOverviewTab::add_comparison);
+    connect(peers_tab_, &EquityPeersTab::remove_from_comparison_requested, overview_tab_,
+            &EquityOverviewTab::remove_comparison);
+    connect(overview_tab_, &EquityOverviewTab::comparisons_changed, peers_tab_,
+            &EquityPeersTab::set_active_comparisons);
 
     vl->addWidget(tab_widget_, 1);
 }
@@ -452,10 +478,7 @@ QWidget* EquityResearchScreen::build_title_bar() {
     symbol_label_->setToolTip("Drag to broadcast this symbol to any panel");
     // Drag-out: pull the current symbol from the live member so the filter
     // always ships the most recent ticker, not whatever was loaded at build.
-    symbol_dnd::installDragSource(
-        symbol_label_,
-        [this]() { return current_symbol(); },
-        link_group_);
+    symbol_dnd::installDragSource(symbol_label_, [this]() { return current_symbol(); }, link_group_);
     hl->addWidget(symbol_label_);
 
     // Visual breathing room before the inline search input.
@@ -475,13 +498,12 @@ QWidget* EquityResearchScreen::build_title_bar() {
     inline_search_input_->setPlaceholderText("Search symbol — type and Enter");
     inline_search_input_->setFixedWidth(220);
     inline_search_input_->setClearButtonEnabled(true);
-    inline_search_input_->setStyleSheet(QString(
-        "QLineEdit { background:%1; color:%2; border:1px solid %3;"
-        " border-radius:2px; padding:3px 8px; font-size:12px;"
-        " font-family:'Consolas',monospace; }"
-        "QLineEdit:focus { border-color:%4; }")
-        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
-             ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+    inline_search_input_->setStyleSheet(
+        QString("QLineEdit { background:%1; color:%2; border:1px solid %3;"
+                " border-radius:2px; padding:3px 8px; font-size:12px;"
+                " font-family:'Consolas',monospace; }"
+                "QLineEdit:focus { border-color:%4; }")
+            .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
     hl->addWidget(inline_search_input_);
 
     // Popup dropdown — borderless top-level mirroring CommandBar's working
@@ -494,29 +516,26 @@ QWidget* EquityResearchScreen::build_title_bar() {
     //   - DO NOT use Qt::Tool: X11 can place it centre-screen on first
     //     map before our setGeometry() runs.
     inline_search_popup_ = new QListWidget(this);
-    inline_search_popup_->setWindowFlags(
-        Qt::ToolTip | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
+    inline_search_popup_->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     inline_search_popup_->setAttribute(Qt::WA_ShowWithoutActivating);
     inline_search_popup_->setUniformItemSizes(true);
     inline_search_popup_->setFocusPolicy(Qt::NoFocus);
     inline_search_popup_->setMouseTracking(true);
     inline_search_popup_->setMaximumHeight(280);
-    inline_search_popup_->setStyleSheet(QString(
-        "QListWidget { background:%1; color:%2; border:1px solid %3;"
-        " font-family:'Consolas',monospace; font-size:12px;"
-        " outline:0; padding:2px; }"
-        "QListWidget::item { padding:4px 8px; }"
-        "QListWidget::item:selected { background:%4; color:%5; }"
-        "QListWidget::item:hover { background:%6; }")
-        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
-             ui::colors::BORDER_MED(), ui::colors::AMBER_DIM(),
-             ui::colors::AMBER(), ui::colors::BG_RAISED()));
+    inline_search_popup_->setStyleSheet(QString("QListWidget { background:%1; color:%2; border:1px solid %3;"
+                                                " font-family:'Consolas',monospace; font-size:12px;"
+                                                " outline:0; padding:2px; }"
+                                                "QListWidget::item { padding:4px 8px; }"
+                                                "QListWidget::item:selected { background:%4; color:%5; }"
+                                                "QListWidget::item:hover { background:%6; }")
+                                            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
+                                                 ui::colors::BORDER_MED(), ui::colors::AMBER_DIM(), ui::colors::AMBER(),
+                                                 ui::colors::BG_RAISED()));
     inline_search_popup_->hide();
     inline_search_popup_->setItemDelegate(new SearchResultDelegate(inline_search_popup_));
 
     // Debounced search on text change.
-    connect(inline_search_input_, &QLineEdit::textChanged, this,
-            [this](const QString& text) {
+    connect(inline_search_input_, &QLineEdit::textChanged, this, [this](const QString& text) {
         const QString stripped = strip_search_prefix(text).trimmed();
         if (stripped.isEmpty()) {
             inline_search_popup_->hide();
@@ -532,64 +551,71 @@ QWidget* EquityResearchScreen::build_title_bar() {
     auto& svc = services::equity::EquityResearchService::instance();
     connect(&svc, &services::equity::EquityResearchService::search_results_loaded, this,
             [this](QVector<services::equity::SearchResult> results, QString query) {
-        if (!inline_search_input_ || !inline_search_input_->hasFocus()) return;
-        // A late answer to an earlier query must not replace the current one.
-        if (query != strip_search_prefix(inline_search_input_->text()).trimmed()) return;
-        inline_search_popup_->clear();
-        for (const auto& r : results) {
-            // The delegate paints from the structured roles — no display
-            // text is set on the item itself. A11y / fallback readers fall
-            // back to the (empty) display string, which we accept for now;
-            // a richer accessibleText is a future polish.
-            auto* it = new QListWidgetItem;
-            it->setData(kRoleSymbol,   r.symbol);
-            it->setData(kRoleName,     r.name);
-            it->setData(kRoleExchange, r.exchange);
-            it->setData(kRoleCurrency, r.currency);
-            it->setData(kRoleType,     r.type);
-            inline_search_popup_->addItem(it);
-        }
-        if (inline_search_popup_->count() == 0) {
-            inline_search_popup_->hide();
-            return;
-        }
-        inline_search_popup_->setCurrentRow(0);
-        position_inline_search_popup();
-        inline_search_popup_->show();
-        inline_search_popup_->raise();
-    });
+                if (!inline_search_input_ || !inline_search_input_->hasFocus())
+                    return;
+                // A late answer to an earlier query must not replace the current one.
+                if (query != strip_search_prefix(inline_search_input_->text()).trimmed())
+                    return;
+                inline_search_popup_->clear();
+                for (const auto& r : results) {
+                    // The delegate paints from the structured roles — no display
+                    // text is set on the item itself. A11y / fallback readers fall
+                    // back to the (empty) display string, which we accept for now;
+                    // a richer accessibleText is a future polish.
+                    auto* it = new QListWidgetItem;
+                    it->setData(kRoleSymbol, r.symbol);
+                    it->setData(kRoleName, r.name);
+                    it->setData(kRoleExchange, r.exchange);
+                    it->setData(kRoleCurrency, r.currency);
+                    it->setData(kRoleType, r.type);
+                    inline_search_popup_->addItem(it);
+                }
+                if (inline_search_popup_->count() == 0) {
+                    inline_search_popup_->hide();
+                    return;
+                }
+                inline_search_popup_->setCurrentRow(0);
+                position_inline_search_popup();
+                inline_search_popup_->show();
+                inline_search_popup_->raise();
+            });
 
     // A failed search says so in the popup instead of leaving the previous
     // query's matches (or an empty list that reads as "no such ticker").
-    connect(&svc, &services::equity::EquityResearchService::search_failed, this, [this](QString query, QString, bool transient) {
-        if (!inline_search_input_ || !inline_search_input_->hasFocus()) return;
-        // A late failure of an earlier query must not cover the current one.
-        if (query != strip_search_prefix(inline_search_input_->text()).trimmed()) return;
-        inline_search_popup_->clear();
-        // The delegate paints from the roles, not the item text.
-        auto* it = new QListWidgetItem;
-        it->setData(kRoleName, fincept::ui::search_failed_text(transient));
-        it->setFlags(Qt::NoItemFlags);   // a message, not a pickable symbol
-        inline_search_popup_->addItem(it);
-        position_inline_search_popup();
-        inline_search_popup_->show();
-        inline_search_popup_->raise();
-    });
+    connect(&svc, &services::equity::EquityResearchService::search_failed, this,
+            [this](QString query, QString, bool transient) {
+                if (!inline_search_input_ || !inline_search_input_->hasFocus())
+                    return;
+                // A late failure of an earlier query must not cover the current one.
+                if (query != strip_search_prefix(inline_search_input_->text()).trimmed())
+                    return;
+                inline_search_popup_->clear();
+                // The delegate paints from the roles, not the item text.
+                auto* it = new QListWidgetItem;
+                it->setData(kRoleName, fincept::ui::search_failed_text(transient));
+                it->setFlags(Qt::NoItemFlags); // a message, not a pickable symbol
+                inline_search_popup_->addItem(it);
+                position_inline_search_popup();
+                inline_search_popup_->show();
+                inline_search_popup_->raise();
+            });
 
     // Click a suggestion → load it.
-    connect(inline_search_popup_, &QListWidget::itemActivated, this,
-            [this](QListWidgetItem* it) {
-        if (!it) return;
+    connect(inline_search_popup_, &QListWidget::itemActivated, this, [this](QListWidgetItem* it) {
+        if (!it)
+            return;
         const QString sym = it->data(Qt::UserRole).toString();
-        if (!sym.isEmpty()) load_symbol(sym);
+        if (!sym.isEmpty())
+            load_symbol(sym);
         inline_search_input_->clear();
         inline_search_popup_->hide();
     });
-    connect(inline_search_popup_, &QListWidget::itemClicked, this,
-            [this](QListWidgetItem* it) {
-        if (!it) return;
+    connect(inline_search_popup_, &QListWidget::itemClicked, this, [this](QListWidgetItem* it) {
+        if (!it)
+            return;
         const QString sym = it->data(Qt::UserRole).toString();
-        if (!sym.isEmpty()) load_symbol(sym);
+        if (!sym.isEmpty())
+            load_symbol(sym);
         inline_search_input_->clear();
         inline_search_popup_->hide();
     });
@@ -607,7 +633,8 @@ QWidget* EquityResearchScreen::build_title_bar() {
             }
         }
         const QString sym = strip_search_prefix(inline_search_input_->text()).trimmed().toUpper();
-        if (sym.isEmpty()) return;
+        if (sym.isEmpty())
+            return;
         load_symbol(sym);
         inline_search_input_->clear();
         inline_search_popup_->hide();
@@ -622,11 +649,12 @@ QWidget* EquityResearchScreen::build_title_bar() {
     // can land on the popup itself when it first maps. (Same approach
     // CommandBar uses for its top-level dropdown.)
     connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* now) {
-        if (!inline_search_popup_ || !inline_search_input_) return;
-        if (!now) return;  // spurious during popup map
-        const bool inside = (now == inline_search_input_ ||
-                             now == inline_search_popup_ ||
-                             inline_search_popup_->isAncestorOf(now));
+        if (!inline_search_popup_ || !inline_search_input_)
+            return;
+        if (!now)
+            return; // spurious during popup map
+        const bool inside =
+            (now == inline_search_input_ || now == inline_search_popup_ || inline_search_popup_->isAncestorOf(now));
         if (!inside)
             inline_search_popup_->hide();
     });
@@ -705,9 +733,12 @@ namespace {
 // EquityOverviewTab's private API for a single call site.
 QString format_market_cap(double v) {
     const double a = std::abs(v);
-    if (a >= 1e12) return QStringLiteral("%1T").arg(v / 1e12, 0, 'f', 2);
-    if (a >= 1e9)  return QStringLiteral("%1B").arg(v / 1e9,  0, 'f', 2);
-    if (a >= 1e6)  return QStringLiteral("%1M").arg(v / 1e6,  0, 'f', 2);
+    if (a >= 1e12)
+        return QStringLiteral("%1T").arg(v / 1e12, 0, 'f', 2);
+    if (a >= 1e9)
+        return QStringLiteral("%1B").arg(v / 1e9, 0, 'f', 2);
+    if (a >= 1e6)
+        return QStringLiteral("%1M").arg(v / 1e6, 0, 'f', 2);
     return QString::number(v, 'f', 0);
 }
 } // namespace
@@ -723,11 +754,11 @@ void EquityResearchScreen::on_info_loaded(services::equity::StockInfo info) {
         // reads as "this company has no market cap", not "nothing filled
         // this in". Absent data still renders the dash, but only when it is
         // genuinely absent.
-        mktcap_label_->setText(info.market_cap > 0
-                                   ? QStringLiteral("MKT CAP: ") + format_market_cap(info.market_cap)
-                                   : QStringLiteral("MKT CAP: \u2014"));
+        mktcap_label_->setText(info.market_cap > 0 ? QStringLiteral("MKT CAP: ") + format_market_cap(info.market_cap)
+                                                   : QStringLiteral("MKT CAP: \u2014"));
     }
-    if (ai_tab_) ai_tab_->set_info(info);   // fundamentals enrich the AI prompt
+    if (ai_tab_)
+        ai_tab_->set_info(info); // fundamentals enrich the AI prompt
 }
 
 void EquityResearchScreen::on_tab_changed(int index) {
@@ -840,12 +871,18 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, boo
     // Forward to every tab so each filters its own signals correctly when
     // the responses land. Tabs whose data hasn't been fetched yet just sit
     // empty until the prefetch below resolves.
-    if (financials_tab_) financials_tab_->set_symbol(symbol);
-    if (analysis_tab_) analysis_tab_->set_symbol(symbol);
-    if (technicals_tab_) technicals_tab_->set_symbol(symbol);
-    if (talipp_tab_) talipp_tab_->set_symbol(symbol);
-    if (peers_tab_) peers_tab_->set_symbol(symbol);
-    if (news_tab_) news_tab_->set_symbol(symbol);
+    if (financials_tab_)
+        financials_tab_->set_symbol(symbol);
+    if (analysis_tab_)
+        analysis_tab_->set_symbol(symbol);
+    if (technicals_tab_)
+        technicals_tab_->set_symbol(symbol);
+    if (talipp_tab_)
+        talipp_tab_->set_symbol(symbol);
+    if (peers_tab_)
+        peers_tab_->set_symbol(symbol);
+    if (news_tab_)
+        news_tab_->set_symbol(symbol);
     // Earnings: forward only when it's the visible tab. The fetch pulls three
     // years of daily bars plus four estimate frames — too heavy to fire for
     // every ticker the user flips past. on_tab_changed picks it up on
@@ -888,27 +925,32 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, boo
 
     // Publish to linked group so Watchlist/EquityTrading/News/etc. follow.
     if (propagate && link_group_ != SymbolGroup::None) {
-        SymbolContext::instance().set_group_symbol(
-            link_group_, SymbolRef::equity(symbol), this);
+        SymbolContext::instance().set_group_symbol(link_group_, SymbolRef::equity(symbol), this);
     }
 }
 
 void EquityResearchScreen::clear_quote_bar() {
-    if (price_label_) price_label_->setText("\xe2\x80\x94");
+    if (price_label_)
+        price_label_->setText("\xe2\x80\x94");
     if (change_label_) {
         change_label_->setText("\xe2\x80\x94");
         change_label_->setStyleSheet(
             QString("font-size:13px; font-weight:600; color:%1;").arg(ui::colors::TEXT_SECONDARY()));
     }
-    if (vol_label_) vol_label_->setText("VOL: \xe2\x80\x94");
-    if (hl_label_) hl_label_->setText("H/L: \xe2\x80\x94");
-    if (mktcap_label_) mktcap_label_->setText("MKT CAP: \xe2\x80\x94");
-    if (rec_label_) rec_label_->setText("\xe2\x80\x94");
+    if (vol_label_)
+        vol_label_->setText("VOL: \xe2\x80\x94");
+    if (hl_label_)
+        hl_label_->setText("H/L: \xe2\x80\x94");
+    if (mktcap_label_)
+        mktcap_label_->setText("MKT CAP: \xe2\x80\x94");
+    if (rec_label_)
+        rec_label_->setText("\xe2\x80\x94");
     // Drop the cached exchange — the new symbol may list elsewhere, and
     // showing the previous ticker's session status would be a lie. The
     // badge re-appears when on_info_loaded fires for the new symbol.
     current_exchange_.clear();
-    if (mkt_status_label_) mkt_status_label_->setVisible(false);
+    if (mkt_status_label_)
+        mkt_status_label_->setVisible(false);
 }
 
 // ── IGroupLinked ─────────────────────────────────────────────────────────────
@@ -935,9 +977,7 @@ void EquityResearchScreen::update_quote_bar(const services::equity::QuoteData& q
     // opens. Printed raw, a NaN renders as the literal text "nan", so every
     // number here is gated. The em-dash is the app-wide missing sentinel.
     const QString dash = ui::formatting::placeholder();
-    const auto px = [&](double v) {
-        return std::isfinite(v) ? QString("%1%2").arg(cs).arg(v, 0, 'f', 2) : dash;
-    };
+    const auto px = [&](double v) { return std::isfinite(v) ? QString("%1%2").arg(cs).arg(v, 0, 'f', 2) : dash; };
 
     sym_label_->setText(q.symbol);
     price_label_->setText(px(q.price));
@@ -947,15 +987,14 @@ void EquityResearchScreen::update_quote_bar(const services::equity::QuoteData& q
     const bool have_chg = std::isfinite(q.change_pct);
     bool up = have_chg && q.change_pct >= 0;
     QString arrow = up ? "\xe2\x96\xb2" : "\xe2\x96\xbc";
-    QString chg_color = have_chg ? (up ? ui::colors::POSITIVE() : ui::colors::NEGATIVE())
-                                 : QString(ui::colors::TEXT_SECONDARY());
-    change_label_->setText(have_chg
-                               ? QString("%1%2  %3%4%")
-                                     .arg(up ? "+" : "")
-                                     .arg(std::isfinite(q.change) ? QString::number(q.change, 'f', 2) : dash)
-                                     .arg(arrow)
-                                     .arg(qAbs(q.change_pct), 0, 'f', 2)
-                               : dash);
+    QString chg_color =
+        have_chg ? (up ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()) : QString(ui::colors::TEXT_SECONDARY());
+    change_label_->setText(have_chg ? QString("%1%2  %3%4%")
+                                          .arg(up ? "+" : "")
+                                          .arg(std::isfinite(q.change) ? QString::number(q.change, 'f', 2) : dash)
+                                          .arg(arrow)
+                                          .arg(qAbs(q.change_pct), 0, 'f', 2)
+                                    : dash);
     change_label_->setStyleSheet(QString("font-size:13px; font-weight:600; color:%1;").arg(chg_color));
 
     auto fmt_vol = [&dash](double v) -> QString {
@@ -998,8 +1037,10 @@ static bool us_market_holiday(const QDate& d) {
 
     // Fixed-date holidays, shifted to the observed weekday.
     const auto observed = [](QDate fixed) {
-        if (fixed.dayOfWeek() == 6) return fixed.addDays(-1); // Sat → Fri
-        if (fixed.dayOfWeek() == 7) return fixed.addDays(1);  // Sun → Mon
+        if (fixed.dayOfWeek() == 6)
+            return fixed.addDays(-1); // Sat → Fri
+        if (fixed.dayOfWeek() == 7)
+            return fixed.addDays(1); // Sun → Mon
         return fixed;
     };
     for (const QDate& fixed : {QDate(y, 1, 1), QDate(y, 6, 19), QDate(y, 7, 4), QDate(y, 12, 25)}) {
@@ -1020,11 +1061,16 @@ static bool us_market_holiday(const QDate& d) {
         QDate last(year, month, QDate(year, month, 1).daysInMonth());
         return last.addDays(-((last.dayOfWeek() - dow + 7) % 7));
     };
-    if (d == nth_dow(y, 1, 1, 3))  return true;  // MLK Day
-    if (d == nth_dow(y, 2, 1, 3))  return true;  // Washington's Birthday
-    if (d == last_dow(y, 5, 1))    return true;  // Memorial Day
-    if (d == nth_dow(y, 9, 1, 1))  return true;  // Labor Day
-    if (d == nth_dow(y, 11, 4, 4)) return true;  // Thanksgiving
+    if (d == nth_dow(y, 1, 1, 3))
+        return true; // MLK Day
+    if (d == nth_dow(y, 2, 1, 3))
+        return true; // Washington's Birthday
+    if (d == last_dow(y, 5, 1))
+        return true; // Memorial Day
+    if (d == nth_dow(y, 9, 1, 1))
+        return true; // Labor Day
+    if (d == nth_dow(y, 11, 4, 4))
+        return true; // Thanksgiving
 
     // Good Friday — two days before Easter (anonymous Gregorian algorithm).
     const int a = y % 19, b = y / 100, c = y % 100;
@@ -1042,7 +1088,8 @@ static bool us_market_holiday(const QDate& d) {
 }
 
 void EquityResearchScreen::update_market_status_badge() {
-    if (!mkt_status_label_) return;
+    if (!mkt_status_label_)
+        return;
     if (current_exchange_.isEmpty()) {
         mkt_status_label_->setVisible(false);
         return;
@@ -1055,13 +1102,13 @@ void EquityResearchScreen::update_market_status_badge() {
     // we track here).
     struct Session {
         QString tz;
-        QPair<int, int> pre;      // hours-of-day (24h), inclusive start, exclusive end
+        QPair<int, int> pre; // hours-of-day (24h), inclusive start, exclusive end
         QPair<int, int> regular;
         QPair<int, int> after;
         // Half-hour offsets for venues like LSE (08:00–16:30). Encoded
         // as start_minute / end_minute on top of the hour fields.
         int regular_start_min = 0;
-        int regular_end_min   = 0;
+        int regular_end_min = 0;
     };
 
     // Map Yahoo exchange code → session. Codes sourced from yfinance .info
@@ -1074,26 +1121,25 @@ void EquityResearchScreen::update_market_status_badge() {
         // into a CLOSED gap before regular opens at 09:30. Check order in
         // the if/else below evaluates `regular` first, so 09:30+ correctly
         // shows OPEN — pre only wins for the 09:00–09:29 strip.
-        const Session us  {"America/New_York", {4, 10}, {9, 16},  {16, 20}, 30, 0};
-        for (const char* code : {"NYQ", "NMS", "NGM", "NCM", "ASE", "PCX",
-                                  "BTS", "OEM", "OQB", "OQX", "PNK", "YHD"})
+        const Session us{"America/New_York", {4, 10}, {9, 16}, {16, 20}, 30, 0};
+        for (const char* code : {"NYQ", "NMS", "NGM", "NCM", "ASE", "PCX", "BTS", "OEM", "OQB", "OQX", "PNK", "YHD"})
             m.insert(QString::fromLatin1(code), us);
-        m.insert("LSE", {"Europe/London",     {-1, -1}, {8, 16}, {-1, -1}, 0, 30});
-        m.insert("IOB", {"Europe/London",     {-1, -1}, {8, 16}, {-1, -1}, 0, 30});
-        m.insert("TOR", {"America/Toronto",   {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
-        m.insert("TSX", {"America/Toronto",   {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
-        m.insert("VAN", {"America/Toronto",   {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
-        m.insert("JPX", {"Asia/Tokyo",        {-1, -1}, {9, 15}, {-1, -1}, 0, 0});
-        m.insert("TYO", {"Asia/Tokyo",        {-1, -1}, {9, 15}, {-1, -1}, 0, 0});
-        m.insert("HKG", {"Asia/Hong_Kong",    {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
-        m.insert("SHH", {"Asia/Shanghai",     {-1, -1}, {9, 15}, {-1, -1}, 30, 0});
-        m.insert("SHZ", {"Asia/Shanghai",     {-1, -1}, {9, 15}, {-1, -1}, 30, 0});
-        m.insert("GER", {"Europe/Berlin",     {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
-        m.insert("FRA", {"Europe/Berlin",     {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
-        m.insert("AMS", {"Europe/Amsterdam",  {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
-        m.insert("PAR", {"Europe/Paris",      {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
-        m.insert("BRU", {"Europe/Brussels",   {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
-        m.insert("ASX", {"Australia/Sydney",  {-1, -1}, {10, 16}, {-1, -1}, 0, 0});
+        m.insert("LSE", {"Europe/London", {-1, -1}, {8, 16}, {-1, -1}, 0, 30});
+        m.insert("IOB", {"Europe/London", {-1, -1}, {8, 16}, {-1, -1}, 0, 30});
+        m.insert("TOR", {"America/Toronto", {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
+        m.insert("TSX", {"America/Toronto", {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
+        m.insert("VAN", {"America/Toronto", {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
+        m.insert("JPX", {"Asia/Tokyo", {-1, -1}, {9, 15}, {-1, -1}, 0, 0});
+        m.insert("TYO", {"Asia/Tokyo", {-1, -1}, {9, 15}, {-1, -1}, 0, 0});
+        m.insert("HKG", {"Asia/Hong_Kong", {-1, -1}, {9, 16}, {-1, -1}, 30, 0});
+        m.insert("SHH", {"Asia/Shanghai", {-1, -1}, {9, 15}, {-1, -1}, 30, 0});
+        m.insert("SHZ", {"Asia/Shanghai", {-1, -1}, {9, 15}, {-1, -1}, 30, 0});
+        m.insert("GER", {"Europe/Berlin", {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("FRA", {"Europe/Berlin", {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("AMS", {"Europe/Amsterdam", {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("PAR", {"Europe/Paris", {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("BRU", {"Europe/Brussels", {-1, -1}, {9, 17}, {-1, -1}, 0, 30});
+        m.insert("ASX", {"Australia/Sydney", {-1, -1}, {10, 16}, {-1, -1}, 0, 0});
         return m;
     }();
 
@@ -1114,8 +1160,7 @@ void EquityResearchScreen::update_market_status_badge() {
         mkt_status_label_->setText(current_exchange_);
         mkt_status_label_->setStyleSheet(chip_ss(ui::colors::BORDER_MED(), true));
         mkt_status_label_->setToolTip(
-            QString("Listed on %1 — no session calendar tracked for this venue.")
-                .arg(current_exchange_));
+            QString("Listed on %1 — no session calendar tracked for this venue.").arg(current_exchange_));
         mkt_status_label_->setVisible(true);
         return;
     }
@@ -1134,14 +1179,15 @@ void EquityResearchScreen::update_market_status_badge() {
         return;
     }
     const QDateTime local = QDateTime::currentDateTime().toTimeZone(tz);
-    const int dow = local.date().dayOfWeek();   // 1=Mon … 7=Sun
+    const int dow = local.date().dayOfWeek(); // 1=Mon … 7=Sun
     const bool holiday = is_us && us_market_holiday(local.date());
     const int mins_of_day = local.time().hour() * 60 + local.time().minute();
 
     auto in_window = [&](QPair<int, int> hours, int start_min, int end_min) {
-        if (hours.first < 0) return false;
+        if (hours.first < 0)
+            return false;
         const int from = hours.first * 60 + start_min;
-        const int to   = hours.second * 60 + end_min;
+        const int to = hours.second * 60 + end_min;
         return mins_of_day >= from && mins_of_day < to;
     };
 
@@ -1149,26 +1195,25 @@ void EquityResearchScreen::update_market_status_badge() {
     QString color;
     if (dow >= 6 || holiday) {
         status = "CLOSED";
-        color  = ui::colors::TEXT_SECONDARY();
+        color = ui::colors::TEXT_SECONDARY();
     } else if (in_window(s.regular, s.regular_start_min, s.regular_end_min)) {
         status = "OPEN";
-        color  = ui::colors::POSITIVE();
+        color = ui::colors::POSITIVE();
     } else if (in_window(s.pre, 0, 0)) {
         status = "PRE";
-        color  = ui::colors::WARNING();
+        color = ui::colors::WARNING();
     } else if (in_window(s.after, 0, 0)) {
         status = "AFTER";
-        color  = ui::colors::WARNING();
+        color = ui::colors::WARNING();
     } else {
         status = "CLOSED";
-        color  = ui::colors::TEXT_SECONDARY();
+        color = ui::colors::TEXT_SECONDARY();
     }
 
     mkt_status_label_->setText(status);
     mkt_status_label_->setStyleSheet(chip_ss(color, status == "CLOSED"));
     mkt_status_label_->setToolTip(
-        QString("%1 · %2 (local %3)")
-            .arg(current_exchange_, status, local.time().toString("HH:mm")));
+        QString("%1 · %2 (local %3)").arg(current_exchange_, status, local.time().toString("HH:mm")));
     mkt_status_label_->setVisible(true);
 }
 
@@ -1180,7 +1225,8 @@ void EquityResearchScreen::update_market_status_badge() {
 // strong-buy / strong-sell. No-op when no FINNHUB_API_KEY: the service
 // resolves an empty vector, and we hide the chip until data arrives.
 void EquityResearchScreen::refresh_recommendation_chip() {
-    if (!rec_label_) return;
+    if (!rec_label_)
+        return;
     if (!services::finnhub::FinnhubService::instance().has_api_key()) {
         rec_label_->setText("");
         rec_label_->setToolTip("Add a Finnhub API key in Settings → Credentials "
@@ -1190,19 +1236,19 @@ void EquityResearchScreen::refresh_recommendation_chip() {
     }
 
     const QString sym = current_symbol_;
-    rec_label_->setVisible(false);    // hide until callback lands
+    rec_label_->setVisible(false); // hide until callback lands
     services::finnhub::FinnhubService::instance().subscribe_recommendations(
-        this, sym,
-        [this, sym](const services::query::QueryStore::State& s) {
+        this, sym, [this, sym](const services::query::QueryStore::State& s) {
             // Late callback from a previous symbol — drop on the floor.
-            if (sym != current_symbol_) return;
-            if (!rec_label_) return;
+            if (sym != current_symbol_)
+                return;
+            if (!rec_label_)
+                return;
             if (!s.data.isValid() || s.data.isNull()) {
                 rec_label_->setVisible(false);
                 return;
             }
-            const auto rows =
-                s.data.value<QVector<services::finnhub::FinnhubRecTrend>>();
+            const auto rows = s.data.value<QVector<services::finnhub::FinnhubRecTrend>>();
             if (rows.isEmpty()) {
                 rec_label_->setVisible(false);
                 return;
@@ -1223,24 +1269,23 @@ void EquityResearchScreen::refresh_recommendation_chip() {
 
             // Direction arrow: compare buy% latest vs prior bucket. Only
             // meaningful with at least two periods.
-            QString arrow = "\xe2\x80\xa2";   // bullet — no prior data
+            QString arrow = "\xe2\x80\xa2"; // bullet — no prior data
             QString arrow_color = ui::colors::TEXT_SECONDARY();
             if (rows.size() >= 2) {
                 const auto& prior = rows.at(1);
                 const int b_prev = prior.strong_buy + prior.buy;
-                const int total_prev = b_prev + prior.hold
-                                       + prior.sell + prior.strong_sell;
+                const int total_prev = b_prev + prior.hold + prior.sell + prior.strong_sell;
                 if (total_prev > 0) {
-                    const double pct_now  = double(b)      / total;
+                    const double pct_now = double(b) / total;
                     const double pct_prev = double(b_prev) / total_prev;
                     if (pct_now > pct_prev + 0.02) {
-                        arrow = "\xe2\x96\xb2";          // ▲ improving
+                        arrow = "\xe2\x96\xb2"; // ▲ improving
                         arrow_color = ui::colors::POSITIVE();
                     } else if (pct_now < pct_prev - 0.02) {
-                        arrow = "\xe2\x96\xbc";          // ▼ weakening
+                        arrow = "\xe2\x96\xbc"; // ▼ weakening
                         arrow_color = ui::colors::NEGATIVE();
                     } else {
-                        arrow = "\xe2\x80\xa2";          // • flat
+                        arrow = "\xe2\x80\xa2"; // • flat
                     }
                 }
             }
@@ -1250,26 +1295,25 @@ void EquityResearchScreen::refresh_recommendation_chip() {
                         "<span style='color:%6;'>%2B</span>"
                         "<span style='color:%7;'>/%3H</span>"
                         "<span style='color:%8;'>/%4S</span>")
-                    .arg(arrow).arg(b).arg(h).arg(s_)
-                    .arg(arrow_color,
-                         ui::colors::POSITIVE(),
-                         ui::colors::TEXT_SECONDARY(),
-                         ui::colors::NEGATIVE()));
+                    .arg(arrow)
+                    .arg(b)
+                    .arg(h)
+                    .arg(s_)
+                    .arg(arrow_color, ui::colors::POSITIVE(), ui::colors::TEXT_SECONDARY(), ui::colors::NEGATIVE()));
             rec_label_->setStyleSheet("font-size:12px; font-weight:600;");
             rec_label_->setTextFormat(Qt::RichText);
-            rec_label_->setToolTip(
-                QString("Analyst recommendations (Finnhub, %1)\n"
-                        "Strong Buy: %2\n"
-                        "Buy: %3\n"
-                        "Hold: %4\n"
-                        "Sell: %5\n"
-                        "Strong Sell: %6")
-                    .arg(latest.period)
-                    .arg(latest.strong_buy)
-                    .arg(latest.buy)
-                    .arg(latest.hold)
-                    .arg(latest.sell)
-                    .arg(latest.strong_sell));
+            rec_label_->setToolTip(QString("Analyst recommendations (Finnhub, %1)\n"
+                                           "Strong Buy: %2\n"
+                                           "Buy: %3\n"
+                                           "Hold: %4\n"
+                                           "Sell: %5\n"
+                                           "Strong Sell: %6")
+                                       .arg(latest.period)
+                                       .arg(latest.strong_buy)
+                                       .arg(latest.buy)
+                                       .arg(latest.hold)
+                                       .arg(latest.sell)
+                                       .arg(latest.strong_sell));
             rec_label_->setVisible(true);
         });
 }
@@ -1299,7 +1343,10 @@ void EquityResearchScreen::restore_state(const QVariantMap& state) {
         int idx = -1;
         if (!name.isEmpty()) {
             for (int i = 0; i < tab_widget_->count(); ++i) {
-                if (tab_widget_->tabText(i) == name) { idx = i; break; }
+                if (tab_widget_->tabText(i) == name) {
+                    idx = i;
+                    break;
+                }
             }
         }
         if (idx < 0)
@@ -1326,7 +1373,8 @@ void EquityResearchScreen::mark_tab_loaded(QWidget* tab) {
 }
 
 void EquityResearchScreen::update_freshness_chip() {
-    if (!freshness_label_ || !tab_widget_) return;
+    if (!freshness_label_ || !tab_widget_)
+        return;
     const int idx = tab_widget_->currentIndex();
 
     // Prefer the tab's own record of when its data was FETCHED upstream.
@@ -1364,11 +1412,16 @@ void EquityResearchScreen::update_freshness_chip() {
     }
     const qint64 secs = t.secsTo(QDateTime::currentDateTime());
     QString rel;
-    if (secs < 5)        rel = "just now";
-    else if (secs < 60)  rel = QString("%1s ago").arg(secs);
-    else if (secs < 3600) rel = QString("%1m ago").arg(secs / 60);
-    else if (secs < 86400) rel = QString("%1h ago").arg(secs / 3600);
-    else                  rel = QString("%1d ago").arg(secs / 86400);
+    if (secs < 5)
+        rel = "just now";
+    else if (secs < 60)
+        rel = QString("%1s ago").arg(secs);
+    else if (secs < 3600)
+        rel = QString("%1m ago").arg(secs / 60);
+    else if (secs < 86400)
+        rel = QString("%1h ago").arg(secs / 3600);
+    else
+        rel = QString("%1d ago").arg(secs / 86400);
     freshness_label_->setText(QString("as of %1 · %2").arg(t.toString("HH:mm:ss"), rel));
 }
 
@@ -1379,16 +1432,18 @@ QString EquityResearchScreen::strip_search_prefix(const QString& raw) const {
     // following whitespace, so users who type the global command-bar syntax
     // here by reflex still get a clean symbol query.
     const QString s = raw.trimmed();
-    if (!s.startsWith('/')) return s;
+    if (!s.startsWith('/'))
+        return s;
     const int sp = s.indexOf(QChar(' '));
-    if (sp < 0) return QString();        // just "/stock" with nothing after
+    if (sp < 0)
+        return QString(); // just "/stock" with nothing after
     return s.mid(sp + 1).trimmed();
 }
 
 void EquityResearchScreen::position_inline_search_popup() {
-    if (!inline_search_input_ || !inline_search_popup_) return;
-    const QPoint global_below =
-        inline_search_input_->mapToGlobal(QPoint(0, inline_search_input_->height()));
+    if (!inline_search_input_ || !inline_search_popup_)
+        return;
+    const QPoint global_below = inline_search_input_->mapToGlobal(QPoint(0, inline_search_input_->height()));
     const int w = std::max(inline_search_input_->width(), 320);
     const int rows = inline_search_popup_->count();
     const int h = std::min(std::max(rows, 1) * 26 + 8, 280);
@@ -1404,8 +1459,8 @@ bool EquityResearchScreen::eventFilter(QObject* watched, QEvent* event) {
             auto* ke = static_cast<QKeyEvent*>(event);
             if (inline_search_popup_->isVisible()) {
                 if (ke->key() == Qt::Key_Down) {
-                    const int next = std::min(inline_search_popup_->currentRow() + 1,
-                                              inline_search_popup_->count() - 1);
+                    const int next =
+                        std::min(inline_search_popup_->currentRow() + 1, inline_search_popup_->count() - 1);
                     inline_search_popup_->setCurrentRow(next);
                     return true;
                 }

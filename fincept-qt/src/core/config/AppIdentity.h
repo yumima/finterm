@@ -24,20 +24,20 @@ struct AppIdentity {
     // invisible to users; changing these orphans existing portfolio/auth data and
     // stored secrets.
     /// On-disk data root (AppPaths::root) and OS keychain/credential service id.
-    static constexpr const char* kBundleId  = "com.fincept.terminal";
+    static constexpr const char* kBundleId = "com.fincept.terminal";
     /// QSettings organization (settings directory, e.g. ~/.config/Fincept).
-    static constexpr const char* kOrg       = "Fincept";
+    static constexpr const char* kOrg = "Fincept";
 
     // ── Settings-store name (rebranded; migrated, not frozen) ────────────────
     // The QSettings *application* name = the .conf file basename. Rebranded to
     // "finterm"; a one-time copy from kAppLegacy preserves existing settings
     // (see the settings migration in app/main.cpp).
     /// QSettings application (primary settings store → finterm.conf).
-    static constexpr const char* kApp       = "finterm";
+    static constexpr const char* kApp = "finterm";
     /// QSettings application for the secure/secret XOR-fallback store.
     static constexpr const char* kAppSecure = "finterm-Secure";
     /// Pre-rebrand settings-store names — read once, for migration only.
-    static constexpr const char* kAppLegacy       = "FinceptTerminal";
+    static constexpr const char* kAppLegacy = "FinceptTerminal";
     static constexpr const char* kAppSecureLegacy = "FinceptTerminal-Secure";
 
     // ── Display brand — safe to rebrand ──────────────────────────────────────

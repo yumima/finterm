@@ -125,7 +125,7 @@ static const QString kStyle =
         .arg(colors::BG_SURFACE())     // %7
         .arg(colors::BORDER_DIM())     // %8
         .arg(colors::AMBER_DIM())      // %9
-        .arg(colors::TEXT_SECONDARY())       // %10
+        .arg(colors::TEXT_SECONDARY()) // %10
         .arg(colors::BG_HOVER())       // %11
         .arg(colors::CYAN())           // %12
         .arg(colors::NEGATIVE())       // %13
@@ -658,29 +658,30 @@ void AlphaArenaScreen::on_create_competition() {
     QPointer<AlphaArenaScreen> self = this;
     services::alpha_arena::AlphaArenaService::instance().run_action(
         payload, [self](const services::alpha_arena::ActionResult& r) {
-        if (!self)
-            return;
-        self->set_loading(false);
-        if (!r.success) {
-            self->status_info_->setText("Error: " + r.error.left(60));
-            return;
-        }
-        const QJsonObject obj = r.data;
-        // Python returns competition_id at top level
-        self->competition_id_ = obj["competition_id"].toString();
-        self->competition_status_ = "created";
-        self->create_panel_->hide();
-        self->run_btn_->setEnabled(true);
-        self->auto_btn_->setEnabled(true);
-        self->status_badge_->setText("CREATED");
-        self->status_badge_->setStyleSheet(
-            QString("color: %1; background: rgba(22,163,74,0.15); font-size: 8px; font-weight: 700; padding: 2px 6px;")
-                .arg(colors::POSITIVE()));
-        self->status_comp_->setText("COMP: " + self->competition_id_.left(8) + "...");
-        self->status_models_->setText(QString::number(self->model_list_->selectedItems().size()) + " models");
-        self->interval_label_->setText("INTERVAL: " + QString::number(self->comp_interval_->value()) + "s");
-        LOG_INFO("AlphaArena", "Competition created: " + self->competition_id_);
-    });
+            if (!self)
+                return;
+            self->set_loading(false);
+            if (!r.success) {
+                self->status_info_->setText("Error: " + r.error.left(60));
+                return;
+            }
+            const QJsonObject obj = r.data;
+            // Python returns competition_id at top level
+            self->competition_id_ = obj["competition_id"].toString();
+            self->competition_status_ = "created";
+            self->create_panel_->hide();
+            self->run_btn_->setEnabled(true);
+            self->auto_btn_->setEnabled(true);
+            self->status_badge_->setText("CREATED");
+            self->status_badge_->setStyleSheet(
+                QString(
+                    "color: %1; background: rgba(22,163,74,0.15); font-size: 8px; font-weight: 700; padding: 2px 6px;")
+                    .arg(colors::POSITIVE()));
+            self->status_comp_->setText("COMP: " + self->competition_id_.left(8) + "...");
+            self->status_models_->setText(QString::number(self->model_list_->selectedItems().size()) + " models");
+            self->interval_label_->setText("INTERVAL: " + QString::number(self->comp_interval_->value()) + "s");
+            LOG_INFO("AlphaArena", "Competition created: " + self->competition_id_);
+        });
 }
 
 void AlphaArenaScreen::on_run_cycle() {

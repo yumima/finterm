@@ -2,12 +2,11 @@
 #include "services/economics/EconomicsService.h"
 
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "python/PythonRunner.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QCryptographicHash>
 #include <QFileInfo>
@@ -33,24 +32,23 @@ fincept::services::util::DiskCache& disk_cache() {
 // EXCLUDED from the hash — it's a per-session identifier, so including
 // it would make identical reruns from new sessions write fresh files and
 // the cache dir would grow without bound.
-QString file_for_dispatch(const QString& source_id, const QString& script,
-                          const QString& command, const QStringList& args,
-                          const QString& /*request_id, unused on purpose*/) {
-    const QString combined = source_id + "|" + script + "|" + command + "|"
-                              + args.join(",");
-    const QByteArray digest =
-        QCryptographicHash::hash(combined.toUtf8(), QCryptographicHash::Sha1).toHex();
+QString file_for_dispatch(const QString& source_id, const QString& script, const QString& command,
+                          const QStringList& args, const QString& /*request_id, unused on purpose*/) {
+    const QString combined = source_id + "|" + script + "|" + command + "|" + args.join(",");
+    const QByteArray digest = QCryptographicHash::hash(combined.toUtf8(), QCryptographicHash::Sha1).toHex();
     // Keep the script base + a short hash for some grep-ability in the
     // cache dir. Strip extension.
     QString script_stem = script;
     const int dot = script_stem.lastIndexOf('.');
-    if (dot > 0) script_stem.truncate(dot);
+    if (dot > 0)
+        script_stem.truncate(dot);
     QString clean_stem;
     for (const QChar c : script_stem)
-        if (c.isLetterOrNumber() || c == '_') clean_stem.append(c);
-    if (clean_stem.isEmpty()) clean_stem = QStringLiteral("econ");
-    return clean_stem + QStringLiteral("_") + QString::fromLatin1(digest.left(16))
-           + QStringLiteral(".json");
+        if (c.isLetterOrNumber() || c == '_')
+            clean_stem.append(c);
+    if (clean_stem.isEmpty())
+        clean_stem = QStringLiteral("econ");
+    return clean_stem + QStringLiteral("_") + QString::fromLatin1(digest.left(16)) + QStringLiteral(".json");
 }
 
 } // namespace
@@ -77,15 +75,17 @@ EconomicsService::EconomicsService(QObject* parent) : QObject(parent) {
         int hydrated = 0;
         for (const QString& fname : files) {
             const QJsonDocument doc = disk_cache().load(fname);
-            if (!doc.isObject()) continue;
+            if (!doc.isObject())
+                continue;
             const QJsonObject root = doc.object();
             // Expected schema written by execute(): { "source_id", "script",
             // "command", "args" (array), "request_id", "data" (the parsed obj) }
             DispatchRecord rec;
             rec.source_id = root.value("source_id").toString();
-            rec.script    = root.value("script").toString();
-            rec.command   = root.value("command").toString();
-            for (const auto& v : root.value("args").toArray()) rec.args << v.toString();
+            rec.script = root.value("script").toString();
+            rec.command = root.value("command").toString();
+            for (const auto& v : root.value("args").toArray())
+                rec.args << v.toString();
             rec.request_id = root.value("request_id").toString();
             const QJsonObject data = root.value("data").toObject();
             if (rec.script.isEmpty() || rec.request_id.isEmpty() || data.isEmpty())
@@ -99,13 +99,12 @@ EconomicsService::EconomicsService(QObject* parent) : QObject(parent) {
             // own age check on next invocation.
             fincept::CacheManager::instance().put(
                 cache_key(rec.script, rec.command, rec.args),
-                QVariant(QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))),
-                kCacheTtlSec, "economics");
+                QVariant(QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))), kCacheTtlSec,
+                "economics");
             ++hydrated;
         }
         if (hydrated > 0)
-            LOG_INFO("EconomicsService",
-                     QString("Hydrated %1 series from disk cache").arg(hydrated));
+            LOG_INFO("EconomicsService", QString("Hydrated %1 series from disk cache").arg(hydrated));
     });
 }
 
@@ -198,7 +197,8 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
                 const QString error_code = res.data.value("error_code").toString();
                 const QString message = res.data["error"].toString();
                 // Prefix with [CODE] so panels can branch on it without a schema change.
-                res.error = error_code.isEmpty() ? message : (QStringLiteral("[") + error_code + QStringLiteral("] ") + message);
+                res.error = error_code.isEmpty() ? message
+                                                 : (QStringLiteral("[") + error_code + QStringLiteral("] ") + message);
                 emit self->result_ready(request_id, res);
                 return;
             }
@@ -213,22 +213,21 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
             // so the constructor can rebuild dispatch_records_ for hub
             // refresh replay.
             {
-                const auto it = self->dispatch_records_.constFind(
-                    EconomicsService::hub_topic(source_id, request_id));
+                const auto it = self->dispatch_records_.constFind(EconomicsService::hub_topic(source_id, request_id));
                 if (it != self->dispatch_records_.constEnd()) {
                     const auto& rec = it.value();
                     QJsonObject root;
-                    root.insert("source_id",  rec.source_id);
-                    root.insert("script",     rec.script);
-                    root.insert("command",    rec.command);
+                    root.insert("source_id", rec.source_id);
+                    root.insert("script", rec.script);
+                    root.insert("command", rec.command);
                     QJsonArray args_arr;
-                    for (const auto& a : rec.args) args_arr.append(a);
-                    root.insert("args",       args_arr);
+                    for (const auto& a : rec.args)
+                        args_arr.append(a);
+                    root.insert("args", args_arr);
                     root.insert("request_id", rec.request_id);
-                    root.insert("data",       res.data);
+                    root.insert("data", res.data);
                     disk_cache().save(
-                        file_for_dispatch(rec.source_id, rec.script, rec.command,
-                                          rec.args, rec.request_id),
+                        file_for_dispatch(rec.source_id, rec.script, rec.command, rec.args, rec.request_id),
                         QJsonDocument(root));
                 }
             }
@@ -261,8 +260,7 @@ void EconomicsService::refresh(const QStringList& topics) {
     for (const auto& topic : topics) {
         auto it = dispatch_records_.constFind(topic);
         if (it == dispatch_records_.constEnd()) {
-            LOG_DEBUG("EconomicsService",
-                      "refresh() for unknown topic (no prior execute): " + topic);
+            LOG_DEBUG("EconomicsService", "refresh() for unknown topic (no prior execute): " + topic);
             continue;
         }
         const DispatchRecord rec = it.value();
@@ -274,11 +272,12 @@ void EconomicsService::refresh(const QStringList& topics) {
 }
 
 int EconomicsService::max_requests_per_sec() const {
-    return 2;  // Python spawn pacing — upstream rate limits are usually higher
+    return 2; // Python spawn pacing — upstream rate limits are usually higher
 }
 
 void EconomicsService::ensure_registered_with_hub() {
-    if (hub_registered_) return;
+    if (hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
     hub.register_producer(this);
 

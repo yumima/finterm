@@ -24,9 +24,8 @@ static QLabel* heading(const QString& num, const QString& title) {
 static QLabel* body(const QString& text) {
     auto* lbl = new QLabel(text);
     lbl->setWordWrap(true);
-    lbl->setStyleSheet(
-        QString("color: %1; font-size: 12px; line-height: 165%%; background: transparent; %2")
-            .arg(colors::TEXT_PRIMARY(), MF));
+    lbl->setStyleSheet(QString("color: %1; font-size: 12px; line-height: 165%%; background: transparent; %2")
+                           .arg(colors::TEXT_PRIMARY(), MF));
     return lbl;
 }
 

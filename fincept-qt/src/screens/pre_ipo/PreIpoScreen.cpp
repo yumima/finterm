@@ -23,8 +23,8 @@ PreIpoScreen::PreIpoScreen(QWidget* parent) : QWidget(parent) {
     connect(&svc, &services::PreIpoService::data_loaded, this, &PreIpoScreen::on_data_loaded);
     connect(&svc, &services::PreIpoService::error_occurred, this, &PreIpoScreen::on_error);
     // company_updated wiring removed — the old detail/list panels are gone.
-    connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed,
-            this, [this](const ui::ThemeTokens&) { refresh_theme(); });
+    connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
+            [this](const ui::ThemeTokens&) { refresh_theme(); });
 
     refresh_theme();
 

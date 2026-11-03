@@ -3,6 +3,7 @@
 #include "core/symbol/SymbolRef.h"
 
 #include <QObject>
+
 #include <functional>
 
 class QWidget;
@@ -19,8 +20,7 @@ namespace fincept::symbol_dnd {
 ///
 /// The drag pixmap is a small amber pill showing the ticker (Bloomberg
 /// convention for "security in flight").
-void startSymbolDrag(QWidget* source, const SymbolRef& ref,
-                     SymbolGroup source_group = SymbolGroup::None);
+void startSymbolDrag(QWidget* source, const SymbolRef& ref, SymbolGroup source_group = SymbolGroup::None);
 
 /// Event filter that converts drops of application/x-fincept-symbol into
 /// a callback receiving the unpacked SymbolRef. Install on any QWidget
@@ -62,8 +62,7 @@ class SymbolDragFilter : public QObject {
   public:
     using RefProvider = std::function<SymbolRef()>;
 
-    SymbolDragFilter(QWidget* source, RefProvider provider,
-                     SymbolGroup source_group = SymbolGroup::None);
+    SymbolDragFilter(QWidget* source, RefProvider provider, SymbolGroup source_group = SymbolGroup::None);
 
     /// The group embedded in the drag is read lazily at drag-start via this
     /// setter — set to follow the screen's current link group.
@@ -82,6 +81,6 @@ class SymbolDragFilter : public QObject {
 
 /// Convenience: create+install a SymbolDragFilter on `source`.
 SymbolDragFilter* installDragSource(QWidget* source, SymbolDragFilter::RefProvider provider,
-                                     SymbolGroup source_group = SymbolGroup::None);
+                                    SymbolGroup source_group = SymbolGroup::None);
 
 } // namespace fincept::symbol_dnd

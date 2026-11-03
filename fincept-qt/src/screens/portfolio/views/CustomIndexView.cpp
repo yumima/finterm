@@ -1,9 +1,8 @@
 // src/screens/portfolio/views/CustomIndexView.cpp
 #include "screens/portfolio/views/CustomIndexView.h"
 
-#include "services/portfolio/PortfolioService.h"
-
 #include "core/logging/Logger.h"
+#include "services/portfolio/PortfolioService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
@@ -231,7 +230,8 @@ QWidget* CustomIndexView::build_index_list_panel() {
     list_empty_msg_ =
         new QLabel("No custom indices created yet.\nGo to CREATE INDEX tab to build one from your portfolio.");
     list_empty_msg_->setAlignment(Qt::AlignCenter);
-    list_empty_msg_->setStyleSheet(QString("color:%1; font-size:12px; padding:40px;").arg(ui::colors::TEXT_SECONDARY()));
+    list_empty_msg_->setStyleSheet(
+        QString("color:%1; font-size:12px; padding:40px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(list_empty_msg_);
 
     return w;
@@ -315,7 +315,7 @@ void CustomIndexView::update_constituents() {
         set_item(2, h.price_known ? QString::number(h.current_price, 'f', 2) : ui::formatting::placeholder());
         set_item(3, QString("%1%").arg(QString::number(h.weight, 'f', 1)), ui::colors::AMBER);
         set_item(4, h.valued() ? QString("%1 %2").arg(currency_, QString::number(h.market_value, 'f', 2))
-                                  : ui::formatting::placeholder());
+                               : ui::formatting::placeholder());
     }
 }
 
@@ -365,8 +365,8 @@ void CustomIndexView::create_index() {
     }
 
     if (!unpriced.isEmpty()) {
-        create_status_->setText(QString("No current price for %1 — deselect or wait for a quote.")
-                                    .arg(unpriced.join(", ")));
+        create_status_->setText(
+            QString("No current price for %1 — deselect or wait for a quote.").arg(unpriced.join(", ")));
         create_status_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
         create_status_->show();
         return;
@@ -548,8 +548,7 @@ void CustomIndexView::show_index_performance(const QString& index_id, const QStr
 static double split_ratio_since(const QString& portfolio_id, const QString& symbol, const QString& since) {
     if (portfolio_id.isEmpty() || symbol.isEmpty())
         return 1.0;
-    const auto txns =
-        fincept::services::PortfolioService::instance().symbol_transactions(portfolio_id, symbol);
+    const auto txns = fincept::services::PortfolioService::instance().symbol_transactions(portfolio_id, symbol);
     double ratio = 1.0;
     for (const auto& t : txns) {
         if (t.transaction_type != QLatin1String("SPLIT") || t.quantity <= 0.0)

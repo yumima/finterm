@@ -124,20 +124,21 @@ void HDXDataPanel::build_ui() {
 
     datasets_table_->verticalHeader()->setDefaultSectionSize(26);
 
-    datasets_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; gridline-color:%3;"
-                                           "font-family:%4; font-size:%5px; border:none; }"
-                                           "QTableWidget::item { padding:3px 8px; }"
-                                           "QTableWidget::item:selected { background:rgba(%6,0.15); }"
-                                           "QHeaderView::section { background:%7; color:%8; font-weight:700;"
-                                           "padding:5px 8px; border:1px solid %3; font-family:%4; font-size:%5px; }"
-                                           "QTableWidget::item:alternate { background:%9; }")
-                                       .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM())
-                                       .arg(ui::fonts::DATA_FAMILY)
-                                       .arg(ui::fonts::SMALL)
-                                       .arg(rgb)
-                                       .arg(ui::colors::BG_RAISED())
-                                       .arg(ui::colors::TEXT_SECONDARY())
-                                       .arg(ui::colors::ROW_ALT()));
+    datasets_table_->setStyleSheet(
+        QString("QTableWidget { background:%1; color:%2; gridline-color:%3;"
+                "font-family:%4; font-size:%5px; border:none; }"
+                "QTableWidget::item { padding:3px 8px; }"
+                "QTableWidget::item:selected { background:rgba(%6,0.15); }"
+                "QHeaderView::section { background:%7; color:%8; font-weight:700;"
+                "padding:5px 8px; border:1px solid %3; font-family:%4; font-size:%5px; }"
+                "QTableWidget::item:alternate { background:%9; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM())
+            .arg(ui::fonts::DATA_FAMILY)
+            .arg(ui::fonts::SMALL)
+            .arg(rgb)
+            .arg(ui::colors::BG_RAISED())
+            .arg(ui::colors::TEXT_SECONDARY())
+            .arg(ui::colors::ROW_ALT()));
 
     // Loading overlay
     loading_label_ = new QLabel("Loading HDX data...", this);

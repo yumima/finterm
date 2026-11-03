@@ -36,11 +36,11 @@ namespace fincept::mcp {
 
 /// One ranked retrieval result.
 struct ToolMatch {
-    QString name;          // Bare tool name (no server_id prefix)
+    QString name; // Bare tool name (no server_id prefix)
     QString category;
-    QString description;   // Truncated to ~200 chars for prompt-friendliness
+    QString description; // Truncated to ~200 chars for prompt-friendliness
     bool is_destructive = false;
-    double score = 0.0;    // BM25 score; higher = more relevant
+    double score = 0.0; // BM25 score; higher = more relevant
 };
 
 class ToolRetriever {
@@ -56,9 +56,7 @@ class ToolRetriever {
     ///
     /// Disabled tools are excluded. Result is sorted by descending score.
     /// An empty query returns empty results (caller should fall back).
-    std::vector<ToolMatch> search(const QString& query,
-                                   int top_k = 5,
-                                   const QString& category_filter = {});
+    std::vector<ToolMatch> search(const QString& query, int top_k = 5, const QString& category_filter = {});
 
     /// Force a rebuild on the next search. Mostly for tests; production code
     /// can rely on the generation-counter check inside search().
@@ -74,27 +72,27 @@ class ToolRetriever {
     struct Doc {
         QString name;
         QString category;
-        QString description;       // Original full description (returned to caller)
+        QString description; // Original full description (returned to caller)
         bool is_destructive = false;
 
         // Tokenised fields. We weight name tokens 3x, parameter-name tokens 2x
         // (they're the strongest discriminator for tool selection), and
         // description tokens 1x. This is captured by repeating tokens at
         // index build time so BM25 TF naturally accounts for it.
-        QStringList all_tokens;    // Concatenated weighted token stream
-        int length = 0;            // |D| in BM25 formula
+        QStringList all_tokens; // Concatenated weighted token stream
+        int length = 0;         // |D| in BM25 formula
     };
 
     // ── Index state — guarded by mutex_ ────────────────────────────────
     mutable QMutex mutex_;
     quint64 indexed_generation_ = static_cast<quint64>(-1); // -1 = never built
     std::vector<Doc> docs_;
-    QHash<QString, int> df_;       // term → document frequency
+    QHash<QString, int> df_; // term → document frequency
     double avg_doc_length_ = 0.0;
 
     // ── BM25 hyperparameters (Okapi defaults — battle-tested) ──────────
-    static constexpr double kK1 = 1.5;   // term-frequency saturation
-    static constexpr double kB = 0.75;   // length normalisation
+    static constexpr double kK1 = 1.5; // term-frequency saturation
+    static constexpr double kB = 0.75; // length normalisation
 
     // Helpers (require mutex_ held).
     void rebuild_index_locked();

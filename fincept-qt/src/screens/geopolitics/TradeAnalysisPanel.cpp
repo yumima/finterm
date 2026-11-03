@@ -451,9 +451,8 @@ void TradeAnalysisPanel::build_ui() {
             return;
         }
         const double t1 = cur_tariff_spin->value() * (1.0 - cut_spin->value() / 100.0);
-        new_level_lbl->setText(QString("New tariff level: %1% → %2%")
-                                   .arg(cur_tariff_spin->value(), 0, 'f', 2)
-                                   .arg(t1, 0, 'f', 2));
+        new_level_lbl->setText(
+            QString("New tariff level: %1% → %2%").arg(cur_tariff_spin->value(), 0, 'f', 2).arg(t1, 0, 'f', 2));
     };
     connect(cur_tariff_spin, &QDoubleSpinBox::valueChanged, new_level_lbl, refresh_new_level);
     connect(cut_spin, &QDoubleSpinBox::valueChanged, new_level_lbl, refresh_new_level);

@@ -29,8 +29,8 @@ QString picker_ss() {
                    "QComboBox QAbstractItemView { background: %1; color: %2; border: 1px solid %3;"
                    " selection-background-color: %6; selection-color: %5; outline: 0;"
                    " font-size: 11px; %4 }")
-        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER(), ui::colors::BG_RAISED());
+        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER(),
+             ui::colors::BG_RAISED());
 }
 } // namespace
 

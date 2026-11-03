@@ -44,9 +44,9 @@ static constexpr const char* TAG = "LlmConfigSection";
 // unless hearth itself has a role bound to a cloud backend.
 // "fincept" was retired in R17.
 const QStringList LlmConfigSection::KNOWN_PROVIDERS = {
-    "hearth",     // local — the gateway on 127.0.0.1:11435 (role aliases)
-    "anthropic",  // claude-agent-sdk runtime
-    "gemini", "openai", "openrouter", "groq", "deepseek", "xai", "kimi", "minimax",
+    "hearth",    // local — the gateway on 127.0.0.1:11435 (role aliases)
+    "anthropic", // claude-agent-sdk runtime
+    "gemini",    "openai", "openrouter", "groq", "deepseek", "xai", "kimi", "minimax",
 };
 
 QString LlmConfigSection::default_base_url(const QString& provider) {
@@ -90,8 +90,7 @@ QStringList LlmConfigSection::fallback_models(const QString& provider) {
         // calendar-day reset. 3.5 is the fallback when 3.7 runs dry. Pro
         // variants are preview/paid and 2.5-flash now 404s, so neither is
         // listed. Offline fallbacks only — "Fetch models" lists what's live.
-        return {"gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash",
-                "gemini-3.5-flash-lite"};
+        return {"gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.5-flash", "gemini-3.5-flash-lite"};
     if (p == "groq")
         return {"llama-3.3-70b-versatile", "mixtral-8x7b-32768", "gemma2-9b-it"};
     if (p == "deepseek")
@@ -117,9 +116,15 @@ QStringList LlmConfigSection::fallback_models(const QString& provider) {
                 "moonshot-v1-128k-vision-preview"};
     if (ai_chat::is_hearth_provider(p))
         // Role aliases (hearth resolves these) first, then concrete model ids.
-        return {"primary_chat", "fast_chat", "coding", "embedding",
-                "qwen2.5:14b-instruct-q4_K_M", "qwen2.5:7b-instruct-q4_K_M",
-                "llama3.1:8b", "qwen2.5:7b", "mistral:7b"};
+        return {"primary_chat",
+                "fast_chat",
+                "coding",
+                "embedding",
+                "qwen2.5:14b-instruct-q4_K_M",
+                "qwen2.5:7b-instruct-q4_K_M",
+                "llama3.1:8b",
+                "qwen2.5:7b",
+                "mistral:7b"};
     if (p == "xai")
         return {"grok-4-latest", "grok-4", "grok-3", "grok-3-mini"};
     return {};
@@ -198,7 +203,7 @@ QWidget* LlmConfigSection::build_providers_tab() {
     splitter->addWidget(build_form_panel());
     splitter->setStretchFactor(0, 0);
     splitter->setStretchFactor(1, 1);
-    splitter->setChildrenCollapsible(false);  // dragging to zero hides the list with no way back
+    splitter->setChildrenCollapsible(false); // dragging to zero hides the list with no way back
     splitter->setSizes({220, 600});
     vl->addWidget(splitter, 1);
 
@@ -433,51 +438,47 @@ QWidget* LlmConfigSection::build_form_panel() {
     lbl_style(eng_lbl);
     engine_status_lbl_ = new QLabel("checking…");
     engine_status_lbl_->setStyleSheet("color:" + QString(ui::colors::TEXT_SECONDARY()) + ";");
-    engine_status_lbl_->setToolTip(
-        "Local AI engine (hearth) detected at the resolved base URL.\n"
-        "Chat + embeddings default to hearth on 127.0.0.1:11435 with no config;\n"
-        "set Base URL above (or $FINCEPT_ENGINE_BASE_URL) to override.");
+    engine_status_lbl_->setToolTip("Local AI engine (hearth) detected at the resolved base URL.\n"
+                                   "Chat + embeddings default to hearth on 127.0.0.1:11435 with no config;\n"
+                                   "set Base URL above (or $FINCEPT_ENGINE_BASE_URL) to override.");
     form->addRow(eng_lbl, engine_status_lbl_);
-    connect(&HearthService::instance(), &HearthService::detected, this,
-            &LlmConfigSection::refresh_engine_status);
+    connect(&HearthService::instance(), &HearthService::detected, this, &LlmConfigSection::refresh_engine_status);
     HearthService::instance().detect();
 
     // "Manage local engine" opt-in — finterm starts/stops hearth automatically.
     // Off by default: users running hearth themselves (or bare Ollama) are
     // unaffected. Persisted in SettingsRepository under "hearth.manage".
     manage_engine_check_ = new QCheckBox("Manage local engine (start hearth automatically)");
-    const QString check_style =
-        "QCheckBox{color:" + QString(ui::colors::TEXT_PRIMARY()) + ";spacing:8px;}"
-        "QCheckBox::indicator{width:16px;height:16px;border:1px solid " +
-        QString(ui::colors::BORDER_MED()) +
-        ";border-radius:3px;background:" + QString(ui::colors::BG_RAISED()) + ";}"
-        "QCheckBox::indicator:checked{background:" + QString(ui::colors::AMBER()) +
-        ";border-color:" + QString(ui::colors::AMBER()) + ";}";
+    const QString check_style = "QCheckBox{color:" + QString(ui::colors::TEXT_PRIMARY()) +
+                                ";spacing:8px;}"
+                                "QCheckBox::indicator{width:16px;height:16px;border:1px solid " +
+                                QString(ui::colors::BORDER_MED()) +
+                                ";border-radius:3px;background:" + QString(ui::colors::BG_RAISED()) +
+                                ";}"
+                                "QCheckBox::indicator:checked{background:" +
+                                QString(ui::colors::AMBER()) + ";border-color:" + QString(ui::colors::AMBER()) + ";}";
     manage_engine_check_->setStyleSheet(check_style);
-    manage_engine_check_->setToolTip(
-        "When checked, finterm starts `hearth start` on launch and keeps it running.\n"
-        "Disable if you manage the hearth engine yourself, or use bare Ollama.\n"
-        "Requires the `hearth` binary on PATH (or install: pip install hearth).");
+    manage_engine_check_->setToolTip("When checked, finterm starts `hearth start` on launch and keeps it running.\n"
+                                     "Disable if you manage the hearth engine yourself, or use bare Ollama.\n"
+                                     "Requires the `hearth` binary on PATH (or install: pip install hearth).");
     {
         auto r = SettingsRepository::instance().get("hearth.manage", "false");
         manage_engine_check_->setChecked(r.is_ok() && r.value() == "true");
     }
     // Connect BEFORE set_enabled so a construction-time self-disable (binary not
     // found) is caught and the checkbox/setting are synced.
-    connect(&HearthSupervisor::instance(), &HearthSupervisor::state_changed, this,
-            [this](HearthSupervisor::State s) {
-                // If the supervisor disabled itself (binary not found), sync
-                // the checkbox and persist so the mismatch doesn't survive restart.
-                if (s == HearthSupervisor::State::Disabled
-                        && !HearthSupervisor::instance().is_enabled()
-                        && manage_engine_check_ && manage_engine_check_->isChecked()) {
-                    manage_engine_check_->blockSignals(true);
-                    manage_engine_check_->setChecked(false);
-                    manage_engine_check_->blockSignals(false);
-                    SettingsRepository::instance().set("hearth.manage", "false", "ai");
-                }
-                refresh_engine_status();
-            });
+    connect(&HearthSupervisor::instance(), &HearthSupervisor::state_changed, this, [this](HearthSupervisor::State s) {
+        // If the supervisor disabled itself (binary not found), sync
+        // the checkbox and persist so the mismatch doesn't survive restart.
+        if (s == HearthSupervisor::State::Disabled && !HearthSupervisor::instance().is_enabled() &&
+            manage_engine_check_ && manage_engine_check_->isChecked()) {
+            manage_engine_check_->blockSignals(true);
+            manage_engine_check_->setChecked(false);
+            manage_engine_check_->blockSignals(false);
+            SettingsRepository::instance().set("hearth.manage", "false", "ai");
+        }
+        refresh_engine_status();
+    });
     connect(manage_engine_check_, &QCheckBox::toggled, this, [this](bool on) {
         SettingsRepository::instance().set("hearth.manage", on ? "true" : "false", "ai");
         HearthSupervisor::instance().set_enabled(on);
@@ -760,12 +761,10 @@ void LlmConfigSection::populate_form(const QString& provider) {
                 active = p.provider;
     const bool is_default = (!active.isEmpty() && active == provider);
     if (default_badge_) {
-        default_badge_->setText(is_default ? "DEFAULT — used by roles set to “Use default”"
-                                           : "Not the default");
-        default_badge_->setStyleSheet(
-            QString("color:%1;font-size:11px;font-weight:%2;")
-                .arg(is_default ? ui::colors::AMBER() : ui::colors::TEXT_DIM())
-                .arg(is_default ? "700" : "400"));
+        default_badge_->setText(is_default ? "DEFAULT — used by roles set to “Use default”" : "Not the default");
+        default_badge_->setStyleSheet(QString("color:%1;font-size:11px;font-weight:%2;")
+                                          .arg(is_default ? ui::colors::AMBER() : ui::colors::TEXT_DIM())
+                                          .arg(is_default ? "700" : "400"));
     }
     if (set_default_btn_) {
         set_default_btn_->setVisible(!is_default);
@@ -898,9 +897,8 @@ void LlmConfigSection::on_save_provider() {
     // only finds out on restart.
     auto verify = LlmConfigRepository::instance().get_active_provider();
     if (!verify.is_ok() || verify.value().provider.toLower() != provider) {
-        QString detail = verify.is_ok()
-                             ? QString("active is '%1' not '%2'").arg(verify.value().provider, provider)
-                             : QString::fromStdString(verify.error());
+        QString detail = verify.is_ok() ? QString("active is '%1' not '%2'").arg(verify.value().provider, provider)
+                                        : QString::fromStdString(verify.error());
         show_status("Save verification failed: " + detail, true);
         LOG_ERROR(TAG, "Save verification failed — " + detail);
         return;
@@ -1028,18 +1026,16 @@ void LlmConfigSection::on_models_fetched(const QString& provider, const QStringL
     // Post-save model verification. Only fires when the fetch SUCCEEDED — if we
     // could not reach the provider we cannot prove the model is wrong, and
     // blocking on an unreachable provider would be worse than allowing it.
-    if (!pending_verify_provider_.isEmpty()
-        && pending_verify_provider_.compare(provider, Qt::CaseInsensitive) == 0) {
+    if (!pending_verify_provider_.isEmpty() && pending_verify_provider_.compare(provider, Qt::CaseInsensitive) == 0) {
         const QString want = pending_verify_model_;
         pending_verify_provider_.clear();
         pending_verify_model_.clear();
         if (error.isEmpty() && !models.isEmpty() && !want.isEmpty() && !models.contains(want)) {
             show_status(QString("Saved, but '%1' is not a model %2 serves — requests using it "
                                 "will fail. Available: %3")
-                            .arg(want, provider, models.mid(0, 6).join(", ")
-                                 + (models.size() > 6 ? ", …" : "")),
+                            .arg(want, provider, models.mid(0, 6).join(", ") + (models.size() > 6 ? ", …" : "")),
                         true);
-            return;  // keep the warning on screen rather than overwriting it below
+            return; // keep the warning on screen rather than overwriting it below
         }
     }
 
@@ -1389,7 +1385,9 @@ void LlmConfigSection::clear_profile_form() {
         auto r = LlmConfigRepository::instance().get_active_provider();
         if (r.is_ok())
             active = r.value().provider;
-        int idx = active.isEmpty() ? 0 : profile_provider_combo_->findText(active, Qt::MatchFixedString | Qt::MatchCaseSensitive);
+        int idx = active.isEmpty()
+                      ? 0
+                      : profile_provider_combo_->findText(active, Qt::MatchFixedString | Qt::MatchCaseSensitive);
         profile_provider_combo_->setCurrentIndex(idx < 0 ? 0 : idx);
     }
     on_profile_provider_changed(profile_provider_combo_->currentText());

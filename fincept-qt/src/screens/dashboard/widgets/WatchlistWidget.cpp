@@ -1,13 +1,11 @@
 #include "screens/dashboard/widgets/WatchlistWidget.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/markets/MarketChartDialog.h"
-
 #include "ui/charts/InlineSparkline.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QLabel>
 #include <QTableWidgetItem>
@@ -81,12 +79,11 @@ WatchlistWidget::WatchlistWidget(QWidget* parent)
 
     apply_styles();
     set_loading(true);
-
 }
 
 void WatchlistWidget::apply_styles() {
-    symbols_label_->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                                      .arg(ui::colors::TEXT_SECONDARY()));
+    symbols_label_->setStyleSheet(
+        QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     symbols_input_->setStyleSheet(
         QString("QLineEdit { background: %1; color: %2; border: 1px solid %3; "
                 "font-size: 10px; padding: 2px 6px; font-family: Consolas; }"
@@ -123,9 +120,8 @@ void WatchlistWidget::refresh_data() {
     topics.reserve(symbols_.size());
     for (const auto& sym : symbols_)
         topics.append(QStringLiteral("market:quote:") + sym);
-    hub.request(topics, /*force=*/true);  // user-triggered: bypass min_interval
+    hub.request(topics, /*force=*/true); // user-triggered: bypass min_interval
 }
-
 
 void WatchlistWidget::hub_resubscribe() {
     auto& hub = datahub::DataHub::instance();
@@ -215,9 +211,12 @@ void WatchlistWidget::render_from_cache() {
         if (it == row_cache_.constEnd()) {
             // No quote yet — show the symbol as pending ("--") with neutral
             // color, keeping the row visible/contiguous (correct striping).
-            if (auto* c = table_->item(row, 1)) c->setText(QStringLiteral("--"));
-            if (auto* c = table_->item(row, 2)) c->setText(QStringLiteral("--"));
-            if (auto* c = table_->item(row, 3)) c->setText(QStringLiteral("--"));
+            if (auto* c = table_->item(row, 1))
+                c->setText(QStringLiteral("--"));
+            if (auto* c = table_->item(row, 2))
+                c->setText(QStringLiteral("--"));
+            if (auto* c = table_->item(row, 3))
+                c->setText(QStringLiteral("--"));
             table_->set_cell_color(row, 2, ui::colors::TEXT_SECONDARY());
             table_->set_cell_color(row, 3, ui::colors::TEXT_SECONDARY());
             continue;
@@ -229,7 +228,8 @@ void WatchlistWidget::render_from_cache() {
         if (auto* c = table_->item(row, 1))
             c->setText(QString("$%1").arg(q.price, 0, 'f', 2));
         if (auto* c = table_->item(row, 2))
-            c->setText(std::isfinite(q.change) ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2) : ui::formatting::placeholder());
+            c->setText(std::isfinite(q.change) ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2)
+                                               : ui::formatting::placeholder());
         if (auto* c = table_->item(row, 3))
             c->setText(ui::formatting::format_percent(q.change_pct, 2, true));
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
@@ -242,15 +242,15 @@ void WatchlistWidget::render_from_cache() {
     }
 }
 
-
 void WatchlistWidget::populate(const QVector<services::QuoteData>& quotes) {
     table_->clear_data();
 
     for (const auto& q : quotes) {
         table_->add_row({q.symbol, QString("$%1").arg(q.price, 0, 'f', 2),
-                         std::isfinite(q.change) ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2) : ui::formatting::placeholder(),
-                         ui::formatting::format_percent(q.change_pct, 2, true),
-                         QString{}});
+                         std::isfinite(q.change)
+                             ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2)
+                             : ui::formatting::placeholder(),
+                         ui::formatting::format_percent(q.change_pct, 2, true), QString{}});
         int row = table_->rowCount() - 1;
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
         table_->set_cell_color(row, 3, ui::change_color(q.change_pct));

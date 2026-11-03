@@ -17,8 +17,7 @@
 
 namespace fincept::screens::widgets {
 
-BrokerHoldingsWidget::BrokerHoldingsWidget(const QJsonObject& cfg, QWidget* parent)
-    : BaseWidget("HOLDINGS", parent) {
+BrokerHoldingsWidget::BrokerHoldingsWidget(const QJsonObject& cfg, QWidget* parent) : BaseWidget("HOLDINGS", parent) {
     auto* vl = content_layout();
     vl->setContentsMargins(8, 6, 8, 6);
     vl->setSpacing(4);
@@ -124,8 +123,7 @@ void BrokerHoldingsWidget::populate(const QVector<trading::BrokerHolding>& rows)
         auto* qty = new QTableWidgetItem(QString::number(h.quantity, 'f', 0));
         auto* avg = new QTableWidgetItem(QString::number(h.avg_price, 'f', 2));
         auto* ltp = new QTableWidgetItem(QString::number(h.ltp, 'f', 2));
-        auto* pnl_pct = new QTableWidgetItem(
-            QString("%1%2%").arg(h.pnl_pct >= 0 ? "+" : "").arg(h.pnl_pct, 0, 'f', 2));
+        auto* pnl_pct = new QTableWidgetItem(QString("%1%2%").arg(h.pnl_pct >= 0 ? "+" : "").arg(h.pnl_pct, 0, 'f', 2));
         const QColor col(h.pnl_pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE());
         pnl_pct->setForeground(col);
         qty->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
@@ -179,15 +177,14 @@ void BrokerHoldingsWidget::on_theme_changed() {
 
 void BrokerHoldingsWidget::apply_styles() {
     header_hint_->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;padding:2px 0;")
-            .arg(ui::colors::TEXT_SECONDARY()));
-    table_->setStyleSheet(QString(
-        "QTableWidget{background:transparent;color:%1;gridline-color:%2;font-size:12px;border:none;}"
-        "QHeaderView::section{background:%3;color:%4;border:none;border-bottom:1px solid %2;"
-        "padding:2px 4px;font-size:12px;font-weight:bold;}"
-        "QTableWidget::item{padding:2px 4px;}")
-        .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED(),
-             ui::colors::TEXT_SECONDARY()));
+        QString("color:%1;font-size:12px;background:transparent;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
+    table_->setStyleSheet(
+        QString("QTableWidget{background:transparent;color:%1;gridline-color:%2;font-size:12px;border:none;}"
+                "QHeaderView::section{background:%3;color:%4;border:none;border-bottom:1px solid %2;"
+                "padding:2px 4px;font-size:12px;font-weight:bold;}"
+                "QTableWidget::item{padding:2px 4px;}")
+            .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED(),
+                 ui::colors::TEXT_SECONDARY()));
 }
 
 } // namespace fincept::screens::widgets

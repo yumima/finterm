@@ -8,9 +8,6 @@
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
 
-#include <QEvent>
-#include <QResizeEvent>
-
 #include <QApplication>
 #include <QComboBox>
 #include <QCoreApplication>
@@ -18,6 +15,7 @@
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDir>
+#include <QEvent>
 #include <QFileInfo>
 #include <QGroupBox>
 #include <QHBoxLayout>
@@ -29,25 +27,26 @@
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
-#include <QPointer>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QPainter>
+#include <QPointer>
 #include <QRadioButton>
 #include <QRect>
-#include <QTableWidget>
-
-#include <algorithm>
-#include <memory>
 #include <QRegularExpression>
+#include <QResizeEvent>
 #include <QScrollArea>
 #include <QSettings>
 #include <QShortcut>
-#include <QTimer>
 #include <QStandardPaths>
+#include <QTableWidget>
+#include <QTimer>
 #include <QUrl>
 #include <QUrlQuery>
 #include <QVBoxLayout>
+
+#include <algorithm>
+#include <memory>
 
 namespace fincept::screens::widgets {
 
@@ -85,8 +84,8 @@ void VideoRenderWidget::mousePressEvent(QMouseEvent* event) {
         // read as active yet, or the compositor may have delivered the
         // focus-in first and made it read active already.
         const bool inactive = !window() || !window()->isActiveWindow();
-        const bool just_activated = window_activated_at_.isValid() &&
-                                    window_activated_at_.elapsed() < kActivationGraceMs;
+        const bool just_activated =
+            window_activated_at_.isValid() && window_activated_at_.elapsed() < kActivationGraceMs;
         if (inactive || just_activated) {
             event->accept();
             return;
@@ -155,10 +154,8 @@ void VideoRenderWidget::present(const QVideoFrame& frame) {
     if (!gpu_out.isNull()) {
         scaled_image_ = std::move(gpu_out);
         const qreal dpr = scaled_image_.devicePixelRatio();
-        const QSize logical(int(scaled_image_.width()  / dpr),
-                            int(scaled_image_.height() / dpr));
-        scaled_origin_ = QPoint((width()  - logical.width())  / 2,
-                                (height() - logical.height()) / 2);
+        const QSize logical(int(scaled_image_.width() / dpr), int(scaled_image_.height() / dpr));
+        scaled_origin_ = QPoint((width() - logical.width()) / 2, (height() - logical.height()) / 2);
         paint_pending_ = true;
         update();
         return;
@@ -173,7 +170,7 @@ void VideoRenderWidget::present(const QVideoFrame& frame) {
     last_image_ = std::move(img);
     rescale_for_widget();
     paint_pending_ = true;
-    update();   // schedule a repaint only when we have a new valid frame
+    update(); // schedule a repaint only when we have a new valid frame
 }
 
 void VideoRenderWidget::rescale_for_widget() {
@@ -189,13 +186,11 @@ void VideoRenderWidget::rescale_for_widget() {
     // once per frame instead of once per paint.
     const qreal dpr = devicePixelRatioF();
     const QSize target_logical = last_image_.size().scaled(size(), Qt::KeepAspectRatio);
-    const QSize target_device(qMax(1, static_cast<int>(target_logical.width()  * dpr)),
+    const QSize target_device(qMax(1, static_cast<int>(target_logical.width() * dpr)),
                               qMax(1, static_cast<int>(target_logical.height() * dpr)));
-    scaled_image_ = last_image_.scaled(target_device, Qt::KeepAspectRatio,
-                                       Qt::SmoothTransformation);
+    scaled_image_ = last_image_.scaled(target_device, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     scaled_image_.setDevicePixelRatio(dpr);
-    scaled_origin_ = QPoint((width()  - target_logical.width())  / 2,
-                            (height() - target_logical.height()) / 2);
+    scaled_origin_ = QPoint((width() - target_logical.width()) / 2, (height() - target_logical.height()) / 2);
 }
 
 void VideoRenderWidget::resizeEvent(QResizeEvent* event) {
@@ -207,10 +202,8 @@ void VideoRenderWidget::resizeEvent(QResizeEvent* event) {
         if (!gpu_out.isNull()) {
             scaled_image_ = std::move(gpu_out);
             const qreal dpr = scaled_image_.devicePixelRatio();
-            const QSize logical(int(scaled_image_.width()  / dpr),
-                                int(scaled_image_.height() / dpr));
-            scaled_origin_ = QPoint((width()  - logical.width())  / 2,
-                                    (height() - logical.height()) / 2);
+            const QSize logical(int(scaled_image_.width() / dpr), int(scaled_image_.height() / dpr));
+            scaled_origin_ = QPoint((width() - logical.width()) / 2, (height() - logical.height()) / 2);
             QWidget::resizeEvent(event);
             return;
         }
@@ -265,9 +258,9 @@ void VideoRenderWidget::changeEvent(QEvent* event) {
 // valid user choice).
 
 namespace {
-constexpr const char* kSettingsKey      = "video.channels";
-constexpr const char* kEngineKey        = "video.engine";   // "gl" | "web"
-constexpr const char* kMaxHeightKey     = "video.max_height"; // "480" | "720" | "1080"
+constexpr const char* kSettingsKey = "video.channels";
+constexpr const char* kEngineKey = "video.engine";        // "gl" | "web"
+constexpr const char* kMaxHeightKey = "video.max_height"; // "480" | "720" | "1080"
 constexpr const char* kSettingsCategory = "video";
 
 // Color palette assigned round-robin to channels. Users pick name/URL only;
@@ -284,10 +277,10 @@ const QStringList kAccentPalette = {
 
 QVector<VideoPlayerWidget::ChannelDef> VideoPlayerWidget::default_channels() {
     return {
-        {"Bloomberg",     "https://www.youtube.com/live/iEpJwprxDdk",    {}},
-        {"CNBC Live",     "https://www.youtube.com/@CNBC/live",          {}},
-        {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live",  {}},
-        {"Euronews",      "https://www.youtube.com/@euronews/live",      {}},
+        {"Bloomberg", "https://www.youtube.com/live/iEpJwprxDdk", {}},
+        {"CNBC Live", "https://www.youtube.com/@CNBC/live", {}},
+        {"Yahoo Finance", "https://www.youtube.com/@YahooFinance/live", {}},
+        {"Euronews", "https://www.youtube.com/@euronews/live", {}},
     };
 }
 
@@ -313,8 +306,7 @@ void VideoPlayerWidget::load_channels() {
     QJsonParseError err{};
     const QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
     if (err.error != QJsonParseError::NoError || !doc.isArray()) {
-        LOG_ERROR("VideoPlayer",
-                  "video.channels JSON unparseable, falling back to defaults: " + err.errorString());
+        LOG_ERROR("VideoPlayer", "video.channels JSON unparseable, falling back to defaults: " + err.errorString());
         channels_ = default_channels();
         assign_colors(channels_);
         return;
@@ -324,7 +316,7 @@ void VideoPlayerWidget::load_channels() {
     for (const auto& v : doc.array()) {
         const QJsonObject o = v.toObject();
         const QString name = o.value("name").toString().trimmed();
-        const QString url  = o.value("url").toString().trimmed();
+        const QString url = o.value("url").toString().trimmed();
         if (name.isEmpty() || url.isEmpty())
             continue; // skip malformed entries silently — the editor enforces this on save
         channels_.append({name, url, {}});
@@ -337,14 +329,13 @@ void VideoPlayerWidget::save_channels(const QVector<ChannelDef>& channels) {
     for (const auto& ch : channels) {
         QJsonObject o;
         o.insert("name", ch.name);
-        o.insert("url",  ch.url);
+        o.insert("url", ch.url);
         arr.append(o);
     }
     const QString json = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
     auto r = fincept::SettingsRepository::instance().set(kSettingsKey, json, kSettingsCategory);
     if (r.is_err())
-        LOG_ERROR("VideoPlayer",
-                  "failed to persist video.channels: " + QString::fromStdString(r.error()));
+        LOG_ERROR("VideoPlayer", "failed to persist video.channels: " + QString::fromStdString(r.error()));
 }
 
 void VideoPlayerWidget::load_engine() {
@@ -356,11 +347,9 @@ void VideoPlayerWidget::load_engine() {
 }
 
 void VideoPlayerWidget::save_engine(bool web) {
-    auto r = fincept::SettingsRepository::instance().set(
-        kEngineKey, web ? "web" : "gl", kSettingsCategory);
+    auto r = fincept::SettingsRepository::instance().set(kEngineKey, web ? "web" : "gl", kSettingsCategory);
     if (r.is_err())
-        LOG_ERROR("VideoPlayer",
-                  "failed to persist video.engine: " + QString::fromStdString(r.error()));
+        LOG_ERROR("VideoPlayer", "failed to persist video.engine: " + QString::fromStdString(r.error()));
 }
 
 void VideoPlayerWidget::load_max_height() {
@@ -376,11 +365,9 @@ void VideoPlayerWidget::load_max_height() {
 }
 
 void VideoPlayerWidget::save_max_height(int height) {
-    auto r = fincept::SettingsRepository::instance().set(
-        kMaxHeightKey, QString::number(height), kSettingsCategory);
+    auto r = fincept::SettingsRepository::instance().set(kMaxHeightKey, QString::number(height), kSettingsCategory);
     if (r.is_err())
-        LOG_ERROR("VideoPlayer",
-                  "failed to persist video.max_height: " + QString::fromStdString(r.error()));
+        LOG_ERROR("VideoPlayer", "failed to persist video.max_height: " + QString::fromStdString(r.error()));
 }
 
 static bool is_youtube_url(const QString& url) {
@@ -397,9 +384,9 @@ static bool is_youtube_url(const QString& url) {
 //   - /live/{11-char-id}                — direct live video URL
 //   - /@channel/live, /c/.../live, etc. — channel's current broadcast
 static bool is_youtube_live_url(const QString& url) {
-    if (url.contains(QStringLiteral("/live/"))) return true;
-    static const QRegularExpression re(
-        QStringLiteral(R"(youtube\.com/(?:@[^/]+|c/[^/]+|user/[^/]+)/live(?:[/?]|$))"));
+    if (url.contains(QStringLiteral("/live/")))
+        return true;
+    static const QRegularExpression re(QStringLiteral(R"(youtube\.com/(?:@[^/]+|c/[^/]+|user/[^/]+)/live(?:[/?]|$))"));
     return re.match(url).hasMatch();
 }
 
@@ -409,7 +396,8 @@ static QString extract_youtube_id(const QString& url) {
     if (u.host().contains("youtu.be"))
         return u.path().mid(1).section('?', 0, 0);
     QString v = QUrlQuery(u).queryItemValue("v");
-    if (!v.isEmpty()) return v;
+    if (!v.isEmpty())
+        return v;
     QRegularExpression re(R"(/(?:embed|live|shorts)/([A-Za-z0-9_-]{11}))");
     auto m = re.match(u.path());
     return m.hasMatch() ? m.captured(1) : QString();
@@ -427,8 +415,7 @@ static QString extract_youtube_id(const QString& url) {
 static std::pair<QString, QString> spotify_resource(const QString& url) {
     const QUrl u(url);
     const QString host = u.host().toLower();
-    if (host != QStringLiteral("open.spotify.com") &&
-        host != QStringLiteral("play.spotify.com"))
+    if (host != QStringLiteral("open.spotify.com") && host != QStringLiteral("play.spotify.com"))
         return {};
     // Match /<type>/<id>, where <type> is one of the embeddable kinds.
     // The path may have a trailing slash or further segments (Spotify
@@ -436,8 +423,7 @@ static std::pair<QString, QString> spotify_resource(const QString& url) {
     QString path = u.path();
     static const QRegularExpression locale_re(QStringLiteral(R"(^/intl-[a-z]{2,3}/)"));
     path.replace(locale_re, QStringLiteral("/"));
-    static const QRegularExpression re(
-        QStringLiteral(R"(^/(show|episode|playlist|track|album)/([A-Za-z0-9]+))"));
+    static const QRegularExpression re(QStringLiteral(R"(^/(show|episode|playlist|track|album)/([A-Za-z0-9]+))"));
     auto m = re.match(path);
     if (!m.hasMatch())
         return {};
@@ -492,30 +478,29 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         // select it (per-user QSettings; empty pinned id → follow default).
         {
             QSettings s(fincept::AppIdentity::kOrg, fincept::AppIdentity::kApp);
-            follow_system_default_ =
-                s.value(QStringLiteral("video/audio_follow_default"), true).toBool();
-            pinned_audio_id_ =
-                s.value(QStringLiteral("video/audio_pinned_id")).toByteArray();
-            if (pinned_audio_id_.isEmpty()) follow_system_default_ = true;
+            follow_system_default_ = s.value(QStringLiteral("video/audio_follow_default"), true).toBool();
+            pinned_audio_id_ = s.value(QStringLiteral("video/audio_pinned_id")).toByteArray();
+            if (pinned_audio_id_.isEmpty())
+                follow_system_default_ = true;
         }
         audio_device_combo_ = new QComboBox;
         audio_device_combo_->setFixedHeight(20);
         audio_device_combo_->setMaximumWidth(220);
         audio_device_combo_->setSizeAdjustPolicy(QComboBox::AdjustToContents);
         audio_device_combo_->setToolTip("Audio output device (defaults to the system default sink)");
-        connect(audio_device_combo_, &QComboBox::currentIndexChanged, this,
-                [this](int idx) {
-                    if (idx < 0) return;
-                    // Empty itemData == "System default" → follow the default
-                    // sink; otherwise pin to the selected device's id.
-                    const QByteArray id = audio_device_combo_->currentData().toByteArray();
-                    follow_system_default_ = id.isEmpty();
-                    pinned_audio_id_ = id;
-                    QSettings s(fincept::AppIdentity::kOrg, fincept::AppIdentity::kApp);
-                    s.setValue(QStringLiteral("video/audio_follow_default"), follow_system_default_);
-                    s.setValue(QStringLiteral("video/audio_pinned_id"), pinned_audio_id_);
-                    refresh_audio_output();
-                });
+        connect(audio_device_combo_, &QComboBox::currentIndexChanged, this, [this](int idx) {
+            if (idx < 0)
+                return;
+            // Empty itemData == "System default" → follow the default
+            // sink; otherwise pin to the selected device's id.
+            const QByteArray id = audio_device_combo_->currentData().toByteArray();
+            follow_system_default_ = id.isEmpty();
+            pinned_audio_id_ = id;
+            QSettings s(fincept::AppIdentity::kOrg, fincept::AppIdentity::kApp);
+            s.setValue(QStringLiteral("video/audio_follow_default"), follow_system_default_);
+            s.setValue(QStringLiteral("video/audio_pinned_id"), pinned_audio_id_);
+            refresh_audio_output();
+        });
         // Filter the combo directly (NOT via the app-wide filter, which is only
         // installed during fullscreen) so a click rebuilds the device list right
         // before the popup opens — see eventFilter().
@@ -535,7 +520,8 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         play_pause_btn_->setToolTip("Pause / resume the current stream");
         connect(play_pause_btn_, &QPushButton::clicked, this, [this]() {
 #ifdef HAS_QT_MULTIMEDIA
-            if (!player_) return;
+            if (!player_)
+                return;
             // User explicitly pressed the button — handle each state.
             // resume_playback() applies the Qt6 FFmpeg audio-detach
             // workaround on the Paused→Playing edge; Stopped is handled
@@ -567,10 +553,8 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                     // forever — which is exactly how this reads to the user:
                     // the button says PLAY, they press it, nothing happens.
                     const QMediaPlayer::MediaStatus st = player_->mediaStatus();
-                    const bool ready = !gave_up &&
-                                       player_->error() == QMediaPlayer::NoError &&
-                                       (st == QMediaPlayer::LoadedMedia ||
-                                        st == QMediaPlayer::BufferedMedia ||
+                    const bool ready = !gave_up && player_->error() == QMediaPlayer::NoError &&
+                                       (st == QMediaPlayer::LoadedMedia || st == QMediaPlayer::BufferedMedia ||
                                         st == QMediaPlayer::BufferingMedia);
                     if (play_in_progress_) {
                         // A resolve is already running — its callback will
@@ -609,8 +593,7 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         fullscreen_btn_->setCursor(Qt::PointingHandCursor);
         fullscreen_btn_->setFixedHeight(20);
         fullscreen_btn_->setToolTip("Toggle fullscreen (Esc to exit)");
-        connect(fullscreen_btn_, &QPushButton::clicked,
-                this, &VideoPlayerWidget::toggle_fullscreen);
+        connect(fullscreen_btn_, &QPushButton::clicked, this, &VideoPlayerWidget::toggle_fullscreen);
         cl->addWidget(fullscreen_btn_);
 
         stop_btn_ = new QPushButton(QString(QChar(0x25A0)) + " BACK");
@@ -638,8 +621,7 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
     // — only if we'd been the ones to pause it, so a user-initiated pause
     // before lock is not undone. WEB engine is unaffected (cross-origin JS
     // can't reliably pause an embedded YouTube iframe).
-    connect(&auth::InactivityGuard::instance(),
-            &auth::InactivityGuard::terminal_locked_changed, this,
+    connect(&auth::InactivityGuard::instance(), &auth::InactivityGuard::terminal_locked_changed, this,
             [this](bool locked) {
 #ifdef HAS_QT_WEBENGINE
                 // Spotify-embed branch. The embed iframe is cross-origin, so
@@ -657,11 +639,11 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                         // QStringLiteral wants a literal; build the snippet
                         // with a single arg() so the verb is the only thing
                         // that varies between the two call sites.
-                        const QString js = QStringLiteral(
-                            "(function(){var f=document.querySelector('iframe');"
-                            "if(!f||!f.contentWindow)return;"
-                            "f.contentWindow.postMessage({command:'%1'},"
-                            "'https://open.spotify.com');})();").arg(QLatin1String(cmd));
+                        const QString js = QStringLiteral("(function(){var f=document.querySelector('iframe');"
+                                                          "if(!f||!f.contentWindow)return;"
+                                                          "f.contentWindow.postMessage({command:'%1'},"
+                                                          "'https://open.spotify.com');})();")
+                                               .arg(QLatin1String(cmd));
                         web_view_->page()->runJavaScript(js);
                     };
                     if (locked) {
@@ -674,7 +656,8 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
                 }
 #endif
 #ifdef HAS_QT_MULTIMEDIA
-                if (!player_) return;
+                if (!player_)
+                    return;
                 if (locked) {
                     if (player_->playbackState() == QMediaPlayer::PlayingState) {
                         player_->pause();
@@ -869,7 +852,7 @@ void VideoPlayerWidget::build_player_view() {
     // pair suffices and is synchronous, so the state matches reality
     // by the time toggle_fullscreen() runs.
     connect(video_widget_, &VideoRenderWidget::doubleClicked, this, [this]() {
-#ifdef HAS_QT_MULTIMEDIA
+#    ifdef HAS_QT_MULTIMEDIA
         if (player_) {
             // StoppedState is left alone on purpose — it only occurs
             // after EOF or error, in which case the first click of
@@ -880,11 +863,11 @@ void VideoPlayerWidget::build_player_view() {
             else if (player_->playbackState() == QMediaPlayer::PlayingState)
                 player_->pause();
         }
-#endif
+#    endif
         toggle_fullscreen();
     });
 
-    player_       = new QMediaPlayer(this);
+    player_ = new QMediaPlayer(this);
     audio_output_ = new QAudioOutput(this);
     audio_output_->setVolume(0.5f);
     // Pin to the *current* system default sink. Without an explicit
@@ -905,8 +888,8 @@ void VideoPlayerWidget::build_player_view() {
     // re-pinning at the start of every fresh stream (see play_direct).
     media_devices_ = new QMediaDevices(this);
     connect(media_devices_, &QMediaDevices::audioOutputsChanged, this, [this]() {
-        populate_audio_devices();   // refresh the combo list + selection
-        refresh_audio_output();     // re-route to the (possibly new) target sink
+        populate_audio_devices(); // refresh the combo list + selection
+        refresh_audio_output();   // re-route to the (possibly new) target sink
     });
 
     // audioOutputsChanged covers device add/remove, but Qt emits *nothing* for
@@ -925,7 +908,8 @@ void VideoPlayerWidget::build_player_view() {
     default_sink_poll_ = new QTimer(this);
     default_sink_poll_->setInterval(2000);
     connect(default_sink_poll_, &QTimer::timeout, this, [this]() {
-        if (!follow_system_default_ || !audio_output_) return;
+        if (!follow_system_default_ || !audio_output_)
+            return;
         const QAudioDevice def = QMediaDevices::defaultAudioOutput();
         if (!def.isNull() && def.id() != audio_output_->device().id())
             refresh_audio_output();
@@ -938,19 +922,16 @@ void VideoPlayerWidget::build_player_view() {
     // crosses from the decode thread to the main thread cleanly.
     video_sink_ = new QVideoSink(this);
     player_->setVideoOutput(video_sink_);
-    connect(video_sink_, &QVideoSink::videoFrameChanged,
-            video_widget_, &VideoRenderWidget::present,
+    connect(video_sink_, &QVideoSink::videoFrameChanged, video_widget_, &VideoRenderWidget::present,
             Qt::QueuedConnection);
 
     // Count frames on the GUI thread (the sink emits from a backend thread, so
     // `this` as the context object makes the connection queued). This counter
     // is the watchdog's ground truth: media status can sit still and lie, a
     // frame arriving cannot.
-    connect(video_sink_, &QVideoSink::videoFrameChanged, this,
-            [this](const QVideoFrame&) { ++frames_seen_; });
+    connect(video_sink_, &QVideoSink::videoFrameChanged, this, [this](const QVideoFrame&) { ++frames_seen_; });
 
-    connect(player_, &QMediaPlayer::errorOccurred, this,
-            &VideoPlayerWidget::on_player_error);
+    connect(player_, &QMediaPlayer::errorOccurred, this, &VideoPlayerWidget::on_player_error);
 
     // Nothing watched media status before this, which is why a live stream
     // that ran out of segments stayed "playing" forever with a frozen picture:
@@ -961,8 +942,7 @@ void VideoPlayerWidget::build_player_view() {
     // Long enough that an ordinary rebuffer recovers on its own — reconnecting
     // on every hiccup would interrupt more playback than it restores.
     stall_timer_->setInterval(6000);
-    connect(stall_timer_, &QTimer::timeout, this,
-            [this]() { auto_reconnect(QStringLiteral("stalled")); });
+    connect(stall_timer_, &QTimer::timeout, this, [this]() { auto_reconnect(QStringLiteral("stalled")); });
 
     // The stall timer above only ever runs when the backend says StalledMedia.
     // It never says it when the segments themselves stop being fetchable: the
@@ -974,59 +954,58 @@ void VideoPlayerWidget::build_player_view() {
     watchdog_->setInterval(kWatchdogIntervalMs);
     connect(watchdog_, &QTimer::timeout, this, &VideoPlayerWidget::on_watchdog_tick);
 
-    connect(player_, &QMediaPlayer::mediaStatusChanged, this,
-            [this](QMediaPlayer::MediaStatus st) {
-                switch (st) {
-                    case QMediaPlayer::StalledMedia:
-                        // Give it a chance to refill before intervening.
-                        if (player_->playbackState() == QMediaPlayer::PlayingState)
-                            stall_timer_->start();
-                        break;
-                    case QMediaPlayer::BufferedMedia:
-                        // Buffered again: cancel any pending reconnect. The
-                        // attempt count is NOT refunded here — only pictures
-                        // do that, in on_watchdog_tick(). A dead stream can
-                        // still cycle its status, and refunding on status
-                        // alone gives it an endless reconnect budget.
-                        stall_timer_->stop();
-                        break;
-                    case QMediaPlayer::EndOfMedia:
-                        stall_timer_->stop();
-                        auto_reconnect(QStringLiteral("end of stream"));
-                        break;
-                    default:
-                        break;
-                }
-            });
-    connect(player_, &QMediaPlayer::playbackStateChanged, this,
-            [this](QMediaPlayer::PlaybackState s) {
-                if (s == QMediaPlayer::PlayingState)
-                    play_in_progress_ = false;
-                // Only watch the default sink while a stream is actually
-                // playing — a default swap matters nowhere else (paused streams
-                // re-route on resume via resume_playback(); stopped ones via
-                // the per-stream re-pin in play_direct). Keeps the dashboard
-                // idle when the user is just browsing the channel list.
-                if (default_sink_poll_) {
-                    if (s == QMediaPlayer::PlayingState) default_sink_poll_->start();
-                    else                                 default_sink_poll_->stop();
-                }
-                // Record the pause moment so resume_playback() can pick
-                // between the cheap and the heavy recovery — both manual
-                // pause and lock-auto-pause flow through this signal.
-                if (s == QMediaPlayer::PausedState)
-                    paused_at_ = QDateTime::currentDateTime();
-                // Reflect state on the pause/play button. StoppedState used to
-                // fall through on the assumption that stopping always meant
-                // stop_playback(), which hides the bar — but a stream that
-                // ends or errors on its own stops with the bar still visible,
-                // leaving the button reading PAUSE while nothing was playing.
-                if (play_pause_btn_) {
-                    play_pause_btn_->setText(s == QMediaPlayer::PlayingState
-                                                 ? QString(QChar(0x23F8)) + " PAUSE"
-                                                 : QString(QChar(0x25B6)) + " PLAY");
-                }
-            });
+    connect(player_, &QMediaPlayer::mediaStatusChanged, this, [this](QMediaPlayer::MediaStatus st) {
+        switch (st) {
+            case QMediaPlayer::StalledMedia:
+                // Give it a chance to refill before intervening.
+                if (player_->playbackState() == QMediaPlayer::PlayingState)
+                    stall_timer_->start();
+                break;
+            case QMediaPlayer::BufferedMedia:
+                // Buffered again: cancel any pending reconnect. The
+                // attempt count is NOT refunded here — only pictures
+                // do that, in on_watchdog_tick(). A dead stream can
+                // still cycle its status, and refunding on status
+                // alone gives it an endless reconnect budget.
+                stall_timer_->stop();
+                break;
+            case QMediaPlayer::EndOfMedia:
+                stall_timer_->stop();
+                auto_reconnect(QStringLiteral("end of stream"));
+                break;
+            default:
+                break;
+        }
+    });
+    connect(player_, &QMediaPlayer::playbackStateChanged, this, [this](QMediaPlayer::PlaybackState s) {
+        if (s == QMediaPlayer::PlayingState)
+            play_in_progress_ = false;
+        // Only watch the default sink while a stream is actually
+        // playing — a default swap matters nowhere else (paused streams
+        // re-route on resume via resume_playback(); stopped ones via
+        // the per-stream re-pin in play_direct). Keeps the dashboard
+        // idle when the user is just browsing the channel list.
+        if (default_sink_poll_) {
+            if (s == QMediaPlayer::PlayingState)
+                default_sink_poll_->start();
+            else
+                default_sink_poll_->stop();
+        }
+        // Record the pause moment so resume_playback() can pick
+        // between the cheap and the heavy recovery — both manual
+        // pause and lock-auto-pause flow through this signal.
+        if (s == QMediaPlayer::PausedState)
+            paused_at_ = QDateTime::currentDateTime();
+        // Reflect state on the pause/play button. StoppedState used to
+        // fall through on the assumption that stopping always meant
+        // stop_playback(), which hides the bar — but a stream that
+        // ends or errors on its own stops with the bar still visible,
+        // leaving the button reading PAUSE while nothing was playing.
+        if (play_pause_btn_) {
+            play_pause_btn_->setText(s == QMediaPlayer::PlayingState ? QString(QChar(0x23F8)) + " PAUSE"
+                                                                     : QString(QChar(0x25B6)) + " PLAY");
+        }
+    });
 #else
     status_label_placeholder_ =
         new QLabel("Qt Multimedia not available.\nBuild with Qt6 Multimedia for inline playback.");
@@ -1063,7 +1042,8 @@ void VideoPlayerWidget::build_player_view() {
 
 #ifdef HAS_QT_MULTIMEDIA
 void VideoPlayerWidget::refresh_audio_output() {
-    if (!player_ || !audio_output_) return;
+    if (!player_ || !audio_output_)
+        return;
     // Resolve the target sink: the live system default when following it,
     // otherwise the user-pinned device. Naming the sink explicitly also
     // bypasses PA's stream-restore module, which would otherwise re-pin
@@ -1073,7 +1053,10 @@ void VideoPlayerWidget::refresh_audio_output() {
         want = QMediaDevices::defaultAudioOutput();
     } else {
         for (const QAudioDevice& d : QMediaDevices::audioOutputs()) {
-            if (d.id() == pinned_audio_id_) { want = d; break; }
+            if (d.id() == pinned_audio_id_) {
+                want = d;
+                break;
+            }
         }
         if (want.isNull()) {
             // Pinned device vanished (unplugged / removed) — fall back to the
@@ -1106,19 +1089,19 @@ void VideoPlayerWidget::refresh_audio_output() {
 }
 
 void VideoPlayerWidget::populate_audio_devices() {
-    if (!audio_device_combo_) return;
+    if (!audio_device_combo_)
+        return;
     // Rebuild without firing currentIndexChanged (which would re-route audio);
     // we restore the user's selection ourselves below.
     QSignalBlocker block(audio_device_combo_);
     audio_device_combo_->clear();
 
     const QAudioDevice def = QMediaDevices::defaultAudioOutput();
-    audio_device_combo_->addItem(
-        def.isNull() ? QStringLiteral("System default")
-                     : QStringLiteral("System default · %1").arg(def.description()),
-        QByteArray());  // empty itemData == follow the system default
+    audio_device_combo_->addItem(def.isNull() ? QStringLiteral("System default")
+                                              : QStringLiteral("System default · %1").arg(def.description()),
+                                 QByteArray()); // empty itemData == follow the system default
 
-    int select = 0;  // default to "System default"
+    int select = 0; // default to "System default"
     for (const QAudioDevice& d : QMediaDevices::audioOutputs()) {
         audio_device_combo_->addItem(d.description(), d.id());
         if (!follow_system_default_ && d.id() == pinned_audio_id_)
@@ -1131,9 +1114,11 @@ void VideoPlayerWidget::populate_audio_devices() {
 void VideoPlayerWidget::sync_web_mode_controls() {
     // Native-pipeline-only controls track the active engine. Each guarded by
     // its own existence so this compiles in any multimedia/webengine combo.
-    if (play_pause_btn_) play_pause_btn_->setVisible(!use_web_engine_);
+    if (play_pause_btn_)
+        play_pause_btn_->setVisible(!use_web_engine_);
 #ifdef HAS_QT_MULTIMEDIA
-    if (audio_device_combo_) audio_device_combo_->setVisible(!use_web_engine_);
+    if (audio_device_combo_)
+        audio_device_combo_->setVisible(!use_web_engine_);
 #endif
 }
 
@@ -1201,10 +1186,10 @@ void VideoPlayerWidget::set_playback_intent(bool want_playing) {
     if (want_playing) {
         // Restart the count from here so the seconds spent paused, resolving
         // or reloading are never charged against the stream.
-        frames_at_check_   = frames_seen_;
+        frames_at_check_ = frames_seen_;
         position_at_check_ = player_ ? player_->position() : -1;
-        starved_ticks_     = 0;
-        good_ticks_        = 0;
+        starved_ticks_ = 0;
+        good_ticks_ = 0;
         watchdog_->start();
     } else {
         watchdog_->stop();
@@ -1225,11 +1210,10 @@ void VideoPlayerWidget::on_watchdog_tick() {
         return;
 
     const quint64 frames = frames_seen_;
-    const qint64  pos    = player_->position();
+    const qint64 pos = player_->position();
     // Position covers an audio-only source, which delivers no frames at all.
-    const bool progressed = frames != frames_at_check_ ||
-                            (pos > 0 && pos != position_at_check_);
-    frames_at_check_   = frames;
+    const bool progressed = frames != frames_at_check_ || (pos > 0 && pos != position_at_check_);
+    frames_at_check_ = frames;
     position_at_check_ = pos;
 
     if (progressed) {
@@ -1253,8 +1237,7 @@ void VideoPlayerWidget::on_watchdog_tick() {
     if (++starved_ticks_ < kStarvedTicksToRecover)
         return;
     starved_ticks_ = 0;
-    auto_reconnect(QStringLiteral("no picture for %1s")
-                       .arg(kStarvedTicksToRecover * kWatchdogIntervalMs / 1000));
+    auto_reconnect(QStringLiteral("no picture for %1s").arg(kStarvedTicksToRecover * kWatchdogIntervalMs / 1000));
 #endif
 }
 
@@ -1268,7 +1251,7 @@ void VideoPlayerWidget::auto_reconnect(const QString& why) {
     if (current_url_.isEmpty() && url_before_error_.isEmpty())
         return;
     if (stack_ && stack_->currentIndex() != 1) {
-        set_playback_intent(false);   // not on the player page: nothing to watch
+        set_playback_intent(false); // not on the player page: nothing to watch
         return;
     }
     // A live stream does not end and does not stall for good: the segment
@@ -1278,7 +1261,7 @@ void VideoPlayerWidget::auto_reconnect(const QString& why) {
     // and a finished clip must not be dragged back to its first frame, so
     // recovery is limited to sources we know are live.
     if (!is_live_source() && !current_is_live_) {
-        set_playback_intent(false);   // and stop asking about it every tick
+        set_playback_intent(false); // and stop asking about it every tick
         return;
     }
     if (reconnect_attempts_ >= kMaxReconnects) {
@@ -1295,8 +1278,7 @@ void VideoPlayerWidget::auto_reconnect(const QString& why) {
     // did nothing.
     if (reconnect_attempts_ == 0) {
         reconnect_attempts_ = 1;
-        LOG_INFO("VideoPlayer", QString("Live stream %1 — reloading source (1/%2)")
-                                    .arg(why).arg(kMaxReconnects));
+        LOG_INFO("VideoPlayer", QString("Live stream %1 — reloading source (1/%2)").arg(why).arg(kMaxReconnects));
         status_label_->setText(QStringLiteral("Reloading stream… (%1)").arg(why));
         status_label_->show();
         hard_reload_source();
@@ -1337,21 +1319,18 @@ bool VideoPlayerWidget::fall_back_to_web(const QString& why) {
         return false;
     const QString vid = extract_youtube_id(url);
     if (vid.isEmpty())
-        return false;   // a channel URL needs a resolve, which is the thing failing
+        return false; // a channel URL needs a resolve, which is the thing failing
 
-    LOG_INFO("VideoPlayer",
-             QString("direct stream unusable (%1) — switching to the embedded player").arg(why));
-    web_fallback_done_ = true;      // one switch per stream, never a loop
+    LOG_INFO("VideoPlayer", QString("direct stream unusable (%1) — switching to the embedded player").arg(why));
+    web_fallback_done_ = true; // one switch per stream, never a loop
     set_playback_intent(false);
     suppress_recovery_briefly();
     player_->stop();
     release_source_then([] {}); // counted: a GL pick right after waits for it
     stop_hls_proxy();
-    status_label_->setText(
-        QStringLiteral("The direct stream kept expiring — switched to the embedded player."));
+    status_label_->setText(QStringLiteral("The direct stream kept expiring — switched to the embedded player."));
     status_label_->show();
-    play_web_video_id(vid, current_title_.isEmpty() ? QStringLiteral("Live Stream")
-                                                    : current_title_, url);
+    play_web_video_id(vid, current_title_.isEmpty() ? QStringLiteral("Live Stream") : current_title_, url);
     return true;
 #else
     Q_UNUSED(why);
@@ -1366,7 +1345,7 @@ void VideoPlayerWidget::give_up_on_stream(const QString& why) {
     if (fall_back_to_web(why))
         return;
     set_loading(false);
-    set_playback_intent(false);   // stop retrying; the user's PLAY restarts it
+    set_playback_intent(false); // stop retrying; the user's PLAY restarts it
     play_in_progress_ = false;
     // STOP the player. The failure this exists for leaves it in PlayingState
     // with a frozen picture, so playbackStateChanged never fires and the
@@ -1377,12 +1356,12 @@ void VideoPlayerWidget::give_up_on_stream(const QString& why) {
         suppress_recovery_briefly();
         player_->stop();
     }
-    status_label_->setText(
-        QStringLiteral("Stream stopped after %1 reconnect attempts (%2). Press PLAY to try "
-                       "again.").arg(kMaxReconnects).arg(why));
+    status_label_->setText(QStringLiteral("Stream stopped after %1 reconnect attempts (%2). Press PLAY to try "
+                                          "again.")
+                               .arg(kMaxReconnects)
+                               .arg(why));
     status_label_->show();
-    LOG_WARN("VideoPlayer", QString("Live stream gave up after %1 attempts (%2)")
-                                .arg(kMaxReconnects).arg(why));
+    LOG_WARN("VideoPlayer", QString("Live stream gave up after %1 attempts (%2)").arg(kMaxReconnects).arg(why));
 #else
     Q_UNUSED(why);
 #endif
@@ -1413,8 +1392,9 @@ void VideoPlayerWidget::re_resolve_source(const QString& why, bool user_initiate
     }
     ++reconnect_attempts_;
 
-    LOG_INFO("VideoPlayer", QString("Re-resolving live stream (%1) — attempt %2/%3")
-                                .arg(why).arg(reconnect_attempts_).arg(kMaxReconnects));
+    LOG_INFO(
+        "VideoPlayer",
+        QString("Re-resolving live stream (%1) — attempt %2/%3").arg(why).arg(reconnect_attempts_).arg(kMaxReconnects));
     // Drop everything the dead session owns before asking for a new one: the
     // player's hold on the old relay URL, and the relay itself. play_url()
     // resolves from the channel URL again, which is the only thing that gets
@@ -1434,7 +1414,7 @@ void VideoPlayerWidget::re_resolve_source(const QString& why, bool user_initiate
     errored_source_.clear();
     status_label_->setText(QStringLiteral("Reconnecting… (%1)").arg(why));
     status_label_->show();
-    set_playback_intent(false);   // re-armed when the new source starts playing
+    set_playback_intent(false); // re-armed when the new source starts playing
 
     // Let the teardown above finish before anything opens a new source. The
     // YouTube path takes a yt-dlp round trip and would never have raced it,
@@ -1506,7 +1486,7 @@ void VideoPlayerWidget::hard_reload_source() {
         if (video_sink_)
             player_->setVideoOutput(video_sink_);
         if (status_label_)
-            status_label_->hide();   // clear any error left from the dead load
+            status_label_->hide(); // clear any error left from the dead load
         // Recovering the stream also recovers its refresh: without this the
         // stream plays but refresh_data() stays disabled from the error.
         // Only when the player is still on the source that errored — if the
@@ -1559,11 +1539,10 @@ void VideoPlayerWidget::release_source_then(std::function<void()> next) {
         --releases_pending_;
         next();
     };
-    connect(player_, &QMediaPlayer::mediaStatusChanged, guard,
-            [fire](QMediaPlayer::MediaStatus st) {
-                if (st == QMediaPlayer::NoMedia)
-                    fire();
-            });
+    connect(player_, &QMediaPlayer::mediaStatusChanged, guard, [fire](QMediaPlayer::MediaStatus st) {
+        if (st == QMediaPlayer::NoMedia)
+            fire();
+    });
     QTimer::singleShot(250, guard, fire);
 #else
     next();
@@ -1587,12 +1566,9 @@ void VideoPlayerWidget::resume_playback() {
     // accept both so we don't silently fall onto the heavy path for a
     // local-proxy URL and risk the long-pause freeze.
     const QString host = src.host();
-    const bool is_live_proxy =
-        host == QLatin1String("127.0.0.1") || host == QLatin1String("localhost");
-    const qint64 elapsed_sec =
-        paused_at_.isValid() ? paused_at_.secsTo(QDateTime::currentDateTime()) : 0;
-    const bool needs_full_reset =
-        is_live_proxy && elapsed_sec > kPauseLiveResetThresholdSec;
+    const bool is_live_proxy = host == QLatin1String("127.0.0.1") || host == QLatin1String("localhost");
+    const qint64 elapsed_sec = paused_at_.isValid() ? paused_at_.secsTo(QDateTime::currentDateTime()) : 0;
+    const bool needs_full_reset = is_live_proxy && elapsed_sec > kPauseLiveResetThresholdSec;
 
     if (needs_full_reset) {
         // Live HLS, paused long enough that the proxy's 6-segment
@@ -1634,7 +1610,8 @@ void VideoPlayerWidget::resume_playback() {
     // picks up any system-default sink change that happened while
     // paused. setVideoOutput is symmetric insurance.
     refresh_audio_output();
-    if (video_sink_) player_->setVideoOutput(video_sink_);
+    if (video_sink_)
+        player_->setVideoOutput(video_sink_);
     player_->play();
 #endif
 }
@@ -1644,32 +1621,27 @@ void VideoPlayerWidget::resume_playback() {
 void VideoPlayerWidget::build_web_view() {
     auto* profile = new QWebEngineProfile(QStringLiteral("finterm_tv"), this);
     profile->settings()->setAttribute(QWebEngineSettings::PlaybackRequiresUserGesture, false);
-    profile->settings()->setAttribute(QWebEngineSettings::FullScreenSupportEnabled,   true);
-    profile->settings()->setAttribute(QWebEngineSettings::JavascriptEnabled,          true);
+    profile->settings()->setAttribute(QWebEngineSettings::FullScreenSupportEnabled, true);
+    profile->settings()->setAttribute(QWebEngineSettings::JavascriptEnabled, true);
 
     // Override the default Qt UA ("QtWebEngine/x.y.z") — YouTube detects this
     // string as an automated browser and returns "An error occurred" with a
     // Playback ID instead of playing the stream. A standard Chrome UA bypasses
     // the check while still being honest about the Chromium engine version.
-    profile->setHttpUserAgent(
-        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+    profile->setHttpUserAgent("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                              "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
 
     web_view_ = new QWebEngineView(profile, this);
     web_view_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     // Auto-grant media permissions (Qt 6.8+ API).
-    connect(web_view_->page(), &QWebEnginePage::permissionRequested,
-            this, [](QWebEnginePermission permission) {
-                using PT = QWebEnginePermission::PermissionType;
-                const auto t = permission.permissionType();
-                if (t == PT::MediaAudioCapture        ||
-                    t == PT::MediaVideoCapture        ||
-                    t == PT::MediaAudioVideoCapture   ||
-                    t == PT::DesktopVideoCapture      ||
-                    t == PT::DesktopAudioVideoCapture)
-                    permission.grant();
-            });
+    connect(web_view_->page(), &QWebEnginePage::permissionRequested, this, [](QWebEnginePermission permission) {
+        using PT = QWebEnginePermission::PermissionType;
+        const auto t = permission.permissionType();
+        if (t == PT::MediaAudioCapture || t == PT::MediaVideoCapture || t == PT::MediaAudioVideoCapture ||
+            t == PT::DesktopVideoCapture || t == PT::DesktopAudioVideoCapture)
+            permission.grant();
+    });
 
     // Honor HTML5 fullscreen requests from the YouTube iframe (the ⛶
     // button inside its own player chrome). Without accept() the
@@ -1677,16 +1649,15 @@ void VideoPlayerWidget::build_web_view() {
     // mirror the toggle into our own reparent path so the QWebEngineView
     // also fills the screen — accepting alone only sizes the <video>
     // to the view's bounds, not the display.
-    connect(web_view_->page(), &QWebEnginePage::fullScreenRequested,
-            this, [this](QWebEngineFullScreenRequest request) {
-                request.accept();
-                if (request.toggleOn() && !fullscreen_target_) {
-                    fullscreen_via_web_request_ = true;
-                    enter_fullscreen();
-                } else if (!request.toggleOn() && fullscreen_target_) {
-                    exit_fullscreen();
-                }
-            });
+    connect(web_view_->page(), &QWebEnginePage::fullScreenRequested, this, [this](QWebEngineFullScreenRequest request) {
+        request.accept();
+        if (request.toggleOn() && !fullscreen_target_) {
+            fullscreen_via_web_request_ = true;
+            enter_fullscreen();
+        } else if (!request.toggleOn() && fullscreen_target_) {
+            exit_fullscreen();
+        }
+    });
 
     stack_->addWidget(web_view_); // page 2
 }
@@ -1694,15 +1665,15 @@ void VideoPlayerWidget::build_web_view() {
 // Embed a YouTube video by ID — the path that already works smoothly for
 // custom URLs. Channel-level embed restrictions (CNBC error 152) DO NOT apply
 // at the individual video level, only at the `live_stream?channel=` endpoint.
-void VideoPlayerWidget::play_web_video_id(const QString& video_id, const QString& title,
-                                          const QString& source_url) {
-    if (!web_view_) build_web_view();
+void VideoPlayerWidget::play_web_video_id(const QString& video_id, const QString& title, const QString& source_url) {
+    if (!web_view_)
+        build_web_view();
     // Clear Spotify-mode latches in case the user switched from a Spotify
     // embed straight to a YouTube URL without hitting BACK. Without this the
     // lock handler would keep posting Spotify-targeted messages to a YouTube
     // iframe (harmless — wrong origin — but the visibility latch on
     // play_pause_btn_ would also stay stuck off).
-    web_is_spotify_              = false;
+    web_is_spotify_ = false;
     spotify_auto_paused_on_lock_ = false;
     sync_web_mode_controls();
 
@@ -1711,18 +1682,19 @@ void VideoPlayerWidget::play_web_video_id(const QString& video_id, const QString
                                       "&origin=https://www.youtube-nocookie.com")
                                   .arg(video_id);
 
-    const QString html = QStringLiteral(
-        "<!DOCTYPE html><html><head><style>"
-        "*{margin:0;padding:0;box-sizing:border-box;background:#000}"
-        "iframe{border:none;width:100vw;height:100vh}"
-        "</style></head><body>"
-        "<iframe src='%1' allow='autoplay;fullscreen;encrypted-media' allowfullscreen></iframe>"
-        "</body></html>").arg(embed_url);
+    const QString html =
+        QStringLiteral("<!DOCTYPE html><html><head><style>"
+                       "*{margin:0;padding:0;box-sizing:border-box;background:#000}"
+                       "iframe{border:none;width:100vw;height:100vh}"
+                       "</style></head><body>"
+                       "<iframe src='%1' allow='autoplay;fullscreen;encrypted-media' allowfullscreen></iframe>"
+                       "</body></html>")
+            .arg(embed_url);
 
     web_view_->setHtml(html, QUrl("https://www.youtube-nocookie.com"));
 
     play_in_progress_ = false;
-    current_url_   = source_url;
+    current_url_ = source_url;
     current_title_ = title;
     now_playing_->setText(QChar(0x25B6) + QString(" ") + title);
     set_channel_title(title);
@@ -1738,24 +1710,24 @@ void VideoPlayerWidget::resolve_live_id_and_play_web(const QString& channel_url,
     const QString ytdlp = resolve_ytdlp_program();
     if (ytdlp.isEmpty()) {
         // No yt-dlp available — show an error directly in the web view.
-        if (!web_view_) build_web_view();
-        web_view_->setHtml(QStringLiteral(
-            "<html><body style='background:#000;color:#999;font:14px sans-serif;"
-            "display:flex;align-items:center;justify-content:center;height:100vh'>"
-            "<div>yt-dlp not found — cannot resolve live stream ID for WEB mode.<br>"
-            "Switch engine to GL.</div></body></html>"));
+        if (!web_view_)
+            build_web_view();
+        web_view_->setHtml(QStringLiteral("<html><body style='background:#000;color:#999;font:14px sans-serif;"
+                                          "display:flex;align-items:center;justify-content:center;height:100vh'>"
+                                          "<div>yt-dlp not found — cannot resolve live stream ID for WEB mode.<br>"
+                                          "Switch engine to GL.</div></body></html>"));
         controls_->show();
         stack_->setCurrentIndex(2);
         return;
     }
 
     // Loading placeholder while yt-dlp runs (~2-3 s).
-    if (!web_view_) build_web_view();
-    web_view_->setHtml(QStringLiteral(
-        "<html><body style='background:#000;color:#888;font:14px sans-serif;"
-        "display:flex;align-items:center;justify-content:center;height:100vh'>"
-        "Resolving live stream…</body></html>"));
-    current_url_   = channel_url;
+    if (!web_view_)
+        build_web_view();
+    web_view_->setHtml(QStringLiteral("<html><body style='background:#000;color:#888;font:14px sans-serif;"
+                                      "display:flex;align-items:center;justify-content:center;height:100vh'>"
+                                      "Resolving live stream…</body></html>"));
+    current_url_ = channel_url;
     current_title_ = title;
     now_playing_->setText(QChar(0x25B6) + QString(" ") + title + " (resolving…)");
     set_channel_title(title);
@@ -1771,36 +1743,32 @@ void VideoPlayerWidget::resolve_live_id_and_play_web(const QString& channel_url,
     resolve_proc_ = proc; // QPointer: nulls itself when the finished proc is deleted
     proc->setProperty("requested_url", channel_url);
     proc->setProperty("requested_title", title);
-    connect(proc, &QProcess::finished, this,
-            [this, proc](int code, QProcess::ExitStatus) {
-                const QString req_url = proc->property("requested_url").toString();
-                const QString req_title = proc->property("requested_title").toString();
-                proc->deleteLater();
+    connect(proc, &QProcess::finished, this, [this, proc](int code, QProcess::ExitStatus) {
+        const QString req_url = proc->property("requested_url").toString();
+        const QString req_title = proc->property("requested_title").toString();
+        proc->deleteLater();
 
-                // Drop result if the user switched channels in the meantime.
-                if (req_url != current_url_)
-                    return;
+        // Drop result if the user switched channels in the meantime.
+        if (req_url != current_url_)
+            return;
 
-                if (code != 0) {
-                    LOG_ERROR("VideoPlayer",
-                              "yt-dlp --print id failed: " + proc->readAllStandardError().left(250));
-                    return;
-                }
-                const QString video_id =
-                    QString::fromLatin1(proc->readAllStandardOutput()).trimmed().section('\n', 0, 0);
-                if (video_id.size() != 11) {
-                    LOG_ERROR("VideoPlayer", "yt-dlp returned unexpected ID: " + video_id);
-                    return;
-                }
-                play_web_video_id(video_id, req_title, req_url);
-            });
+        if (code != 0) {
+            LOG_ERROR("VideoPlayer", "yt-dlp --print id failed: " + proc->readAllStandardError().left(250));
+            return;
+        }
+        const QString video_id = QString::fromLatin1(proc->readAllStandardOutput()).trimmed().section('\n', 0, 0);
+        if (video_id.size() != 11) {
+            LOG_ERROR("VideoPlayer", "yt-dlp returned unexpected ID: " + video_id);
+            return;
+        }
+        play_web_video_id(video_id, req_title, req_url);
+    });
 
     // --print id alone is fast: yt-dlp resolves the channel's current live video
     // ID without touching the HLS manifest. --js-runtimes node bypasses yt-dlp's
     // PoToken / signature deciphering issues on recent YouTube changes.
-    proc->start(ytdlp,
-                {"--print", "id", "--no-download", "--no-playlist", "--quiet", "--no-warnings",
-                 "--js-runtimes", "node", channel_url});
+    proc->start(ytdlp, {"--print", "id", "--no-download", "--no-playlist", "--quiet", "--no-warnings", "--js-runtimes",
+                        "node", channel_url});
 }
 
 void VideoPlayerWidget::play_web(const QString& channel_url, const QString& title) {
@@ -1818,7 +1786,8 @@ void VideoPlayerWidget::play_web(const QString& channel_url, const QString& titl
 }
 
 void VideoPlayerWidget::stop_web() {
-    if (web_view_) web_view_->setUrl(QUrl("about:blank"));
+    if (web_view_)
+        web_view_->setUrl(QUrl("about:blank"));
     // Clear Spotify-specific latches so a subsequent unlock or refresh doesn't
     // try to resume something we already tore down.
     web_is_spotify_ = false;
@@ -1838,34 +1807,35 @@ void VideoPlayerWidget::stop_web() {
 // Hard-strip any query the user pasted (typically `?si=…` share tokens). The
 // embed only needs `utm_source=generator` for analytics; passing through
 // arbitrary query state has occasionally surfaced inconsistent embed UI.
-void VideoPlayerWidget::play_spotify_embed(const QString& type, const QString& id,
-                                            const QString& title, const QString& source_url) {
-    if (!web_view_) build_web_view();
+void VideoPlayerWidget::play_spotify_embed(const QString& type, const QString& id, const QString& title,
+                                           const QString& source_url) {
+    if (!web_view_)
+        build_web_view();
 
-    // Tear down any GL pipeline that was running — otherwise the user would
-    // hear the previous stream alongside the Spotify embed with no obvious
-    // way to silence it (the GL pause button gets hidden below). Symmetric
-    // with play_via_proxy() / play_direct(), which stop their own pipelines
-    // before swapping pages.
-#ifdef HAS_QT_MULTIMEDIA
+        // Tear down any GL pipeline that was running — otherwise the user would
+        // hear the previous stream alongside the Spotify embed with no obvious
+        // way to silence it (the GL pause button gets hidden below). Symmetric
+        // with play_via_proxy() / play_direct(), which stop their own pipelines
+        // before swapping pages.
+#    ifdef HAS_QT_MULTIMEDIA
     if (player_) {
         player_->stop();
-        if (video_widget_) video_widget_->clear_frame();
+        if (video_widget_)
+            video_widget_->clear_frame();
     }
     stop_hls_proxy();
-    current_is_live_     = false;
+    current_is_live_ = false;
     auto_paused_on_lock_ = false;
-#endif
+#    endif
 
-    const QString embed_url = QStringLiteral("https://open.spotify.com/embed/%1/%2?utm_source=generator")
-                                  .arg(type, id);
+    const QString embed_url = QStringLiteral("https://open.spotify.com/embed/%1/%2?utm_source=generator").arg(type, id);
     web_view_->setUrl(QUrl(embed_url));
 
-    web_is_spotify_              = true;
+    web_is_spotify_ = true;
     spotify_auto_paused_on_lock_ = false;
-    play_in_progress_            = false;
-    current_url_                 = source_url;
-    current_title_               = title;
+    play_in_progress_ = false;
+    current_url_ = source_url;
+    current_title_ = title;
     now_playing_->setText(QChar(0x25B6) + QString(" ") + title);
     set_channel_title(title);
     status_label_->hide();
@@ -1874,11 +1844,13 @@ void VideoPlayerWidget::play_spotify_embed(const QString& type, const QString& i
     // inside the embed. Hide our pause button so users don't expect it to
     // drive the embed (cross-origin postMessage is best-effort; the visible
     // controls live inside the iframe).
-    if (play_pause_btn_) play_pause_btn_->setVisible(false);
-#ifdef HAS_QT_MULTIMEDIA
+    if (play_pause_btn_)
+        play_pause_btn_->setVisible(false);
+#    ifdef HAS_QT_MULTIMEDIA
     // The embed owns its own audio too — hide the GL device picker here.
-    if (audio_device_combo_) audio_device_combo_->setVisible(false);
-#endif
+    if (audio_device_combo_)
+        audio_device_combo_->setVisible(false);
+#    endif
     stack_->setCurrentIndex(2);
 }
 #endif
@@ -1977,8 +1949,8 @@ void VideoPlayerWidget::rebuild_channel_menu() {
     }
     if (!channels_.isEmpty())
         channel_menu_->addSeparator();
-    connect(channel_menu_->addAction(QStringLiteral("All channels / custom URL…")),
-            &QAction::triggered, this, &VideoPlayerWidget::stop_playback);
+    connect(channel_menu_->addAction(QStringLiteral("All channels / custom URL…")), &QAction::triggered, this,
+            &VideoPlayerWidget::stop_playback);
 }
 
 void VideoPlayerWidget::switch_channel(int index) {
@@ -1999,8 +1971,7 @@ void VideoPlayerWidget::switch_channel(int index) {
     // so this needs no wait of its own (and BACK + pick gets the same safety).
     teardown_playback();
     controls_->show();
-    now_playing_->setText(QString(QChar(0x25B6)) + " " + channels_[index].name +
-                          QStringLiteral(" (switching…)"));
+    now_playing_->setText(QString(QChar(0x25B6)) + " " + channels_[index].name + QStringLiteral(" (switching…)"));
     set_channel_title(channels_[index].name);
     play_preset(index);
 }
@@ -2009,8 +1980,8 @@ void VideoPlayerWidget::play_custom_url() {
     QString url = url_input_->text().trimmed();
     if (url.isEmpty())
         return;
-    reconnect_attempts_ = 0;   // deliberate choice — see play_preset()
-    ++switch_token_;           // and it supersedes deferred opens, likewise
+    reconnect_attempts_ = 0; // deliberate choice — see play_preset()
+    ++switch_token_;         // and it supersedes deferred opens, likewise
     if (!url.startsWith("http://") && !url.startsWith("https://"))
         url.prepend("https://");
 
@@ -2170,7 +2141,8 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
     const QString ytdlp_program = resolve_ytdlp_program();
     if (ytdlp_program.isEmpty()) {
         set_loading(false);
-        status_label_->setText("yt-dlp not found. Place the binary next to the finterm executable, or install it on your PATH.");
+        status_label_->setText(
+            "yt-dlp not found. Place the binary next to the finterm executable, or install it on your PATH.");
         status_label_->show();
         LOG_ERROR("VideoPlayer", "yt-dlp not found in app directory or PATH");
         return;
@@ -2204,10 +2176,7 @@ void VideoPlayerWidget::resolve_youtube_and_play(const QString& youtube_url, con
     if (ceiling > 720)
         fmt += QStringLiteral("/best[protocol=m3u8_native][height<=720]");
     fmt += QString("/best[protocol=m3u8_native]/best[height<=%1]/best").arg(ceiling);
-    proc->start(ytdlp_program,
-                {"-f", fmt,
-                 "--no-playlist", "--quiet", "--js-runtimes", "node",
-                 "-g", youtube_url});
+    proc->start(ytdlp_program, {"-f", fmt, "--no-playlist", "--quiet", "--js-runtimes", "node", "-g", youtube_url});
 }
 
 // yt-dlp's stderr opens with boilerplate — a version-age nag, an update hint,
@@ -2309,8 +2278,8 @@ void VideoPlayerWidget::on_ytdlp_error(QProcess::ProcessError /*error*/) {
 
     const QString err = proc->errorString();
     play_in_progress_ = false;
-    url_before_error_ = current_url_;   // so PLAY can try again — see on_ytdlp_finished
-    current_url_.clear(); // stop refresh_data() from retrying indefinitely
+    url_before_error_ = current_url_; // so PLAY can try again — see on_ytdlp_finished
+    current_url_.clear();             // stop refresh_data() from retrying indefinitely
     set_loading(false);
     status_label_->setText("Failed to start yt-dlp: " + (err.isEmpty() ? QString("Unknown error") : err.left(90)));
     status_label_->show();
@@ -2370,14 +2339,14 @@ void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
     // QMediaPlayer at it. Otherwise QMediaPlayer's first GET hits a
     // 503 "not ready yet" and Qt's HLS demuxer typically gives up
     // immediately rather than retrying.
-    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::ready,
-            this, [this]() {
-        if (!hls_proxy_) return; // user stopped between fetch start and ready
+    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::ready, this, [this]() {
+        if (!hls_proxy_)
+            return; // user stopped between fetch start and ready
         status_label_->hide();
         controls_->show();
         stack_->setCurrentIndex(1);
-        populate_audio_devices();  // refresh the picker (see play_direct)
-        refresh_audio_output();    // re-pin to the current default sink
+        populate_audio_devices(); // refresh the picker (see play_direct)
+        refresh_audio_output();   // re-pin to the current default sink
         player_->setSource(hls_proxy_->local_url());
         set_playback_intent(true);
         player_->play();
@@ -2386,10 +2355,9 @@ void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
     // segments go 403. Answer with a fresh yt-dlp resolve and hand the URL
     // back — the player keeps reading the same local URL throughout, so this
     // is invisible: no source reset, no stop, no re-buffer.
-    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::refresh_upstream_requested,
-            this, &VideoPlayerWidget::refresh_live_session);
-    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::upstream_error,
-            this, [this](const QString& msg) {
+    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::refresh_upstream_requested, this,
+            &VideoPlayerWidget::refresh_live_session);
+    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::upstream_error, this, [this](const QString& msg) {
         set_loading(false);
         status_label_->setText("Live stream relay failed: " + msg.left(200));
         status_label_->show();
@@ -2432,7 +2400,7 @@ void VideoPlayerWidget::refresh_live_session() {
     if (!hls_proxy_ || current_url_.isEmpty() || !current_is_live_)
         return;
     if (session_refresh_proc_)
-        return;   // one resolve in flight is enough
+        return; // one resolve in flight is enough
     const QString program = resolve_ytdlp_program();
     if (program.isEmpty())
         return;
@@ -2450,8 +2418,7 @@ void VideoPlayerWidget::refresh_live_session() {
             proc->kill();
         }
     });
-    connect(proc, &QProcess::finished, this,
-            [this, proc](int code, QProcess::ExitStatus) {
+    connect(proc, &QProcess::finished, this, [this, proc](int code, QProcess::ExitStatus) {
         proc->deleteLater();
         if (session_refresh_proc_ == proc)
             session_refresh_proc_ = nullptr;
@@ -2461,12 +2428,11 @@ void VideoPlayerWidget::refresh_live_session() {
         if (code != 0) {
             // Not fatal: the current session still has a few seconds, and the
             // next tick asks again. The watchdog is the backstop.
-            LOG_WARN("VideoPlayer", "live session refresh failed: " +
-                                        ytdlp_real_error(proc->readAllStandardError()).left(200));
+            LOG_WARN("VideoPlayer",
+                     "live session refresh failed: " + ytdlp_real_error(proc->readAllStandardError()).left(200));
             return;
         }
-        const QString url =
-            QString::fromUtf8(proc->readAllStandardOutput()).trimmed().split('\n').value(0).trimmed();
+        const QString url = QString::fromUtf8(proc->readAllStandardOutput()).trimmed().split('\n').value(0).trimmed();
         if (url.isEmpty())
             return;
         hls_proxy_->set_upstream(QUrl(url));
@@ -2484,8 +2450,7 @@ void VideoPlayerWidget::refresh_live_session() {
     if (ceiling > 720)
         fmt += QStringLiteral("/best[protocol=m3u8_native][height<=720]");
     fmt += QString("/best[protocol=m3u8_native]/best[height<=%1]/best").arg(ceiling);
-    proc->start(program, {"-f", fmt, "--no-playlist", "--quiet", "--js-runtimes", "node",
-                          "-g", current_url_});
+    proc->start(program, {"-f", fmt, "--no-playlist", "--quiet", "--js-runtimes", "node", "-g", current_url_});
 #endif
 }
 
@@ -2499,7 +2464,8 @@ void VideoPlayerWidget::stop_hls_proxy() {
         session_refresh_proc_->deleteLater();
         session_refresh_proc_ = nullptr;
     }
-    if (!hls_proxy_) return;
+    if (!hls_proxy_)
+        return;
     // Disconnect signals before delete so the late-arriving `ready` /
     // `upstream_error` from an in-flight upstream fetch doesn't touch a
     // widget mid-teardown.
@@ -2532,12 +2498,15 @@ void VideoPlayerWidget::stop_hls_proxy() {
 // continues without a source reset.
 
 void VideoPlayerWidget::toggle_fullscreen() {
-    if (fullscreen_target_) exit_fullscreen();
-    else                    enter_fullscreen();
+    if (fullscreen_target_)
+        exit_fullscreen();
+    else
+        enter_fullscreen();
 }
 
 void VideoPlayerWidget::enter_fullscreen() {
-    if (fullscreen_target_) return;
+    if (fullscreen_target_)
+        return;
     QWidget* target = nullptr;
 #ifdef HAS_QT_WEBENGINE
     if (stack_->currentIndex() == 2 && web_view_) {
@@ -2545,19 +2514,19 @@ void VideoPlayerWidget::enter_fullscreen() {
     } else
 #endif
 #ifdef HAS_QT_MULTIMEDIA
-    if (stack_->currentIndex() == 1 && video_widget_) {
+        if (stack_->currentIndex() == 1 && video_widget_) {
         target = video_widget_;
     }
 #endif
-    if (!target) return;
+    if (!target)
+        return;
 
     fullscreen_target_ = target;
     // setParent(nullptr) reparents out of the layout and implicitly
     // makes the widget a top-level window. setWindowTitle gives it a
     // sensible window-list entry in case the compositor shows one.
     target->setParent(nullptr);
-    target->setWindowTitle(current_title_.isEmpty() ? QStringLiteral("finterm — Video")
-                                                    : current_title_);
+    target->setWindowTitle(current_title_.isEmpty() ? QStringLiteral("finterm — Video") : current_title_);
     target->showFullScreen();
     target->setFocus();
     // App-wide filter so Esc fires no matter which descendant of
@@ -2572,7 +2541,8 @@ void VideoPlayerWidget::enter_fullscreen() {
 }
 
 void VideoPlayerWidget::exit_fullscreen() {
-    if (!fullscreen_target_) return;
+    if (!fullscreen_target_)
+        return;
     QCoreApplication::instance()->removeEventFilter(this);
     QWidget* target = fullscreen_target_;
     fullscreen_target_ = nullptr;
@@ -2616,8 +2586,8 @@ bool VideoPlayerWidget::eventFilter(QObject* obj, QEvent* event) {
     // The title is the channel picker while a channel is on (not on the list).
     // It is also the tile's drag handle: open only for a CLICK — press and
     // release in the same place — never at the end of a drag.
-    if (obj == title_label() && (event->type() == QEvent::MouseButtonPress ||
-                                 event->type() == QEvent::MouseButtonRelease)) {
+    if (obj == title_label() &&
+        (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::MouseButtonRelease)) {
         auto* me = static_cast<QMouseEvent*>(event);
         if (me->button() == Qt::LeftButton) {
             if (event->type() == QEvent::MouseButtonPress) {
@@ -2640,7 +2610,8 @@ bool VideoPlayerWidget::eventFilter(QObject* obj, QEvent* event) {
             // back through our signal handler and calls exit_fullscreen
             // cleanly. Intercepting here would leave the page stuck in
             // HTML5 fullscreen state with the view reparented out.
-            if (fullscreen_via_web_request_) return false;
+            if (fullscreen_via_web_request_)
+                return false;
             exit_fullscreen();
             return true;
         }
@@ -2692,7 +2663,8 @@ void VideoPlayerWidget::teardown_playback() {
     // Bring the surface back into the tile before tearing playback
     // down — otherwise the user gets a momentarily-visible fullscreen
     // window with a stopped (black) frame.
-    if (fullscreen_target_) exit_fullscreen();
+    if (fullscreen_target_)
+        exit_fullscreen();
 
     // Clear current_url_ FIRST so any in-flight yt-dlp resolver (web ID lookup
     // or HLS extraction) sees the mismatch in its finished callback and bails
@@ -2737,7 +2709,6 @@ void VideoPlayerWidget::teardown_playback() {
     status_label_->hide();
 }
 
-
 void VideoPlayerWidget::on_player_error() {
 #ifdef HAS_QT_MULTIMEDIA
     if (recovery_suppressed()) {
@@ -2749,14 +2720,13 @@ void VideoPlayerWidget::on_player_error() {
         // cannot open a second source on a half-torn-down player, and this
         // error lands inside that gap. It is cleared when playback starts or
         // when the reload gives up.
-        LOG_INFO("VideoPlayer", "Player error during teardown (ignored): " +
-                                    player_->errorString().left(120));
+        LOG_INFO("VideoPlayer", "Player error during teardown (ignored): " + player_->errorString().left(120));
         return;
     }
     const QString err = player_->errorString();
     play_in_progress_ = false;
-    url_before_error_ = current_url_;   // restored if the user recovers the stream
-    errored_source_   = player_->source();
+    url_before_error_ = current_url_; // restored if the user recovers the stream
+    errored_source_ = player_->source();
     current_url_.clear(); // stops refresh_data() from retrying
     // Stop the render loop — without this, frameSwapped keeps firing 60fps
     // rendering the last frozen frame behind the error label indefinitely.
@@ -2857,23 +2827,22 @@ void VideoPlayerWidget::apply_styles() {
     // is the only knob we vary, and only to encode meaning:
     //   • BACK  → NEGATIVE (red): destructive, exits playback
     //   • PAUSE / FULLSCREEN → TEXT_PRIMARY: neutral, non-destructive
-    const QString btn_base = QStringLiteral(
-        "QPushButton { background: %1; border: 1px solid %2; color: %3; "
-        "font-size: 9px; font-weight: bold; padding: 0 10px; border-radius: 2px; }"
-        "QPushButton:hover { background: %4; color: %5; }");
+    const QString btn_base = QStringLiteral("QPushButton { background: %1; border: 1px solid %2; color: %3; "
+                                            "font-size: 9px; font-weight: bold; padding: 0 10px; border-radius: 2px; }"
+                                            "QPushButton:hover { background: %4; color: %5; }");
     if (play_pause_btn_) {
-        play_pause_btn_->setStyleSheet(btn_base.arg(
-            ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_SECONDARY(),
-            ui::colors::BG_HOVER(), ui::colors::TEXT_PRIMARY()));
+        play_pause_btn_->setStyleSheet(btn_base.arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(),
+                                                    ui::colors::TEXT_SECONDARY(), ui::colors::BG_HOVER(),
+                                                    ui::colors::TEXT_PRIMARY()));
     }
     if (fullscreen_btn_) {
-        fullscreen_btn_->setStyleSheet(btn_base.arg(
-            ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_SECONDARY(),
-            ui::colors::BG_HOVER(), ui::colors::TEXT_PRIMARY()));
+        fullscreen_btn_->setStyleSheet(btn_base.arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(),
+                                                    ui::colors::TEXT_SECONDARY(), ui::colors::BG_HOVER(),
+                                                    ui::colors::TEXT_PRIMARY()));
     }
-    stop_btn_->setStyleSheet(btn_base.arg(
-        ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_SECONDARY(),
-        ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY()));
+    stop_btn_->setStyleSheet(btn_base.arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(),
+                                          ui::colors::TEXT_SECONDARY(), ui::colors::NEGATIVE(),
+                                          ui::colors::TEXT_PRIMARY()));
 }
 
 void VideoPlayerWidget::on_theme_changed() {
@@ -2895,10 +2864,9 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
 
     auto* root = new QVBoxLayout(dlg);
 
-    auto* hint = new QLabel(
-        "Channels appear on the LIVE TV tile in the order shown. "
-        "YouTube channel /live URLs, HLS .m3u8, or any direct stream URL.",
-        dlg);
+    auto* hint = new QLabel("Channels appear on the LIVE TV tile in the order shown. "
+                            "YouTube channel /live URLs, HLS .m3u8, or any direct stream URL.",
+                            dlg);
     hint->setWordWrap(true);
     root->addWidget(hint);
 
@@ -2907,7 +2875,7 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
 #ifdef HAS_QT_WEBENGINE
     auto* engine_group = new QGroupBox("Streaming engine", dlg);
     auto* engine_h = new QHBoxLayout(engine_group);
-    auto* gl_radio  = new QRadioButton("GL — yt-dlp + QPainter (HLS)", engine_group);
+    auto* gl_radio = new QRadioButton("GL — yt-dlp + QPainter (HLS)", engine_group);
     auto* web_radio = new QRadioButton("WEB — YouTube iframe (Chromium)", engine_group);
     gl_radio->setToolTip("Works for any public stream. Default — works for CNBC, Yahoo, etc.");
     web_radio->setToolTip("Smoother for plain YouTube videos. Some news channels block embedding.");
@@ -2924,11 +2892,11 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
     // or 480p on weaker hardware. The format chain falls back gracefully if
     // the source doesn't offer the chosen height.
     auto* res_group = new QGroupBox("Maximum resolution (GL pipeline)", dlg);
-    auto* res_h     = new QHBoxLayout(res_group);
+    auto* res_h = new QHBoxLayout(res_group);
     auto* res_combo = new QComboBox(res_group);
     res_combo->addItem("1080p — Sharper, more decode load", 1080);
-    res_combo->addItem("720p — Balanced",                    720);
-    res_combo->addItem("480p — Lowest CPU load",             480);
+    res_combo->addItem("720p — Balanced", 720);
+    res_combo->addItem("480p — Lowest CPU load", 480);
     {
         const int idx = res_combo->findData(max_height_);
         res_combo->setCurrentIndex(idx >= 0 ? idx : 0);
@@ -2957,10 +2925,10 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
 
     // Row controls
     auto* row_bar = new QHBoxLayout();
-    auto* add_btn   = new QPushButton("Add", dlg);
-    auto* remove_btn= new QPushButton("Remove", dlg);
-    auto* up_btn    = new QPushButton(QChar(0x2191), dlg); // ↑
-    auto* down_btn  = new QPushButton(QChar(0x2193), dlg); // ↓
+    auto* add_btn = new QPushButton("Add", dlg);
+    auto* remove_btn = new QPushButton("Remove", dlg);
+    auto* up_btn = new QPushButton(QChar(0x2191), dlg);   // ↑
+    auto* down_btn = new QPushButton(QChar(0x2193), dlg); // ↓
     auto* reset_btn = new QPushButton("Reset to Defaults", dlg);
     row_bar->addWidget(add_btn);
     row_bar->addWidget(remove_btn);
@@ -2999,12 +2967,12 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
         }
         table->setCurrentCell(target, table->currentColumn());
     };
-    connect(up_btn,   &QPushButton::clicked, dlg, [move_row]() { move_row(-1); });
+    connect(up_btn, &QPushButton::clicked, dlg, [move_row]() { move_row(-1); });
     connect(down_btn, &QPushButton::clicked, dlg, [move_row]() { move_row(+1); });
 
     connect(reset_btn, &QPushButton::clicked, dlg, [dlg, fill_table]() {
-        const auto ok = QMessageBox::question(dlg, "Reset Channels",
-                                              "Replace the current list with the default CNBC / Yahoo / Euronews seed?");
+        const auto ok = QMessageBox::question(
+            dlg, "Reset Channels", "Replace the current list with the default CNBC / Yahoo / Euronews seed?");
         if (ok == QMessageBox::Yes)
             fill_table(default_channels());
     });
@@ -3015,52 +2983,53 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
     connect(buttons, &QDialogButtonBox::accepted, dlg,
             [this, dlg, table, res_combo
 #ifdef HAS_QT_WEBENGINE
-             , web_radio
+             ,
+             web_radio
 #endif
-            ]() {
-        // Commit any in-progress cell edit before we read the table.
-        table->setCurrentCell(-1, -1);
+    ]() {
+                // Commit any in-progress cell edit before we read the table.
+                table->setCurrentCell(-1, -1);
 
-        QVector<ChannelDef> next;
-        next.reserve(table->rowCount());
-        for (int i = 0; i < table->rowCount(); ++i) {
-            const auto* name_item = table->item(i, 0);
-            const auto* url_item  = table->item(i, 1);
-            const QString name = name_item ? name_item->text().trimmed() : QString();
-            const QString url  = url_item  ? url_item->text().trimmed()  : QString();
-            if (name.isEmpty() || url.isEmpty())
-                continue; // drop blank rows silently
-            next.append({name, url, {}});
-        }
+                QVector<ChannelDef> next;
+                next.reserve(table->rowCount());
+                for (int i = 0; i < table->rowCount(); ++i) {
+                    const auto* name_item = table->item(i, 0);
+                    const auto* url_item = table->item(i, 1);
+                    const QString name = name_item ? name_item->text().trimmed() : QString();
+                    const QString url = url_item ? url_item->text().trimmed() : QString();
+                    if (name.isEmpty() || url.isEmpty())
+                        continue; // drop blank rows silently
+                    next.append({name, url, {}});
+                }
 
-        save_channels(next);
-        channels_ = next;
-        assign_colors(channels_);
-        populate_channel_rows();
+                save_channels(next);
+                channels_ = next;
+                assign_colors(channels_);
+                populate_channel_rows();
 
 #ifdef HAS_QT_WEBENGINE
-        const bool want_web = web_radio->isChecked();
-        if (want_web != use_web_engine_) {
-            use_web_engine_ = want_web;
-            save_engine(use_web_engine_);
-            // Native-pipeline controls (pause/play + device picker) target the
-            // GL player only; hide them when WEB takes over.
-            sync_web_mode_controls();
-        }
+                const bool want_web = web_radio->isChecked();
+                if (want_web != use_web_engine_) {
+                    use_web_engine_ = want_web;
+                    save_engine(use_web_engine_);
+                    // Native-pipeline controls (pause/play + device picker) target the
+                    // GL player only; hide them when WEB takes over.
+                    sync_web_mode_controls();
+                }
 #endif
 
-        const int want_height = res_combo->currentData().toInt();
-        if (want_height != max_height_ && (want_height == 480 || want_height == 720 || want_height == 1080)) {
-            max_height_ = want_height;
-            save_max_height(max_height_);
-            // The new ceiling applies to the next stream resolution — currently
-            // playing stream keeps its existing height. Users who want immediate
-            // effect can hit BACK and restart the channel.
-        }
+                const int want_height = res_combo->currentData().toInt();
+                if (want_height != max_height_ && (want_height == 480 || want_height == 720 || want_height == 1080)) {
+                    max_height_ = want_height;
+                    save_max_height(max_height_);
+                    // The new ceiling applies to the next stream resolution — currently
+                    // playing stream keeps its existing height. Users who want immediate
+                    // effect can hit BACK and restart the channel.
+                }
 
-        apply_styles();
-        dlg->accept();
-    });
+                apply_styles();
+                dlg->accept();
+            });
     connect(buttons, &QDialogButtonBox::rejected, dlg, &QDialog::reject);
 
     return dlg;

@@ -21,8 +21,11 @@
 
 class QPlainTextEdit;
 class QTimer;
-template <typename T> class QFutureWatcher;
-namespace fincept::ai_chat { struct LlmResponse; }
+template <typename T>
+class QFutureWatcher;
+namespace fincept::ai_chat {
+struct LlmResponse;
+}
 
 namespace fincept::services {
 
@@ -53,8 +56,8 @@ class InlineCompletionController : public QObject {
     // the grayed format.  Empty span means "no pending completion".
     int pending_anchor_ = -1;
     int pending_len_ = 0;
-    QString pending_prefix_;     // text we requested a completion for
-    bool ignore_next_change_ = false;  // guard against our own insert re-triggering
+    QString pending_prefix_;          // text we requested a completion for
+    bool ignore_next_change_ = false; // guard against our own insert re-triggering
 
     // LRU on the prefix → completion mapping.  Avoids re-asking the
     // model for the same context after a user dismisses + retypes.

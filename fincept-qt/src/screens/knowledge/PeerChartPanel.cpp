@@ -3,8 +3,6 @@
 #include "services/markets/MarketDataService.h"
 #include "ui/theme/Theme.h"
 
-#include <cmath>
-
 #include <QBarCategoryAxis>
 #include <QBarSeries>
 #include <QBarSet>
@@ -13,8 +11,10 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPointer>
-#include <QValueAxis>
 #include <QVBoxLayout>
+#include <QValueAxis>
+
+#include <cmath>
 
 namespace fincept::knowledge {
 
@@ -23,21 +23,32 @@ constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 constexpr int CHART_HEIGHT = 160;
 
 double pluck(const services::InfoData& info, const QString& metric) {
-    if (metric == "pe_ratio") return info.pe_ratio;
-    if (metric == "forward_pe") return info.forward_pe;
-    if (metric == "price_to_book") return info.price_to_book;
-    if (metric == "dividend_yield") return info.dividend_yield * 100.0;
-    if (metric == "beta") return info.beta;
-    if (metric == "market_cap") return info.market_cap / 1e9; // → $B
-    if (metric == "eps") return info.eps;
-    if (metric == "roe") return info.roe * 100.0;
-    if (metric == "debt_to_equity") return info.debt_to_equity;
+    if (metric == "pe_ratio")
+        return info.pe_ratio;
+    if (metric == "forward_pe")
+        return info.forward_pe;
+    if (metric == "price_to_book")
+        return info.price_to_book;
+    if (metric == "dividend_yield")
+        return info.dividend_yield * 100.0;
+    if (metric == "beta")
+        return info.beta;
+    if (metric == "market_cap")
+        return info.market_cap / 1e9; // → $B
+    if (metric == "eps")
+        return info.eps;
+    if (metric == "roe")
+        return info.roe * 100.0;
+    if (metric == "debt_to_equity")
+        return info.debt_to_equity;
     return 0.0;
 }
 
 QString metric_unit(const QString& metric) {
-    if (metric == "dividend_yield" || metric == "roe" || metric == "profit_margin") return "%";
-    if (metric == "market_cap") return "$B";
+    if (metric == "dividend_yield" || metric == "roe" || metric == "profit_margin")
+        return "%";
+    if (metric == "market_cap")
+        return "$B";
     return QString();
 }
 
@@ -52,8 +63,8 @@ PeerChartPanel::PeerChartPanel(const QStringList& peers, const QString& metric, 
     root->setSpacing(4);
 
     status_ = new QLabel(QString("Loading peer comparison (%1)…").arg(metric_), this);
-    status_->setStyleSheet(QString("color: %1; background: transparent; font-size: 10px; %2")
-                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
+    status_->setStyleSheet(
+        QString("color: %1; background: transparent; font-size: 10px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO));
     root->addWidget(status_);
 
     view_ = new QChartView(this);
@@ -146,8 +157,8 @@ void PeerChartPanel::load() {
                     series->attachAxis(y);
 
                     guard->view_->setChart(chart);
-                    guard->status_->setText(QString("Peer comparison · %1%2")
-                                                .arg(guard->metric_, metric_unit(guard->metric_)));
+                    guard->status_->setText(
+                        QString("Peer comparison · %1%2").arg(guard->metric_, metric_unit(guard->metric_)));
 
                     delete shared_count;
                     delete shared_values;

@@ -1,8 +1,8 @@
 // src/screens/gov_data/GovDataAustraliaPanel.cpp
 #include "screens/gov_data/GovDataAustraliaPanel.h"
-#include "screens/gov_data/GovDataProviderPanel.h"
 
 #include "core/logging/Logger.h"
+#include "screens/gov_data/GovDataProviderPanel.h"
 #include "services/gov_data/GovDataService.h"
 #include "ui/theme/Theme.h"
 

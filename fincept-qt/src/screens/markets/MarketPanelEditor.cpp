@@ -1,7 +1,7 @@
 #include "screens/markets/MarketPanelEditor.h"
-#include "ui/SearchFailedText.h"
 
 #include "python/PythonWorker.h"
+#include "ui/SearchFailedText.h"
 #include "ui/theme/Theme.h"
 
 #include <QDialogButtonBox>
@@ -30,8 +30,8 @@ static QString input_ss() {
     return QString("QLineEdit{background:%1;color:%2;border:1px solid %3;"
                    "padding:4px 8px;selection-background-color:%4;}"
                    "QLineEdit:focus{border-color:%5;}")
-        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),
-             ui::colors::BG_HOVER(), ui::colors::AMBER());
+        .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::colors::BG_HOVER(),
+             ui::colors::AMBER());
 }
 
 static QString list_ss() {
@@ -39,8 +39,8 @@ static QString list_ss() {
                    "QListWidget::item{padding:5px 10px;border-bottom:1px solid %3;color:%4;}"
                    "QListWidget::item:hover{background:%5;color:%6;}"
                    "QListWidget::item:selected{background:%5;color:%6;}")
-        .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(), ui::colors::BORDER_DIM(),
-             ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER(), ui::colors::AMBER());
+        .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY(),
+             ui::colors::BG_HOVER(), ui::colors::AMBER());
 }
 
 static QString section_lbl_ss() {
@@ -57,8 +57,7 @@ void MarketPanelEditor::build_ui() {
     setWindowTitle(config_.id.isEmpty() ? "New Panel" : "Edit Panel — " + config_.title);
     setModal(true);
     setMinimumSize(440, 520);
-    setStyleSheet(QString("QDialog{background:%1;color:%2;}")
-                      .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
+    setStyleSheet(QString("QDialog{background:%1;color:%2;}").arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(18, 18, 18, 18);
@@ -75,7 +74,8 @@ void MarketPanelEditor::build_ui() {
     root->addWidget(title_edit_);
 
     auto make_sep = [&]() {
-        auto* s = new QFrame; s->setFixedHeight(1);
+        auto* s = new QFrame;
+        s->setFixedHeight(1);
         s->setStyleSheet(QString("background:%1;border:none;").arg(ui::colors::BORDER_DIM()));
         return s;
     };
@@ -83,7 +83,7 @@ void MarketPanelEditor::build_ui() {
 
     // Ticker list header
     auto* tickers_hdr = new QWidget;
-    auto* tickers_hl  = new QHBoxLayout(tickers_hdr);
+    auto* tickers_hl = new QHBoxLayout(tickers_hdr);
     tickers_hl->setContentsMargins(0, 0, 0, 0);
     auto* tickers_lbl = new QLabel("TICKERS");
     tickers_lbl->setStyleSheet(section_lbl_ss());
@@ -92,11 +92,10 @@ void MarketPanelEditor::build_ui() {
     auto* remove_btn = new QPushButton("✕ REMOVE");
     remove_btn->setFixedHeight(20);
     remove_btn->setCursor(Qt::PointingHandCursor);
-    remove_btn->setStyleSheet(
-        QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
-                "padding:0 8px;font-size:12px;font-weight:bold;}"
-                "QPushButton:hover{color:%2;border-color:%2;}")
-            .arg(ui::colors::BORDER_MED(), ui::colors::NEGATIVE()));
+    remove_btn->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
+                                      "padding:0 8px;font-size:12px;font-weight:bold;}"
+                                      "QPushButton:hover{color:%2;border-color:%2;}")
+                                  .arg(ui::colors::BORDER_MED(), ui::colors::NEGATIVE()));
     connect(remove_btn, &QPushButton::clicked, this, &MarketPanelEditor::on_remove_selected);
     tickers_hl->addWidget(remove_btn);
     root->addWidget(tickers_hdr);
@@ -104,9 +103,7 @@ void MarketPanelEditor::build_ui() {
     ticker_list_ = new QListWidget;
     ticker_list_->setStyleSheet(list_ss());
     ticker_list_->setFixedHeight(150);
-    connect(ticker_list_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*) {
-        on_remove_selected();
-    });
+    connect(ticker_list_, &QListWidget::itemDoubleClicked, this, [this](QListWidgetItem*) { on_remove_selected(); });
     root->addWidget(ticker_list_);
 
     root->addWidget(make_sep());
@@ -126,9 +123,7 @@ void MarketPanelEditor::build_ui() {
     search_debounce_ = new QTimer(this);
     search_debounce_->setSingleShot(true);
     search_debounce_->setInterval(kDebounceMs);
-    connect(search_debounce_, &QTimer::timeout, this, [this]() {
-        fire_search(pending_query_);
-    });
+    connect(search_debounce_, &QTimer::timeout, this, [this]() { fire_search(pending_query_); });
 
     connect(search_edit_, &QLineEdit::textChanged, this, &MarketPanelEditor::on_search_text_changed);
     connect(search_edit_, &QLineEdit::returnPressed, this, [this]() {
@@ -147,17 +142,15 @@ void MarketPanelEditor::build_ui() {
     dropdown_->setFixedHeight(160);
     dropdown_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     dropdown_->hide();
-    connect(dropdown_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
-        on_add_symbol(item->data(Qt::UserRole).toString());
-    });
+    connect(dropdown_, &QListWidget::itemClicked, this,
+            [this](QListWidgetItem* item) { on_add_symbol(item->data(Qt::UserRole).toString()); });
 
     // Dialog buttons
     auto* btns = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel);
     btns->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:4px 16px;font-weight:bold;}"
                 "QPushButton:hover{border-color:%4;color:%4;}")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(),
-                 ui::colors::BORDER_MED(), ui::colors::AMBER()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::AMBER()));
     connect(btns, &QDialogButtonBox::accepted, this, [this]() {
         config_.title = title_edit_->text().trimmed();
         config_.symbols.clear();
@@ -178,7 +171,8 @@ void MarketPanelEditor::build_ui() {
 }
 
 void MarketPanelEditor::reposition_dropdown() {
-    if (!search_edit_ || !dropdown_) return;
+    if (!search_edit_ || !dropdown_)
+        return;
     QPoint pos = search_edit_->mapTo(this, QPoint(0, search_edit_->height()));
     dropdown_->setGeometry(pos.x(), pos.y(), search_edit_->width(), 160);
     dropdown_->raise();
@@ -186,7 +180,8 @@ void MarketPanelEditor::reposition_dropdown() {
 
 void MarketPanelEditor::hide_dropdown() {
     search_debounce_->stop();
-    if (dropdown_) dropdown_->hide();
+    if (dropdown_)
+        dropdown_->hide();
 }
 
 void MarketPanelEditor::resizeEvent(QResizeEvent* event) {
@@ -232,7 +227,8 @@ void MarketPanelEditor::on_search_text_changed(const QString& text) {
 }
 
 void MarketPanelEditor::fire_search(const QString& query) {
-    if (query.isEmpty()) return;
+    if (query.isEmpty())
+        return;
 
     QJsonObject payload;
     payload["query"] = query;
@@ -242,8 +238,10 @@ void MarketPanelEditor::fire_search(const QString& query) {
     python::PythonWorker::instance().submit(
         "search", payload,
         [self, query](bool ok, QJsonObject result, QString) {
-            if (!self) return;
-            if (self->pending_query_ != query) return; // stale response
+            if (!self)
+                return;
+            if (self->pending_query_ != query)
+                return; // stale response
             // A failed search says so (read_search_reply) — not the last query's
             // matches, and not an empty list that reads as "no such ticker".
             const auto reply = fincept::ui::read_search_reply(ok, result);
@@ -256,15 +254,16 @@ void MarketPanelEditor::on_search_results(const QJsonArray& results, const QStri
     dropdown_->clear();
     if (!failure.isEmpty()) {
         auto* item = new QListWidgetItem(failure);
-        item->setFlags(Qt::NoItemFlags);   // a message, not a pickable symbol
+        item->setFlags(Qt::NoItemFlags); // a message, not a pickable symbol
         dropdown_->addItem(item);
     }
 
     for (const auto& v : results) {
-        const auto obj    = v.toObject();
+        const auto obj = v.toObject();
         const QString sym = obj["symbol"].toString();
         const QString name = obj["name"].toString();
-        if (sym.isEmpty()) continue;
+        if (sym.isEmpty())
+            continue;
 
         const QString display = name.isEmpty() ? sym : QString("%1  ·  %2").arg(sym, name);
         auto* item = new QListWidgetItem(display);
@@ -292,7 +291,8 @@ void MarketPanelEditor::refresh_ticker_list() {
 
 void MarketPanelEditor::on_add_symbol(const QString& symbol) {
     const QString sym = symbol.trimmed().toUpper();
-    if (sym.isEmpty() || config_.symbols.contains(sym)) return;
+    if (sym.isEmpty() || config_.symbols.contains(sym))
+        return;
     config_.symbols << sym;
     refresh_ticker_list();
     search_edit_->clear();
@@ -302,7 +302,8 @@ void MarketPanelEditor::on_add_symbol(const QString& symbol) {
 
 void MarketPanelEditor::on_remove_selected() {
     auto* item = ticker_list_->currentItem();
-    if (!item) return;
+    if (!item)
+        return;
     config_.symbols.removeAll(item->text());
     refresh_ticker_list();
 }

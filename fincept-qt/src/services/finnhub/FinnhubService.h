@@ -17,21 +17,21 @@ namespace fincept::services::finnhub {
 struct FinnhubIPO {
     QString symbol;
     QString name;
-    QDate   date;              // expected pricing date (or actual if status="priced")
-    QString exchange;          // "NYSE", "NASDAQ Global", "AMEX", …
-    QString status;            // filed / expected / priced / withdrawn
-    double  price_low = 0.0;
-    double  price_high = 0.0;
-    qint64  shares = 0;
-    qint64  total_value = 0;   // shares × midpoint price (Finnhub-provided)
+    QDate date;       // expected pricing date (or actual if status="priced")
+    QString exchange; // "NYSE", "NASDAQ Global", "AMEX", …
+    QString status;   // filed / expected / priced / withdrawn
+    double price_low = 0.0;
+    double price_high = 0.0;
+    qint64 shares = 0;
+    qint64 total_value = 0; // shares × midpoint price (Finnhub-provided)
 };
 
 /// One row from /stock/lockup. `related_event` describes the trigger
 /// (e.g. "ipo"), `share` is the number of insider shares unlocking.
 struct FinnhubLockup {
     QString symbol;
-    QDate   expiration_date;
-    qint64  shares = 0;
+    QDate expiration_date;
+    qint64 shares = 0;
     QString related_event;
 };
 
@@ -39,12 +39,12 @@ struct FinnhubLockup {
 /// `code` is the SEC transaction code: S=sale, P=purchase, F=tax-related
 /// disposition, M=option exercise, G=gift, etc.
 struct FinnhubInsiderTx {
-    QString name;              // insider name
-    qint64  shares = 0;        // resulting holdings after this transaction
-    qint64  change = 0;        // signed delta (negative = sale)
-    QDate   transaction_date;
-    double  transaction_price = 0.0;
-    QString code;              // SEC code
+    QString name;      // insider name
+    qint64 shares = 0; // resulting holdings after this transaction
+    qint64 change = 0; // signed delta (negative = sale)
+    QDate transaction_date;
+    double transaction_price = 0.0;
+    QString code; // SEC code
 };
 
 /// One time-bucket from /stock/recommendation. Periods are YYYY-MM-DD
@@ -83,25 +83,21 @@ class FinnhubService : public QObject {
     bool has_api_key() const;
 
     /// IPO calendar between two dates. State carries QVector<FinnhubIPO>.
-    void subscribe_ipo_calendar(QObject* owner, const QDate& from, const QDate& to,
-                                 query::QueryStore::Callback cb);
+    void subscribe_ipo_calendar(QObject* owner, const QDate& from, const QDate& to, query::QueryStore::Callback cb);
 
     /// Lockup expiries between two dates (optionally filtered to one symbol).
     /// State carries QVector<FinnhubLockup>.
-    void subscribe_lockups(QObject* owner, const QDate& from, const QDate& to,
-                           const QString& symbol,
+    void subscribe_lockups(QObject* owner, const QDate& from, const QDate& to, const QString& symbol,
                            query::QueryStore::Callback cb);
 
     /// SEC Form 4 transactions for `symbol`. State carries
     /// QVector<FinnhubInsiderTx>.
-    void subscribe_insider_tx(QObject* owner, const QString& symbol,
-                              const QDate& from, const QDate& to,
+    void subscribe_insider_tx(QObject* owner, const QString& symbol, const QDate& from, const QDate& to,
                               query::QueryStore::Callback cb);
 
     /// Analyst-recommendation monthly trend. State carries
     /// QVector<FinnhubRecTrend>.
-    void subscribe_recommendations(QObject* owner, const QString& symbol,
-                                    query::QueryStore::Callback cb);
+    void subscribe_recommendations(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
 
   private:
     explicit FinnhubService(QObject* parent = nullptr);
@@ -109,18 +105,18 @@ class FinnhubService : public QObject {
 
     // Parsers — pure transformers, called from the QueryStore fetcher
     // closures after the Python subprocess result is decoded.
-    QVector<FinnhubIPO>        parse_ipo_calendar(const QJsonObject& root) const;
-    QVector<FinnhubLockup>     parse_lockups(const QJsonObject& root) const;
-    QVector<FinnhubInsiderTx>  parse_insider_tx(const QJsonObject& root) const;
-    QVector<FinnhubRecTrend>   parse_recommendations(const QJsonArray& arr) const;
+    QVector<FinnhubIPO> parse_ipo_calendar(const QJsonObject& root) const;
+    QVector<FinnhubLockup> parse_lockups(const QJsonObject& root) const;
+    QVector<FinnhubInsiderTx> parse_insider_tx(const QJsonObject& root) const;
+    QVector<FinnhubRecTrend> parse_recommendations(const QJsonArray& arr) const;
 
     // ── Cache TTLs ───────────────────────────────────────────────────────────
     // All Finnhub endpoints we use return slow-moving data; generous TTLs
     // keep network load light without sacrificing freshness.
-    static constexpr int kIpoCalendarTtlSec  = 3600;       // 1h — calendar updates daily
-    static constexpr int kLockupTtlSec       = 3600;       // 1h
-    static constexpr int kInsiderTxTtlSec    = 1800;       // 30min — Form 4s file in bursts
-    static constexpr int kRecTrendsTtlSec    = 86400;      // 24h — monthly bucket
+    static constexpr int kIpoCalendarTtlSec = 3600; // 1h — calendar updates daily
+    static constexpr int kLockupTtlSec = 3600;      // 1h
+    static constexpr int kInsiderTxTtlSec = 1800;   // 30min — Form 4s file in bursts
+    static constexpr int kRecTrendsTtlSec = 86400;  // 24h — monthly bucket
 };
 
 } // namespace fincept::services::finnhub

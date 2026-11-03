@@ -3,8 +3,6 @@
 
 #include "services/equity/EquityResearchService.h"
 #include "ui/formatting/NumberFormat.h"
-
-#include <cmath>
 #include "ui/theme/Theme.h"
 
 #include <QCheckBox>
@@ -15,6 +13,8 @@
 #include <QScrollBar>
 #include <QTimer>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 namespace fincept::screens {
 
@@ -93,7 +93,8 @@ void EquityPeersTab::build_ui() {
         QTableWidget::item { padding:2px 6px; }
     )")
                                    .arg(ui::colors::BG_SURFACE(), ui::colors::BG_BASE(), ui::colors::BORDER_DIM(),
-                                        ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY()));
+                                        ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(),
+                                        ui::colors::TEXT_SECONDARY()));
     peer_table_->setAlternatingRowColors(true);
     peer_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     peer_table_->setSelectionBehavior(QAbstractItemView::SelectRows);
@@ -109,8 +110,8 @@ void EquityPeersTab::build_ui() {
     // cell on every sortIndicatorChanged. Also: sorting by COMP itself
     // is meaningless (the widget isn't an item), so bounce that header
     // click back to SYMBOL (col 0).
-    connect(peer_table_->horizontalHeader(), &QHeaderView::sortIndicatorChanged,
-            this, [this](int col, Qt::SortOrder order) {
+    connect(peer_table_->horizontalHeader(), &QHeaderView::sortIndicatorChanged, this,
+            [this](int col, Qt::SortOrder order) {
                 const int comp_col = peer_table_->columnCount() - 1;
                 if (col == comp_col) {
                     // Bounce back to whatever column WAS sorted before
@@ -118,9 +119,9 @@ void EquityPeersTab::build_ui() {
                     // SYMBOL desc → asc) would be surprising. We track
                     // last_sort_col_/last_sort_order_ on every accepted
                     // sort below.
-                    peer_table_->horizontalHeader()->setSortIndicator(
-                        last_sort_col_ < 0 ? 0 : last_sort_col_,
-                        last_sort_col_ < 0 ? Qt::AscendingOrder : last_sort_order_);
+                    peer_table_->horizontalHeader()->setSortIndicator(last_sort_col_ < 0 ? 0 : last_sort_col_,
+                                                                      last_sort_col_ < 0 ? Qt::AscendingOrder
+                                                                                         : last_sort_order_);
                     return;
                 }
                 last_sort_col_ = col;
@@ -157,25 +158,32 @@ void EquityPeersTab::build_ui() {
 void EquityPeersTab::set_active_comparisons(const QStringList& symbols) {
     QSet<QString> next;
     next.reserve(symbols.size());
-    for (const auto& s : symbols) next.insert(s.toUpper());
-    if (next == active_comp_set_) return;     // no-op when unchanged
+    for (const auto& s : symbols)
+        next.insert(s.toUpper());
+    if (next == active_comp_set_)
+        return; // no-op when unchanged
     active_comp_set_ = std::move(next);
     refresh_check_column();
 }
 
 void EquityPeersTab::refresh_check_column() {
-    if (!peer_table_) return;
+    if (!peer_table_)
+        return;
     const int comp_col = peer_table_->columnCount() - 1;
-    if (comp_col < 0) return;
+    if (comp_col < 0)
+        return;
     for (int r = 0; r < peer_table_->rowCount(); ++r) {
         auto* wrap = peer_table_->cellWidget(r, comp_col);
         auto* sym_item = peer_table_->item(r, 0);
-        if (!wrap || !sym_item) continue;
+        if (!wrap || !sym_item)
+            continue;
         auto* cb = wrap->findChild<QCheckBox*>();
-        if (!cb) continue;
+        if (!cb)
+            continue;
         const QString sym = sym_item->text().trimmed().toUpper();
         const bool should_check = active_comp_set_.contains(sym);
-        if (cb->isChecked() == should_check) continue;
+        if (cb->isChecked() == should_check)
+            continue;
         // QCheckBox::clicked only fires for actual user clicks (not
         // setChecked), so no signal blocking is needed — clicked-vs-
         // toggled is the entire reason we connected to clicked above.
@@ -203,13 +211,13 @@ void EquityPeersTab::on_load_clicked() {
     auto& store = services::query::QueryStore::instance();
     store.unsubscribe_all(this);
     services::equity::EquityResearchService::instance().subscribe_peers(
-        this, current_symbol_, peers,
-        [this](const services::query::QueryStore::State& s) { apply_peers_state(s); });
+        this, current_symbol_, peers, [this](const services::query::QueryStore::State& s) { apply_peers_state(s); });
 }
 
 void EquityPeersTab::apply_peers_state(const services::query::QueryStore::State& s) {
     if (!s.error.isEmpty()) {
-        if (loading_overlay_) loading_overlay_->hide_loading();
+        if (loading_overlay_)
+            loading_overlay_->hide_loading();
         // Deliveries are subscription-bound, so this error is for the current
         // symbol's basket. If the table still shows a DIFFERENT symbol's
         // peers, returning would leave that basket under the new symbol's
@@ -217,7 +225,8 @@ void EquityPeersTab::apply_peers_state(const services::query::QueryStore::State&
         // failures keep the good rows.)
         if (displayed_symbol_ != current_symbol_) {
             displayed_symbol_.clear();
-            if (peer_table_) peer_table_->setRowCount(0);
+            if (peer_table_)
+                peer_table_->setRowCount(0);
             status_label_->setText(QString("Couldn't load peers \xe2\x80\x94 %1").arg(s.error));
             status_label_->show();
         } else {
@@ -225,7 +234,8 @@ void EquityPeersTab::apply_peers_state(const services::query::QueryStore::State&
         }
         return;
     }
-    if (!s.data.isValid() || s.data.isNull()) return;
+    if (!s.data.isValid() || s.data.isNull())
+        return;
     const auto peers = s.data.value<QVector<services::equity::PeerData>>();
     status_label_->hide();
     loading_overlay_->hide_loading();
@@ -306,12 +316,10 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
     // which used to disagree (this tab was 1dp). fmt_pct's input is a
     // fraction (×100).
     auto fmt = [](double v, int dec = 2) -> QString {
-        return std::isfinite(v) ? QString::number(v, 'f', dec)
-                                : ui::formatting::placeholder();
+        return std::isfinite(v) ? QString::number(v, 'f', dec) : ui::formatting::placeholder();
     };
     auto fmt_pct = [](double v) -> QString {
-        return std::isfinite(v) ? ui::formatting::format_percent(v * 100.0, 2)
-                                : ui::formatting::placeholder();
+        return std::isfinite(v) ? ui::formatting::format_percent(v * 100.0, 2) : ui::formatting::placeholder();
     };
 
     for (int r = 0; r < peers.size(); ++r) {
@@ -327,7 +335,8 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
             f.setBold(true);
             return f;
         }());
-        if (is_primary) sym_item->setToolTip(QStringLiteral("(current symbol)"));
+        if (is_primary)
+            sym_item->setToolTip(QStringLiteral("(current symbol)"));
         peer_table_->setItem(r, 0, sym_item);
 
         set_cell(r, 1, fmt(p.price, 2), QColor("#22d3ee"));
@@ -351,7 +360,7 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
         // times the market and must not read as calm either. This column is a
         // volatility gauge, so it grades |beta|.
         set_cell(r, 15, fmt(p.beta, 2),
-                 !std::isfinite(p.beta) ? QColor("#6b7280")
+                 !std::isfinite(p.beta)      ? QColor("#6b7280")
                  : (std::abs(p.beta) <= 1.5) ? QColor(ui::colors::POSITIVE())
                                              : QColor(ui::colors::NEGATIVE()));
 
@@ -372,12 +381,11 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
         wl->setContentsMargins(0, 0, 0, 0);
         auto* cb = new QCheckBox;
         cb->setChecked(active_comp_set_.contains(p.symbol));
-        cb->setStyleSheet(QStringLiteral(
-            "QCheckBox{background:transparent;margin:0;padding:0;}"
-            "QCheckBox::indicator{width:14px;height:14px;border:1px solid #6b7280;"
-            "border-radius:2px;background:#0a0a0a;}"
-            "QCheckBox::indicator:hover{border-color:#d97706;}"
-            "QCheckBox::indicator:checked{background:#d97706;border-color:#d97706;}"));
+        cb->setStyleSheet(QStringLiteral("QCheckBox{background:transparent;margin:0;padding:0;}"
+                                         "QCheckBox::indicator{width:14px;height:14px;border:1px solid #6b7280;"
+                                         "border-radius:2px;background:#0a0a0a;}"
+                                         "QCheckBox::indicator:hover{border-color:#d97706;}"
+                                         "QCheckBox::indicator:checked{background:#d97706;border-color:#d97706;}"));
         if (is_primary) {
             cb->setEnabled(false);
             cb->setToolTip(QStringLiteral("(current symbol — primary, not a comparison)"));
@@ -389,11 +397,14 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
                 // grid finds wrap's current row, then we read SYMBOL.
                 const int cc = peer_table_->columnCount() - 1;
                 for (int rr = 0; rr < peer_table_->rowCount(); ++rr) {
-                    if (peer_table_->cellWidget(rr, cc) != wrap) continue;
+                    if (peer_table_->cellWidget(rr, cc) != wrap)
+                        continue;
                     auto* sit = peer_table_->item(rr, 0);
-                    if (!sit) return;
+                    if (!sit)
+                        return;
                     const QString sym = sit->text().trimmed().toUpper();
-                    if (sym.isEmpty() || sym == current_symbol_) return;
+                    if (sym.isEmpty() || sym == current_symbol_)
+                        return;
                     if (checked) {
                         active_comp_set_.insert(sym);
                         emit add_to_comparison_requested(sym);
@@ -433,9 +444,8 @@ void EquityPeersTab::populate_table(const QVector<services::equity::PeerData>& p
             }
         }
     }
-    QTimer::singleShot(0, peer_table_, [this, prev_scroll]() {
-        peer_table_->verticalScrollBar()->setValue(prev_scroll);
-    });
+    QTimer::singleShot(0, peer_table_,
+                       [this, prev_scroll]() { peer_table_->verticalScrollBar()->setValue(prev_scroll); });
 }
 
 QStringList EquityPeersTab::default_peers(const QString& symbol) const {
@@ -456,9 +466,9 @@ QStringList EquityPeersTab::default_peers(const QString& symbol) const {
         {"RGTI", {"IONQ", "QBTS", "QUBT", "IBM", "ARQQ"}},
         {"QBTS", {"IONQ", "RGTI", "QUBT", "IBM", "ARQQ"}},
         // Semis — chip design / AI infra
-        {"ARM",  {"NVDA", "AVGO", "QCOM", "AMD", "INTC"}},
+        {"ARM", {"NVDA", "AVGO", "QCOM", "AMD", "INTC"}},
         {"AVGO", {"NVDA", "AMD", "QCOM", "TSM", "MRVL"}},
-        {"AMD",  {"NVDA", "INTC", "QCOM", "AVGO", "TSM"}},
+        {"AMD", {"NVDA", "INTC", "QCOM", "AVGO", "TSM"}},
         // Enterprise data / AI software
         {"PLTR", {"SNOW", "CRM", "NOW", "MDB", "AI"}},
         // Diversified financials (Berkshire has no true peer; this is the closest set)
@@ -466,95 +476,95 @@ QStringList EquityPeersTab::default_peers(const QString& symbol) const {
         {"BRK-B", {"JPM", "BLK", "MS", "V", "MA"}},
         // ── More common stocks ────────────────────────────────────────────────
         // Semis (standalone keys)
-        {"TSM",  {"NVDA", "AVGO", "INTC", "AMD", "ASML"}},
+        {"TSM", {"NVDA", "AVGO", "INTC", "AMD", "ASML"}},
         {"INTC", {"AMD", "NVDA", "TSM", "QCOM", "AVGO"}},
         {"QCOM", {"NVDA", "AVGO", "AMD", "INTC", "MRVL"}},
         // Enterprise software
         {"ORCL", {"MSFT", "CRM", "SAP", "IBM", "NOW"}},
-        {"CRM",  {"ORCL", "NOW", "MSFT", "ADBE", "WDAY"}},
-        {"NOW",  {"CRM", "MSFT", "ORCL", "SNOW", "DDOG"}},
+        {"CRM", {"ORCL", "NOW", "MSFT", "ADBE", "WDAY"}},
+        {"NOW", {"CRM", "MSFT", "ORCL", "SNOW", "DDOG"}},
         {"SNOW", {"DDOG", "MDB", "NET", "PLTR", "CRM"}},
         {"ADBE", {"CRM", "MSFT", "ORCL", "INTU", "AUTODESK"}},
         // Media / streaming
         {"NFLX", {"DIS", "CMCSA", "WBD", "ROKU", "SPOT"}},
-        {"DIS",  {"NFLX", "CMCSA", "PARA", "WBD", "T"}},
+        {"DIS", {"NFLX", "CMCSA", "PARA", "WBD", "T"}},
         // Retail
-        {"WMT",  {"COST", "TGT", "AMZN", "KR", "BJ"}},
+        {"WMT", {"COST", "TGT", "AMZN", "KR", "BJ"}},
         {"COST", {"WMT", "BJ", "TGT", "KR", "DG"}},
-        {"HD",   {"LOW", "FND", "BLDR", "TSCO", "AZO"}},
-        {"TGT",  {"WMT", "COST", "DG", "DLTR", "BJ"}},
+        {"HD", {"LOW", "FND", "BLDR", "TSCO", "AZO"}},
+        {"TGT", {"WMT", "COST", "DG", "DLTR", "BJ"}},
         // Consumer staples
-        {"KO",   {"PEP", "MNST", "KDP", "FIZZ", "CELH"}},
-        {"PEP",  {"KO", "MNST", "KDP", "CELH", "STZ"}},
-        {"PG",   {"KMB", "CL", "CHD", "UL", "EL"}},
+        {"KO", {"PEP", "MNST", "KDP", "FIZZ", "CELH"}},
+        {"PEP", {"KO", "MNST", "KDP", "CELH", "STZ"}},
+        {"PG", {"KMB", "CL", "CHD", "UL", "EL"}},
         // Payments / fintech
-        {"V",    {"MA", "AXP", "PYPL", "FIS", "FISV"}},
-        {"MA",   {"V", "AXP", "PYPL", "FIS", "FISV"}},
-        {"AXP",  {"V", "MA", "COF", "DFS", "SYF"}},
+        {"V", {"MA", "AXP", "PYPL", "FIS", "FISV"}},
+        {"MA", {"V", "AXP", "PYPL", "FIS", "FISV"}},
+        {"AXP", {"V", "MA", "COF", "DFS", "SYF"}},
         {"PYPL", {"V", "MA", "SQ", "ADYEN", "AFRM"}},
         // Banks (extended)
-        {"BAC",  {"JPM", "WFC", "C", "USB", "PNC"}},
-        {"WFC",  {"JPM", "BAC", "C", "USB", "PNC"}},
-        {"GS",   {"MS", "JPM", "BAC", "BLK", "C"}},
-        {"MS",   {"GS", "JPM", "BAC", "BLK", "SCHW"}},
+        {"BAC", {"JPM", "WFC", "C", "USB", "PNC"}},
+        {"WFC", {"JPM", "BAC", "C", "USB", "PNC"}},
+        {"GS", {"MS", "JPM", "BAC", "BLK", "C"}},
+        {"MS", {"GS", "JPM", "BAC", "BLK", "SCHW"}},
         // Healthcare
-        {"LLY",  {"NVO", "MRK", "PFE", "AZN", "ABBV"}},
-        {"UNH",  {"CVS", "ELV", "CI", "HUM", "CNC"}},
-        {"PFE",  {"MRK", "JNJ", "BMY", "ABBV", "LLY"}},
+        {"LLY", {"NVO", "MRK", "PFE", "AZN", "ABBV"}},
+        {"UNH", {"CVS", "ELV", "CI", "HUM", "CNC"}},
+        {"PFE", {"MRK", "JNJ", "BMY", "ABBV", "LLY"}},
         // Aerospace / defense
-        {"BA",   {"LMT", "NOC", "RTX", "GD", "HII"}},
-        {"LMT",  {"NOC", "RTX", "GD", "BA", "HII"}},
-        {"RTX",  {"LMT", "NOC", "GD", "BA", "HII"}},
+        {"BA", {"LMT", "NOC", "RTX", "GD", "HII"}},
+        {"LMT", {"NOC", "RTX", "GD", "BA", "HII"}},
+        {"RTX", {"LMT", "NOC", "GD", "BA", "HII"}},
         // Industrials
-        {"HON",  {"MMM", "GE", "EMR", "ROK", "ETN"}},
-        {"CAT",  {"DE", "CMI", "PCAR", "AGCO", "OSK"}},
-        {"GE",   {"HON", "MMM", "RTX", "EMR", "ROK"}},
+        {"HON", {"MMM", "GE", "EMR", "ROK", "ETN"}},
+        {"CAT", {"DE", "CMI", "PCAR", "AGCO", "OSK"}},
+        {"GE", {"HON", "MMM", "RTX", "EMR", "ROK"}},
         // Telecom
-        {"T",    {"VZ", "TMUS", "CMCSA", "CHTR", "LUMN"}},
-        {"VZ",   {"T", "TMUS", "CMCSA", "CHTR", "LUMN"}},
+        {"T", {"VZ", "TMUS", "CMCSA", "CHTR", "LUMN"}},
+        {"VZ", {"T", "TMUS", "CMCSA", "CHTR", "LUMN"}},
         {"TMUS", {"T", "VZ", "CMCSA", "CHTR", "LUMN"}},
         // Energy (extended)
-        {"CVX",  {"XOM", "BP", "SHEL", "COP", "EOG"}},
-        {"COP",  {"XOM", "CVX", "EOG", "OXY", "PXD"}},
+        {"CVX", {"XOM", "BP", "SHEL", "COP", "EOG"}},
+        {"COP", {"XOM", "CVX", "EOG", "OXY", "PXD"}},
         // Crypto / fintech retail
         {"COIN", {"HOOD", "SOFI", "MARA", "RIOT", "CLSK"}},
         {"HOOD", {"COIN", "SOFI", "IBKR", "SCHW", "LPLA"}},
         // EV / auto (extended beyond TSLA)
-        {"F",    {"GM", "TSLA", "STLA", "TM", "HMC"}},
-        {"GM",   {"F", "TSLA", "STLA", "TM", "HMC"}},
+        {"F", {"GM", "TSLA", "STLA", "TM", "HMC"}},
+        {"GM", {"F", "TSLA", "STLA", "TM", "HMC"}},
 
         // ── Index & broad-market ETFs ────────────────────────────────────────
-        {"SPY",  {"IVV", "VOO", "VTI", "SCHX", "SPLG"}},       // S&P 500
-        {"VOO",  {"IVV", "SPY", "VTI", "SCHX", "SPLG"}},
-        {"IVV",  {"SPY", "VOO", "VTI", "SCHX", "SPLG"}},
-        {"QQQ",  {"QQQM", "ONEQ", "SPYG", "VUG", "IVW"}},      // Nasdaq-100
+        {"SPY", {"IVV", "VOO", "VTI", "SCHX", "SPLG"}}, // S&P 500
+        {"VOO", {"IVV", "SPY", "VTI", "SCHX", "SPLG"}},
+        {"IVV", {"SPY", "VOO", "VTI", "SCHX", "SPLG"}},
+        {"QQQ", {"QQQM", "ONEQ", "SPYG", "VUG", "IVW"}}, // Nasdaq-100
         {"QQQM", {"QQQ", "ONEQ", "SPYG", "VUG", "IVW"}},
-        {"DIA",  {"SPY", "IVV", "OEF", "IWB", "RSP"}},         // Dow
-        {"VTI",  {"ITOT", "SCHB", "SWTSX", "FZROX", "VTSAX"}}, // total US
-        {"IWM",  {"VTWO", "SCHA", "VBR", "VB", "IJR"}},        // small cap
-        {"EFA",  {"VEA", "IEFA", "SCHF", "SPDW", "VXUS"}},     // developed ex-US
-        {"VWO",  {"IEMG", "EEM", "SCHE", "SPEM", "VXUS"}},     // emerging
-        {"AGG",  {"BND", "SCHZ", "IUSB", "FXNAX", "VBTLX"}},   // total bond
+        {"DIA", {"SPY", "IVV", "OEF", "IWB", "RSP"}},         // Dow
+        {"VTI", {"ITOT", "SCHB", "SWTSX", "FZROX", "VTSAX"}}, // total US
+        {"IWM", {"VTWO", "SCHA", "VBR", "VB", "IJR"}},        // small cap
+        {"EFA", {"VEA", "IEFA", "SCHF", "SPDW", "VXUS"}},     // developed ex-US
+        {"VWO", {"IEMG", "EEM", "SCHE", "SPEM", "VXUS"}},     // emerging
+        {"AGG", {"BND", "SCHZ", "IUSB", "FXNAX", "VBTLX"}},   // total bond
 
         // ── Sector / thematic ETFs ───────────────────────────────────────────
-        {"SMH",  {"SOXX", "FTXL", "XSD", "PSI", "SOXQ"}},      // semiconductor
-        {"XLK",  {"VGT", "IYW", "FTEC", "FXL", "IGM"}},        // broad tech
-        {"SLX",  {"XME", "PICK", "COPX", "REMX", "GDX"}},      // steel
-        {"AIRR", {"XLI", "IYJ", "VIS", "FXR", "ITA"}},         // US industrials
-        {"GLD",  {"IAU", "GLDM", "SGOL", "BAR", "AAAU"}},      // gold bullion
-        {"XME",  {"PICK", "SLX", "COPX", "REMX", "GDX"}},      // metals & mining
-        {"XLE",  {"VDE", "IYE", "FENY", "IXC", "AMLP"}},       // energy
-        {"XLF",  {"VFH", "IYF", "FNCL", "KBE", "KRE"}},        // financials
-        {"XLV",  {"VHT", "IYH", "FHLC", "IBB", "XBI"}},        // healthcare
-        {"XLY",  {"VCR", "IYC", "FDIS", "RXI", "RTH"}},        // consumer disc.
-        {"XLP",  {"VDC", "IYK", "FSTA", "KXI", "PSL"}},        // consumer staples
-        {"XLI",  {"VIS", "IYJ", "FIDU", "FXR", "EXI"}},        // industrials
-        {"XLU",  {"VPU", "IDU", "FUTY", "JXI", "RYU"}},        // utilities
-        {"XLB",  {"VAW", "IYM", "FMAT", "MXI", "RTM"}},        // materials
-        {"XLRE", {"VNQ", "IYR", "USRT", "REET", "RWR"}},       // real estate
-        {"VNQ",  {"XLRE", "IYR", "USRT", "REET", "RWR"}},
-        {"GDX",  {"GDXJ", "RING", "GOAU", "SGDM", "PICK"}},    // gold miners
-        {"ARKK", {"ARKW", "ARKG", "ARKQ", "ARKF", "TSLA"}},    // disruptive innov.
+        {"SMH", {"SOXX", "FTXL", "XSD", "PSI", "SOXQ"}}, // semiconductor
+        {"XLK", {"VGT", "IYW", "FTEC", "FXL", "IGM"}},   // broad tech
+        {"SLX", {"XME", "PICK", "COPX", "REMX", "GDX"}}, // steel
+        {"AIRR", {"XLI", "IYJ", "VIS", "FXR", "ITA"}},   // US industrials
+        {"GLD", {"IAU", "GLDM", "SGOL", "BAR", "AAAU"}}, // gold bullion
+        {"XME", {"PICK", "SLX", "COPX", "REMX", "GDX"}}, // metals & mining
+        {"XLE", {"VDE", "IYE", "FENY", "IXC", "AMLP"}},  // energy
+        {"XLF", {"VFH", "IYF", "FNCL", "KBE", "KRE"}},   // financials
+        {"XLV", {"VHT", "IYH", "FHLC", "IBB", "XBI"}},   // healthcare
+        {"XLY", {"VCR", "IYC", "FDIS", "RXI", "RTH"}},   // consumer disc.
+        {"XLP", {"VDC", "IYK", "FSTA", "KXI", "PSL"}},   // consumer staples
+        {"XLI", {"VIS", "IYJ", "FIDU", "FXR", "EXI"}},   // industrials
+        {"XLU", {"VPU", "IDU", "FUTY", "JXI", "RYU"}},   // utilities
+        {"XLB", {"VAW", "IYM", "FMAT", "MXI", "RTM"}},   // materials
+        {"XLRE", {"VNQ", "IYR", "USRT", "REET", "RWR"}}, // real estate
+        {"VNQ", {"XLRE", "IYR", "USRT", "REET", "RWR"}},
+        {"GDX", {"GDXJ", "RING", "GOAU", "SGDM", "PICK"}},  // gold miners
+        {"ARKK", {"ARKW", "ARKG", "ARKQ", "ARKF", "TSLA"}}, // disruptive innov.
 
         // ── Mutual funds (your portfolio holdings) ───────────────────────────
         // Index funds — large-cap blend

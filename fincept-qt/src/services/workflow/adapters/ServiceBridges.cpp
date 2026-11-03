@@ -4,11 +4,11 @@
 #include "mcp/McpService.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
+#include "services/markets/MarketDataService.h"
 #include "services/workflow/AuditLogger.h"
 #include "services/workflow/ConfirmationService.h"
 #include "services/workflow/NodeRegistry.h"
 #include "services/workflow/RiskManager.h"
-#include "services/markets/MarketDataService.h"
 #include "trading/AccountManager.h"
 #include "trading/ExchangeService.h"
 #include "trading/OrderMatcher.h"
@@ -127,8 +127,8 @@ std::optional<trading::BrokerAccount> resolve_trading_account(const QJsonObject&
         QStringList names;
         for (const auto& a : matches)
             names << QString("%1 (%2)").arg(a.display_name, a.account_id);
-        *err = QString("Multiple '%1' accounts match (%2) — set 'account_id' to choose one")
-                   .arg(broker, names.join(", "));
+        *err =
+            QString("Multiple '%1' accounts match (%2) — set 'account_id' to choose one").arg(broker, names.join(", "));
         return std::nullopt;
     }
     return matches.first();
@@ -345,21 +345,21 @@ void wire_trading_bridges(NodeRegistry& registry) {
             req.type = ConfirmationType::Trade;
             req.risk = paper ? RiskLevel::Low : RiskLevel::High;
             req.title = QString("%1 %2 x%3").arg(side.toUpper(), symbol).arg(qty);
-            req.message = QString("Place %1 %2 order for %3 of %4 via %5 (%6)")
-                              .arg(type, side, QString::number(qty), symbol, acct->display_name,
-                                   paper ? "paper" : "LIVE");
+            req.message =
+                QString("Place %1 %2 order for %3 of %4 via %5 (%6)")
+                    .arg(type, side, QString::number(qty), symbol, acct->display_name, paper ? "paper" : "LIVE");
             req.details = params;
             req.paper_trading = paper;
 
             const trading::BrokerAccount account = *acct;
-            ConfirmationService::instance().request(
-                req, [cb, params, order, account](bool approved, const QString& notes) {
-                    if (!approved) {
-                        cb(false, {}, "Order rejected by user: " + notes);
-                        return;
-                    }
-                    route_order(account, order, params, cb);
-                });
+            ConfirmationService::instance().request(req,
+                                                    [cb, params, order, account](bool approved, const QString& notes) {
+                                                        if (!approved) {
+                                                            cb(false, {}, "Order rejected by user: " + notes);
+                                                            return;
+                                                        }
+                                                        route_order(account, order, params, cb);
+                                                    });
         };
     }
 

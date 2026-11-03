@@ -34,13 +34,14 @@ static bool ds_is_secret_field(const QString& provider, const QString& key) {
             if (f.name == key && f.type == FieldType::Password)
                 return true;
     }
-    static const QStringList kHints = {"password", "passwd", "pwd", "secret", "token", "api_key", "apikey",
-                                       "access_key", "private_key", "privatekey", "credential", "auth",
-                                       "passphrase", "client_secret", "key"};
+    static const QStringList kHints = {"password",   "passwd", "pwd",        "secret",        "token",
+                                       "api_key",    "apikey", "access_key", "private_key",   "privatekey",
+                                       "credential", "auth",   "passphrase", "client_secret", "key"};
     const QString k = key.toLower();
     for (const auto& h : kHints) {
-        if (h == QLatin1String("key") ? (k == h || k.endsWith(QLatin1String("_key")) || k.endsWith(QLatin1String("key")))
-                                      : k.contains(h))
+        if (h == QLatin1String("key")
+                ? (k == h || k.endsWith(QLatin1String("_key")) || k.endsWith(QLatin1String("key")))
+                : k.contains(h))
             return true;
     }
     return false;

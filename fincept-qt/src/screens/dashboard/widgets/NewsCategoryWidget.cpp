@@ -6,9 +6,9 @@
 #include "ui/components/ExternalLink.h"
 #include "ui/theme/Theme.h"
 
+#include <QDateTime>
 #include <QDialog>
 #include <QDialogButtonBox>
-#include <QDateTime>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QJsonObject>
@@ -124,11 +124,10 @@ void NewsCategoryWidget::on_articles(const QVariant& v) {
     int n = std::min<int>(max_rows_, articles.size());
     for (int i = 0; i < n; ++i) {
         const auto& a = articles[i];
-        const QString time =
-            (a.sort_ts > 0)
-                // EVENT-STAMP: a publication instant, not a trading session.
-                ? QDateTime::fromSecsSinceEpoch(a.sort_ts).toString("HH:mm")
-                : a.time;
+        const QString time = (a.sort_ts > 0)
+                                 // EVENT-STAMP: a publication instant, not a trading session.
+                                 ? QDateTime::fromSecsSinceEpoch(a.sort_ts).toString("HH:mm")
+                                 : a.time;
         const QString line = QString("[%1]  %2").arg(time, a.headline);
         auto* item = new QListWidgetItem(line, list_);
         // Carry the article URL on the row so a click can open it. Stored
@@ -181,12 +180,10 @@ void NewsCategoryWidget::on_theme_changed() {
 void NewsCategoryWidget::apply_styles() {
     badge_->setStyleSheet(QString("color:%1;background:%2;border:1px solid %3;"
                                   "border-radius:3px;padding:1px 6px;font-size:12px;font-weight:700;")
-                              .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
-                                   ui::colors::BORDER_DIM()));
-    list_->setStyleSheet(
-        QString("QListWidget{background:transparent;color:%1;font-size:12px;border:none;}"
-                "QListWidget::item{padding:3px 4px;border-bottom:1px solid %2;}")
-            .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
+                              .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    list_->setStyleSheet(QString("QListWidget{background:transparent;color:%1;font-size:12px;border:none;}"
+                                 "QListWidget::item{padding:3px 4px;border-bottom:1px solid %2;}")
+                             .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
 }
 
 } // namespace fincept::screens::widgets

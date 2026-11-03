@@ -1,5 +1,7 @@
 #include "screens/dashboard/DashboardScreen.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/dashboard/canvas/AddWidgetDialog.h"
 #include "screens/dashboard/canvas/DashboardTemplates.h"
 #include "screens/dashboard/canvas/TemplatePicker.h"
@@ -10,9 +12,6 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/widgets/NotifToast.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QDataStream>
 #include <QEvent>
@@ -78,8 +77,7 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
                                         "QScrollBar::handle:vertical{background:%2;border-radius:3px;min-height:20px;}"
                                         "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}")
                                     .arg(ui::colors::BG_BASE(), ui::colors::BORDER_MED()));
-    scroll_area_->viewport()->setStyleSheet(
-        QString("background:%1;").arg(ui::colors::BG_BASE()));
+    scroll_area_->viewport()->setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));
 
     // Sync canvas width to scroll viewport via event filter
     scroll_area_->viewport()->installEventFilter(this);
@@ -111,7 +109,6 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
     save_timer_->setSingleShot(true);
     save_timer_->setInterval(800);
     connect(save_timer_, &QTimer::timeout, this, &DashboardScreen::save_layout);
-
 
     // ── Canvas signals → toolbar/statusbar ──
     connect(canvas_, &DashboardCanvas::widget_count_changed, toolbar_, &DashboardToolBar::set_widget_count);
@@ -244,7 +241,6 @@ void DashboardScreen::refresh_ticker() {
     hub_resubscribe_ticker();
 }
 
-
 void DashboardScreen::rebuild_ticker_from_cache() {
     if (!ticker_bar_)
         return;
@@ -304,7 +300,6 @@ void DashboardScreen::hub_unsubscribe_ticker() {
     hub_active_ = false;
 }
 
-
 // ── Event filter: sync canvas width to scroll viewport ────────────────────────
 
 bool DashboardScreen::eventFilter(QObject* obj, QEvent* event) {
@@ -334,8 +329,8 @@ bool DashboardScreen::eventFilter(QObject* obj, QEvent* event) {
 // Header for the v1 layout blob that also persists per-widget config. The
 // magic distinguishes it from the legacy (config-less, header-less) format so
 // old saved layouts still load.
-static constexpr quint32 kLayoutMagic   = 0xDA58B0A7; // "dashboard" sentinel
-static constexpr qint32  kLayoutVersion = 1;
+static constexpr quint32 kLayoutMagic = 0xDA58B0A7; // "dashboard" sentinel
+static constexpr qint32 kLayoutVersion = 1;
 
 void DashboardScreen::save_layout() {
     save_timer_->stop();

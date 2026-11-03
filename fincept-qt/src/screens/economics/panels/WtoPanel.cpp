@@ -240,8 +240,8 @@ void WtoPanel::on_result(const QString& request_id, const services::EconomicsRes
         QSet<QString> series_ids;
         for (const auto& v : rows) {
             const auto r = v.toObject();
-            series_ids.insert(r["reporter"].toVariant().toString() + '|' + r["partner"].toVariant().toString() +
-                              '|' + r["product"].toVariant().toString());
+            series_ids.insert(r["reporter"].toVariant().toString() + '|' + r["partner"].toVariant().toString() + '|' +
+                              r["product"].toVariant().toString());
         }
         const QString ts_title = "WTO Trade Statistics: " + indicator_combo_->currentText();
         if (series_ids.size() == 1)

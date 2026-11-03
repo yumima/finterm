@@ -3,18 +3,17 @@
 // Equity derivatives, fixed income, FX, credit, commodities, risk, macro
 
 #include "SurfaceCapabilities.h"
-#include "services/economics/EconomicsService.h"
-
-#include <QSet>
 #include "SurfaceTypes.h"
 #include "core/symbol/IGroupLinked.h"
 #include "screens/IStatefulScreen.h"
 #include "services/databento/DatabentoService.h"
+#include "services/economics/EconomicsService.h"
 
 #include <QHash>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSet>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QString>
@@ -29,9 +28,7 @@ class SurfaceLineWidget;
 class SurfaceControlPanel;
 class SurfaceDataInspector;
 
-class SurfaceAnalyticsScreen : public QWidget,
-                               public fincept::screens::IStatefulScreen,
-                               public fincept::IGroupLinked {
+class SurfaceAnalyticsScreen : public QWidget, public fincept::screens::IStatefulScreen, public fincept::IGroupLinked {
     Q_OBJECT
     Q_INTERFACES(fincept::IGroupLinked)
   public:
@@ -91,8 +88,7 @@ class SurfaceAnalyticsScreen : public QWidget,
     void compute_equity_surfaces(const fincept::DatabentoOhlcvResult& r);
     /// Ask FRED for the Treasury curve, TIPS real yields and breakevens.
     void load_rates_from_fred();
-    void on_fred_result(const QString& request_id,
-                        const fincept::services::EconomicsResult& r);
+    void on_fred_result(const QString& request_id, const fincept::services::EconomicsResult& r);
     /// Implied forwards derived from the published curve — see the .cpp for
     /// why they are only built on top of real data and never alone.
     void build_forward_rates();

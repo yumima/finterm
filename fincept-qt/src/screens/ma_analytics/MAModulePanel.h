@@ -64,8 +64,8 @@ class MAModulePanel : public QWidget {
                     std::function<void()> on_run);
     QDoubleSpinBox* add_field(QWidget* tab, QVBoxLayout* vl, const QString& key, const QString& label, double min,
                               double max, int decimals, const QString& suffix = {});
-    QSpinBox* add_int_field(QWidget* tab, QVBoxLayout* vl, const QString& key, const QString& label, int min,
-                            int max, int val);
+    QSpinBox* add_int_field(QWidget* tab, QVBoxLayout* vl, const QString& key, const QString& label, int min, int max,
+                            int val);
     QComboBox* add_choice(QWidget* tab, QVBoxLayout* vl, const QString& key, const QString& label,
                           const QStringList& items);
     QComboBox* add_text_field(QWidget* tab, QVBoxLayout* vl, const QString& key, const QString& label,
@@ -97,7 +97,7 @@ class MAModulePanel : public QWidget {
     QHash<QString, QSpinBox*> int_inputs_;
     QHash<QString, QComboBox*> combo_inputs_;
     QHash<QString, QTextEdit*> json_inputs_;
-    QHash<QString, QString> text_kinds_;  // combo key -> "text" | "pct_list" | "num_list"
+    QHash<QString, QString> text_kinds_; // combo key -> "text" | "pct_list" | "num_list"
 };
 
 } // namespace fincept::screens

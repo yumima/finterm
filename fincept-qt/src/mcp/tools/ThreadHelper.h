@@ -76,8 +76,7 @@ void run_on_target_thread_sync(QObject* target, F&& fn) {
 // called with a default-constructed args (caller decides what that means).
 // Defaults to no timeout — relies on the underlying API to call back.
 template <typename Start, typename OnDone>
-void run_async_callback_sync(QObject* target, Start&& start, OnDone&& on_done,
-                              int /*timeout_ms*/ = 0) {
+void run_async_callback_sync(QObject* target, Start&& start, OnDone&& on_done, int /*timeout_ms*/ = 0) {
     // We use a small heap-allocated Resolution so the resolve() lambda can
     // outlive both the worker and the target — the target may invoke resolve
     // synchronously (still on worker) or after queuing (on target thread).
@@ -116,9 +115,7 @@ void run_async_callback_sync(QObject* target, Start&& start, OnDone&& on_done,
         std::forward<Start>(start)(resolve);
     } else {
         QMetaObject::invokeMethod(
-            target,
-            [start = std::forward<Start>(start), resolve]() mutable { start(resolve); },
-            Qt::QueuedConnection);
+            target, [start = std::forward<Start>(start), resolve]() mutable { start(resolve); }, Qt::QueuedConnection);
     }
 
     QMutexLocker lock(&res->m);
@@ -165,8 +162,7 @@ void run_async_wait(QObject* target, Start&& start) {
         std::forward<Start>(start)(signal_done);
     } else {
         QMetaObject::invokeMethod(
-            target,
-            [start = std::forward<Start>(start), signal_done]() mutable { start(signal_done); },
+            target, [start = std::forward<Start>(start), signal_done]() mutable { start(signal_done); },
             Qt::QueuedConnection);
     }
 

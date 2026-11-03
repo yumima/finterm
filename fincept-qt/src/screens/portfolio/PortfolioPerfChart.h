@@ -21,8 +21,7 @@ class CrosshairChartView : public QChartView {
     /// Pass snap_ts_ms when pts uses sequential bar indices as x (multi-day
     /// intraday or daily aggregate) so the crosshair tooltip can display the
     /// real market time/date rather than interpreting the index as a timestamp.
-    void set_series_data(const QVector<QPointF>& pts, const QString& currency,
-                         const QVector<qint64>& snap_ts_ms = {});
+    void set_series_data(const QVector<QPointF>& pts, const QString& currency, const QVector<qint64>& snap_ts_ms = {});
 
   protected:
     void mouseMoveEvent(QMouseEvent* event) override;
@@ -33,7 +32,7 @@ class CrosshairChartView : public QChartView {
     void hide_crosshair();
 
     QVector<QPointF> pts_;
-    QVector<qint64>  snap_ts_ms_; // real epoch-ms per point; empty = pts_.x() is epoch-ms
+    QVector<qint64> snap_ts_ms_; // real epoch-ms per point; empty = pts_.x() is epoch-ms
     QString currency_;
     QGraphicsLineItem* v_line_ = nullptr;
     QLabel* tooltip_ = nullptr;
@@ -52,13 +51,11 @@ class PortfolioPerfChart : public QWidget {
     /// always change together — a snapshots-only update against a stale
     /// flow log would let deposits read as gains again.
     void set_history(const QVector<portfolio::PortfolioSnapshot>& snapshots,
-                     const QVector<portfolio::Transaction>& txns,
-                     const portfolio::FxRates& fx);
+                     const QVector<portfolio::Transaction>& txns, const portfolio::FxRates& fx);
     void set_currency(const QString& currency);
     /// Feed real benchmark closes for the overlay. The symbol is shown on the
     /// toggle button and used to disambiguate currencies in indexed mode.
-    void set_benchmark_history(const QString& symbol, const QStringList& dates,
-                               const QVector<double>& closes);
+    void set_benchmark_history(const QString& symbol, const QStringList& dates, const QVector<double>& closes);
     /// Legacy shim — same as set_benchmark_history("SPY", dates, closes).
     void set_spy_history(const QStringList& dates, const QVector<double>& closes);
     void refresh_theme();
@@ -72,20 +69,17 @@ class PortfolioPerfChart : public QWidget {
     void clear_focus_symbol();
     /// Feed daily closes for the currently focused symbol. Mismatched symbols
     /// are ignored (race-safe against stale fetches).
-    void set_focus_history(const QString& symbol, const QStringList& dates,
-                           const QVector<double>& closes);
+    void set_focus_history(const QString& symbol, const QStringList& dates, const QVector<double>& closes);
     QString focus_symbol() const { return focus_symbol_; }
 
     // ── 1D intraday ─────────────────────────────────────────────────────────
     /// Feed today's 1-minute close series for the currently focused symbol.
     /// Mismatched symbol → ignored (race-safe against stale fetches).
-    void set_symbol_intraday(const QString& symbol,
-                             const QVector<qint64>& timestamps_ms,
+    void set_symbol_intraday(const QString& symbol, const QVector<qint64>& timestamps_ms,
                              const QVector<double>& closes);
     /// Feed today's 1-minute aggregate-NAV series for portfolio view. An empty
     /// series with a non-empty `unavailable_reason` renders that reason.
-    void set_portfolio_intraday(const QVector<qint64>& timestamps_ms,
-                                const QVector<double>& navs,
+    void set_portfolio_intraday(const QVector<qint64>& timestamps_ms, const QVector<double>& navs,
                                 const QString& unavailable_reason = QString());
 
   signals:
@@ -102,9 +96,7 @@ class PortfolioPerfChart : public QWidget {
     /// focus mode, or fetch_portfolio_intraday(portfolio_id) for the aggregate
     /// 1D path (which keeps its 1d/1m defaults). The chart paints a
     /// placeholder until set_*_intraday() lands.
-    void intraday_requested(QString symbol_or_empty,
-                            QString period,
-                            QString interval);
+    void intraday_requested(QString symbol_or_empty, QString period, QString interval);
 
   private:
     void build_ui();
@@ -195,14 +187,14 @@ class PortfolioPerfChart : public QWidget {
     // is non-empty.
     QVector<qint64> intraday_ts_ms_;
     QVector<double> intraday_values_;
-    QString          intraday_for_symbol_;  // empty = portfolio aggregate
-    bool             intraday_requested_   = false;  // 1D selected, waiting for data
+    QString intraday_for_symbol_;     // empty = portfolio aggregate
+    bool intraday_requested_ = false; // 1D selected, waiting for data
     // True once the fetch callback has fired for the current request. Lets
     // render_intraday distinguish "still loading" from "loaded but empty"
     // (e.g. weekend, holiday, pre-open) — the latter should show a terminal
     // message, not "Loading…" forever.
-    bool             intraday_resolved_    = false;
-    QString          intraday_unavailable_reason_; // why the aggregate 1D NAV is empty
+    bool intraday_resolved_ = false;
+    QString intraday_unavailable_reason_; // why the aggregate 1D NAV is empty
     QVector<double> focus_closes_;
     bool focus_data_loaded_ = false; // true once set_focus_history fires (even with empty data)
     QLabel* title_label_ = nullptr;
@@ -220,10 +212,10 @@ class PortfolioPerfChart : public QWidget {
     // calls — with this marker we fire one at a time and chase the latest
     // focus_symbol_ from the callback when it lands.
     QString ob_fetch_for_;
-    double  ob_bid_      = 0;
-    double  ob_ask_      = 0;
-    double  ob_bid_size_ = 0;
-    double  ob_ask_size_ = 0;
+    double ob_bid_ = 0;
+    double ob_ask_ = 0;
+    double ob_bid_size_ = 0;
+    double ob_ask_size_ = 0;
 };
 
 } // namespace fincept::screens

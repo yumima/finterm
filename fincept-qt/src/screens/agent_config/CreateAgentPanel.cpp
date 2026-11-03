@@ -116,8 +116,8 @@ QWidget* CreateAgentPanel::build_saved_panel() {
     hl->addWidget(t);
     hl->addStretch();
     saved_count_ = new QLabel("0");
-    saved_count_->setStyleSheet(
-        QString("color:%1;font-size:12px;background:%2;padding:1px 6px;").arg(ui::colors::CYAN(), ui::colors::BG_BASE()));
+    saved_count_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;padding:1px 6px;")
+                                    .arg(ui::colors::CYAN(), ui::colors::BG_BASE()));
     hl->addWidget(saved_count_);
     vl->addWidget(hdr);
 
@@ -336,7 +336,8 @@ QWidget* CreateAgentPanel::build_form_panel() {
         sl->setSpacing(12);
         auto make_sub_chk = [](const QString& lbl) -> QCheckBox* {
             auto* c = new QCheckBox(lbl);
-            c->setStyleSheet(QString("QCheckBox{color:%1;font-size:12px;spacing:5px;}").arg(ui::colors::TEXT_PRIMARY()));
+            c->setStyleSheet(
+                QString("QCheckBox{color:%1;font-size:12px;spacing:5px;}").arg(ui::colors::TEXT_PRIMARY()));
             return c;
         };
         guardrails_pii_check_ = make_sub_chk("PII Detection");
@@ -371,7 +372,8 @@ QWidget* CreateAgentPanel::build_form_panel() {
         auto* mr2 = new QHBoxLayout;
         auto make_sub_chk = [](const QString& lbl) -> QCheckBox* {
             auto* c = new QCheckBox(lbl);
-            c->setStyleSheet(QString("QCheckBox{color:%1;font-size:12px;spacing:5px;}").arg(ui::colors::TEXT_PRIMARY()));
+            c->setStyleSheet(
+                QString("QCheckBox{color:%1;font-size:12px;spacing:5px;}").arg(ui::colors::TEXT_PRIMARY()));
             return c;
         };
         memory_user_memories_check_ = make_sub_chk("User Memories");
@@ -517,7 +519,8 @@ QWidget* CreateAgentPanel::build_test_panel() {
     bl->addWidget(test_btn_);
 
     test_status_lbl_ = new QLabel;
-    test_status_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
+    test_status_lbl_->setStyleSheet(
+        QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
     bl->addWidget(test_status_lbl_);
 
     auto* rlbl = new QLabel("OUTPUT");
@@ -532,7 +535,8 @@ QWidget* CreateAgentPanel::build_test_panel() {
                 "QScrollBar:vertical{background:%1;width:5px;border:none;}"
                 "QScrollBar::handle:vertical{background:%4;min-height:20px;}"
                 "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}")
-            .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::BORDER_BRIGHT()));
+            .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::BORDER_BRIGHT()));
     bl->addWidget(test_result_, 1);
 
     vl->addWidget(body, 1);

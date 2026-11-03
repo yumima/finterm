@@ -3,8 +3,6 @@
 
 #include "services/equity/EquityResearchService.h"
 #include "ui/formatting/NumberFormat.h"
-
-#include <cmath>
 #include "ui/theme/Theme.h"
 
 #include <QFrame>
@@ -12,6 +10,8 @@
 #include <QHBoxLayout>
 #include <QScrollArea>
 #include <QVBoxLayout>
+
+#include <cmath>
 
 namespace fincept::screens {
 
@@ -88,20 +88,19 @@ void EquityAnalysisTab::set_symbol(const QString& symbol) {
     loading_overlay_->show_loading("LOADING ANALYSIS…");
 
     auto& store = services::query::QueryStore::instance();
-    store.unsubscribe_all(this);  // drop any prior info subscription
+    store.unsubscribe_all(this); // drop any prior info subscription
     services::equity::EquityResearchService::instance().subscribe_info(
-        this, symbol,
-        [this](const services::query::QueryStore::State& s) { apply_info_state(s); });
+        this, symbol, [this](const services::query::QueryStore::State& s) { apply_info_state(s); });
 }
 
 void EquityAnalysisTab::reset_values() {
     displayed_symbol_.clear();
     static const QString dash = QStringLiteral("\xe2\x80\x94");
-    for (QLabel* l : {cash_val_, debt_val_, fcf_val_, ocf_val_, ev_val_, ev_rev_val_,
-                      ev_ebitda_val_, book_val_, rev_val_, rev_share_val_, gp_val_,
-                      ebitda_m_val_, pe_val_, peg_val_, roe_val_, roa_val_, beta_val_,
-                      short_rat_val_}) {
-        if (l) l->setText(dash);
+    for (QLabel* l :
+         {cash_val_, debt_val_, fcf_val_, ocf_val_, ev_val_, ev_rev_val_, ev_ebitda_val_, book_val_, rev_val_,
+          rev_share_val_, gp_val_, ebitda_m_val_, pe_val_, peg_val_, roe_val_, roa_val_, beta_val_, short_rat_val_}) {
+        if (l)
+            l->setText(dash);
     }
 }
 
@@ -186,7 +185,8 @@ void EquityAnalysisTab::build_ui() {
 
 void EquityAnalysisTab::apply_info_state(const services::query::QueryStore::State& s) {
     if (!s.error.isEmpty()) {
-        if (loading_overlay_) loading_overlay_->hide_loading();
+        if (loading_overlay_)
+            loading_overlay_->hide_loading();
         // Deliveries are subscription-bound, so this error is for the current
         // symbol. If the panels still show a DIFFERENT symbol's numbers,
         // returning would leave them under the new symbol's header — blank
@@ -195,10 +195,12 @@ void EquityAnalysisTab::apply_info_state(const services::query::QueryStore::Stat
             reset_values();
         return;
     }
-    if (!s.data.isValid() || s.data.isNull()) return;
+    if (!s.data.isValid() || s.data.isNull())
+        return;
     const auto info = s.data.value<services::equity::StockInfo>();
     if (!info.valid) {
-        if (loading_overlay_) loading_overlay_->hide_loading();
+        if (loading_overlay_)
+            loading_overlay_->hide_loading();
         return;
     }
     loading_overlay_->hide_loading();
@@ -242,21 +244,18 @@ void EquityAnalysisTab::apply_info_state(const services::query::QueryStore::Stat
 // NumberFormat.h states the rule — gate on NaN / optional, never on == 0.0.
 
 QString EquityAnalysisTab::fmt(double v, int decimals) {
-    return std::isfinite(v) ? QString::number(v, 'f', decimals)
-                            : ui::formatting::placeholder();
+    return std::isfinite(v) ? QString::number(v, 'f', decimals) : ui::formatting::placeholder();
 }
 
 QString EquityAnalysisTab::fmt_large(double v) {
     // Unified K/M/B/T at one decimal via the shared layer (was M@1dp but B/T@2dp,
     // and lacked a K tier).
-    return std::isfinite(v) ? ui::formatting::format_compact(v, 1)
-                            : ui::formatting::placeholder();
+    return std::isfinite(v) ? ui::formatting::format_compact(v, 1) : ui::formatting::placeholder();
 }
 
 QString EquityAnalysisTab::fmt_pct(double v) {
     // 2dp, matching EquityPeersTab (now unified). Input is a fraction (×100).
-    return std::isfinite(v) ? ui::formatting::format_percent(v * 100.0, 2)
-                            : ui::formatting::placeholder();
+    return std::isfinite(v) ? ui::formatting::format_percent(v * 100.0, 2) : ui::formatting::placeholder();
 }
 
 } // namespace fincept::screens

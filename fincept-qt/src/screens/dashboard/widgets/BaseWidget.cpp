@@ -1,12 +1,11 @@
 #include "screens/dashboard/widgets/BaseWidget.h"
 
-#include <QStackedWidget>
-
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QPalette>
 #include <QSize>
+#include <QStackedWidget>
 #include <QStyle>
 
 namespace fincept::screens::widgets {
@@ -21,9 +20,8 @@ BaseWidget::BaseWidget(const QString& title, QWidget* parent, const QString& acc
     pal.setColor(QPalette::Window, QColor(ui::colors::BG_SURFACE()));
     setPalette(pal);
 
-    setStyleSheet(
-        QString("#dashboardBaseWidget { background: %1; border: 1px solid %2; border-radius: 2px; }")
-            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_BRIGHT()));
+    setStyleSheet(QString("#dashboardBaseWidget { background: %1; border: 1px solid %2; border-radius: 2px; }")
+                      .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_BRIGHT()));
 
     auto* vl = new QVBoxLayout(this);
     vl->setContentsMargins(0, 0, 0, 0);
@@ -103,8 +101,8 @@ BaseWidget::BaseWidget(const QString& title, QWidget* parent, const QString& acc
         QString("QPushButton { color: %1; background: %2; border: 1px solid %3; border-radius: 2px; "
                 "padding: 0px; }"
                 "QPushButton:hover { color: %4; border-color: %4; background: %5; }")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::NEGATIVE(),
-                 ui::colors::BG_HOVER()));
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(),
+                 ui::colors::NEGATIVE(), ui::colors::BG_HOVER()));
     connect(close_btn, &QPushButton::clicked, this, &BaseWidget::close_requested);
     hl->addWidget(close_btn);
 
@@ -154,16 +152,14 @@ void BaseWidget::apply_title_bar_style() {
         // file-IO from the logger delayed the first paint visibly. Titles are
         // already passed uppercased by widget constructors so removing it is a
         // no-op visually. (letter-spacing IS supported via QFont mapping.)
-        title_label_->setStyleSheet(
-            QString("color:%1;font-size:%2;font-weight:bold;letter-spacing:0.5px;"
-                    "background:transparent;")
-                .arg(accent_color_, ui::fonts::ui_px()));
+        title_label_->setStyleSheet(QString("color:%1;font-size:%2;font-weight:bold;letter-spacing:0.5px;"
+                                            "background:transparent;")
+                                        .arg(accent_color_, ui::fonts::ui_px()));
     if (accent_bar_)
         accent_bar_->setStyleSheet(QString("background:%1;border-radius:1px;").arg(accent_color_));
     if (loading_label_)
         loading_label_->setStyleSheet(
-            QString("color:%1;font-size:%2;background:transparent;")
-                .arg(ui::colors::AMBER(), ui::fonts::ui_px()));
+            QString("color:%1;font-size:%2;background:transparent;").arg(ui::colors::AMBER(), ui::fonts::ui_px()));
     if (refresh_btn_)
         refresh_btn_->setStyleSheet(
             QString("QPushButton{color:%1;background:%2;border:1px solid %3;border-radius:2px;padding:0;}"

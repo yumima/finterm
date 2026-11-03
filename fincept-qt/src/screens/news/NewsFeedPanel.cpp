@@ -1,6 +1,7 @@
 #include "screens/news/NewsFeedPanel.h"
 
 #include "core/logging/Logger.h"
+
 #include <QApplication>
 #include <QDateTime>
 #include <QMouseEvent>
@@ -52,10 +53,8 @@ NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
 
     // Restore saved source-column width.
     {
-        const int saved = QSettings()
-                              .value(QStringLiteral("news/source_col_width"),
-                                     NewsFeedDelegate::kSourceColDefault)
-                              .toInt();
+        const int saved =
+            QSettings().value(QStringLiteral("news/source_col_width"), NewsFeedDelegate::kSourceColDefault).toInt();
         delegate_->set_source_col_width(saved);
     }
 
@@ -85,9 +84,8 @@ NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
         empty_state_title_ = new QLabel(QStringLiteral("No articles available"), empty_state_);
         empty_state_title_->setObjectName("newsEmptyStateTitle");
         empty_state_title_->setAlignment(Qt::AlignCenter);
-        empty_state_hint_ = new QLabel(
-            QStringLiteral("Check your network connection and click Refresh to retry."),
-            empty_state_);
+        empty_state_hint_ =
+            new QLabel(QStringLiteral("Check your network connection and click Refresh to retry."), empty_state_);
         empty_state_hint_->setObjectName("newsEmptyStateHint");
         empty_state_hint_->setAlignment(Qt::AlignCenter);
         empty_state_hint_->setWordWrap(true);
@@ -106,8 +104,7 @@ NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
 
     connect(list_view_, &QListView::clicked, this, &NewsFeedPanel::on_item_clicked);
 
-    connect(list_view_->verticalScrollBar(), &QScrollBar::valueChanged,
-            this, &NewsFeedPanel::check_scroll_position);
+    connect(list_view_->verticalScrollBar(), &QScrollBar::valueChanged, this, &NewsFeedPanel::check_scroll_position);
 
     // Banner dismiss timer
     banner_dismiss_timer_ = new QTimer(this);
@@ -272,14 +269,11 @@ void NewsFeedPanel::set_empty_state(bool empty) {
 
 void NewsFeedPanel::set_empty_state_message(const QString& title, const QString& hint) {
     if (empty_state_title_) {
-        empty_state_title_->setText(title.isEmpty()
-            ? QStringLiteral("No articles available")
-            : title);
+        empty_state_title_->setText(title.isEmpty() ? QStringLiteral("No articles available") : title);
     }
     if (empty_state_hint_) {
-        empty_state_hint_->setText(hint.isEmpty()
-            ? QStringLiteral("Check your network connection and click Refresh to retry.")
-            : hint);
+        empty_state_hint_->setText(
+            hint.isEmpty() ? QStringLiteral("Check your network connection and click Refresh to retry.") : hint);
     }
 }
 
@@ -393,7 +387,8 @@ void NewsFeedPanel::showEvent(QShowEvent* ev) {
 }
 
 bool NewsFeedPanel::eventFilter(QObject* obj, QEvent* ev) {
-    if (!delegate_) return QWidget::eventFilter(obj, ev);
+    if (!delegate_)
+        return QWidget::eventFilter(obj, ev);
 
     if (!list_view_ || obj != list_view_->viewport())
         return QWidget::eventFilter(obj, ev);
@@ -402,9 +397,7 @@ bool NewsFeedPanel::eventFilter(QObject* obj, QEvent* ev) {
     // Source/headline boundary lives at kPreSourceX + source_col_width()
     // from the viewport left edge (mirrors paint_wire_row's x-advance).
     const int boundary_x = NewsFeedDelegate::kPreSourceX + delegate_->source_col_width();
-    auto near_boundary = [&](int x) {
-        return std::abs(x - boundary_x) <= kSourceColDragHotzone;
-    };
+    auto near_boundary = [&](int x) { return std::abs(x - boundary_x) <= kSourceColDragHotzone; };
 
     if (ev->type() == QEvent::MouseMove) {
         auto* me = static_cast<QMouseEvent*>(ev);
@@ -422,8 +415,8 @@ bool NewsFeedPanel::eventFilter(QObject* obj, QEvent* ev) {
         auto* me = static_cast<QMouseEvent*>(ev);
         if (me->button() == Qt::LeftButton && near_boundary(me->pos().x())) {
             dragging_source_col_ = true;
-            drag_start_x_        = me->pos().x();
-            drag_start_width_    = delegate_->source_col_width();
+            drag_start_x_ = me->pos().x();
+            drag_start_width_ = delegate_->source_col_width();
             viewport->setCursor(Qt::SplitHCursor);
             return true; // swallow so the list doesn't select
         }
@@ -432,8 +425,7 @@ bool NewsFeedPanel::eventFilter(QObject* obj, QEvent* ev) {
     if (ev->type() == QEvent::MouseButtonRelease) {
         if (dragging_source_col_) {
             dragging_source_col_ = false;
-            QSettings().setValue(QStringLiteral("news/source_col_width"),
-                                 delegate_->source_col_width());
+            QSettings().setValue(QStringLiteral("news/source_col_width"), delegate_->source_col_width());
             return true;
         }
         return false;

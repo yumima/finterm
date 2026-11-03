@@ -28,8 +28,7 @@ namespace {
 
 constexpr const char* kMig041Tag = "Migration041";
 
-static Result<void> sql(QSqlDatabase& db, const char* stmt,
-                        const QVariantList& params = {}) {
+static Result<void> sql(QSqlDatabase& db, const char* stmt, const QVariantList& params = {}) {
     QSqlQuery q(db);
     q.prepare(stmt);
     for (int i = 0; i < params.size(); ++i)
@@ -64,8 +63,7 @@ static Result<void> apply_v041(QSqlDatabase& db) {
     if (has_ollama(db)) {
         // An ollama row already exists. Just delete the stale fincept row so
         // it doesn't clutter the provider list; the ollama row takes over.
-        if (auto r = sql(db, "DELETE FROM llm_configs WHERE provider = 'fincept'");
-            r.is_err())
+        if (auto r = sql(db, "DELETE FROM llm_configs WHERE provider = 'fincept'"); r.is_err())
             return r;
         LOG_INFO(kMig041Tag, "deleted stale fincept row (ollama row already present)");
         return Result<void>::ok();
@@ -76,17 +74,15 @@ static Result<void> apply_v041(QSqlDatabase& db) {
     // loopback port; model uses the primary_chat role alias.
     // base_url is the root without /v1 — LlmService appends /v1/chat/completions
     // and /v1/models itself, matching the convention used by Ollama (:11434).
-    if (auto r = sql(db,
-            "UPDATE llm_configs SET provider = 'ollama', "
-            "  base_url = 'http://127.0.0.1:11435', "
-            "  model    = 'primary_chat', "
-            "  updated_at = datetime('now') "
-            "WHERE provider = 'fincept'");
+    if (auto r = sql(db, "UPDATE llm_configs SET provider = 'ollama', "
+                         "  base_url = 'http://127.0.0.1:11435', "
+                         "  model    = 'primary_chat', "
+                         "  updated_at = datetime('now') "
+                         "WHERE provider = 'fincept'");
         r.is_err())
         return r;
 
-    LOG_INFO(kMig041Tag,
-        "migrated fincept provider row to ollama (hearth) with model=primary_chat");
+    LOG_INFO(kMig041Tag, "migrated fincept provider row to ollama (hearth) with model=primary_chat");
     return Result<void>::ok();
 }
 

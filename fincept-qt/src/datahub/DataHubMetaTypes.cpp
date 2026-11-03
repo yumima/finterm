@@ -22,20 +22,28 @@ void register_metatypes() {
 
     // Prediction Markets (Polymarket, Kalshi, …)
     qRegisterMetaType<fincept::services::prediction::MarketKey>("fincept::services::prediction::MarketKey");
-    qRegisterMetaType<fincept::services::prediction::PredictionMarket>("fincept::services::prediction::PredictionMarket");
+    qRegisterMetaType<fincept::services::prediction::PredictionMarket>(
+        "fincept::services::prediction::PredictionMarket");
     qRegisterMetaType<fincept::services::prediction::PredictionEvent>("fincept::services::prediction::PredictionEvent");
-    qRegisterMetaType<fincept::services::prediction::PredictionOrderBook>("fincept::services::prediction::PredictionOrderBook");
+    qRegisterMetaType<fincept::services::prediction::PredictionOrderBook>(
+        "fincept::services::prediction::PredictionOrderBook");
     qRegisterMetaType<fincept::services::prediction::PriceHistory>("fincept::services::prediction::PriceHistory");
     qRegisterMetaType<fincept::services::prediction::PredictionTrade>("fincept::services::prediction::PredictionTrade");
-    qRegisterMetaType<fincept::services::prediction::PredictionPosition>("fincept::services::prediction::PredictionPosition");
+    qRegisterMetaType<fincept::services::prediction::PredictionPosition>(
+        "fincept::services::prediction::PredictionPosition");
     qRegisterMetaType<fincept::services::prediction::OpenOrder>("fincept::services::prediction::OpenOrder");
     qRegisterMetaType<fincept::services::prediction::OrderResult>("fincept::services::prediction::OrderResult");
     qRegisterMetaType<fincept::services::prediction::AccountBalance>("fincept::services::prediction::AccountBalance");
-    qRegisterMetaType<QVector<fincept::services::prediction::PredictionMarket>>("QVector<fincept::services::prediction::PredictionMarket>");
-    qRegisterMetaType<QVector<fincept::services::prediction::PredictionEvent>>("QVector<fincept::services::prediction::PredictionEvent>");
-    qRegisterMetaType<QVector<fincept::services::prediction::PredictionTrade>>("QVector<fincept::services::prediction::PredictionTrade>");
-    qRegisterMetaType<QVector<fincept::services::prediction::PredictionPosition>>("QVector<fincept::services::prediction::PredictionPosition>");
-    qRegisterMetaType<QVector<fincept::services::prediction::OpenOrder>>("QVector<fincept::services::prediction::OpenOrder>");
+    qRegisterMetaType<QVector<fincept::services::prediction::PredictionMarket>>(
+        "QVector<fincept::services::prediction::PredictionMarket>");
+    qRegisterMetaType<QVector<fincept::services::prediction::PredictionEvent>>(
+        "QVector<fincept::services::prediction::PredictionEvent>");
+    qRegisterMetaType<QVector<fincept::services::prediction::PredictionTrade>>(
+        "QVector<fincept::services::prediction::PredictionTrade>");
+    qRegisterMetaType<QVector<fincept::services::prediction::PredictionPosition>>(
+        "QVector<fincept::services::prediction::PredictionPosition>");
+    qRegisterMetaType<QVector<fincept::services::prediction::OpenOrder>>(
+        "QVector<fincept::services::prediction::OpenOrder>");
     qRegisterMetaType<fincept::services::DbnDataPoint>("fincept::services::DbnDataPoint");
     qRegisterMetaType<fincept::services::GovDataResult>("fincept::services::GovDataResult");
     qRegisterMetaType<fincept::trading::BrokerPosition>("fincept::trading::BrokerPosition");
@@ -56,9 +64,11 @@ void register_metatypes() {
     qRegisterMetaType<QVector<fincept::services::geo::NewsEvent>>("QVector<fincept::services::geo::NewsEvent>");
     qRegisterMetaType<QVector<fincept::services::geo::HDXDataset>>("QVector<fincept::services::geo::HDXDataset>");
     qRegisterMetaType<QVector<fincept::services::geo::UniqueCountry>>("QVector<fincept::services::geo::UniqueCountry>");
-    qRegisterMetaType<QVector<fincept::services::geo::UniqueCategory>>("QVector<fincept::services::geo::UniqueCategory>");
+    qRegisterMetaType<QVector<fincept::services::geo::UniqueCategory>>(
+        "QVector<fincept::services::geo::UniqueCategory>");
     qRegisterMetaType<fincept::services::maritime::VesselData>("fincept::services::maritime::VesselData");
-    qRegisterMetaType<QVector<fincept::services::maritime::VesselData>>("QVector<fincept::services::maritime::VesselData>");
+    qRegisterMetaType<QVector<fincept::services::maritime::VesselData>>(
+        "QVector<fincept::services::maritime::VesselData>");
     qRegisterMetaType<fincept::relmap::RelationshipData>("fincept::relmap::RelationshipData");
 
     LOG_INFO("DataHub", "Registered 51 payload meta-types");

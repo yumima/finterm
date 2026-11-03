@@ -23,12 +23,19 @@ namespace {
 
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 
-struct LinkTypeStyle { QString icon; QString label; };
+struct LinkTypeStyle {
+    QString icon;
+    QString label;
+};
 LinkTypeStyle link_type_style(const QString& type) {
-    if (type == "reference") return {QString::fromUtf8("📊"), "REFERENCE"};
-    if (type == "deep_dive") return {QString::fromUtf8("🎓"), "DEEP DIVE"};
-    if (type == "video")     return {QString::fromUtf8("🎥"), "VIDEO"};
-    if (type == "tool")      return {QString::fromUtf8("🛠"), "TOOL"};
+    if (type == "reference")
+        return {QString::fromUtf8("📊"), "REFERENCE"};
+    if (type == "deep_dive")
+        return {QString::fromUtf8("🎓"), "DEEP DIVE"};
+    if (type == "video")
+        return {QString::fromUtf8("🎥"), "VIDEO"};
+    if (type == "tool")
+        return {QString::fromUtf8("🛠"), "TOOL"};
     return {QString::fromUtf8("📖"), "PRIMER"};
 }
 
@@ -50,15 +57,15 @@ QString action_button_ss() {
     return QString("QPushButton { color: %1; background: %2; border: 1px solid %3; padding: 6px 10px;"
                    " font-size: 11px; font-weight: 500; text-align: left; %4 }"
                    "QPushButton:hover { color: %5; border-color: %5; background: %6; }")
-        .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER(), ui::colors::ACCENT_BG());
+        .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER(),
+             ui::colors::ACCENT_BG());
 }
 QString related_chip_ss() {
     return QString("QPushButton { color: %1; background: %2; border: 1px solid %3; padding: 4px 9px;"
                    " font-size: 11px; %4 }"
                    "QPushButton:hover { color: %5; border-color: %5; background: %6; }")
-        .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER(), ui::colors::BG_RAISED());
+        .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER(),
+             ui::colors::BG_RAISED());
 }
 QString scroll_ss() {
     return QString("QScrollArea { border: none; background: transparent; }"
@@ -103,8 +110,8 @@ void RailWidget::rebuild() {
 
     if (!current_) {
         auto* lbl = new QLabel(QString("<i>Click an entry in any column to see its finterm context here.</i>"), inner);
-        lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
-                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
+        lbl->setStyleSheet(
+            QString("color: %1; background: transparent; font-size: 11px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO));
         lbl->setWordWrap(true);
         rl->addWidget(lbl);
         rl->addStretch();
@@ -222,7 +229,8 @@ void RailWidget::rebuild() {
             auto* btn = new QPushButton(a.label, container);
             btn->setCursor(Qt::PointingHandCursor);
             btn->setStyleSheet(action_button_ss());
-            if (!a.hint.isEmpty()) btn->setToolTip(a.hint);
+            if (!a.hint.isEmpty())
+                btn->setToolTip(a.hint);
             const QString screen = a.screen;
             const QString ticker = a.ticker;
             connect(btn, &QPushButton::clicked, this,
@@ -243,8 +251,7 @@ void RailWidget::rebuild() {
             btn->setCursor(Qt::PointingHandCursor);
             btn->setStyleSheet(link_button_ss());
             const QString screen = r.screen;
-            connect(btn, &QPushButton::clicked, this,
-                    [this, screen]() { emit request_action(screen, QString{}); });
+            connect(btn, &QPushButton::clicked, this, [this, screen]() { emit request_action(screen, QString{}); });
             cl->addWidget(btn);
         }
         add_panel("WHERE IN FINTERM", container);

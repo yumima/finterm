@@ -269,8 +269,9 @@ void PricingScreen::render_plan_cards() {
     if (plans_.empty()) {
         auto* empty = new QLabel("No plans available.");
         empty->setAlignment(Qt::AlignCenter);
-        empty->setStyleSheet(
-            QString("color: %1; font-size: 13px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
+        empty->setStyleSheet(QString("color: %1; font-size: 13px; background: transparent; %2")
+                                 .arg(ui::colors::TEXT_SECONDARY())
+                                 .arg(MF));
         cards_layout_->addWidget(empty);
     }
 
@@ -327,8 +328,9 @@ QWidget* PricingScreen::create_plan_card(const auth::SubscriptionPlan& plan, int
         auto* desc = new QLabel(plan.description);
         desc->setWordWrap(true);
         desc->setAlignment(Qt::AlignCenter);
-        desc->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
+        desc->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent; %2")
+                                .arg(ui::colors::TEXT_SECONDARY())
+                                .arg(MF));
         vl->addWidget(desc);
     }
 
@@ -354,8 +356,9 @@ QWidget* PricingScreen::create_plan_card(const auth::SubscriptionPlan& plan, int
 
         auto* period = new QLabel(QString("/ %1 days").arg(plan.validity_days));
         period->setAlignment(Qt::AlignCenter);
-        period->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
+        period->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent; %2")
+                                  .arg(ui::colors::TEXT_SECONDARY())
+                                  .arg(MF));
         vl->addWidget(period);
     }
 
@@ -389,8 +392,9 @@ QWidget* PricingScreen::create_plan_card(const auth::SubscriptionPlan& plan, int
     for (const auto& feature : plan.features) {
         auto* feat = new QLabel(QString("  %1").arg(feature));
         feat->setWordWrap(true);
-        feat->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
+        feat->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent; %2")
+                                .arg(ui::colors::TEXT_SECONDARY())
+                                .arg(MF));
         vl->addWidget(feat);
     }
 
@@ -430,14 +434,14 @@ QWidget* PricingScreen::create_plan_card(const auth::SubscriptionPlan& plan, int
         }
     } else {
         btn->setText("SELECT PLAN");
-        btn->setStyleSheet(
-            QString("QPushButton { background: rgba(217,119,6,0.1); color: %1; "
-                    "border: 1px solid %2; font-size: 11px; font-weight: 700; %3 }"
-                    "QPushButton:hover { background: %1; color: %4; }"
-                    "QPushButton:disabled { background: %5; color: %6; border-color: %7; }")
-                .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM())
-                .arg(MF)
-                .arg(ui::colors::BG_BASE(), ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
+        btn->setStyleSheet(QString("QPushButton { background: rgba(217,119,6,0.1); color: %1; "
+                                   "border: 1px solid %2; font-size: 11px; font-weight: 700; %3 }"
+                                   "QPushButton:hover { background: %1; color: %4; }"
+                                   "QPushButton:disabled { background: %5; color: %6; border-color: %7; }")
+                               .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM())
+                               .arg(MF)
+                               .arg(ui::colors::BG_BASE(), ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(),
+                                    ui::colors::BORDER_DIM()));
         QString pid = plan.plan_id;
         connect(btn, &QPushButton::clicked, this, [this, pid]() { on_select_plan(pid); });
     }
@@ -599,8 +603,9 @@ void PricingScreen::update_footer() {
         hl->setSpacing(6);
 
         auto* explore = new QLabel("Want to explore first?");
-        explore->setStyleSheet(
-            QString("color: %1; font-size: 12px; background: transparent; %2").arg(ui::colors::TEXT_SECONDARY()).arg(MF));
+        explore->setStyleSheet(QString("color: %1; font-size: 12px; background: transparent; %2")
+                                   .arg(ui::colors::TEXT_SECONDARY())
+                                   .arg(MF));
         hl->addWidget(explore);
 
         auto* free_btn = new QPushButton("Continue with Free Plan");

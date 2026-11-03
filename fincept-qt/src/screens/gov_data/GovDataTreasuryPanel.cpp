@@ -1,8 +1,8 @@
 // src/screens/gov_data/GovDataTreasuryPanel.cpp
 #include "screens/gov_data/GovDataTreasuryPanel.h"
-#include "screens/gov_data/GovDataProviderPanel.h"
 
 #include "core/logging/Logger.h"
+#include "screens/gov_data/GovDataProviderPanel.h"
 #include "services/gov_data/GovDataService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -56,7 +56,8 @@ static QString build_treasury_style() {
     s += QString("#govCsvBtn:hover { color:%1; background:%2; }").arg(t.text_primary, t.bg_hover);
 
     // Filter bar
-    s += QString("#govTreasuryFilterBar { background:%1; border-bottom:1px solid %2; }").arg(t.bg_surface, t.border_dim);
+    s +=
+        QString("#govTreasuryFilterBar { background:%1; border-bottom:1px solid %2; }").arg(t.bg_surface, t.border_dim);
     s += QString("#govTreasuryFilterLabel { color:%1; font-size:12px; font-weight:700;"
                  "  letter-spacing:0.5px; background:transparent; }")
              .arg(t.text_secondary);

@@ -3,6 +3,7 @@
 #include "core/config/AppIdentity.h"
 #include "core/config/ProfileManager.h"
 #include "core/logging/Logger.h"
+
 #include <QHash>
 #include <QMutex>
 #include <QSet>
@@ -19,9 +20,9 @@
 //           casual inspection. Build with libsecret-1-dev for production.
 
 #ifdef Q_OS_WIN
-#    include <windows.h>
 #    include <wincred.h>
 #    include <wincrypt.h>
+#    include <windows.h>
 #    pragma comment(lib, "Advapi32.lib")
 #endif
 
@@ -73,10 +74,9 @@ SecureStorage& SecureStorage::instance() {
     static bool warned_once = false;
     if (!warned_once) {
         warned_once = true;
-        LOG_WARN(TAG,
-                 "Linux credential storage is using XOR-obfuscated QSettings — "
-                 "NOT cryptographically secure. Install libsecret-1-dev and rebuild "
-                 "to enable the Secret Service (GNOME Keyring / KWallet) backend.");
+        LOG_WARN(TAG, "Linux credential storage is using XOR-obfuscated QSettings — "
+                      "NOT cryptographically secure. Install libsecret-1-dev and rebuild "
+                      "to enable the Secret Service (GNOME Keyring / KWallet) backend.");
     }
 #endif
 
@@ -88,7 +88,7 @@ SecureStorage& SecureStorage::instance() {
 // ─────────────────────────────────────────────────────────────────────────────
 #if !defined(Q_OS_WIN) && !defined(Q_OS_MAC)
 
-#ifdef FINCEPT_HAVE_LIBSECRET
+#    ifdef FINCEPT_HAVE_LIBSECRET
 
 // Schema describing the structure of secrets we store. The single
 // attribute "fincept-key" holds the per-secret name (e.g. FRED_API_KEY)
@@ -101,21 +101,22 @@ SecureStorage& SecureStorage::instance() {
 // unnamed trailing fields (long-standing quirk; gcc bug 39589 family).
 // Suppress just here — it's not a bug we can fix on the libsecret side.
 static const SecretSchema* fincept_schema() {
-#if defined(__GNUC__) && !defined(__clang__)
-#    pragma GCC diagnostic push
-#    pragma GCC diagnostic ignored "-Wmissing-field-initializers"
-#endif
+#        if defined(__GNUC__) && !defined(__clang__)
+#            pragma GCC diagnostic push
+#            pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+#        endif
     static const SecretSchema schema = {
         .name = AppIdentity::kBundleId,
         .flags = SECRET_SCHEMA_NONE,
-        .attributes = {
-            {"fincept-key", SECRET_SCHEMA_ATTRIBUTE_STRING},
-            {nullptr, SecretSchemaAttributeType(0)},
-        },
+        .attributes =
+            {
+                {"fincept-key", SECRET_SCHEMA_ATTRIBUTE_STRING},
+                {nullptr, SecretSchemaAttributeType(0)},
+            },
     };
-#if defined(__GNUC__) && !defined(__clang__)
-#    pragma GCC diagnostic pop
-#endif
+#        if defined(__GNUC__) && !defined(__clang__)
+#            pragma GCC diagnostic pop
+#        endif
     return &schema;
 }
 
@@ -140,13 +141,12 @@ static bool default_collection_locked() {
     return locked;
 }
 
-#else // XOR fallback helpers
+#    else // XOR fallback helpers
 
 // Derive a machine-unique obfuscation key from stable system identifiers.
 // Not a secret — just prevents the file being readable at a glance.
 static QByteArray machine_key() {
-    const QString seed = QSysInfo::machineUniqueId() + QSysInfo::productType()
-                         + QLatin1String(kService);
+    const QString seed = QSysInfo::machineUniqueId() + QSysInfo::productType() + QLatin1String(kService);
     return QCryptographicHash::hash(seed.toUtf8(), QCryptographicHash::Sha256);
 }
 
@@ -155,14 +155,13 @@ static QByteArray xor_obfuscate(const QByteArray& data) {
     QByteArray out;
     out.resize(data.size());
     for (int i = 0; i < data.size(); ++i)
-        out[i] = static_cast<char>(
-            static_cast<unsigned char>(data[i]) ^
-            static_cast<unsigned char>(key[i % key.size()]));
+        out[i] =
+            static_cast<char>(static_cast<unsigned char>(data[i]) ^ static_cast<unsigned char>(key[i % key.size()]));
     return out;
 }
 
-#endif // FINCEPT_HAVE_LIBSECRET
-#endif // Linux helpers
+#    endif // FINCEPT_HAVE_LIBSECRET
+#endif     // Linux helpers
 
 // Every secret is namespaced by the active profile so a non-default `--profile`
 // can neither read nor clear another profile's credentials. ProfileManager returns
@@ -205,27 +204,22 @@ static Result<void> backend_store(const QString& key, const QString& value) {
     const QByteArray acct_bytes = key.toUtf8();
     const QByteArray data_bytes = value.toUtf8();
 
-    CFStringRef service = CFStringCreateWithBytes(
-        nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
-        svc_bytes.size(), kCFStringEncodingUTF8, false);
-    CFStringRef account = CFStringCreateWithBytes(
-        nullptr, reinterpret_cast<const UInt8*>(acct_bytes.constData()),
-        acct_bytes.size(), kCFStringEncodingUTF8, false);
-    CFDataRef secret_data = CFDataCreate(
-        nullptr, reinterpret_cast<const UInt8*>(data_bytes.constData()),
-        static_cast<CFIndex>(data_bytes.size()));
+    CFStringRef service = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
+                                                  svc_bytes.size(), kCFStringEncodingUTF8, false);
+    CFStringRef account = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(acct_bytes.constData()),
+                                                  acct_bytes.size(), kCFStringEncodingUTF8, false);
+    CFDataRef secret_data = CFDataCreate(nullptr, reinterpret_cast<const UInt8*>(data_bytes.constData()),
+                                         static_cast<CFIndex>(data_bytes.size()));
 
     const void* find_keys[] = {kSecClass, kSecAttrService, kSecAttrAccount};
     const void* find_vals[] = {kSecClassGenericPassword, service, account};
-    CFDictionaryRef find_query = CFDictionaryCreate(
-        nullptr, find_keys, find_vals, 3,
-        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef find_query = CFDictionaryCreate(nullptr, find_keys, find_vals, 3, &kCFTypeDictionaryKeyCallBacks,
+                                                    &kCFTypeDictionaryValueCallBacks);
 
     const void* upd_keys[] = {kSecValueData};
     const void* upd_vals[] = {secret_data};
-    CFDictionaryRef upd_attrs = CFDictionaryCreate(
-        nullptr, upd_keys, upd_vals, 1,
-        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef upd_attrs = CFDictionaryCreate(nullptr, upd_keys, upd_vals, 1, &kCFTypeDictionaryKeyCallBacks,
+                                                   &kCFTypeDictionaryValueCallBacks);
 
     OSStatus status = SecItemUpdate(find_query, upd_attrs);
     CFRelease(upd_attrs);
@@ -234,9 +228,8 @@ static Result<void> backend_store(const QString& key, const QString& value) {
         // No existing item — add a new one.
         const void* add_keys[] = {kSecClass, kSecAttrService, kSecAttrAccount, kSecValueData};
         const void* add_vals[] = {kSecClassGenericPassword, service, account, secret_data};
-        CFDictionaryRef add_attrs = CFDictionaryCreate(
-            nullptr, add_keys, add_vals, 4,
-            &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+        CFDictionaryRef add_attrs = CFDictionaryCreate(nullptr, add_keys, add_vals, 4, &kCFTypeDictionaryKeyCallBacks,
+                                                       &kCFTypeDictionaryValueCallBacks);
         status = SecItemAdd(add_attrs, nullptr);
         CFRelease(add_attrs);
     } else if (status != errSecSuccess) {
@@ -244,8 +237,7 @@ static Result<void> backend_store(const QString& key, const QString& value) {
         // to Add: if the item exists but Update is rejected (ACL, locked
         // keychain, etc.) the right answer is to surface the failure, not
         // create a duplicate item.
-        LOG_WARN(TAG, QString("SecItemUpdate returned unexpected OSStatus %1 for key %2")
-                          .arg(status).arg(key));
+        LOG_WARN(TAG, QString("SecItemUpdate returned unexpected OSStatus %1 for key %2").arg(status).arg(key));
     }
 
     CFRelease(find_query);
@@ -254,8 +246,7 @@ static Result<void> backend_store(const QString& key, const QString& value) {
     CFRelease(service);
 
     if (status != errSecSuccess) {
-        LOG_ERROR(TAG, QString("Keychain store failed (OSStatus %1) for key: %2")
-                           .arg(status).arg(key));
+        LOG_ERROR(TAG, QString("Keychain store failed (OSStatus %1) for key: %2").arg(status).arg(key));
         return Result<void>::err("Failed to store in Keychain");
     }
     return Result<void>::ok();
@@ -268,15 +259,8 @@ static Result<void> backend_store(const QString& key, const QString& value) {
     const QByteArray val_bytes = value.toUtf8();
     const QByteArray label = ("finterm: " + key).toUtf8();
 
-    secret_password_store_sync(
-        fincept_schema(),
-        SECRET_COLLECTION_DEFAULT,
-        label.constData(),
-        val_bytes.constData(),
-        nullptr,
-        &err,
-        "fincept-key", key_bytes.constData(),
-        nullptr);
+    secret_password_store_sync(fincept_schema(), SECRET_COLLECTION_DEFAULT, label.constData(), val_bytes.constData(),
+                               nullptr, &err, "fincept-key", key_bytes.constData(), nullptr);
 
     if (err) {
         QString msg = QString::fromUtf8(err->message);
@@ -322,20 +306,15 @@ static Result<QString> backend_retrieve(const QString& key) {
     const QByteArray svc_bytes = QByteArray(kService);
     const QByteArray acct_bytes = key.toUtf8();
 
-    CFStringRef service = CFStringCreateWithBytes(
-        nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
-        svc_bytes.size(), kCFStringEncodingUTF8, false);
-    CFStringRef account = CFStringCreateWithBytes(
-        nullptr, reinterpret_cast<const UInt8*>(acct_bytes.constData()),
-        acct_bytes.size(), kCFStringEncodingUTF8, false);
+    CFStringRef service = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
+                                                  svc_bytes.size(), kCFStringEncodingUTF8, false);
+    CFStringRef account = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(acct_bytes.constData()),
+                                                  acct_bytes.size(), kCFStringEncodingUTF8, false);
 
-    const void* keys[] = {kSecClass, kSecAttrService, kSecAttrAccount,
-                          kSecReturnData, kSecMatchLimit};
-    const void* vals[] = {kSecClassGenericPassword, service, account,
-                          kCFBooleanTrue, kSecMatchLimitOne};
-    CFDictionaryRef query = CFDictionaryCreate(
-        nullptr, keys, vals, 5,
-        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    const void* keys[] = {kSecClass, kSecAttrService, kSecAttrAccount, kSecReturnData, kSecMatchLimit};
+    const void* vals[] = {kSecClassGenericPassword, service, account, kCFBooleanTrue, kSecMatchLimitOne};
+    CFDictionaryRef query =
+        CFDictionaryCreate(nullptr, keys, vals, 5, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
     CFTypeRef result_ref = nullptr;
     OSStatus status = SecItemCopyMatching(query, &result_ref);
@@ -351,9 +330,8 @@ static Result<QString> backend_retrieve(const QString& key) {
     }
 
     CFDataRef data = static_cast<CFDataRef>(result_ref);
-    QString value = QString::fromUtf8(
-        reinterpret_cast<const char*>(CFDataGetBytePtr(data)),
-        static_cast<int>(CFDataGetLength(data)));
+    QString value = QString::fromUtf8(reinterpret_cast<const char*>(CFDataGetBytePtr(data)),
+                                      static_cast<int>(CFDataGetLength(data)));
     CFRelease(result_ref);
     return Result<QString>::ok(value);
 
@@ -362,12 +340,8 @@ static Result<QString> backend_retrieve(const QString& key) {
     GError* err = nullptr;
     const QByteArray key_bytes = key.toUtf8();
 
-    gchar* password = secret_password_lookup_sync(
-        fincept_schema(),
-        nullptr,
-        &err,
-        "fincept-key", key_bytes.constData(),
-        nullptr);
+    gchar* password =
+        secret_password_lookup_sync(fincept_schema(), nullptr, &err, "fincept-key", key_bytes.constData(), nullptr);
 
     if (err) {
         QString msg = QString::fromUtf8(err->message);
@@ -402,7 +376,6 @@ static Result<QString> backend_retrieve(const QString& key) {
 #endif
 }
 
-
 // ─────────────────────────────────────────────────────────────────────────────
 // remove
 // ─────────────────────────────────────────────────────────────────────────────
@@ -419,18 +392,15 @@ static Result<void> backend_remove(const QString& key) {
     const QByteArray svc_bytes = QByteArray(kService);
     const QByteArray acct_bytes = key.toUtf8();
 
-    CFStringRef service = CFStringCreateWithBytes(
-        nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
-        svc_bytes.size(), kCFStringEncodingUTF8, false);
-    CFStringRef account = CFStringCreateWithBytes(
-        nullptr, reinterpret_cast<const UInt8*>(acct_bytes.constData()),
-        acct_bytes.size(), kCFStringEncodingUTF8, false);
+    CFStringRef service = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(svc_bytes.constData()),
+                                                  svc_bytes.size(), kCFStringEncodingUTF8, false);
+    CFStringRef account = CFStringCreateWithBytes(nullptr, reinterpret_cast<const UInt8*>(acct_bytes.constData()),
+                                                  acct_bytes.size(), kCFStringEncodingUTF8, false);
 
     const void* keys[] = {kSecClass, kSecAttrService, kSecAttrAccount};
     const void* vals[] = {kSecClassGenericPassword, service, account};
-    CFDictionaryRef query = CFDictionaryCreate(
-        nullptr, keys, vals, 3,
-        &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+    CFDictionaryRef query =
+        CFDictionaryCreate(nullptr, keys, vals, 3, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
 
     const OSStatus del_status = SecItemDelete(query);
     CFRelease(query);
@@ -445,12 +415,7 @@ static Result<void> backend_remove(const QString& key) {
     GError* err = nullptr;
     const QByteArray key_bytes = key.toUtf8();
 
-    secret_password_clear_sync(
-        fincept_schema(),
-        nullptr,
-        &err,
-        "fincept-key", key_bytes.constData(),
-        nullptr);
+    secret_password_clear_sync(fincept_schema(), nullptr, &err, "fincept-key", key_bytes.constData(), nullptr);
 
     // An absent item is not an error (clear returns FALSE without setting
     // err); a set err means the Secret Service itself failed, and a caller
@@ -469,7 +434,6 @@ static Result<void> backend_remove(const QString& key) {
 #    endif
 #endif
 }
-
 
 // ─────────────────────────────────────────────────────────────────────────────
 // In-memory cache over the backend
@@ -614,7 +578,6 @@ Result<void> SecureStorage::remove(const QString& key_in) {
     return r;
 }
 
-
 bool SecureStorage::is_not_found(const Result<QString>& r) {
     // Every backend returns exactly "Not found" for an absent item and a
     // different message for any failure.
@@ -698,8 +661,8 @@ Result<QStringList> SecureStorage::list_keys(const QString& prefix) {
             const QString full = QString::fromUtf8(raw);
             // The default profile has no scope prefix, so its keys must not
             // swallow other profiles' "profiles/<name>/…" entries.
-            const bool in_scope = scope.isEmpty() ? !full.startsWith(QLatin1String("profiles/"))
-                                                  : full.startsWith(scope);
+            const bool in_scope =
+                scope.isEmpty() ? !full.startsWith(QLatin1String("profiles/")) : full.startsWith(scope);
             if (in_scope) {
                 const QString key = full.mid(scope.size());
                 if (key.startsWith(prefix))

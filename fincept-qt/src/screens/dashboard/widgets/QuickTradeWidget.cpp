@@ -1,10 +1,9 @@
 #include "screens/dashboard/widgets/QuickTradeWidget.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QFrame>
 #include <QHBoxLayout>
@@ -186,21 +185,17 @@ void QuickTradeWidget::apply_styles() {
         QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     price_label_->setStyleSheet(QString("color: %1; font-size: 20px; font-weight: bold; background: transparent;")
                                     .arg(ui::colors::TEXT_PRIMARY()));
-    bid_label_->setStyleSheet(
-        QString("color: %1; background: transparent;").arg(ui::colors::POSITIVE()));
-    ask_label_->setStyleSheet(
-        QString("color: %1; background: transparent;").arg(ui::colors::NEGATIVE()));
+    bid_label_->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::POSITIVE()));
+    ask_label_->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::NEGATIVE()));
 
     separator_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
 
     side_combo_->setStyleSheet(combo_style());
     order_type_->setStyleSheet(combo_style());
 
-    qty_lbl_->setStyleSheet(
-        QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    qty_lbl_->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     qty_input_->setStyleSheet(input_style());
-    price_lbl_->setStyleSheet(
-        QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    price_lbl_->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     price_input_->setStyleSheet(input_style(ui::colors::BORDER_DIM()));
 
     est_total_->setStyleSheet(
@@ -239,7 +234,6 @@ void QuickTradeWidget::lookup_symbol() {
     set_loading(true);
 }
 
-
 void QuickTradeWidget::apply_quote(const services::QuoteData& q) {
     current_price_ = q.price;
     current_symbol_ = q.symbol.isEmpty() ? current_symbol_ : q.symbol;
@@ -269,7 +263,6 @@ void QuickTradeWidget::hub_unsubscribe_all() {
     datahub::DataHub::instance().unsubscribe(this);
     hub_active_ = false;
 }
-
 
 void QuickTradeWidget::on_side_changed(int idx) {
     // BUY = green, SELL/SHORT = red

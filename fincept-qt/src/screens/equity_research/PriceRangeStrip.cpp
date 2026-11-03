@@ -50,11 +50,10 @@ void PriceRangeStrip::clear() {
     update();
 }
 
-void PriceRangeStrip::set_candles(const QVector<services::equity::Candle>& candles,
-                                  const QString& currency_sym) {
+void PriceRangeStrip::set_candles(const QVector<services::equity::Candle>& candles, const QString& currency_sym) {
     ccy_ = currency_sym;
     stats_ = Stats{};
-    if (candles.size() < 30) {   // too little history to say anything about range
+    if (candles.size() < 30) { // too little history to say anything about range
         update();
         return;
     }
@@ -80,12 +79,12 @@ void PriceRangeStrip::set_candles(const QVector<services::equity::Candle>& candl
         return;
     }
 
-    stats_.last  = candles.last().close;
-    stats_.hi52  = hi;
-    stats_.lo52  = lo;
-    stats_.days  = in_window;
+    stats_.last = candles.last().close;
+    stats_.hi52 = hi;
+    stats_.lo52 = lo;
+    stats_.days = in_window;
     stats_.pct_of_range = std::clamp((stats_.last - lo) / (hi - lo), 0.0, 1.0);
-    stats_.has50  = sma(candles, 50, &stats_.sma50);
+    stats_.has50 = sma(candles, 50, &stats_.sma50);
     stats_.has200 = sma(candles, 200, &stats_.sma200);
 
     // Daily-return volatility, so distance from an average can be stated in
@@ -96,7 +95,7 @@ void PriceRangeStrip::set_candles(const QVector<services::equity::Candle>& candl
     for (qsizetype i = std::max<qsizetype>(1, candles.size() - 252); i < candles.size(); ++i) {
         const double p0 = candles[i - 1].close, p1 = candles[i].close;
         if (p0 <= 0.0 || p1 <= 0.0)
-            continue;   // log(0) is -inf; a real 0.000 print (^IRX) reaches here
+            continue; // log(0) is -inf; a real 0.000 print (^IRX) reaches here
         const double r = std::log(p1 / p0);
         sum += r;
         sumsq += r * r;
@@ -160,11 +159,12 @@ void PriceRangeStrip::paintEvent(QPaintEvent*) {
         g.setPen(QPen(QColor(ui::colors::TEXT_SECONDARY()), 1, Qt::DashLine));
         g.drawLine(x, bar.top() - 4, x, bar.bottom() + 4);
         g.setPen(QColor(ui::colors::TEXT_SECONDARY()));
-        g.drawText(QRect(x - 24, bar.bottom() + 5, 48, 13), Qt::AlignHCenter | Qt::AlignTop,
-                   label);
+        g.drawText(QRect(x - 24, bar.bottom() + 5, 48, 13), Qt::AlignHCenter | Qt::AlignTop, label);
     };
-    if (stats_.has200) tick(stats_.sma200, QStringLiteral("200d"));
-    if (stats_.has50)  tick(stats_.sma50,  QStringLiteral("50d"));
+    if (stats_.has200)
+        tick(stats_.sma200, QStringLiteral("200d"));
+    if (stats_.has50)
+        tick(stats_.sma50, QStringLiteral("50d"));
 
     // Today.
     const int px = x_for(stats_.last);
@@ -178,21 +178,18 @@ void PriceRangeStrip::paintEvent(QPaintEvent*) {
     g.setPen(QColor(ui::colors::TEXT_SECONDARY()));
     g.drawText(QRect(kPad, kPad - 4, bar.width() / 2, 13), Qt::AlignLeft | Qt::AlignVCenter,
                QStringLiteral("52w low %1").arg(fmt::format_money(stats_.lo52, ccy_)));
-    g.drawText(QRect(kPad + bar.width() / 2, kPad - 4, bar.width() / 2, 13),
-               Qt::AlignRight | Qt::AlignVCenter,
+    g.drawText(QRect(kPad + bar.width() / 2, kPad - 4, bar.width() / 2, 13), Qt::AlignRight | Qt::AlignVCenter,
                QStringLiteral("%1 52w high").arg(fmt::format_money(stats_.hi52, ccy_)));
 
     g.setPen(QColor(ui::colors::TEXT_PRIMARY()));
-    QString caption = QStringLiteral("%1 of its 52-week range")
-                          .arg(fmt::format_percent(stats_.pct_of_range * 100.0, 0));
+    QString caption =
+        QStringLiteral("%1 of its 52-week range").arg(fmt::format_percent(stats_.pct_of_range * 100.0, 0));
     if (stats_.has200 && stats_.daily_vol > 1e-9) {
         // Distance in this stock's own daily sigma. A bare percentage cannot be
         // compared across securities; this can.
-        caption += QStringLiteral("   ·   %1σ from its 200-day")
-                       .arg(QString::number(stats_.z200, 'f', 1));
+        caption += QStringLiteral("   ·   %1σ from its 200-day").arg(QString::number(stats_.z200, 'f', 1));
     }
-    g.drawText(QRect(kPad, bar.bottom() + 18, width() - kPad * 2, 14),
-               Qt::AlignLeft | Qt::AlignVCenter,
+    g.drawText(QRect(kPad, bar.bottom() + 18, width() - kPad * 2, 14), Qt::AlignLeft | Qt::AlignVCenter,
                fm.elidedText(caption, Qt::ElideRight, width() - kPad * 2));
 }
 
@@ -205,27 +202,23 @@ bool PriceRangeStrip::event(QEvent* e) {
         }
         QStringList t;
         t << QStringLiteral("Last %1 · %2 of the 52-week range (%3 sessions)")
-                 .arg(fmt::format_money(stats_.last, ccy_),
-                      fmt::format_percent(stats_.pct_of_range * 100.0, 0))
+                 .arg(fmt::format_money(stats_.last, ccy_), fmt::format_percent(stats_.pct_of_range * 100.0, 0))
                  .arg(stats_.days);
         if (stats_.has50)
             t << QStringLiteral("50-day %1 · %2σ away")
-                     .arg(fmt::format_money(stats_.sma50, ccy_),
-                          QString::number(stats_.z50, 'f', 1));
+                     .arg(fmt::format_money(stats_.sma50, ccy_), QString::number(stats_.z50, 'f', 1));
         if (stats_.has200)
             t << QStringLiteral("200-day %1 · %2σ away")
-                     .arg(fmt::format_money(stats_.sma200, ccy_),
-                          QString::number(stats_.z200, 'f', 1));
+                     .arg(fmt::format_money(stats_.sma200, ccy_), QString::number(stats_.z200, 'f', 1));
         t << QString();
         // The honest reading, stated once, where someone is about to draw the
         // wrong conclusion from the picture.
-        t << QStringLiteral(
-            "Position, not a recommendation. Trading below an average is not evidence of a "
-            "good entry at these horizons: nearness to the 52-week HIGH is what predicts "
-            "higher subsequent returns (George & Hwang, 2004), reversal of past losers takes "
-            "three to five years (De Bondt & Thaler, 1985), and short-horizon mean reversion "
-            "plays out inside about two weeks. The averages are marked because they are the "
-            "levels most capital watches, not because crossing one is a signal.");
+        t << QStringLiteral("Position, not a recommendation. Trading below an average is not evidence of a "
+                            "good entry at these horizons: nearness to the 52-week HIGH is what predicts "
+                            "higher subsequent returns (George & Hwang, 2004), reversal of past losers takes "
+                            "three to five years (De Bondt & Thaler, 1985), and short-horizon mean reversion "
+                            "plays out inside about two weeks. The averages are marked because they are the "
+                            "levels most capital watches, not because crossing one is a signal.");
         QToolTip::showText(he->globalPos(), t.join(QStringLiteral("\n")), this);
         return true;
     }

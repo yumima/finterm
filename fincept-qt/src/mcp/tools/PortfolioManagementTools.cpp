@@ -185,8 +185,8 @@ std::vector<ToolDef> get_portfolio_management_tools() {
             // of truth, and the asset row is re-derived from its replay.
             const QString txn_date =
                 date.trimmed().isEmpty() ? QDateTime::currentDateTimeUtc().toString(Qt::ISODate) : date;
-            auto r = PortfolioRepository::instance().add_transaction(portfolio_id, symbol, "BUY", quantity, price,
-                                                                     txn_date);
+            auto r =
+                PortfolioRepository::instance().add_transaction(portfolio_id, symbol, "BUY", quantity, price, txn_date);
             if (r.is_err())
                 return ToolResult::fail("Failed to add asset: " + QString::fromStdString(r.error()));
             const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);

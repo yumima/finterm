@@ -114,12 +114,10 @@ void PortfolioStatusBar::set_summary(const portfolio::PortfolioSummary& s) {
         const bool live = !s.from_cache;
         live_label_->setText(live ? QStringLiteral("\u25CF LIVE") : QStringLiteral("\u25CB CACHED"));
         live_label_->setStyleSheet(
-            QString("color:%1; font-weight:700;")
-                .arg(live ? ui::colors::POSITIVE() : ui::colors::TEXT_SECONDARY()));
-        live_label_->setToolTip(live
-                                    ? QStringLiteral("Values computed from a fresh quote fetch.")
-                                    : QStringLiteral("Values restored from the on-disk cache — a refresh\n"
-                                                     "is in flight; they update when it lands."));
+            QString("color:%1; font-weight:700;").arg(live ? ui::colors::POSITIVE() : ui::colors::TEXT_SECONDARY()));
+        live_label_->setToolTip(live ? QStringLiteral("Values computed from a fresh quote fetch.")
+                                     : QStringLiteral("Values restored from the on-disk cache — a refresh\n"
+                                                      "is in flight; they update when it lands."));
     }
 
     // No holding valued: unknown, not 0 (nor a gain's colour); some left
@@ -131,8 +129,9 @@ void PortfolioStatusBar::set_summary(const portfolio::PortfolioSummary& s) {
     pnl_label_->setText(QStringLiteral("P&L ") +
                         s.total_text(QString("%1%2").arg(pnl >= 0 ? "+" : "").arg(fmt(pnl)), QStringLiteral("")));
     pnl_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;")
-                                  .arg(none ? ui::colors::TEXT_SECONDARY()
-                                            : pnl >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
+                                  .arg(none       ? ui::colors::TEXT_SECONDARY()
+                                       : pnl >= 0 ? ui::colors::POSITIVE()
+                                                  : ui::colors::NEGATIVE()));
 }
 
 } // namespace fincept::screens

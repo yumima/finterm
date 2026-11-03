@@ -23,7 +23,12 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"quantity", "Quantity", "number", 1, {}, "Number of shares/contracts", true},
                 {"price", "Limit Price", "number", 0, {}, "Price for limit orders"},
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr, // Wired via UnifiedTrading
     });
@@ -42,7 +47,12 @@ void register_trading_nodes(NodeRegistry& registry) {
             {
                 {"order_id", "Order ID", "string", "", {}, "Order ID to cancel", true},
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });
@@ -63,7 +73,12 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"quantity", "New Quantity", "number", 0, {}, ""},
                 {"price", "New Price", "number", 0, {}, ""},
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });
@@ -82,7 +97,12 @@ void register_trading_nodes(NodeRegistry& registry) {
             {
                 {"status", "Status", "select", "all", {"all", "open", "filled", "cancelled"}, ""},
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });
@@ -100,7 +120,12 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });
@@ -118,7 +143,12 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });
@@ -136,7 +166,12 @@ void register_trading_nodes(NodeRegistry& registry) {
         .parameters =
             {
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });
@@ -156,7 +191,12 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"symbol", "Symbol", "string", "", {}, "Ticker symbol", true},
                 {"quantity", "Quantity", "number", 0, {}, "0 = close all"},
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });
@@ -182,7 +222,12 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"stop_loss", "Stop Loss", "number", 0, {}, "Stop price", true},
                 {"take_profit", "Take Profit", "number", 0, {}, "Target price", true},
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });
@@ -204,7 +249,12 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"trail_value", "Trail Value", "number", 5.0, {}, "% or $ amount"},
                 {"quantity", "Quantity", "number", 0, {}, "0 = all shares"},
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });
@@ -227,7 +277,12 @@ void register_trading_nodes(NodeRegistry& registry) {
                 {"tranches", "Tranches", "number", 4, {}, "Number of orders"},
                 {"interval_sec", "Interval (sec)", "number", 60, {}, "Seconds between orders"},
                 {"broker", "Broker", "select", "paper", {"paper", "alpaca", "ibkr", "tradier", "saxobank"}, ""},
-                {"account_id", "Account ID", "string", "", {}, "Optional — pick one account when several match the broker"},
+                {"account_id",
+                 "Account ID",
+                 "string",
+                 "",
+                 {},
+                 "Optional — pick one account when several match the broker"},
             },
         .execute = nullptr,
     });

@@ -440,18 +440,19 @@ QWidget* BacktestingScreen::build_center_panel() {
     metrics_table_->setAlternatingRowColors(true);
     metrics_table_->horizontalHeader()->setStretchLastSection(true);
     metrics_table_->verticalHeader()->setVisible(false);
-    metrics_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; gridline-color:%3;"
-                                          "font-family:%4; font-size:%5px; border:none; }"
-                                          "QTableWidget::item { padding:3px 8px; }"
-                                          "QHeaderView::section { background:%6; color:%7; font-weight:700;"
-                                          "padding:4px 8px; border:1px solid %3; font-family:%4; font-size:%5px; }"
-                                          "QTableWidget::item:alternate { background:%8; }")
-                                      .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM())
-                                      .arg(ui::fonts::DATA_FAMILY)
-                                      .arg(ui::fonts::SMALL)
-                                      .arg(ui::colors::BG_RAISED())
-                                      .arg(ui::colors::TEXT_SECONDARY())
-                                      .arg(ui::colors::ROW_ALT()));
+    metrics_table_->setStyleSheet(
+        QString("QTableWidget { background:%1; color:%2; gridline-color:%3;"
+                "font-family:%4; font-size:%5px; border:none; }"
+                "QTableWidget::item { padding:3px 8px; }"
+                "QHeaderView::section { background:%6; color:%7; font-weight:700;"
+                "padding:4px 8px; border:1px solid %3; font-family:%4; font-size:%5px; }"
+                "QTableWidget::item:alternate { background:%8; }")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM())
+            .arg(ui::fonts::DATA_FAMILY)
+            .arg(ui::fonts::SMALL)
+            .arg(ui::colors::BG_RAISED())
+            .arg(ui::colors::TEXT_SECONDARY())
+            .arg(ui::colors::ROW_ALT()));
     result_tabs_->addTab(metrics_table_, "METRICS");
 
     // TRADES tab
@@ -546,8 +547,7 @@ QWidget* BacktestingScreen::build_right_panel() {
     symbols_edit_->setStyleSheet(input_style);
     vl->addWidget(symbols_edit_);
     // Publish the first symbol to the linked group when the user finishes editing.
-    connect(symbols_edit_, &QLineEdit::editingFinished, this,
-            [this]() { publish_first_symbol_to_group(); });
+    connect(symbols_edit_, &QLineEdit::editingFinished, this, [this]() { publish_first_symbol_to_group(); });
 
     auto* cap_lbl = new QLabel("INITIAL CAPITAL ($)", content);
     cap_lbl->setStyleSheet(label_style);
@@ -1345,8 +1345,7 @@ void BacktestingScreen::display_result(const QJsonObject& envelope) {
 
     // Providers wrap results as {"success": true, "data": {...}} — unwrap so
     // performance/trades are found. Raw JSON tab still shows the full envelope.
-    const QJsonObject payload =
-        envelope.value("data").isObject() ? envelope.value("data").toObject() : envelope;
+    const QJsonObject payload = envelope.value("data").isObject() ? envelope.value("data").toObject() : envelope;
 
     clear_results();
 
@@ -1363,8 +1362,8 @@ void BacktestingScreen::display_result(const QJsonObject& envelope) {
 
     // Extract performance metrics (handle nested structures)
     auto perf = payload.contains("performance") ? payload["performance"].toObject()
-                : payload.contains("payload")      ? payload["payload"].toObject().value("performance").toObject()
-                                             : payload;
+                : payload.contains("payload")   ? payload["payload"].toObject().value("performance").toObject()
+                                                : payload;
 
     // Key metric cards in grid
     auto* cards = new QWidget(summary_container_);
@@ -1464,9 +1463,9 @@ void BacktestingScreen::display_result(const QJsonObject& envelope) {
     }
 
     // ── TRADES tab ──
-    auto trades = payload.contains("trades") ? payload["trades"].toArray()
+    auto trades = payload.contains("trades")    ? payload["trades"].toArray()
                   : payload.contains("payload") ? payload["payload"].toObject().value("trades").toArray()
-                                          : QJsonArray();
+                                                : QJsonArray();
 
     if (!trades.isEmpty() && trades[0].isObject()) {
         auto first = trades[0].toObject();

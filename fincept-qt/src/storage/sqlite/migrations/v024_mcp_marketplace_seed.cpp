@@ -33,8 +33,8 @@ struct Seed {
     const char* name;
     const char* description;
     const char* command;
-    const char* args_json;   // JSON array string of argv entries
-    const char* env_json;    // JSON object string of env KEY -> VAL
+    const char* args_json; // JSON array string of argv entries
+    const char* env_json;  // JSON object string of env KEY -> VAL
     const char* category;
 };
 
@@ -43,71 +43,29 @@ struct Seed {
 // db path, API keys) are flagged in the description so they
 // configure before enabling.
 static const Seed kSeeds[] = {
-    {"mcp-fetch",
-     "Fetch",
-     "Generic URL fetch — no auth required.",
-     "uvx",
-     R"(["mcp-server-fetch"])",
-     "{}",
-     "web"},
-    {"mcp-filesystem",
-     "Filesystem (sandboxed)",
-     "Sandboxed local file ops.  Edit args to set the allowed path before enabling.",
-     "npx",
-     R"(["-y","@modelcontextprotocol/server-filesystem","/tmp/finterm-fs"])",
-     "{}",
-     "files"},
-    {"mcp-sqlite",
-     "SQLite",
-     "Local DB queries.  Edit args to set the db path before enabling.",
-     "uvx",
-     R"(["mcp-server-sqlite","--db-path","/tmp/finterm.db"])",
-     "{}",
-     "data"},
-    {"mcp-time",
-     "Time / timezone",
-     "Time + timezone helpers.  No auth.",
-     "uvx",
-     R"(["mcp-server-time"])",
-     "{}",
+    {"mcp-fetch", "Fetch", "Generic URL fetch — no auth required.", "uvx", R"(["mcp-server-fetch"])", "{}", "web"},
+    {"mcp-filesystem", "Filesystem (sandboxed)",
+     "Sandboxed local file ops.  Edit args to set the allowed path before enabling.", "npx",
+     R"(["-y","@modelcontextprotocol/server-filesystem","/tmp/finterm-fs"])", "{}", "files"},
+    {"mcp-sqlite", "SQLite", "Local DB queries.  Edit args to set the db path before enabling.", "uvx",
+     R"(["mcp-server-sqlite","--db-path","/tmp/finterm.db"])", "{}", "data"},
+    {"mcp-time", "Time / timezone", "Time + timezone helpers.  No auth.", "uvx", R"(["mcp-server-time"])", "{}",
      "utility"},
-    {"mcp-sequentialthinking",
-     "Sequential Thinking",
-     "Reasoning aid — emits structured intermediate thoughts.  No auth.",
-     "npx",
-     R"(["-y","@modelcontextprotocol/server-sequential-thinking"])",
-     "{}",
-     "ai"},
-    {"mcp-brave-search",
-     "Brave Search",
-     "Web search via Brave.  Fill BRAVE_API_KEY (free at brave.com/api).",
-     "npx",
-     R"(["-y","@modelcontextprotocol/server-brave-search"])",
-     R"({"BRAVE_API_KEY":""})",
-     "web"},
-    {"mcp-playwright",
-     "Playwright (browser)",
-     "Browser automation.  No auth.",
-     "npx",
-     R"(["-y","@playwright/mcp@latest"])",
-     "{}",
-     "web"},
-    {"mcp-yfinance",
-     "yfinance (community)",
+    {"mcp-sequentialthinking", "Sequential Thinking",
+     "Reasoning aid — emits structured intermediate thoughts.  No auth.", "npx",
+     R"(["-y","@modelcontextprotocol/server-sequential-thinking"])", "{}", "ai"},
+    {"mcp-brave-search", "Brave Search", "Web search via Brave.  Fill BRAVE_API_KEY (free at brave.com/api).", "npx",
+     R"(["-y","@modelcontextprotocol/server-brave-search"])", R"({"BRAVE_API_KEY":""})", "web"},
+    {"mcp-playwright", "Playwright (browser)", "Browser automation.  No auth.", "npx",
+     R"(["-y","@playwright/mcp@latest"])", "{}", "web"},
+    {"mcp-yfinance", "yfinance (community)",
      "Free quotes / fundamentals via yfinance scrape.  No auth — community-maintained, "
      "verify the install command against the upstream README before enabling.",
-     "uvx",
-     R"(["yfinance-mcp"])",
-     "{}",
-     "finance"},
-    {"mcp-financial-datasets",
-     "financial-datasets",
+     "uvx", R"(["yfinance-mcp"])", "{}", "finance"},
+    {"mcp-financial-datasets", "financial-datasets",
      "US fundamentals + news + crypto.  Fill FINANCIAL_DATASETS_API_KEY "
      "(free tier at financialdatasets.ai).",
-     "uvx",
-     R"(["mcp-server-financial-datasets"])",
-     R"({"FINANCIAL_DATASETS_API_KEY":""})",
-     "finance"},
+     "uvx", R"(["mcp-server-financial-datasets"])", R"({"FINANCIAL_DATASETS_API_KEY":""})", "finance"},
 };
 
 static Result<void> apply_v024(QSqlDatabase& db) {
@@ -136,8 +94,7 @@ static Result<void> apply_v024(QSqlDatabase& db) {
             ++inserted;
     }
 
-    LOG_INFO(kTag, QString("Seeded %1 marketplace MCP server(s) (the rest already present)")
-                       .arg(inserted));
+    LOG_INFO(kTag, QString("Seeded %1 marketplace MCP server(s) (the rest already present)").arg(inserted));
     return Result<void>::ok();
 }
 

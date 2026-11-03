@@ -2,9 +2,8 @@
 
 #include "mcp/McpManager.h"
 
-#include "mcp/McpHttpClient.h"
-
 #include "core/logging/Logger.h"
+#include "mcp/McpHttpClient.h"
 #include "storage/repositories/McpServerRepository.h"
 
 #include <QJsonArray>

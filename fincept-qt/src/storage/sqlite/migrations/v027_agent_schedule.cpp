@@ -25,19 +25,19 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 }
 
 static Result<void> apply_v027(QSqlDatabase& db) {
-    if (auto r = sql(db,
-            "CREATE TABLE IF NOT EXISTS agent_schedule ("
-            "  id TEXT PRIMARY KEY,"
-            "  agent_id TEXT NOT NULL,"
-            "  skill TEXT NOT NULL,"
-            "  args_json TEXT NOT NULL DEFAULT '{}',"
-            "  cron TEXT NOT NULL,"
-            "  enabled INTEGER NOT NULL DEFAULT 1,"
-            "  last_run_at TEXT,"
-            "  last_status TEXT,"
-            "  created_at TEXT DEFAULT (datetime('now')),"
-            "  updated_at TEXT DEFAULT (datetime('now'))"
-            ")"); r.is_err()) {
+    if (auto r = sql(db, "CREATE TABLE IF NOT EXISTS agent_schedule ("
+                         "  id TEXT PRIMARY KEY,"
+                         "  agent_id TEXT NOT NULL,"
+                         "  skill TEXT NOT NULL,"
+                         "  args_json TEXT NOT NULL DEFAULT '{}',"
+                         "  cron TEXT NOT NULL,"
+                         "  enabled INTEGER NOT NULL DEFAULT 1,"
+                         "  last_run_at TEXT,"
+                         "  last_status TEXT,"
+                         "  created_at TEXT DEFAULT (datetime('now')),"
+                         "  updated_at TEXT DEFAULT (datetime('now'))"
+                         ")");
+        r.is_err()) {
         return r;
     }
 

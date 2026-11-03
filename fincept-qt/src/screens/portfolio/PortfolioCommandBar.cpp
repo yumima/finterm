@@ -228,12 +228,12 @@ void PortfolioCommandBar::build_portfolio_selector() {
         connect(b, &QPushButton::clicked, this, [this, signal]() {
             dropdown_->hide();
             dropdown_visible_ = false;
-            emit (this->*signal)();
+            emit(this->*signal)();
         });
         io_row->addWidget(b);
         slot = b;
     };
-    make_io("EXPORT CSV",  dd_export_csv_btn_,  &PortfolioCommandBar::export_csv_requested);
+    make_io("EXPORT CSV", dd_export_csv_btn_, &PortfolioCommandBar::export_csv_requested);
     make_io("EXPORT JSON", dd_export_json_btn_, &PortfolioCommandBar::export_json_requested);
     make_io("IMPORT JSON", dd_import_json_btn_, &PortfolioCommandBar::import_requested);
     dd_layout->addLayout(io_row);
@@ -380,8 +380,8 @@ void PortfolioCommandBar::apply_row1_styles() {
                 "  padding:0 6px; font-size:12px; font-weight:600; min-width:42px; }"
                 "QComboBox::drop-down { border:none; width:14px; }"
                 "QComboBox QAbstractItemView { background:%1; color:%2; selection-background-color:%4; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER_DIM()));
-
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::AMBER_DIM()));
 }
 
 void PortfolioCommandBar::apply_row2_styles() {
@@ -474,17 +474,18 @@ void PortfolioCommandBar::set_summary(const portfolio::PortfolioSummary& s) {
     nav_label_->setText(QStringLiteral("NAV  ") + s.total_text(fmt(s.total_market_value)));
     nav_label_->setStyleSheet(QString("color:%1; %2").arg(ui::colors::WARNING(), base_css));
 
-    pnl_label_->setText(QStringLiteral("P&L  ") +
-                        s.total_text(QString("%1%2%").arg(s.total_unrealized_pnl >= 0 ? "+" : "")
-                                         .arg(fmt(s.total_unrealized_pnl_percent)),
-                                     QStringLiteral("")));
+    pnl_label_->setText(
+        QStringLiteral("P&L  ") +
+        s.total_text(
+            QString("%1%2%").arg(s.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl_percent)),
+            QStringLiteral("")));
     pnl_label_->setStyleSheet(QString("color:%1; %2").arg(tone(s.total_unrealized_pnl), base_css));
 
     const QString day_note = s.day_note() == s.exclusion_note() ? QStringLiteral("") : s.day_note();
-    day_label_->setText(QStringLiteral("DAY  ") +
-                        s.total_text(QString("%1%2%").arg(s.total_day_change >= 0 ? "+" : "")
-                                         .arg(fmt(s.total_day_change_percent)),
-                                     day_note));
+    day_label_->setText(
+        QStringLiteral("DAY  ") +
+        s.total_text(QString("%1%2%").arg(s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change_percent)),
+                     day_note));
     day_label_->setStyleSheet(QString("color:%1; %2").arg(tone(s.total_day_change), base_css));
 
     pos_label_->setText(QString("POS %1  \u25B4%2  \u25BE%3").arg(s.total_positions).arg(s.gainers).arg(s.losers));
@@ -522,7 +523,8 @@ void PortfolioCommandBar::set_detail_view(std::optional<portfolio::DetailView> v
 }
 
 void PortfolioCommandBar::set_ffn_active(bool active) {
-    if (!ffn_btn_) return;
+    if (!ffn_btn_)
+        return;
     ffn_btn_->setProperty("active", active);
     ffn_btn_->style()->unpolish(ffn_btn_);
     ffn_btn_->style()->polish(ffn_btn_);
@@ -570,11 +572,11 @@ void PortfolioCommandBar::apply_dropdown_styles() {
             QString("background:%1; border:1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_MED()));
     }
     if (search_edit_) {
-        search_edit_->setStyleSheet(QString("QLineEdit { background:%1; color:%2; border:1px solid %3;"
-                                            "  padding:0 8px; font-size:12px; }"
-                                            "QLineEdit:focus { border-color:%4; }")
-                                        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(),
-                                             ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+        search_edit_->setStyleSheet(
+            QString("QLineEdit { background:%1; color:%2; border:1px solid %3;"
+                    "  padding:0 8px; font-size:12px; }"
+                    "QLineEdit:focus { border-color:%4; }")
+                .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
     }
     if (portfolio_list_) {
         portfolio_list_->setStyleSheet(QString("QListWidget { background:%1; color:%2; border:none; font-size:12px; }"
@@ -593,14 +595,16 @@ void PortfolioCommandBar::apply_dropdown_styles() {
     // Coloured outline at rest, fills with the accent on hover/focus.
     // :focus mirrors :hover so keyboard nav gets the same cue as the mouse.
     auto outline_lg = [](QPushButton* b, const QString& accent) {
-        if (!b) return;
+        if (!b)
+            return;
         b->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
                                  "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
                                  "QPushButton:hover, QPushButton:focus { background:%1; color:%2; outline:none; }")
                              .arg(accent, ui::colors::BG_BASE()));
     };
     auto outline_sm = [](QPushButton* b, const QString& accent) {
-        if (!b) return;
+        if (!b)
+            return;
         b->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %1;"
                                  "  font-size:11px; font-weight:700; letter-spacing:0.3px; }"
                                  "QPushButton:hover, QPushButton:focus { background:%1; color:%2; outline:none; }")
@@ -611,7 +615,7 @@ void PortfolioCommandBar::apply_dropdown_styles() {
     // Exports share CYAN — paired data-OUT operations. Import gets the
     // amber accent (paired with the CREATE NEW above): both bring new
     // portfolio state into the app, so they share the constructive cue.
-    outline_sm(dd_export_csv_btn_,  ui::colors::CYAN());
+    outline_sm(dd_export_csv_btn_, ui::colors::CYAN());
     outline_sm(dd_export_json_btn_, ui::colors::CYAN());
     outline_sm(dd_import_json_btn_, ui::colors::AMBER());
 }

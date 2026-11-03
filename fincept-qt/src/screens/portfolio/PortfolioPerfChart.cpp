@@ -8,18 +8,17 @@
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
-#include <QPointer>
-
 #include <QAreaSeries>
 #include <QCategoryAxis>
 #include <QChart>
 #include <QDateTime>
 #include <QDateTimeAxis>
-#include <QHash>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QLineSeries>
 #include <QMouseEvent>
+#include <QPointer>
 #include <QScreen>
 #include <QTimeZone>
 #include <QVBoxLayout>
@@ -56,12 +55,14 @@ void filter_to_market_hours(QVector<qint64>& ts_ms, QVector<double>& vals) {
     int out = 0;
     for (int i = 0; i < ts_ms.size(); ++i) {
         const QDateTime dt = QDateTime::fromMSecsSinceEpoch(ts_ms[i], kET);
-        if (dt.date().dayOfWeek() > 5) continue;
+        if (dt.date().dayOfWeek() > 5)
+            continue;
         const QTime t = dt.time();
         // 09:30 ≤ t ≤ 16:00 — both boundaries inclusive (16:00 IS the closing bar)
-        if (t < QTime(9, 30) || t > QTime(16, 0)) continue;
+        if (t < QTime(9, 30) || t > QTime(16, 0))
+            continue;
         ts_ms[out] = ts_ms[i];
-        vals[out]  = vals[i];
+        vals[out] = vals[i];
         ++out;
     }
     ts_ms.resize(out);
@@ -72,21 +73,23 @@ void filter_to_market_hours(QVector<qint64>& ts_ms, QVector<double>& vals) {
 // Returns (sequential_index, label_string) pairs. Targets ~5 visible labels.
 // Consecutive identical dates (live-NAV point duplicating the last snapshot)
 // are silently de-duplicated.
-QVector<QPair<double, QString>> daily_seq_labels(const QVector<QDate>& dates,
-                                                  const QString& period) {
+QVector<QPair<double, QString>> daily_seq_labels(const QVector<QDate>& dates, const QString& period) {
     QVector<QPair<double, QString>> result;
     const int n = dates.size();
-    if (n == 0) return result;
+    if (n == 0)
+        return result;
 
     QDate last_added;
     auto add = [&](int i, const QString& fmt) {
-        if (dates[i] == last_added) return; // de-duplicate consecutive identical dates
+        if (dates[i] == last_added)
+            return; // de-duplicate consecutive identical dates
         last_added = dates[i];
         result.append({static_cast<double>(i), dates[i].toString(fmt)});
     };
 
     if (period == "1W") {
-        for (int i = 0; i < n; ++i) add(i, "ddd");
+        for (int i = 0; i < n; ++i)
+            add(i, "ddd");
     } else if (period == "1M") {
         for (int i = 0; i < n; ++i)
             if (i == 0 || dates[i].weekNumber() != dates[i - 1].weekNumber())
@@ -127,9 +130,8 @@ CrosshairChartView::CrosshairChartView(QChart* chart, QWidget* parent) : QChartV
     tooltip_->hide();
 }
 
-void CrosshairChartView::set_series_data(const QVector<QPointF>& pts,
-                                          const QString& currency,
-                                          const QVector<qint64>& snap_ts_ms) {
+void CrosshairChartView::set_series_data(const QVector<QPointF>& pts, const QString& currency,
+                                         const QVector<qint64>& snap_ts_ms) {
     pts_ = pts;
     currency_ = currency;
     snap_ts_ms_ = snap_ts_ms;
@@ -180,14 +182,12 @@ void CrosshairChartView::update_crosshair(const QPoint& widget_pos) {
     // when pts_ uses sequential bar indices as x (multi-day or daily-snap
     // charts). For 1D intraday pts_.x() is the epoch-ms directly.
     const bool has_real_ts = !snap_ts_ms_.isEmpty();
-    const qint64 display_ms = has_real_ts
-        ? (best_idx < snap_ts_ms_.size() ? snap_ts_ms_[best_idx] : 0)
-        : static_cast<qint64>(snap_pt.x());
-    const qint64 series_span_ms = has_real_ts && snap_ts_ms_.size() >= 2
-        ? snap_ts_ms_.last() - snap_ts_ms_.first()
-        : (pts_.size() >= 2
-               ? static_cast<qint64>(pts_.last().x() - pts_.first().x())
-               : 0);
+    const qint64 display_ms =
+        has_real_ts ? (best_idx < snap_ts_ms_.size() ? snap_ts_ms_[best_idx] : 0) : static_cast<qint64>(snap_pt.x());
+    const qint64 series_span_ms =
+        has_real_ts && snap_ts_ms_.size() >= 2
+            ? snap_ts_ms_.last() - snap_ts_ms_.first()
+            : (pts_.size() >= 2 ? static_cast<qint64>(pts_.last().x() - pts_.first().x()) : 0);
 
     // Timestamps from iso_date_to_ms_utc are midnight UTC; intraday bars are not.
     // Use this to pick a format that shows time only when meaningful.
@@ -196,11 +196,11 @@ void CrosshairChartView::update_crosshair(const QPoint& widget_pos) {
     const QDateTime dt = QDateTime::fromMSecsSinceEpoch(display_ms);
     QString time_str;
     if (series_span_ms > 0 && series_span_ms <= k36hMs)
-        time_str = dt.toString("HH:mm");           // 1D single session
+        time_str = dt.toString("HH:mm"); // 1D single session
     else if (!is_midnight_utc)
-        time_str = dt.toString("ddd HH:mm");       // multi-day intraday (1W focus)
+        time_str = dt.toString("ddd HH:mm"); // multi-day intraday (1W focus)
     else
-        time_str = dt.toString("dd MMM yyyy");     // daily snapshot charts
+        time_str = dt.toString("dd MMM yyyy"); // daily snapshot charts
     const QString val_str = QString("%1 %2").arg(currency_, QString::number(snap_pt.y(), 'f', 2));
     tooltip_->setText(time_str + "\n" + val_str);
     tooltip_->adjustSize();
@@ -251,9 +251,8 @@ void PortfolioPerfChart::build_ui() {
     title_label_->setTextFormat(Qt::RichText);
     title_label_->setStyleSheet(
         QString("font-size:12px; font-weight:700; letter-spacing:1.5px; background:transparent;"));
-    title_label_->setText(
-        QString("<span style='color:%1'>HOLDINGS</span> <span style='color:%2'>PERFORMANCE</span>")
-            .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY()));
+    title_label_->setText(QString("<span style='color:%1'>HOLDINGS</span> <span style='color:%2'>PERFORMANCE</span>")
+                              .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY()));
     header->addWidget(title_label_);
 
     // The former "← PORTFOLIO" back pill lived here; it was removed because
@@ -320,8 +319,7 @@ void PortfolioPerfChart::build_ui() {
                 "  font-size:12px; font-weight:700; border-radius:2px; }"
                 "QPushButton:checked { color:%4; background:%2; border:1px solid %2; }"
                 "QPushButton:hover:!checked { color:%3; border-color:%3; }")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(),
-                 ui::colors::BG_BASE()));
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::AMBER(), ui::colors::TEXT_PRIMARY(), ui::colors::BG_BASE()));
     connect(indexed_btn_, &QPushButton::clicked, this, [this]() {
         indexed_mode_ = indexed_btn_->isChecked();
         update_chart();
@@ -363,8 +361,7 @@ void PortfolioPerfChart::build_ui() {
     info_bar->addWidget(sep3);
 
     cost_basis_label_ = new QLabel;
-    cost_basis_label_->setStyleSheet(
-        QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+    cost_basis_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     cost_basis_label_->setToolTip("Total cost basis — the dashed horizontal line on the chart.");
     info_bar->addWidget(cost_basis_label_);
 
@@ -381,22 +378,20 @@ void PortfolioPerfChart::build_ui() {
     const QString live_cyan = QString("color:%1; font-size:12px; font-weight:700;"
                                       "font-family:Consolas,monospace; background:transparent;")
                                   .arg(ui::colors::CYAN());
-    const QString live_dim  = QString("color:%1; font-size:12px;"
-                                      "font-family:Consolas,monospace; background:transparent;")
-                                  .arg(ui::colors::TEXT_SECONDARY());
+    const QString live_dim = QString("color:%1; font-size:12px;"
+                                     "font-family:Consolas,monospace; background:transparent;")
+                                 .arg(ui::colors::TEXT_SECONDARY());
 
     live_last_label_ = new QLabel;
     live_last_label_->setStyleSheet(live_prim);
-    live_last_label_->setToolTip(QStringLiteral(
-        "Last trade — most recent transaction price from yfinance."));
+    live_last_label_->setToolTip(QStringLiteral("Last trade — most recent transaction price from yfinance."));
     info_bar->addWidget(live_last_label_);
 
     live_bidask_label_ = new QLabel;
     live_bidask_label_->setStyleSheet(live_cyan);
-    live_bidask_label_->setToolTip(QStringLiteral(
-        "Bid x Ask — best-effort live order-book snapshot. May be delayed; "
-        "zero / dash outside regular trading hours or for illiquid tickers. "
-        "Not a real order book."));
+    live_bidask_label_->setToolTip(QStringLiteral("Bid x Ask — best-effort live order-book snapshot. May be delayed; "
+                                                  "zero / dash outside regular trading hours or for illiquid tickers. "
+                                                  "Not a real order book."));
     info_bar->addWidget(live_bidask_label_);
 
     live_range_label_ = new QLabel;
@@ -435,14 +430,13 @@ void PortfolioPerfChart::set_summary(const portfolio::PortfolioSummary& summary)
     // PortfolioService::load_summary lands cached=true first, then a
     // second emit with cached=false replaces it.
     if (title_label_ && focus_symbol_.isEmpty()) {
-        const QString stale_tag = summary.from_cache
-            ? QString(" <span style='color:%1;font-weight:600'>CACHED</span>")
-                  .arg(ui::colors::TEXT_TERTIARY())
-            : QString();
-        title_label_->setText(
-            QString("<span style='color:%1'>HOLDINGS</span>"
-                    " <span style='color:%2'>PERFORMANCE</span>%3")
-                .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY(), stale_tag));
+        const QString stale_tag =
+            summary.from_cache
+                ? QString(" <span style='color:%1;font-weight:600'>CACHED</span>").arg(ui::colors::TEXT_TERTIARY())
+                : QString();
+        title_label_->setText(QString("<span style='color:%1'>HOLDINGS</span>"
+                                      " <span style='color:%2'>PERFORMANCE</span>%3")
+                                  .arg(ui::colors::WARNING(), ui::colors::TEXT_SECONDARY(), stale_tag));
     }
     update_chart();
 }
@@ -457,8 +451,7 @@ void PortfolioPerfChart::set_snapshots(const QVector<portfolio::PortfolioSnapsho
 }
 
 void PortfolioPerfChart::set_history(const QVector<portfolio::PortfolioSnapshot>& snapshots,
-                                     const QVector<portfolio::Transaction>& txns,
-                                     const portfolio::FxRates& fx) {
+                                     const QVector<portfolio::Transaction>& txns, const portfolio::FxRates& fx) {
     transactions_ = txns;
     fx_ = fx;
     set_snapshots(snapshots);
@@ -475,7 +468,7 @@ void PortfolioPerfChart::set_spy_history(const QStringList& dates, const QVector
 void PortfolioPerfChart::set_benchmark_history(const QString& symbol, const QStringList& dates,
                                                const QVector<double>& closes) {
     benchmark_symbol_ = symbol.isEmpty() ? QStringLiteral("SPY") : symbol;
-    spy_dates_ = dates;   // field name kept for back-compat; holds chosen benchmark
+    spy_dates_ = dates; // field name kept for back-compat; holds chosen benchmark
     spy_closes_ = closes;
     if (benchmark_btn_)
         benchmark_btn_->setText(benchmark_symbol_);
@@ -494,26 +487,27 @@ void PortfolioPerfChart::set_period(const QString& period) {
     // chart paints a placeholder until set_*_intraday() lands.
     if (is_intraday_period()) {
         intraday_requested_ = true;
-        intraday_resolved_  = false;  // waiting for callback
-        intraday_for_symbol_ = focus_symbol_;  // empty if portfolio view
+        intraday_resolved_ = false;           // waiting for callback
+        intraday_for_symbol_ = focus_symbol_; // empty if portfolio view
         // 1D gets a 2-point prev-close → current seed so the chart isn't
         // blank during the fan-out. 1W intraday spans 5 trading days — the
         // 6.5h seed would mislead, so skip the seed and let the placeholder
         // render until real bars arrive.
         if (current_period_ == QStringLiteral("1D"))
             seed_intraday_from_summary();
-        else
-            { intraday_ts_ms_.clear(); intraday_values_.clear(); }
+        else {
+            intraday_ts_ms_.clear();
+            intraday_values_.clear();
+        }
         // Indexed (base-100) mode only makes sense over multi-day windows;
         // 1D is a raw-value series. Keep it available for 1W intraday.
         if (indexed_btn_) {
             const bool indexed_ok = current_period_ != QStringLiteral("1D");
             indexed_btn_->setEnabled(indexed_ok);
             indexed_btn_->setToolTip(indexed_ok
-                ? QStringLiteral("Indexed view: rebase to 100 at the start of the period.")
-                : QStringLiteral(
-                    "Indexed view is unavailable in 1D — intraday is rendered "
-                    "as raw price/NAV."));
+                                         ? QStringLiteral("Indexed view: rebase to 100 at the start of the period.")
+                                         : QStringLiteral("Indexed view is unavailable in 1D — intraday is rendered "
+                                                          "as raw price/NAV."));
         }
         emit intraday_requested(focus_symbol_, period_for_yfinance(), intraday_interval());
         update_chart();
@@ -527,9 +521,8 @@ void PortfolioPerfChart::set_period(const QString& period) {
     intraday_values_.clear();
     if (indexed_btn_) {
         indexed_btn_->setEnabled(true);
-        indexed_btn_->setToolTip(
-            QStringLiteral("Indexed view: rebase portfolio and benchmark to 100 at the start of\n"
-                           "the period for a like-for-like return comparison."));
+        indexed_btn_->setToolTip(QStringLiteral("Indexed view: rebase portfolio and benchmark to 100 at the start of\n"
+                                                "the period for a like-for-like return comparison."));
     }
 
     // Focus mode: ask the owner to refetch this symbol's history for the new
@@ -546,14 +539,13 @@ void PortfolioPerfChart::set_period(const QString& period) {
     if (prev != period && !snapshots_.isEmpty()) {
         const QDate earliest = QDate::fromString(snapshots_.first().snapshot_date.left(10), Qt::ISODate);
         const QDate today = QDate::currentDate();
-        const int needed_days = (period == "5Y" || period == "ALL") ? 1825
-                              : (period == "1Y" || period == "YTD") ? 365
-                              : (period == "3M") ? 95
-                              : (period == "1M") ? 32
-                              : 10;
+        const int needed_days = (period == "5Y" || period == "ALL")   ? 1825
+                                : (period == "1Y" || period == "YTD") ? 365
+                                : (period == "3M")                    ? 95
+                                : (period == "1M")                    ? 32
+                                                                      : 10;
         if (earliest.isValid() && earliest.daysTo(today) < needed_days - 5) {
-            const QString backfill_period =
-                (period == "5Y" || period == "ALL") ? "5y" : "1y";
+            const QString backfill_period = (period == "5Y" || period == "ALL") ? "5y" : "1y";
             emit backfill_period_requested(backfill_period);
         }
     }
@@ -571,13 +563,20 @@ QString PortfolioPerfChart::focus_currency() const {
 QString PortfolioPerfChart::period_for_yfinance() const {
     // yfinance accepts: 1d 5d 1mo 3mo 6mo 1y 2y 5y 10y ytd max
     const QString& p = current_period_;
-    if (p == "1D") return QStringLiteral("1d");
-    if (p == "1W") return QStringLiteral("5d");
-    if (p == "1M") return QStringLiteral("1mo");
-    if (p == "3M") return QStringLiteral("3mo");
-    if (p == "YTD") return QStringLiteral("ytd");
-    if (p == "1Y") return QStringLiteral("1y");
-    if (p == "5Y") return QStringLiteral("5y");
+    if (p == "1D")
+        return QStringLiteral("1d");
+    if (p == "1W")
+        return QStringLiteral("5d");
+    if (p == "1M")
+        return QStringLiteral("1mo");
+    if (p == "3M")
+        return QStringLiteral("3mo");
+    if (p == "YTD")
+        return QStringLiteral("ytd");
+    if (p == "1Y")
+        return QStringLiteral("1y");
+    if (p == "5Y")
+        return QStringLiteral("5y");
     return QStringLiteral("max"); // ALL
 }
 
@@ -594,8 +593,7 @@ bool PortfolioPerfChart::is_intraday_period() const {
 }
 
 QString PortfolioPerfChart::intraday_interval() const {
-    return current_period_ == QStringLiteral("1W")
-        ? QStringLiteral("30m") : QStringLiteral("1m");
+    return current_period_ == QStringLiteral("1W") ? QStringLiteral("30m") : QStringLiteral("1m");
 }
 
 void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
@@ -609,11 +607,13 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
         // always, 1W in focus mode) so we don't hit the daily-close path.
         if (is_intraday_period()) {
             intraday_requested_ = true;
-            intraday_resolved_  = false;
+            intraday_resolved_ = false;
             if (current_period_ == QStringLiteral("1D"))
                 seed_intraday_from_summary();
-            else
-                { intraday_ts_ms_.clear(); intraday_values_.clear(); }
+            else {
+                intraday_ts_ms_.clear();
+                intraday_values_.clear();
+            }
             emit intraday_requested(focus_symbol_, period_for_yfinance(), intraday_interval());
         } else {
             emit focus_symbol_period_requested(focus_symbol_, period_for_yfinance());
@@ -636,15 +636,14 @@ void PortfolioPerfChart::set_focus_symbol(const QString& symbol) {
     if (title_label_)
         title_label_->setText(
             QString("<span style='color:%1'>%2</span> <span style='color:%3'>PERFORMANCE</span>")
-                .arg(ui::colors::WARNING(), focus_symbol_.toHtmlEscaped(),
-                     ui::colors::TEXT_SECONDARY()));
+                .arg(ui::colors::WARNING(), focus_symbol_.toHtmlEscaped(), ui::colors::TEXT_SECONDARY()));
     // Route the fetch by current period: intraday-rendered periods (1D, and
     // 1W in focus mode) need bar-level data, not daily closes. Clear the
     // prior symbol's intraday bars so the chart shows a "Loading…"
     // placeholder until the new symbol's bars land.
     if (is_intraday_period()) {
-        intraday_requested_  = true;
-        intraday_resolved_   = false;
+        intraday_requested_ = true;
+        intraday_resolved_ = false;
         intraday_for_symbol_ = focus_symbol_;
         intraday_ts_ms_.clear();
         intraday_values_.clear();
@@ -673,8 +672,7 @@ void PortfolioPerfChart::fetch_focus_orderbook() {
     const QString want = focus_symbol_;
     QPointer<PortfolioPerfChart> self = this;
     services::MarketDataService::instance().fetch_orderbook( // D4-exempt: focus-symbol orderbook, no hub producer yet
-        want,
-        [self, want](bool ok, const services::MarketDataService::OrderbookData& ob) {
+        want, [self, want](bool ok, const services::MarketDataService::OrderbookData& ob) {
             if (!self)
                 return;
             // Clear the in-flight marker only if it still matches *this*
@@ -692,9 +690,9 @@ void PortfolioPerfChart::fetch_focus_orderbook() {
             }
             if (!ok)
                 return;
-            self->ob_symbol_   = want;
-            self->ob_bid_      = ob.bid;
-            self->ob_ask_      = ob.ask;
+            self->ob_symbol_ = want;
+            self->ob_bid_ = ob.bid;
+            self->ob_ask_ = ob.ask;
             self->ob_bid_size_ = ob.bid_size;
             self->ob_ask_size_ = ob.ask_size;
             self->update_chart();
@@ -727,7 +725,7 @@ void PortfolioPerfChart::clear_focus_symbol() {
     intraday_for_symbol_.clear();
     if (current_period_ == QStringLiteral("1D")) {
         intraday_requested_ = true;
-        seed_intraday_from_summary();  // aggregate seed now that focus is gone
+        seed_intraday_from_summary(); // aggregate seed now that focus is gone
         emit intraday_requested(QString(), QStringLiteral("1d"), QStringLiteral("1m"));
     } else if (current_period_ == QStringLiteral("1W")) {
         // Aggregate 1W uses the snapshots path, not intraday — leave the
@@ -746,29 +744,31 @@ void PortfolioPerfChart::set_focus_history(const QString& symbol, const QStringL
     update_chart();
 }
 
-void PortfolioPerfChart::set_symbol_intraday(const QString& symbol,
-                                             const QVector<qint64>& timestamps_ms,
+void PortfolioPerfChart::set_symbol_intraday(const QString& symbol, const QVector<qint64>& timestamps_ms,
                                              const QVector<double>& closes) {
     // Race-safe: only accept if we're still showing an intraday-rendered
     // period (1D, or 1W in focus mode) for this symbol.
-    if (!is_intraday_period()) return;
-    if (focus_symbol_.isEmpty() || symbol.toUpper() != focus_symbol_) return;
+    if (!is_intraday_period())
+        return;
+    if (focus_symbol_.isEmpty() || symbol.toUpper() != focus_symbol_)
+        return;
     intraday_for_symbol_ = focus_symbol_;
-    intraday_ts_ms_      = timestamps_ms;
-    intraday_values_     = closes;
-    intraday_resolved_   = true;  // got a definitive answer (may be empty)
+    intraday_ts_ms_ = timestamps_ms;
+    intraday_values_ = closes;
+    intraday_resolved_ = true; // got a definitive answer (may be empty)
     update_chart();
 }
 
-void PortfolioPerfChart::set_portfolio_intraday(const QVector<qint64>& timestamps_ms,
-                                                const QVector<double>& navs,
+void PortfolioPerfChart::set_portfolio_intraday(const QVector<qint64>& timestamps_ms, const QVector<double>& navs,
                                                 const QString& unavailable_reason) {
-    if (current_period_ != QStringLiteral("1D")) return;
-    if (!focus_symbol_.isEmpty()) return; // stale aggregate while symbol focused
+    if (current_period_ != QStringLiteral("1D"))
+        return;
+    if (!focus_symbol_.isEmpty())
+        return; // stale aggregate while symbol focused
     intraday_for_symbol_ = QString();
-    intraday_ts_ms_      = timestamps_ms;
-    intraday_values_     = navs;
-    intraday_resolved_   = true;
+    intraday_ts_ms_ = timestamps_ms;
+    intraday_values_ = navs;
+    intraday_resolved_ = true;
     intraday_unavailable_reason_ = unavailable_reason;
     update_chart();
 }
@@ -786,9 +786,8 @@ void PortfolioPerfChart::update_period_buttons_enabled() {
     // left it disabled for freshly-imported portfolios — exactly the case
     // where the user most wants to glance at today's curve.
     const QDate today = QDate::currentDate();
-    const QDate earliest = snapshots_.isEmpty()
-        ? QDate()
-        : QDate::fromString(snapshots_.first().snapshot_date.left(10), Qt::ISODate);
+    const QDate earliest =
+        snapshots_.isEmpty() ? QDate() : QDate::fromString(snapshots_.first().snapshot_date.left(10), Qt::ISODate);
     const int span_days = earliest.isValid() ? earliest.daysTo(today) : 0;
     for (auto* btn : period_btns_) {
         const QString p = btn->text();
@@ -800,8 +799,7 @@ void PortfolioPerfChart::update_period_buttons_enabled() {
         // 1D and the longer periods always allowed: backfill / intraday fetch
         // kicks in when clicked.
         btn->setEnabled(feasible);
-        btn->setToolTip(feasible ? QString()
-                                 : QStringLiteral("Needs more snapshot history."));
+        btn->setToolTip(feasible ? QString() : QStringLiteral("Needs more snapshot history."));
     }
 }
 
@@ -814,10 +812,14 @@ void PortfolioPerfChart::set_live_group_visible(bool visible) {
     // overall-performance tokens; toggle each individually since they share
     // a layout. Hidden labels collapse to zero width by default (Qt's
     // QSizePolicy::retainSizeWhenHidden is off).
-    if (live_last_label_)   live_last_label_->setVisible(visible);
-    if (live_bidask_label_) live_bidask_label_->setVisible(visible);
-    if (live_range_label_)  live_range_label_->setVisible(visible);
-    if (live_vol_label_)    live_vol_label_->setVisible(visible);
+    if (live_last_label_)
+        live_last_label_->setVisible(visible);
+    if (live_bidask_label_)
+        live_bidask_label_->setVisible(visible);
+    if (live_range_label_)
+        live_range_label_->setVisible(visible);
+    if (live_vol_label_)
+        live_vol_label_->setVisible(visible);
 }
 
 void PortfolioPerfChart::seed_intraday_from_summary() {
@@ -840,14 +842,12 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     }
 
     if (intraday_ts_ms_.size() != intraday_values_.size()) {
-        LOG_WARN("PortfolioPerf",
-                 QString("Intraday series size mismatch: %1 ts vs %2 vals — rendering placeholder")
-                     .arg(intraday_ts_ms_.size()).arg(intraday_values_.size()));
+        LOG_WARN("PortfolioPerf", QString("Intraday series size mismatch: %1 ts vs %2 vals — rendering placeholder")
+                                      .arg(intraday_ts_ms_.size())
+                                      .arg(intraday_values_.size()));
     }
-    if (intraday_ts_ms_.isEmpty() || intraday_values_.isEmpty()
-        || intraday_ts_ms_.size() != intraday_values_.size()) {
-        const QString label = is_aggregate ? QStringLiteral("portfolio NAV")
-                                           : focus_symbol_;
+    if (intraday_ts_ms_.isEmpty() || intraday_values_.isEmpty() || intraday_ts_ms_.size() != intraday_values_.size()) {
+        const QString label = is_aggregate ? QStringLiteral("portfolio NAV") : focus_symbol_;
         // Distinguish "still loading" (callback hasn't fired yet) from
         // "callback fired but returned empty" (market closed, holiday,
         // illiquid symbol). The latter would otherwise show "Loading…"
@@ -856,11 +856,9 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
             const QString why = (is_aggregate && !intraday_unavailable_reason_.isEmpty())
                                     ? intraday_unavailable_reason_
                                     : QStringLiteral("market closed or no bars");
-            period_change_label_->setText(
-                QString("%1 unavailable for %2 (%3)").arg(current_period_, label, why));
+            period_change_label_->setText(QString("%1 unavailable for %2 (%3)").arg(current_period_, label, why));
         } else {
-            period_change_label_->setText(
-                QString("Loading %1 %2…").arg(current_period_, label));
+            period_change_label_->setText(QString("Loading %1 %2…").arg(current_period_, label));
         }
         // Aggregate path owns its own info-bar; per-symbol path's
         // TOTAL/MV/COST + live row is populated by update_chart_focus()'s
@@ -868,7 +866,8 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
         if (is_aggregate) {
             total_return_label_->clear();
             nav_label_->clear();
-            if (cost_basis_label_) cost_basis_label_->clear();
+            if (cost_basis_label_)
+                cost_basis_label_->clear();
         }
         chart_view_->set_series_data({}, currency_);
         return false;
@@ -878,24 +877,22 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     // and assign sequential bar indices as x so weekend/overnight gaps vanish.
     // Single-day (1D) keeps real ms timestamps — one session has no gaps.
     constexpr qint64 kOneDayMs = 24LL * 60 * 60 * 1000;
-    const bool multi_day =
-        (intraday_ts_ms_.last() - intraday_ts_ms_.first()) > kOneDayMs;
+    const bool multi_day = (intraday_ts_ms_.last() - intraday_ts_ms_.first()) > kOneDayMs;
 
     QVector<QPointF> pts;
-    QVector<qint64>  pts_ts_ms; // actual timestamps for crosshair (multi-day only)
-    QAbstractAxis*   x = nullptr;
+    QVector<qint64> pts_ts_ms; // actual timestamps for crosshair (multi-day only)
+    QAbstractAxis* x = nullptr;
 
     if (multi_day) {
-        QVector<qint64> mkt_ts   = intraday_ts_ms_;
-        QVector<double>  mkt_vals = intraday_values_;
+        QVector<qint64> mkt_ts = intraday_ts_ms_;
+        QVector<double> mkt_vals = intraday_values_;
         filter_to_market_hours(mkt_ts, mkt_vals);
         // Guard: filter may empty the vectors for holiday stubs or all-weekend
         // data. Without this, pts.first() below would be undefined behaviour.
         // chart was already cleared at the top of this function; x is nullptr
         // but never used past this point, so no axis leak.
         if (mkt_ts.isEmpty()) {
-            period_change_label_->setText(
-                QString("%1 unavailable (no market-hour bars)").arg(current_period_));
+            period_change_label_->setText(QString("%1 unavailable (no market-hour bars)").arg(current_period_));
             chart_view_->set_series_data({}, currency_);
             return false;
         }
@@ -942,7 +939,7 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     }
 
     const double first = pts.first().y();
-    const double last  = pts.last().y();
+    const double last = pts.last().y();
     // 1D change is measured from the PREVIOUS CLOSE — the base the stats
     // ribbon's day change uses — not from the session's first 1-minute bar,
     // which silently dropped the overnight gap and disagreed with the
@@ -977,7 +974,7 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     }
     const double pnl_pct = base > 0 ? (last - base) / base * 100.0 : 0.0;
 
-    auto* line  = new QLineSeries;
+    auto* line = new QLineSeries;
     auto* upper = new QLineSeries;
     auto* lower = new QLineSeries;
     double y_min = std::numeric_limits<double>::max();
@@ -991,11 +988,11 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
     }
     y_min = std::min(y_min, base);
     y_max = std::max(y_max, base);
-    const QColor lc = pnl_pct >= 0 ? QColor(ui::colors::POSITIVE())
-                                   : QColor(ui::colors::NEGATIVE());
+    const QColor lc = pnl_pct >= 0 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE());
     line->setPen(QPen(lc, 2));
     auto* area = new QAreaSeries(upper, lower);
-    QColor fill = lc; fill.setAlpha(35);
+    QColor fill = lc;
+    fill.setAlpha(35);
     area->setBrush(fill);
     area->setPen(QPen(Qt::NoPen));
 
@@ -1034,16 +1031,15 @@ bool PortfolioPerfChart::render_intraday(bool is_aggregate) {
         : base_is_prev_close
             ? tr("Change since the previous close — the same base as the day change in the stats ribbon.")
             : tr("Previous close unknown — change measured from the session's first bar."));
-    period_change_label_->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:600;").arg(pcol));
+    period_change_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(pcol));
 
     if (is_aggregate) {
-        total_return_label_->setText(QString("NAV %1 %2")
-                                         .arg(currency_).arg(QString::number(last, 'f', 2)));
+        total_return_label_->setText(QString("NAV %1 %2").arg(currency_).arg(QString::number(last, 'f', 2)));
         total_return_label_->setStyleSheet(
             QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
         nav_label_->clear();
-        if (cost_basis_label_) cost_basis_label_->clear();
+        if (cost_basis_label_)
+            cost_basis_label_->clear();
     }
     // Non-aggregate: TOTAL/MV/COST handled by update_chart_focus()'s tail
     // so the labels track summary_.holdings instead of being overwritten
@@ -1060,15 +1056,13 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
         delete axis;
     }
 
-    if (focus_dates_.isEmpty() || focus_closes_.isEmpty() ||
-        focus_dates_.size() != focus_closes_.size()) {
+    if (focus_dates_.isEmpty() || focus_closes_.isEmpty() || focus_dates_.size() != focus_closes_.size()) {
         // Loading placeholder — or, once the fetch has answered empty, an
         // explicit unavailable state (it used to say "Loading…" forever).
         // Caller's tail still populates held-based labels.
         period_change_label_->setText(
-            focus_data_loaded_
-                ? QStringLiteral("%1  No price history for %2").arg(current_period_, focus_symbol_)
-                : QStringLiteral("Loading %1…").arg(focus_symbol_));
+            focus_data_loaded_ ? QStringLiteral("%1  No price history for %2").arg(current_period_, focus_symbol_)
+                               : QStringLiteral("Loading %1…").arg(focus_symbol_));
         chart_view_->set_series_data({}, currency_);
         return false;
     }
@@ -1078,15 +1072,14 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
     QVector<QPointF> ms_pts; // (ms, raw_close) — used only for ordering
     ms_pts.reserve(focus_closes_.size());
     for (int i = 0; i < focus_closes_.size(); ++i)
-        ms_pts.append(QPointF(static_cast<double>(iso_date_to_ms_utc(focus_dates_[i])),
-                              focus_closes_[i]));
-    std::sort(ms_pts.begin(), ms_pts.end(),
-              [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
+        ms_pts.append(QPointF(static_cast<double>(iso_date_to_ms_utc(focus_dates_[i])), focus_closes_[i]));
+    std::sort(ms_pts.begin(), ms_pts.end(), [](const QPointF& a, const QPointF& b) { return a.x() < b.x(); });
 
-    const double first    = ms_pts.first().y();
+    const double first = ms_pts.first().y();
     const double last_val = ms_pts.last().y();
-    if (last_out) *last_out = last_val;
-    const double pnl     = last_val - first;
+    if (last_out)
+        *last_out = last_val;
+    const double pnl = last_val - first;
     const double pnl_pct = first > 0 ? (pnl / first) * 100.0 : 0.0;
 
     auto to_display = [&](double v) -> double {
@@ -1097,8 +1090,8 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
 
     // Sequential-index pts (raw y for crosshair) + actual timestamps + dates
     QVector<QPointF> pts;
-    QVector<qint64>  seq_ts_ms;
-    QVector<QDate>   seq_dates;
+    QVector<qint64> seq_ts_ms;
+    QVector<QDate> seq_dates;
     pts.reserve(ms_pts.size());
     seq_ts_ms.reserve(ms_pts.size());
     seq_dates.reserve(ms_pts.size());
@@ -1109,7 +1102,7 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
         seq_dates.append(QDateTime::fromMSecsSinceEpoch(ms, QTimeZone::UTC).date());
     }
 
-    auto* line  = new QLineSeries;
+    auto* line = new QLineSeries;
     auto* upper = new QLineSeries;
     auto* lower = new QLineSeries;
     double y_min = std::numeric_limits<double>::max();
@@ -1126,7 +1119,8 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
     QColor lc = pnl >= 0 ? QColor(ui::colors::POSITIVE()) : QColor(ui::colors::NEGATIVE());
     line->setPen(QPen(lc, 2));
     auto* area = new QAreaSeries(upper, lower);
-    QColor fill = lc; fill.setAlpha(35);
+    QColor fill = lc;
+    fill.setAlpha(35);
     area->setBrush(fill);
     area->setPen(QPen(Qt::NoPen));
 
@@ -1164,12 +1158,9 @@ bool PortfolioPerfChart::render_daily_focus(double* last_out) {
     chart_view_->set_series_data(pts, indexed_mode_ ? QStringLiteral("%") : focus_currency(), seq_ts_ms);
 
     const char* period_color = pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
-    period_change_label_->setText(QString("%1  %2%3%")
-                                      .arg(current_period_)
-                                      .arg(pnl_pct >= 0 ? "+" : "")
-                                      .arg(QString::number(pnl_pct, 'f', 2)));
-    period_change_label_->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:600;").arg(period_color));
+    period_change_label_->setText(
+        QString("%1  %2%3%").arg(current_period_).arg(pnl_pct >= 0 ? "+" : "").arg(QString::number(pnl_pct, 'f', 2)));
+    period_change_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(period_color));
     return true;
 }
 
@@ -1197,21 +1188,23 @@ void PortfolioPerfChart::update_chart_focus() {
     // independent of the chart's fetch state.
     const portfolio::HoldingWithQuote* held = nullptr;
     for (const auto& h : summary_.holdings) {
-        if (h.symbol == focus_symbol_) { held = &h; break; }
+        if (h.symbol == focus_symbol_) {
+            held = &h;
+            break;
+        }
     }
 
     if (held && held->cost_basis > 0) {
         // No price → TOTAL and MV are unknown ("—"), not 0 / -100%.
         const double total_pct = held->unrealized_pnl_percent;
         const bool known = held->price_known && std::isfinite(total_pct);
-        const char* tot_color = !known          ? ui::colors::TEXT_SECONDARY
+        const char* tot_color = !known           ? ui::colors::TEXT_SECONDARY
                                 : total_pct >= 0 ? ui::colors::POSITIVE
                                                  : ui::colors::NEGATIVE;
         // Unrealized only (price vs average cost); realized P&L and dividends
         // are separate figures, named in the tooltip.
         total_return_label_->setText(
-            known ? QString("UNREALIZED  %1%2%").arg(total_pct >= 0 ? "+" : "")
-                                                .arg(QString::number(total_pct, 'f', 2))
+            known ? QString("UNREALIZED  %1%2%").arg(total_pct >= 0 ? "+" : "").arg(QString::number(total_pct, 'f', 2))
                   : QStringLiteral("UNREALIZED  ") + ui::formatting::placeholder());
         total_return_label_->setToolTip(
             tr("Unrealized return of the open position vs its average cost.\n"
@@ -1221,31 +1214,30 @@ void PortfolioPerfChart::update_chart_focus() {
                                                        : ui::formatting::placeholder())
                 .arg(std::isfinite(held->dividend_income) ? QString::number(held->dividend_income, 'f', 2)
                                                           : ui::formatting::placeholder()));
-        total_return_label_->setStyleSheet(
-            QString("color:%1; font-size:14px; font-weight:700;").arg(tot_color));
+        total_return_label_->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700;").arg(tot_color));
 
-        nav_label_->setText(
-            held->valued()
-                ? QString("MV %1 %2").arg(currency_).arg(QString::number(held->market_value, 'f', 2))
-                : QStringLiteral("MV ") + ui::formatting::placeholder());
+        nav_label_->setText(held->valued()
+                                ? QString("MV %1 %2").arg(currency_).arg(QString::number(held->market_value, 'f', 2))
+                                : QStringLiteral("MV ") + ui::formatting::placeholder());
         if (cost_basis_label_)
             cost_basis_label_->setText(
-                held->fx_known
-                    ? QString("COST %1 %2").arg(currency_).arg(QString::number(held->cost_basis, 'f', 2))
-                    : QStringLiteral("COST ") + ui::formatting::placeholder());
+                held->fx_known ? QString("COST %1 %2").arg(currency_).arg(QString::number(held->cost_basis, 'f', 2))
+                               : QStringLiteral("COST ") + ui::formatting::placeholder());
     } else if (have_data && last_price > 0) {
         // Not a held position but chart drew — stand-in price.
-        total_return_label_->setText(QString("PRICE %1 %2")
-                                         .arg(focus_currency()).arg(QString::number(last_price, 'f', 2)));
+        total_return_label_->setText(
+            QString("PRICE %1 %2").arg(focus_currency()).arg(QString::number(last_price, 'f', 2)));
         total_return_label_->setToolTip(QString());
         total_return_label_->setStyleSheet(
             QString("color:%1; font-size:14px; font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
         nav_label_->clear();
-        if (cost_basis_label_) cost_basis_label_->clear();
+        if (cost_basis_label_)
+            cost_basis_label_->clear();
     } else {
         total_return_label_->clear();
         nav_label_->clear();
-        if (cost_basis_label_) cost_basis_label_->clear();
+        if (cost_basis_label_)
+            cost_basis_label_->clear();
     }
 
     // Live trade snapshot row — only when we have a held position.
@@ -1255,10 +1247,14 @@ void PortfolioPerfChart::update_chart_focus() {
             return v > 0 ? QString::number(v, 'f', dec) : QStringLiteral("--");
         };
         auto fmt_vol = [](double v) -> QString {
-            if (v <= 0) return QStringLiteral("--");
-            if (v >= 1e9) return QString::number(v / 1e9, 'f', 2) + "B";
-            if (v >= 1e6) return QString::number(v / 1e6, 'f', 2) + "M";
-            if (v >= 1e3) return QString::number(v / 1e3, 'f', 1) + "K";
+            if (v <= 0)
+                return QStringLiteral("--");
+            if (v >= 1e9)
+                return QString::number(v / 1e9, 'f', 2) + "B";
+            if (v >= 1e6)
+                return QString::number(v / 1e6, 'f', 2) + "M";
+            if (v >= 1e3)
+                return QString::number(v / 1e3, 'f', 1) + "K";
             return QString::number(v, 'f', 0);
         };
         live_last_label_->setText(QString("LAST %1").arg(fmt_or_dash(held->current_price, 2)));
@@ -1272,8 +1268,7 @@ void PortfolioPerfChart::update_chart_focus() {
         const QString ask_s = fmt_or_dash(ask, 2);
         live_bidask_label_->setText(QString("BID %1 x ASK %2").arg(bid_s, ask_s));
         live_range_label_->setText(
-            QString("DAY %1-%2").arg(fmt_or_dash(held->day_low, 2),
-                                     fmt_or_dash(held->day_high, 2)));
+            QString("DAY %1-%2").arg(fmt_or_dash(held->day_low, 2), fmt_or_dash(held->day_high, 2)));
         live_vol_label_->setText(QString("VOL %1").arg(fmt_vol(held->day_volume)));
         set_live_group_visible(true);
     } else {
@@ -1366,9 +1361,9 @@ void PortfolioPerfChart::update_chart() {
     // nav_pts:   (sequential_index, NAV) — x used by series + crosshair snap
     // nav_ts_ms: actual UTC ms per point — used by crosshair tooltip
     // nav_dates: calendar dates per point — used for axis label building
-    QVector<QPointF>  nav_pts;
-    QVector<qint64>   nav_ts_ms;
-    QVector<QDate>    nav_dates;
+    QVector<QPointF> nav_pts;
+    QVector<qint64> nav_ts_ms;
+    QVector<QDate> nav_dates;
     nav_pts.reserve(filtered.size() + 1);
     nav_ts_ms.reserve(filtered.size() + 1);
     nav_dates.reserve(filtered.size() + 1);
@@ -1383,17 +1378,17 @@ void PortfolioPerfChart::update_chart() {
         const QString note = summary_.exclusion_note();
         const bool none = summary_.nothing_valued();
         const double total_pnl_pct = summary_.total_unrealized_pnl_percent;
-        const char* total_color = none ? ui::colors::TEXT_SECONDARY
-                                       : total_pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE;
+        const char* total_color = none                 ? ui::colors::TEXT_SECONDARY
+                                  : total_pnl_pct >= 0 ? ui::colors::POSITIVE
+                                                       : ui::colors::NEGATIVE;
         // Unrealized only: open positions vs their average cost. Realized P&L
         // (closed lots) and dividends are not in it — the all-in figure is in
         // the tooltip, labelled as what it is.
-        total_return_label_->setText(
-            QStringLiteral("UNREALIZED  ") +
-            summary_.total_text(QString("%1%2%3%").arg(approx, total_pnl_pct >= 0 ? "+" : "")
-                                    .arg(QString::number(total_pnl_pct, 'f', 2))));
-        total_return_label_->setStyleSheet(
-            QString("color:%1; font-size:14px; font-weight:700;").arg(total_color));
+        total_return_label_->setText(QStringLiteral("UNREALIZED  ") +
+                                     summary_.total_text(QString("%1%2%3%")
+                                                             .arg(approx, total_pnl_pct >= 0 ? "+" : "")
+                                                             .arg(QString::number(total_pnl_pct, 'f', 2))));
+        total_return_label_->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700;").arg(total_color));
         const double total_pnl =
             summary_.total_unrealized_pnl + summary_.total_realized_pnl + summary_.total_dividend_income;
         total_return_label_->setToolTip(
@@ -1411,11 +1406,13 @@ void PortfolioPerfChart::update_chart() {
                           ? tr("\n(realized P&L / dividends leave out a sale or payment with no currency conversion)")
                           : QString())));
 
-        nav_label_->setText(QString("NAV %1 %2").arg(currency_, summary_.total_text(approx + QString::number(live_nav, 'f', 2))));
+        nav_label_->setText(
+            QString("NAV %1 %2").arg(currency_, summary_.total_text(approx + QString::number(live_nav, 'f', 2))));
         if (cost_basis_label_) {
             if (none || cost_basis > 0)
-                cost_basis_label_->setText(QString("COST %1 %2").arg(
-                    currency_, summary_.total_text(approx + QString::number(cost_basis, 'f', 2))));
+                cost_basis_label_->setText(
+                    QString("COST %1 %2")
+                        .arg(currency_, summary_.total_text(approx + QString::number(cost_basis, 'f', 2))));
             else
                 cost_basis_label_->clear();
         }
@@ -1448,8 +1445,7 @@ void PortfolioPerfChart::update_chart() {
             baseline_unavailable = true; // period return would use a partial NAV
         }
 
-        const QDate first_date = QDate::fromString(
-            filtered.first().snapshot_date.left(10), Qt::ISODate);
+        const QDate first_date = QDate::fromString(filtered.first().snapshot_date.left(10), Qt::ISODate);
         if (anchor_idx < 0 && !is_all && first_date.isValid()) {
             // History starts inside the window.
             const qint64 window_days = cutoff.daysTo(today);
@@ -1464,13 +1460,13 @@ void PortfolioPerfChart::update_chart() {
         // to draw. A fabricated "yesterday = cost basis" point used to be
         // plotted here, painting the entire unrealized P&L as one day's move.
         chart_view_->set_series_data({}, currency_);
-        period_change_label_->setText(QString("%1  %2 insufficient NAV history").arg(current_period_, ui::formatting::placeholder()));
+        period_change_label_->setText(
+            QString("%1  %2 insufficient NAV history").arg(current_period_, ui::formatting::placeholder()));
         period_change_label_->setStyleSheet(
             QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
-        period_change_label_->setToolTip(
-            tr("Fewer than two daily NAV snapshots fall in this period.\n"
-               "The history grows one point per day; a backfill from the\n"
-               "transaction log fills it when price history is available."));
+        period_change_label_->setToolTip(tr("Fewer than two daily NAV snapshots fall in this period.\n"
+                                            "The history grows one point per day; a backfill from the\n"
+                                            "transaction log fills it when price history is available."));
         fill_total_labels();
         return;
     }
@@ -1483,8 +1479,8 @@ void PortfolioPerfChart::update_chart() {
     // is likewise the market's gain net of flows. Falls back to the naive
     // ratio only when the TWR is uncomputable (thin history) — the
     // baseline_unavailable branch below already dashes those cases out.
-    const auto period_ret = portfolio::compute_period_return(
-        filtered, live_nav, today.toString(Qt::ISODate), transactions_, fx_);
+    const auto period_ret =
+        portfolio::compute_period_return(filtered, live_nav, today.toString(Qt::ISODate), transactions_, fx_);
     // A flow with no known FX rate leaves the period return unknown — dash it
     // rather than fall back to the naive ratio (which would count the flow).
     if (period_ret.fx_unknown)
@@ -1503,8 +1499,8 @@ void PortfolioPerfChart::update_chart() {
     nav_path.reserve(nav_pts.size());
     for (int i = 0; i < nav_pts.size(); ++i)
         nav_path.append({nav_dates[i].toString(Qt::ISODate), nav_pts[i].y()});
-    const QVector<double> twr_idx = indexed_mode_ ? portfolio::twr_index(nav_path, transactions_, fx_)
-                                                  : QVector<double>();
+    const QVector<double> twr_idx =
+        indexed_mode_ ? portfolio::twr_index(nav_path, transactions_, fx_) : QVector<double>();
 
     // ── Convert series to display space (currency value vs. base-100 indexed) ─
     auto display_at = [&](int i) -> double {
@@ -1616,9 +1612,7 @@ void PortfolioPerfChart::update_chart() {
     }
 
     // nav_line->points() has sequential x + display-transformed y (matches chart)
-    chart_view_->set_series_data(nav_line->points(),
-                                 indexed_mode_ ? QStringLiteral("idx") : currency_,
-                                 drawn_ts_ms);
+    chart_view_->set_series_data(nav_line->points(), indexed_mode_ ? QStringLiteral("idx") : currency_, drawn_ts_ms);
 
     // ── Benchmark overlay ─────────────────────────────────────────────────────
     // Like-for-like in both modes. Indexed: benchmark rebased to the
@@ -1629,8 +1623,7 @@ void PortfolioPerfChart::update_chart() {
     // set a deposit-inflated NAV against a no-deposit index.
     if (show_benchmark_ && nav_line->count() >= 2) {
         if (spy_dates_.isEmpty() || spy_closes_.isEmpty()) {
-            nav_label_->setText(nav_label_->text() +
-                                QString("  |  %1: loading…").arg(benchmark_symbol_));
+            nav_label_->setText(nav_label_->text() + QString("  |  %1: loading…").arg(benchmark_symbol_));
         } else {
             // Benchmark close on or before each NAV date (a weekend/live point
             // takes the last session's close). Dates are ISO, so string order
@@ -1647,9 +1640,9 @@ void PortfolioPerfChart::update_chart() {
             auto* bench_line = new QLineSeries;
             double b_min = std::numeric_limits<double>::max();
             double b_max = std::numeric_limits<double>::lowest();
-            int bi = -1;           // cursor: last bench index with date ≤ current NAV date
-            double b_prev = 0;     // benchmark close at the previous drawn point
-            double level = 0;      // current overlay value (display space)
+            int bi = -1;       // cursor: last bench index with date ≤ current NAV date
+            double b_prev = 0; // benchmark close at the previous drawn point
+            double level = 0;  // current overlay value (display space)
             bool started = false;
             for (int i = 0; i < nav_path.size(); ++i) {
                 while (bi + 1 < bench.size() && bench[bi + 1].first <= nav_path[i].date)
@@ -1706,8 +1699,7 @@ void PortfolioPerfChart::update_chart() {
     if (baseline_unavailable) {
         period_change_label_->setText(QString("%1  —").arg(current_period_));
         period_change_label_->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:600;")
-                .arg(ui::colors::TEXT_SECONDARY()));
+            QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
         period_change_label_->setToolTip(
             period_ret.fx_unknown
                 ? QStringLiteral("Period return unavailable: a trade in this period has no known FX rate.")
@@ -1721,26 +1713,22 @@ void PortfolioPerfChart::update_chart() {
                                           .arg(period_ret.degraded ? QStringLiteral("≈") : QString())
                                           .arg(period_pnl_pct >= 0 ? "+" : "")
                                           .arg(QString::number(period_pnl_pct, 'f', 2)));
-        period_change_label_->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:600;").arg(pnl_color));
+        period_change_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:600;").arg(pnl_color));
         // The dollar gain was computed and then dropped on the floor. A
         // percentage alone doesn't tell you whether +12% is $400 or $40,000,
         // and the figure is already exact here (TWR's gain_value, net of
         // flows) — so it goes in the tooltip beside the return it explains.
         period_change_label_->setToolTip(
-            (period_ret.valid
-                ? tr("Time-weighted return from %1 to now.\nDeposits and withdrawals change the "
-                     "portfolio's size, not this number%2")
-                      .arg(filtered.first().snapshot_date.left(10))
-                      .arg(period_ret.net_external_flow != 0.0
-                               ? tr(" (net external flow this period: %1 %2).")
-                                     .arg(currency_)
-                                     .arg(QString::number(period_ret.net_external_flow, 'f', 2))
-                               : QStringLiteral("."))
-                : QString())
-            + tr("\n\nGain over the period: %1 %2")
-                  .arg(currency_)
-                  .arg(QString::number(period_pnl, 'f', 2)));
+            (period_ret.valid ? tr("Time-weighted return from %1 to now.\nDeposits and withdrawals change the "
+                                   "portfolio's size, not this number%2")
+                                    .arg(filtered.first().snapshot_date.left(10))
+                                    .arg(period_ret.net_external_flow != 0.0
+                                             ? tr(" (net external flow this period: %1 %2).")
+                                                   .arg(currency_)
+                                                   .arg(QString::number(period_ret.net_external_flow, 'f', 2))
+                                             : QStringLiteral("."))
+                              : QString()) +
+            tr("\n\nGain over the period: %1 %2").arg(currency_).arg(QString::number(period_pnl, 'f', 2)));
     }
 
     fill_total_labels();

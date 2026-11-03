@@ -33,18 +33,18 @@ class StrategyListPanel : public QWidget {
 
     static constexpr int kPageSize = 50;
 
-    QLineEdit*    search_edit_   = nullptr;
-    QLabel*       count_label_   = nullptr;
-    QComboBox*    sort_combo_    = nullptr;
-    QComboBox*    cat_combo_     = nullptr;
-    QTableWidget* table_         = nullptr;
-    QLabel*       page_label_    = nullptr;
-    QPushButton*  prev_btn_      = nullptr;
-    QPushButton*  next_btn_      = nullptr;
+    QLineEdit* search_edit_ = nullptr;
+    QLabel* count_label_ = nullptr;
+    QComboBox* sort_combo_ = nullptr;
+    QComboBox* cat_combo_ = nullptr;
+    QTableWidget* table_ = nullptr;
+    QLabel* page_label_ = nullptr;
+    QPushButton* prev_btn_ = nullptr;
+    QPushButton* next_btn_ = nullptr;
 
-    QVector<fincept::services::algo::AlgoStrategy> strategies_;  // full list
-    QVector<fincept::services::algo::AlgoStrategy> filtered_;    // after search/sort
-    int current_page_ = 0; // 0-based
+    QVector<fincept::services::algo::AlgoStrategy> strategies_; // full list
+    QVector<fincept::services::algo::AlgoStrategy> filtered_;   // after search/sort
+    int current_page_ = 0;                                      // 0-based
 };
 
 } // namespace fincept::screens

@@ -106,8 +106,8 @@ QWidget* WorkflowsViewPanel::build_catalog_panel() {
     hl->addWidget(t);
     hl->addStretch();
     auto* cnt = new QLabel(QString::number(kWorkflowCount));
-    cnt->setStyleSheet(
-        QString("color:%1;font-size:12px;background:%2;padding:1px 6px;").arg(ui::colors::CYAN(), ui::colors::BG_BASE()));
+    cnt->setStyleSheet(QString("color:%1;font-size:12px;background:%2;padding:1px 6px;")
+                           .arg(ui::colors::CYAN(), ui::colors::BG_BASE()));
     hl->addWidget(cnt);
     vl->addWidget(hdr);
 
@@ -117,8 +117,9 @@ QWidget* WorkflowsViewPanel::build_catalog_panel() {
                                          "QListWidget::item{padding:7px 10px;border-bottom:1px solid %3;}"
                                          "QListWidget::item:selected{background:%4;color:%2;border-left:2px solid %5;}"
                                          "QListWidget::item:hover{background:%6;}")
-                                     .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
-                                          ui::colors::BG_HOVER(), ui::colors::AMBER(), ui::colors::BG_HOVER()));
+                                     .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(),
+                                          ui::colors::BORDER_DIM(), ui::colors::BG_HOVER(), ui::colors::AMBER(),
+                                          ui::colors::BG_HOVER()));
 
     // Group by category — insert dim category headers
     QString last_cat;
@@ -146,8 +147,9 @@ QWidget* WorkflowsViewPanel::build_catalog_panel() {
     wf_desc_label_ = new QLabel("Select a workflow to configure and run.");
     wf_desc_label_->setWordWrap(true);
     wf_desc_label_->setContentsMargins(10, 6, 10, 8);
-    wf_desc_label_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;border-top:1px solid %3;")
-                                      .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    wf_desc_label_->setStyleSheet(
+        QString("color:%1;font-size:12px;background:%2;border-top:1px solid %3;")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
     vl->addWidget(wf_desc_label_);
 
     return p;
@@ -194,7 +196,8 @@ QWidget* WorkflowsViewPanel::build_params_panel() {
         QString("QComboBox{background:%1;color:%2;border:1px solid %3;padding:3px 6px;font-size:12px;}"
                 "QComboBox::drop-down{border:none;}"
                 "QComboBox QAbstractItemView{background:%1;color:%2;selection-background-color:%4;}")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::colors::AMBER_DIM()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),
+                 ui::colors::AMBER_DIM()));
     llm_profile_combo_->addItem("Default (Global)", QString{});
     const auto pr = LlmProfileRepository::instance().list_profiles();
     const auto profiles = pr.is_ok() ? pr.value() : QVector<LlmProfile>{};
@@ -203,7 +206,8 @@ QWidget* WorkflowsViewPanel::build_params_panel() {
     bl->addWidget(llm_profile_combo_);
 
     llm_resolved_lbl_ = new QLabel;
-    llm_resolved_lbl_->setStyleSheet(QString("color:%1;font-size:12px;padding:1px 0;").arg(ui::colors::TEXT_SECONDARY()));
+    llm_resolved_lbl_->setStyleSheet(
+        QString("color:%1;font-size:12px;padding:1px 0;").arg(ui::colors::TEXT_SECONDARY()));
     bl->addWidget(llm_resolved_lbl_);
 
     // Symbol row (shown for symbol-requiring workflows)
@@ -259,8 +263,8 @@ QWidget* WorkflowsViewPanel::build_params_panel() {
                                     "font-size:12px;font-weight:700;letter-spacing:1px;}"
                                     "QPushButton:hover{background:%3;}"
                                     "QPushButton:disabled{background:%4;color:%5;}")
-                                .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE(), ui::colors::BG_RAISED(),
-                                     ui::colors::TEXT_SECONDARY()));
+                                .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE(),
+                                     ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY()));
     connect(run_btn_, &QPushButton::clicked, this, &WorkflowsViewPanel::run_current_workflow);
     bl->addWidget(run_btn_);
 
@@ -317,7 +321,8 @@ QWidget* WorkflowsViewPanel::build_output_panel() {
                 "QScrollBar:vertical{background:%1;width:5px;border:none;}"
                 "QScrollBar::handle:vertical{background:%4;min-height:20px;}"
                 "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::BORDER_BRIGHT()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::BORDER_BRIGHT()));
     bl->addWidget(log_display_);
 
     auto* res_lbl = new QLabel("RESULT");
@@ -332,7 +337,8 @@ QWidget* WorkflowsViewPanel::build_output_panel() {
                 "QScrollBar:vertical{background:%1;width:5px;border:none;}"
                 "QScrollBar::handle:vertical{background:%4;min-height:20px;}"
                 "QScrollBar::add-line:vertical,QScrollBar::sub-line:vertical{height:0;}")
-            .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::BORDER_BRIGHT()));
+            .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::BORDER_BRIGHT()));
     result_display_->document()->setDefaultStyleSheet(
         QString("body{color:%1;background:%2;font-size:12px;}"
                 "h1,h2,h3{color:%3;margin:6px 0 3px 0;}"
@@ -512,7 +518,8 @@ void WorkflowsViewPanel::run_current_workflow() {
             run_btn_->setEnabled(true);
             run_btn_->setText("RUN WORKFLOW");
             params_status_->setText("Symbol is required");
-            params_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
+            params_status_->setStyleSheet(
+                QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
             return;
         }
         params["symbol"] = sym;
@@ -525,7 +532,8 @@ void WorkflowsViewPanel::run_current_workflow() {
             run_btn_->setEnabled(true);
             run_btn_->setText("RUN WORKFLOW");
             params_status_->setText("Query is required");
-            params_status_->setStyleSheet(QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
+            params_status_->setStyleSheet(
+                QString("color:%1;font-size:12px;padding:2px 0;").arg(ui::colors::NEGATIVE()));
             return;
         }
         params["query"] = q;

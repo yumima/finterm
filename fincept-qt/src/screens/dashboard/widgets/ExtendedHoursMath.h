@@ -3,9 +3,9 @@
 #include <QDateTime>
 #include <QJsonObject>
 #include <QLatin1String>
+#include <QString>
 #include <QTimeZone>
 #include <QtGlobal>
-#include <QString>
 
 #include <cmath>
 #include <optional>
@@ -18,10 +18,10 @@ namespace fincept::screens::widgets::exthours {
 
 /// One symbol's extended-hours reading, already reduced to what the cell needs.
 struct ExtQuote {
-    double pct = 0;        // signed move against the regular close
-    double price = 0;      // the extended-hours print
-    double regular = 0;    // the close it is measured against
-    bool   from_pre = false;
+    double pct = 0;     // signed move against the regular close
+    double price = 0;   // the extended-hours print
+    double regular = 0; // the close it is measured against
+    bool from_pre = false;
     qint64 regular_ts = 0; // when each bar printed; 0 when the daemon didn't say
     qint64 ext_ts = 0;
 };
@@ -69,10 +69,8 @@ inline std::optional<double> json_num(const QJsonObject& o, const char* key) {
 /// no post-market print means no number.
 inline std::optional<ExtQuote> quote_from_row(const QJsonObject& row, bool in_pre_session) {
     const QString session = row.value(QStringLiteral("session")).toString();
-    const bool in_pre = session.isEmpty()
-                            ? in_pre_session
-                            : (session == QLatin1String("PRE") ||
-                               session == QLatin1String("REGULAR"));
+    const bool in_pre =
+        session.isEmpty() ? in_pre_session : (session == QLatin1String("PRE") || session == QLatin1String("REGULAR"));
 
     // An explicit null `ext_price` is the daemon saying "these prints cannot be
     // honestly paired with this close" — a reference bar from an earlier day,

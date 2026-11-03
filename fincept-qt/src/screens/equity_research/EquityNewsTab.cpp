@@ -34,8 +34,7 @@ void EquityNewsTab::set_symbol(const QString& symbol) {
     auto& store = services::query::QueryStore::instance();
     store.unsubscribe_all(this);
     services::equity::EquityResearchService::instance().subscribe_news(
-        this, symbol,
-        [this](const services::query::QueryStore::State& s) { apply_news_state(s); });
+        this, symbol, [this](const services::query::QueryStore::State& s) { apply_news_state(s); });
 }
 
 void EquityNewsTab::build_ui() {
@@ -125,8 +124,7 @@ void EquityNewsTab::populate(const QVector<services::equity::NewsArticle>& artic
     // periodic QueryStore updates re-call populate, which rebuilds every card
     // and snaps the scrollbar to 0). On a symbol switch set_symbol() already
     // reset scroll to 0, so restoring 0 there is a harmless no-op.
-    const int prev_scroll =
-        scroll_area_ ? scroll_area_->verticalScrollBar()->value() : 0;
+    const int prev_scroll = scroll_area_ ? scroll_area_->verticalScrollBar()->value() : 0;
 
     clear_cards();
     status_label_->hide();
@@ -226,9 +224,8 @@ void EquityNewsTab::populate(const QVector<services::equity::NewsArticle>& artic
     }
 
     if (scroll_area_) {
-        QTimer::singleShot(0, scroll_area_, [this, prev_scroll]() {
-            scroll_area_->verticalScrollBar()->setValue(prev_scroll);
-        });
+        QTimer::singleShot(0, scroll_area_,
+                           [this, prev_scroll]() { scroll_area_->verticalScrollBar()->setValue(prev_scroll); });
     }
 }
 
@@ -245,10 +242,12 @@ bool EquityNewsTab::eventFilter(QObject* obj, QEvent* event) {
 
 void EquityNewsTab::apply_news_state(const services::query::QueryStore::State& s) {
     if (!s.error.isEmpty()) {
-        if (loading_overlay_) loading_overlay_->hide_loading();
+        if (loading_overlay_)
+            loading_overlay_->hide_loading();
         return;
     }
-    if (!s.data.isValid() || s.data.isNull()) return;
+    if (!s.data.isValid() || s.data.isNull())
+        return;
     const auto articles = s.data.value<QVector<services::equity::NewsArticle>>();
     loading_overlay_->hide_loading();
     populate(articles);

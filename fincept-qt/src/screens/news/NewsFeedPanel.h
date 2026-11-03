@@ -87,12 +87,12 @@ class NewsFeedPanel : public QWidget {
     bool is_banner_duplicate(const QString& headline) const;
 
     QStackedWidget* stack_ = nullptr;
-    QListView* list_view_ = nullptr;        // the headline list
-    QSplitter* feed_splitter_ = nullptr;    // horizontal: headline list | detail pane
-    QWidget* detail_widget_ = nullptr;      // detail pane docked on the right
+    QListView* list_view_ = nullptr;     // the headline list
+    QSplitter* feed_splitter_ = nullptr; // horizontal: headline list | detail pane
+    QWidget* detail_widget_ = nullptr;   // detail pane docked on the right
     NewsFeedModel* model_ = nullptr;
     NewsFeedDelegate* delegate_ = nullptr;
-    bool split_seeded_ = false;             // one-shot guard for showEvent()
+    bool split_seeded_ = false; // one-shot guard for showEvent()
 
     // Breaking banner
     QWidget* banner_widget_ = nullptr;
@@ -127,8 +127,8 @@ class NewsFeedPanel : public QWidget {
 
     // Source-column drag-resize state
     bool dragging_source_col_ = false;
-    int  drag_start_x_        = 0;
-    int  drag_start_width_    = 0;
+    int drag_start_x_ = 0;
+    int drag_start_width_ = 0;
     static constexpr int kSourceColDragHotzone = 4; // px on each side of boundary
 };
 

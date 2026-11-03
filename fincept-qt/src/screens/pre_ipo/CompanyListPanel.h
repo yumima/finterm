@@ -39,12 +39,12 @@ class CompanyListPanel : public QWidget {
     static QString valuation_label(double b);
 
     // ── Widgets ───────────────────────────────────────────────────────────────
-    QLineEdit*   search_edit_     = nullptr;
-    QWidget*     filter_bar_      = nullptr;
-    QHBoxLayout* filter_layout_   = nullptr;
-    QScrollArea* scroll_          = nullptr;
-    QWidget*     list_container_  = nullptr;
-    QVBoxLayout* list_layout_     = nullptr;
+    QLineEdit* search_edit_ = nullptr;
+    QWidget* filter_bar_ = nullptr;
+    QHBoxLayout* filter_layout_ = nullptr;
+    QScrollArea* scroll_ = nullptr;
+    QWidget* list_container_ = nullptr;
+    QVBoxLayout* list_layout_ = nullptr;
 
     // Filter chip buttons
     QVector<QPushButton*> filter_btns_;

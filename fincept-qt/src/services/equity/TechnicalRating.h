@@ -108,8 +108,8 @@ struct RatingVerdict {
     /// Weighted composite in [-1, +1]. The gauge is drawn straight off this so
     /// the bar and the words can never disagree.
     double net = 0.0;
-    int voting = 0;   // indicators that actually cast a vote
-    int displayed = 0;// indicators shown, voting or not
+    int voting = 0;    // indicators that actually cast a vote
+    int displayed = 0; // indicators shown, voting or not
     int strong_buy = 0, buy = 0, neutral = 0, sell = 0, strong_sell = 0;
     /// Per-bucket contribution, or the reason there is no rating.
     QString basis;
@@ -129,12 +129,12 @@ inline constexpr int kSlopeLookback = 5;
 /// One definition on purpose: these were once hand-copied literals on both
 /// sides, drifted (the text said "flat" about values the badge called BUY),
 /// and only an audit caught it.
-inline constexpr double kAdxTrend = 20.0;        // below: no trend to be directional about
-inline constexpr double kAdxStrongTrend = 25.0;  // at/above: directional vote upgrades to Strong
-inline constexpr double kRocDirectional = 2.0;   // |ROC| beyond this votes Buy/Sell
-inline constexpr double kRocStrong = 10.0;       // …and beyond this, Strong
-inline constexpr double kCmfDirectional = 0.05;  // |CMF| beyond this votes Buy/Sell
-inline constexpr double kCmfStrong = 0.20;       // …and beyond this, Strong
+inline constexpr double kAdxTrend = 20.0;       // below: no trend to be directional about
+inline constexpr double kAdxStrongTrend = 25.0; // at/above: directional vote upgrades to Strong
+inline constexpr double kRocDirectional = 2.0;  // |ROC| beyond this votes Buy/Sell
+inline constexpr double kRocStrong = 10.0;      // …and beyond this, Strong
+inline constexpr double kCmfDirectional = 0.05; // |CMF| beyond this votes Buy/Sell
+inline constexpr double kCmfStrong = 0.20;      // …and beyond this, Strong
 
 /// Whether there is enough history for the trend evidence to mean anything.
 ///

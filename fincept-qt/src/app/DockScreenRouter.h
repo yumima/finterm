@@ -76,8 +76,7 @@ class DockScreenRouter : public QObject {
     /// the anchor was chosen BEFORE materializing the screen — widget
     /// construction can move focus (e.g. a search field calling setFocus),
     /// and a post-construction lookup would then split a different area.
-    void split_alongside(const QString& id,
-                         ads::DockWidgetArea side = ads::RightDockWidgetArea,
+    void split_alongside(const QString& id, ads::DockWidgetArea side = ads::RightDockWidgetArea,
                          ads::CDockAreaWidget* anchor = nullptr);
 
     /// Open `id` next to the panel the user is working in: splits the focused
@@ -104,7 +103,10 @@ class DockScreenRouter : public QObject {
 
     /// Build a layout-restored lazy screen (no raise, no focus change) so its
     /// EventBus subscriptions exist before something is published to it.
-    void ensure_built(const QString& id) { if (is_open(id)) materialize_screen(id); }
+    void ensure_built(const QString& id) {
+        if (is_open(id))
+            materialize_screen(id);
+    }
 
     /// True if `id`'s dock widget is currently part of the visible layout
     /// (exists, not closed, has a dock area). Use this to decide whether
@@ -218,8 +220,7 @@ class DockScreenRouter : public QObject {
     QHash<QString, IGroupLinked*> group_linked_;
     QHash<QString, QPointer<ui::GroupBadge>> group_badges_;
 
-    void on_group_symbol_changed_external(fincept::SymbolGroup g, const fincept::SymbolRef& ref,
-                                          QObject* source);
+    void on_group_symbol_changed_external(fincept::SymbolGroup g, const fincept::SymbolRef& ref, QObject* source);
     /// Apply theme colors directly to all CDockAreaTitleBar and CDockWidgetTab
     /// widgets. Called after any addDockWidget() call since those create new
     /// QFrame-derived widgets that the app-level QFrame rule overrides.

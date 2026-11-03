@@ -225,26 +225,25 @@ void register_market_data_nodes(NodeRegistry& registry) {
                     run_python_json("yfinance_data.py", {"info", symbol}, cb);
                 } else {
                     // income, balance, cashflow, earnings → financials command
-                    run_python_json("yfinance_data.py", {"financials", symbol},
-                                    [cb, type](bool ok, QJsonValue val, QString err) {
-                                        if (!ok) {
-                                            cb(false, {}, err);
-                                            return;
-                                        }
-                                        // yfinance_data.py financials section keys.
-                                        const QString key = type == "income"     ? QString("income_statement")
-                                                            : type == "balance"  ? QString("balance_sheet")
-                                                            : type == "cashflow" ? QString("cash_flow")
-                                                                                 : type;
-                                        if (val.isObject() && val.toObject().contains(key)) {
-                                            cb(true, val.toObject().value(key), {});
-                                        } else {
-                                            // Don't hand back the whole payload labelled as `type`.
-                                            cb(false, {},
-                                               QString("Fundamentals: '%1' is not available from the financials source")
-                                                   .arg(type));
-                                        }
-                                    });
+                    run_python_json(
+                        "yfinance_data.py", {"financials", symbol}, [cb, type](bool ok, QJsonValue val, QString err) {
+                            if (!ok) {
+                                cb(false, {}, err);
+                                return;
+                            }
+                            // yfinance_data.py financials section keys.
+                            const QString key = type == "income"     ? QString("income_statement")
+                                                : type == "balance"  ? QString("balance_sheet")
+                                                : type == "cashflow" ? QString("cash_flow")
+                                                                     : type;
+                            if (val.isObject() && val.toObject().contains(key)) {
+                                cb(true, val.toObject().value(key), {});
+                            } else {
+                                // Don't hand back the whole payload labelled as `type`.
+                                cb(false, {},
+                                   QString("Fundamentals: '%1' is not available from the financials source").arg(type));
+                            }
+                        });
                 }
             },
     });
@@ -261,20 +260,26 @@ void register_market_data_nodes(NodeRegistry& registry) {
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::EconomicData}},
         .parameters =
             {
-                {"preset",
-                 "Preset",
-                 "select",
-                 "GDPC1",
-                 fincept::screens::fred_preset_series_ids(),
+                {"preset", "Preset", "select", "GDPC1", fincept::screens::fred_preset_series_ids(),
                  "Pick a common series, or use Series ID below for any FRED code"},
-                {"series_id", "Series ID (override)", "string", "", {},
+                {"series_id",
+                 "Series ID (override)",
+                 "string",
+                 "",
+                 {},
                  "Optional FRED series id (e.g. GS10). Overrides Preset when set."},
                 {"start_date", "Start Date", "string", "", {}, "YYYY-MM-DD (optional)"},
                 {"end_date", "End Date", "string", "", {}, "YYYY-MM-DD (optional)"},
-                {"frequency", "Frequency", "select", "",
+                {"frequency",
+                 "Frequency",
+                 "select",
+                 "",
                  {"", "d", "w", "m", "q", "a"},
                  "Output frequency: d=daily, w=weekly, m=monthly, q=quarterly, a=annual"},
-                {"transform", "Transform", "select", "",
+                {"transform",
+                 "Transform",
+                 "select",
+                 "",
                  {"", "chg", "pch", "log"},
                  "chg=change, pch=percent change, log=natural log"},
             },
@@ -573,60 +578,60 @@ void register_market_data_nodes(NodeRegistry& registry) {
                 const double min_value = params.value("min_value").toDouble(0);
                 const QString since = QDate::currentDate().addDays(-days_back).toString("yyyy-MM-dd");
                 // Real Form 4 transactions parsed from EDGAR (sec_data.py → sec_ownership_data).
-                run_python_json(
-                    "sec_data.py", {"insider_trading", symbol, "", since, "", "100"},
-                    [cb, symbol, tx_type, since, min_value](bool ok, QJsonValue val, QString err) {
-                        if (!ok) {
-                            cb(false, {}, err);
-                            return;
-                        }
-                        const QJsonObject res = val.toObject();
-                        if (!res.value("data").isArray()) {
-                            cb(false, {}, QString("No insider transaction data returned for %1").arg(symbol));
-                            return;
-                        }
-                        // Form 4 codes: P = open-market buy, S = open-market sale,
-                        // M/X = option exercise / conversion.
-                        QStringList codes;
-                        if (tx_type == "buy")
-                            codes = {"P"};
-                        else if (tx_type == "sell")
-                            codes = {"S"};
-                        else if (tx_type == "exercise")
-                            codes = {"M", "X"};
-                        QJsonArray rows;
-                        int unvalued = 0;
-                        for (const auto& v : res.value("data").toArray()) {
-                            const QJsonObject t = v.toObject();
-                            const QString date = t.value("date").toString();
-                            if (date.isEmpty() || date < since)
-                                continue;
-                            if (!codes.isEmpty() && !codes.contains(t.value("code").toString()))
-                                continue;
-                            if (min_value > 0) {
-                                // Rows without a reported value can't be shown to meet the minimum.
-                                if (!t.value("value").isDouble()) {
-                                    ++unvalued;
-                                    continue;
-                                }
-                                if (std::abs(t.value("value").toDouble()) < min_value)
-                                    continue;
-                            }
-                            rows.append(t);
-                        }
-                        QJsonObject out;
-                        out["symbol"] = symbol;
-                        out["source"] = "sec_edgar_form4";
-                        out["since"] = since;
-                        out["transaction_type"] = tx_type;
-                        out["count"] = rows.size();
-                        out["transactions"] = rows;
-                        if (unvalued > 0)
-                            out["excluded_without_value"] = unvalued;
-                        if (res.contains("coverage"))
-                            out["coverage"] = res.value("coverage");
-                        cb(true, out, {});
-                    });
+                run_python_json("sec_data.py", {"insider_trading", symbol, "", since, "", "100"},
+                                [cb, symbol, tx_type, since, min_value](bool ok, QJsonValue val, QString err) {
+                                    if (!ok) {
+                                        cb(false, {}, err);
+                                        return;
+                                    }
+                                    const QJsonObject res = val.toObject();
+                                    if (!res.value("data").isArray()) {
+                                        cb(false, {},
+                                           QString("No insider transaction data returned for %1").arg(symbol));
+                                        return;
+                                    }
+                                    // Form 4 codes: P = open-market buy, S = open-market sale,
+                                    // M/X = option exercise / conversion.
+                                    QStringList codes;
+                                    if (tx_type == "buy")
+                                        codes = {"P"};
+                                    else if (tx_type == "sell")
+                                        codes = {"S"};
+                                    else if (tx_type == "exercise")
+                                        codes = {"M", "X"};
+                                    QJsonArray rows;
+                                    int unvalued = 0;
+                                    for (const auto& v : res.value("data").toArray()) {
+                                        const QJsonObject t = v.toObject();
+                                        const QString date = t.value("date").toString();
+                                        if (date.isEmpty() || date < since)
+                                            continue;
+                                        if (!codes.isEmpty() && !codes.contains(t.value("code").toString()))
+                                            continue;
+                                        if (min_value > 0) {
+                                            // Rows without a reported value can't be shown to meet the minimum.
+                                            if (!t.value("value").isDouble()) {
+                                                ++unvalued;
+                                                continue;
+                                            }
+                                            if (std::abs(t.value("value").toDouble()) < min_value)
+                                                continue;
+                                        }
+                                        rows.append(t);
+                                    }
+                                    QJsonObject out;
+                                    out["symbol"] = symbol;
+                                    out["source"] = "sec_edgar_form4";
+                                    out["since"] = since;
+                                    out["transaction_type"] = tx_type;
+                                    out["count"] = rows.size();
+                                    out["transactions"] = rows;
+                                    if (unvalued > 0)
+                                        out["excluded_without_value"] = unvalued;
+                                    if (res.contains("coverage"))
+                                        out["coverage"] = res.value("coverage");
+                                    cb(true, out, {});
+                                });
             },
     });
 
@@ -664,7 +669,8 @@ void register_market_data_nodes(NodeRegistry& registry) {
                     form.clear();
                 else if (form == "13F")
                     form = "13F-HR";
-                const QString limit = QString::number(std::max(1, static_cast<int>(params.value("limit").toDouble(10))));
+                const QString limit =
+                    QString::number(std::max(1, static_cast<int>(params.value("limit").toDouble(10))));
                 // Real filing index from EDGAR submissions API.
                 run_python_json("sec_data.py", {"company_filings", symbol, "", form, "", "", limit},
                                 [cb, symbol, form](bool ok, QJsonValue val, QString err) {

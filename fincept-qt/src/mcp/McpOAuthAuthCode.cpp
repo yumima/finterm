@@ -45,22 +45,16 @@ QString random_b64url(int byte_count) {
     auto* rng = QRandomGenerator::system();
     for (int i = 0; i < byte_count; ++i)
         bytes[i] = static_cast<char>(rng->bounded(256));
-    return QString::fromLatin1(
-        bytes.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+    return QString::fromLatin1(bytes.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
 }
 
 QString pkce_challenge(const QString& verifier) {
-    return QString::fromLatin1(QCryptographicHash::hash(
-                                   verifier.toLatin1(), QCryptographicHash::Sha256)
-                                   .toBase64(QByteArray::Base64UrlEncoding |
-                                             QByteArray::OmitTrailingEquals));
+    return QString::fromLatin1(QCryptographicHash::hash(verifier.toLatin1(), QCryptographicHash::Sha256)
+                                   .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
 }
 
-QString build_auth_url(const AuthCodeConfig& cfg,
-                      const QString& client_id,
-                      const QString& redirect_uri,
-                      const QString& state,
-                      const QString& code_challenge) {
+QString build_auth_url(const AuthCodeConfig& cfg, const QString& client_id, const QString& redirect_uri,
+                       const QString& state, const QString& code_challenge) {
     QUrl url(cfg.authorization_url);
     QUrlQuery q(url);
     q.addQueryItem("response_type", "code");
@@ -78,32 +72,30 @@ QString build_auth_url(const AuthCodeConfig& cfg,
 /// Inline HTML returned to the user's browser after the callback —
 /// they can close the tab.  No interactivity, no JS that could leak
 /// the code.
-constexpr const char* kCallbackHtml =
-    "HTTP/1.1 200 OK\r\n"
-    "Content-Type: text/html; charset=utf-8\r\n"
-    "Connection: close\r\n"
-    "\r\n"
-    "<!DOCTYPE html>\n"
-    "<html><head><title>finterm — auth complete</title>\n"
-    "<style>body{font-family:system-ui;background:#1a1d23;color:#ccc;"
-    "display:flex;align-items:center;justify-content:center;height:100vh;"
-    "margin:0}.box{text-align:center;padding:40px}"
-    ".ok{color:#4ade80;font-size:48px}h1{font-weight:400}</style>\n"
-    "</head><body><div class=\"box\">\n"
-    "<div class=\"ok\">✓</div>\n"
-    "<h1>Authentication received</h1>\n"
-    "<p>You may close this window.</p>\n"
-    "</div></body></html>";
+constexpr const char* kCallbackHtml = "HTTP/1.1 200 OK\r\n"
+                                      "Content-Type: text/html; charset=utf-8\r\n"
+                                      "Connection: close\r\n"
+                                      "\r\n"
+                                      "<!DOCTYPE html>\n"
+                                      "<html><head><title>finterm — auth complete</title>\n"
+                                      "<style>body{font-family:system-ui;background:#1a1d23;color:#ccc;"
+                                      "display:flex;align-items:center;justify-content:center;height:100vh;"
+                                      "margin:0}.box{text-align:center;padding:40px}"
+                                      ".ok{color:#4ade80;font-size:48px}h1{font-weight:400}</style>\n"
+                                      "</head><body><div class=\"box\">\n"
+                                      "<div class=\"ok\">✓</div>\n"
+                                      "<h1>Authentication received</h1>\n"
+                                      "<p>You may close this window.</p>\n"
+                                      "</div></body></html>";
 
-constexpr const char* kCallbackErrorHtml =
-    "HTTP/1.1 400 Bad Request\r\n"
-    "Content-Type: text/html; charset=utf-8\r\n"
-    "Connection: close\r\n"
-    "\r\n"
-    "<!DOCTYPE html><html><body>"
-    "<h1>Authentication failed</h1>"
-    "<p>finterm could not match the callback — try again.</p>"
-    "</body></html>";
+constexpr const char* kCallbackErrorHtml = "HTTP/1.1 400 Bad Request\r\n"
+                                           "Content-Type: text/html; charset=utf-8\r\n"
+                                           "Connection: close\r\n"
+                                           "\r\n"
+                                           "<!DOCTYPE html><html><body>"
+                                           "<h1>Authentication failed</h1>"
+                                           "<p>finterm could not match the callback — try again.</p>"
+                                           "</body></html>";
 
 /// Listen on localhost:port for the redirect, return the
 /// authorization code on success.  Validates the state param against
@@ -111,9 +103,10 @@ constexpr const char* kCallbackErrorHtml =
 Result<QString> await_callback(int port, const QString& expected_state, int wait_seconds) {
     QTcpServer server;
     if (!server.listen(QHostAddress::LocalHost, static_cast<quint16>(port))) {
-        return Result<QString>::err(
-            QString("oauth: callback listener could not bind 127.0.0.1:%1 — %2")
-                .arg(port).arg(server.errorString()).toStdString());
+        return Result<QString>::err(QString("oauth: callback listener could not bind 127.0.0.1:%1 — %2")
+                                        .arg(port)
+                                        .arg(server.errorString())
+                                        .toStdString());
     }
     LOG_INFO(kAcTag, QString("Callback listener up on 127.0.0.1:%1").arg(port));
 
@@ -138,9 +131,7 @@ Result<QString> await_callback(int port, const QString& expected_state, int wait
             const QString first_line = QString::fromUtf8(req).section('\n', 0, 0);
             const int sp1 = first_line.indexOf(' ');
             const int sp2 = first_line.indexOf(' ', sp1 + 1);
-            const QString path = (sp1 > 0 && sp2 > sp1)
-                                     ? first_line.mid(sp1 + 1, sp2 - sp1 - 1)
-                                     : QString();
+            const QString path = (sp1 > 0 && sp2 > sp1) ? first_line.mid(sp1 + 1, sp2 - sp1 - 1) : QString();
             QUrl url("http://localhost" + path);
             QUrlQuery q(url);
             const QString code = q.queryItemValue("code");
@@ -148,8 +139,8 @@ Result<QString> await_callback(int port, const QString& expected_state, int wait
             const QString err = q.queryItemValue("error");
 
             if (!err.isEmpty()) {
-                error_msg = QString("oauth: provider returned error: %1 (%2)")
-                                .arg(err, q.queryItemValue("error_description"));
+                error_msg =
+                    QString("oauth: provider returned error: %1 (%2)").arg(err, q.queryItemValue("error_description"));
                 sock->write(kCallbackErrorHtml);
             } else if (state != expected_state) {
                 error_msg = "oauth: callback state mismatch (possible CSRF) — aborted";
@@ -178,8 +169,8 @@ Result<QString> await_callback(int port, const QString& expected_state, int wait
 
 /// POST form-encoded body, return parsed JSON.  Mirror of McpOAuth's
 /// http_post but lives here to avoid the symbol clash.
-Result<QJsonObject> http_post_form(const QUrl& url, const QUrlQuery& form,
-                                    const QString& client_id, const QString& client_secret) {
+Result<QJsonObject> http_post_form(const QUrl& url, const QUrlQuery& form, const QString& client_id,
+                                   const QString& client_secret) {
     QNetworkAccessManager nam;
     QNetworkRequest req(url);
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/x-www-form-urlencoded");
@@ -212,16 +203,16 @@ Result<QJsonObject> http_post_form(const QUrl& url, const QUrlQuery& form,
     reply->deleteLater();
 
     if (err != QNetworkReply::NoError) {
-        return Result<QJsonObject>::err(
-            QString("oauth: token exchange HTTP %1 (status %2): %3")
-                .arg(static_cast<int>(err)).arg(status)
-                .arg(QString::fromUtf8(response).left(300)).toStdString());
+        return Result<QJsonObject>::err(QString("oauth: token exchange HTTP %1 (status %2): %3")
+                                            .arg(static_cast<int>(err))
+                                            .arg(status)
+                                            .arg(QString::fromUtf8(response).left(300))
+                                            .toStdString());
     }
     QJsonParseError perr;
     const QJsonDocument doc = QJsonDocument::fromJson(response, &perr);
     if (perr.error != QJsonParseError::NoError || !doc.isObject())
-        return Result<QJsonObject>::err(
-            ("oauth: token response not JSON: " + perr.errorString()).toStdString());
+        return Result<QJsonObject>::err(("oauth: token response not JSON: " + perr.errorString()).toStdString());
     const QJsonObject obj = doc.object();
     if (status >= 400 || obj.contains("error")) {
         const QString reason = obj.value("error_description").toString(obj.value("error").toString("unknown"));
@@ -245,8 +236,7 @@ void store_tokens(const QString& server_id, const QJsonObject& token_response) {
 
 Result<QString> McpOAuthAuthCode::run_flow(const AuthCodeConfig& cfg) {
     if (cfg.authorization_url.isEmpty() || cfg.token_url.isEmpty())
-        return Result<QString>::err(
-            "oauth: authorization_code grant requires authorization_url + token_url");
+        return Result<QString>::err("oauth: authorization_code grant requires authorization_url + token_url");
 
     // Client credentials must exist before the flow can start.  DCR for
     // authorization_code clients with no pre-registration is rare and
@@ -255,16 +245,14 @@ Result<QString> McpOAuthAuthCode::run_flow(const AuthCodeConfig& cfg) {
     const QString client_id = get_secure(McpOAuth::secure_key_client_id(cfg.server_id));
     const QString client_secret = get_secure(McpOAuth::secure_key_client_secret(cfg.server_id));
     if (client_id.isEmpty())
-        return Result<QString>::err(
-            ("oauth: no client_id in SecureStorage for " + cfg.server_id +
-             " — write mcp.oauth.<server>.client_id before invoking the flow")
-                .toStdString());
+        return Result<QString>::err(("oauth: no client_id in SecureStorage for " + cfg.server_id +
+                                     " — write mcp.oauth.<server>.client_id before invoking the flow")
+                                        .toStdString());
 
-    const QString verifier = random_b64url(48);     // ~64 url-safe chars
+    const QString verifier = random_b64url(48); // ~64 url-safe chars
     const QString challenge = pkce_challenge(verifier);
     const QString state = random_b64url(24);
-    const QString redirect_uri =
-        QStringLiteral("http://localhost:%1/callback").arg(cfg.callback_port);
+    const QString redirect_uri = QStringLiteral("http://localhost:%1/callback").arg(cfg.callback_port);
 
     const QString auth_url = build_auth_url(cfg, client_id, redirect_uri, state, challenge);
     LOG_INFO(kAcTag, QString("Opening browser to %1").arg(QString(auth_url).left(80)));

@@ -3,9 +3,9 @@
 // Categories use publishers command (normalized string array).
 // HK category_datasets may return empty — fall back to datasets_list + client-side filter.
 #include "screens/gov_data/GovDataHKPanel.h"
-#include "screens/gov_data/GovDataProviderPanel.h"
 
 #include "core/logging/Logger.h"
+#include "screens/gov_data/GovDataProviderPanel.h"
 #include "services/gov_data/GovDataService.h"
 #include "ui/theme/Theme.h"
 

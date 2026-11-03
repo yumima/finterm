@@ -34,7 +34,7 @@ namespace {
 constexpr const char* kTag = "Migration022";
 
 struct Row {
-    QString id;       // primary key (provider name, model id, profile id)
+    QString id; // primary key (provider name, model id, profile id)
     QString api_key;
 };
 

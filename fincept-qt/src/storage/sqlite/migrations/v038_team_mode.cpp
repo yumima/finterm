@@ -60,11 +60,9 @@ static Result<void> apply_v038(QSqlDatabase& db) {
     }
     // Remap legacy values regardless (idempotent — UPDATEs nothing
     // when the values are already correct).
-    if (auto r = sql(db,
-            "UPDATE teams SET mode = 'coordinate' WHERE mode = 'sequential'"); r.is_err())
+    if (auto r = sql(db, "UPDATE teams SET mode = 'coordinate' WHERE mode = 'sequential'"); r.is_err())
         return r;
-    if (auto r = sql(db,
-            "UPDATE teams SET mode = 'collaborate' WHERE mode = 'parallel'"); r.is_err())
+    if (auto r = sql(db, "UPDATE teams SET mode = 'collaborate' WHERE mode = 'parallel'"); r.is_err())
         return r;
     LOG_INFO(kTag, "teams.mode ready (renamed from strategy + values remapped)");
     return Result<void>::ok();

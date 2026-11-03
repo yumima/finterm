@@ -1,18 +1,15 @@
 // src/services/ma_analytics/MAAnalyticsService.h
 #pragma once
+#include "datahub/Producer.h"
 #include "services/ma_analytics/MAAnalyticsTypes.h"
 
 #include <QObject>
-
-#    include "datahub/Producer.h"
 
 namespace fincept::services::ma {
 
 /// Singleton service for all M&A Analytics Python backend calls.
 /// Each method is async — results delivered via signals.
-class MAAnalyticsService : public QObject
-    , public fincept::datahub::Producer
-{
+class MAAnalyticsService : public QObject, public fincept::datahub::Producer {
     Q_OBJECT
   public:
     static MAAnalyticsService& instance();

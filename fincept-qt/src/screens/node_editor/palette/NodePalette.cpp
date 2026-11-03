@@ -151,16 +151,16 @@ void NodePalette::rebuild_categories(const QString& filter) {
             auto* btn = new QPushButton;
             btn->setFixedHeight(32);
             btn->setCursor(Qt::OpenHandCursor);
-            btn->setStyleSheet(
-                QString("QPushButton {"
-                        "  background: %1; color: %2; border: none;"
-                        "  border-bottom: 1px solid %3; font-family: Consolas;"
-                        "  font-size: 11px; text-align: left; padding: 0 10px;"
-                        "}"
-                        "QPushButton:hover {"
-                        "  background: %4; color: %2;"
-                        "}")
-                    .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER(), ui::colors::BG_HOVER()));
+            btn->setStyleSheet(QString("QPushButton {"
+                                       "  background: %1; color: %2; border: none;"
+                                       "  border-bottom: 1px solid %3; font-family: Consolas;"
+                                       "  font-size: 11px; text-align: left; padding: 0 10px;"
+                                       "}"
+                                       "QPushButton:hover {"
+                                       "  background: %4; color: %2;"
+                                       "}")
+                                   .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER(),
+                                        ui::colors::BG_HOVER()));
 
             btn->setToolTip(n.description);
 

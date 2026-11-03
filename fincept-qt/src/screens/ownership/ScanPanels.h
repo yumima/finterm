@@ -38,6 +38,7 @@ class InsiderBuysPanel : public QWidget {
     void refresh();
   signals:
     void stock_activated(const QString& symbol);
+
   private:
     void render();
     QLabel* title_note_ = nullptr;
@@ -57,6 +58,7 @@ class ShortRankPanel : public QWidget {
     void refresh();
   signals:
     void stock_activated(const QString& symbol);
+
   private:
     void render();
     QLabel* title_note_ = nullptr;
@@ -72,6 +74,7 @@ class MoversPanel : public QWidget {
     void refresh();
   signals:
     void stock_activated(const QString& symbol);
+
   private:
     void render();
     QLabel* title_note_ = nullptr;
@@ -99,6 +102,7 @@ class LargestFundsPanel : public QWidget {
     void show_fund(const QString& cik);
   signals:
     void stock_activated(const QString& symbol);
+
   private:
     void render();
     QLabel* title_note_ = nullptr;
@@ -110,8 +114,8 @@ class LargestFundsPanel : public QWidget {
     // the row describes, so it matches the row's moves even for an
     // EDGAR-pulled quarter.
     FirmDetailPanel* detail_ = nullptr;
-    ui::LoadingOverlay* loading_ = nullptr;   // over the ranking while it (re)loads
-    QString selected_cik_;   // re-selected after a reload re-fills the table
+    ui::LoadingOverlay* loading_ = nullptr; // over the ranking while it (re)loads
+    QString selected_cik_;                  // re-selected after a reload re-fills the table
     // True when the open fund came from the search rather than a row: it may
     // not be in the ranking at all, so a reload must not close it for that.
     bool selected_from_search_ = false;

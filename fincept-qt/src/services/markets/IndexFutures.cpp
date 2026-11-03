@@ -23,12 +23,9 @@ namespace {
 // tooltip. NIY is the yen contract, in the index's own currency.
 const QVector<IndexFuture>& futures() {
     static const QVector<IndexFuture> v = {
-        {"^GSPC", "ES=F", "ES", "E-mini S&P 500"},
-        {"^DJI", "YM=F", "YM", "E-mini Dow"},
-        {"^IXIC", "NQ=F", "NQ", "E-mini Nasdaq-100"},
-        {"^NDX", "NQ=F", "NQ", "E-mini Nasdaq-100"},
-        {"^RUT", "RTY=F", "RTY", "E-mini Russell 2000"},
-        {"^N225", "NIY=F", "NIY", "Nikkei 225 (yen, CME)"},
+        {"^GSPC", "ES=F", "ES", "E-mini S&P 500"},       {"^DJI", "YM=F", "YM", "E-mini Dow"},
+        {"^IXIC", "NQ=F", "NQ", "E-mini Nasdaq-100"},    {"^NDX", "NQ=F", "NQ", "E-mini Nasdaq-100"},
+        {"^RUT", "RTY=F", "RTY", "E-mini Russell 2000"}, {"^N225", "NIY=F", "NIY", "Nikkei 225 (yen, CME)"},
     };
     return v;
 }
@@ -107,8 +104,8 @@ void fetch_index_futures(const QStringList& indices, QObject* ctx,
                 // The daemon already refuses stale prints and missing closes;
                 // this only guards the shape. A last print from the future
                 // would be a clock or decode bug, not a quote.
-                if (!std::isfinite(q.pct) || q.price <= 0 || q.ref_price <= 0 || !q.ref_date.isValid() ||
-                    q.ts <= 0 || q.ts > now + 600)
+                if (!std::isfinite(q.pct) || q.price <= 0 || q.ref_price <= 0 || !q.ref_date.isValid() || q.ts <= 0 ||
+                    q.ts > now + 600)
                     continue;
                 out.insert(q.index, q);
             }
@@ -124,8 +121,7 @@ QString index_future_tooltip(const IndexFutureQuote& q, const QString& label) {
                                "Previous close %6 (%7)\n"
                                "Change %8%9 (%10%11%)")
                     .arg(label, contract_label(q), f ? f->name : q.contract, px(q.price), when_et(q.ts),
-                         px(q.ref_price), q.ref_date.toString(QStringLiteral("ddd d MMM")),
-                         q.change >= 0 ? "+" : "−")
+                         px(q.ref_price), q.ref_date.toString(QStringLiteral("ddd d MMM")), q.change >= 0 ? "+" : "−")
                     .arg(px(std::abs(q.change)), q.pct >= 0 ? "+" : "−", QString::number(std::abs(q.pct), 'f', 2));
     if (q.index == QLatin1String("^IXIC"))
         s += QStringLiteral("\n\nThe Composite has no future; the Nasdaq-100 future stands in for it.");
@@ -146,8 +142,7 @@ QString index_future_tooltip(const IndexFutureQuote& q, const QString& label) {
 
 QString index_future_unavailable_tooltip(const QString& index, const QString& label) {
     if (!index_future_for(index))
-        return QStringLiteral("%1 has no futures quote: the data feed carries no future for this index.")
-            .arg(label);
+        return QStringLiteral("%1 has no futures quote: the data feed carries no future for this index.").arg(label);
     return QStringLiteral("%1 futures: no sound reading right now — still fetching, the contract has "
                           "stopped printing while the market is open (a feed gap), or the feed has no "
                           "data for it. Shown as a dash rather than an old quote.")

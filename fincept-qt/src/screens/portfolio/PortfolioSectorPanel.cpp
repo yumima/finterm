@@ -311,7 +311,8 @@ void PortfolioSectorPanel::update_correlation() {
     // Matrix
     for (int r = 0; r < n; ++r) {
         auto* row_label = new QLabel(sorted[r].symbol.left(4));
-        row_label->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
+        row_label->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
         grid->addWidget(row_label, r + 1, 0);
 
         for (int c = 0; c < n; ++c) {

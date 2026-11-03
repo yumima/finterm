@@ -1,9 +1,9 @@
 // ReportBuilderService.cpp — see header for design rationale.
 
 #include "services/report_builder/ReportBuilderService.h"
-#include "core/config/AppPaths.h"
 
 #include "core/config/AppIdentity.h"
+#include "core/config/AppPaths.h"
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
 
@@ -51,8 +51,7 @@ class AddCmd : public QUndoCommand {
 
 class RemoveCmd : public QUndoCommand {
   public:
-    RemoveCmd(ReportBuilderService* svc, int index)
-        : QUndoCommand("Remove component"), svc_(svc), index_(index) {}
+    RemoveCmd(ReportBuilderService* svc, int index) : QUndoCommand("Remove component"), svc_(svc), index_(index) {}
     void redo() override;
     void undo() override;
     void set_saved(rep::ReportComponent c) { saved_ = std::move(c); }
@@ -102,10 +101,7 @@ class MoveCmd : public QUndoCommand {
 class MetadataCmd : public QUndoCommand {
   public:
     MetadataCmd(ReportBuilderService* svc, rep::ReportMetadata old_m, rep::ReportMetadata new_m)
-        : QUndoCommand("Edit metadata"),
-          svc_(svc),
-          old_(std::move(old_m)),
-          new_(std::move(new_m)) {}
+        : QUndoCommand("Edit metadata"), svc_(svc), old_(std::move(old_m)), new_(std::move(new_m)) {}
     void redo() override;
     void undo() override;
 
@@ -117,10 +113,7 @@ class MetadataCmd : public QUndoCommand {
 class ThemeCmd : public QUndoCommand {
   public:
     ThemeCmd(ReportBuilderService* svc, rep::ReportTheme old_t, rep::ReportTheme new_t)
-        : QUndoCommand("Change theme"),
-          svc_(svc),
-          old_(std::move(old_t)),
-          new_(std::move(new_t)) {}
+        : QUndoCommand("Change theme"), svc_(svc), old_(std::move(old_t)), new_(std::move(new_t)) {}
     void redo() override;
     void undo() override;
 
@@ -261,7 +254,9 @@ rep::ReportComponent ServiceFriend::locked_get_at(ReportBuilderService* svc, int
 
 // ── Undo command bodies ──────────────────────────────────────────────────────
 
-void AddCmd::redo() { detail::ServiceFriend::direct_insert(svc_, comp_, at_); }
+void AddCmd::redo() {
+    detail::ServiceFriend::direct_insert(svc_, comp_, at_);
+}
 void AddCmd::undo() {
     // Find by id rather than index — concurrent mutations may have shifted
     // positions since the original add. (Within a macro this is unlikely
@@ -300,14 +295,26 @@ bool UpdateCmd::mergeWith(const QUndoCommand* other) {
     return true;
 }
 
-void MoveCmd::redo() { detail::ServiceFriend::direct_move_by_id(svc_, id_, to_); }
-void MoveCmd::undo() { detail::ServiceFriend::direct_move_by_id(svc_, id_, from_); }
+void MoveCmd::redo() {
+    detail::ServiceFriend::direct_move_by_id(svc_, id_, to_);
+}
+void MoveCmd::undo() {
+    detail::ServiceFriend::direct_move_by_id(svc_, id_, from_);
+}
 
-void MetadataCmd::redo() { detail::ServiceFriend::direct_set_metadata(svc_, new_); }
-void MetadataCmd::undo() { detail::ServiceFriend::direct_set_metadata(svc_, old_); }
+void MetadataCmd::redo() {
+    detail::ServiceFriend::direct_set_metadata(svc_, new_);
+}
+void MetadataCmd::undo() {
+    detail::ServiceFriend::direct_set_metadata(svc_, old_);
+}
 
-void ThemeCmd::redo() { detail::ServiceFriend::direct_set_theme(svc_, new_); }
-void ThemeCmd::undo() { detail::ServiceFriend::direct_set_theme(svc_, old_); }
+void ThemeCmd::redo() {
+    detail::ServiceFriend::direct_set_theme(svc_, new_);
+}
+void ThemeCmd::undo() {
+    detail::ServiceFriend::direct_set_theme(svc_, old_);
+}
 
 // ── Service ──────────────────────────────────────────────────────────────────
 
@@ -432,7 +439,7 @@ bool ReportBuilderService::update_component(int id, const QString& content, cons
 }
 
 bool ReportBuilderService::patch_component(int id, const QString* content_or_null,
-                                            const QMap<QString, QString>& partial_config) {
+                                           const QMap<QString, QString>& partial_config) {
     QString old_content, new_content;
     QMap<QString, QString> old_config, new_config;
     {
@@ -527,7 +534,9 @@ void ReportBuilderService::replace_document(const rep::ReportDocument& doc) {
 
 // ── Undo helpers ────────────────────────────────────────────────────────────
 
-QUndoStack* ReportBuilderService::undo_stack() { return undo_stack_; }
+QUndoStack* ReportBuilderService::undo_stack() {
+    return undo_stack_;
+}
 
 void ReportBuilderService::begin_macro(const QString& description) {
     if (macro_depth_++ == 0)
@@ -551,7 +560,9 @@ void ReportBuilderService::note_llm_mutation() {
     llm_window_timer_->start();
 }
 
-void ReportBuilderService::push_undo(QUndoCommand* cmd) { undo_stack_->push(cmd); }
+void ReportBuilderService::push_undo(QUndoCommand* cmd) {
+    undo_stack_->push(cmd);
+}
 
 // ── File ops ────────────────────────────────────────────────────────────────
 
@@ -613,7 +624,9 @@ void ReportBuilderService::persist_current_file() {
     s.setValue(kCurrentFileKey, current_file_);
 }
 
-QString ReportBuilderService::autosave_path() const { return autosave_path_; }
+QString ReportBuilderService::autosave_path() const {
+    return autosave_path_;
+}
 
 void ReportBuilderService::trigger_autosave() {
     QString json;

@@ -1,8 +1,8 @@
 #include "screens/dashboard/widgets/SparklineStripWidget.h"
-#include "screens/markets/MarketChartDialog.h"
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
+#include "screens/markets/MarketChartDialog.h"
 #include "ui/theme/Theme.h"
 
 #include <QDialog>
@@ -16,6 +16,7 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QWidget>
+
 #include <algorithm>
 
 namespace fincept::screens::widgets {
@@ -23,9 +24,7 @@ namespace fincept::screens::widgets {
 // ── Inline sparkline canvas ──────────────────────────────────────────────────
 class SparklineCanvas : public QWidget {
   public:
-    explicit SparklineCanvas(QWidget* parent = nullptr) : QWidget(parent) {
-        setMinimumHeight(18);
-    }
+    explicit SparklineCanvas(QWidget* parent = nullptr) : QWidget(parent) { setMinimumHeight(18); }
     void set_points(const QVector<double>& pts) {
         pts_ = pts;
         update();
@@ -67,8 +66,7 @@ namespace {
 const QStringList kDefaultSymbols = {"AAPL", "MSFT", "GOOGL", "NVDA"};
 } // namespace
 
-SparklineStripWidget::SparklineStripWidget(const QJsonObject& cfg, QWidget* parent)
-    : BaseWidget("SPARKLINES", parent) {
+SparklineStripWidget::SparklineStripWidget(const QJsonObject& cfg, QWidget* parent) : BaseWidget("SPARKLINES", parent) {
     auto* vl = content_layout();
     vl->setContentsMargins(10, 8, 10, 8);
     vl->setSpacing(4);
@@ -139,8 +137,8 @@ void SparklineStripWidget::build_rows() {
         grid->addWidget(r.spark, i, 1);
         grid->addWidget(r.last, i, 2);
         // The sparkline is a preview; a click opens the full chart.
-        for (QWidget* w : {static_cast<QWidget*>(r.symbol), static_cast<QWidget*>(r.spark),
-                           static_cast<QWidget*>(r.last)}) {
+        for (QWidget* w :
+             {static_cast<QWidget*>(r.symbol), static_cast<QWidget*>(r.spark), static_cast<QWidget*>(r.last)}) {
             screens::MarketChartDialog::make_clickable(w);
             screens::MarketChartDialog::set_target(w, sym);
         }
@@ -229,11 +227,9 @@ void SparklineStripWidget::on_theme_changed() {
 
 void SparklineStripWidget::apply_styles() {
     const QString sym_css =
-        QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
-            .arg(ui::colors::TEXT_PRIMARY());
+        QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(ui::colors::TEXT_PRIMARY());
     const QString last_css =
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
-            .arg(ui::colors::TEXT_PRIMARY());
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(ui::colors::TEXT_PRIMARY());
     for (auto it = rows_.begin(); it != rows_.end(); ++it) {
         if (it->symbol)
             it->symbol->setStyleSheet(sym_css);

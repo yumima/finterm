@@ -178,11 +178,11 @@ void PortfolioOrderPanel::update_tabs() {
 void PortfolioOrderPanel::update_submit() {
     const bool is_buy = (side_ == "BUY");
     submit_btn_->setText(QString("OPEN %1 ORDER").arg(side_));
-    submit_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%2; border:none;"
-                                       "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
-                                       "QPushButton:hover { opacity:0.9; }")
-                                   .arg(is_buy ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(),
-                                        is_buy ? "#000" : "#fff"));
+    submit_btn_->setStyleSheet(
+        QString("QPushButton { background:%1; color:%2; border:none;"
+                "  font-size:12px; font-weight:700; letter-spacing:0.5px; }"
+                "QPushButton:hover { opacity:0.9; }")
+            .arg(is_buy ? ui::colors::POSITIVE() : ui::colors::NEGATIVE(), is_buy ? "#000" : "#fff"));
 }
 
 void PortfolioOrderPanel::set_holding(const portfolio::HoldingWithQuote* holding) {

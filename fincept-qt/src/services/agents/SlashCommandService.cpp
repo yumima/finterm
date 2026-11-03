@@ -18,84 +18,93 @@ namespace {
 // Format: {command, agent_id, skill, positional-arg-keys, help}.
 static std::vector<SlashCommandSpec> default_specs() {
     return {
-        {QStringLiteral("comps"), QStringLiteral("pitch_agent"),
+        {QStringLiteral("comps"),
+         QStringLiteral("pitch_agent"),
          QStringLiteral("comps-analysis"),
          {QStringLiteral("ticker")},
          QStringLiteral("Build comps table for a ticker"),
-         {QStringLiteral("/dcf {ticker}"), QStringLiteral("/catalysts {ticker}"),
-          QStringLiteral("/ic-memo {ticker}")}},
+         {QStringLiteral("/dcf {ticker}"), QStringLiteral("/catalysts {ticker}"), QStringLiteral("/ic-memo {ticker}")}},
 
-        {QStringLiteral("dcf"), QStringLiteral("model_builder"),
+        {QStringLiteral("dcf"),
+         QStringLiteral("model_builder"),
          QStringLiteral("dcf-model"),
          {QStringLiteral("ticker")},
          QStringLiteral("Build / update DCF for a ticker"),
-         {QStringLiteral("/comps {ticker}"), QStringLiteral("/initiate {ticker}"),
-          QStringLiteral("/thesis {ticker}")}},
+         {QStringLiteral("/comps {ticker}"), QStringLiteral("/initiate {ticker}"), QStringLiteral("/thesis {ticker}")}},
 
-        {QStringLiteral("lbo"), QStringLiteral("model_builder"),
+        {QStringLiteral("lbo"),
+         QStringLiteral("model_builder"),
          QStringLiteral("lbo-model"),
          {QStringLiteral("ticker")},
          QStringLiteral("Build LBO model for a ticker"),
          {QStringLiteral("/ic-memo {ticker}"), QStringLiteral("/comps {ticker}")}},
 
-        {QStringLiteral("earnings"), QStringLiteral("earnings_reviewer"),
+        {QStringLiteral("earnings"),
+         QStringLiteral("earnings_reviewer"),
          QStringLiteral("earnings-analysis"),
          {QStringLiteral("ticker"), QStringLiteral("quarter")},
          QStringLiteral("Analyse a printed quarter"),
          {QStringLiteral("/thesis {ticker}"), QStringLiteral("/comps {ticker}"),
           QStringLiteral("/catalysts {ticker}")}},
 
-        {QStringLiteral("earnings-preview"), QStringLiteral("earnings_reviewer"),
+        {QStringLiteral("earnings-preview"),
+         QStringLiteral("earnings_reviewer"),
          QStringLiteral("earnings-preview"),
          {QStringLiteral("ticker")},
          QStringLiteral("Preview an upcoming earnings print"),
          {QStringLiteral("/catalysts {ticker}"), QStringLiteral("/thesis {ticker}")}},
 
-        {QStringLiteral("initiate"), QStringLiteral("pitch_agent"),
+        {QStringLiteral("initiate"),
+         QStringLiteral("pitch_agent"),
          QStringLiteral("initiating-coverage"),
          {QStringLiteral("ticker")},
          QStringLiteral("Initiating coverage memo"),
-         {QStringLiteral("/comps {ticker}"), QStringLiteral("/dcf {ticker}"),
-          QStringLiteral("/ic-memo {ticker}")}},
+         {QStringLiteral("/comps {ticker}"), QStringLiteral("/dcf {ticker}"), QStringLiteral("/ic-memo {ticker}")}},
 
-        {QStringLiteral("sector"), QStringLiteral("market_researcher"),
+        {QStringLiteral("sector"),
+         QStringLiteral("market_researcher"),
          QStringLiteral("sector-overview"),
          {QStringLiteral("sector")},
          QStringLiteral("Sector overview brief"),
          {QStringLiteral("/morning-note"), QStringLiteral("/rebalance")}},
 
-        {QStringLiteral("ic-memo"), QStringLiteral("pitch_agent"),
+        {QStringLiteral("ic-memo"),
+         QStringLiteral("pitch_agent"),
          QStringLiteral("ic-memo"),
          {QStringLiteral("ticker")},
          QStringLiteral("Investment-committee memo"),
-         {QStringLiteral("/comps {ticker}"), QStringLiteral("/dcf {ticker}"),
-          QStringLiteral("/thesis {ticker}")}},
+         {QStringLiteral("/comps {ticker}"), QStringLiteral("/dcf {ticker}"), QStringLiteral("/thesis {ticker}")}},
 
-        {QStringLiteral("morning-note"), QStringLiteral("market_researcher"),
+        {QStringLiteral("morning-note"),
+         QStringLiteral("market_researcher"),
          QStringLiteral("morning-note"),
          {},
          QStringLiteral("Today's market open note"),
          {QStringLiteral("/rebalance"), QStringLiteral("/client-review")}},
 
-        {QStringLiteral("catalysts"), QStringLiteral("market_researcher"),
+        {QStringLiteral("catalysts"),
+         QStringLiteral("market_researcher"),
          QStringLiteral("catalyst-calendar"),
          {QStringLiteral("ticker")},
          QStringLiteral("Upcoming catalysts for a ticker"),
          {QStringLiteral("/earnings-preview {ticker}"), QStringLiteral("/thesis {ticker}")}},
 
-        {QStringLiteral("thesis"), QStringLiteral("market_researcher"),
+        {QStringLiteral("thesis"),
+         QStringLiteral("market_researcher"),
          QStringLiteral("thesis-tracker"),
          {QStringLiteral("ticker")},
          QStringLiteral("Track thesis vs reality"),
          {QStringLiteral("/earnings {ticker} latest"), QStringLiteral("/catalysts {ticker}")}},
 
-        {QStringLiteral("rebalance"), QStringLiteral("month_end_closer"),
+        {QStringLiteral("rebalance"),
+         QStringLiteral("month_end_closer"),
          QStringLiteral("portfolio-rebalance"),
          {},
          QStringLiteral("Suggest portfolio rebalance"),
          {QStringLiteral("/morning-note"), QStringLiteral("/client-review")}},
 
-        {QStringLiteral("client-review"), QStringLiteral("meeting_prep"),
+        {QStringLiteral("client-review"),
+         QStringLiteral("meeting_prep"),
          QStringLiteral("client-review"),
          {},
          QStringLiteral("Client review prep pack"),
@@ -107,9 +116,7 @@ static std::vector<SlashCommandSpec> default_specs() {
 
 SlashCommandService::SlashCommandService() : specs_(default_specs()) {}
 
-bool SlashCommandService::parse_tokens(const QString& input,
-                                       QString& out_command,
-                                       QStringList& out_positional,
+bool SlashCommandService::parse_tokens(const QString& input, QString& out_command, QStringList& out_positional,
                                        QJsonObject& out_flags) {
     const QString trimmed = input.trimmed();
     if (!trimmed.startsWith(QLatin1Char('/')))
@@ -120,9 +127,9 @@ bool SlashCommandService::parse_tokens(const QString& input,
         return false;
 
     const QString first = parts.first();
-    if (first.size() < 2)  // just "/"
+    if (first.size() < 2) // just "/"
         return false;
-    out_command = first.mid(1);  // strip leading "/"
+    out_command = first.mid(1); // strip leading "/"
     out_positional.clear();
     out_flags = QJsonObject{};
 

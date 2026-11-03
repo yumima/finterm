@@ -111,8 +111,7 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
     settings_btn_->setCursor(Qt::PointingHandCursor);
     settings_btn_->setToolTip("Settings & profile");
     settings_btn_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    connect(settings_btn_, &QPushButton::clicked, this,
-            [this]() { emit navigate_to(QStringLiteral("settings")); });
+    connect(settings_btn_, &QPushButton::clicked, this, [this]() { emit navigate_to(QStringLiteral("settings")); });
     hl->addWidget(settings_btn_);
     sep();
     credits_label_ = mk("---");
@@ -161,7 +160,8 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
 
 void ToolBar::refresh_theme() {
     // Bar background
-    setStyleSheet(QString("background:%1;border-bottom:1px solid %2;").arg(colors::BG_BASE()).arg(colors::BORDER_DIM()));
+    setStyleSheet(
+        QString("background:%1;border-bottom:1px solid %2;").arg(colors::BG_BASE()).arg(colors::BORDER_DIM()));
     // Menu bar + popup menus
     if (menu_bar_) {
         menu_bar_->setStyleSheet(menu_ss());
@@ -286,11 +286,9 @@ QMenu* ToolBar::build_file_menu() {
         for (QScreen* s : screens) {
             const QString name = s->name();
             const QSize size = s->size();
-            const QString label =
-                QString("%1. %2  (%3×%4)").arg(idx++).arg(name).arg(size.width()).arg(size.height());
-            monitors->addAction(label, this, [this, name]() {
-                emit action_triggered(QString("move_to_monitor:%1").arg(name));
-            });
+            const QString label = QString("%1. %2  (%3×%4)").arg(idx++).arg(name).arg(size.width()).arg(size.height());
+            monitors->addAction(label, this,
+                                [this, name]() { emit action_triggered(QString("move_to_monitor:%1").arg(name)); });
         }
     });
 
@@ -389,8 +387,7 @@ QMenu* ToolBar::build_view_menu() {
     auto* m = new QMenu("View", this);
     m->setStyleSheet(popup_ss());
     // Component Browser at the top — Bloomberg's discoverability hook.
-    m->addAction("Component Browser\tCtrl+K", this,
-                 [this]() { emit action_triggered("browse_components"); });
+    m->addAction("Component Browser\tCtrl+K", this, [this]() { emit action_triggered("browse_components"); });
     m->addSeparator();
     m->addAction("Fullscreen\tF11", this, [this]() { emit action_triggered("fullscreen"); });
     m->addSeparator();
@@ -400,8 +397,7 @@ QMenu* ToolBar::build_view_menu() {
     // a checkable toolbar action would drift out of sync on window focus
     // changes. If the user cares about the visual, the window's title bar
     // retains the OS-level "always on top" decoration on most platforms.
-    m->addAction("Always on Top\tCtrl+Shift+T", this,
-                 [this]() { emit action_triggered("always_on_top"); });
+    m->addAction("Always on Top\tCtrl+Shift+T", this, [this]() { emit action_triggered("always_on_top"); });
     m->addSeparator();
 
     // Float any screen as a separate window on another monitor

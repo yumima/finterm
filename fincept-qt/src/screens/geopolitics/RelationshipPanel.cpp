@@ -88,12 +88,11 @@ void RelationshipPanel::build_ui() {
             orgs++;
     }
 
-    auto* stats = new QLabel(
-        QString("REFERENCE MAP  |  NODES: %1  |  CONFLICTS: %2  |  ORGANIZATIONS: %3")
-            .arg(nodes.size())
-            .arg(conflicts)
-            .arg(orgs),
-        header);
+    auto* stats = new QLabel(QString("REFERENCE MAP  |  NODES: %1  |  CONFLICTS: %2  |  ORGANIZATIONS: %3")
+                                 .arg(nodes.size())
+                                 .arg(conflicts)
+                                 .arg(orgs),
+                             header);
     stats->setToolTip("Static reference taxonomy — no live severity or dataset counts. "
                       "Use the HDX tab for live humanitarian datasets.");
     stats->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; padding:2px 8px;"

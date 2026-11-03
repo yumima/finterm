@@ -20,7 +20,7 @@ class RailWidget : public QWidget {
     void set_entry(const KnowledgeEntry* entry);
 
   signals:
-    void open_entry(const QString& entry_id);                       ///< click on RELATED chip
+    void open_entry(const QString& entry_id);                             ///< click on RELATED chip
     void request_action(const QString& screen_id, const QString& ticker); ///< Try / Where in finterm
 
   private:

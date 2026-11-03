@@ -1,10 +1,10 @@
 #include "ui/navigation/CommandBar.h"
-#include "ui/SearchFailedText.h"
 
 #include "core/events/EventBus.h"
 #include "core/keys/KeyConfigManager.h"
 #include "core/session/ScreenStateManager.h"
 #include "python/PythonWorker.h"
+#include "ui/SearchFailedText.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -394,12 +394,7 @@ void CommandBar::build_commands() {
          "",
          {"trade", "visualization", "flow"}},
         // Community / Info
-        {"about",
-         "About",
-         "About finterm",
-         {"about", "info", "version"},
-         "",
-         {"about", "information", "version"}},
+        {"about", "About", "About finterm", {"about", "info", "version"}, "", {"about", "information", "version"}},
         {"support",
          "Support",
          "Support tickets",
@@ -500,8 +495,7 @@ CommandBar::CommandBar(QWidget* parent) : QWidget(parent) {
     //        update_position() runs); Qt::Popup (grabs keyboard, blocks
     //        further typing past the slash-prefix).
     dropdown_ = new QFrame(this);
-    dropdown_->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint
-                              | Qt::NoDropShadowWindowHint);
+    dropdown_->setWindowFlags(Qt::ToolTip | Qt::FramelessWindowHint | Qt::NoDropShadowWindowHint);
     dropdown_->setAttribute(Qt::WA_ShowWithoutActivating);
     dropdown_->setStyleSheet(drop_ss());
 
@@ -539,8 +533,7 @@ CommandBar::CommandBar(QWidget* parent) : QWidget(parent) {
     connect(qApp, &QApplication::focusChanged, this, [this](QWidget*, QWidget* now) {
         if (!now)
             return; // spurious focus-out events while the dropdown opens
-        const bool focus_inside =
-            (now == input_ || now == list_ || now == dropdown_ || dropdown_->isAncestorOf(now));
+        const bool focus_inside = (now == input_ || now == list_ || now == dropdown_ || dropdown_->isAncestorOf(now));
         if (!focus_inside)
             hide_dropdown();
     });
@@ -1183,7 +1176,7 @@ void CommandBar::fire_asset_search(const QString& query) {
     // auth stub, which no longer runs — every search returned "No results found".
     QJsonObject payload;
     payload["query"] = query;
-    payload["type"]  = active_asset_type_; // stock/fund/index/crypto — daemon filters
+    payload["type"] = active_asset_type_; // stock/fund/index/crypto — daemon filters
     payload["limit"] = kMaxResults;
 
     QPointer<CommandBar> self = this;

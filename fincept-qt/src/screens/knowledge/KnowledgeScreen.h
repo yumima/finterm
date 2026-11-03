@@ -1,7 +1,7 @@
 #pragma once
 
-#include <QHash>
 #include <QHBoxLayout>
+#include <QHash>
 #include <QString>
 #include <QVector>
 #include <QWidget>
@@ -54,18 +54,18 @@ class KnowledgeScreen : public QWidget {
     QLabel* breadcrumb_ = nullptr;
     QLabel* count_label_ = nullptr;
 
-    GroupedPane* basics_pane_   = nullptr;
+    GroupedPane* basics_pane_ = nullptr;
     GroupedPane* practice_pane_ = nullptr;
-    GroupedPane* quant_pane_    = nullptr;
+    GroupedPane* quant_pane_ = nullptr;
 
     QHash<QString, CategoryColumn*> category_cols_;
     AbbreviationsColumn* abbrev_col_ = nullptr;
     RailWidget* rail_ = nullptr;
 
     // ── Recently viewed ───────────────────────────────────────────────────────
-    QWidget*         recent_bar_ = nullptr;
-    QHBoxLayout*     recent_hl_  = nullptr;
-    QVector<QString> recently_viewed_;      // entry IDs, most recent first, max 8
+    QWidget* recent_bar_ = nullptr;
+    QHBoxLayout* recent_hl_ = nullptr;
+    QVector<QString> recently_viewed_; // entry IDs, most recent first, max 8
     static constexpr int kMaxRecent = 8;
     void update_recent_bar();
 };

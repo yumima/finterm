@@ -53,16 +53,16 @@ struct McpServerConfig {
     // leave these at defaults.
     QString transport_type = "stdio"; // "stdio" | "http"
     QString base_url;                 // HTTP endpoint; empty for stdio
-    QString auth_scheme  = "none";    // "none" | "bearer" | "api_key" | "oauth"
+    QString auth_scheme = "none";     // "none" | "bearer" | "api_key" | "oauth"
     QString auth_header;              // header name for api_key (default X-API-Key when blank)
 
     // OAuth 2.0 + DCR (Track 4 #14b) — migration v033.  Populated only
     // when auth_scheme == "oauth".  Credentials (client_id, client_secret,
     // access_token, refresh_token, expires_at) live in SecureStorage,
     // not in this struct.
-    QString auth_token_url;           // token endpoint
-    QString auth_registration_url;    // optional RFC 7591 DCR endpoint
-    QString auth_scope;               // space-separated scopes
+    QString auth_token_url;                          // token endpoint
+    QString auth_registration_url;                   // optional RFC 7591 DCR endpoint
+    QString auth_scope;                              // space-separated scopes
     QString oauth_grant_type = "client_credentials"; // grant type; "client_credentials" only today
 };
 
@@ -107,11 +107,8 @@ class McpClientBase : public QObject {
 
     // Prompts (MCP spec).  Same opt-in pattern as resources — default
     // returns an empty list / errored result, real transports override.
-    virtual Result<std::vector<ExternalPrompt>> list_prompts() {
-        return Result<std::vector<ExternalPrompt>>::ok({});
-    }
-    virtual Result<PromptResult> get_prompt(const QString& name,
-                                            const QHash<QString, QString>& args) {
+    virtual Result<std::vector<ExternalPrompt>> list_prompts() { return Result<std::vector<ExternalPrompt>>::ok({}); }
+    virtual Result<PromptResult> get_prompt(const QString& name, const QHash<QString, QString>& args) {
         (void)args;
         PromptResult pr;
         pr.error = QString("prompts/get not implemented by this transport (name=%1)").arg(name);
@@ -138,12 +135,9 @@ class McpClientBase : public QObject {
     // response.  Stdio implements them via the same dispatcher;
     // McpHttpClient currently can't (HTTP is request-response).
 
-    using NotificationHandler =
-        std::function<void(const QString& method, const QJsonObject& params)>;
+    using NotificationHandler = std::function<void(const QString& method, const QJsonObject& params)>;
 
-    void set_notification_handler(NotificationHandler handler) {
-        notification_handler_ = std::move(handler);
-    }
+    void set_notification_handler(NotificationHandler handler) { notification_handler_ = std::move(handler); }
 
     // Server-initiated requests — JSON-RPC messages with both an `id`
     // and a `method` field.  Server expects a response on the same
@@ -160,12 +154,9 @@ class McpClientBase : public QObject {
     // Default returns method-not-found.  AgentService installs handlers
     // that route to LlmService (sampling) + ElicitBridge (elicitation).
 
-    using ServerRequestHandler =
-        std::function<Result<QJsonObject>(const QString& method, const QJsonObject& params)>;
+    using ServerRequestHandler = std::function<Result<QJsonObject>(const QString& method, const QJsonObject& params)>;
 
-    void set_server_request_handler(ServerRequestHandler handler) {
-        server_request_handler_ = std::move(handler);
-    }
+    void set_server_request_handler(ServerRequestHandler handler) { server_request_handler_ = std::move(handler); }
 
   protected:
     NotificationHandler notification_handler_;

@@ -42,8 +42,7 @@ class McpClient : public McpClientBase {
 
     // MCP prompts
     Result<std::vector<ExternalPrompt>> list_prompts() override;
-    Result<PromptResult> get_prompt(const QString& name,
-                                    const QHash<QString, QString>& args) override;
+    Result<PromptResult> get_prompt(const QString& name, const QHash<QString, QString>& args) override;
 
     const McpServerConfig& config() const override { return config_; }
 

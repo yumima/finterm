@@ -250,7 +250,7 @@ QWidget* NotesScreen::build_editor_panel() {
 
     // ── Page 1: View mode ────────────────────────────────────────────────────
     auto* view_page = new QWidget(this);
-    view_page->setStyleSheet(QString("background: %1;").arg(BG_BASE() ));
+    view_page->setStyleSheet(QString("background: %1;").arg(BG_BASE()));
     auto* vl = new QVBoxLayout(view_page);
     vl->setContentsMargins(14, 14, 14, 14);
     vl->setSpacing(10);

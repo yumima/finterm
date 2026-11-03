@@ -76,8 +76,8 @@ void RecentFilesWidget::refresh_data() {
     if (files.isEmpty()) {
         auto* empty = new QLabel("No files yet");
         empty->setAlignment(Qt::AlignCenter);
-        empty->setStyleSheet(
-            QString("color:%1;font-size:12px;background:transparent;padding:16px;%2").arg(colors::TEXT_SECONDARY(), MF));
+        empty->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;padding:16px;%2")
+                                 .arg(colors::TEXT_SECONDARY(), MF));
         list_layout_->addWidget(empty);
         list_layout_->addStretch();
         return;
@@ -112,7 +112,8 @@ void RecentFilesWidget::refresh_data() {
         QString date_str =
             QDateTime::fromString(f["uploadedAt"].toString(), Qt::ISODate).toLocalTime().toString("MM/dd HH:mm");
         auto* date_lbl = new QLabel(date_str);
-        date_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;%2").arg(colors::TEXT_SECONDARY(), MF));
+        date_lbl->setStyleSheet(
+            QString("color:%1;font-size:12px;background:transparent;%2").arg(colors::TEXT_SECONDARY(), MF));
         rl->addWidget(date_lbl);
 
         list_layout_->addWidget(row);

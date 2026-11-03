@@ -16,16 +16,14 @@ namespace fincept::knowledge {
 
 namespace {
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
-constexpr const char* SERIF =
-    "font-family: 'Charter','Bitstream Charter','Iowan Old Style','Georgia','Cambria',serif;";
+constexpr const char* SERIF = "font-family: 'Charter','Bitstream Charter','Iowan Old Style','Georgia','Cambria',serif;";
 constexpr const char* BODY_BG = "#13110f";
 
 QString filter_ss() {
     return QString("QLineEdit { background: %1; color: %2; border: 1px solid %3;"
                    " padding: 5px 9px; font-size: 11px; %4 }"
                    "QLineEdit:focus { border-color: %5; }")
-        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER());
+        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER());
 }
 
 QString list_ss() {
@@ -39,8 +37,8 @@ QString list_ss() {
                    "QScrollBar::handle:vertical:hover { background: %9; }"
                    "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
         .arg(QString(BODY_BG), ui::colors::TEXT_PRIMARY(), QString(SERIF), ui::colors::BORDER_DIM(),
-             ui::colors::BG_RAISED(), ui::colors::ACCENT_BG(), ui::colors::AMBER(),
-             ui::colors::BORDER_MED(), ui::colors::BORDER_BRIGHT());
+             ui::colors::BG_RAISED(), ui::colors::ACCENT_BG(), ui::colors::AMBER(), ui::colors::BORDER_MED(),
+             ui::colors::BORDER_BRIGHT());
 }
 
 } // namespace

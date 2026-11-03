@@ -367,14 +367,14 @@ void ScannerPanel::build_ui() {
     auto* megacaps_btn = new QPushButton("MEGA CAPS", right_col);
     megacaps_btn->setCursor(Qt::PointingHandCursor);
     megacaps_btn->setFixedHeight(26);
-    megacaps_btn->setStyleSheet(
-        QString("QPushButton { background: %1; color: %2; border: 1px solid %3;"
-                " font-size: %4px; font-weight: 700; %5 padding: 2px 10px; }"
-                "QPushButton:hover { background: %6; color: %7; }")
-            .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::BORDER_DIM())
-            .arg(fincept::ui::fonts::TINY)
-            .arg(kMonoFont())
-            .arg(fincept::ui::colors::BG_HOVER(), fincept::ui::colors::TEXT_PRIMARY()));
+    megacaps_btn->setStyleSheet(QString("QPushButton { background: %1; color: %2; border: 1px solid %3;"
+                                        " font-size: %4px; font-weight: 700; %5 padding: 2px 10px; }"
+                                        "QPushButton:hover { background: %6; color: %7; }")
+                                    .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::TEXT_SECONDARY(),
+                                         fincept::ui::colors::BORDER_DIM())
+                                    .arg(fincept::ui::fonts::TINY)
+                                    .arg(kMonoFont())
+                                    .arg(fincept::ui::colors::BG_HOVER(), fincept::ui::colors::TEXT_PRIMARY()));
     connect(megacaps_btn, &QPushButton::clicked, this,
             [this]() { symbols_edit_->setPlainText(megacap_symbols().join("\n")); });
     quick_row->addWidget(megacaps_btn);
@@ -465,23 +465,22 @@ void ScannerPanel::build_ui() {
     results_table_->setAlternatingRowColors(true);
     results_table_->verticalHeader()->setVisible(false);
     results_table_->setMinimumHeight(160);
-    results_table_->setStyleSheet(
-        QString("QTableWidget { background: %1; border: 1px solid %2; gridline-color: %2;"
-                " font-size: %3px; font-family: %4; color: %5;"
-                " alternate-background-color: %6; }"
-                "QTableWidget::item { padding: 4px 8px; border: none; }"
-                "QHeaderView::section { background: %7; color: %8; font-size: %3px;"
-                " font-weight: 700; font-family: %4; padding: 4px 8px;"
-                " border: none; border-bottom: 1px solid %2; }"
-                "QTableWidget::item:selected { background: %9; color: %5; }")
-            .arg(fincept::ui::colors::BG_BASE(), fincept::ui::colors::BORDER_DIM())
-            .arg(fincept::ui::fonts::SMALL)
-            .arg(fincept::ui::fonts::DATA_FAMILY)
-            .arg(fincept::ui::colors::TEXT_PRIMARY())
-            .arg(fincept::ui::colors::BG_SURFACE())
-            .arg(fincept::ui::colors::BG_RAISED())
-            .arg(fincept::ui::colors::TEXT_SECONDARY())
-            .arg(fincept::ui::colors::BG_HOVER()));
+    results_table_->setStyleSheet(QString("QTableWidget { background: %1; border: 1px solid %2; gridline-color: %2;"
+                                          " font-size: %3px; font-family: %4; color: %5;"
+                                          " alternate-background-color: %6; }"
+                                          "QTableWidget::item { padding: 4px 8px; border: none; }"
+                                          "QHeaderView::section { background: %7; color: %8; font-size: %3px;"
+                                          " font-weight: 700; font-family: %4; padding: 4px 8px;"
+                                          " border: none; border-bottom: 1px solid %2; }"
+                                          "QTableWidget::item:selected { background: %9; color: %5; }")
+                                      .arg(fincept::ui::colors::BG_BASE(), fincept::ui::colors::BORDER_DIM())
+                                      .arg(fincept::ui::fonts::SMALL)
+                                      .arg(fincept::ui::fonts::DATA_FAMILY)
+                                      .arg(fincept::ui::colors::TEXT_PRIMARY())
+                                      .arg(fincept::ui::colors::BG_SURFACE())
+                                      .arg(fincept::ui::colors::BG_RAISED())
+                                      .arg(fincept::ui::colors::TEXT_SECONDARY())
+                                      .arg(fincept::ui::colors::BG_HOVER()));
     main_vl->addWidget(results_table_);
     main_vl->addStretch();
 
@@ -536,22 +535,21 @@ void ScannerPanel::on_scan_result(const QJsonObject& payload) {
     results_table_->setSortingEnabled(false);
     results_table_->setRowCount(0);
 
-    QJsonArray matches         = payload.value("matches").toArray();
-    int        total_scanned   = payload.value("total_scanned").toInt();
-    int        condition_count = payload.value("condition_count").toInt();
+    QJsonArray matches = payload.value("matches").toArray();
+    int total_scanned = payload.value("total_scanned").toInt();
+    int condition_count = payload.value("condition_count").toInt();
 
     status_label_->setText(
         QString("Scan complete: %1 matches out of %2 symbols").arg(matches.size()).arg(total_scanned));
-    status_label_->setStyleSheet(
-        QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-            .arg(fincept::ui::colors::POSITIVE())
-            .arg(fincept::ui::fonts::SMALL)
-            .arg(kMonoFont()));
+    status_label_->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
+                                     .arg(fincept::ui::colors::POSITIVE())
+                                     .arg(fincept::ui::fonts::SMALL)
+                                     .arg(kMonoFont()));
 
     for (const auto& mval : matches) {
-        QJsonObject match         = mval.toObject();
-        QString     symbol        = match.value("symbol").toString();
-        QJsonArray  matched_conds = match.value("conditions").toArray();
+        QJsonObject match = mval.toObject();
+        QString symbol = match.value("symbol").toString();
+        QJsonArray matched_conds = match.value("conditions").toArray();
 
         // Infer signal direction from operator types
         int bullish_count = 0, bearish_count = 0;
@@ -564,13 +562,13 @@ void ScannerPanel::on_scan_result(const QJsonObject& payload) {
         }
         QString signal_text, signal_color;
         if (bullish_count > 0 && bearish_count == 0) {
-            signal_text  = "BULLISH";
+            signal_text = "BULLISH";
             signal_color = fincept::ui::colors::POSITIVE();
         } else if (bearish_count > 0 && bullish_count == 0) {
-            signal_text  = "BEARISH";
+            signal_text = "BEARISH";
             signal_color = fincept::ui::colors::NEGATIVE();
         } else {
-            signal_text  = "NEUTRAL";
+            signal_text = "NEUTRAL";
             signal_color = fincept::ui::colors::TEXT_SECONDARY();
         }
 
@@ -579,9 +577,8 @@ void ScannerPanel::on_scan_result(const QJsonObject& payload) {
         for (const auto& cv : matched_conds) {
             QJsonObject c = cv.toObject();
             cond_strs.append(QString("%1 %2 %3 %4")
-                .arg(c["indicator"].toString(), c["field"].toString(),
-                     c["operator"].toString(),
-                     QString::number(c["value"].toDouble(), 'f', 2)));
+                                 .arg(c["indicator"].toString(), c["field"].toString(), c["operator"].toString(),
+                                      QString::number(c["value"].toDouble(), 'f', 2)));
         }
 
         int row = results_table_->rowCount();
@@ -590,20 +587,17 @@ void ScannerPanel::on_scan_result(const QJsonObject& payload) {
         // Col 0: Symbol
         auto* sym_item = new QTableWidgetItem(symbol);
         sym_item->setForeground(QColor(fincept::ui::colors::AMBER()));
-        sym_item->setFont(QFont(fincept::ui::fonts::DATA_FAMILY(),
-                                fincept::ui::fonts::SMALL, QFont::Bold));
+        sym_item->setFont(QFont(fincept::ui::fonts::DATA_FAMILY(), fincept::ui::fonts::SMALL, QFont::Bold));
         results_table_->setItem(row, 0, sym_item);
 
         // Col 1: Signal
         auto* sig_item = new QTableWidgetItem(signal_text);
         sig_item->setForeground(QColor(signal_color));
-        sig_item->setFont(QFont(fincept::ui::fonts::DATA_FAMILY(),
-                                fincept::ui::fonts::TINY, QFont::Bold));
+        sig_item->setFont(QFont(fincept::ui::fonts::DATA_FAMILY(), fincept::ui::fonts::TINY, QFont::Bold));
         results_table_->setItem(row, 1, sig_item);
 
         // Col 2: Match count
-        auto* match_item = new QTableWidgetItem(
-            QString("%1/%2").arg(matched_conds.size()).arg(condition_count));
+        auto* match_item = new QTableWidgetItem(QString("%1/%2").arg(matched_conds.size()).arg(condition_count));
         match_item->setForeground(QColor(fincept::ui::colors::POSITIVE()));
         match_item->setTextAlignment(Qt::AlignCenter);
         results_table_->setItem(row, 2, match_item);

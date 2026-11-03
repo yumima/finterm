@@ -68,13 +68,13 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
     } else if (param.type == "boolean") {
         auto* check = new QCheckBox(param.label);
         check->setChecked(current_value.toBool(param.default_value.toBool()));
-        check->setStyleSheet(
-            QString("QCheckBox { color: %1; font-family: Consolas; font-size: 12px; }"
-                    "QCheckBox::indicator {"
-                    "  width: 14px; height: 14px; background: %2; border: 1px solid %3;"
-                    "}"
-                    "QCheckBox::indicator:checked { background: %4; }")
-                .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER(), ui::colors::BORDER_MED(), ui::colors::AMBER()));
+        check->setStyleSheet(QString("QCheckBox { color: %1; font-family: Consolas; font-size: 12px; }"
+                                     "QCheckBox::indicator {"
+                                     "  width: 14px; height: 14px; background: %2; border: 1px solid %3;"
+                                     "}"
+                                     "QCheckBox::indicator:checked { background: %4; }")
+                                 .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER(), ui::colors::BORDER_MED(),
+                                      ui::colors::AMBER()));
         layout->addWidget(check);
 
         // Remove the label since checkbox has its own
@@ -199,11 +199,12 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
         auto* import_btn = new QPushButton("+ Import");
         import_btn->setFixedHeight(24);
         import_btn->setToolTip("Import a file from your PC into the File Manager");
-        import_btn->setStyleSheet(QString("QPushButton { background: %1; color: %2;"
-                                          " border: 1px solid %3; font-family: Consolas;"
-                                          " font-size: 10px; padding: 0 6px; }"
-                                          "QPushButton:hover { background: %3; }")
-                                      .arg(ui::colors::BORDER_MED(), ui::colors::AMBER(), ui::colors::TEXT_SECONDARY()));
+        import_btn->setStyleSheet(
+            QString("QPushButton { background: %1; color: %2;"
+                    " border: 1px solid %3; font-family: Consolas;"
+                    " font-size: 10px; padding: 0 6px; }"
+                    "QPushButton:hover { background: %3; }")
+                .arg(ui::colors::BORDER_MED(), ui::colors::AMBER(), ui::colors::TEXT_SECONDARY()));
         rl->addWidget(import_btn);
 
         layout->addWidget(row);
@@ -221,25 +222,24 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
         QObject::connect(combo, &QComboBox::currentIndexChanged, container,
                          [key, on_change, combo](int) { on_change(key, QJsonValue(combo->currentData().toString())); });
 
-        QObject::connect(import_btn, &QPushButton::clicked, container,
-                         [populate, dialog_filter, key, on_change, import_btn]() {
-                             QString path = QFileDialog::getOpenFileName(import_btn->window(), "Import File", QString(),
-                                                                         dialog_filter);
-                             if (path.isEmpty())
-                                 return;
+        QObject::connect(
+            import_btn, &QPushButton::clicked, container, [populate, dialog_filter, key, on_change, import_btn]() {
+                QString path =
+                    QFileDialog::getOpenFileName(import_btn->window(), "Import File", QString(), dialog_filter);
+                if (path.isEmpty())
+                    return;
 
-                             QString file_id =
-                                 fincept::services::FileManagerService::instance().import_file(path, "workflow_node");
-                             if (file_id.isEmpty())
-                                 return;
+                QString file_id = fincept::services::FileManagerService::instance().import_file(path, "workflow_node");
+                if (file_id.isEmpty())
+                    return;
 
-                             // Find the full managed path for the newly imported file
-                             auto f = fincept::services::FileManagerService::instance().find_by_id(file_id);
-                             QString full_path = fincept::services::FileManagerService::instance().full_path(f.name);
+                // Find the full managed path for the newly imported file
+                auto f = fincept::services::FileManagerService::instance().find_by_id(file_id);
+                QString full_path = fincept::services::FileManagerService::instance().full_path(f.name);
 
-                             populate(full_path);
-                             on_change(key, QJsonValue(full_path));
-                         });
+                populate(full_path);
+                on_change(key, QJsonValue(full_path));
+            });
     } else if (param.type == "agent_select") {
         auto* row = new QWidget(parent);
         auto* rl = new QHBoxLayout(row);
@@ -344,7 +344,8 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
         layout->addWidget(combo);
 
         auto* hint = new QLabel("Leave blank to use the LLM assigned to the agent in Agent Config");
-        hint->setStyleSheet(QString("color:%1; font-family:Consolas; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+        hint->setStyleSheet(
+            QString("color:%1; font-family:Consolas; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
         hint->setWordWrap(true);
         layout->addWidget(hint);
 
@@ -418,7 +419,8 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
         layout->addWidget(row);
 
         auto* hint = new QLabel("All finterm internal tools. Input JSON flows in as arguments.");
-        hint->setStyleSheet(QString("color:%1; font-family:Consolas; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
+        hint->setStyleSheet(
+            QString("color:%1; font-family:Consolas; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
         hint->setWordWrap(true);
         layout->addWidget(hint);
 

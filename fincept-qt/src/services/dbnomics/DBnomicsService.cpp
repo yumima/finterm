@@ -2,16 +2,16 @@
 #include "services/dbnomics/DBnomicsService.h"
 
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "network/http/HttpClient.h"
 #include "storage/cache/CacheManager.h"
 
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
-
-#include <limits>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QUrl>
+
+#include <limits>
 
 namespace fincept::services {
 
@@ -217,8 +217,8 @@ void DBnomicsService::fetch_series(const QString& provider_code, const QString& 
                 cache_root["total"] = total;
                 fincept::CacheManager::instance().put(
                     "dbnomics:series:" + cache_key,
-                    QVariant(QString::fromUtf8(QJsonDocument(cache_root).toJson(QJsonDocument::Compact))), kSeriesCacheSec,
-                    "dbnomics");
+                    QVariant(QString::fromUtf8(QJsonDocument(cache_root).toJson(QJsonDocument::Compact))),
+                    kSeriesCacheSec, "dbnomics");
             }
             LOG_INFO("DBnomicsService", QString("Loaded %1 series (total=%2)").arg(out.size()).arg(total));
             emit series_loaded(out, page, append);
@@ -255,7 +255,7 @@ void DBnomicsService::fetch_observations(const QString& provider_code, const QSt
             DbnObservation o;
             o.period = periods[i].toString();
             if (values[i].isNull() || values[i].toString() == "NA") {
-                o.value = std::numeric_limits<double>::quiet_NaN();  // NA — no number, not 0
+                o.value = std::numeric_limits<double>::quiet_NaN(); // NA — no number, not 0
                 o.valid = false;
             } else {
                 o.value = values[i].toDouble();
@@ -331,8 +331,7 @@ QColor DBnomicsService::chart_color(int index) {
 // ── DataHub producer wiring ─────────────────────────────────────────────────
 
 QString DBnomicsService::hub_topic(const QString& provider, const QString& dataset, const QString& series) {
-    return QStringLiteral("dbnomics:") + provider + QLatin1Char(':') + dataset +
-           QLatin1Char(':') + series;
+    return QStringLiteral("dbnomics:") + provider + QLatin1Char(':') + dataset + QLatin1Char(':') + series;
 }
 
 QStringList DBnomicsService::topic_patterns() const {
@@ -345,17 +344,19 @@ void DBnomicsService::refresh(const QStringList& topics) {
     // 4-segment shape is silently skipped.
     for (const auto& topic : topics) {
         const QStringList parts = topic.split(QLatin1Char(':'));
-        if (parts.size() != 4) continue;
+        if (parts.size() != 4)
+            continue;
         fetch_observations(parts[1], parts[2], parts[3]);
     }
 }
 
 int DBnomicsService::max_requests_per_sec() const {
-    return 3;  // DBnomics REST — conservative default
+    return 3; // DBnomics REST — conservative default
 }
 
 void DBnomicsService::ensure_registered_with_hub() {
-    if (hub_registered_) return;
+    if (hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
     hub.register_producer(this);
 

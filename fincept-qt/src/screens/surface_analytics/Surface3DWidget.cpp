@@ -126,14 +126,11 @@ void Surface3DWidget::paintEvent(QPaintEvent*) {
     if (!supported_) {
         painter.setPen(QColor(217, 119, 6));
         painter.setFont(QFont("Consolas", 13, QFont::Bold));
-        painter.drawText(QRect(0, H / 2 - 28, W, 24), Qt::AlignCenter,
-                         "3D NOT APPLICABLE");
+        painter.drawText(QRect(0, H / 2 - 28, W, 24), Qt::AlignCenter, "3D NOT APPLICABLE");
         painter.setPen(QColor(140, 140, 140));
         painter.setFont(QFont("Consolas", 10));
-        painter.drawText(QRect(0, H / 2, W, 22), Qt::AlignCenter,
-                         "This surface is 1-D or categorical.");
-        painter.drawText(QRect(0, H / 2 + 18, W, 22), Qt::AlignCenter,
-                         "Switch to TABLE or LINE view.");
+        painter.drawText(QRect(0, H / 2, W, 22), Qt::AlignCenter, "This surface is 1-D or categorical.");
+        painter.drawText(QRect(0, H / 2 + 18, W, 22), Qt::AlignCenter, "Switch to TABLE or LINE view.");
         return;
     }
 

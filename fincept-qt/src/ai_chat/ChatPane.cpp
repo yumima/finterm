@@ -34,8 +34,8 @@ namespace fnt = fincept::ui::fonts;
 // per request (the model's context window is the real limit — a months-old
 // NVDA thread must not push the DATA block out of it), and the bubbles
 // materialised on restore (widget trees, not rows).
-static constexpr int kMaxRequestTurns = 40;    // most recent turns sent per request
-static constexpr int kMaxRestoredMessages = 200;  // bubbles built when a thread reloads
+static constexpr int kMaxRequestTurns = 40;      // most recent turns sent per request
+static constexpr int kMaxRestoredMessages = 200; // bubbles built when a thread reloads
 
 // Same sizing rules as the old chat screen's bubbles: QLabel + word wrap +
 // a max width; heightForWidth does the rest.
@@ -139,12 +139,12 @@ void ChatPane::build_ui() {
 
     send_btn_ = new QPushButton(QStringLiteral("Send"));
     send_btn_->setCursor(Qt::PointingHandCursor);
-    send_btn_->setStyleSheet(QStringLiteral("QPushButton{background:%1;color:%2;border:1px solid %3;border-radius:4px;"
-                                            "padding:7px 14px;font-weight:700;}"
-                                            "QPushButton:hover:enabled{background:%4;border-color:%2;}"
-                                            "QPushButton:disabled{color:%5;}")
-                                 .arg(col::BG_SURFACE(), col::AMBER(), col::BORDER_MED(), col::BG_RAISED(),
-                                      col::TEXT_DIM()));
+    send_btn_->setStyleSheet(
+        QStringLiteral("QPushButton{background:%1;color:%2;border:1px solid %3;border-radius:4px;"
+                       "padding:7px 14px;font-weight:700;}"
+                       "QPushButton:hover:enabled{background:%4;border-color:%2;}"
+                       "QPushButton:disabled{color:%5;}")
+            .arg(col::BG_SURFACE(), col::AMBER(), col::BORDER_MED(), col::BG_RAISED(), col::TEXT_DIM()));
     connect(send_btn_, &QPushButton::clicked, this, &ChatPane::on_send);
     row->addWidget(send_btn_);
 
@@ -271,8 +271,8 @@ void ChatPane::on_send() {
     if (text.isEmpty())
         return;
     if (!LlmService::instance().is_configured()) {
-        add_bubble(QStringLiteral("system"),
-                   QStringLiteral("No model configured — Settings → AI Config."), /*markdown=*/false);
+        add_bubble(QStringLiteral("system"), QStringLiteral("No model configured — Settings → AI Config."),
+                   /*markdown=*/false);
         return;
     }
     if (!ensure_session()) {
@@ -397,9 +397,9 @@ void ChatPane::on_send() {
 
             if (!resp.success) {
                 const QString err =
-                    QStringLiteral("Error: %1").arg(resp.error.isEmpty()
-                                                        ? QStringLiteral("the model returned no answer.")
-                                                        : resp.error) + used_note;
+                    QStringLiteral("Error: %1")
+                        .arg(resp.error.isEmpty() ? QStringLiteral("the model returned no answer.") : resp.error) +
+                    used_note;
                 if (b) {
                     b->setTextFormat(Qt::MarkdownText);
                     b->setText(err);
@@ -416,8 +416,7 @@ void ChatPane::on_send() {
                     b->setTextFormat(Qt::MarkdownText);
                     b->setText(content + used_note);
                     b->setProperty("acc", content);
-                    if (auto* copy_btn = qobject_cast<QPushButton*>(
-                            b->property("copy_btn").value<QObject*>()))
+                    if (auto* copy_btn = qobject_cast<QPushButton*>(b->property("copy_btn").value<QObject*>()))
                         copy_btn->show();
                 } else {
                     b->setText(QStringLiteral("(No answer came back — try rephrasing the question.)"));
@@ -428,8 +427,7 @@ void ChatPane::on_send() {
                 // Bound the in-memory thread the same way a restore is bounded;
                 // the DB keeps everything.
                 if (self->history_.size() > std::size_t(kMaxRestoredMessages) * 2)
-                    self->history_.erase(self->history_.begin(),
-                                         self->history_.end() - kMaxRestoredMessages);
+                    self->history_.erase(self->history_.begin(), self->history_.end() - kMaxRestoredMessages);
                 self->last_reply_ = content;
                 if (!self->session_id_.isEmpty())
                     ChatRepository::instance().add_message(

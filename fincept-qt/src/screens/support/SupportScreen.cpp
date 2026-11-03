@@ -1133,7 +1133,8 @@ void SupportScreen::on_send_message() {
         auto* mh = new QHBoxLayout;
         mh->addWidget(lbl("You", ui::colors::CYAN(), 11, true));
         mh->addStretch();
-        mh->addWidget(lbl(QDateTime::currentDateTime().toString("d MMM yyyy  hh:mm"), ui::colors::TEXT_SECONDARY(), 10));
+        mh->addWidget(
+            lbl(QDateTime::currentDateTime().toString("d MMM yyyy  hh:mm"), ui::colors::TEXT_SECONDARY(), 10));
         ml->addLayout(mh);
         auto* mb = lbl(msg, ui::colors::TEXT_PRIMARY(), 12, false, true);
         ml->addWidget(mb);

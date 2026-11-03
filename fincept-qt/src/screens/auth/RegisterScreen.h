@@ -21,12 +21,12 @@ class RegisterScreen : public QWidget {
     void hideEvent(QHideEvent* event) override;
 
   private:
-    QLineEdit*   username_     = nullptr;
-    QLineEdit*   pin_          = nullptr;
-    QLineEdit*   pin_confirm_  = nullptr;
-    QPushButton* create_btn_   = nullptr;
-    QPushButton* back_btn_     = nullptr;
-    QLabel*      error_label_  = nullptr;
+    QLineEdit* username_ = nullptr;
+    QLineEdit* pin_ = nullptr;
+    QLineEdit* pin_confirm_ = nullptr;
+    QPushButton* create_btn_ = nullptr;
+    QPushButton* back_btn_ = nullptr;
+    QLabel* error_label_ = nullptr;
 
     void build_form();
 

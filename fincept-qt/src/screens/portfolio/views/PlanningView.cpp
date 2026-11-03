@@ -179,8 +179,8 @@ QWidget* PlanningView::build_retirement_tab() {
         cl->setSpacing(2);
 
         auto* lbl = new QLabel(label);
-        lbl->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
         cl->addWidget(lbl);
 
         val_label = new QLabel("--");
@@ -273,8 +273,7 @@ void PlanningView::recalculate() {
         gap_label_->setText(QStringLiteral("—"));
         gap_label_->setStyleSheet(
             QString("color:%1; font-size:18px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
-        status_label_->setText(
-            tr("Set a retirement age later than your current age to project a plan."));
+        status_label_->setText(tr("Set a retirement age later than your current age to project a plan."));
         status_label_->setStyleSheet(
             QString("color:%1; font-size:12px; padding:12px;").arg(ui::colors::TEXT_SECONDARY()));
         return;
@@ -300,8 +299,7 @@ void PlanningView::recalculate() {
     // expected return, while the lump sum above shrank at the real rate.
     const bool rate_is_zero = std::abs(monthly_rate) < 1e-9;
     const double annuity_factor =
-        rate_is_zero ? static_cast<double>(months)
-                     : ((std::pow(1.0 + monthly_rate, months) - 1.0) / monthly_rate);
+        rate_is_zero ? static_cast<double>(months) : ((std::pow(1.0 + monthly_rate, months) - 1.0) / monthly_rate);
     double fv_contrib = monthly * annuity_factor;
     double projected = fv_portfolio + fv_contrib;
     double gap = projected - target;

@@ -90,8 +90,8 @@ mcp::ElicitResponse ElicitBridge::request(const mcp::ElicitRequest& req, int tim
 void ElicitBridge::resolve(const QString& token, const mcp::ElicitResponse& response) {
     QMutexLocker lock(&mutex_);
     if (pending_token_.isEmpty() || pending_token_ != token) {
-        LOG_WARN(kElicitTag, QString("resolve for unknown token %1 (current=%2)")
-                          .arg(token.left(8), pending_token_.left(8)));
+        LOG_WARN(kElicitTag,
+                 QString("resolve for unknown token %1 (current=%2)").arg(token.left(8), pending_token_.left(8)));
         return;
     }
     pending_response_ = response;

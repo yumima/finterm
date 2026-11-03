@@ -5,7 +5,7 @@
 #include <QHelpEvent>
 #include <QProxyStyle>
 #include <QStyle>
-#include <QTextDocument>   // Qt::mightBeRichText
+#include <QTextDocument> // Qt::mightBeRichText
 #include <QToolTip>
 #include <QWidget>
 
@@ -76,8 +76,7 @@ class TooltipFormatter : public QObject {
 
         // Already rich (it wraps by itself), or short enough that one line is
         // the better shape.
-        if (Qt::mightBeRichText(tip) ||
-            (tip.size() <= kWrapThresholdChars && !tip.contains(QLatin1Char('\n'))))
+        if (Qt::mightBeRichText(tip) || (tip.size() <= kWrapThresholdChars && !tip.contains(QLatin1Char('\n'))))
             return QObject::eventFilter(obj, event);
 
         // Anchored on the cursor rather than the widget: for a wide row or a

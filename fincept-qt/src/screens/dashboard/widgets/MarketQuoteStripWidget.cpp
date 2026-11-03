@@ -1,8 +1,8 @@
 #include "screens/dashboard/widgets/MarketQuoteStripWidget.h"
-#include "screens/markets/MarketChartDialog.h"
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
+#include "screens/markets/MarketChartDialog.h"
 #include "services/markets/MarketDataService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -150,8 +150,7 @@ void MarketQuoteStripWidget::on_quote(const fincept::services::QuoteData& q) {
     r.price->setText(QString::number(q.price, 'f', 2));
     r.change->setText(ui::formatting::format_percent(q.change_pct, 2, true));
     const QColor col(ui::change_color(q.change_pct));
-    r.change->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(col.name()));
+    r.change->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(col.name()));
     set_loading(false);
 }
 
@@ -192,14 +191,11 @@ void MarketQuoteStripWidget::on_theme_changed() {
 
 void MarketQuoteStripWidget::apply_styles() {
     const QString sym_css =
-        QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
-            .arg(ui::colors::TEXT_PRIMARY());
+        QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(ui::colors::TEXT_PRIMARY());
     const QString price_css =
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
-            .arg(ui::colors::TEXT_PRIMARY());
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(ui::colors::TEXT_PRIMARY());
     const QString chg_css =
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
-            .arg(ui::colors::TEXT_SECONDARY());
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(ui::colors::TEXT_SECONDARY());
     for (auto it = rows_.begin(); it != rows_.end(); ++it) {
         if (it->symbol)
             it->symbol->setStyleSheet(sym_css);

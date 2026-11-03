@@ -50,666 +50,669 @@ QString muted_button() {
 }
 
 QString news_screen_styles() {
-    return fill_qss_checked("news_screen_styles",
+    return fill_qss_checked(
+        "news_screen_styles",
         QString(
-               /* ── NewsScreen root ── */
-               "#newsScreen { background: %1; }"
+            /* ── NewsScreen root ── */
+            "#newsScreen { background: %1; }"
 
-               /* ── Command bar (two-row header) ── */
-               "#newsCommandBar { background: %2; border-bottom: 1px solid %3; }"
-               "#newsCommandRow { background: %2; border-bottom: 1px solid %3; }"
-               "#newsCommandBarSearch { background: %1; color: %4; border: 1px solid %3; "
-               "  padding: 2px 8px; font-size: 12px; }"
-               "#newsCommandBarSearch:focus { border-color: %5; }"
-               "#newsCommandBarPill { background: transparent; color: %6; border: 1px solid %3; "
-               "  padding: 0 5px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }"
-               "#newsCommandBarPill:hover { color: %7; background: %8; }"
-               "#newsCommandBarPill[active=\"true\"] { background: %9; color: %4; border-color: %10; }"
-               "#newsCommandBarPill:disabled { color: %6; border-color: %3; background: transparent; }"
-               "#newsCommandBarPill:disabled:hover { color: %6; background: transparent; }"
-               "#newsCommandBarSep { color: %3; font-size: 12px; background: transparent; }"
-               "#newsCommandBarCount { color: %7; font-size: 12px; background: transparent; padding: 0 4px; }"
-               "#newsCommandBarAlert { color: %11; font-size: 11px; font-weight: 700; "
-               "  background: transparent; padding: 0 6px; border: 0; outline: 0; "
-               "  text-align: left; }"
-               "#newsCommandBarAlert:hover { color: %4; }"
-               "#newsCommandBarAlert:pressed { background: transparent; }"
-               "#newsCommandBarAlert:focus { outline: 0; border: 0; }"
-               "#newsCommandBarUnseen { color: %12; font-size: 11px; font-weight: 700; "
-               "  background: transparent; padding: 0 6px; border: 0; }"
-               "#newsCommandBarUnseen:hover { color: %4; }"
-               "#newsCommandBarUnseen:focus { outline: 0; border: 0; }"
-               "#newsCommandBarProgress { color: %6; font-size: 11px; background: transparent; padding: 0 4px; }"
-               "#newsCommandBarRefresh { background: %8; color: %7; border: 1px solid %3; "
-               "  padding: 0 10px; font-size: 11px; font-weight: 700; }"
-               "#newsCommandBarRefresh:hover { color: %4; background: %13; }"
-               "#newsCommandBarRefresh:disabled { color: %6; }"
-               "#newsCommandBarCombo { background: %1; color: %7; border: 1px solid %3; "
-               "  padding: 1px 4px; font-size: 11px; }"
+            /* ── Command bar (two-row header) ── */
+            "#newsCommandBar { background: %2; border-bottom: 1px solid %3; }"
+            "#newsCommandRow { background: %2; border-bottom: 1px solid %3; }"
+            "#newsCommandBarSearch { background: %1; color: %4; border: 1px solid %3; "
+            "  padding: 2px 8px; font-size: 12px; }"
+            "#newsCommandBarSearch:focus { border-color: %5; }"
+            "#newsCommandBarPill { background: transparent; color: %6; border: 1px solid %3; "
+            "  padding: 0 5px; font-size: 10px; font-weight: 600; letter-spacing: 0.3px; }"
+            "#newsCommandBarPill:hover { color: %7; background: %8; }"
+            "#newsCommandBarPill[active=\"true\"] { background: %9; color: %4; border-color: %10; }"
+            "#newsCommandBarPill:disabled { color: %6; border-color: %3; background: transparent; }"
+            "#newsCommandBarPill:disabled:hover { color: %6; background: transparent; }"
+            "#newsCommandBarSep { color: %3; font-size: 12px; background: transparent; }"
+            "#newsCommandBarCount { color: %7; font-size: 12px; background: transparent; padding: 0 4px; }"
+            "#newsCommandBarAlert { color: %11; font-size: 11px; font-weight: 700; "
+            "  background: transparent; padding: 0 6px; border: 0; outline: 0; "
+            "  text-align: left; }"
+            "#newsCommandBarAlert:hover { color: %4; }"
+            "#newsCommandBarAlert:pressed { background: transparent; }"
+            "#newsCommandBarAlert:focus { outline: 0; border: 0; }"
+            "#newsCommandBarUnseen { color: %12; font-size: 11px; font-weight: 700; "
+            "  background: transparent; padding: 0 6px; border: 0; }"
+            "#newsCommandBarUnseen:hover { color: %4; }"
+            "#newsCommandBarUnseen:focus { outline: 0; border: 0; }"
+            "#newsCommandBarProgress { color: %6; font-size: 11px; background: transparent; padding: 0 4px; }"
+            "#newsCommandBarRefresh { background: %8; color: %7; border: 1px solid %3; "
+            "  padding: 0 10px; font-size: 11px; font-weight: 700; }"
+            "#newsCommandBarRefresh:hover { color: %4; background: %13; }"
+            "#newsCommandBarRefresh:disabled { color: %6; }"
+            "#newsCommandBarCombo { background: %1; color: %7; border: 1px solid %3; "
+            "  padding: 1px 4px; font-size: 11px; }"
 
-               "#newsCommandRowScroll { background: transparent; border: none; }"
+            "#newsCommandRowScroll { background: transparent; border: none; }"
 
-               /* ── Drawer toggle button ── */
-               "#newsDrawerBtn { background: rgba(217,119,6,0.08); color: %12; "
-               "  border: 1px solid %10; padding: 0 10px; font-size: 11px; "
-               "  font-weight: 700; letter-spacing: 0.5px; }"
-               "#newsDrawerBtn:hover { background: rgba(217,119,6,0.15); }"
-               "#newsDrawerBtn:checked { background: %12; color: %1; }"
+            /* ── Drawer toggle button ── */
+            "#newsDrawerBtn { background: rgba(217,119,6,0.08); color: %12; "
+            "  border: 1px solid %10; padding: 0 10px; font-size: 11px; "
+            "  font-weight: 700; letter-spacing: 0.5px; }"
+            "#newsDrawerBtn:hover { background: rgba(217,119,6,0.15); }"
+            "#newsDrawerBtn:checked { background: %12; color: %1; }"
 
-               /* ── Intel strip (row 2 of header) ── */
-               "#newsIntelStrip { background: %8; border-bottom: 1px solid %3; }"
-               "#newsIntelLabel { color: %6; font-size: 10px; font-weight: 700; "
-               "  letter-spacing: 0.5px; background: transparent; }"
-               "#newsIntelValue { color: %14; font-size: 11px; font-weight: 700; background: transparent; }"
-               "#newsIntelSep { color: %3; font-size: 10px; background: transparent; }"
-               "#newsIntelScore { color: %7; font-size: 11px; font-weight: 700; background: transparent; }"
-               "#newsIntelMonitors { color: %7; font-size: 11px; background: transparent; }"
-               "#newsIntelTldr { color: %14; font-size: 11px; font-weight: 700; "
-               "  background: transparent; padding: 0 6px; border: 0; "
-               "  letter-spacing: 0.5px; text-align: left; }"
-               "#newsIntelTldr:hover { color: %4; }"
-               "#newsIntelTldr:disabled { color: %6; }"
-               "#newsIntelTldr:focus { outline: 0; border: 0; }"
-               "#newsIntelDeviations { color: %11; font-size: 11px; font-weight: 700; background: transparent; }"
-               "#newsSentimentBull { background: %15; }"
-               "#newsSentimentNeut { background: %16; }"
-               "#newsSentimentBear { background: %11; }"
+            /* ── Intel strip (row 2 of header) ── */
+            "#newsIntelStrip { background: %8; border-bottom: 1px solid %3; }"
+            "#newsIntelLabel { color: %6; font-size: 10px; font-weight: 700; "
+            "  letter-spacing: 0.5px; background: transparent; }"
+            "#newsIntelValue { color: %14; font-size: 11px; font-weight: 700; background: transparent; }"
+            "#newsIntelSep { color: %3; font-size: 10px; background: transparent; }"
+            "#newsIntelScore { color: %7; font-size: 11px; font-weight: 700; background: transparent; }"
+            "#newsIntelMonitors { color: %7; font-size: 11px; background: transparent; }"
+            "#newsIntelTldr { color: %14; font-size: 11px; font-weight: 700; "
+            "  background: transparent; padding: 0 6px; border: 0; "
+            "  letter-spacing: 0.5px; text-align: left; }"
+            "#newsIntelTldr:hover { color: %4; }"
+            "#newsIntelTldr:disabled { color: %6; }"
+            "#newsIntelTldr:focus { outline: 0; border: 0; }"
+            "#newsIntelDeviations { color: %11; font-size: 11px; font-weight: 700; background: transparent; }"
+            "#newsSentimentBull { background: %15; }"
+            "#newsSentimentNeut { background: %16; }"
+            "#newsSentimentBear { background: %11; }"
 
-               /* ── Content area ── */
-               /* Warm-dark surface matching the Knowledge body palette       */
-               /* (#13110f). Cream text on warm brown reads like a book at    */
-               /* length — replaced the prior near-black + smoke-white combo  */
-               /* that was harsh for sustained reading. Scoped to news only:  */
-               /* the global theme BG_BASE is unchanged so other panels keep  */
-               /* their existing look.                                        */
-               "#newsContentArea { background: #13110f; }"
+            /* ── Content area ── */
+            /* Warm-dark surface matching the Knowledge body palette       */
+            /* (#13110f). Cream text on warm brown reads like a book at    */
+            /* length — replaced the prior near-black + smoke-white combo  */
+            /* that was harsh for sustained reading. Scoped to news only:  */
+            /* the global theme BG_BASE is unchanged so other panels keep  */
+            /* their existing look.                                        */
+            "#newsContentArea { background: #13110f; }"
 
-               /* ── Headline list (left pane of the feed splitter) ── */
-               "#newsFeedList { background: #13110f; border: none; outline: none; }"
-               "#newsFeedList::item { border: none; padding: 0; }"
-               "#newsFeedList::item:selected { background: transparent; }"
-               "#newsFeedList::item:hover { background: transparent; }"
-               /* Divider between the headline list and the reading pane. The
-                  handle widget is kSplitHandleW px wide so it can be grabbed;
-                  the margin insets the painted strip to a hairline so it still
-                  looks like a thin rule. Hover tints it amber to advertise
-                  that it drags. */
-               "#newsFeedSplitter::handle:horizontal { background: %3; margin: 0px 2px; }"
-               "#newsFeedSplitter::handle:horizontal:hover { background: %12; margin: 0px 2px; }"
-               "#newsFeedSplitter::handle:horizontal:pressed { background: %12; margin: 0px 2px; }"
+            /* ── Headline list (left pane of the feed splitter) ── */
+            "#newsFeedList { background: #13110f; border: none; outline: none; }"
+            "#newsFeedList::item { border: none; padding: 0; }"
+            "#newsFeedList::item:selected { background: transparent; }"
+            "#newsFeedList::item:hover { background: transparent; }"
+            /* Divider between the headline list and the reading pane. The
+               handle widget is kSplitHandleW px wide so it can be grabbed;
+               the margin insets the painted strip to a hairline so it still
+               looks like a thin rule. Hover tints it amber to advertise
+               that it drags. */
+            "#newsFeedSplitter::handle:horizontal { background: %3; margin: 0px 2px; }"
+            "#newsFeedSplitter::handle:horizontal:hover { background: %12; margin: 0px 2px; }"
+            "#newsFeedSplitter::handle:horizontal:pressed { background: %12; margin: 0px 2px; }"
 
-               /* ── Breaking banner ── */
-               "#newsBreakingBanner { background: %17; border-bottom: 1px solid %11; }"
-               "#newsBreakingTag { color: %4; background: %11; font-size: 10px; font-weight: 700; "
-               "  letter-spacing: 1px; padding: 1px 4px; }"
-               "#newsBreakingHeadline { color: %4; font-size: 12px; font-weight: 700; background: transparent; }"
-               "#newsBreakingSource { color: %14; font-size: 11px; background: transparent; }"
-               "#newsBreakingDismiss { color: %6; background: transparent; border: none; font-size: 12px; }"
-               "#newsBreakingDismiss:hover { color: %4; }"
+            /* ── Breaking banner ── */
+            "#newsBreakingBanner { background: %17; border-bottom: 1px solid %11; }"
+            "#newsBreakingTag { color: %4; background: %11; font-size: 10px; font-weight: 700; "
+            "  letter-spacing: 1px; padding: 1px 4px; }"
+            "#newsBreakingHeadline { color: %4; font-size: 12px; font-weight: 700; background: transparent; }"
+            "#newsBreakingSource { color: %14; font-size: 11px; background: transparent; }"
+            "#newsBreakingDismiss { color: %6; background: transparent; border: none; font-size: 12px; }"
+            "#newsBreakingDismiss:hover { color: %4; }"
 
-               /* ── Intel drawer (left overlay) ── */
-               "#newsDrawerPanel { background: %2; border-right: 1px solid %5; }"
-               "#newsDrawerHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#newsDrawerTitle { color: %12; font-size: 12px; font-weight: 700; "
-               "  letter-spacing: 1px; background: transparent; }"
-               "#newsDrawerCloseBtn { color: %6; background: transparent; border: 1px solid %3; "
-               "  font-size: 12px; font-weight: 700; }"
-               "#newsDrawerCloseBtn:hover { color: %4; background: %8; }"
-               "#newsDrawerScroll { background: transparent; }"
-               "#newsDrawerContent { background: transparent; }"
-               "#newsDrawerSectionTitle { color: %12; font-size: 11px; font-weight: 700; "
-               "  letter-spacing: 0.5px; background: transparent; padding: 4px 0 2px; "
-               "  border-bottom: 1px solid %3; }"
+            /* ── Intel drawer (left overlay) ── */
+            "#newsDrawerPanel { background: %2; border-right: 1px solid %5; }"
+            "#newsDrawerHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#newsDrawerTitle { color: %12; font-size: 12px; font-weight: 700; "
+            "  letter-spacing: 1px; background: transparent; }"
+            "#newsDrawerCloseBtn { color: %6; background: transparent; border: 1px solid %3; "
+            "  font-size: 12px; font-weight: 700; }"
+            "#newsDrawerCloseBtn:hover { color: %4; background: %8; }"
+            "#newsDrawerScroll { background: transparent; }"
+            "#newsDrawerContent { background: transparent; }"
+            "#newsDrawerSectionTitle { color: %12; font-size: 11px; font-weight: 700; "
+            "  letter-spacing: 0.5px; background: transparent; padding: 4px 0 2px; "
+            "  border-bottom: 1px solid %3; }"
 
-               /* ── Top stories ──
-                  Primary text, not secondary: these are headlines to be read at
-                  a glance, and %7 against the drawer background was too low a
-                  contrast to scan. Hover goes amber so the row still has a
-                  distinct affordance now that the resting state is bright. */
-               "#newsTopStoryBtn { background: transparent; color: %4; font-size: 11px; "
-               "  text-align: left; border: none; border-bottom: 1px solid %3; padding: 3px 4px; }"
-               "#newsTopStoryBtn:hover { color: %12; background: %8; }"
+            /* ── Top stories ──
+               Primary text, not secondary: these are headlines to be read at
+               a glance, and %7 against the drawer background was too low a
+               contrast to scan. Hover goes amber so the row still has a
+               distinct affordance now that the resting state is bright. */
+            "#newsTopStoryBtn { background: transparent; color: %4; font-size: 11px; "
+            "  text-align: left; border: none; border-bottom: 1px solid %3; padding: 3px 4px; }"
+            "#newsTopStoryBtn:hover { color: %12; background: %8; }"
 
-               /* ── DIGEST (INTEL drawer) ──
-                  Body is prose, so it gets the same primary text colour the
-                  reading pane uses rather than the dim metadata grey. */
-               "#newsDrawerDigestSection { background: transparent; }"
-               "#newsDrawerDigestBody { color: %4; font-size: 12px; background: transparent; "
-               "  padding: 2px 0 4px; }"
+            /* ── DIGEST (INTEL drawer) ──
+               Body is prose, so it gets the same primary text colour the
+               reading pane uses rather than the dim metadata grey. */
+            "#newsDrawerDigestSection { background: transparent; }"
+            "#newsDrawerDigestBody { color: %4; font-size: 12px; background: transparent; "
+            "  padding: 2px 0 4px; }"
 
-               /* ── Categories ── */
-               "#newsCategoryBtn { background: transparent; color: %7; font-size: 11px; "
-               "  text-align: left; border: none; border-bottom: 1px solid %3; padding: 2px 4px; }"
-               "#newsCategoryBtn:hover { color: %4; background: %8; }"
+            /* ── Categories ── */
+            "#newsCategoryBtn { background: transparent; color: %7; font-size: 11px; "
+            "  text-align: left; border: none; border-bottom: 1px solid %3; padding: 2px 4px; }"
+            "#newsCategoryBtn:hover { color: %4; background: %8; }"
 
-               /* ── Monitors ── */
-               "#newsMonitorRow { background: transparent; }"
-               "#newsMonitorLabel { color: %7; font-size: 11px; background: transparent; }"
-               "#newsMonitorInput { background: %1; color: %4; border: 1px solid %3; "
-               "  padding: 2px 6px; font-size: 11px; }"
-               "#newsMonitorInput:focus { border-color: %5; }"
-               "#newsMonitorAddBtn { background: %8; color: %12; border: 1px solid %3; "
-               "  font-size: 12px; font-weight: 700; }"
-               "#newsMonitorAddBtn:hover { color: %4; }"
-               "#newsMonitorToggleOn { background: transparent; color: %15; border: 1px solid %3; "
-               "  font-size: 9px; font-weight: 700; }"
-               "#newsMonitorToggleOff { background: transparent; color: %6; border: 1px solid %3; "
-               "  font-size: 9px; }"
-               "#newsMonitorDeleteBtn { background: transparent; color: %6; border: 1px solid %3; font-size: 10px; }"
-               "#newsMonitorDeleteBtn:hover { color: %11; }"
+            /* ── Monitors ── */
+            "#newsMonitorRow { background: transparent; }"
+            "#newsMonitorLabel { color: %7; font-size: 11px; background: transparent; }"
+            "#newsMonitorInput { background: %1; color: %4; border: 1px solid %3; "
+            "  padding: 2px 6px; font-size: 11px; }"
+            "#newsMonitorInput:focus { border-color: %5; }"
+            "#newsMonitorAddBtn { background: %8; color: %12; border: 1px solid %3; "
+            "  font-size: 12px; font-weight: 700; }"
+            "#newsMonitorAddBtn:hover { color: %4; }"
+            "#newsMonitorToggleOn { background: transparent; color: %15; border: 1px solid %3; "
+            "  font-size: 9px; font-weight: 700; }"
+            "#newsMonitorToggleOff { background: transparent; color: %6; border: 1px solid %3; "
+            "  font-size: 9px; }"
+            "#newsMonitorDeleteBtn { background: transparent; color: %6; border: 1px solid %3; font-size: 10px; }"
+            "#newsMonitorDeleteBtn:hover { color: %11; }"
 
-               /* ── Deviations ── */
-               "#newsDeviationCategory { color: %7; font-size: 11px; background: transparent; }"
-               "#newsDeviationScore { color: %11; font-size: 11px; font-weight: 700; background: transparent; }"
+            /* ── Deviations ── */
+            "#newsDeviationCategory { color: %7; font-size: 11px; background: transparent; }"
+            "#newsDeviationScore { color: %11; font-size: 11px; font-weight: 700; background: transparent; }"
 
-               /* ── Detail reading pane (permanent right pane) ── */
-               "#newsDetailOverlay { background: %2; border-left: 1px solid %5; }"
-               "#newsDetailHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#newsDetailHeaderTitle { color: %12; font-size: 12px; font-weight: 700; "
-               "  letter-spacing: 1px; background: transparent; }"
-               "#newsDetailContent { background: transparent; }"
-               "#newsDetailEmpty { color: %6; font-size: 13px; background: transparent; }"
-               "#newsDetailHeadline { color: %4; font-size: 15px; font-weight: 700; background: transparent; }"
-               "#newsDetailPriorityBadge { font-size: 10px; font-weight: 700; padding: 1px 6px; }"
-               "#newsDetailSentimentBadge { font-size: 11px; background: transparent; }"
-               "#newsDetailTierBadge { color: %12; font-size: 10px; font-weight: 700; background: transparent; }"
-               "#newsDetailCategory { color: %7; font-size: 11px; background: transparent; }"
-               "#newsDetailSource { color: %14; font-size: 12px; font-weight: 700; background: transparent; }"
-               "#newsDetailTime { color: %6; font-size: 11px; background: transparent; }"
-               /* Summary block — matches the WIRE-feed headline style the user pointed
-                  at as the reference: cream #f0e8d0 (kNewsTextPrimary from
-                  NewsFeedDelegate.cpp), 12pt, regular weight (not bold). BG_BASE
-                  black background per the user's request — visually distinct from
-                  the headline / body which sit on the panel's BG_SURFACE. */
-               "#newsDetailSummary { color: #f0e8d0; font-size: 12pt; line-height: 1.4;"
-               "  background: %1; padding: 4px 6px; }"
-               "#newsDetailImpact { color: %16; font-size: 11px; background: transparent; }"
-               "#newsDetailTickers { color: %16; font-size: 11px; font-weight: 700; background: transparent; }"
-               "#newsDetailSep { background: %3; }"
-               /* Article body extracted by NewsService::extract_article_body. The
-                  target style is the WIRE-mode feed headline rendered by
-                  NewsFeedDelegate (kNewsTextPrimary cream #f0e8d0, point-size 12,
-                  regular weight) — not the middle-pane #newsDetailHeadline.
+            /* ── Detail reading pane (permanent right pane) ── */
+            "#newsDetailOverlay { background: %2; border-left: 1px solid %5; }"
+            "#newsDetailHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#newsDetailHeaderTitle { color: %12; font-size: 12px; font-weight: 700; "
+            "  letter-spacing: 1px; background: transparent; }"
+            "#newsDetailContent { background: transparent; }"
+            "#newsDetailEmpty { color: %6; font-size: 13px; background: transparent; }"
+            "#newsDetailHeadline { color: %4; font-size: 15px; font-weight: 700; background: transparent; }"
+            "#newsDetailPriorityBadge { font-size: 10px; font-weight: 700; padding: 1px 6px; }"
+            "#newsDetailSentimentBadge { font-size: 11px; background: transparent; }"
+            "#newsDetailTierBadge { color: %12; font-size: 10px; font-weight: 700; background: transparent; }"
+            "#newsDetailCategory { color: %7; font-size: 11px; background: transparent; }"
+            "#newsDetailSource { color: %14; font-size: 12px; font-weight: 700; background: transparent; }"
+            "#newsDetailTime { color: %6; font-size: 11px; background: transparent; }"
+            /* Summary block — matches the WIRE-feed headline style the user pointed
+               at as the reference: cream #f0e8d0 (kNewsTextPrimary from
+               NewsFeedDelegate.cpp), 12pt, regular weight (not bold). BG_BASE
+               black background per the user's request — visually distinct from
+               the headline / body which sit on the panel's BG_SURFACE. */
+            "#newsDetailSummary { color: #f0e8d0; font-size: 12pt; line-height: 1.4;"
+            "  background: %1; padding: 4px 6px; }"
+            "#newsDetailImpact { color: %16; font-size: 11px; background: transparent; }"
+            "#newsDetailTickers { color: %16; font-size: 11px; font-weight: 700; background: transparent; }"
+            "#newsDetailSep { background: %3; }"
+            /* Article body extracted by NewsService::extract_article_body. The
+               target style is the WIRE-mode feed headline rendered by
+               NewsFeedDelegate (kNewsTextPrimary cream #f0e8d0, point-size 12,
+               regular weight) — not the middle-pane #newsDetailHeadline.
 
-                  Title row keeps bold to act as a section header; status and body
-                  drop to regular weight so paragraphs read cleanly.
+               Title row keeps bold to act as a section header; status and body
+               drop to regular weight so paragraphs read cleanly.
 
-                  #newsBodySection makes the wrapper QWidget transparent so the
-                  panel's BG_SURFACE shows through (without this it falls back to
-                  the global QWidget { background-color: BG_BASE } and produces a
-                  black box behind the body). */
-               /* meta_row & body_section_ are plain QWidget containers with no
-                  objectName-specific rule, so without these overrides they fall
-                  through to the global `QWidget { background-color: BG_BASE }` and
-                  paint a black band behind their child labels. The headline above
-                  them rides on BG_SURFACE (via #newsDetailContent transparent), so
-                  the black band looks like an unintended dark strip. Making both
-                  rows transparent lets the panel's BG_SURFACE bleed through. */
-               "#newsDetailMetaRow { background: transparent; }"
-               "#newsBodySection { background: transparent; }"
-               /* ARTICLE header. Cream + bold + hairline border-bottom (using the
-                  same %3 BORDER_DIM as the panel's other section separators) sets
-                  this off as a clear "start of long-form prose" cue between the
-                  action button row above and the body paragraphs below.
-                  letter-spacing matches #newsDetailSectionTitle / #newsTldrTitle for
-                  consistency with the panel's other section headers. */
-               "#newsDetailBodyTitle { color: #f0e8d0; font-size: 12pt; font-weight: 700;"
-               "  letter-spacing: 0.5px; background: transparent; padding: 2px 0 4px 0;"
-               "  border-bottom: 1px solid %3; }"
-               "#newsDetailBody { color: #f0e8d0; font-size: 12pt; background: transparent; }"
-               "#newsDetailBodyStatus { color: #f0e8d0; font-size: 12pt; background: transparent; }"
-               "#newsDetailSectionTitle { color: %12; font-size: 11px; font-weight: 700; "
-               "  letter-spacing: 0.5px; background: transparent; padding: 2px 0; "
-               "  border-bottom: 1px solid %3; }"
-               "#newsDetailSubTitle { color: %6; font-size: 10px; font-weight: 700; background: transparent; }"
-               "#newsDetailOpenBtn, #newsDetailCopyBtn, #newsDetailCopyTitleBtn, #newsDetailSaveBtn { "
-               "  background: %8; color: %7; "
-               "  border: 1px solid %3; font-size: 11px; font-weight: 700; padding: 0 8px; }"
-               "#newsDetailOpenBtn:hover, #newsDetailCopyBtn:hover, #newsDetailCopyTitleBtn:hover, "
-               "#newsDetailSaveBtn:hover { color: %4; background: %13; }"
-               "#newsDetailAnalyzeBtn { background: rgba(217,119,6,0.1); color: %12; "
-               "  border: 1px solid %10; font-size: 11px; font-weight: 700; padding: 0 10px; }"
-               "#newsDetailAnalyzeBtn:hover { background: %12; color: %1; }"
-               "#newsDetailAnalyzeBtn:disabled { color: %6; background: %8; border-color: %3; }"
-               "#newsDetailHeaderBtn { background: %8; border: 1px solid %10; padding: 0; }"
-               // Not the solid-accent hover of the text buttons: the glyph IS
-               // the accent colour and would vanish into it.
-               "#newsDetailHeaderBtn:hover { background: %13; border-color: %12; }"
-               "#newsDetailAiSummary { color: #f0e8d0; font-size: 12pt; line-height: 1.4; background: transparent; }"
-               "#newsDetailAiSentiment { font-size: 12px; font-weight: 700; background: transparent; }"
-               "#newsDetailAiUrgency { color: %16; font-size: 12px; background: transparent; }"
-               "#newsDetailKeyPoint { color: #f0e8d0; font-size: 11px; background: transparent; }"
-               "#newsDetailRisk { color: %11; font-size: 11px; background: transparent; }"
-               "#newsDetailTopicBadge { color: %14; font-size: 10px; background: %8; "
-               "  border: 1px solid %3; padding: 1px 6px; }"
-               "#newsRelatedBtn { background: transparent; color: %7; font-size: 11px; "
-               "  text-align: left; border: none; border-bottom: 1px solid %3; padding: 3px 4px; }"
-               "#newsRelatedBtn:hover { color: %4; background: %8; }"
+               #newsBodySection makes the wrapper QWidget transparent so the
+               panel's BG_SURFACE shows through (without this it falls back to
+               the global QWidget { background-color: BG_BASE } and produces a
+               black box behind the body). */
+            /* meta_row & body_section_ are plain QWidget containers with no
+               objectName-specific rule, so without these overrides they fall
+               through to the global `QWidget { background-color: BG_BASE }` and
+               paint a black band behind their child labels. The headline above
+               them rides on BG_SURFACE (via #newsDetailContent transparent), so
+               the black band looks like an unintended dark strip. Making both
+               rows transparent lets the panel's BG_SURFACE bleed through. */
+            "#newsDetailMetaRow { background: transparent; }"
+            "#newsBodySection { background: transparent; }"
+            /* ARTICLE header. Cream + bold + hairline border-bottom (using the
+               same %3 BORDER_DIM as the panel's other section separators) sets
+               this off as a clear "start of long-form prose" cue between the
+               action button row above and the body paragraphs below.
+               letter-spacing matches #newsDetailSectionTitle / #newsTldrTitle for
+               consistency with the panel's other section headers. */
+            "#newsDetailBodyTitle { color: #f0e8d0; font-size: 12pt; font-weight: 700;"
+            "  letter-spacing: 0.5px; background: transparent; padding: 2px 0 4px 0;"
+            "  border-bottom: 1px solid %3; }"
+            "#newsDetailBody { color: #f0e8d0; font-size: 12pt; background: transparent; }"
+            "#newsDetailBodyStatus { color: #f0e8d0; font-size: 12pt; background: transparent; }"
+            "#newsDetailSectionTitle { color: %12; font-size: 11px; font-weight: 700; "
+            "  letter-spacing: 0.5px; background: transparent; padding: 2px 0; "
+            "  border-bottom: 1px solid %3; }"
+            "#newsDetailSubTitle { color: %6; font-size: 10px; font-weight: 700; background: transparent; }"
+            "#newsDetailOpenBtn, #newsDetailCopyBtn, #newsDetailCopyTitleBtn, #newsDetailSaveBtn { "
+            "  background: %8; color: %7; "
+            "  border: 1px solid %3; font-size: 11px; font-weight: 700; padding: 0 8px; }"
+            "#newsDetailOpenBtn:hover, #newsDetailCopyBtn:hover, #newsDetailCopyTitleBtn:hover, "
+            "#newsDetailSaveBtn:hover { color: %4; background: %13; }"
+            "#newsDetailAnalyzeBtn { background: rgba(217,119,6,0.1); color: %12; "
+            "  border: 1px solid %10; font-size: 11px; font-weight: 700; padding: 0 10px; }"
+            "#newsDetailAnalyzeBtn:hover { background: %12; color: %1; }"
+            "#newsDetailAnalyzeBtn:disabled { color: %6; background: %8; border-color: %3; }"
+            "#newsDetailHeaderBtn { background: %8; border: 1px solid %10; padding: 0; }"
+            // Not the solid-accent hover of the text buttons: the glyph IS
+            // the accent colour and would vanish into it.
+            "#newsDetailHeaderBtn:hover { background: %13; border-color: %12; }"
+            "#newsDetailAiSummary { color: #f0e8d0; font-size: 12pt; line-height: 1.4; background: transparent; }"
+            "#newsDetailAiSentiment { font-size: 12px; font-weight: 700; background: transparent; }"
+            "#newsDetailAiUrgency { color: %16; font-size: 12px; background: transparent; }"
+            "#newsDetailKeyPoint { color: #f0e8d0; font-size: 11px; background: transparent; }"
+            "#newsDetailRisk { color: %11; font-size: 11px; background: transparent; }"
+            "#newsDetailTopicBadge { color: %14; font-size: 10px; background: %8; "
+            "  border: 1px solid %3; padding: 1px 6px; }"
+            "#newsRelatedBtn { background: transparent; color: %7; font-size: 11px; "
+            "  text-align: left; border: none; border-bottom: 1px solid %3; padding: 3px 4px; }"
+            "#newsRelatedBtn:hover { color: %4; background: %8; }"
 
-               /* ── TL;DR section (top of detail panel) ── */
-               /* Cyan border-bottom to echo the intel-strip TL;DR accent so */
-               /* the click-target and the destination are visually linked.  */
-               "#newsTldrSection { background: transparent; border-bottom: 1px solid %3; }"
-               "#newsTldrTitle { color: %14; font-size: 11px; font-weight: 700; "
-               "  letter-spacing: 1px; background: transparent; padding: 2px 0; }"
-               "#newsTldrBody { color: #f0e8d0; font-size: 12pt; line-height: 1.4; "
-               "  background: transparent; padding: 2px 0 4px; }"
-               "#newsMonitorMatchLabel { color: %7; font-size: 11px; background: transparent; }"
+            /* ── TL;DR section (top of detail panel) ── */
+            /* Cyan border-bottom to echo the intel-strip TL;DR accent so */
+            /* the click-target and the destination are visually linked.  */
+            "#newsTldrSection { background: transparent; border-bottom: 1px solid %3; }"
+            "#newsTldrTitle { color: %14; font-size: 11px; font-weight: 700; "
+            "  letter-spacing: 1px; background: transparent; padding: 2px 0; }"
+            "#newsTldrBody { color: #f0e8d0; font-size: 12pt; line-height: 1.4; "
+            "  background: transparent; padding: 2px 0 4px; }"
+            "#newsMonitorMatchLabel { color: %7; font-size: 11px; background: transparent; }"
 
-               /* ── Ticker strip ── */
-               "#newsTickerStrip { background: %1; border-top: 1px solid %3; }"
+            /* ── Ticker strip ── */
+            "#newsTickerStrip { background: %1; border-top: 1px solid %3; }"
 
-               /* ── Skeleton ── */
-               /* Hard-coded #13110f to match the feed-list bg, otherwise the */
-               /* skeleton-to-loaded transition flashes the global near-black */
-               /* %1 (BG_BASE) for a frame before showing the warm-dark feed. */
-               "#newsSkeletonOverlay { background: #13110f; }"
+            /* ── Skeleton ── */
+            /* Hard-coded #13110f to match the feed-list bg, otherwise the */
+            /* skeleton-to-loaded transition flashes the global near-black */
+            /* %1 (BG_BASE) for a frame before showing the warm-dark feed. */
+            "#newsSkeletonOverlay { background: #13110f; }"
 
-               /* ── Empty state ── */
-               "#newsEmptyState { background: #13110f; }"
-               "#newsEmptyStateTitle { color: %12; font-size: 13px; font-weight: 700; "
-               "  letter-spacing: 0.5px; background: transparent; }"
-               "#newsEmptyStateHint { color: %6; font-size: 11px; background: transparent; }"),
+            /* ── Empty state ── */
+            "#newsEmptyState { background: #13110f; }"
+            "#newsEmptyStateTitle { color: %12; font-size: 13px; font-weight: 700; "
+            "  letter-spacing: 0.5px; background: transparent; }"
+            "#newsEmptyStateHint { color: %6; font-size: 11px; background: transparent; }"),
         {
-            QString::fromLatin1(colors::BG_BASE()),         // %1
-            QString::fromLatin1(colors::BG_SURFACE()),      // %2
-            QString::fromLatin1(colors::BORDER_DIM()),      // %3
-            QString::fromLatin1(colors::TEXT_PRIMARY()),    // %4
-            QString::fromLatin1(colors::BORDER_BRIGHT()),   // %5
-            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %6
-            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %7
-            QString::fromLatin1(colors::BG_RAISED()),       // %8
-            QString::fromLatin1(colors::ORANGE()),          // %9
-            QString::fromLatin1(colors::AMBER_DIM()),       // %10
-            QString::fromLatin1(colors::NEGATIVE()),        // %11
-            QString::fromLatin1(colors::AMBER()),           // %12
-            QString::fromLatin1(colors::BG_HOVER()),        // %13
-            QString::fromLatin1(colors::CYAN()),            // %14
-            QString::fromLatin1(colors::POSITIVE()),        // %15
-            QString::fromLatin1(colors::WARNING()),         // %16
-            QString::fromLatin1(colors::NEGATIVE_BG()),     // %17
+            QString::fromLatin1(colors::BG_BASE()),        // %1
+            QString::fromLatin1(colors::BG_SURFACE()),     // %2
+            QString::fromLatin1(colors::BORDER_DIM()),     // %3
+            QString::fromLatin1(colors::TEXT_PRIMARY()),   // %4
+            QString::fromLatin1(colors::BORDER_BRIGHT()),  // %5
+            QString::fromLatin1(colors::TEXT_SECONDARY()), // %6
+            QString::fromLatin1(colors::TEXT_SECONDARY()), // %7
+            QString::fromLatin1(colors::BG_RAISED()),      // %8
+            QString::fromLatin1(colors::ORANGE()),         // %9
+            QString::fromLatin1(colors::AMBER_DIM()),      // %10
+            QString::fromLatin1(colors::NEGATIVE()),       // %11
+            QString::fromLatin1(colors::AMBER()),          // %12
+            QString::fromLatin1(colors::BG_HOVER()),       // %13
+            QString::fromLatin1(colors::CYAN()),           // %14
+            QString::fromLatin1(colors::POSITIVE()),       // %15
+            QString::fromLatin1(colors::WARNING()),        // %16
+            QString::fromLatin1(colors::NEGATIVE_BG()),    // %17
         });
 }
 
 QString crypto_trading_styles() {
-    return fill_qss_checked("crypto_trading_styles",
+    return fill_qss_checked(
+        "crypto_trading_styles",
         QString(
-               /* ── Root ── */
-               "#cryptoScreen { background: %1; font-family: 'Consolas','Courier New',monospace; }"
+            /* ── Root ── */
+            "#cryptoScreen { background: %1; font-family: 'Consolas','Courier New',monospace; }"
 
-               /* ── Command bar ── */
-               "#cryptoCommandBar { background: %8; border-bottom: 1px solid %3; }"
-               "#cryptoCommandBarTitle { color: %12; font-weight: 700; font-size: 12px; "
-               "  letter-spacing: 1px; background: transparent; border: none; }"
-               "#cryptoCommandBarSep { color: %3; font-size: 14px; background: transparent; border: none; }"
+            /* ── Command bar ── */
+            "#cryptoCommandBar { background: %8; border-bottom: 1px solid %3; }"
+            "#cryptoCommandBarTitle { color: %12; font-weight: 700; font-size: 12px; "
+            "  letter-spacing: 1px; background: transparent; border: none; }"
+            "#cryptoCommandBarSep { color: %3; font-size: 14px; background: transparent; border: none; }"
 
-               "#cryptoExchangeBtn { background: %16; color: %12; "
-               "  border: 1px solid %10; padding: 2px 10px; font-size: 11px; "
-               "  font-weight: 700; letter-spacing: 0.5px; }"
-               "#cryptoExchangeBtn:hover { background: %12; color: %1; }"
-               "#cryptoExchangeBtn::menu-indicator { width: 0; height: 0; }"
+            "#cryptoExchangeBtn { background: %16; color: %12; "
+            "  border: 1px solid %10; padding: 2px 10px; font-size: 11px; "
+            "  font-weight: 700; letter-spacing: 0.5px; }"
+            "#cryptoExchangeBtn:hover { background: %12; color: %1; }"
+            "#cryptoExchangeBtn::menu-indicator { width: 0; height: 0; }"
 
-               "#cryptoSymbolInput { background: %2; color: %12; border: 1px solid %3; "
-               "  padding: 2px 8px; font-size: 13px; font-weight: 700; }"
-               "#cryptoSymbolInput:focus { border-color: %12; }"
+            "#cryptoSymbolInput { background: %2; color: %12; border: 1px solid %3; "
+            "  padding: 2px 8px; font-size: 13px; font-weight: 700; }"
+            "#cryptoSymbolInput:focus { border-color: %12; }"
 
-               /* ── Price ribbon ── */
-               "#cryptoPriceRibbon { background: transparent; border: none; }"
-               "#cryptoHeroPrice { color: %4; font-size: 18px; font-weight: 700; "
-               "  background: transparent; border: none; }"
-               "#cryptoChange { font-size: 12px; font-weight: 700; background: transparent; border: none; }"
-               "#cryptoBid { color: %15; font-size: 11px; font-weight: 600; background: transparent; border: none; }"
-               "#cryptoAsk { color: %11; font-size: 11px; font-weight: 600; background: transparent; border: none; }"
-               "#cryptoSpreadInline { color: %6; font-size: 11px; background: transparent; border: none; }"
-               "#cryptoStatLabel { color: %6; font-size: 11px; background: transparent; border: none; }"
+            /* ── Price ribbon ── */
+            "#cryptoPriceRibbon { background: transparent; border: none; }"
+            "#cryptoHeroPrice { color: %4; font-size: 18px; font-weight: 700; "
+            "  background: transparent; border: none; }"
+            "#cryptoChange { font-size: 12px; font-weight: 700; background: transparent; border: none; }"
+            "#cryptoBid { color: %15; font-size: 11px; font-weight: 600; background: transparent; border: none; }"
+            "#cryptoAsk { color: %11; font-size: 11px; font-weight: 600; background: transparent; border: none; }"
+            "#cryptoSpreadInline { color: %6; font-size: 11px; background: transparent; border: none; }"
+            "#cryptoStatLabel { color: %6; font-size: 11px; background: transparent; border: none; }"
 
-               "#cryptoModeBtn { padding: 2px 10px; font-weight: 700; font-size: 11px; letter-spacing: 0.5px; }"
-               "#cryptoModeBtn[mode=\"paper\"] { background: %17; color: %15; border: 1px solid "
-               "%19; }"
-               "#cryptoModeBtn[mode=\"live\"] { background: %18; color: %11; border: 1px solid "
-               "%20; }"
-               "#cryptoApiBtn { background: %8; color: %7; border: 1px solid %3; "
-               "  padding: 2px 10px; font-size: 11px; font-weight: 700; }"
-               "#cryptoApiBtn:hover { color: %4; background: %13; }"
+            "#cryptoModeBtn { padding: 2px 10px; font-weight: 700; font-size: 11px; letter-spacing: 0.5px; }"
+            "#cryptoModeBtn[mode=\"paper\"] { background: %17; color: %15; border: 1px solid "
+            "%19; }"
+            "#cryptoModeBtn[mode=\"live\"] { background: %18; color: %11; border: 1px solid "
+            "%20; }"
+            "#cryptoApiBtn { background: %8; color: %7; border: 1px solid %3; "
+            "  padding: 2px 10px; font-size: 11px; font-weight: 700; }"
+            "#cryptoApiBtn:hover { color: %4; background: %13; }"
 
-               "#cryptoWsStatus { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; "
-               "  background: transparent; border: none; }"
-               "#cryptoClock { color: %6; font-size: 11px; font-weight: 600; "
-               "  background: transparent; border: none; }"
+            "#cryptoWsStatus { font-size: 10px; font-weight: 700; letter-spacing: 0.5px; "
+            "  background: transparent; border: none; }"
+            "#cryptoClock { color: %6; font-size: 11px; font-weight: 600; "
+            "  background: transparent; border: none; }"
 
-               /* ── Splitter ── */
-               "#cryptoMainSplitter::handle { background: %3; width: 1px; }"
-               "#cryptoCenterSplitter::handle { background: %3; height: 1px; }"
-               "#cryptoRightSplitter::handle { background: %3; height: 1px; }"
+            /* ── Splitter ── */
+            "#cryptoMainSplitter::handle { background: %3; width: 1px; }"
+            "#cryptoCenterSplitter::handle { background: %3; height: 1px; }"
+            "#cryptoRightSplitter::handle { background: %3; height: 1px; }"
 
-               /* ── Watchlist ── */
-               "#cryptoWatchlist { background: %2; border-right: 1px solid %3; }"
-               "#cryptoWatchlistHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#cryptoWatchlistTitle { color: %12; font-weight: 700; font-size: 11px; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#cryptoWatchlistCount { color: %6; font-size: 11px; background: transparent; border: none; }"
-               "#cryptoWatchlistSearch { background: %1; border: none; border-bottom: 1px solid %3; "
-               "  color: %4; padding: 3px 10px; font-size: 12px; }"
-               "#cryptoWatchlistSearch:focus { border-bottom-color: %5; }"
-               "#cryptoWatchlistTable { background: %1; border: none; color: %4; font-size: 12px; }"
-               "#cryptoWatchlistTable::item { padding: 0 4px; border-bottom: 1px solid %3; }"
-               "#cryptoWatchlistTable::item:selected { background: %13; }"
-               "QHeaderView::section { background: %2; color: %9; font-size: 11px; font-weight: 700; "
-               "  border: none; border-bottom: 1px solid %3; padding: 0 4px; }"
+            /* ── Watchlist ── */
+            "#cryptoWatchlist { background: %2; border-right: 1px solid %3; }"
+            "#cryptoWatchlistHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#cryptoWatchlistTitle { color: %12; font-weight: 700; font-size: 11px; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#cryptoWatchlistCount { color: %6; font-size: 11px; background: transparent; border: none; }"
+            "#cryptoWatchlistSearch { background: %1; border: none; border-bottom: 1px solid %3; "
+            "  color: %4; padding: 3px 10px; font-size: 12px; }"
+            "#cryptoWatchlistSearch:focus { border-bottom-color: %5; }"
+            "#cryptoWatchlistTable { background: %1; border: none; color: %4; font-size: 12px; }"
+            "#cryptoWatchlistTable::item { padding: 0 4px; border-bottom: 1px solid %3; }"
+            "#cryptoWatchlistTable::item:selected { background: %13; }"
+            "QHeaderView::section { background: %2; color: %9; font-size: 11px; font-weight: 700; "
+            "  border: none; border-bottom: 1px solid %3; padding: 0 4px; }"
 
-               /* ── Chart ── */
-               "#cryptoChart { background: %2; border: 1px solid %3; }"
-               "#cryptoChartHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#cryptoChartTitle { color: %12; font-weight: 700; font-size: 11px; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#cryptoTfBtn { background: transparent; color: %6; border: none; "
-               "  border-bottom: 2px solid transparent; padding: 2px 8px; "
-               "  font-size: 11px; font-weight: 700; }"
-               "#cryptoTfBtn:hover { color: %7; }"
-               "#cryptoTfBtn[active=\"true\"] { color: %12; border-bottom-color: %12; }"
+            /* ── Chart ── */
+            "#cryptoChart { background: %2; border: 1px solid %3; }"
+            "#cryptoChartHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#cryptoChartTitle { color: %12; font-weight: 700; font-size: 11px; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#cryptoTfBtn { background: transparent; color: %6; border: none; "
+            "  border-bottom: 2px solid transparent; padding: 2px 8px; "
+            "  font-size: 11px; font-weight: 700; }"
+            "#cryptoTfBtn:hover { color: %7; }"
+            "#cryptoTfBtn[active=\"true\"] { color: %12; border-bottom-color: %12; }"
 
-               /* ── Order book ── */
-               "#cryptoOrderBook { background: %2; border: 1px solid %3; }"
-               "#cryptoObHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#cryptoObTitle { color: %12; font-weight: 700; font-size: 11px; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#cryptoObModeBtn { background: transparent; color: %6; border: none; "
-               "  border-bottom: 2px solid transparent; padding: 1px 6px; "
-               "  font-size: 10px; font-weight: 700; }"
-               "#cryptoObModeBtn:hover { color: %7; }"
-               "#cryptoObModeBtn[active=\"true\"] { color: %4; border-bottom-color: %12; }"
-               "#cryptoObSpread { background: %8; color: %7; font-size: 11px; font-weight: 700; "
-               "  border-top: 1px solid %3; border-bottom: 1px solid %3; }"
+            /* ── Order book ── */
+            "#cryptoOrderBook { background: %2; border: 1px solid %3; }"
+            "#cryptoObHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#cryptoObTitle { color: %12; font-weight: 700; font-size: 11px; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#cryptoObModeBtn { background: transparent; color: %6; border: none; "
+            "  border-bottom: 2px solid transparent; padding: 1px 6px; "
+            "  font-size: 10px; font-weight: 700; }"
+            "#cryptoObModeBtn:hover { color: %7; }"
+            "#cryptoObModeBtn[active=\"true\"] { color: %4; border-bottom-color: %12; }"
+            "#cryptoObSpread { background: %8; color: %7; font-size: 11px; font-weight: 700; "
+            "  border-top: 1px solid %3; border-bottom: 1px solid %3; }"
 
-               /* ── Order entry ── */
-               "#cryptoOrderEntry { background: %2; border: 1px solid %3; }"
-               "#cryptoOeHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#cryptoOeTitle { color: %12; font-weight: 700; font-size: 11px; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#cryptoOeMode { font-weight: 700; font-size: 11px; letter-spacing: 0.5px; "
-               "  background: transparent; border: none; }"
-               "#cryptoOeMode[mode=\"paper\"] { color: %15; }"
-               "#cryptoOeMode[mode=\"live\"] { color: %11; }"
+            /* ── Order entry ── */
+            "#cryptoOrderEntry { background: %2; border: 1px solid %3; }"
+            "#cryptoOeHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#cryptoOeTitle { color: %12; font-weight: 700; font-size: 11px; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#cryptoOeMode { font-weight: 700; font-size: 11px; letter-spacing: 0.5px; "
+            "  background: transparent; border: none; }"
+            "#cryptoOeMode[mode=\"paper\"] { color: %15; }"
+            "#cryptoOeMode[mode=\"live\"] { color: %11; }"
 
-               "#cryptoBuyTab { background: transparent; color: %6; border: none; "
-               "  border-bottom: 2px solid transparent; padding: 4px 0; "
-               "  font-size: 12px; font-weight: 700; }"
-               "#cryptoBuyTab:hover { color: %15; }"
-               "#cryptoBuyTab[active=\"true\"] { color: %15; border-bottom-color: %15; }"
-               "#cryptoSellTab { background: transparent; color: %6; border: none; "
-               "  border-bottom: 2px solid transparent; padding: 4px 0; "
-               "  font-size: 12px; font-weight: 700; }"
-               "#cryptoSellTab:hover { color: %11; }"
-               "#cryptoSellTab[active=\"true\"] { color: %11; border-bottom-color: %11; }"
+            "#cryptoBuyTab { background: transparent; color: %6; border: none; "
+            "  border-bottom: 2px solid transparent; padding: 4px 0; "
+            "  font-size: 12px; font-weight: 700; }"
+            "#cryptoBuyTab:hover { color: %15; }"
+            "#cryptoBuyTab[active=\"true\"] { color: %15; border-bottom-color: %15; }"
+            "#cryptoSellTab { background: transparent; color: %6; border: none; "
+            "  border-bottom: 2px solid transparent; padding: 4px 0; "
+            "  font-size: 12px; font-weight: 700; }"
+            "#cryptoSellTab:hover { color: %11; }"
+            "#cryptoSellTab[active=\"true\"] { color: %11; border-bottom-color: %11; }"
 
-               "#cryptoOeTypeBtn { background: transparent; color: %6; border: none; "
-               "  border-bottom: 2px solid transparent; padding: 1px 6px; "
-               "  font-size: 10px; font-weight: 700; }"
-               "#cryptoOeTypeBtn:hover { color: %7; }"
-               "#cryptoOeTypeBtn[active=\"true\"] { color: %4; border-bottom-color: %12; }"
+            "#cryptoOeTypeBtn { background: transparent; color: %6; border: none; "
+            "  border-bottom: 2px solid transparent; padding: 1px 6px; "
+            "  font-size: 10px; font-weight: 700; }"
+            "#cryptoOeTypeBtn:hover { color: %7; }"
+            "#cryptoOeTypeBtn[active=\"true\"] { color: %4; border-bottom-color: %12; }"
 
-               "#cryptoOeLabel { color: %7; font-size: 11px; font-weight: 700; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#cryptoOeInput { background: %1; border: 1px solid %3; color: %4; "
-               "  padding: 3px 6px; font-size: 12px; }"
-               "#cryptoOeInput:focus { border-color: %5; }"
-               "#cryptoOeInput:disabled { color: %9; }"
-               "#cryptoOePctBtn { background: %8; color: %7; border: 1px solid %3; "
-               "  font-size: 10px; font-weight: 700; padding: 0 4px; }"
-               "#cryptoOePctBtn:hover { color: %4; background: %13; }"
+            "#cryptoOeLabel { color: %7; font-size: 11px; font-weight: 700; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#cryptoOeInput { background: %1; border: 1px solid %3; color: %4; "
+            "  padding: 3px 6px; font-size: 12px; }"
+            "#cryptoOeInput:focus { border-color: %5; }"
+            "#cryptoOeInput:disabled { color: %9; }"
+            "#cryptoOePctBtn { background: %8; color: %7; border: 1px solid %3; "
+            "  font-size: 10px; font-weight: 700; padding: 0 4px; }"
+            "#cryptoOePctBtn:hover { color: %4; background: %13; }"
 
-               "#cryptoOeBalance { color: %14; font-size: 12px; font-weight: 700; "
-               "  background: transparent; border: none; }"
-               "#cryptoOeMarketPrice { color: %6; font-size: 11px; background: transparent; border: none; }"
-               "#cryptoOeCost { color: %6; font-size: 11px; background: transparent; border: none; }"
-               "#cryptoOeStatus { font-size: 11px; background: transparent; border: none; }"
-               "#cryptoOeStatus[error=\"true\"] { color: %11; }"
+            "#cryptoOeBalance { color: %14; font-size: 12px; font-weight: 700; "
+            "  background: transparent; border: none; }"
+            "#cryptoOeMarketPrice { color: %6; font-size: 11px; background: transparent; border: none; }"
+            "#cryptoOeCost { color: %6; font-size: 11px; background: transparent; border: none; }"
+            "#cryptoOeStatus { font-size: 11px; background: transparent; border: none; }"
+            "#cryptoOeStatus[error=\"true\"] { color: %11; }"
 
-               "#cryptoBuySubmit { background: %17; color: %15; "
-               "  border: 1px solid %19; padding: 8px; font-weight: 700; font-size: 13px; }"
-               "#cryptoBuySubmit:hover { background: %15; color: %1; }"
-               "#cryptoSellSubmit { background: %18; color: %11; "
-               "  border: 1px solid %20; padding: 8px; font-weight: 700; font-size: 13px; }"
-               "#cryptoSellSubmit:hover { background: %11; color: %4; }"
+            "#cryptoBuySubmit { background: %17; color: %15; "
+            "  border: 1px solid %19; padding: 8px; font-weight: 700; font-size: 13px; }"
+            "#cryptoBuySubmit:hover { background: %15; color: %1; }"
+            "#cryptoSellSubmit { background: %18; color: %11; "
+            "  border: 1px solid %20; padding: 8px; font-weight: 700; font-size: 13px; }"
+            "#cryptoSellSubmit:hover { background: %11; color: %4; }"
 
-               "#cryptoAdvToggle { background: transparent; color: %6; border: none; "
-               "  font-size: 10px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 0; }"
-               "#cryptoAdvToggle:hover { color: %7; }"
+            "#cryptoAdvToggle { background: transparent; color: %6; border: none; "
+            "  font-size: 10px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 0; }"
+            "#cryptoAdvToggle:hover { color: %7; }"
 
-               /* ── Bottom panel ── */
-               "#cryptoBottomPanel { background: %2; border: 1px solid %3; }"
-               "#cryptoBottomTabs::pane { border: none; background: %2; }"
-               "#cryptoBottomTabs QTabBar::tab { background: transparent; color: %6; "
-               "  padding: 3px 10px; border: none; border-bottom: 2px solid transparent; "
-               "  font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }"
-               "#cryptoBottomTabs QTabBar::tab:selected { color: %12; border-bottom-color: %12; }"
-               "#cryptoBottomTabs QTabBar::tab:hover:!selected { color: %7; }"
+            /* ── Bottom panel ── */
+            "#cryptoBottomPanel { background: %2; border: 1px solid %3; }"
+            "#cryptoBottomTabs::pane { border: none; background: %2; }"
+            "#cryptoBottomTabs QTabBar::tab { background: transparent; color: %6; "
+            "  padding: 3px 10px; border: none; border-bottom: 2px solid transparent; "
+            "  font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }"
+            "#cryptoBottomTabs QTabBar::tab:selected { color: %12; border-bottom-color: %12; }"
+            "#cryptoBottomTabs QTabBar::tab:hover:!selected { color: %7; }"
 
-               "#cryptoBottomTable { background: %1; border: none; color: %4; font-size: 12px; }"
-               "#cryptoBottomTable::item { padding: 0 4px; border-bottom: 1px solid %3; }"
-               "#cryptoBottomTable QHeaderView::section { background: %2; color: %9; "
-               "  font-size: 11px; font-weight: 700; border: none; border-bottom: 1px solid %3; padding: 0 4px; }"
+            "#cryptoBottomTable { background: %1; border: none; color: %4; font-size: 12px; }"
+            "#cryptoBottomTable::item { padding: 0 4px; border-bottom: 1px solid %3; }"
+            "#cryptoBottomTable QHeaderView::section { background: %2; color: %9; "
+            "  font-size: 11px; font-weight: 700; border: none; border-bottom: 1px solid %3; padding: 0 4px; }"
 
-               "#cryptoCancelBtn { background: %18; color: %11; "
-               "  border: 1px solid %20; padding: 1px 6px; font-size: 10px; font-weight: 700; }"
-               "#cryptoCancelBtn:hover { background: %11; color: %4; }"
+            "#cryptoCancelBtn { background: %18; color: %11; "
+            "  border: 1px solid %20; padding: 1px 6px; font-size: 10px; font-weight: 700; }"
+            "#cryptoCancelBtn:hover { background: %11; color: %4; }"
 
-               "#cryptoInfoRow { border-bottom: 1px solid %3; }"
-               "#cryptoInfoLabel { color: %7; font-size: 11px; font-weight: 700; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#cryptoInfoValue { color: %4; font-size: 12px; font-weight: 700; "
-               "  background: transparent; border: none; }"
+            "#cryptoInfoRow { border-bottom: 1px solid %3; }"
+            "#cryptoInfoLabel { color: %7; font-size: 11px; font-weight: 700; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#cryptoInfoValue { color: %4; font-size: 12px; font-weight: 700; "
+            "  background: transparent; border: none; }"
 
-               "#cryptoStatRow { border-bottom: 1px solid %3; }"
-               "#cryptoStatLabel { color: %7; font-size: 11px; font-weight: 700; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#cryptoStatValue { color: %4; font-size: 13px; font-weight: 700; "
-               "  background: transparent; border: none; }"
-               "#cryptoStatValue[pnl=\"positive\"] { color: %15; }"
-               "#cryptoStatValue[pnl=\"negative\"] { color: %11; }"
+            "#cryptoStatRow { border-bottom: 1px solid %3; }"
+            "#cryptoStatLabel { color: %7; font-size: 11px; font-weight: 700; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#cryptoStatValue { color: %4; font-size: 13px; font-weight: 700; "
+            "  background: transparent; border: none; }"
+            "#cryptoStatValue[pnl=\"positive\"] { color: %15; }"
+            "#cryptoStatValue[pnl=\"negative\"] { color: %11; }"
 
-               /* ── Time & Sales ── */
-               "#cryptoTimeSales { background: %1; }"
+            /* ── Time & Sales ── */
+            "#cryptoTimeSales { background: %1; }"
 
-               /* ── Depth Chart ── */
-               "#cryptoDepthChart { background: %1; }"),
+            /* ── Depth Chart ── */
+            "#cryptoDepthChart { background: %1; }"),
         {
-            QString::fromLatin1(colors::BG_BASE()),         // %1
-            QString::fromLatin1(colors::BG_SURFACE()),      // %2
-            QString::fromLatin1(colors::BORDER_DIM()),      // %3
-            QString::fromLatin1(colors::TEXT_PRIMARY()),    // %4
-            QString::fromLatin1(colors::BORDER_BRIGHT()),   // %5
-            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %6
-            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %7
-            QString::fromLatin1(colors::BG_RAISED()),       // %8
-            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %9
-            QString::fromLatin1(colors::AMBER_DIM()),       // %10
-            QString::fromLatin1(colors::NEGATIVE()),        // %11
-            QString::fromLatin1(colors::AMBER()),           // %12
-            QString::fromLatin1(colors::BG_HOVER()),        // %13
-            QString::fromLatin1(colors::CYAN()),            // %14
-            QString::fromLatin1(colors::POSITIVE()),        // %15
-            QString::fromLatin1(colors::ACCENT_BG()),       // %16
-            QString::fromLatin1(colors::POSITIVE_BG()),     // %17
-            QString::fromLatin1(colors::NEGATIVE_BG()),     // %18
-            QString::fromLatin1(colors::POSITIVE_DIM()),    // %19
-            QString::fromLatin1(colors::NEGATIVE_DIM()),    // %20
+            QString::fromLatin1(colors::BG_BASE()),        // %1
+            QString::fromLatin1(colors::BG_SURFACE()),     // %2
+            QString::fromLatin1(colors::BORDER_DIM()),     // %3
+            QString::fromLatin1(colors::TEXT_PRIMARY()),   // %4
+            QString::fromLatin1(colors::BORDER_BRIGHT()),  // %5
+            QString::fromLatin1(colors::TEXT_SECONDARY()), // %6
+            QString::fromLatin1(colors::TEXT_SECONDARY()), // %7
+            QString::fromLatin1(colors::BG_RAISED()),      // %8
+            QString::fromLatin1(colors::TEXT_SECONDARY()), // %9
+            QString::fromLatin1(colors::AMBER_DIM()),      // %10
+            QString::fromLatin1(colors::NEGATIVE()),       // %11
+            QString::fromLatin1(colors::AMBER()),          // %12
+            QString::fromLatin1(colors::BG_HOVER()),       // %13
+            QString::fromLatin1(colors::CYAN()),           // %14
+            QString::fromLatin1(colors::POSITIVE()),       // %15
+            QString::fromLatin1(colors::ACCENT_BG()),      // %16
+            QString::fromLatin1(colors::POSITIVE_BG()),    // %17
+            QString::fromLatin1(colors::NEGATIVE_BG()),    // %18
+            QString::fromLatin1(colors::POSITIVE_DIM()),   // %19
+            QString::fromLatin1(colors::NEGATIVE_DIM()),   // %20
         });
 }
 
 QString equity_trading_styles() {
     // Reuse same Obsidian color palette as crypto — identical visual language
-    return fill_qss_checked("equity_trading_styles",
+    return fill_qss_checked(
+        "equity_trading_styles",
         QString(
-               /* ── Root ── */
-               "#eqScreen { background: %1; font-family: 'Consolas','Courier New',monospace; }"
+            /* ── Root ── */
+            "#eqScreen { background: %1; font-family: 'Consolas','Courier New',monospace; }"
 
-               /* ── Command bar ── */
-               "#eqCommandBar { background: %8; border-bottom: 1px solid %3; }"
-               "#eqCommandBarSep { color: %3; font-size: 14px; background: transparent; border: none; }"
+            /* ── Command bar ── */
+            "#eqCommandBar { background: %8; border-bottom: 1px solid %3; }"
+            "#eqCommandBarSep { color: %3; font-size: 14px; background: transparent; border: none; }"
 
-               "#eqBrokerBtn { background: %16; color: %12; "
-               "  border: 1px solid %10; padding: 2px 10px; font-size: 11px; "
-               "  font-weight: 700; letter-spacing: 0.5px; }"
-               "#eqBrokerBtn:hover { background: %12; color: %1; }"
-               "#eqBrokerBtn::menu-indicator { width: 0; height: 0; }"
+            "#eqBrokerBtn { background: %16; color: %12; "
+            "  border: 1px solid %10; padding: 2px 10px; font-size: 11px; "
+            "  font-weight: 700; letter-spacing: 0.5px; }"
+            "#eqBrokerBtn:hover { background: %12; color: %1; }"
+            "#eqBrokerBtn::menu-indicator { width: 0; height: 0; }"
 
-               "#eqExchangeLabel { color: %14; font-size: 11px; font-weight: 700; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#eqExchangeLabel { color: %14; font-size: 11px; font-weight: 700; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
 
-               "#eqSymbolInput { background: %2; color: %12; border: 1px solid %3; "
-               "  padding: 2px 8px; font-size: 13px; font-weight: 700; }"
-               "#eqSymbolInput:focus { border-color: %12; }"
+            "#eqSymbolInput { background: %2; color: %12; border: 1px solid %3; "
+            "  padding: 2px 8px; font-size: 13px; font-weight: 700; }"
+            "#eqSymbolInput:focus { border-color: %12; }"
 
-               /* ── Price ribbon ── */
-               "#eqPriceRibbon { background: transparent; border: none; }"
-               "#eqCommandBarTitle { color: %12; font-weight: 700; font-size: 12px; "
-               "  letter-spacing: 1px; background: transparent; border: none; }"
-               "#eqHeroPrice { color: %4; font-size: 18px; font-weight: 700; "
-               "  background: transparent; border: none; }"
-               "#eqChange { font-size: 12px; font-weight: 700; background: transparent; border: none; }"
-               "#eqBid { color: %15; font-size: 11px; font-weight: 600; background: transparent; border: none; }"
-               "#eqAsk { color: %11; font-size: 11px; font-weight: 600; background: transparent; border: none; }"
-               "#eqSpreadInline { color: %6; font-size: 11px; background: transparent; border: none; }"
-               "#eqStatLabel { color: %6; font-size: 11px; background: transparent; border: none; }"
+            /* ── Price ribbon ── */
+            "#eqPriceRibbon { background: transparent; border: none; }"
+            "#eqCommandBarTitle { color: %12; font-weight: 700; font-size: 12px; "
+            "  letter-spacing: 1px; background: transparent; border: none; }"
+            "#eqHeroPrice { color: %4; font-size: 18px; font-weight: 700; "
+            "  background: transparent; border: none; }"
+            "#eqChange { font-size: 12px; font-weight: 700; background: transparent; border: none; }"
+            "#eqBid { color: %15; font-size: 11px; font-weight: 600; background: transparent; border: none; }"
+            "#eqAsk { color: %11; font-size: 11px; font-weight: 600; background: transparent; border: none; }"
+            "#eqSpreadInline { color: %6; font-size: 11px; background: transparent; border: none; }"
+            "#eqStatLabel { color: %6; font-size: 11px; background: transparent; border: none; }"
 
-               "#eqModeBtn { padding: 2px 10px; font-weight: 700; font-size: 11px; letter-spacing: 0.5px; }"
-               "#eqModeBtn[mode=\"paper\"] { background: %17; color: %15; border: 1px solid %19; }"
-               "#eqModeBtn[mode=\"live\"] { background: %18; color: %11; border: 1px solid %20; }"
-               "#eqApiBtn { background: %8; color: %7; border: 1px solid %3; "
-               "  padding: 2px 10px; font-size: 11px; font-weight: 700; }"
-               "#eqApiBtn:hover { color: %4; background: %13; }"
+            "#eqModeBtn { padding: 2px 10px; font-weight: 700; font-size: 11px; letter-spacing: 0.5px; }"
+            "#eqModeBtn[mode=\"paper\"] { background: %17; color: %15; border: 1px solid %19; }"
+            "#eqModeBtn[mode=\"live\"] { background: %18; color: %11; border: 1px solid %20; }"
+            "#eqApiBtn { background: %8; color: %7; border: 1px solid %3; "
+            "  padding: 2px 10px; font-size: 11px; font-weight: 700; }"
+            "#eqApiBtn:hover { color: %4; background: %13; }"
 
-               "#eqClock { color: %6; font-size: 11px; font-weight: 600; "
-               "  background: transparent; border: none; }"
+            "#eqClock { color: %6; font-size: 11px; font-weight: 600; "
+            "  background: transparent; border: none; }"
 
-               /* ── Splitters ── */
-               "#eqMainSplitter::handle { background: %3; width: 1px; }"
-               "#eqCenterSplitter::handle { background: %3; height: 1px; }"
-               "#eqRightSplitter::handle { background: %3; height: 1px; }"
+            /* ── Splitters ── */
+            "#eqMainSplitter::handle { background: %3; width: 1px; }"
+            "#eqCenterSplitter::handle { background: %3; height: 1px; }"
+            "#eqRightSplitter::handle { background: %3; height: 1px; }"
 
-               /* ── Watchlist ── */
-               "#eqWatchlist { background: %2; border-right: 1px solid %3; }"
-               "#eqWatchlistHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#eqWatchlistTitle { color: %12; font-weight: 700; font-size: 11px; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#eqWatchlistCount { color: %6; font-size: 11px; background: transparent; border: none; }"
-               "#eqWatchlistSearch { background: %1; border: none; border-bottom: 1px solid %3; "
-               "  color: %4; padding: 3px 10px; font-size: 12px; }"
-               "#eqWatchlistSearch:focus { border-bottom-color: %5; }"
-               "#eqWatchlistTable { background: %1; border: none; color: %4; font-size: 12px; }"
-               "#eqWatchlistTable::item { padding: 0 4px; border-bottom: 1px solid %3; }"
-               "#eqWatchlistTable::item:selected { background: %13; }"
-               "#eqWatchlistTable QHeaderView::section { background: %2; color: %9; font-size: 11px; "
-               "  font-weight: 700; border: none; border-bottom: 1px solid %3; padding: 0 4px; }"
+            /* ── Watchlist ── */
+            "#eqWatchlist { background: %2; border-right: 1px solid %3; }"
+            "#eqWatchlistHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#eqWatchlistTitle { color: %12; font-weight: 700; font-size: 11px; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#eqWatchlistCount { color: %6; font-size: 11px; background: transparent; border: none; }"
+            "#eqWatchlistSearch { background: %1; border: none; border-bottom: 1px solid %3; "
+            "  color: %4; padding: 3px 10px; font-size: 12px; }"
+            "#eqWatchlistSearch:focus { border-bottom-color: %5; }"
+            "#eqWatchlistTable { background: %1; border: none; color: %4; font-size: 12px; }"
+            "#eqWatchlistTable::item { padding: 0 4px; border-bottom: 1px solid %3; }"
+            "#eqWatchlistTable::item:selected { background: %13; }"
+            "#eqWatchlistTable QHeaderView::section { background: %2; color: %9; font-size: 11px; "
+            "  font-weight: 700; border: none; border-bottom: 1px solid %3; padding: 0 4px; }"
 
-               /* ── Chart ── */
-               "#eqChart { background: %2; border: 1px solid %3; }"
-               "#eqChartHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#eqChartTitle { color: %12; font-weight: 700; font-size: 11px; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#eqTfBtn { background: transparent; color: %6; border: none; "
-               "  border-bottom: 2px solid transparent; padding: 2px 8px; "
-               "  font-size: 11px; font-weight: 700; }"
-               "#eqTfBtn:hover { color: %7; }"
-               "#eqTfBtn[active=\"true\"] { color: %12; border-bottom-color: %12; }"
+            /* ── Chart ── */
+            "#eqChart { background: %2; border: 1px solid %3; }"
+            "#eqChartHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#eqChartTitle { color: %12; font-weight: 700; font-size: 11px; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#eqTfBtn { background: transparent; color: %6; border: none; "
+            "  border-bottom: 2px solid transparent; padding: 2px 8px; "
+            "  font-size: 11px; font-weight: 700; }"
+            "#eqTfBtn:hover { color: %7; }"
+            "#eqTfBtn[active=\"true\"] { color: %12; border-bottom-color: %12; }"
 
-               /* ── Order book ── */
-               "#eqOrderBook { background: %2; border: 1px solid %3; }"
-               "#eqObHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#eqObTitle { color: %12; font-weight: 700; font-size: 11px; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#eqObSpread { background: %8; color: %7; font-size: 11px; font-weight: 700; "
-               "  border-top: 1px solid %3; border-bottom: 1px solid %3; }"
+            /* ── Order book ── */
+            "#eqOrderBook { background: %2; border: 1px solid %3; }"
+            "#eqObHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#eqObTitle { color: %12; font-weight: 700; font-size: 11px; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#eqObSpread { background: %8; color: %7; font-size: 11px; font-weight: 700; "
+            "  border-top: 1px solid %3; border-bottom: 1px solid %3; }"
 
-               /* ── Order entry ── */
-               "#eqOrderEntry { background: %2; border: 1px solid %3; }"
-               "#eqOeHeader { background: %8; border-bottom: 1px solid %3; }"
-               "#eqOeTitle { color: %12; font-weight: 700; font-size: 11px; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#eqOeMode { font-weight: 700; font-size: 11px; letter-spacing: 0.5px; "
-               "  background: transparent; border: none; }"
+            /* ── Order entry ── */
+            "#eqOrderEntry { background: %2; border: 1px solid %3; }"
+            "#eqOeHeader { background: %8; border-bottom: 1px solid %3; }"
+            "#eqOeTitle { color: %12; font-weight: 700; font-size: 11px; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#eqOeMode { font-weight: 700; font-size: 11px; letter-spacing: 0.5px; "
+            "  background: transparent; border: none; }"
 
-               "#eqBuyTab { background: transparent; color: %6; border: none; "
-               "  border-bottom: 2px solid transparent; padding: 4px 0; "
-               "  font-size: 12px; font-weight: 700; }"
-               "#eqBuyTab:hover { color: %15; }"
-               "#eqBuyTab[active=\"true\"] { color: %15; border-bottom-color: %15; }"
-               "#eqSellTab { background: transparent; color: %6; border: none; "
-               "  border-bottom: 2px solid transparent; padding: 4px 0; "
-               "  font-size: 12px; font-weight: 700; }"
-               "#eqSellTab:hover { color: %11; }"
-               "#eqSellTab[active=\"true\"] { color: %11; border-bottom-color: %11; }"
+            "#eqBuyTab { background: transparent; color: %6; border: none; "
+            "  border-bottom: 2px solid transparent; padding: 4px 0; "
+            "  font-size: 12px; font-weight: 700; }"
+            "#eqBuyTab:hover { color: %15; }"
+            "#eqBuyTab[active=\"true\"] { color: %15; border-bottom-color: %15; }"
+            "#eqSellTab { background: transparent; color: %6; border: none; "
+            "  border-bottom: 2px solid transparent; padding: 4px 0; "
+            "  font-size: 12px; font-weight: 700; }"
+            "#eqSellTab:hover { color: %11; }"
+            "#eqSellTab[active=\"true\"] { color: %11; border-bottom-color: %11; }"
 
-               "#eqOeTypeBtn { background: transparent; color: %6; border: none; "
-               "  border-bottom: 2px solid transparent; padding: 1px 6px; "
-               "  font-size: 10px; font-weight: 700; }"
-               "#eqOeTypeBtn:hover { color: %7; }"
-               "#eqOeTypeBtn[active=\"true\"] { color: %4; border-bottom-color: %12; }"
+            "#eqOeTypeBtn { background: transparent; color: %6; border: none; "
+            "  border-bottom: 2px solid transparent; padding: 1px 6px; "
+            "  font-size: 10px; font-weight: 700; }"
+            "#eqOeTypeBtn:hover { color: %7; }"
+            "#eqOeTypeBtn[active=\"true\"] { color: %4; border-bottom-color: %12; }"
 
-               "#eqOeLabel { color: %7; font-size: 11px; font-weight: 700; "
-               "  letter-spacing: 0.5px; background: transparent; border: none; }"
-               "#eqOeInput { background: %1; border: 1px solid %3; color: %4; "
-               "  padding: 3px 6px; font-size: 12px; }"
-               "#eqOeInput:focus { border-color: %5; }"
-               "#eqOeInput:disabled { color: %9; }"
-               "#eqOeCombo { background: %1; border: 1px solid %3; color: %4; "
-               "  padding: 3px 6px; font-size: 12px; }"
-               "#eqOeCombo:focus { border-color: %5; }"
-               "#eqOeCombo QAbstractItemView { background: %2; color: %4; "
-               "  selection-background-color: %13; border: 1px solid %3; }"
+            "#eqOeLabel { color: %7; font-size: 11px; font-weight: 700; "
+            "  letter-spacing: 0.5px; background: transparent; border: none; }"
+            "#eqOeInput { background: %1; border: 1px solid %3; color: %4; "
+            "  padding: 3px 6px; font-size: 12px; }"
+            "#eqOeInput:focus { border-color: %5; }"
+            "#eqOeInput:disabled { color: %9; }"
+            "#eqOeCombo { background: %1; border: 1px solid %3; color: %4; "
+            "  padding: 3px 6px; font-size: 12px; }"
+            "#eqOeCombo:focus { border-color: %5; }"
+            "#eqOeCombo QAbstractItemView { background: %2; color: %4; "
+            "  selection-background-color: %13; border: 1px solid %3; }"
 
-               "#eqOeBalance { color: %14; font-size: 12px; font-weight: 700; "
-               "  background: transparent; border: none; }"
-               "#eqOeMarketPrice { color: %6; font-size: 11px; background: transparent; border: none; }"
-               "#eqOeCost { color: %6; font-size: 11px; background: transparent; border: none; }"
-               "#eqOeStatus { font-size: 11px; background: transparent; border: none; }"
+            "#eqOeBalance { color: %14; font-size: 12px; font-weight: 700; "
+            "  background: transparent; border: none; }"
+            "#eqOeMarketPrice { color: %6; font-size: 11px; background: transparent; border: none; }"
+            "#eqOeCost { color: %6; font-size: 11px; background: transparent; border: none; }"
+            "#eqOeStatus { font-size: 11px; background: transparent; border: none; }"
 
-               "#eqBuySubmit { background: %17; color: %15; "
-               "  border: 1px solid %19; padding: 8px; font-weight: 700; font-size: 13px; }"
-               "#eqBuySubmit:hover { background: %15; color: %1; }"
-               "#eqSellSubmit { background: %18; color: %11; "
-               "  border: 1px solid %20; padding: 8px; font-weight: 700; font-size: 13px; }"
-               "#eqSellSubmit:hover { background: %11; color: %4; }"
+            "#eqBuySubmit { background: %17; color: %15; "
+            "  border: 1px solid %19; padding: 8px; font-weight: 700; font-size: 13px; }"
+            "#eqBuySubmit:hover { background: %15; color: %1; }"
+            "#eqSellSubmit { background: %18; color: %11; "
+            "  border: 1px solid %20; padding: 8px; font-weight: 700; font-size: 13px; }"
+            "#eqSellSubmit:hover { background: %11; color: %4; }"
 
-               "#eqAdvToggle { background: transparent; color: %6; border: none; "
-               "  font-size: 10px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 0; }"
-               "#eqAdvToggle:hover { color: %7; }"
+            "#eqAdvToggle { background: transparent; color: %6; border: none; "
+            "  font-size: 10px; font-weight: 700; letter-spacing: 0.5px; padding: 2px 0; }"
+            "#eqAdvToggle:hover { color: %7; }"
 
-               /* ── Bottom panel ── */
-               "#eqBottomPanel { background: %2; border: 1px solid %3; }"
-               "#eqBottomTabs::pane { border: none; background: %2; }"
-               "#eqBottomTabs QTabBar::tab { background: transparent; color: %6; "
-               "  padding: 3px 10px; border: none; border-bottom: 2px solid transparent; "
-               "  font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }"
-               "#eqBottomTabs QTabBar::tab:selected { color: %12; border-bottom-color: %12; }"
-               "#eqBottomTabs QTabBar::tab:hover:!selected { color: %7; }"
+            /* ── Bottom panel ── */
+            "#eqBottomPanel { background: %2; border: 1px solid %3; }"
+            "#eqBottomTabs::pane { border: none; background: %2; }"
+            "#eqBottomTabs QTabBar::tab { background: transparent; color: %6; "
+            "  padding: 3px 10px; border: none; border-bottom: 2px solid transparent; "
+            "  font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }"
+            "#eqBottomTabs QTabBar::tab:selected { color: %12; border-bottom-color: %12; }"
+            "#eqBottomTabs QTabBar::tab:hover:!selected { color: %7; }"
 
-               "#eqTable { background: %1; border: none; color: %4; font-size: 12px; }"
-               "#eqTable::item { padding: 0 4px; border-bottom: 1px solid %3; }"
-               "#eqTable QHeaderView::section { background: %2; color: %9; "
-               "  font-size: 11px; font-weight: 700; border: none; border-bottom: 1px solid %3; padding: 0 4px; }"),
+            "#eqTable { background: %1; border: none; color: %4; font-size: 12px; }"
+            "#eqTable::item { padding: 0 4px; border-bottom: 1px solid %3; }"
+            "#eqTable QHeaderView::section { background: %2; color: %9; "
+            "  font-size: 11px; font-weight: 700; border: none; border-bottom: 1px solid %3; padding: 0 4px; }"),
         {
-            QString::fromLatin1(colors::BG_BASE()),         // %1
-            QString::fromLatin1(colors::BG_SURFACE()),      // %2
-            QString::fromLatin1(colors::BORDER_DIM()),      // %3
-            QString::fromLatin1(colors::TEXT_PRIMARY()),    // %4
-            QString::fromLatin1(colors::BORDER_BRIGHT()),   // %5
-            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %6
-            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %7
-            QString::fromLatin1(colors::BG_RAISED()),       // %8
-            QString::fromLatin1(colors::TEXT_SECONDARY()),  // %9
-            QString::fromLatin1(colors::AMBER_DIM()),       // %10
-            QString::fromLatin1(colors::NEGATIVE()),        // %11
-            QString::fromLatin1(colors::AMBER()),           // %12
-            QString::fromLatin1(colors::BG_HOVER()),        // %13
-            QString::fromLatin1(colors::CYAN()),            // %14
-            QString::fromLatin1(colors::POSITIVE()),        // %15
-            QString::fromLatin1(colors::ACCENT_BG()),       // %16
-            QString::fromLatin1(colors::POSITIVE_BG()),     // %17
-            QString::fromLatin1(colors::NEGATIVE_BG()),     // %18
-            QString::fromLatin1(colors::POSITIVE_DIM()),    // %19
-            QString::fromLatin1(colors::NEGATIVE_DIM()),    // %20
+            QString::fromLatin1(colors::BG_BASE()),        // %1
+            QString::fromLatin1(colors::BG_SURFACE()),     // %2
+            QString::fromLatin1(colors::BORDER_DIM()),     // %3
+            QString::fromLatin1(colors::TEXT_PRIMARY()),   // %4
+            QString::fromLatin1(colors::BORDER_BRIGHT()),  // %5
+            QString::fromLatin1(colors::TEXT_SECONDARY()), // %6
+            QString::fromLatin1(colors::TEXT_SECONDARY()), // %7
+            QString::fromLatin1(colors::BG_RAISED()),      // %8
+            QString::fromLatin1(colors::TEXT_SECONDARY()), // %9
+            QString::fromLatin1(colors::AMBER_DIM()),      // %10
+            QString::fromLatin1(colors::NEGATIVE()),       // %11
+            QString::fromLatin1(colors::AMBER()),          // %12
+            QString::fromLatin1(colors::BG_HOVER()),       // %13
+            QString::fromLatin1(colors::CYAN()),           // %14
+            QString::fromLatin1(colors::POSITIVE()),       // %15
+            QString::fromLatin1(colors::ACCENT_BG()),      // %16
+            QString::fromLatin1(colors::POSITIVE_BG()),    // %17
+            QString::fromLatin1(colors::NEGATIVE_BG()),    // %18
+            QString::fromLatin1(colors::POSITIVE_DIM()),   // %19
+            QString::fromLatin1(colors::NEGATIVE_DIM()),   // %20
         });
 }
 

@@ -30,9 +30,9 @@ class AuthService : public QObject {
     void initialize();
 
     // ── Session persistence (stored in auth.db, always open) ─────────────────
-    void    save_session(const QString& api_key, const QString& session_json);
+    void save_session(const QString& api_key, const QString& session_json);
     QString load_session(const QString& api_key);
-    void    remove_session(const QString& api_key);
+    void remove_session(const QString& api_key);
 
     // ── Per-user DB lifecycle ─────────────────────────────────────────────────
     /// Open the per-user fincept DB (users/<username>.db). Creates it fresh and
@@ -75,14 +75,14 @@ class AuthService : public QObject {
   private:
     AuthService() = default;
 
-    void        init_schema();
-    QString     hash_password(const QString& password) const;
-    bool        verify_password(const QString& password, const QString& stored) const;
-    QString     make_token() const;
-    QJsonObject profile_json(int id, const QString& username, const QString& email,
-                              const QString& created_at, const QString& last_login) const;
-    QString     username_for_key(const QString& api_key) const;
-    QString     user_db_path(const QString& username) const;
+    void init_schema();
+    QString hash_password(const QString& password) const;
+    bool verify_password(const QString& password, const QString& stored) const;
+    QString make_token() const;
+    QJsonObject profile_json(int id, const QString& username, const QString& email, const QString& created_at,
+                             const QString& last_login) const;
+    QString username_for_key(const QString& api_key) const;
+    QString user_db_path(const QString& username) const;
 
     QSqlDatabase db_; // auth.db connection
 };

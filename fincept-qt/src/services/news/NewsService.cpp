@@ -1,39 +1,36 @@
 #include "services/news/NewsService.h"
 
+#include "ai_chat/Degeneracy.h"
+#include "ai_chat/LlmService.h"
+#include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
+#include "network/http/HttpClient.h"
+#include "python/PythonRunner.h"
+#include "services/app_context/AppContextService.h"
 #include "services/news/NewsBriefCacheKey.h"
 #include "services/news/NewsBriefPrompts.h"
 #include "services/news/NewsBriefSelection.h"
 #include "services/news/NewsCategories.h"
 #include "services/news/NewsClusterService.h"
 #include "services/news/NewsFeedMerge.h"
-
-#include "ai_chat/Degeneracy.h"
-#include "ai_chat/LlmService.h"
-#include "core/logging/Logger.h"
-#include "network/http/HttpClient.h"
-#include "python/PythonRunner.h"
-#include "services/app_context/AppContextService.h"
 #include "storage/cache/CacheManager.h"
 #include "storage/repositories/PortfolioRepository.h"
 
+#include <QAtomicInt>
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QElapsedTimer>
 #include <QFutureWatcher>
-#include <QThreadPool>
-#include <QtConcurrent>
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
-
-#include <QAtomicInt>
-#include <QDateTime>
 #include <QJsonDocument>
 #include <QMutex>
 #include <QMutexLocker>
 #include <QRegularExpression>
 #include <QSet>
+#include <QThreadPool>
 #include <QUuid>
 #include <QXmlStreamReader>
+#include <QtConcurrent>
 
 #ifdef HAS_QT_WEBSOCKETS
 #    include <QtWebSockets/QWebSocket>
@@ -49,8 +46,9 @@ namespace fincept::services {
 // retagged several feeds (SCMP News/Business, DW, France 24, Guardian UK
 // Business). A cache written under the old tags would file those stories
 // under the wrong region pill until it expired.
-static constexpr const char* kArticlesCacheKey = "news:articles:v3"; // v3: rows deduped by headline, + "similar" / "also_sources"
-static constexpr int kFeedTransferTimeoutMs = 8000;   // 8s per RSS feed request
+static constexpr const char* kArticlesCacheKey =
+    "news:articles:v3";                             // v3: rows deduped by headline, + "similar" / "also_sources"
+static constexpr int kFeedTransferTimeoutMs = 8000; // 8s per RSS feed request
 
 // Model role used for AI briefs (TL;DR / DIGEST). A hearth role name rather
 // than a concrete model so it follows whatever the user maps it to.
@@ -75,15 +73,14 @@ constexpr int kBriefPromptVersion = 5;
 // the caller's own timeout; the error is the better answer. See
 // news_run_brief_call for why chat() is not a single bounded request.
 constexpr qint64 kBriefRetryBudgetMs = 45000;
-static constexpr int kWsReconnectDelayMs    = 10000;  // 10s before WebSocket reconnect
-static constexpr int kSummaryMaxChars       = 300;    // max chars for article summary
+static constexpr int kWsReconnectDelayMs = 10000; // 10s before WebSocket reconnect
+static constexpr int kSummaryMaxChars = 300;      // max chars for article summary
 
 // Use a real browser User-Agent — Bloomberg, WSJ, FT and other major
 // publishers reject "finterm/4.0" as scraper traffic. Browser UA
 // gets us 200s on the same endpoints.
-static constexpr const char* kBrowserUserAgent =
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+static constexpr const char* kBrowserUserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                                                 "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 // ── Singleton ───────────────────────────────────────────────────────────────
 
@@ -191,8 +188,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
         QNetworkRequest req(QUrl(feed.url));
         req.setHeader(QNetworkRequest::UserAgentHeader, kBrowserUserAgent);
         req.setRawHeader("Accept", "application/rss+xml, application/xml, text/xml, */*");
-        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                         QNetworkRequest::NoLessSafeRedirectPolicy);
+        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
         req.setTransferTimeout(kFeedTransferTimeoutMs);
 
         auto* reply = nam_->get(req);
@@ -208,23 +204,25 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
                 // <feed. HTML error pages (Akamai access-denied, Cloudflare
                 // captcha) start with <html / <!doctype and would pass through
                 // the parser silently producing 0 articles — flag them clearly.
-                const bool looks_like_html =
-                    trimmed.left(20).toLower().contains("<html") ||
-                    trimmed.left(20).toLower().contains("<!doctype html");
+                const bool looks_like_html = trimmed.left(20).toLower().contains("<html") ||
+                                             trimmed.left(20).toLower().contains("<!doctype html");
                 if (looks_like_html) {
-                    LOG_WARN("NewsService",
-                             QString("Feed %1 (%2) returned HTML (likely access-denied), %3 bytes")
-                                 .arg(feed.id, feed.source).arg(data.size()));
+                    LOG_WARN("NewsService", QString("Feed %1 (%2) returned HTML (likely access-denied), %3 bytes")
+                                                .arg(feed.id, feed.source)
+                                                .arg(data.size()));
                 } else if (trimmed.startsWith('<')) {
                     articles = parse_rss_xml(data, feed);
                 }
                 if (articles.isEmpty() && !looks_like_html) {
                     LOG_WARN("NewsService", QString("Feed %1 (%2) returned %3 bytes but no parsed articles")
-                                                .arg(feed.id, feed.source).arg(data.size()));
+                                                .arg(feed.id, feed.source)
+                                                .arg(data.size()));
                 }
             } else {
                 LOG_WARN("NewsService", QString("Feed %1 (%2) failed: HTTP %3, err=%4")
-                                            .arg(feed.id, feed.source).arg(http_code).arg(reply->errorString()));
+                                            .arg(feed.id, feed.source)
+                                            .arg(http_code)
+                                            .arg(reply->errorString()));
             }
 
             {
@@ -310,8 +308,7 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
         QNetworkRequest req(QUrl(feed.url));
         req.setHeader(QNetworkRequest::UserAgentHeader, kBrowserUserAgent);
         req.setRawHeader("Accept", "application/rss+xml, application/xml, text/xml, */*");
-        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                         QNetworkRequest::NoLessSafeRedirectPolicy);
+        req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
         req.setTransferTimeout(kFeedTransferTimeoutMs);
 
         auto* reply = nam_->get(req);
@@ -323,23 +320,25 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
             if (reply->error() == QNetworkReply::NoError) {
                 QByteArray data = reply->readAll();
                 const QByteArray trimmed = data.trimmed();
-                const bool looks_like_html =
-                    trimmed.left(20).toLower().contains("<html") ||
-                    trimmed.left(20).toLower().contains("<!doctype html");
+                const bool looks_like_html = trimmed.left(20).toLower().contains("<html") ||
+                                             trimmed.left(20).toLower().contains("<!doctype html");
                 if (looks_like_html) {
-                    LOG_WARN("NewsService",
-                             QString("Feed %1 (%2) returned HTML (likely access-denied), %3 bytes")
-                                 .arg(feed.id, feed.source).arg(data.size()));
+                    LOG_WARN("NewsService", QString("Feed %1 (%2) returned HTML (likely access-denied), %3 bytes")
+                                                .arg(feed.id, feed.source)
+                                                .arg(data.size()));
                 } else if (trimmed.startsWith('<')) {
                     batch = parse_rss_xml(data, feed);
                 }
                 if (batch.isEmpty() && !looks_like_html) {
                     LOG_WARN("NewsService", QString("Feed %1 (%2) returned %3 bytes but no parsed articles")
-                                                .arg(feed.id, feed.source).arg(data.size()));
+                                                .arg(feed.id, feed.source)
+                                                .arg(data.size()));
                 }
             } else {
                 LOG_WARN("NewsService", QString("Feed %1 (%2) failed: HTTP %3, err=%4")
-                                            .arg(feed.id, feed.source).arg(http_code).arg(reply->errorString()));
+                                            .arg(feed.id, feed.source)
+                                            .arg(http_code)
+                                            .arg(reply->errorString()));
             }
 
             QVector<NewsArticle> snapshot;
@@ -409,19 +408,18 @@ QString news_build_analysis_prompt(const QString& title, const QString& body) {
     QString text = body;
     if (text.size() > 8000)
         text = text.left(8000) + "\n…[truncated]";
-    return QString(
-               "You are a financial news analyst. Analyse the article and reply with ONLY a JSON "
-               "object (no markdown, no commentary) of exactly this shape:\n"
-               "{\"summary\":\"2-3 sentences\","
-               "\"sentiment\":{\"score\":-1..1,\"intensity\":0..1,\"confidence\":0..1},"
-               "\"market_impact\":{\"urgency\":\"LOW|MEDIUM|HIGH\","
-               "\"prediction\":\"negative|neutral|moderate_positive|positive\"},"
-               "\"keywords\":[],\"topics\":[],\"key_points\":[],"
-               "\"risk_signals\":{\"regulatory\":{\"level\":\"none|low|medium|high\",\"details\":\"\"},"
-               "\"geopolitical\":{\"level\":\"\",\"details\":\"\"},"
-               "\"operational\":{\"level\":\"\",\"details\":\"\"},"
-               "\"market\":{\"level\":\"\",\"details\":\"\"}}}\n\n"
-               "Title: %1\n\nArticle:\n%2")
+    return QString("You are a financial news analyst. Analyse the article and reply with ONLY a JSON "
+                   "object (no markdown, no commentary) of exactly this shape:\n"
+                   "{\"summary\":\"2-3 sentences\","
+                   "\"sentiment\":{\"score\":-1..1,\"intensity\":0..1,\"confidence\":0..1},"
+                   "\"market_impact\":{\"urgency\":\"LOW|MEDIUM|HIGH\","
+                   "\"prediction\":\"negative|neutral|moderate_positive|positive\"},"
+                   "\"keywords\":[],\"topics\":[],\"key_points\":[],"
+                   "\"risk_signals\":{\"regulatory\":{\"level\":\"none|low|medium|high\",\"details\":\"\"},"
+                   "\"geopolitical\":{\"level\":\"\",\"details\":\"\"},"
+                   "\"operational\":{\"level\":\"\",\"details\":\"\"},"
+                   "\"market\":{\"level\":\"\",\"details\":\"\"}}}\n\n"
+                   "Title: %1\n\nArticle:\n%2")
         .arg(title.isEmpty() ? QStringLiteral("(untitled)") : title, text);
 }
 
@@ -434,8 +432,7 @@ QString news_build_analysis_prompt(const QString& title, const QString& body) {
 // stochastic — same prompt, same model, and the next pass is normally clean —
 // so rejecting on the first collapse spends a real request to display "AI
 // brief unavailable", which is what the user actually saw.
-ai_chat::LlmResponse news_run_brief_call(const QString& prompt, const ai_chat::PersonaScope& scope,
-                                         const char* what) {
+ai_chat::LlmResponse news_run_brief_call(const QString& prompt, const ai_chat::PersonaScope& scope, const char* what) {
     QElapsedTimer clock;
     clock.start();
     auto resp = ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false, scope);
@@ -510,26 +507,23 @@ void NewsService::analyze_article(const QString& url, AnalysisCallback cb) {
         // chat() is blocking + uses a synchronous HTTP loop, so run it off the
         // UI thread; the watcher's finished() lands back on the UI thread.
         auto* watcher = new QFutureWatcher<ai_chat::LlmResponse>(this);
-        QObject::connect(watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
-                         [this, watcher, cb]() {
-                             const ai_chat::LlmResponse resp = watcher->result();
-                             watcher->deleteLater();
-                             NewsAnalysis analysis;
-                             if (!resp.success || !news_parse_analysis(resp.content, analysis)) {
-                                 LOG_WARN("NewsService",
-                                          "analyze_article: local analysis failed: "
-                                              + (resp.success ? QStringLiteral("unparseable response")
-                                                              : resp.error));
-                                 cb(false, {});
-                                 return;
-                             }
-                             analysis.model_used = resp.model_used;
-                             analysis.provider_used = resp.provider_used;
-                             analysis.requested_model = resp.requested_model;
-                             analysis.fell_back = resp.fell_back;
-                             cb(true, analysis);
-                             emit this->analysis_ready(analysis);
-                         });
+        QObject::connect(watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this, [this, watcher, cb]() {
+            const ai_chat::LlmResponse resp = watcher->result();
+            watcher->deleteLater();
+            NewsAnalysis analysis;
+            if (!resp.success || !news_parse_analysis(resp.content, analysis)) {
+                LOG_WARN("NewsService", "analyze_article: local analysis failed: " +
+                                            (resp.success ? QStringLiteral("unparseable response") : resp.error));
+                cb(false, {});
+                return;
+            }
+            analysis.model_used = resp.model_used;
+            analysis.provider_used = resp.provider_used;
+            analysis.requested_model = resp.requested_model;
+            analysis.fell_back = resp.fell_back;
+            cb(true, analysis);
+            emit this->analysis_ready(analysis);
+        });
         // Constrained JSON decoding, and no chain-of-thought. The parser here
         // takes the first '{' to the last '}' and needs valid JSON in between;
         // small local models emit nearly-valid JSON often enough — a dropped
@@ -539,7 +533,7 @@ void NewsService::analyze_article(const QString& url, AnalysisCallback cb) {
         // free-form and none were with response_format set.
         ai_chat::PersonaScope scope;
         scope.json_object = true;
-        scope.think = false;   // a one-shot structured extraction, not reasoning
+        scope.think = false; // a one-shot structured extraction, not reasoning
         watcher->setFuture(QtConcurrent::run([prompt, scope]() {
             return ai_chat::LlmService::instance().chat(prompt, {}, /*use_tools=*/false, scope);
         }));
@@ -556,9 +550,8 @@ void NewsService::analyze_article(const QString& url, AnalysisCallback cb) {
 
 QString NewsService::article_body_cache_key(const QString& url) {
     // SHA1 hex collapses any URL to 40 chars.
-    return QStringLiteral("news:body:")
-           + QString::fromLatin1(
-               QCryptographicHash::hash(url.trimmed().toUtf8(), QCryptographicHash::Sha1).toHex());
+    return QStringLiteral("news:body:") +
+           QString::fromLatin1(QCryptographicHash::hash(url.trimmed().toUtf8(), QCryptographicHash::Sha1).toHex());
 }
 
 void NewsService::extract_article_body(const QString& url, BodyCallback cb) {
@@ -582,13 +575,11 @@ void NewsService::extract_article_body(const QString& url, BodyCallback cb) {
     constexpr int kExtractTimeoutMs = 25'000;
 
     python::PythonRunner::instance().run(
-        QStringLiteral("extract_article.py"),
-        QStringList{url},
+        QStringLiteral("extract_article.py"), QStringList{url},
         [cb, cache_key](python::PythonResult result) {
             if (!result.success || result.output.trimmed().isEmpty()) {
-                LOG_WARN("NewsService",
-                         "extract_article failed: exit=" + QString::number(result.exit_code)
-                             + " err=" + result.error.left(200));
+                LOG_WARN("NewsService", "extract_article failed: exit=" + QString::number(result.exit_code) +
+                                            " err=" + result.error.left(200));
                 cb(false, {}, {});
                 return;
             }
@@ -603,13 +594,13 @@ void NewsService::extract_article_body(const QString& url, BodyCallback cb) {
                 return;
             }
             const QString title = obj.value("title").toString();
-            const QString text  = obj.value("text").toString();
+            const QString text = obj.value("text").toString();
             // Cache the parsed object (not the raw stdout) so a malformed
             // future extractor version with extra fields doesn't pollute the
             // cache slot we read back.
             QJsonObject store;
             store["title"] = title;
-            store["text"]  = text;
+            store["text"] = text;
             const QString blob = QString::fromUtf8(QJsonDocument(store).toJson(QJsonDocument::Compact));
             CacheManager::instance().put(cache_key, QVariant(blob), kArticleBodyTtlSec, "news");
             cb(true, title, text);
@@ -640,8 +631,7 @@ void NewsService::extract_article_bodies(const QStringList& urls, BodiesCallback
         seen.insert(url);
         const QVariant cached = CacheManager::instance().get(article_body_cache_key(url));
         if (!cached.isNull()) {
-            const QString text =
-                QJsonDocument::fromJson(cached.toString().toUtf8()).object().value("text").toString();
+            const QString text = QJsonDocument::fromJson(cached.toString().toUtf8()).object().value("text").toString();
             if (!text.isEmpty())
                 out->insert(url, text);
             continue;
@@ -665,14 +655,12 @@ void NewsService::extract_article_bodies(const QStringList& urls, BodiesCallback
             // A failed batch is not a failed brief: every story still has its
             // headline and RSS blurb. Hand back whatever the cache gave us.
             if (!result.success || result.output.trimmed().isEmpty()) {
-                LOG_WARN("NewsService", "extract_articles_batch failed: exit="
-                                            + QString::number(result.exit_code) + " err="
-                                            + result.error.left(200));
+                LOG_WARN("NewsService", "extract_articles_batch failed: exit=" + QString::number(result.exit_code) +
+                                            " err=" + result.error.left(200));
                 cb(*out);
                 return;
             }
-            const QJsonArray arr =
-                QJsonDocument::fromJson(result.output.toUtf8()).object().value("results").toArray();
+            const QJsonArray arr = QJsonDocument::fromJson(result.output.toUtf8()).object().value("results").toArray();
             int ok_count = 0;
             for (const auto& v : arr) {
                 const QJsonObject o = v.toObject();
@@ -694,8 +682,8 @@ void NewsService::extract_article_bodies(const QStringList& urls, BodiesCallback
                     QVariant(QString::fromUtf8(QJsonDocument(store).toJson(QJsonDocument::Compact))),
                     kArticleBodyTtlSec, "news");
             }
-            LOG_INFO("NewsService", QString("extract_articles_batch: %1/%2 bodies extracted")
-                                        .arg(ok_count).arg(arr.size()));
+            LOG_INFO("NewsService",
+                     QString("extract_articles_batch: %1/%2 bodies extracted").arg(ok_count).arg(arr.size()));
             cb(*out);
         },
         /*on_line=*/{}, /*timeout_ms=*/kExtractTimeoutMs);
@@ -744,9 +732,7 @@ QThreadPool& brief_pool(const QString& provider) {
         return true;
     }();
     Q_UNUSED(configured)
-    const QString eff = provider.isEmpty()
-                            ? ai_chat::LlmService::instance().active_provider()
-                            : provider;
+    const QString eff = provider.isEmpty() ? ai_chat::LlmService::instance().active_provider() : provider;
     const int want = ai_chat::is_hearth_provider(eff) ? 1 : 4;
     if (pool.maxThreadCount() != want)
         pool.setMaxThreadCount(want);
@@ -856,266 +842,251 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                     to_enrich.append(s.link.trimmed());
             }
 
-            extract_article_bodies(
-                to_enrich, [this, stories, cb, on_top, cfg, held, pool_key](QHash<QString, QString> bodies) mutable {
-                    QVector<Story> enriched = stories;
-                    for (Story& s : enriched)
-                        s.body = bodies.value(s.link.trimmed());
+            extract_article_bodies(to_enrich, [this, stories, cb, on_top, cfg, held,
+                                               pool_key](QHash<QString, QString> bodies) mutable {
+                QVector<Story> enriched = stories;
+                for (Story& s : enriched)
+                    s.body = bodies.value(s.link.trimmed());
 
-                    const QStringList categories = news::brief_select::categories_present(enriched, cfg);
-                    const QString top_block = news::brief_select::render_stories(enriched);
-                    const QString grouped_block =
-                        news::brief_select::render_stories_by_category(enriched, categories);
+                const QStringList categories = news::brief_select::categories_present(enriched, cfg);
+                const QString top_block = news::brief_select::render_stories(enriched);
+                const QString grouped_block = news::brief_select::render_stories_by_category(enriched, categories);
 
-                    QString portfolio_block;
-                    if (!held.isEmpty()) {
-                        QStringList in_news;
-                        for (const Story& s : enriched) {
-                            if (s.portfolio_hit)
-                                in_news.append(s.portfolio_tickers.join(QStringLiteral(", ")) + " — "
-                                               + s.headline);
-                        }
-                        portfolio_block = "Holdings: " + held.join(", ");
-                        portfolio_block +=
-                            in_news.isEmpty()
-                                ? "\n(No holding appears directly in today's stories.)"
-                                : "\nHoldings in today's stories:\n" + in_news.join("\n");
+                QString portfolio_block;
+                if (!held.isEmpty()) {
+                    QStringList in_news;
+                    for (const Story& s : enriched) {
+                        if (s.portfolio_hit)
+                            in_news.append(s.portfolio_tickers.join(QStringLiteral(", ")) + " — " + s.headline);
                     }
+                    portfolio_block = "Holdings: " + held.join(", ");
+                    portfolio_block += in_news.isEmpty() ? "\n(No holding appears directly in today's stories.)"
+                                                         : "\nHoldings in today's stories:\n" + in_news.join("\n");
+                }
 
-                    const QString top_prompt = news::brief_prompt::build_top(top_block, portfolio_block);
-                    const QString breakdown_prompt =
-                        categories.isEmpty() ? QString()
-                                             : news::brief_prompt::build_breakdown(grouped_block, categories);
+                const QString top_prompt = news::brief_prompt::build_top(top_block, portfolio_block);
+                const QString breakdown_prompt =
+                    categories.isEmpty() ? QString() : news::brief_prompt::build_breakdown(grouped_block, categories);
 
-                    // ── Stage 3: brief cache, keyed on the prompts themselves ──
-                    const QString content_key =
-                        news::brief_select::brief_key(top_prompt, breakdown_prompt);
-                    {
-                        const QVariant cached = fincept::CacheManager::instance().get(content_key);
-                        if (!cached.isNull()) {
-                            const QString hit = cached.toString();
-                            // Fill the pool slot too, so the next call over
-                            // this same feed short-circuits at stage 0 instead
-                            // of re-clustering to reach the same answer.
-                            fincept::CacheManager::instance().put(pool_key, QVariant(hit),
-                                                                  kSummaryCacheTtlSec, "news");
-                            cb(true, hit);
-                            return;
-                        }
-                    }
-
-                    // ── Stage 4: generate both halves concurrently ──────────
-                    ai_chat::PersonaScope scope;
-                    // think=false: a short structured one-shot is exactly what
-                    // the flag exists for. It is a request rather than a
-                    // guarantee — Ollama's /v1 route drops it, see
-                    // build_openai_request — so the token budgets below are
-                    // sized to hold a chain-of-thought anyway.
-                    scope.think = false;
-                    // The whole point of a content-addressed cache is that the
-                    // same stories give the same brief; at the provider's
-                    // default temperature they instead give two differently
-                    // worded reads of the same day and the reader cannot tell
-                    // that apart from the news having changed.
-                    scope.temperature = 0.0;
-                    // Run briefs on the fast role rather than the configured
-                    // chat model. fast_chat is a hearth ROLE ALIAS, not a model
-                    // name — it resolved to qwen3:14b when these numbers were
-                    // taken and to qwen3.5:9b later, so read the figures as the
-                    // shape of the gap rather than as a fixed model: fast_chat
-                    // returned 495 completion tokens in 30s against
-                    // primary_chat's (qwen3:30b-a3b) 1554 in 40s standalone —
-                    // and far worse in-app, because 30b-a3b exceeds this GPU's
-                    // VRAM and spills to CPU.
-                    //
-                    // Resolve the bound model for the "news" role, falling back
-                    // to the hearth alias only when we are actually on hearth:
-                    // on a cloud provider that alias is a model name it never
-                    // heard of. See AiRoles.h.
-                    {
-                        const auto target = ai_chat::LlmService::instance().scope_for_role(
-                            QStringLiteral("news"), QString::fromLatin1(kBriefModelRole));
-                        scope.provider = target.provider;
-                        scope.model = target.model;
-                        scope.api_key = target.api_key;
-                        scope.base_url = target.base_url;
-                    }
-
-                    struct Job {
-                        QString top;
-                        QString breakdown;
-                        bool top_ok = false;
-                        int pending = 0;
-                        // Set when a quota fallback wrote either half on a
-                        // model other than the configured one.
-                        QString fallback_note;
-                    };
-                    // Appended to the brief (and cached with it, since that
-                    // brief really was written by that model).
-                    const auto note_fallback = [](const std::shared_ptr<Job>& j, const ai_chat::LlmResponse& r) {
-                        if (r.success && r.fell_back && !r.model_used.isEmpty() && j->fallback_note.isEmpty())
-                            j->fallback_note =
-                                QStringLiteral("*Answered by %1 (%2) — fell back from %3 after a quota limit.*")
-                                    .arg(r.model_used, r.provider_used,
-                                         r.requested_model.isEmpty() ? QStringLiteral("the configured model")
-                                                                     : r.requested_model);
-                    };
-                    auto job = std::make_shared<Job>();
-                    job->pending = breakdown_prompt.isEmpty() ? 1 : 2;
-
-                    // Both watchers are parented to this service and therefore
-                    // fire on its thread, so `job` needs no lock.
-                    const QString wanted_breakdown = breakdown_prompt;
-                    auto finish = [job, cb, content_key, pool_key, wanted_breakdown]() {
-                        if (--job->pending > 0)
-                            return;
-                        if (!job->top_ok) {
-                            cb(false, {});
-                            return;
-                        }
-                        // The breakdown is optional. A brief whose top half
-                        // arrived is worth showing even if the second call
-                        // failed — split() handles a brief with no marker, and
-                        // half a brief beats "AI brief unavailable".
-                        QString out = job->top;
-                        if (!job->fallback_note.isEmpty())
-                            out += QStringLiteral("\n\n") + job->fallback_note;
-                        const bool complete = job->breakdown.isEmpty() == wanted_breakdown.isEmpty();
-                        if (!job->breakdown.isEmpty())
-                            out += QStringLiteral("\n\n")
-                                   + QString(news::kCategoryMarker) + QStringLiteral("\n")
-                                   + job->breakdown;
-                        // Only a COMPLETE brief earns the content-addressed
-                        // slot. That key is a hash of the prompts, so caching a
-                        // brief whose breakdown call errored, timed out or
-                        // collapsed would pin the half-answer to this selection
-                        // for the full hour and never retry the missing half —
-                        // turning one transient failure into a permanently
-                        // category-less brief. Show it now, ask again next time.
-                        if (complete)
-                            fincept::CacheManager::instance().put(content_key, QVariant(out),
-                                                                  kBriefCacheTtlSec, "news");
-                        fincept::CacheManager::instance().put(
-                            pool_key, QVariant(out),
-                            complete ? kSummaryCacheTtlSec : kPartialBriefCacheTtlSec, "news");
-                        cb(true, out);
-                    };
-
-                    // Each half gets its own ceiling, sized to hold the answer
-                    // AND — where reasoning cannot be suppressed — the model's
-                    // chain-of-thought.
-                    //
-                    // The old 900 assumed think=false takes effect, and on
-                    // Ollama's /v1 route it does not. Measured on this prompt:
-                    // qwen3:14b spent all 900 tokens reasoning and returned
-                    // finish_reason=length with an EMPTY message; qwen3.5:9b
-                    // did the same at 2000, because the reasoning expands to
-                    // fill whatever it is given.
-                    //
-                    // That is a DIRECT-OLLAMA failure, not a universal one.
-                    // Behind hearth — the zero-config default — the same
-                    // request returns a complete brief with no reasoning at
-                    // all, because hearth forwards `think` to Ollama's native
-                    // API where /v1 drops it. Both are reached correctly: the
-                    // native probe 404s on hearth and falls back to its /v1.
-                    // See LlmService::use_ollama_native.
-                    //
-                    // The headroom stays for the paths that route can't cover —
-                    // a cloud reasoning model, or a local one behind a tool
-                    // call. It costs nothing when unused: a model that finishes
-                    // stops at its stop token, so only a request that genuinely
-                    // needs the room spends it. What the tight cap bought was
-                    // bounding a collapse, and looks_degenerate plus
-                    // kBriefRetryBudgetMs already do that better than
-                    // truncation does.
-                    ai_chat::PersonaScope top_scope = scope;
-                    top_scope.max_tokens = 1800;
-                    auto* top_watcher = new QFutureWatcher<ai_chat::LlmResponse>(this);
-                    QObject::connect(top_watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
-                                     [top_watcher, job, finish, note_fallback, on_top]() {
-                                         const auto resp = top_watcher->result();
-                                         top_watcher->deleteLater();
-                                         note_fallback(job, resp);
-                                         const QString text = resp.content.trimmed();
-                                         if (!resp.success || text.isEmpty()) {
-                                             // An empty message on a SUCCESSFUL
-                                             // request is its own diagnosis and
-                                             // used to be logged as a blank
-                                             // error: the model spent the whole
-                                             // token budget reasoning and never
-                                             // reached the answer. Name it, or
-                                             // the next person reads "failed:"
-                                             // with nothing after it.
-                                             LOG_WARN("NewsService",
-                                                      resp.success
-                                                          ? QString("brief top half returned an "
-                                                                    "empty message (%1 completion "
-                                                                    "tokens) — raise the budget or "
-                                                                    "suppress reasoning")
-                                                                .arg(resp.completion_tokens)
-                                                          : "brief top half failed: " + resp.error);
-                                         } else if (ai_chat::looks_degenerate(text)) {
-                                             // A collapsed response is worse
-                                             // than none: it is cached, rendered
-                                             // in full, and reads as though the
-                                             // feed itself is broken.
-                                             LOG_WARN("NewsService",
-                                                      QString("brief top half discarded as "
-                                                              "degenerate (%1 chars)")
-                                                          .arg(text.size()));
-                                         } else {
-                                             job->top = text;
-                                             job->top_ok = true;
-                                             // Breakdown still writing: hand the
-                                             // opening out now rather than when
-                                             // the slower half lands.
-                                             if (on_top && job->pending > 1)
-                                                 on_top(text);
-                                         }
-                                         finish();
-                                     });
-                    top_watcher->setFuture(QtConcurrent::run(&brief_pool(scope.provider), [top_prompt, top_scope]() {
-                        return news_run_brief_call(top_prompt, top_scope, "top half");
-                    }));
-
-                    if (breakdown_prompt.isEmpty())
+                // ── Stage 3: brief cache, keyed on the prompts themselves ──
+                const QString content_key = news::brief_select::brief_key(top_prompt, breakdown_prompt);
+                {
+                    const QVariant cached = fincept::CacheManager::instance().get(content_key);
+                    if (!cached.isNull()) {
+                        const QString hit = cached.toString();
+                        // Fill the pool slot too, so the next call over
+                        // this same feed short-circuits at stage 0 instead
+                        // of re-clustering to reach the same answer.
+                        fincept::CacheManager::instance().put(pool_key, QVariant(hit), kSummaryCacheTtlSec, "news");
+                        cb(true, hit);
                         return;
+                    }
+                }
 
-                    // Larger than the top half: eight sections of two
-                    // 30-word sentences is more output than five bullets and a
-                    // one-line read, and it is the half that was being cut.
-                    ai_chat::PersonaScope cat_scope = scope;
-                    cat_scope.max_tokens = 2400;
-                    auto* cat_watcher = new QFutureWatcher<ai_chat::LlmResponse>(this);
-                    QObject::connect(cat_watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
-                                     [cat_watcher, job, finish, note_fallback]() {
-                                         const auto resp = cat_watcher->result();
-                                         cat_watcher->deleteLater();
-                                         note_fallback(job, resp);
-                                         const QString text = resp.content.trimmed();
-                                         if (!resp.success || text.isEmpty()) {
-                                             LOG_WARN("NewsService",
-                                                      resp.success
-                                                          ? QString("brief breakdown returned an "
-                                                                    "empty message (%1 completion "
-                                                                    "tokens) — raise the budget or "
-                                                                    "suppress reasoning")
-                                                                .arg(resp.completion_tokens)
-                                                          : "brief breakdown failed: " + resp.error);
-                                         } else if (ai_chat::looks_degenerate(text)) {
-                                             LOG_WARN("NewsService",
-                                                      QString("brief breakdown discarded as "
-                                                              "degenerate (%1 chars)")
-                                                          .arg(text.size()));
-                                         } else {
-                                             job->breakdown = text;
-                                         }
-                                         finish();
-                                     });
-                    cat_watcher->setFuture(QtConcurrent::run(&brief_pool(scope.provider), [breakdown_prompt, cat_scope]() {
-                        return news_run_brief_call(breakdown_prompt, cat_scope, "breakdown");
-                    }));
-                });
+                // ── Stage 4: generate both halves concurrently ──────────
+                ai_chat::PersonaScope scope;
+                // think=false: a short structured one-shot is exactly what
+                // the flag exists for. It is a request rather than a
+                // guarantee — Ollama's /v1 route drops it, see
+                // build_openai_request — so the token budgets below are
+                // sized to hold a chain-of-thought anyway.
+                scope.think = false;
+                // The whole point of a content-addressed cache is that the
+                // same stories give the same brief; at the provider's
+                // default temperature they instead give two differently
+                // worded reads of the same day and the reader cannot tell
+                // that apart from the news having changed.
+                scope.temperature = 0.0;
+                // Run briefs on the fast role rather than the configured
+                // chat model. fast_chat is a hearth ROLE ALIAS, not a model
+                // name — it resolved to qwen3:14b when these numbers were
+                // taken and to qwen3.5:9b later, so read the figures as the
+                // shape of the gap rather than as a fixed model: fast_chat
+                // returned 495 completion tokens in 30s against
+                // primary_chat's (qwen3:30b-a3b) 1554 in 40s standalone —
+                // and far worse in-app, because 30b-a3b exceeds this GPU's
+                // VRAM and spills to CPU.
+                //
+                // Resolve the bound model for the "news" role, falling back
+                // to the hearth alias only when we are actually on hearth:
+                // on a cloud provider that alias is a model name it never
+                // heard of. See AiRoles.h.
+                {
+                    const auto target = ai_chat::LlmService::instance().scope_for_role(
+                        QStringLiteral("news"), QString::fromLatin1(kBriefModelRole));
+                    scope.provider = target.provider;
+                    scope.model = target.model;
+                    scope.api_key = target.api_key;
+                    scope.base_url = target.base_url;
+                }
+
+                struct Job {
+                    QString top;
+                    QString breakdown;
+                    bool top_ok = false;
+                    int pending = 0;
+                    // Set when a quota fallback wrote either half on a
+                    // model other than the configured one.
+                    QString fallback_note;
+                };
+                // Appended to the brief (and cached with it, since that
+                // brief really was written by that model).
+                const auto note_fallback = [](const std::shared_ptr<Job>& j, const ai_chat::LlmResponse& r) {
+                    if (r.success && r.fell_back && !r.model_used.isEmpty() && j->fallback_note.isEmpty())
+                        j->fallback_note =
+                            QStringLiteral("*Answered by %1 (%2) — fell back from %3 after a quota limit.*")
+                                .arg(r.model_used, r.provider_used,
+                                     r.requested_model.isEmpty() ? QStringLiteral("the configured model")
+                                                                 : r.requested_model);
+                };
+                auto job = std::make_shared<Job>();
+                job->pending = breakdown_prompt.isEmpty() ? 1 : 2;
+
+                // Both watchers are parented to this service and therefore
+                // fire on its thread, so `job` needs no lock.
+                const QString wanted_breakdown = breakdown_prompt;
+                auto finish = [job, cb, content_key, pool_key, wanted_breakdown]() {
+                    if (--job->pending > 0)
+                        return;
+                    if (!job->top_ok) {
+                        cb(false, {});
+                        return;
+                    }
+                    // The breakdown is optional. A brief whose top half
+                    // arrived is worth showing even if the second call
+                    // failed — split() handles a brief with no marker, and
+                    // half a brief beats "AI brief unavailable".
+                    QString out = job->top;
+                    if (!job->fallback_note.isEmpty())
+                        out += QStringLiteral("\n\n") + job->fallback_note;
+                    const bool complete = job->breakdown.isEmpty() == wanted_breakdown.isEmpty();
+                    if (!job->breakdown.isEmpty())
+                        out += QStringLiteral("\n\n") + QString(news::kCategoryMarker) + QStringLiteral("\n") +
+                               job->breakdown;
+                    // Only a COMPLETE brief earns the content-addressed
+                    // slot. That key is a hash of the prompts, so caching a
+                    // brief whose breakdown call errored, timed out or
+                    // collapsed would pin the half-answer to this selection
+                    // for the full hour and never retry the missing half —
+                    // turning one transient failure into a permanently
+                    // category-less brief. Show it now, ask again next time.
+                    if (complete)
+                        fincept::CacheManager::instance().put(content_key, QVariant(out), kBriefCacheTtlSec, "news");
+                    fincept::CacheManager::instance().put(
+                        pool_key, QVariant(out), complete ? kSummaryCacheTtlSec : kPartialBriefCacheTtlSec, "news");
+                    cb(true, out);
+                };
+
+                // Each half gets its own ceiling, sized to hold the answer
+                // AND — where reasoning cannot be suppressed — the model's
+                // chain-of-thought.
+                //
+                // The old 900 assumed think=false takes effect, and on
+                // Ollama's /v1 route it does not. Measured on this prompt:
+                // qwen3:14b spent all 900 tokens reasoning and returned
+                // finish_reason=length with an EMPTY message; qwen3.5:9b
+                // did the same at 2000, because the reasoning expands to
+                // fill whatever it is given.
+                //
+                // That is a DIRECT-OLLAMA failure, not a universal one.
+                // Behind hearth — the zero-config default — the same
+                // request returns a complete brief with no reasoning at
+                // all, because hearth forwards `think` to Ollama's native
+                // API where /v1 drops it. Both are reached correctly: the
+                // native probe 404s on hearth and falls back to its /v1.
+                // See LlmService::use_ollama_native.
+                //
+                // The headroom stays for the paths that route can't cover —
+                // a cloud reasoning model, or a local one behind a tool
+                // call. It costs nothing when unused: a model that finishes
+                // stops at its stop token, so only a request that genuinely
+                // needs the room spends it. What the tight cap bought was
+                // bounding a collapse, and looks_degenerate plus
+                // kBriefRetryBudgetMs already do that better than
+                // truncation does.
+                ai_chat::PersonaScope top_scope = scope;
+                top_scope.max_tokens = 1800;
+                auto* top_watcher = new QFutureWatcher<ai_chat::LlmResponse>(this);
+                QObject::connect(top_watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
+                                 [top_watcher, job, finish, note_fallback, on_top]() {
+                                     const auto resp = top_watcher->result();
+                                     top_watcher->deleteLater();
+                                     note_fallback(job, resp);
+                                     const QString text = resp.content.trimmed();
+                                     if (!resp.success || text.isEmpty()) {
+                                         // An empty message on a SUCCESSFUL
+                                         // request is its own diagnosis and
+                                         // used to be logged as a blank
+                                         // error: the model spent the whole
+                                         // token budget reasoning and never
+                                         // reached the answer. Name it, or
+                                         // the next person reads "failed:"
+                                         // with nothing after it.
+                                         LOG_WARN("NewsService", resp.success ? QString("brief top half returned an "
+                                                                                        "empty message (%1 completion "
+                                                                                        "tokens) — raise the budget or "
+                                                                                        "suppress reasoning")
+                                                                                    .arg(resp.completion_tokens)
+                                                                              : "brief top half failed: " + resp.error);
+                                     } else if (ai_chat::looks_degenerate(text)) {
+                                         // A collapsed response is worse
+                                         // than none: it is cached, rendered
+                                         // in full, and reads as though the
+                                         // feed itself is broken.
+                                         LOG_WARN("NewsService", QString("brief top half discarded as "
+                                                                         "degenerate (%1 chars)")
+                                                                     .arg(text.size()));
+                                     } else {
+                                         job->top = text;
+                                         job->top_ok = true;
+                                         // Breakdown still writing: hand the
+                                         // opening out now rather than when
+                                         // the slower half lands.
+                                         if (on_top && job->pending > 1)
+                                             on_top(text);
+                                     }
+                                     finish();
+                                 });
+                top_watcher->setFuture(QtConcurrent::run(&brief_pool(scope.provider), [top_prompt, top_scope]() {
+                    return news_run_brief_call(top_prompt, top_scope, "top half");
+                }));
+
+                if (breakdown_prompt.isEmpty())
+                    return;
+
+                // Larger than the top half: eight sections of two
+                // 30-word sentences is more output than five bullets and a
+                // one-line read, and it is the half that was being cut.
+                ai_chat::PersonaScope cat_scope = scope;
+                cat_scope.max_tokens = 2400;
+                auto* cat_watcher = new QFutureWatcher<ai_chat::LlmResponse>(this);
+                QObject::connect(cat_watcher, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
+                                 [cat_watcher, job, finish, note_fallback]() {
+                                     const auto resp = cat_watcher->result();
+                                     cat_watcher->deleteLater();
+                                     note_fallback(job, resp);
+                                     const QString text = resp.content.trimmed();
+                                     if (!resp.success || text.isEmpty()) {
+                                         LOG_WARN("NewsService", resp.success
+                                                                     ? QString("brief breakdown returned an "
+                                                                               "empty message (%1 completion "
+                                                                               "tokens) — raise the budget or "
+                                                                               "suppress reasoning")
+                                                                           .arg(resp.completion_tokens)
+                                                                     : "brief breakdown failed: " + resp.error);
+                                     } else if (ai_chat::looks_degenerate(text)) {
+                                         LOG_WARN("NewsService", QString("brief breakdown discarded as "
+                                                                         "degenerate (%1 chars)")
+                                                                     .arg(text.size()));
+                                     } else {
+                                         job->breakdown = text;
+                                     }
+                                     finish();
+                                 });
+                cat_watcher->setFuture(QtConcurrent::run(&brief_pool(scope.provider), [breakdown_prompt, cat_scope]() {
+                    return news_run_brief_call(breakdown_prompt, cat_scope, "breakdown");
+                }));
+            });
         });
 
     select_watcher->setFuture(QtConcurrent::run([articles, held_set, cfg]() {
@@ -1164,7 +1135,7 @@ void NewsService::connect_live_feed(const QString& ws_url) {
         // EVENT-STAMP: a publication instant. A message without a timestamp
         // stays undated (sort_ts 0, empty time) — never stamped with receipt time.
         article.sort_ts = obj["timestamp"].toInteger(0);
-        if (article.sort_ts > 0)  // EVENT-STAMP: publication instant, shown in the viewer's local time
+        if (article.sort_ts > 0) // EVENT-STAMP: publication instant, shown in the viewer's local time
             article.time = QDateTime::fromSecsSinceEpoch(article.sort_ts).toString("MMM dd, HH:mm");
         article.tier = obj["tier"].toInt(2);
 
@@ -1386,10 +1357,12 @@ void NewsService::enrich_article(NewsArticle& article) {
             // gain → gains/gained/gaining/gainer; drop → dropped/dropping;
             // recover → recovery; beat → beaten
             const QString last = QRegularExpression::escape(w.right(1));
-            pat = QStringLiteral("\\b") + QRegularExpression::escape(w) + QStringLiteral("(?:s|es|ed|ing|er|ers|en|y|ies|ment|ments|") +
-                  last + QStringLiteral("ed|") + last + QStringLiteral("ing)?\\b");
+            pat = QStringLiteral("\\b") + QRegularExpression::escape(w) +
+                  QStringLiteral("(?:s|es|ed|ing|er|ers|en|y|ies|ment|ments|") + last + QStringLiteral("ed|") + last +
+                  QStringLiteral("ing)?\\b");
         }
-        QRegularExpression re(pat, QRegularExpression::CaseInsensitiveOption | QRegularExpression::UseUnicodePropertiesOption);
+        QRegularExpression re(pat, QRegularExpression::CaseInsensitiveOption |
+                                       QRegularExpression::UseUnicodePropertiesOption);
         re.optimize();
         return re;
     };
@@ -1417,29 +1390,31 @@ void NewsService::enrich_article(NewsArticle& article) {
     };
 
     static const WordWeight positives[] = {
-        {"surge", 3},       {"soar", 3},       {"skyrocket", 3}, {"breakthrough", 3}, {"boom", 3},
-        {"record high", 3}, {"rally", 2},      {"gain", 2},      {"rise", 2},         {"jump", 2},
-        {"climb", 2},       {"spike", 2},      {"rebound", 2},   {"boost", 2},        {"beat", 2},
-        {"exceed", 2},      {"upgrade", 2},    {"profit*", 2},    {"growth", 2},       {"expan*", 2},
-        {"recover", 2},     {"victory", 2},    {"ceasefire", 2}, {"treaty", 2},       {"reform", 2},
-        {"optimis*", 2},    {"milestone", 2},  {"strong", 1},    {"robust", 1},       {"stellar", 1},
-        {"buy", 1},         {"positive", 1},   {"success*", 1},   {"win", 1},          {"approv*", 1},
+        {"surge", 3},       {"soar", 3},      {"skyrocket", 3}, {"breakthrough", 3}, {"boom", 3},
+        {"record high", 3}, {"rally", 2},     {"gain", 2},      {"rise", 2},         {"jump", 2},
+        {"climb", 2},       {"spike", 2},     {"rebound", 2},   {"boost", 2},        {"beat", 2},
+        {"exceed", 2},      {"upgrade", 2},   {"profit*", 2},   {"growth", 2},       {"expan*", 2},
+        {"recover", 2},     {"victory", 2},   {"ceasefire", 2}, {"treaty", 2},       {"reform", 2},
+        {"optimis*", 2},    {"milestone", 2}, {"strong", 1},    {"robust", 1},       {"stellar", 1},
+        {"buy", 1},         {"positive", 1},  {"success*", 1},  {"win", 1},          {"approv*", 1},
         {"deal", 1},        {"confiden*", 1}, {"dividend", 1},  {"progress", 1},     {"improve", 1},
-        {"hope", 1},        {"support", 1},    {"bolster", 1},   {"outperform", 1},   {"bullish", 1},
-        {"upside", 1},      {"favorable", 1},  {"momentum", 1},  {"launch", 1},       {"unveil", 1},
+        {"hope", 1},        {"support", 1},   {"bolster", 1},   {"outperform", 1},   {"bullish", 1},
+        {"upside", 1},      {"favorable", 1}, {"momentum", 1},  {"launch", 1},       {"unveil", 1},
     };
 
     static const WordWeight negatives[] = {
-        {"crash", 3},      {"plunge", 3},    {"collapse", 3},   {"devastat*", 3},  {"catastroph*", 3}, {"invasion", 3},
-        {"war crime", 3},  {"nuclear", 3},   {"bankrupt*", 3}, {"meltdown", 3},  {"fall", 2},       {"drop", 2},
-        {"decline", 2},    {"tumble", 2},    {"slide", 2},      {"slump", 2},     {"miss", 2},       {"disappoint*", 2},
-        {"fail*", 2},       {"recession*", 2}, {"crisis", 2},     {"conflict", 2},  {"attack", 2},     {"kill", 2},
-        {"sanction", 2},   {"tariff", 2},    {"escalat*", 2},    {"layoff", 2},    {"downgrade", 2},  {"default", 2},
-        {"fraud*", 2},      {"scandal", 2},   {"coup", 2},       {"protest", 2},   {"disast*", 2},   {"worst", 1},
-        {"weak*", 1},       {"loss", 1},      {"deficit", 1},    {"fear*", 1},      {"risk", 1},       {"threat*", 1},
-        {"warning", 1},    {"sell", 1},      {"debt", 1},       {"inflation*", 1}, {"slowdown", 1},   {"bearish", 1},
-        {"negative", 1},   {"volatil*", 1},  {"uncertain*", 1},  {"reject*", 1},    {"ban", 1},        {"suspen*", 1},
-        {"investigat*", 1}, {"probe", 1},     {"hack", 1},       {"leak", 1},      {"shortage", 1},   {"disrupt*", 1},
+        {"crash", 3},      {"plunge", 3},    {"collapse", 3},    {"devastat*", 3}, {"catastroph*", 3},
+        {"invasion", 3},   {"war crime", 3}, {"nuclear", 3},     {"bankrupt*", 3}, {"meltdown", 3},
+        {"fall", 2},       {"drop", 2},      {"decline", 2},     {"tumble", 2},    {"slide", 2},
+        {"slump", 2},      {"miss", 2},      {"disappoint*", 2}, {"fail*", 2},     {"recession*", 2},
+        {"crisis", 2},     {"conflict", 2},  {"attack", 2},      {"kill", 2},      {"sanction", 2},
+        {"tariff", 2},     {"escalat*", 2},  {"layoff", 2},      {"downgrade", 2}, {"default", 2},
+        {"fraud*", 2},     {"scandal", 2},   {"coup", 2},        {"protest", 2},   {"disast*", 2},
+        {"worst", 1},      {"weak*", 1},     {"loss", 1},        {"deficit", 1},   {"fear*", 1},
+        {"risk", 1},       {"threat*", 1},   {"warning", 1},     {"sell", 1},      {"debt", 1},
+        {"inflation*", 1}, {"slowdown", 1},  {"bearish", 1},     {"negative", 1},  {"volatil*", 1},
+        {"uncertain*", 1}, {"reject*", 1},   {"ban", 1},         {"suspen*", 1},   {"investigat*", 1},
+        {"probe", 1},      {"hack", 1},      {"leak", 1},        {"shortage", 1},  {"disrupt*", 1},
         {"shrink", 1},
     };
 
@@ -1576,34 +1551,25 @@ ThreatClassification NewsService::classify_threat(const NewsArticle& article, co
 
     // High — significant events
     static const PatternScore high_patterns[] = {
-        {"invasion", "conflict", ThreatLevel::HIGH},
-        {"airstrike", "conflict", ThreatLevel::HIGH},
-        {"missile launch", "conflict", ThreatLevel::HIGH},
-        {"military deploy", "conflict", ThreatLevel::HIGH},
-        {"coup attempt", "conflict", ThreatLevel::HIGH},
-        {"martial law", "conflict", ThreatLevel::HIGH},
-        {"bankruptcy fil", "market", ThreatLevel::HIGH},
-        {"rate hike", "market", ThreatLevel::HIGH},
-        {"rate cut", "market", ThreatLevel::HIGH},
-        {"earnings miss", "market", ThreatLevel::HIGH},
-        {"profit warning", "market", ThreatLevel::HIGH},
-        {"downgrad", "market", ThreatLevel::HIGH},
-        {"sanction", "regulatory", ThreatLevel::HIGH},
-        {"embargo", "regulatory", ThreatLevel::HIGH},
-        {"earthquake", "natural", ThreatLevel::HIGH},
-        {"tsunami", "natural", ThreatLevel::HIGH},
-        {"hurricane", "natural", ThreatLevel::HIGH},
-        {"pandemic", "natural", ThreatLevel::HIGH},
+        {"invasion", "conflict", ThreatLevel::HIGH},       {"airstrike", "conflict", ThreatLevel::HIGH},
+        {"missile launch", "conflict", ThreatLevel::HIGH}, {"military deploy", "conflict", ThreatLevel::HIGH},
+        {"coup attempt", "conflict", ThreatLevel::HIGH},   {"martial law", "conflict", ThreatLevel::HIGH},
+        {"bankruptcy fil", "market", ThreatLevel::HIGH},   {"rate hike", "market", ThreatLevel::HIGH},
+        {"rate cut", "market", ThreatLevel::HIGH},         {"earnings miss", "market", ThreatLevel::HIGH},
+        {"profit warning", "market", ThreatLevel::HIGH},   {"downgrad", "market", ThreatLevel::HIGH},
+        {"sanction", "regulatory", ThreatLevel::HIGH},     {"embargo", "regulatory", ThreatLevel::HIGH},
+        {"earthquake", "natural", ThreatLevel::HIGH},      {"tsunami", "natural", ThreatLevel::HIGH},
+        {"hurricane", "natural", ThreatLevel::HIGH},       {"pandemic", "natural", ThreatLevel::HIGH},
     };
 
     // Medium patterns
     static const PatternScore medium_patterns[] = {
         {"protest", "conflict", ThreatLevel::MEDIUM},     {"riot", "conflict", ThreatLevel::MEDIUM},
         {"tension", "conflict", ThreatLevel::MEDIUM},     {"escalat", "conflict", ThreatLevel::MEDIUM},
-        {"tariff", "regulatory", ThreatLevel::MEDIUM},   {"regulation", "regulatory", ThreatLevel::MEDIUM},
+        {"tariff", "regulatory", ThreatLevel::MEDIUM},    {"regulation", "regulatory", ThreatLevel::MEDIUM},
         {"antitrust", "regulatory", ThreatLevel::MEDIUM}, {"investigat", "regulatory", ThreatLevel::MEDIUM},
         {"layoff", "market", ThreatLevel::MEDIUM},        {"recession", "market", ThreatLevel::MEDIUM},
-        {"inflation", "market", ThreatLevel::MEDIUM},    {"selloff", "market", ThreatLevel::MEDIUM},
+        {"inflation", "market", ThreatLevel::MEDIUM},     {"selloff", "market", ThreatLevel::MEDIUM},
         {"sell-off", "market", ThreatLevel::MEDIUM},      {"volatil", "market", ThreatLevel::MEDIUM},
         {"wildfire", "natural", ThreatLevel::MEDIUM},     {"flood", "natural", ThreatLevel::MEDIUM},
     };
@@ -1745,8 +1711,8 @@ QVector<RSSFeed> NewsService::default_feeds() {
         // (Caixin Global's /feed/ returns 404 — endpoint discontinued.)
         {"scmp-china", "SCMP China", "https://www.scmp.com/rss/4/feed/", "GEOPOLITICS", "CHINA", "SCMP", 2},
         {"ft-china", "FT China", "https://www.ft.com/china?format=rss", "MARKETS", "CHINA", "FT", 2},
-        {"bbc-china", "BBC China", "https://feeds.bbci.co.uk/news/world/asia/china/rss.xml", "GEOPOLITICS",
-         "CHINA", "BBC", 2},
+        {"bbc-china", "BBC China", "https://feeds.bbci.co.uk/news/world/asia/china/rss.xml", "GEOPOLITICS", "CHINA",
+         "BBC", 2},
 
         // Tier 2 — Region desks for the US / CHN / EU news pills. A feed tagged
         // with a pill's region lands under it whole; a broader desk is tagged
@@ -1757,8 +1723,8 @@ QVector<RSSFeed> NewsService::default_feeds() {
         {"euractiv", "Euractiv", "https://www.euractiv.com/feed/", "GEOPOLITICS", "EU", "EURACTIV", 2},
         {"bbc-europe", "BBC Europe", "https://feeds.bbci.co.uk/news/world/europe/rss.xml", "GEOPOLITICS", "EUROPE",
          "BBC", 2},
-        {"nyt-europe", "NYT Europe", "https://rss.nytimes.com/services/xml/rss/nyt/Europe.xml", "GEOPOLITICS",
-         "EUROPE", "NYT", 2},
+        {"nyt-europe", "NYT Europe", "https://rss.nytimes.com/services/xml/rss/nyt/Europe.xml", "GEOPOLITICS", "EUROPE",
+         "NYT", 2},
         {"nyt-us", "NYT U.S.", "https://rss.nytimes.com/services/xml/rss/nyt/US.xml", "GEOPOLITICS", "US", "NYT", 2},
         {"npr-news", "NPR News", "https://feeds.npr.org/1001/rss.xml", "GEOPOLITICS", "US", "NPR", 2},
         {"bbc-us", "BBC US & Canada", "https://feeds.bbci.co.uk/news/world/us_and_canada/rss.xml", "GEOPOLITICS",
@@ -1988,9 +1954,7 @@ Impact impact_from_string(const QString& s) {
 // ── DataHub producer wiring ─────────────────────────────────────────────────
 
 QStringList NewsService::topic_patterns() const {
-    return {QStringLiteral("news:general"),
-            QStringLiteral("news:symbol:*"),
-            QStringLiteral("news:category:*"),
+    return {QStringLiteral("news:general"), QStringLiteral("news:symbol:*"), QStringLiteral("news:category:*"),
             QStringLiteral("news:cluster:*")};
 }
 
@@ -1998,14 +1962,14 @@ void NewsService::refresh(const QStringList& topics) {
     // Cluster topics are push-only — producer never pulls them.
     bool needs_general = false;
     for (const auto& t : topics) {
-        if (t == QLatin1String("news:general") ||
-            t.startsWith(QLatin1String("news:symbol:")) ||
+        if (t == QLatin1String("news:general") || t.startsWith(QLatin1String("news:symbol:")) ||
             t.startsWith(QLatin1String("news:category:"))) {
             needs_general = true;
             break;
         }
     }
-    if (!needs_general) return;
+    if (!needs_general)
+        return;
 
     // All non-cluster topics derive from the general feed; one fetch
     // fans out via publish_articles_to_hub.
@@ -2013,11 +1977,12 @@ void NewsService::refresh(const QStringList& topics) {
 }
 
 int NewsService::max_requests_per_sec() const {
-    return 2;  // RSS aggregator pacing — generous but avoids request storms
+    return 2; // RSS aggregator pacing — generous but avoids request storms
 }
 
 void NewsService::ensure_registered_with_hub() {
-    if (hub_registered_) return;
+    if (hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
     hub.register_producer(this);
 
@@ -2045,13 +2010,13 @@ void NewsService::ensure_registered_with_hub() {
     hub.set_policy_pattern(QStringLiteral("news:cluster:*"), cluster_policy);
 
     hub_registered_ = true;
-    LOG_INFO("NewsService",
-             "Registered with DataHub (news:general, news:symbol:*, "
-             "news:category:*, news:cluster:*)");
+    LOG_INFO("NewsService", "Registered with DataHub (news:general, news:symbol:*, "
+                            "news:category:*, news:cluster:*)");
 }
 
 void NewsService::publish_articles_to_hub(const QVector<NewsArticle>& accumulated) {
-    if (!hub_registered_) return;
+    if (!hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
 
     // Single canonical publish — the whole accumulated list on news:general.
@@ -2075,12 +2040,10 @@ void NewsService::publish_articles_to_hub(const QVector<NewsArticle>& accumulate
             by_category[a.category].append(a);
     }
     for (auto it = by_symbol.constBegin(); it != by_symbol.constEnd(); ++it) {
-        hub.publish(QStringLiteral("news:symbol:") + it.key(),
-                    QVariant::fromValue(it.value()));
+        hub.publish(QStringLiteral("news:symbol:") + it.key(), QVariant::fromValue(it.value()));
     }
     for (auto it = by_category.constBegin(); it != by_category.constEnd(); ++it) {
-        hub.publish(QStringLiteral("news:category:") + it.key(),
-                    QVariant::fromValue(it.value()));
+        hub.publish(QStringLiteral("news:category:") + it.key(), QVariant::fromValue(it.value()));
     }
 }
 

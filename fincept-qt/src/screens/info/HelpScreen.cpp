@@ -32,16 +32,17 @@ static QWidget* make_faq(const QString& question, const QString& answer, const Q
                                  " padding: 11px 14px; text-align: left;"
                                  " font-size: 12px; font-weight: 600; %4 }"
                                  "QPushButton:hover { background: %5; border-color: %6; color: %7; }")
-                             .arg(colors::TEXT_PRIMARY(), colors::BG_SURFACE(), colors::BORDER_DIM(), MF, colors::BG_RAISED(),
-                                  colors::AMBER(), colors::AMBER()));
+                             .arg(colors::TEXT_PRIMARY(), colors::BG_SURFACE(), colors::BORDER_DIM(), MF,
+                                  colors::BG_RAISED(), colors::AMBER(), colors::AMBER()));
 
     auto* a_lbl = new QLabel(answer);
     a_lbl->setWordWrap(true);
-    a_lbl->setStyleSheet(QString("color: %1; font-size: 12px; background: %2;"
-                                 " border: 1px solid %3; border-top: none;"
-                                 " border-left: 3px solid %4;"
-                                 " padding: 12px 16px 12px 18px; %5")
-                             .arg(colors::TEXT_SECONDARY(), colors::BG_SURFACE(), colors::BORDER_DIM(), colors::AMBER(), MF));
+    a_lbl->setStyleSheet(
+        QString("color: %1; font-size: 12px; background: %2;"
+                " border: 1px solid %3; border-top: none;"
+                " border-left: 3px solid %4;"
+                " padding: 12px 16px 12px 18px; %5")
+            .arg(colors::TEXT_SECONDARY(), colors::BG_SURFACE(), colors::BORDER_DIM(), colors::AMBER(), MF));
     a_lbl->setVisible(false);
 
     QObject::connect(q_btn, &QPushButton::clicked, a_lbl, [a_lbl, q_btn, question, icon]() {
@@ -177,8 +178,8 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
             btn->setStyleSheet(QString("QPushButton { background: %1; color: %2; border: 1px solid %3;"
                                        " text-align: left; padding: 0; }"
                                        "QPushButton:hover { background: %4; border-color: %5; }")
-                                   .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM(), colors::BG_RAISED(),
-                                        colors::AMBER()));
+                                   .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM(),
+                                        colors::BG_RAISED(), colors::AMBER()));
 
             auto* bl = new QVBoxLayout(btn);
             bl->setContentsMargins(12, 8, 12, 8);
@@ -277,7 +278,8 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
             const char* detail;
         };
         const Step steps[] = {
-            {"1", "Create an account", "Use the in-app sign-up — credentials stay on your machine via the localhost stub."},
+            {"1", "Create an account",
+             "Use the in-app sign-up — credentials stay on your machine via the localhost stub."},
             {"2", "Complete setup", "The setup wizard installs Python and configures your paths."},
             {"3", "Connect a data source", "Add a broker or enable free data feeds in Data Sources."},
             {"4", "Explore the terminal", "Browse Markets, Research, AI Chat, and QuantLib tabs."},
@@ -334,10 +336,9 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
         vl->addWidget(section_header("WHERE TO GO FROM HERE"));
         vl->addSpacing(8);
 
-        auto* card = new QLabel(
-            "finterm is an open-source community fork. There is no commercial support. "
-            "For bugs, feature requests, and questions, file an issue or discussion on the GitHub "
-            "repository (URL in the project README).");
+        auto* card = new QLabel("finterm is an open-source community fork. There is no commercial support. "
+                                "For bugs, feature requests, and questions, file an issue or discussion on the GitHub "
+                                "repository (URL in the project README).");
         card->setWordWrap(true);
         card->setStyleSheet(QString("color: %1; font-size: 12px; line-height: 165%%; background: %2;"
                                     " border: 1px solid %3; padding: 14px; %4")

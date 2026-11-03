@@ -39,10 +39,9 @@ AgentTraceRow map_row(QSqlQuery& q) {
     return r;
 }
 
-constexpr const char* kCols =
-    "id, request_id, agent_id, runtime, source, query, config_json, "
-    "started_at, finished_at, status, response, error, "
-    "latency_ms, tokens_in, tokens_out, cost_usd, tool_calls_json";
+constexpr const char* kCols = "id, request_id, agent_id, runtime, source, query, config_json, "
+                              "started_at, finished_at, status, response, error, "
+                              "latency_ms, tokens_in, tokens_out, cost_usd, tool_calls_json";
 
 // Wrap an optional<T> into a QVariant that SQL sees as NULL when
 // the optional is empty.  We must use the typed-null QVariant form
@@ -68,17 +67,12 @@ Result<void> AgentTraceRepository::create(const AgentTraceCreate& c) {
     // Real dispatcher uses UUIDs so collisions can't happen; the
     // OR IGNORE is defensive against a buggy caller that retries on
     // dispatch failure with the same id.
-    const QString sql = QStringLiteral(
-        "INSERT OR IGNORE INTO agent_traces "
-        "(request_id, agent_id, runtime, source, query, config_json, status) "
-        "VALUES (?, ?, ?, ?, ?, ?, 'in_progress')");
+    const QString sql = QStringLiteral("INSERT OR IGNORE INTO agent_traces "
+                                       "(request_id, agent_id, runtime, source, query, config_json, status) "
+                                       "VALUES (?, ?, ?, ?, ?, ?, 'in_progress')");
     const QVariantList params = {
-        c.request_id,
-        c.agent_id,
-        c.runtime,
-        c.source,
-        c.query,
-        QString::fromUtf8(QJsonDocument(c.config).toJson(QJsonDocument::Compact)),
+        c.request_id, c.agent_id, c.runtime,
+        c.source,     c.query,    QString::fromUtf8(QJsonDocument(c.config).toJson(QJsonDocument::Compact)),
     };
     auto r = Database::instance().execute(sql, params);
     if (r.is_err())
@@ -90,18 +84,17 @@ Result<void> AgentTraceRepository::finish(const AgentTraceFinish& f) {
     if (f.request_id.isEmpty())
         return Result<void>::err("AgentTraceRepository::finish: empty request_id");
 
-    const QString sql = QStringLiteral(
-        "UPDATE agent_traces SET "
-        "  finished_at = datetime('now'), "
-        "  status = ?, "
-        "  response = COALESCE(NULLIF(?, ''), response), "
-        "  error = COALESCE(NULLIF(?, ''), error), "
-        "  latency_ms = COALESCE(?, latency_ms), "
-        "  tokens_in = COALESCE(?, tokens_in), "
-        "  tokens_out = COALESCE(?, tokens_out), "
-        "  cost_usd = COALESCE(?, cost_usd), "
-        "  tool_calls_json = COALESCE(NULLIF(?, ''), tool_calls_json) "
-        "WHERE request_id = ?");
+    const QString sql = QStringLiteral("UPDATE agent_traces SET "
+                                       "  finished_at = datetime('now'), "
+                                       "  status = ?, "
+                                       "  response = COALESCE(NULLIF(?, ''), response), "
+                                       "  error = COALESCE(NULLIF(?, ''), error), "
+                                       "  latency_ms = COALESCE(?, latency_ms), "
+                                       "  tokens_in = COALESCE(?, tokens_in), "
+                                       "  tokens_out = COALESCE(?, tokens_out), "
+                                       "  cost_usd = COALESCE(?, cost_usd), "
+                                       "  tool_calls_json = COALESCE(NULLIF(?, ''), tool_calls_json) "
+                                       "WHERE request_id = ?");
     const QVariantList params = {
         f.success ? QStringLiteral("success") : QStringLiteral("error"),
         f.response,
@@ -128,8 +121,7 @@ Result<void> AgentTraceRepository::finish(const AgentTraceFinish& f) {
 
 Result<QVector<AgentTraceRow>> AgentTraceRepository::list_recent(int limit) {
     const int n = std::clamp(limit, 1, kMaxListLimit);
-    const QString sql = QStringLiteral(
-        "SELECT %1 FROM agent_traces ORDER BY started_at DESC LIMIT ?").arg(kCols);
+    const QString sql = QStringLiteral("SELECT %1 FROM agent_traces ORDER BY started_at DESC LIMIT ?").arg(kCols);
     auto r = Database::instance().execute(sql, {n});
     if (r.is_err())
         return Result<QVector<AgentTraceRow>>::err(r.error());
@@ -141,8 +133,7 @@ Result<QVector<AgentTraceRow>> AgentTraceRepository::list_recent(int limit) {
 }
 
 Result<std::optional<AgentTraceRow>> AgentTraceRepository::get(const QString& request_id) {
-    const QString sql = QStringLiteral(
-        "SELECT %1 FROM agent_traces WHERE request_id = ?").arg(kCols);
+    const QString sql = QStringLiteral("SELECT %1 FROM agent_traces WHERE request_id = ?").arg(kCols);
     auto r = Database::instance().execute(sql, {request_id});
     if (r.is_err())
         return Result<std::optional<AgentTraceRow>>::err(r.error());

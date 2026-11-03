@@ -18,8 +18,8 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonObject>
-#include <QLocale>
 #include <QLineSeries>
+#include <QLocale>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QScrollArea>
@@ -67,7 +67,9 @@ constexpr double kNaN = std::numeric_limits<double>::quiet_NaN();
 
 // Bars can't be skipped inside a QBarSet; an absent value draws no bar
 // (height 0) instead of feeding NaN into the axis range.
-inline double bar_or_empty(double v) { return std::isfinite(v) ? v : 0.0; }
+inline double bar_or_empty(double v) {
+    return std::isfinite(v) ? v : 0.0;
+}
 
 QFrame* section_frame(const QString& title, const QString& color) {
     auto* f = new QFrame;
@@ -199,8 +201,7 @@ void EquityFinancialsTab::set_symbol(const QString& symbol) {
     auto& store = services::query::QueryStore::instance();
     store.unsubscribe_all(this);
     services::equity::EquityResearchService::instance().subscribe_financials(
-        this, symbol,
-        [this](const services::query::QueryStore::State& s) { apply_financials_state(s); });
+        this, symbol, [this](const services::query::QueryStore::State& s) { apply_financials_state(s); });
 }
 
 // ── Build UI ──────────────────────────────────────────────────────────────────
@@ -220,8 +221,7 @@ void EquityFinancialsTab::build_ui() {
     btn_hl->setContentsMargins(10, 6, 10, 6);
     btn_hl->setSpacing(6);
 
-    QString btn_style =
-        QString(R"(
+    QString btn_style = QString(R"(
         QPushButton {
             background:transparent; color:%1; border:1px solid %2;
             border-radius:3px; padding:4px 14px; font-size:12px; font-weight:700;
@@ -229,7 +229,8 @@ void EquityFinancialsTab::build_ui() {
         QPushButton:checked { background:%3; color:%4; border-color:%3; }
         QPushButton:hover:!checked { border-color:%3; background:%5; }
     )")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), kAmber, ui::colors::BG_BASE(), ui::colors::BG_HOVER());
+                            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), kAmber, ui::colors::BG_BASE(),
+                                 ui::colors::BG_HOVER());
 
     auto make_btn = [&](const QString& label, QPushButton*& out) {
         out = new QPushButton(label);
@@ -446,8 +447,8 @@ QWidget* EquityFinancialsTab::build_income_view() {
                                    .arg(kGreen));
             out->setAlignment(Qt::AlignCenter);
             auto* lbl = new QLabel(label_text);
-            lbl->setStyleSheet(
-                QString("color:%1; font-size:12px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
+            lbl->setStyleSheet(QString("color:%1; font-size:12px; background:transparent; border:0;")
+                                   .arg(ui::colors::TEXT_SECONDARY()));
             lbl->setAlignment(Qt::AlignCenter);
             col->addWidget(out);
             col->addWidget(lbl);
@@ -455,8 +456,8 @@ QWidget* EquityFinancialsTab::build_income_view() {
         };
         auto make_op = [&](const QString& sym) {
             auto* op = new QLabel(sym);
-            op->setStyleSheet(
-                QString("color:%1; font-size:16px; background:transparent; border:0;").arg(ui::colors::TEXT_SECONDARY()));
+            op->setStyleSheet(QString("color:%1; font-size:16px; background:transparent; border:0;")
+                                  .arg(ui::colors::TEXT_SECONDARY()));
             op->setAlignment(Qt::AlignCenter);
             formula_hl->addWidget(op);
         };
@@ -655,7 +656,8 @@ QWidget* EquityFinancialsTab::build_cashflow_view() {
 
 void EquityFinancialsTab::apply_financials_state(const services::query::QueryStore::State& s) {
     if (!s.error.isEmpty()) {
-        if (loading_overlay_) loading_overlay_->hide_loading();
+        if (loading_overlay_)
+            loading_overlay_->hide_loading();
         // Deliveries are subscription-bound, so this error is for the current
         // symbol. If the tables still show a DIFFERENT symbol's statements,
         // returning would leave them under the new symbol's header — and
@@ -680,7 +682,8 @@ void EquityFinancialsTab::apply_financials_state(const services::query::QuerySto
         }
         return;
     }
-    if (!s.data.isValid() || s.data.isNull()) return;
+    if (!s.data.isValid() || s.data.isNull())
+        return;
     const auto payload = s.data.value<services::equity::FinancialsData>();
     cached_data_ = payload;
     loaded_ = true;
@@ -762,19 +765,16 @@ void EquityFinancialsTab::populate_income_view(const services::equity::Financial
     // Prefer the TTM sub-line: mid-year, the fiscal-year figure can be nine
     // months stale, and "TTM revenue" is what an analyst actually quotes.
     // Falls back to YoY growth when fewer than four quarters were reported.
-    set(inc_revenue_sub_,
-        d.ttm_revenue > 0.0
-            ? QStringLiteral("TTM ") + fmt_large(d.ttm_revenue)
-            : (std::isfinite(rev_growth) ? fmt_pct(rev_growth) + " YoY" : QString()));
+    set(inc_revenue_sub_, d.ttm_revenue > 0.0 ? QStringLiteral("TTM ") + fmt_large(d.ttm_revenue)
+                                              : (std::isfinite(rev_growth) ? fmt_pct(rev_growth) + " YoY" : QString()));
     set(inc_gross_val_, fmt_large(gross));
     set(inc_gross_sub_, margin_sub(gross_margin));
     set(inc_opincome_val_, fmt_large(op_income));
     set(inc_opincome_sub_, margin_sub(op_margin));
     set(inc_netincome_val_, fmt_large(net_income));
-    set(inc_netincome_sub_,
-        d.ttm_net_income != 0.0
-            ? QStringLiteral("TTM ") + fmt_large(d.ttm_net_income)
-            : (std::isfinite(net_growth) ? fmt_pct(net_growth) + " YoY" : QString()));
+    set(inc_netincome_sub_, d.ttm_net_income != 0.0
+                                ? QStringLiteral("TTM ") + fmt_large(d.ttm_net_income)
+                                : (std::isfinite(net_growth) ? fmt_pct(net_growth) + " YoY" : QString()));
     set(inc_ebitda_val_, fmt_large(ebitda));
     set(inc_ebitda_sub_, margin_sub(ebitda_margin));
     set(inc_gross_margin_, fmt_pct(gross_margin));
@@ -816,8 +816,7 @@ void EquityFinancialsTab::populate_income_view(const services::equity::Financial
         //   • the field is absent, or pretax income is not positive (a
         //     loss-maker's ratio is meaningless) → no rate can be derived,
         //     so ROIC renders "—" rather than assuming a statutory 21%.
-        const auto pretax = find_val(latest, {"Pretax Income", "Income Before Tax",
-                                              "Earnings Before Tax"});
+        const auto pretax = find_val(latest, {"Pretax Income", "Income Before Tax", "Earnings Before Tax"});
         const auto tax_exp = find_val(latest, {"Tax Provision", "Income Tax Expense"});
         double tax_rate = kNaN;
         if (tax_exp && pretax && *pretax > 0.0)
@@ -900,8 +899,7 @@ void EquityFinancialsTab::populate_balance_view(const services::equity::Financia
     set(bal_debt_assets_, fmt_pct(d_a));
     // Name the basis when it is the fallback, so "12.4x (EBITDA)" is never
     // silently compared against another name's EBIT-based figure.
-    set(bal_int_coverage_,
-        int_cov > 0 ? fmt_ratio(int_cov) + (int_cov_is_ebitda ? "x (EBITDA)" : "x") : "N/A");
+    set(bal_int_coverage_, int_cov > 0 ? fmt_ratio(int_cov) + (int_cov_is_ebitda ? "x (EBITDA)" : "x") : "N/A");
 }
 
 void EquityFinancialsTab::populate_cashflow_view(const services::equity::FinancialsData& d) {
@@ -914,7 +912,7 @@ void EquityFinancialsTab::populate_cashflow_view(const services::equity::Financi
     double fin_cf = get_val(cf, {"Financing Cash Flow", "Total Cash From Financing Activities"});
     double capex = get_val(cf, {"Capital Expenditure", "Capital Expenditures"});
     if (capex > 0)
-        capex = -capex;         // capex is usually negative
+        capex = -capex; // capex is usually negative
     // Absent capex leaves FCF NaN ("—") — never silently FCF = OCF.
     double fcf = op_cf + capex; // capex is negative so this subtracts
     double dividends = get_val(cf, {"Cash Dividends Paid", "Payment Of Dividends"});

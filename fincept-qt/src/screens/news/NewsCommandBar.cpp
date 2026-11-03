@@ -141,9 +141,8 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     // when active the label includes an inline count badge ("PTF 7").
     view_ptf_ = make_pill("PTF", "PTF", hl);
     view_ptf_->setCheckable(true);
-    view_ptf_->setToolTip(QStringLiteral(
-        "Filter the feed to articles tagged with tickers in your portfolio. "
-        "With no holdings the filter yields an empty feed — load a portfolio first."));
+    view_ptf_->setToolTip(QStringLiteral("Filter the feed to articles tagged with tickers in your portfolio. "
+                                         "With no holdings the filter yields an empty feed — load a portfolio first."));
     connect(view_ptf_, &QPushButton::clicked, this, [this]() {
         portfolio_active_ = view_ptf_->isChecked();
         refresh_portfolio_pill();
@@ -173,9 +172,8 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     unseen_label_->setObjectName("newsCommandBarUnseen");
     unseen_label_->setFlat(true);
     unseen_label_->setCursor(Qt::PointingHandCursor);
-    unseen_label_->setToolTip(QStringLiteral(
-        "Unseen articles since you last opened News. "
-        "Click to return to the default view (clears the BREAKING filter)."));
+    unseen_label_->setToolTip(QStringLiteral("Unseen articles since you last opened News. "
+                                             "Click to return to the default view (clears the BREAKING filter)."));
     unseen_label_->hide();
     // Click → reset the WIRE/CLUSTERS pill back to WIRE so the local
     // command-bar state matches what NewsScreen will do, then signal up.
@@ -195,9 +193,8 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     alert_label_->setObjectName("newsCommandBarAlert");
     alert_label_->setFlat(true);
     alert_label_->setCursor(Qt::PointingHandCursor);
-    alert_label_->setToolTip(QStringLiteral(
-        "Breaking-news clusters — stories getting high-velocity coverage "
-        "across multiple sources right now. Click to show only these."));
+    alert_label_->setToolTip(QStringLiteral("Breaking-news clusters — stories getting high-velocity coverage "
+                                            "across multiple sources right now. Click to show only these."));
     alert_label_->hide();
     connect(alert_label_, &QPushButton::clicked, this, &NewsCommandBar::breaking_filter_requested);
     hl->addWidget(alert_label_);
@@ -282,10 +279,9 @@ void NewsCommandBar::build_intel_row(QVBoxLayout* root) {
     tldr_btn_->setObjectName("newsIntelTldr");
     tldr_btn_->setFlat(true);
     tldr_btn_->setCursor(Qt::PointingHandCursor);
-    tldr_btn_->setToolTip(QStringLiteral(
-        "DIGEST — a broader AI read of the whole feed, grouped by theme "
-        "(vs the command-row TL;DR, a quick brief of your current view). "
-        "Renders into the article detail pane (the middle window)."));
+    tldr_btn_->setToolTip(QStringLiteral("DIGEST — a broader AI read of the whole feed, grouped by theme "
+                                         "(vs the command-row TL;DR, a quick brief of your current view). "
+                                         "Renders into the article detail pane (the middle window)."));
     connect(tldr_btn_, &QPushButton::clicked, this, &NewsCommandBar::tldr_clicked);
     hl->addWidget(tldr_btn_);
 
@@ -554,9 +550,8 @@ void NewsCommandBar::update_monitor_summary(int total_monitors, int active_alert
                                      .arg(hit_color)
                                      .arg(active_alerts));
     } else {
-        intel_monitors_->setText(QString("<span style=\"color:%1;\">%2 WATCHES</span>")
-                                     .arg(watches_color)
-                                     .arg(total_monitors));
+        intel_monitors_->setText(
+            QString("<span style=\"color:%1;\">%2 WATCHES</span>").arg(watches_color).arg(total_monitors));
     }
 }
 

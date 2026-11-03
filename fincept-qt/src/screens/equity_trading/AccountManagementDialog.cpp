@@ -2,7 +2,6 @@
 #include "screens/equity_trading/AccountManagementDialog.h"
 
 #include "core/logging/Logger.h"
-
 #include "trading/AccountManager.h"
 #include "trading/BrokerRegistry.h"
 #include "ui/theme/Theme.h"
@@ -41,8 +40,7 @@ static QLabel* make_field_label(const QString& text) {
 
 // ── constructor ──────────────────────────────────────────────────────────────
 
-AccountManagementDialog::AccountManagementDialog(QWidget* parent)
-    : QDialog(parent) {
+AccountManagementDialog::AccountManagementDialog(QWidget* parent) : QDialog(parent) {
     setWindowTitle("Manage Broker Accounts");
     setMinimumSize(700, 480);
     setStyleSheet(QString("QDialog { background: %1; color: %2; }"
@@ -61,8 +59,8 @@ AccountManagementDialog::AccountManagementDialog(QWidget* parent)
                           "QListWidget { background: %5; border: 1px solid %6; color: %2; font-size: 12px; }"
                           "QListWidget::item { padding: 6px 8px; }"
                           "QListWidget::item:selected { background: rgba(217,119,6,0.2); color: %4; }")
-                      .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::TEXT_SECONDARY(),
-                           colors::AMBER(), colors::BG_BASE(), colors::BORDER_MED(), colors::BG_RAISED()));
+                      .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::TEXT_SECONDARY(), colors::AMBER(),
+                           colors::BG_BASE(), colors::BORDER_MED(), colors::BG_RAISED()));
     setup_ui();
     refresh_account_list();
 }
@@ -104,14 +102,14 @@ void AccountManagementDialog::setup_ui() {
 
     auto* btn_row = new QHBoxLayout;
     add_btn_ = new QPushButton("+ ADD");
-    add_btn_->setStyleSheet(QString("QPushButton { background: %1; color: %2; }")
-                                .arg(colors::AMBER(), colors::BG_BASE()));
+    add_btn_->setStyleSheet(
+        QString("QPushButton { background: %1; color: %2; }").arg(colors::AMBER(), colors::BG_BASE()));
     connect(add_btn_, &QPushButton::clicked, this, &AccountManagementDialog::on_add_account);
     btn_row->addWidget(add_btn_);
 
     remove_btn_ = new QPushButton("REMOVE");
-    remove_btn_->setStyleSheet(QString("QPushButton { background: %1; color: %2; }")
-                                   .arg(colors::NEGATIVE(), colors::TEXT_PRIMARY()));
+    remove_btn_->setStyleSheet(
+        QString("QPushButton { background: %1; color: %2; }").arg(colors::NEGATIVE(), colors::TEXT_PRIMARY()));
     remove_btn_->setEnabled(false);
     connect(remove_btn_, &QPushButton::clicked, this, &AccountManagementDialog::on_remove_account);
     btn_row->addWidget(remove_btn_);
@@ -157,14 +155,14 @@ void AccountManagementDialog::setup_ui() {
     // Action buttons
     auto* action_row = new QHBoxLayout;
     rename_btn_ = new QPushButton("RENAME");
-    rename_btn_->setStyleSheet(QString("QPushButton { background: %1; color: %2; }")
-                                   .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY()));
+    rename_btn_->setStyleSheet(
+        QString("QPushButton { background: %1; color: %2; }").arg(colors::BG_RAISED(), colors::TEXT_PRIMARY()));
     connect(rename_btn_, &QPushButton::clicked, this, &AccountManagementDialog::on_rename_account);
     action_row->addWidget(rename_btn_);
 
     connect_btn_ = new QPushButton("CONNECT");
-    connect_btn_->setStyleSheet(QString("QPushButton { background: %1; color: %2; }")
-                                    .arg(colors::AMBER(), colors::BG_BASE()));
+    connect_btn_->setStyleSheet(
+        QString("QPushButton { background: %1; color: %2; }").arg(colors::AMBER(), colors::BG_BASE()));
     connect(connect_btn_, &QPushButton::clicked, this, &AccountManagementDialog::on_connect_account);
     action_row->addWidget(connect_btn_);
     form_layout->addLayout(action_row);
@@ -185,8 +183,8 @@ void AccountManagementDialog::refresh_account_list() {
         auto* broker = BrokerRegistry::instance().get(account.broker_id);
         const QString broker_name = broker ? broker->profile().display_name : account.broker_id;
         const QString state_icon = account.state == ConnectionState::Connected ? QString::fromUtf8("\xe2\x97\x8f") // ●
-                                 : account.state == ConnectionState::Error     ? QString::fromUtf8("\xe2\x97\x8f") // ●
-                                                                               : QString::fromUtf8("\xe2\x97\x8b"); // ○
+                                   : account.state == ConnectionState::Error ? QString::fromUtf8("\xe2\x97\x8f")  // ●
+                                                                             : QString::fromUtf8("\xe2\x97\x8b"); // ○
         const QString text = QString("%1 %2 [%3]").arg(state_icon, account.display_name, broker_name);
         auto* item = new QListWidgetItem(text);
         item->setData(Qt::UserRole, account.account_id);
@@ -276,17 +274,17 @@ void AccountManagementDialog::load_saved_credentials(const QString& account_id) 
         if (idx >= cred_fields_.size())
             break;
         switch (def.field) {
-        case CredentialField::ApiKey:
-            cred_fields_[idx]->setText(creds.api_key);
-            break;
-        case CredentialField::ApiSecret:
-            cred_fields_[idx]->setText(creds.api_secret);
-            break;
-        case CredentialField::AuthCode:
-            // Auth codes are ephemeral — don't pre-fill
-            break;
-        default:
-            break;
+            case CredentialField::ApiKey:
+                cred_fields_[idx]->setText(creds.api_key);
+                break;
+            case CredentialField::ApiSecret:
+                cred_fields_[idx]->setText(creds.api_secret);
+                break;
+            case CredentialField::AuthCode:
+                // Auth codes are ephemeral — don't pre-fill
+                break;
+            default:
+                break;
         }
         ++idx;
     }
@@ -374,17 +372,17 @@ void AccountManagementDialog::on_connect_account() {
             break;
         const QString val = cred_fields_[idx]->text().trimmed();
         switch (def.field) {
-        case CredentialField::ApiKey:
-            creds.api_key = val;
-            break;
-        case CredentialField::ApiSecret:
-            creds.api_secret = val;
-            break;
-        case CredentialField::AuthCode:
-            auth_code = val;
-            break;
-        default:
-            break;
+            case CredentialField::ApiKey:
+                creds.api_key = val;
+                break;
+            case CredentialField::ApiSecret:
+                creds.api_secret = val;
+                break;
+            case CredentialField::AuthCode:
+                auth_code = val;
+                break;
+            default:
+                break;
         }
         ++idx;
     }
@@ -404,7 +402,8 @@ void AccountManagementDialog::on_connect_account() {
     const QString auth_code_val = auth_code;
     const QString existing_additional = creds.additional_data;
 
-    (void)QtConcurrent::run([self, broker, account_id, api_key_val, api_secret_val, auth_code_val, existing_additional]() {
+    (void)QtConcurrent::run([self, broker, account_id, api_key_val, api_secret_val, auth_code_val,
+                             existing_additional]() {
         auto result = broker->exchange_token(api_key_val, api_secret_val, auth_code_val);
 
         QMetaObject::invokeMethod(
@@ -447,9 +446,9 @@ void AccountManagementDialog::on_connect_account() {
                 // dialog has been closed in the meantime.
                 if (self) {
                     emit self->credentials_saved(account_id);
-                    self->form_status_->setText(QString("Connected as %1")
-                                                     .arg(creds.user_id.isEmpty() ? creds.api_key.left(8) + "..."
-                                                                                  : creds.user_id));
+                    self->form_status_->setText(
+                        QString("Connected as %1")
+                            .arg(creds.user_id.isEmpty() ? creds.api_key.left(8) + "..." : creds.user_id));
                     self->form_status_->setStyleSheet(QString("color: %1;").arg(colors::POSITIVE()));
                     self->connect_btn_->setEnabled(true);
                     if (self->selected_account_id_ == account_id)

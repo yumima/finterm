@@ -25,11 +25,10 @@
 #include "ui/theme/ThemeManager.h"
 
 #include <QIcon>
+#include <QObject>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
-
-#include <QObject>
 #include <QPointer>
 #include <QPushButton>
 #include <QString>
@@ -44,7 +43,7 @@ namespace fincept::ui {
 /// dimmed and silent (preparing), and a cross (stop).
 enum class ReadAloudGlyph { Speaker, Preparing, Cross };
 inline QIcon read_aloud_icon(ReadAloudGlyph g, int px = 16) {
-    const qreal dpr = 2.0;  // crisp on HiDPI; Qt scales down on 1x
+    const qreal dpr = 2.0; // crisp on HiDPI; Qt scales down on 1x
     QPixmap pm(int(px * dpr), int(px * dpr));
     pm.setDevicePixelRatio(dpr);
     pm.fill(Qt::transparent);
@@ -148,11 +147,10 @@ class ReadAloudToggle : public QObject {
         }
         // Refused start. Say why — the service's own reason when it gave one
         // (Piper failed to start, voice file vanished, read-aloud switched off).
-        btn_->setToolTip(launch_error_.isEmpty()
-                             ? QStringLiteral("No voice available — set one up in Settings → Voice")
-                             : QStringLiteral("Could not start: %1").arg(launch_error_));
+        btn_->setToolTip(launch_error_.isEmpty() ? QStringLiteral("No voice available — set one up in Settings → Voice")
+                                                 : QStringLiteral("Could not start: %1").arg(launch_error_));
         if (labels_.icons)
-            return;  // no room for words on an icon; the tooltip carries them
+            return; // no room for words on an icon; the tooltip carries them
         btn_->setText(QStringLiteral("NO VOICE"));
         QTimer::singleShot(1500, this, [this]() {
             if (!active_)
@@ -164,7 +162,7 @@ class ReadAloudToggle : public QObject {
     void stop() {
         if (!active_)
             return;
-        active_ = false;  // first: TtsService::stop() emits state_changed(false)
+        active_ = false; // first: TtsService::stop() emits state_changed(false)
         services::TtsService::instance().stop();
         show(State::Idle);
     }
@@ -191,8 +189,8 @@ class ReadAloudToggle : public QObject {
     Labels labels_;
     QString tooltip_;
     bool active_ = false;
-    int session_ = -1;        ///< TtsService::session() of this toggle's reading
-    bool launching_ = false;  ///< inside launch(): errors belong to the launch
+    int session_ = -1;       ///< TtsService::session() of this toggle's reading
+    bool launching_ = false; ///< inside launch(): errors belong to the launch
     QString launch_error_;
     State state_ = State::Idle;
 };

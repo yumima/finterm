@@ -25,7 +25,9 @@ constexpr const char* kUnbound = "";
 // two providers expose the same name — hearth fronts Gemini, so
 // "gemini-3.5-flash" is reachable through BOTH "ollama" and "gemini" here.
 const QChar kSep = QChar(0x1f);
-inline QString pack(const QString& provider, const QString& model) { return provider + kSep + model; }
+inline QString pack(const QString& provider, const QString& model) {
+    return provider + kSep + model;
+}
 inline QPair<QString, QString> unpack(const QString& data) {
     const int i = data.indexOf(kSep);
     return i < 0 ? qMakePair(QString(), QString()) : qMakePair(data.left(i), data.mid(i + 1));
@@ -43,15 +45,13 @@ void AiRolesSection::build_ui() {
     root->setSpacing(10);
 
     auto* title = new QLabel("Roles");
-    title->setStyleSheet(
-        QString("color:%1;font-size:15px;font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
+    title->setStyleSheet(QString("color:%1;font-size:15px;font-weight:700;").arg(ui::colors::TEXT_PRIMARY()));
     root->addWidget(title);
 
-    auto* blurb = new QLabel(
-        "Each role is a place in finterm that asks a model for something. Bind a role to send it "
-        "to a different provider — a fast local one for news briefs and inline completion, a "
-        "stronger cloud one for research. Providers run independently, so roles can point at "
-        "different ones at the same time. Roles left on “Use default” follow the Chat role.");
+    auto* blurb = new QLabel("Each role is a place in finterm that asks a model for something. Bind a role to send it "
+                             "to a different provider — a fast local one for news briefs and inline completion, a "
+                             "stronger cloud one for research. Providers run independently, so roles can point at "
+                             "different ones at the same time. Roles left on “Use default” follow the Chat role.");
     blurb->setWordWrap(true);
     blurb->setStyleSheet(QString("color:%1;font-size:11px;").arg(ui::colors::TEXT_DIM()));
     root->addWidget(blurb);
@@ -75,8 +75,7 @@ void AiRolesSection::build_ui() {
     int row = 0;
     for (const auto& role : ai_chat::ai_roles()) {
         auto* label = new QLabel(role.label);
-        label->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:600;").arg(ui::colors::TEXT_PRIMARY()));
+        label->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;").arg(ui::colors::TEXT_PRIMARY()));
         grid->addWidget(label, row, 0, Qt::AlignTop | Qt::AlignLeft);
 
         auto* right = new QVBoxLayout();
@@ -119,19 +118,18 @@ void AiRolesSection::reload() {
     if (providers.is_ok()) {
         for (const auto& c : providers.value()) {
             if (c.model.isEmpty())
-                continue;  // a provider with no model chosen isn't bindable yet
+                continue; // a provider with no model chosen isn't bindable yet
             configured_.append({c.provider, c.model});
             if (c.is_active)
                 default_provider_ = c.provider;
         }
     }
 
-    provider_note_->setText(
-        configured_.isEmpty()
-            ? QString("No providers configured — add one on the Models tab first.")
-            : QString("Choices come from the Models tab (%1 configured). To use a model that "
-                      "isn't listed, add or edit it there.")
-                  .arg(configured_.size()));
+    provider_note_->setText(configured_.isEmpty()
+                                ? QString("No providers configured — add one on the Models tab first.")
+                                : QString("Choices come from the Models tab (%1 configured). To use a model that "
+                                          "isn't listed, add or edit it there.")
+                                      .arg(configured_.size()));
 
     auto& repo = LlmProfileRepository::instance();
     loading_ = true;
@@ -153,8 +151,7 @@ void AiRolesSection::reload() {
     loading_ = false;
 }
 
-void AiRolesSection::populate_combo(QComboBox* combo, const QString& provider,
-                                    const QString& model) {
+void AiRolesSection::populate_combo(QComboBox* combo, const QString& provider, const QString& model) {
     combo->clear();
 
     // Name the default explicitly so "Use default" is never a guess.
@@ -177,8 +174,7 @@ void AiRolesSection::populate_combo(QComboBox* combo, const QString& provider,
     // A binding whose provider/model is no longer configured must stay
     // selectable, or simply opening Settings would silently rewrite it.
     if (!model.isEmpty() && !have_selected)
-        combo->addItem(provider + "  ·  " + model + "   (no longer configured)",
-                       pack(provider, model));
+        combo->addItem(provider + "  ·  " + model + "   (no longer configured)", pack(provider, model));
 
     const int idx = model.isEmpty() ? 0 : combo->findData(pack(provider, model));
     combo->setCurrentIndex(idx >= 0 ? idx : 0);
@@ -225,8 +221,7 @@ QString AiRolesSection::profile_for_model(const QString& provider, const QString
     return p.id;
 }
 
-void AiRolesSection::apply_binding(const QString& role_id, const QString& provider,
-                                   const QString& model_id) {
+void AiRolesSection::apply_binding(const QString& role_id, const QString& provider, const QString& model_id) {
     auto& repo = LlmProfileRepository::instance();
 
     // Write only on a real change. `loading_` already suppresses the signals
@@ -244,7 +239,7 @@ void AiRolesSection::apply_binding(const QString& role_id, const QString& provid
             }
         }
         if (cur_provider == provider && cur_model == model_id)
-            return;  // nothing to do
+            return; // nothing to do
     }
     if (model_id.isEmpty()) {
         repo.remove_assignment(role_id, QString());

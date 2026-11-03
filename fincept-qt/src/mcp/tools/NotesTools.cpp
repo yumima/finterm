@@ -132,10 +132,14 @@ std::vector<ToolDef> get_notes_tools() {
 namespace {
 int notes_priority_rank(const QString& priority) {
     const QString p = priority.toUpper();
-    if (p == "CRITICAL") return 0;
-    if (p == "HIGH") return 1;
-    if (p == "MEDIUM") return 2;
-    if (p == "LOW") return 3;
+    if (p == "CRITICAL")
+        return 0;
+    if (p == "HIGH")
+        return 1;
+    if (p == "MEDIUM")
+        return 2;
+    if (p == "LOW")
+        return 3;
     return 4;
 }
 } // namespace
@@ -147,12 +151,11 @@ std::vector<Resource> get_notes_resources() {
         Resource r;
         r.uri = QStringLiteral("finterm://notes/active_thesis");
         r.name = QStringLiteral("Active thesis (recent notes)");
-        r.description = QStringLiteral(
-            "Top 20 non-archived research notes ordered by priority then "
-            "recency.  Read this to pick up the user's current thinking "
-            "before writing or refining theses.  A first-class 'active "
-            "thesis' object will replace this proxy when the agent surface "
-            "needs explicit thesis-tracking.");
+        r.description = QStringLiteral("Top 20 non-archived research notes ordered by priority then "
+                                       "recency.  Read this to pick up the user's current thinking "
+                                       "before writing or refining theses.  A first-class 'active "
+                                       "thesis' object will replace this proxy when the agent surface "
+                                       "needs explicit thesis-tracking.");
         r.mime_type = QStringLiteral("application/json");
         r.handler = []() -> ResourceContent {
             ResourceContent rc;
@@ -161,20 +164,18 @@ std::vector<Resource> get_notes_resources() {
 
             auto loaded = NotesRepository::instance().list_all(/*include_archived=*/false);
             if (loaded.is_err()) {
-                rc.error = "Failed to load notes: " +
-                           QString::fromStdString(loaded.error());
+                rc.error = "Failed to load notes: " + QString::fromStdString(loaded.error());
                 return rc;
             }
 
             QVector<FinancialNote> notes = loaded.value();
-            std::sort(notes.begin(), notes.end(),
-                      [](const FinancialNote& a, const FinancialNote& b) {
-                          int pa = notes_priority_rank(a.priority);
-                          int pb = notes_priority_rank(b.priority);
-                          if (pa != pb)
-                              return pa < pb;
-                          return a.updated_at > b.updated_at;
-                      });
+            std::sort(notes.begin(), notes.end(), [](const FinancialNote& a, const FinancialNote& b) {
+                int pa = notes_priority_rank(a.priority);
+                int pb = notes_priority_rank(b.priority);
+                if (pa != pb)
+                    return pa < pb;
+                return a.updated_at > b.updated_at;
+            });
 
             constexpr int kMaxNotes = 20;
             const int take = std::min<int>(notes.size(), kMaxNotes);
@@ -202,8 +203,7 @@ std::vector<Resource> get_notes_resources() {
                 {"total_active", notes.size()},
                 {"notes", arr},
             };
-            rc.text =
-                QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
+            rc.text = QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
             return rc;
         };
         resources.push_back(std::move(r));
@@ -230,15 +230,13 @@ std::vector<Prompt> get_notes_prompts() {
     {
         Prompt p;
         p.name = QStringLiteral("daily_brief");
-        p.description = QStringLiteral(
-            "Draft a morning brief: portfolio summary, watchlist moves (via get_quote), "
-            "headline news digest, and a one-paragraph synthesis of the "
-            "user's active thesis notes.");
+        p.description = QStringLiteral("Draft a morning brief: portfolio summary, watchlist moves (via get_quote), "
+                                       "headline news digest, and a one-paragraph synthesis of the "
+                                       "user's active thesis notes.");
         p.arguments = {
             {QStringLiteral("focus"),
-             QStringLiteral(
-                 "Optional focus area — e.g. 'risk', 'macro', 'AAPL'.  "
-                 "Defaults to a general portfolio + market brief."),
+             QStringLiteral("Optional focus area — e.g. 'risk', 'macro', 'AAPL'.  "
+                            "Defaults to a general portfolio + market brief."),
              /*required=*/false},
         };
         p.handler = [](const QHash<QString, QString>& args) -> PromptResult {
@@ -246,36 +244,34 @@ std::vector<Prompt> get_notes_prompts() {
             r.description = QStringLiteral("Daily brief draft");
 
             const QString focus = args.value(QStringLiteral("focus")).trimmed();
-            const QString focus_clause = focus.isEmpty()
-                ? QStringLiteral("a general portfolio + market view")
-                : QStringLiteral("a focus on %1").arg(focus);
+            const QString focus_clause = focus.isEmpty() ? QStringLiteral("a general portfolio + market view")
+                                                         : QStringLiteral("a focus on %1").arg(focus);
 
             PromptMessage sys;
             sys.role = QStringLiteral("system");
-            sys.text = QStringLiteral(
-                "You are drafting the user's daily morning brief.  Pull "
-                "context from the finterm:// resources before writing:\n"
-                "  - finterm://portfolio/snapshot   current holdings\n"
-                "  - finterm://watchlist/all        watched symbols\n"
-                "  - finterm://news/digest          last 24h news\n"
-                "  - finterm://notes/active_thesis  the user's thinking\n"
-                "The watchlist resource lists symbols only — it carries no "
-                "prices.  For watchlist moves, call get_quote with the "
-                "watched symbols (comma-separated) and report only the "
-                "change_pct values it returns; if the quote call fails or "
-                "is unavailable, list the symbols and say prices are "
-                "unavailable.  Never state a price, move or figure that did "
-                "not come from a resource or tool result.\n"
-                "Write four short sections (Portfolio / Watchlist / News / "
-                "Thesis synthesis), <= 60 words each.  Cite sources from "
-                "the news digest where claims rest on a specific article.");
+            sys.text = QStringLiteral("You are drafting the user's daily morning brief.  Pull "
+                                      "context from the finterm:// resources before writing:\n"
+                                      "  - finterm://portfolio/snapshot   current holdings\n"
+                                      "  - finterm://watchlist/all        watched symbols\n"
+                                      "  - finterm://news/digest          last 24h news\n"
+                                      "  - finterm://notes/active_thesis  the user's thinking\n"
+                                      "The watchlist resource lists symbols only — it carries no "
+                                      "prices.  For watchlist moves, call get_quote with the "
+                                      "watched symbols (comma-separated) and report only the "
+                                      "change_pct values it returns; if the quote call fails or "
+                                      "is unavailable, list the symbols and say prices are "
+                                      "unavailable.  Never state a price, move or figure that did "
+                                      "not come from a resource or tool result.\n"
+                                      "Write four short sections (Portfolio / Watchlist / News / "
+                                      "Thesis synthesis), <= 60 words each.  Cite sources from "
+                                      "the news digest where claims rest on a specific article.");
             r.messages.push_back(std::move(sys));
 
             PromptMessage user;
             user.role = QStringLiteral("user");
-            user.text = QStringLiteral(
-                "Draft my morning brief with %1.  Skip preamble; start "
-                "directly with the Portfolio section.").arg(focus_clause);
+            user.text = QStringLiteral("Draft my morning brief with %1.  Skip preamble; start "
+                                       "directly with the Portfolio section.")
+                            .arg(focus_clause);
             r.messages.push_back(std::move(user));
 
             return r;

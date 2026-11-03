@@ -77,8 +77,7 @@ class PythonSttProvider : public SttProvider {
 #else
         const QChar kPathSep = ':';
 #endif
-        const QString new_pypath =
-            existing_pypath.isEmpty() ? scripts_dir : (scripts_dir + kPathSep + existing_pypath);
+        const QString new_pypath = existing_pypath.isEmpty() ? scripts_dir : (scripts_dir + kPathSep + existing_pypath);
         env.insert("PYTHONPATH", new_pypath);
 
         // Give subclass a chance to inject API keys / model / language
@@ -131,9 +130,7 @@ class PythonSttProvider : public SttProvider {
         }
     }
 
-    [[nodiscard]] bool is_active() const noexcept override {
-        return active_.load(std::memory_order_relaxed);
-    }
+    [[nodiscard]] bool is_active() const noexcept override { return active_.load(std::memory_order_relaxed); }
 
   protected:
     /// Absolute path to the Python script that implements the JSON-lines protocol.
@@ -233,8 +230,7 @@ class WhisperSttProvider final : public PythonSttProvider {
 
   protected:
     QString script_path() const override {
-        return python::PythonRunner::instance().scripts_dir() +
-               QStringLiteral("/voice/whisper_stt.py");
+        return python::PythonRunner::instance().scripts_dir() + QStringLiteral("/voice/whisper_stt.py");
     }
 
     void extend_environment(QProcessEnvironment& env) const override {
@@ -261,8 +257,7 @@ class DeepgramSttProvider final : public PythonSttProvider {
 
   protected:
     QString script_path() const override {
-        return python::PythonRunner::instance().scripts_dir() +
-               QStringLiteral("/voice/deepgram_stt.py");
+        return python::PythonRunner::instance().scripts_dir() + QStringLiteral("/voice/deepgram_stt.py");
     }
 
     void extend_environment(QProcessEnvironment& env) const override {

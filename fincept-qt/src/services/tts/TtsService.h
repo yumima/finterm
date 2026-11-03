@@ -26,9 +26,9 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QMap>
-#include <QStringList>
 #include <QObject>
 #include <QString>
+#include <QStringList>
 
 #include <memory>
 
@@ -101,16 +101,16 @@ class TtsService : public QObject {
     TtsService();
     ~TtsService() override;
 
-    QProcess* proc_ = nullptr;        ///< current piper_tts.py invocation
-    QMediaPlayer* player_ = nullptr;  ///< plays the produced WAV (buffered path only)
+    QProcess* proc_ = nullptr;       ///< current piper_tts.py invocation
+    QMediaPlayer* player_ = nullptr; ///< plays the produced WAV (buffered path only)
     QAudioOutput* audio_ = nullptr;
-    QString pending_wav_path_;        ///< temp WAV cleaned up after playback
-    bool stream_mode_ = false;        ///< proc_ is the piper→player streaming pipeline (no WAV)
-    bool stream_started_ = false;     ///< the streaming pipeline reported it launched
-    QByteArray stream_out_;           ///< accumulated streaming-mode stdout (status/fatal) for diagnostics
+    QString pending_wav_path_;    ///< temp WAV cleaned up after playback
+    bool stream_mode_ = false;    ///< proc_ is the piper→player streaming pipeline (no WAV)
+    bool stream_started_ = false; ///< the streaming pipeline reported it launched
+    QByteArray stream_out_;       ///< accumulated streaming-mode stdout (status/fatal) for diagnostics
 
     int session_ = 0;
-    bool announced_ = false;  ///< speaking=true already emitted for session_
+    bool announced_ = false; ///< speaking=true already emitted for session_
     /// Emit state_changed + session_state; true at most once per reading.
     void set_speaking(bool speaking);
     /// Emit error + session_error.
@@ -120,33 +120,33 @@ class TtsService : public QObject {
     /// the run) or unreachable (refused / timed out — for a minute). Checked
     /// before showing a speaker or calling the engine, so a dead hearth or an
     /// OpenAI-compatible server without speech is not hit on every click.
-    QHash<QString, qint64> engine_unusable_until_;  ///< url → epoch ms
+    QHash<QString, qint64> engine_unusable_until_; ///< url → epoch ms
     bool engine_usable(const QString& url) const;
     void mark_engine_failed(const QString& url, int http_status);
 
     QNetworkAccessManager* nam_ = nullptr;
-    QNetworkReply* reply_ = nullptr;  ///< in-flight engine /audio/speech request
+    QNetworkReply* reply_ = nullptr; ///< in-flight engine /audio/speech request
 
     // Engine reading, synthesised in sentence chunks: the first is short so
     // audio starts in ~2s, and each later chunk is fetched while the previous
     // one plays. Also keeps every request under the engine's input cap.
     bool eng_session_ = false;
     QStringList eng_chunks_;
-    int eng_next_ = 0;            ///< index of the next chunk to fetch
-    QStringList eng_ready_;       ///< synthesised WAVs waiting to play (≤ 2)
-    QString eng_text_;            ///< the whole text, for the Piper fallback
+    int eng_next_ = 0;      ///< index of the next chunk to fetch
+    QStringList eng_ready_; ///< synthesised WAVs waiting to play (≤ 2)
+    QString eng_text_;      ///< the whole text, for the Piper fallback
     QString eng_url_;
     QMap<QString, QString> eng_headers_;
     QJsonObject eng_body_;
     void engine_fetch_next();
     void engine_play_next();
-    void end_engine_session();     ///< abort the chunk request, drop queue + buffered WAVs; no signals
+    void end_engine_session(); ///< abort the chunk request, drop queue + buffered WAVs; no signals
 
     // prewarm_engine() state: one clip for one text.
-    QString warm_text_;  ///< warm_key(url, body, first chunk) of the warm clip — the match key
+    QString warm_text_; ///< warm_key(url, body, first chunk) of the warm clip — the match key
     QString warm_wav_;
     QNetworkReply* warm_reply_ = nullptr;
-    bool eng_waiting_warm_ = false;  ///< the session's chunk 0 IS the in-flight warm request
+    bool eng_waiting_warm_ = false; ///< the session's chunk 0 IS the in-flight warm request
     /// Queue a copy of the warm clip as chunk 0 and start; false if unusable.
     bool adopt_warm_clip();
     void discard_warm();
@@ -167,7 +167,7 @@ class TtsService : public QObject {
     /// The actual (filesystem-heavy) availability probe. is_available() caches
     /// its result briefly because it's called once per chat-message bubble.
     bool compute_available() const;
-    mutable bool avail_cache_ = false;     ///< last compute_available() result
+    mutable bool avail_cache_ = false;      ///< last compute_available() result
     mutable QElapsedTimer avail_cache_age_; ///< invalid until first probe; TTL'd below
     static constexpr int kAvailCacheTtlMs = 2000;
 };

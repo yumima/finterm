@@ -22,10 +22,7 @@ namespace {
 // No CPU mirror needed.
 constexpr float kQuadVerts[] = {
     // pos.xy        // uv.xy (natural — flip happens via readback orientation)
-    -1.f, -1.f,      0.f, 0.f,
-     1.f, -1.f,      1.f, 0.f,
-    -1.f,  1.f,      0.f, 1.f,
-     1.f,  1.f,      1.f, 1.f,
+    -1.f, -1.f, 0.f, 0.f, 1.f, -1.f, 1.f, 0.f, -1.f, 1.f, 0.f, 1.f, 1.f, 1.f, 1.f, 1.f,
 };
 
 constexpr const char* kVertShader = R"(
@@ -62,9 +59,10 @@ void main() {
 )";
 
 QSize aspect_fit(QSize source, QSize bound) {
-    if (source.isEmpty() || bound.isEmpty()) return {};
+    if (source.isEmpty() || bound.isEmpty())
+        return {};
     const double sa = double(source.width()) / source.height();
-    const double ba = double(bound.width())  / bound.height();
+    const double ba = double(bound.width()) / bound.height();
     if (sa > ba) {
         // wider than bound — fit width
         return QSize(bound.width(), int(bound.width() / sa));
@@ -82,8 +80,10 @@ OffscreenVideoScaler::~OffscreenVideoScaler() {
         context_->makeCurrent(surface_);
         // RAII for VBO / VAO / program; explicit only for raw GL handles.
         auto* f = context_->functions();
-        if (y_tex_)  f->glDeleteTextures(1, &y_tex_);
-        if (uv_tex_) f->glDeleteTextures(1, &uv_tex_);
+        if (y_tex_)
+            f->glDeleteTextures(1, &y_tex_);
+        if (uv_tex_)
+            f->glDeleteTextures(1, &uv_tex_);
         fbo_.reset();
         program_.removeAllShaders();
         vbo_.destroy();
@@ -95,7 +95,8 @@ OffscreenVideoScaler::~OffscreenVideoScaler() {
 }
 
 bool OffscreenVideoScaler::ensure_initialized() {
-    if (init_attempted_) return gl_ok_;
+    if (init_attempted_)
+        return gl_ok_;
     init_attempted_ = true;
 
     // Match the global default share context's format so resource sharing
@@ -158,9 +159,9 @@ bool OffscreenVideoScaler::ensure_initialized() {
     const int stride = 4 * sizeof(float);
     program_.bind();
     program_.enableAttributeArray("a_pos");
-    program_.setAttributeBuffer("a_pos", GL_FLOAT, 0,            2, stride);
+    program_.setAttributeBuffer("a_pos", GL_FLOAT, 0, 2, stride);
     program_.enableAttributeArray("a_uv");
-    program_.setAttributeBuffer("a_uv",  GL_FLOAT, 2 * sizeof(float), 2, stride);
+    program_.setAttributeBuffer("a_uv", GL_FLOAT, 2 * sizeof(float), 2, stride);
     program_.release();
 
     vbo_.release();
@@ -172,18 +173,18 @@ bool OffscreenVideoScaler::ensure_initialized() {
     f->glBindTexture(GL_TEXTURE_2D, y_tex_);
     f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
-    f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+    f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     f->glGenTextures(1, &uv_tex_);
     f->glBindTexture(GL_TEXTURE_2D, uv_tex_);
     f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
-    f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+    f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    f->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     f->glBindTexture(GL_TEXTURE_2D, 0);
 
-    loc_u_y_  = program_.uniformLocation("u_y");
+    loc_u_y_ = program_.uniformLocation("u_y");
     loc_u_uv_ = program_.uniformLocation("u_uv");
 
     context_->doneCurrent();
@@ -209,8 +210,10 @@ bool OffscreenVideoScaler::build_shader() {
 }
 
 bool OffscreenVideoScaler::ensure_fbo(QSize out_device_size) {
-    if (out_device_size.isEmpty()) return false;
-    if (fbo_ && fbo_device_size_ == out_device_size) return true;
+    if (out_device_size.isEmpty())
+        return false;
+    if (fbo_ && fbo_device_size_ == out_device_size)
+        return true;
 
     QOpenGLFramebufferObjectFormat fmt;
     fmt.setInternalTextureFormat(GL_RGB8);
@@ -225,11 +228,11 @@ bool OffscreenVideoScaler::ensure_fbo(QSize out_device_size) {
     return true;
 }
 
-QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
-                                      const QSize& target_logical_size,
-                                      qreal dpr) {
-    if (!ensure_initialized()) return {};
-    if (!frame_in.isValid() || target_logical_size.isEmpty()) return {};
+QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in, const QSize& target_logical_size, qreal dpr) {
+    if (!ensure_initialized())
+        return {};
+    if (!frame_in.isValid() || target_logical_size.isEmpty())
+        return {};
 
     // Fast path is NV12 only. Anything else, return null and let the caller
     // fall back to QVideoFrame::toImage() + QImage::scaled() on CPU.
@@ -243,7 +246,8 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
 
     // QVideoFrame::map is non-const — work on a copy.
     QVideoFrame f = frame_in;
-    if (!f.map(QVideoFrame::ReadOnly)) return {};
+    if (!f.map(QVideoFrame::ReadOnly))
+        return {};
 
     const int src_w = f.width();
     const int src_h = f.height();
@@ -263,7 +267,7 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
     // Target FBO size: source frame letterboxed into the widget's device-pixel
     // rect. Matches how the caller's paintEvent expects scaled_image_ to be
     // sized — the surrounding letterbox is filled black at paint time.
-    const QSize bound_device(qMax(1, int(target_logical_size.width()  * dpr)),
+    const QSize bound_device(qMax(1, int(target_logical_size.width() * dpr)),
                              qMax(1, int(target_logical_size.height() * dpr)));
     const QSize out_device = aspect_fit(QSize(src_w, src_h), bound_device);
     if (out_device.isEmpty() || !ensure_fbo(out_device)) {
@@ -278,12 +282,10 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
     fns->glPixelStorei(GL_UNPACK_ROW_LENGTH, f.bytesPerLine(0));
     fns->glBindTexture(GL_TEXTURE_2D, y_tex_);
     if (y_tex_size_ != QSize(src_w, src_h)) {
-        fns->glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, src_w, src_h, 0,
-                          GL_RED, GL_UNSIGNED_BYTE, f.bits(0));
+        fns->glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, src_w, src_h, 0, GL_RED, GL_UNSIGNED_BYTE, f.bits(0));
         y_tex_size_ = QSize(src_w, src_h);
     } else {
-        fns->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h,
-                             GL_RED, GL_UNSIGNED_BYTE, f.bits(0));
+        fns->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, src_w, src_h, GL_RED, GL_UNSIGNED_BYTE, f.bits(0));
     }
 
     // Upload UV plane (RG8, half resolution — interleaved U,V).
@@ -291,12 +293,12 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
     fns->glBindTexture(GL_TEXTURE_2D, uv_tex_);
     const QSize uv_size(src_w / 2, src_h / 2);
     if (uv_tex_size_ != uv_size) {
-        fns->glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, uv_size.width(), uv_size.height(), 0,
-                          GL_RG, GL_UNSIGNED_BYTE, f.bits(1));
+        fns->glTexImage2D(GL_TEXTURE_2D, 0, GL_RG8, uv_size.width(), uv_size.height(), 0, GL_RG, GL_UNSIGNED_BYTE,
+                          f.bits(1));
         uv_tex_size_ = uv_size;
     } else {
-        fns->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, uv_size.width(), uv_size.height(),
-                             GL_RG, GL_UNSIGNED_BYTE, f.bits(1));
+        fns->glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, uv_size.width(), uv_size.height(), GL_RG, GL_UNSIGNED_BYTE,
+                             f.bits(1));
     }
     fns->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
 
@@ -329,8 +331,7 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in,
     // output, producing chroma-shifted stripes.
     QImage out(out_device, QImage::Format_RGBA8888);
     fns->glPixelStorei(GL_PACK_ALIGNMENT, 4);
-    fns->glReadPixels(0, 0, out_device.width(), out_device.height(),
-                      GL_RGBA, GL_UNSIGNED_BYTE, out.bits());
+    fns->glReadPixels(0, 0, out_device.width(), out_device.height(), GL_RGBA, GL_UNSIGNED_BYTE, out.bits());
 
     fbo_->release();
     fns->glBindTexture(GL_TEXTURE_2D, 0);

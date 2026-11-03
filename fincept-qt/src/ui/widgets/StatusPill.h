@@ -34,11 +34,11 @@ class StatusPill : public QWidget {
     Q_OBJECT
   public:
     enum class State {
-        Idle,         ///< Steady-state success — e.g. "yfinance · 15:34:01"
-        Loading,      ///< Fetch in flight — e.g. "loading…"
-        Stale,        ///< Data showing but stale — SWR window, amber dot
-        Error,        ///< Last fetch failed — red dot, retry button shown
-        Empty,        ///< Loaded successfully, no data — neutral message
+        Idle,    ///< Steady-state success — e.g. "yfinance · 15:34:01"
+        Loading, ///< Fetch in flight — e.g. "loading…"
+        Stale,   ///< Data showing but stale — SWR window, amber dot
+        Error,   ///< Last fetch failed — red dot, retry button shown
+        Empty,   ///< Loaded successfully, no data — neutral message
     };
 
     explicit StatusPill(QWidget* parent = nullptr);
@@ -49,8 +49,7 @@ class StatusPill : public QWidget {
     void set_idle(const QString& message);
     void set_loading(const QString& message = QStringLiteral("loading…"));
     void set_stale(const QString& message);
-    void set_error(const QString& message,
-                   std::function<void()> on_retry = {});
+    void set_error(const QString& message, std::function<void()> on_retry = {});
     void set_empty(const QString& message);
 
   signals:
@@ -63,11 +62,11 @@ class StatusPill : public QWidget {
   private:
     void apply_state(State s, const QString& message);
 
-    QLabel*    dot_      = nullptr;   // unicode bullet, colour by state
-    QLabel*    label_    = nullptr;   // status message
-    QWidget*   retry_btn_= nullptr;   // ↻ button — hidden unless Error+callback
+    QLabel* dot_ = nullptr;        // unicode bullet, colour by state
+    QLabel* label_ = nullptr;      // status message
+    QWidget* retry_btn_ = nullptr; // ↻ button — hidden unless Error+callback
     std::function<void()> on_retry_;
-    State      state_ = State::Idle;
+    State state_ = State::Idle;
 };
 
 } // namespace fincept::ui

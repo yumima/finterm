@@ -33,12 +33,8 @@ namespace {
 // a sub-entity) still resolves.
 const QStringList& featured_pick_ids() {
     static const QStringList ids = {
-        QStringLiteral("spacex"),
-        QStringLiteral("stripe"),
-        QStringLiteral("anthropic"),
-        QStringLiteral("openai"),
-        QStringLiteral("anduril"),
-        QStringLiteral("databricks"),
+        QStringLiteral("spacex"), QStringLiteral("stripe"),  QStringLiteral("anthropic"),
+        QStringLiteral("openai"), QStringLiteral("anduril"), QStringLiteral("databricks"),
     };
     return ids;
 }
@@ -49,7 +45,8 @@ const QStringList& featured_pick_ids() {
 int featured_rank(const PrivateCompany& c) {
     const auto& ids = featured_pick_ids();
     for (int i = 0; i < ids.size(); ++i) {
-        if (c.id == ids[i] || c.aliases.contains(ids[i])) return i;
+        if (c.id == ids[i] || c.aliases.contains(ids[i]))
+            return i;
     }
     return -1;
 }
@@ -79,8 +76,7 @@ void PicksView::build_ui() {
         row->addWidget(header_lbl_);
 
         auto* sub = new QLabel("Today's investable signals from the private market");
-        sub->setStyleSheet(
-            QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+        sub->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
         row->addWidget(sub);
         row->addStretch();
         root->addLayout(row);
@@ -93,18 +89,16 @@ void PicksView::build_ui() {
     // Left half — Top Picks
     {
         auto* col = new QWidget;
-        col->setStyleSheet(
-            QString("background:%1;border-radius:4px;border:1px solid %2;")
-                .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+        col->setStyleSheet(QString("background:%1;border-radius:4px;border:1px solid %2;")
+                               .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
         auto* cl = new QVBoxLayout(col);
         cl->setContentsMargins(12, 10, 12, 10);
         cl->setSpacing(6);
 
         auto* hr = new QHBoxLayout;
         auto* h = new QLabel("TOP PICKS");
-        h->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;background:transparent;")
-                .arg(colors::TEXT_SECONDARY()));
+        h->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;background:transparent;")
+                             .arg(colors::TEXT_SECONDARY()));
         hr->addWidget(h);
         hr->addStretch();
         picks_count_lbl_ = new QLabel("0");
@@ -132,18 +126,16 @@ void PicksView::build_ui() {
     // Right half — Signals
     {
         auto* col = new QWidget;
-        col->setStyleSheet(
-            QString("background:%1;border-radius:4px;border:1px solid %2;")
-                .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+        col->setStyleSheet(QString("background:%1;border-radius:4px;border:1px solid %2;")
+                               .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
         auto* cl = new QVBoxLayout(col);
         cl->setContentsMargins(12, 10, 12, 10);
         cl->setSpacing(6);
 
         auto* hr = new QHBoxLayout;
         auto* h = new QLabel("RECENT SIGNALS");
-        h->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;background:transparent;")
-                .arg(colors::TEXT_SECONDARY()));
+        h->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;letter-spacing:1px;background:transparent;")
+                             .arg(colors::TEXT_SECONDARY()));
         hr->addWidget(h);
         hr->addStretch();
         signals_count_lbl_ = new QLabel("0");
@@ -186,12 +178,14 @@ void PicksView::set_summary(const PreIpoSummary& summary) {
     // ── Clear ─────────────────────────────────────────────────────────────────
     while (picks_layout_->count() > 1) {
         auto* item = picks_layout_->takeAt(0);
-        if (item->widget()) item->widget()->deleteLater();
+        if (item->widget())
+            item->widget()->deleteLater();
         delete item;
     }
     while (signals_layout_->count() > 1) {
         auto* item = signals_layout_->takeAt(0);
-        if (item->widget()) item->widget()->deleteLater();
+        if (item->widget())
+            item->widget()->deleteLater();
         delete item;
     }
 
@@ -200,16 +194,14 @@ void PicksView::set_summary(const PreIpoSummary& summary) {
         auto make_loading = [](const QString& msg) {
             auto* lbl = new QLabel(msg);
             lbl->setAlignment(Qt::AlignCenter);
-            lbl->setStyleSheet(
-                QString("color:%1;font-size:12px;padding:40px 12px;background:transparent;")
-                    .arg(colors::TEXT_SECONDARY()));
+            lbl->setStyleSheet(QString("color:%1;font-size:12px;padding:40px 12px;background:transparent;")
+                                   .arg(colors::TEXT_SECONDARY()));
             lbl->setWordWrap(true);
             return lbl;
         };
-        picks_layout_->insertWidget(0, make_loading(
-            "Loading…\n\nFetching SEC EDGAR Form D filings, mutual-fund N-PORT "
-            "marks, and S-1 pipeline. First load can take ~60–90 seconds; "
-            "subsequent visits load instantly from cache."));
+        picks_layout_->insertWidget(0, make_loading("Loading…\n\nFetching SEC EDGAR Form D filings, mutual-fund N-PORT "
+                                                    "marks, and S-1 pipeline. First load can take ~60–90 seconds; "
+                                                    "subsequent visits load instantly from cache."));
         signals_layout_->insertWidget(0, make_loading("Loading signals…"));
         picks_count_lbl_->setText("…");
         signals_count_lbl_->setText("…");
@@ -225,17 +217,18 @@ void PicksView::set_summary(const PreIpoSummary& summary) {
     // wants to track. After the featured block, the rest of the universe
     // falls in by composite_picks_score desc.
     QVector<PrivateCompany> ranked = summary.companies;
-    std::sort(ranked.begin(), ranked.end(),
-              [](const PrivateCompany& a, const PrivateCompany& b) {
-                  const int ra = featured_rank(a);
-                  const int rb = featured_rank(b);
-                  if (ra != rb) {
-                      if (ra < 0) return false;
-                      if (rb < 0) return true;
-                      return ra < rb;  // earlier in featured list = higher
-                  }
-                  return a.analytics.composite_picks_score > b.analytics.composite_picks_score;
-              });
+    std::sort(ranked.begin(), ranked.end(), [](const PrivateCompany& a, const PrivateCompany& b) {
+        const int ra = featured_rank(a);
+        const int rb = featured_rank(b);
+        if (ra != rb) {
+            if (ra < 0)
+                return false;
+            if (rb < 0)
+                return true;
+            return ra < rb; // earlier in featured list = higher
+        }
+        return a.analytics.composite_picks_score > b.analytics.composite_picks_score;
+    });
     int inserted = 0;
     for (const auto& c : ranked) {
         // Featured picks always render even if their composite is 0 (the
@@ -243,11 +236,11 @@ void PicksView::set_summary(const PreIpoSummary& summary) {
         // keep the prior "score > 0 or raised >= $50M" gate so the list
         // doesn't fill with no-signal companies.
         const bool is_featured = featured_rank(c) >= 0;
-        if (!is_featured &&
-            c.analytics.composite_picks_score <= 0 && c.cumulative_raised_m < 50)
+        if (!is_featured && c.analytics.composite_picks_score <= 0 && c.cumulative_raised_m < 50)
             continue;
         picks_layout_->insertWidget(inserted++, make_pick_card(c));
-        if (inserted >= 12) break;
+        if (inserted >= 12)
+            break;
     }
     picks_count_lbl_->setText(QString::number(inserted));
 
@@ -255,7 +248,8 @@ void PicksView::set_summary(const PreIpoSummary& summary) {
     int s_inserted = 0;
     for (const auto& s : summary.signal_list) {
         signals_layout_->insertWidget(s_inserted++, make_signal_card(s));
-        if (s_inserted >= 30) break;
+        if (s_inserted >= 30)
+            break;
     }
     // Match picks_count_lbl_ semantics (count of cards actually rendered)
     // rather than the universe-wide signal total. The two badges were
@@ -266,10 +260,9 @@ void PicksView::set_summary(const PreIpoSummary& summary) {
 QWidget* PicksView::make_pick_card(const PrivateCompany& c) const {
     auto* card = new QWidget;
     card->setCursor(Qt::PointingHandCursor);
-    card->setStyleSheet(
-        QString("QWidget{background:%1;border:1px solid %2;border-radius:4px;}"
-                "QWidget:hover{border-color:%3;}")
-            .arg(colors::BG_RAISED(), colors::BORDER_DIM(), colors::AMBER()));
+    card->setStyleSheet(QString("QWidget{background:%1;border:1px solid %2;border-radius:4px;}"
+                                "QWidget:hover{border-color:%3;}")
+                            .arg(colors::BG_RAISED(), colors::BORDER_DIM(), colors::AMBER()));
     card->setFixedHeight(64);
 
     auto* hl = new QHBoxLayout(card);
@@ -280,26 +273,24 @@ QWidget* PicksView::make_pick_card(const PrivateCompany& c) const {
     auto* score = new QLabel(QString::number(c.analytics.ipo_readiness_score));
     score->setFixedSize(40, 40);
     score->setAlignment(Qt::AlignCenter);
-    score->setStyleSheet(
-        QString("color:%1;font-size:16px;font-weight:800;"
-                "background:rgba(217,119,6,0.15);border:1px solid %1;border-radius:20px;")
-            .arg(colors::AMBER()));
+    score->setStyleSheet(QString("color:%1;font-size:16px;font-weight:800;"
+                                 "background:rgba(217,119,6,0.15);border:1px solid %1;border-radius:20px;")
+                             .arg(colors::AMBER()));
     hl->addWidget(score);
 
     // Center: name + sector
     auto* mid = new QVBoxLayout;
     mid->setSpacing(2);
     auto* name = new QLabel(c.name);
-    name->setStyleSheet(
-        QString("color:%1;font-size:13px;font-weight:700;background:transparent;").arg(colors::CYAN()));
+    name->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;background:transparent;").arg(colors::CYAN()));
     mid->addWidget(name);
     QString sub = c.sector;
-    if (!c.hq_state.isEmpty()) sub += " · " + c.hq_state;
+    if (!c.hq_state.isEmpty())
+        sub += " · " + c.hq_state;
     if (c.cumulative_raised_m > 0)
         sub += QString(" · $%1M raised").arg(qRound(c.cumulative_raised_m));
     auto* sl = new QLabel(sub);
-    sl->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+    sl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
     mid->addWidget(sl);
     hl->addLayout(mid, 1);
 
@@ -322,8 +313,7 @@ QWidget* PicksView::make_pick_card(const PrivateCompany& c) const {
         drift_color = v >= 0 ? colors::POSITIVE() : colors::NEGATIVE();
     }
     auto* drift = new QLabel(drift_txt);
-    drift->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(drift_color));
+    drift->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(drift_color));
     drift->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     right->addWidget(drift);
     hl->addLayout(right);
@@ -338,9 +328,7 @@ QWidget* PicksView::make_pick_card(const PrivateCompany& c) const {
     card->installEventFilter(const_cast<PicksView*>(this));
     const QString cid = c.id;
     auto* self = const_cast<PicksView*>(this);
-    QObject::connect(overlay, &QPushButton::clicked, self, [self, cid] {
-        emit self->company_selected(cid);
-    });
+    QObject::connect(overlay, &QPushButton::clicked, self, [self, cid] { emit self->company_selected(cid); });
     card->setProperty("_overlay", QVariant::fromValue(static_cast<QObject*>(overlay)));
 
     return card;
@@ -350,42 +338,62 @@ QWidget* PicksView::make_signal_card(const Signal& s) const {
     QString icon = "•";
     QString color = colors::TEXT_SECONDARY();
     switch (s.kind) {
-        case SignalKind::MarkUp:          icon = "▲"; color = colors::POSITIVE(); break;
-        case SignalKind::MarkDown:        icon = "▼"; color = colors::NEGATIVE(); break;
-        case SignalKind::NewFiling:       icon = "+"; color = colors::CYAN(); break;
-        case SignalKind::AmendmentBurst:  icon = "≡"; color = colors::AMBER(); break;
-        case SignalKind::PremiumHigh:     icon = "$"; color = colors::POSITIVE(); break;
-        case SignalKind::ReadinessJump:   icon = "★"; color = colors::AMBER(); break;
-        case SignalKind::RoundFiled:      icon = "◆"; color = colors::CYAN(); break;
+        case SignalKind::MarkUp:
+            icon = "▲";
+            color = colors::POSITIVE();
+            break;
+        case SignalKind::MarkDown:
+            icon = "▼";
+            color = colors::NEGATIVE();
+            break;
+        case SignalKind::NewFiling:
+            icon = "+";
+            color = colors::CYAN();
+            break;
+        case SignalKind::AmendmentBurst:
+            icon = "≡";
+            color = colors::AMBER();
+            break;
+        case SignalKind::PremiumHigh:
+            icon = "$";
+            color = colors::POSITIVE();
+            break;
+        case SignalKind::ReadinessJump:
+            icon = "★";
+            color = colors::AMBER();
+            break;
+        case SignalKind::RoundFiled:
+            icon = "◆";
+            color = colors::CYAN();
+            break;
         // A pulled deal is the one unambiguously bad signal in this feed and
         // must not fall through to the neutral grey bullet.
-        case SignalKind::Withdrawn:       icon = "✕"; color = colors::NEGATIVE(); break;
+        case SignalKind::Withdrawn:
+            icon = "✕";
+            color = colors::NEGATIVE();
+            break;
     }
 
     auto* row = new QWidget;
     row->setFixedHeight(40);
-    row->setStyleSheet(
-        QString("QWidget{background:%1;border:1px solid %2;border-radius:3px;}"
-                "QWidget:hover{background:%3;}")
-            .arg(colors::BG_RAISED(), colors::BORDER_DIM(), colors::BG_BASE()));
+    row->setStyleSheet(QString("QWidget{background:%1;border:1px solid %2;border-radius:3px;}"
+                               "QWidget:hover{background:%3;}")
+                           .arg(colors::BG_RAISED(), colors::BORDER_DIM(), colors::BG_BASE()));
     auto* hl = new QHBoxLayout(row);
     hl->setContentsMargins(10, 6, 10, 6);
     hl->setSpacing(8);
 
     auto* ic = new QLabel(icon);
-    ic->setStyleSheet(
-        QString("color:%1;font-size:14px;font-weight:700;background:transparent;").arg(color));
+    ic->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;background:transparent;").arg(color));
     ic->setFixedWidth(16);
     hl->addWidget(ic);
 
     auto* name = new QLabel(s.company_name);
-    name->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(colors::CYAN()));
+    name->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(colors::CYAN()));
     hl->addWidget(name);
 
     auto* desc = new QLabel(s.description);
-    desc->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_PRIMARY()));
+    desc->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_PRIMARY()));
     hl->addWidget(desc, 1);
 
     auto* overlay = new QPushButton(row);
@@ -398,7 +406,8 @@ QWidget* PicksView::make_signal_card(const Signal& s) const {
     const QString cid = s.company_id;
     auto* self = const_cast<PicksView*>(this);
     QObject::connect(overlay, &QPushButton::clicked, self, [self, cid] {
-        if (!cid.isEmpty()) emit self->company_selected(cid);
+        if (!cid.isEmpty())
+            emit self->company_selected(cid);
     });
     row->setProperty("_overlay", QVariant::fromValue(static_cast<QObject*>(overlay)));
 

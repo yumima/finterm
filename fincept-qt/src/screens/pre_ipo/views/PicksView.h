@@ -31,11 +31,11 @@ class PicksView : public QWidget {
     QWidget* make_pick_card(const pre_ipo::PrivateCompany& c) const;
     QWidget* make_signal_card(const pre_ipo::Signal& s) const;
 
-    QLabel*      header_lbl_         = nullptr;
-    QVBoxLayout* picks_layout_       = nullptr;
-    QVBoxLayout* signals_layout_     = nullptr;
-    QLabel*      picks_count_lbl_    = nullptr;
-    QLabel*      signals_count_lbl_  = nullptr;
+    QLabel* header_lbl_ = nullptr;
+    QVBoxLayout* picks_layout_ = nullptr;
+    QVBoxLayout* signals_layout_ = nullptr;
+    QLabel* picks_count_lbl_ = nullptr;
+    QLabel* signals_count_lbl_ = nullptr;
 };
 
 } // namespace fincept::screens

@@ -44,7 +44,7 @@ namespace fincept::screens::fingpt {
 // ── Forecaster data shapes ───────────────────────────────────────────────────
 
 struct NewsItem {
-    QDateTime published_utc;  // EVENT stamp — a real instant (BarTime.h)
+    QDateTime published_utc; // EVENT stamp — a real instant (BarTime.h)
     QString headline;
     QString summary;
 };
@@ -52,7 +52,7 @@ struct NewsItem {
 /// One week of the lookback window: the price move between two session closes
 /// and the news that landed in between.
 struct WeekSlice {
-    QDate start;        // session date of the anchor close (exchange calendar)
+    QDate start; // session date of the anchor close (exchange calendar)
     QDate end;
     double start_close = 0.0;
     double end_close = 0.0;
@@ -68,8 +68,8 @@ struct WeekSlice {
 // Returns an empty vector when the candles cannot cover the window (no session
 // on/after the oldest step, or fewer than two distinct anchors) — the caller
 // must surface that, not invent a window.
-inline QVector<WeekSlice> make_week_slices(const QVector<services::equity::Candle>& candles,
-                                           const QDate& curday, int n_weeks) {
+inline QVector<WeekSlice> make_week_slices(const QVector<services::equity::Candle>& candles, const QDate& curday,
+                                           int n_weeks) {
     QVector<WeekSlice> out;
     if (candles.isEmpty() || n_weeks < 1 || !curday.isValid())
         return out;
@@ -80,10 +80,13 @@ inline QVector<WeekSlice> make_week_slices(const QVector<services::equity::Candl
         const QDate step = curday.addDays(-7 * n);
         qsizetype idx = -1;
         for (qsizetype i = 0; i < candles.size(); ++i) {
-            if (candles[i].date() >= step) { idx = i; break; }
+            if (candles[i].date() >= step) {
+                idx = i;
+                break;
+            }
         }
         if (idx < 0)
-            return {};  // history ends before this step — cannot cover the window
+            return {}; // history ends before this step — cannot cover the window
         anchor_dates.append(candles[idx].date());
         anchor_closes.append(candles[idx].close);
     }
@@ -117,8 +120,7 @@ inline QVector<WeekSlice> make_week_slices(const QVector<services::equity::Candl
 /// Slice i owns (start, end]; the first slice also owns its own start date.
 /// Items newer than the last session close but not after `curday` (today's
 /// news, published after the close) belong to the final slice.
-inline void bucket_news(QVector<WeekSlice>& slices, const QVector<NewsItem>& items,
-                        const QDate& curday) {
+inline void bucket_news(QVector<WeekSlice>& slices, const QVector<NewsItem>& items, const QDate& curday) {
     if (slices.isEmpty())
         return;
     for (const NewsItem& it : items) {
@@ -148,14 +150,19 @@ inline QVector<int> sample_indices(int n, int k) {
     if (n <= 0 || k <= 0)
         return out;
     if (k >= n) {
-        for (int i = 0; i < n; ++i) out.append(i);
+        for (int i = 0; i < n; ++i)
+            out.append(i);
         return out;
     }
-    if (k == 1) { out.append(n - 1); return out; }  // one slot → the freshest item
+    if (k == 1) {
+        out.append(n - 1);
+        return out;
+    } // one slot → the freshest item
     int prev = -1;
     for (int j = 0; j < k; ++j) {
         int idx = static_cast<int>(std::llround(static_cast<double>(j) * (n - 1) / (k - 1)));
-        if (idx <= prev) idx = prev + 1;  // rounding collisions — keep strictly increasing
+        if (idx <= prev)
+            idx = prev + 1; // rounding collisions — keep strictly increasing
         prev = idx;
         out.append(idx);
     }
@@ -166,29 +173,30 @@ inline QVector<int> sample_indices(int n, int k) {
 
 /// FinGPT-Forecaster's system prompt, verbatim (app.py SYSTEM_PROMPT).
 inline QString forecaster_system_prompt() {
-    return QStringLiteral(
-        "You are a seasoned stock market analyst. Your task is to list the positive "
-        "developments and potential concerns for companies based on relevant news and "
-        "basic financials from the past weeks, then provide an analysis and prediction "
-        "for the companies' stock price movement for the upcoming week. "
-        "Your answer format should be as follows:\n\n[Positive Developments]:\n1. ...\n\n"
-        "[Potential Concerns]:\n1. ...\n\n[Prediction & Analysis]\nPrediction: ...\nAnalysis: ...");
+    return QStringLiteral("You are a seasoned stock market analyst. Your task is to list the positive "
+                          "developments and potential concerns for companies based on relevant news and "
+                          "basic financials from the past weeks, then provide an analysis and prediction "
+                          "for the companies' stock price movement for the upcoming week. "
+                          "Your answer format should be as follows:\n\n[Positive Developments]:\n1. ...\n\n"
+                          "[Potential Concerns]:\n1. ...\n\n[Prediction & Analysis]\nPrediction: ...\nAnalysis: ...");
 }
 
 /// Large count for prompt text: "3.45 trillion" — readable by the model, no
 /// locale formatting.
 inline QString prompt_count(double v) {
     const double a = std::fabs(v);
-    if (a >= 1e12) return QStringLiteral("%1 trillion").arg(QString::number(v / 1e12, 'f', 2));
-    if (a >= 1e9)  return QStringLiteral("%1 billion").arg(QString::number(v / 1e9, 'f', 2));
-    if (a >= 1e6)  return QStringLiteral("%1 million").arg(QString::number(v / 1e6, 'f', 2));
+    if (a >= 1e12)
+        return QStringLiteral("%1 trillion").arg(QString::number(v / 1e12, 'f', 2));
+    if (a >= 1e9)
+        return QStringLiteral("%1 billion").arg(QString::number(v / 1e9, 'f', 2));
+    if (a >= 1e6)
+        return QStringLiteral("%1 million").arg(QString::number(v / 1e6, 'f', 2));
     return QString::number(v, 'f', 2);
 }
 
 /// Same, with a currency unit: "3.45 trillion USD".
 inline QString prompt_money(double v, const QString& currency) {
-    return prompt_count(v) + QLatin1Char(' ')
-        + (currency.isEmpty() ? QStringLiteral("USD") : currency);
+    return prompt_count(v) + QLatin1Char(' ') + (currency.isEmpty() ? QStringLiteral("USD") : currency);
 }
 
 /// FinGPT's "[Company Introduction]" template, with each sentence gated on the
@@ -209,8 +217,7 @@ inline QString company_intro(const QString& symbol, const services::equity::Stoc
         QString s = QStringLiteral("As of today, %1 has a market capitalization of %2")
                         .arg(name, prompt_money(info.market_cap, info.currency));
         if (std::isfinite(info.shares_outstanding) && info.shares_outstanding > 0)
-            s += QStringLiteral(", with %1 shares outstanding")
-                     .arg(prompt_count(info.shares_outstanding));
+            s += QStringLiteral(", with %1 shares outstanding").arg(prompt_count(info.shares_outstanding));
         s += QStringLiteral(".");
         parts << s;
     }
@@ -233,11 +240,11 @@ inline QString week_block(const QString& symbol, const WeekSlice& w, int max_new
     const char* term = (w.end_close > w.start_close)   ? "increased"
                        : (w.end_close < w.start_close) ? "decreased"
                                                        : "stayed unchanged";
-    QString head = QStringLiteral("From %1 to %2, %3's stock price %4 from %5 to %6. "
-                                  "Company news during this period are listed below:\n\n")
-                       .arg(w.start.toString(Qt::ISODate), w.end.toString(Qt::ISODate), symbol,
-                            QString::fromLatin1(term), QString::number(w.start_close, 'f', 2),
-                            QString::number(w.end_close, 'f', 2));
+    QString head =
+        QStringLiteral("From %1 to %2, %3's stock price %4 from %5 to %6. "
+                       "Company news during this period are listed below:\n\n")
+            .arg(w.start.toString(Qt::ISODate), w.end.toString(Qt::ISODate), symbol, QString::fromLatin1(term),
+                 QString::number(w.start_close, 'f', 2), QString::number(w.end_close, 'f', 2));
     QStringList items;
     const QVector<int> picks = sample_indices(static_cast<int>(w.news.size()), max_news);
     for (int idx : picks) {
@@ -297,22 +304,20 @@ inline QString basics_block(const QString& symbol, const services::equity::Stock
 /// FinGPT's inference-time closing instruction, verbatim (app.py
 /// get_all_prompts_online).
 inline QString closing_instruction(const QString& symbol, const QDate& curday) {
-    const QString period = QStringLiteral("%1 to %2").arg(curday.toString(Qt::ISODate),
-                                                          curday.addDays(7).toString(Qt::ISODate));
-    return QStringLiteral(
-               "\n\nBased on all the information before %1, let's first analyze the positive "
-               "developments and potential concerns for %2. Come up with 2-4 most important "
-               "factors respectively and keep them concise. Most factors should be inferred from "
-               "company related news. Then make your prediction of the %2 stock price movement "
-               "for next week (%3). Provide a summary analysis to support your prediction.")
+    const QString period =
+        QStringLiteral("%1 to %2").arg(curday.toString(Qt::ISODate), curday.addDays(7).toString(Qt::ISODate));
+    return QStringLiteral("\n\nBased on all the information before %1, let's first analyze the positive "
+                          "developments and potential concerns for %2. Come up with 2-4 most important "
+                          "factors respectively and keep them concise. Most factors should be inferred from "
+                          "company related news. Then make your prediction of the %2 stock price movement "
+                          "for next week (%3). Provide a summary analysis to support your prediction.")
         .arg(curday.toString(Qt::ISODate), symbol, period);
 }
 
 /// The full user prompt: intro + week blocks + basics + closing instruction.
 /// `slices` must already carry their news (bucket_news).
 inline QString forecaster_user_prompt(const QString& symbol, const services::equity::StockInfo& info,
-                                      const QVector<WeekSlice>& slices, const QDate& curday,
-                                      bool with_basics) {
+                                      const QVector<WeekSlice>& slices, const QDate& curday, bool with_basics) {
     QStringList parts;
     parts << company_intro(symbol, info);
     for (const WeekSlice& w : slices)
@@ -345,8 +350,7 @@ inline QStringList sentiment_vote_instructions(const QString& text_type = QStrin
     };
     QStringList out;
     for (const char* t : kTemplates)
-        out << QString::fromLatin1(t).arg(text_type)
-                   + QStringLiteral("\nOptions: positive, negative, neutral");
+        out << QString::fromLatin1(t).arg(text_type) + QStringLiteral("\nOptions: positive, negative, neutral");
     return out;
 }
 
@@ -359,8 +363,10 @@ inline QString sentiment_frame(const QString& instruction, const QString& input)
 /// positive beats negative when both appear, anything else is neutral.
 inline QString parse_sentiment_label(const QString& output) {
     const QString s = output.toLower();
-    if (s.contains(QStringLiteral("positive"))) return QStringLiteral("positive");
-    if (s.contains(QStringLiteral("negative"))) return QStringLiteral("negative");
+    if (s.contains(QStringLiteral("positive")))
+        return QStringLiteral("positive");
+    if (s.contains(QStringLiteral("negative")))
+        return QStringLiteral("negative");
     return QStringLiteral("neutral");
 }
 
@@ -369,11 +375,15 @@ inline QString parse_sentiment_label(const QString& output) {
 inline QString vote_sentiment(const QStringList& labels) {
     int pos = 0, neg = 0;
     for (const QString& l : labels) {
-        if (l == QStringLiteral("positive")) ++pos;
-        else if (l == QStringLiteral("negative")) ++neg;
+        if (l == QStringLiteral("positive"))
+            ++pos;
+        else if (l == QStringLiteral("negative"))
+            ++neg;
     }
-    if (pos > neg) return QStringLiteral("positive");
-    if (neg > pos) return QStringLiteral("negative");
+    if (pos > neg)
+        return QStringLiteral("positive");
+    if (neg > pos)
+        return QStringLiteral("negative");
     return QStringLiteral("neutral");
 }
 

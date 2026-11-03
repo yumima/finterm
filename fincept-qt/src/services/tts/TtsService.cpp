@@ -6,31 +6,30 @@
 
 #include <QAudioOutput>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMediaPlayer>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QMediaPlayer>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUuid>
-#include <QDateTime>
-
-#include <limits>
 
 #include <algorithm>
+#include <limits>
 
 #if defined(Q_OS_UNIX)
-#include <csignal>
-#include <sys/types.h>
-#include <unistd.h>
+#    include <csignal>
+#    include <sys/types.h>
+#    include <unistd.h>
 #endif
 
 namespace fincept::services {
@@ -80,10 +79,10 @@ QString resolve_model_path() {
 /// piper is on PATH (incl. ~/.local/bin, where `hearth voice` symlinks it).
 bool piper_on_path() {
     const QString lbin = QDir::homePath() + "/.local/bin";
-    return !QStandardPaths::findExecutable("piper").isEmpty()
-           || !QStandardPaths::findExecutable("piper", {lbin}).isEmpty()
-           || !QStandardPaths::findExecutable("piper-tts").isEmpty()
-           || !QStandardPaths::findExecutable("piper-tts", {lbin}).isEmpty();
+    return !QStandardPaths::findExecutable("piper").isEmpty() ||
+           !QStandardPaths::findExecutable("piper", {lbin}).isEmpty() ||
+           !QStandardPaths::findExecutable("piper-tts").isEmpty() ||
+           !QStandardPaths::findExecutable("piper-tts", {lbin}).isEmpty();
 }
 
 QString new_temp_wav_path() {
@@ -97,8 +96,7 @@ QString new_temp_wav_path() {
 bool stream_sink_available() {
     const QString lbin = QDir::homePath() + "/.local/bin";
     for (const char* p : {"paplay", "pw-play", "aplay"}) {
-        if (!QStandardPaths::findExecutable(p).isEmpty() ||
-            !QStandardPaths::findExecutable(p, {lbin}).isEmpty())
+        if (!QStandardPaths::findExecutable(p).isEmpty() || !QStandardPaths::findExecutable(p, {lbin}).isEmpty())
             return true;
     }
     return false;
@@ -112,7 +110,7 @@ void kill_process_group(QProcess* p) {
 #if defined(Q_OS_UNIX)
     const qint64 pid = p->processId();
     if (pid > 0) {
-        ::kill(static_cast<pid_t>(-pid), SIGTERM);  // negative pid = the process group
+        ::kill(static_cast<pid_t>(-pid), SIGTERM); // negative pid = the process group
         // SIGTERM reaps piper/player promptly; keep the GUI-thread block close to
         // the old ~500ms (stop() is called synchronously from the button + aboutToQuit).
         if (!p->waitForFinished(400)) {
@@ -168,7 +166,7 @@ bool TtsService::is_available() const {
 bool TtsService::compute_available() const {
     const QString provider = get_setting("tts.provider");
     if (provider == QStringLiteral("none"))
-        return false;  // explicitly disabled
+        return false; // explicitly disabled
     // Unset or "piper" → auto-detect a provisioned voice + the piper runtime.
     if (!provider.isEmpty() && provider != QStringLiteral("piper"))
         return false;
@@ -183,7 +181,7 @@ bool TtsService::compute_available() const {
 
 bool TtsService::engine_or_local_available() const {
     if (get_setting("tts.provider") == QStringLiteral("none"))
-        return false;  // the user switched read-aloud off — engine included
+        return false; // the user switched read-aloud off — engine included
     const auto ep = ai_chat::LlmService::instance().speech_endpoint();
     return (ep && engine_usable(ep->url)) || is_available();
 }
@@ -206,7 +204,10 @@ QStringList split_for_speech(const QString& text, int cap) {
     cap = cap > 0 ? cap : 4096;
     static const QRegularExpression kSentenceEnd(QStringLiteral("(?<=[.!?:;])\\s+"));
     // Pieces = sentences, each tagged with whether it ends a paragraph.
-    struct Piece { QString text; bool para_end; };
+    struct Piece {
+        QString text;
+        bool para_end;
+    };
     QList<Piece> pieces;
     for (const QString& para : text.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
         const QStringList sents = para.split(kSentenceEnd, Qt::SkipEmptyParts);
@@ -221,8 +222,7 @@ QStringList split_for_speech(const QString& text, int cap) {
     QStringList chunks;
     QString cur;
     for (int i = 0; i < pieces.size(); ++i) {
-        const int target =
-            std::min(chunks.isEmpty() ? kFirst : chunks.size() == 1 ? kSecond : kRest, cap);
+        const int target = std::min(chunks.isEmpty() ? kFirst : chunks.size() == 1 ? kSecond : kRest, cap);
         Piece pc = pieces[i];
         // A run-on piece longer than this chunk's target is cut on whitespace
         // and the rest goes back in line — so even a punctuation-free opening
@@ -237,7 +237,7 @@ QStringList split_for_speech(const QString& text, int cap) {
         if (!cur.isEmpty() && cur.size() + 1 + pc.text.size() > target) {
             chunks << cur;
             cur.clear();
-            --i;  // re-place this piece against the next chunk's target
+            --i; // re-place this piece against the next chunk's target
             continue;
         }
         cur = cur.isEmpty() ? pc.text : cur + QLatin1Char(' ') + pc.text;
@@ -258,12 +258,12 @@ QStringList split_for_speech(const QString& text, int cap) {
 /// model/voice, saying what. A warm clip is only reused on an exact match, so
 /// a settings change between prewarm and click cannot splice voices.
 QString warm_key(const QString& url, const QJsonObject& body, const QString& chunk) {
-    return url + QChar(0x1f) + QString::fromUtf8(QJsonDocument(body).toJson(QJsonDocument::Compact))
-           + QChar(0x1f) + chunk;
+    return url + QChar(0x1f) + QString::fromUtf8(QJsonDocument(body).toJson(QJsonDocument::Compact)) + QChar(0x1f) +
+           chunk;
 }
 
-QNetworkReply* post_speech(QNetworkAccessManager* nam, const QString& url,
-                           const QMap<QString, QString>& headers, QJsonObject body, const QString& input) {
+QNetworkReply* post_speech(QNetworkAccessManager* nam, const QString& url, const QMap<QString, QString>& headers,
+                           QJsonObject body, const QString& input) {
     QNetworkRequest req{QUrl(url)};
     for (auto it = headers.cbegin(); it != headers.cend(); ++it)
         req.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
@@ -340,7 +340,7 @@ void TtsService::prewarm_engine(const QString& text) {
         if (!path.isEmpty())
             warm_wav_ = path;
         else
-            warm_text_.clear();  // no clip — a later speak fetches normally
+            warm_text_.clear(); // no clip — a later speak fetches normally
         if (!eng_waiting_warm_)
             return;
         // A reading of this text was started while the clip synthesised and
@@ -350,7 +350,7 @@ void TtsService::prewarm_engine(const QString& text) {
             return;
         if (!path.isEmpty() && adopt_warm_clip())
             return;
-        engine_fetch_next();  // fetch chunk 0 the normal way (its failure falls back to Piper)
+        engine_fetch_next(); // fetch chunk 0 the normal way (its failure falls back to Piper)
     });
 }
 
@@ -390,7 +390,7 @@ void TtsService::discard_warm() {
 void TtsService::set_speaking(bool speaking) {
     if (speaking) {
         if (announced_)
-            return;  // later engine chunks: the reading is already "speaking"
+            return; // later engine chunks: the reading is already "speaking"
         announced_ = true;
     } else {
         announced_ = false;
@@ -437,7 +437,7 @@ bool TtsService::speak_via_engine(const QString& text) {
     }
     const auto ep = ai_chat::LlmService::instance().speech_endpoint();
     if (!ep || !engine_usable(ep->url))
-        return start_piper(text);  // no (working) speech route: Anthropic, Gemini, a dead hearth, …
+        return start_piper(text); // no (working) speech route: Anthropic, Gemini, a dead hearth, …
 
     eng_chunks_ = split_for_speech(text, ep->max_input);
     if (eng_chunks_.isEmpty())
@@ -450,10 +450,14 @@ bool TtsService::speak_via_engine(const QString& text) {
     eng_session_ = true;
     const bool warm = !warm_text_.isEmpty() && warm_key(eng_url_, eng_body_, eng_chunks_.first()) == warm_text_;
     LOG_INFO(kTtsTag, QString("speaking via engine %1 (%2 chars, %3 chunks, first chunk %4)")
-                          .arg(ep->url).arg(text.size()).arg(eng_chunks_.size())
-                          .arg(!warm ? "cold" : warm_reply_ ? "synthesising" : "ready"));
+                          .arg(ep->url)
+                          .arg(text.size())
+                          .arg(eng_chunks_.size())
+                          .arg(!warm         ? "cold"
+                               : warm_reply_ ? "synthesising"
+                                             : "ready"));
     if (warm && warm_reply_) {
-        eng_waiting_warm_ = true;  // its finished handler starts the reading
+        eng_waiting_warm_ = true; // its finished handler starts the reading
         return true;
     }
     if (warm && adopt_warm_clip())
@@ -484,7 +488,7 @@ void TtsService::engine_fetch_next() {
                 // error() FIRST: stop()'s state_changed(false) resets the button,
                 // after which it would no longer listen for the reason.
                 fail(QStringLiteral("Engine speech stopped part-way (%1)").arg(why));
-                stop();  // ends the session + the clip playing
+                stop(); // ends the session + the clip playing
                 return;
             }
             // Nothing has played yet: fall back to the on-device voice. Quietly —
@@ -523,7 +527,7 @@ void TtsService::engine_play_next() {
     }
     pending_wav_path_ = eng_ready_.takeFirst();
     start_playback();
-    engine_fetch_next();  // a buffer slot just freed up
+    engine_fetch_next(); // a buffer slot just freed up
 }
 
 void TtsService::end_engine_session() {
@@ -537,7 +541,7 @@ void TtsService::end_engine_session() {
         r->deleteLater();
     }
     eng_session_ = false;
-    eng_waiting_warm_ = false;  // a warm request still finishing just stores its clip
+    eng_waiting_warm_ = false; // a warm request still finishing just stores its clip
     eng_chunks_.clear();
     eng_text_.clear();
     eng_next_ = 0;
@@ -653,7 +657,7 @@ bool TtsService::start_piper(const QString& text) {
 }
 
 void TtsService::stop() {
-    end_engine_session();  // also aborts an in-flight chunk request
+    end_engine_session(); // also aborts an in-flight chunk request
     if (proc_) {
         // Disconnect first so on_proc_finished doesn't fire and try to play the
         // (possibly half-written) WAV. Group-kill so the streaming pipeline's
@@ -701,8 +705,8 @@ void TtsService::on_proc_finished(int exit_code) {
             // stream_out_; `out` catches anything written after the last burst.
             const QByteArray diag = stream_out_ + out;
             fail(QStringLiteral("TTS streaming exited %1: %2")
-                           .arg(exit_code)
-                           .arg(QString::fromUtf8(diag).trimmed().left(300)));
+                     .arg(exit_code)
+                     .arg(QString::fromUtf8(diag).trimmed().left(300)));
         }
         stream_out_.clear();
         set_speaking(false);
@@ -730,27 +734,25 @@ void TtsService::start_playback() {
     player_ = new QMediaPlayer(this);
     audio_ = new QAudioOutput(this);
     player_->setAudioOutput(audio_);
-    connect(player_, &QMediaPlayer::playbackStateChanged, this,
-            [this](QMediaPlayer::PlaybackState s) {
-                if (s == QMediaPlayer::PlayingState)
-                    set_speaking(true);  // audio actually started (synthesis done)
-                else if (s == QMediaPlayer::StoppedState)
-                    teardown_playback();
-            });
+    connect(player_, &QMediaPlayer::playbackStateChanged, this, [this](QMediaPlayer::PlaybackState s) {
+        if (s == QMediaPlayer::PlayingState)
+            set_speaking(true); // audio actually started (synthesis done)
+        else if (s == QMediaPlayer::StoppedState)
+            teardown_playback();
+    });
     // A decode/output failure (corrupt WAV, no audio device, busy sink) makes
     // QMediaPlayer emit errorOccurred WITHOUT a PlayingState→StoppedState pair,
     // so without this the UI would hang on "preparing" forever. Surface it and
     // reset state.
-    connect(player_, &QMediaPlayer::errorOccurred, this,
-            [this](QMediaPlayer::Error err, const QString& msg) {
-                if (err == QMediaPlayer::NoError)
-                    return;
-                // No device / undecodable clip: every later chunk would fail the
-                // same way, so the whole reading ends here.
-                end_engine_session();
-                fail(QStringLiteral("Audio playback failed: %1").arg(msg));
-                teardown_playback();
-            });
+    connect(player_, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error err, const QString& msg) {
+        if (err == QMediaPlayer::NoError)
+            return;
+        // No device / undecodable clip: every later chunk would fail the
+        // same way, so the whole reading ends here.
+        end_engine_session();
+        fail(QStringLiteral("Audio playback failed: %1").arg(msg));
+        teardown_playback();
+    });
     player_->setSource(QUrl::fromLocalFile(pending_wav_path_));
     player_->play();
 }
@@ -768,7 +770,7 @@ void TtsService::teardown_playback() {
         pending_wav_path_ = eng_ready_.takeFirst();
         player_->setSource(QUrl::fromLocalFile(pending_wav_path_));
         player_->play();
-        engine_fetch_next();  // a buffer slot just freed up
+        engine_fetch_next(); // a buffer slot just freed up
         return;
     }
     // Drop the player + audio output too — leaving stale pointers around
@@ -785,7 +787,7 @@ void TtsService::teardown_playback() {
         audio_ = nullptr;
     }
     if (eng_session_) {
-        engine_play_next();  // starved: waits for the next clip; or ends the reading
+        engine_play_next(); // starved: waits for the next clip; or ends the reading
         return;
     }
     set_speaking(false);

@@ -30,7 +30,7 @@ class VisibilityAwareTimer : public QObject {
     explicit VisibilityAwareTimer(QWidget* watched);
 
     void setInterval(int msec);
-    int  interval() const { return timer_.interval(); }
+    int interval() const { return timer_.interval(); }
     void setSingleShot(bool single);
     bool isSingleShot() const { return timer_.isSingleShot(); }
 
@@ -58,9 +58,9 @@ class VisibilityAwareTimer : public QObject {
     bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
-    QTimer   timer_;
+    QTimer timer_;
     QWidget* watched_ = nullptr;
-    bool     wanted_active_ = false;
+    bool wanted_active_ = false;
 };
 
 } // namespace fincept::util

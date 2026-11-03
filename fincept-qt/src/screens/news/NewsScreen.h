@@ -202,8 +202,8 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     // a single disk write. QSettings auto-syncs on destruction so the final
     // value still persists if the user quits before the debounce fires.
     QSettings settings_;
-    QTimer*   settings_write_debounce_ = nullptr;
-    void      schedule_settings_write();
+    QTimer* settings_write_debounce_ = nullptr;
+    void schedule_settings_write();
 
     // Active variant for feed filtering
     QString active_variant_ = "FULL";

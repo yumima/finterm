@@ -2,12 +2,11 @@
 #include "services/ma_analytics/MAAnalyticsService.h"
 
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "python/PythonRunner.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QCryptographicHash>
 #include <QFileInfo>
@@ -19,7 +18,8 @@ namespace fincept::services::ma {
 
 namespace {
 inline void publish_ma_result(bool hub_registered, const QString& context, const QJsonObject& obj) {
-    if (!hub_registered) return;
+    if (!hub_registered)
+        return;
     fincept::datahub::DataHub::instance().publish(QStringLiteral("ma:") + context, QVariant(obj));
 }
 
@@ -55,7 +55,7 @@ QString context_filename(const QString& ctx) {
     return sanitize_context(ctx) + QStringLiteral(".json");
 }
 
-}  // namespace
+} // namespace
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 MAAnalyticsService& MAAnalyticsService::instance() {
@@ -71,28 +71,29 @@ MAAnalyticsService::MAAnalyticsService(QObject* parent) : QObject(parent) {
     // event-loop tick so the file I/O stays off the startup path (the replayed
     // result_ready signals still reach no listeners until panels connect).
     QTimer::singleShot(0, this, [this]() {
-    const QStringList files = disk_cache().files();
-    for (const QString& fname : files) {
-        // Detect old per-params files by the "_<8-hex>.json" tail and unlink.
-        QString stem = fname;
-        if (stem.endsWith(QStringLiteral(".json"))) stem.chop(5);
-        const int last_us = stem.lastIndexOf(QLatin1Char('_'));
-        const QString tail = last_us > 0 ? stem.mid(last_us + 1) : QString();
-        const bool tail_is_hash =
-            tail.size() == 8 && std::all_of(tail.begin(), tail.end(), [](QChar c) {
-                return (c >= QLatin1Char('0') && c <= QLatin1Char('9'))
-                    || (c >= QLatin1Char('a') && c <= QLatin1Char('f'));
-            });
-        if (tail_is_hash) {
-            disk_cache().remove(fname);
-            continue;
+        const QStringList files = disk_cache().files();
+        for (const QString& fname : files) {
+            // Detect old per-params files by the "_<8-hex>.json" tail and unlink.
+            QString stem = fname;
+            if (stem.endsWith(QStringLiteral(".json")))
+                stem.chop(5);
+            const int last_us = stem.lastIndexOf(QLatin1Char('_'));
+            const QString tail = last_us > 0 ? stem.mid(last_us + 1) : QString();
+            const bool tail_is_hash = tail.size() == 8 && std::all_of(tail.begin(), tail.end(), [](QChar c) {
+                                          return (c >= QLatin1Char('0') && c <= QLatin1Char('9')) ||
+                                                 (c >= QLatin1Char('a') && c <= QLatin1Char('f'));
+                                      });
+            if (tail_is_hash) {
+                disk_cache().remove(fname);
+                continue;
+            }
+            // By-context payload — replay through result_ready. No listeners
+            // yet (panels connect later); they re-emit via panel-driven fetch.
+            const QJsonDocument doc = disk_cache().load(fname);
+            if (!doc.isObject())
+                continue;
+            emit result_ready(stem, doc.object());
         }
-        // By-context payload — replay through result_ready. No listeners
-        // yet (panels connect later); they re-emit via panel-driven fetch.
-        const QJsonDocument doc = disk_cache().load(fname);
-        if (!doc.isObject()) continue;
-        emit result_ready(stem, doc.object());
-    }
     });
 }
 
@@ -146,7 +147,7 @@ void MAAnalyticsService::run_python(const QString& script, const QStringList& ar
         if (const QString msg = ma_in_band_error(obj); !msg.isEmpty()) {
             LOG_ERROR("MAAnalytics", QString("Script reported error [%1]: %2").arg(context, msg));
             emit self->error_occurred(context, msg);
-            return;  // never persist an error payload as a cached result
+            return; // never persist an error payload as a cached result
         }
         // Persist by-context — these are the slow paths (deal-database EDGAR
         // walk especially) so the next launch hydrates instantly.
@@ -179,8 +180,7 @@ void MAAnalyticsService::run_python_json(const QString& script, const QString& c
     QPointer<MAAnalyticsService> self = this;
     const QByteArray params_for_hash = params_json;
     python::PythonRunner::instance().run(
-        script, args,
-        [self, context, cache_key, params_for_hash](python::PythonResult result) {
+        script, args, [self, context, cache_key, params_for_hash](python::PythonResult result) {
             if (!self)
                 return;
             // Failures are often stdout {"error": ...} + exit 1 with empty
@@ -212,8 +212,7 @@ void MAAnalyticsService::run_python_json(const QString& script, const QString& c
             else if (obj.contains("success") && obj.value("data").isArray())
                 obj = QJsonObject{{"items", obj.value("data")}};
             fincept::CacheManager::instance().put(
-                cache_key,
-                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
+                cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
                 kResultTtlSec, "ma_analytics");
             // Per-input results (DCF/LBO/comps) intentionally do NOT persist
             // to disk: the constructor can't replay them anyway (filename
@@ -482,17 +481,18 @@ void MAAnalyticsService::refresh(const QStringList& topics) {
 }
 
 int MAAnalyticsService::max_requests_per_sec() const {
-    return 1;  // Heavy Python analytics; callers drive their own cadence.
+    return 1; // Heavy Python analytics; callers drive their own cadence.
 }
 
 void MAAnalyticsService::ensure_registered_with_hub() {
-    if (hub_registered_) return;
+    if (hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
     hub.register_producer(this);
 
     fincept::datahub::TopicPolicy policy;
     policy.push_only = true;
-    policy.ttl_ms = kResultTtlSec * 1000;  // 2 min cache for latecomers.
+    policy.ttl_ms = kResultTtlSec * 1000; // 2 min cache for latecomers.
     hub.set_policy_pattern(QStringLiteral("ma:*"), policy);
 
     hub_registered_ = true;

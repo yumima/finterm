@@ -24,9 +24,7 @@ namespace fincept::ui {
 /// Use for: pill filters in panels (RankingsPanel), tab-button rows, chip
 /// strips where every item is a labeled peer. Do NOT use for table column
 /// headers (use ensure_header_fits) or heterogeneous form rows.
-void equalize_and_distribute(const QList<QPushButton*>& peers,
-                             const QFont&               font,
-                             int                        hpad = 24);
+void equalize_and_distribute(const QList<QPushButton*>& peers, const QFont& font, int hpad = 24);
 
 /// Ensure every visible column header on a QTableWidget has a width at least
 /// as wide as its header text + padding.

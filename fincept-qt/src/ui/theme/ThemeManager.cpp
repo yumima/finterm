@@ -113,7 +113,9 @@ QFont ThemeManager::current_font() const {
 
 void ThemeManager::rebuild_and_apply() {
     LOG_INFO("ThemeManager", QString("rebuild_and_apply: font=%1 size=%2px density_pad=%3")
-        .arg(font_family_).arg(font_size_px_).arg(density_pad_));
+                                 .arg(font_family_)
+                                 .arg(font_size_px_)
+                                 .arg(density_pad_));
 
     QFont f(font_family_);
     f.setStyleHint(QFont::Monospace);
@@ -493,27 +495,27 @@ QssSlotFill ThemeManager::build_global_qss_fill() const {
     // .arg() chain would: an unused slot there once shifted #positiveText to
     // icon_dim and #warningText to the positive green.
     const QssSlotFill fill = fill_qss_slots(tmpl, {
-        QString::fromUtf8(t.bg_base), // %1 bg_base
-        QString::fromUtf8(t.text_primary), // %2 text_primary
-        QString::fromUtf8(t.border_med), // %3 border_med
-        QString::fromUtf8(t.border_bright), // %4 border_bright
-        QString::fromUtf8(t.bg_surface), // %5 bg_surface
-        QString::fromUtf8(t.border_dim), // %6 border_dim
-        QString::number(p), // %7 padding (density)
-        QString::number(p2), // %8 double padding
-        QString::fromUtf8(t.accent), // %9 accent
-        QString::fromUtf8(t.text_secondary), // %10 text_secondary
-        QString::fromUtf8(t.bg_hover), // %11 bg_hover
-        QString::fromUtf8(t.bg_raised), // %12 bg_raised
-        QString::fromUtf8(t.text_dim), // %13 text_dim
-        QString::fromUtf8(t.row_alt), // %14 row_alt
-        font_family_, // %15 font-family
-        QString::number(font_size_px_), // %16 font-size
-        QString::fromUtf8(t.text_on_accent), // %17 text_on_accent
-        QString::fromUtf8(t.positive), // %18 positive
-        QString::fromUtf8(t.negative), // %19 negative
-        QString::fromUtf8(t.warning) // %20 warning
-    });
+                                                      QString::fromUtf8(t.bg_base),        // %1 bg_base
+                                                      QString::fromUtf8(t.text_primary),   // %2 text_primary
+                                                      QString::fromUtf8(t.border_med),     // %3 border_med
+                                                      QString::fromUtf8(t.border_bright),  // %4 border_bright
+                                                      QString::fromUtf8(t.bg_surface),     // %5 bg_surface
+                                                      QString::fromUtf8(t.border_dim),     // %6 border_dim
+                                                      QString::number(p),                  // %7 padding (density)
+                                                      QString::number(p2),                 // %8 double padding
+                                                      QString::fromUtf8(t.accent),         // %9 accent
+                                                      QString::fromUtf8(t.text_secondary), // %10 text_secondary
+                                                      QString::fromUtf8(t.bg_hover),       // %11 bg_hover
+                                                      QString::fromUtf8(t.bg_raised),      // %12 bg_raised
+                                                      QString::fromUtf8(t.text_dim),       // %13 text_dim
+                                                      QString::fromUtf8(t.row_alt),        // %14 row_alt
+                                                      font_family_,                        // %15 font-family
+                                                      QString::number(font_size_px_),      // %16 font-size
+                                                      QString::fromUtf8(t.text_on_accent), // %17 text_on_accent
+                                                      QString::fromUtf8(t.positive),       // %18 positive
+                                                      QString::fromUtf8(t.negative),       // %19 negative
+                                                      QString::fromUtf8(t.warning)         // %20 warning
+                                                  });
     QssSlotFill out = fill;
     QString& qss = out.text;
 
@@ -521,8 +523,8 @@ QssSlotFill ThemeManager::build_global_qss_fill() const {
     // The sentinels (no `%` prefix) survived the slot fill untouched, so we
     // can now rewrite them to the form Qt's CSS engine expects without
     // the slot fill mis-reading them as positional placeholders.
-    qss.replace("ZZICON_DIM_HASHZZ",   "%2380808080");  // dim icon stroke
-    qss.replace("ZZICON_HOVER_HASHZZ", "%23e5e5e5");    // hover icon stroke
+    qss.replace("ZZICON_DIM_HASHZZ", "%2380808080"); // dim icon stroke
+    qss.replace("ZZICON_HOVER_HASHZZ", "%23e5e5e5"); // hover icon stroke
 
     return out;
 }
@@ -536,7 +538,11 @@ QString ThemeManager::build_global_qss() const {
 QString ThemeManager::build_ads_qss() const {
     const auto& t = current_;
     LOG_INFO("ThemeManager", QString("build_ads_qss: bg_base=%1 bg_raised=%2 bg_surface=%3 accent=%4 border_dim=%5")
-        .arg(t.bg_base).arg(t.bg_raised).arg(t.bg_surface).arg(t.accent).arg(t.border_dim));
+                                 .arg(t.bg_base)
+                                 .arg(t.bg_raised)
+                                 .arg(t.bg_surface)
+                                 .arg(t.accent)
+                                 .arg(t.border_dim));
     // This stylesheet is applied directly to CDockManager to completely override
     // ADS's internally loaded default.css / focus_highlighting.css which use
     // palette(window)/palette(highlight) — the Windows system gray/blue colors.
@@ -604,14 +610,14 @@ QString ThemeManager::build_ads_qss() const {
         ads--CDockOverlayCross { background: transparent; }
         ads--CDockSplitter::handle:hover { background-color: %4; }
     )")
-        .arg(t.bg_base)        // %1
-        .arg(t.bg_raised)      // %2
-        .arg(t.border_dim)     // %3
-        .arg(t.accent)         // %4
-        .arg(t.bg_surface)     // %5
-        .arg(t.text_secondary) // %6
-        .arg(t.text_primary)   // %7
-        .arg(t.bg_hover);      // %8
+                      .arg(t.bg_base)        // %1
+                      .arg(t.bg_raised)      // %2
+                      .arg(t.border_dim)     // %3
+                      .arg(t.accent)         // %4
+                      .arg(t.bg_surface)     // %5
+                      .arg(t.text_secondary) // %6
+                      .arg(t.text_primary)   // %7
+                      .arg(t.bg_hover);      // %8
 
     LOG_INFO("ThemeManager", QString("build_ads_qss: produced %1 chars").arg(qss.length()));
     return qss;

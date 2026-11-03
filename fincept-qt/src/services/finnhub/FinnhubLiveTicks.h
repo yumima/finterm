@@ -55,9 +55,9 @@ class FinnhubLiveTicks : public QObject {
     void send_op(const QString& op, const QString& symbol);
 
     WebSocketClient socket_;
-    QString  current_symbol_;
-    QString  prev_symbol_;
-    bool     want_open_ = false;
+    QString current_symbol_;
+    QString prev_symbol_;
+    bool want_open_ = false;
 };
 
 } // namespace fincept::services::finnhub

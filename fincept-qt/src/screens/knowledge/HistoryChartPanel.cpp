@@ -5,13 +5,13 @@
 
 #include <QChart>
 #include <QChartView>
-#include <QLineSeries>
-#include <QValueAxis>
 #include <QDateTimeAxis>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineSeries>
 #include <QPointer>
 #include <QVBoxLayout>
+#include <QValueAxis>
 
 #include <algorithm>
 #include <limits>
@@ -32,8 +32,8 @@ HistoryChartPanel::HistoryChartPanel(const QString& ticker, const QString& perio
     root->setSpacing(4);
 
     status_ = new QLabel(QString("Loading %1 history…").arg(ticker_), this);
-    status_->setStyleSheet(QString("color: %1; background: transparent; font-size: 10px; %2")
-                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
+    status_->setStyleSheet(
+        QString("color: %1; background: transparent; font-size: 10px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO));
     root->addWidget(status_);
 
     view_ = new QChartView(this);
@@ -69,14 +69,13 @@ void HistoryChartPanel::load() {
             const double pct = (pts.last().close - pts.first().close) / pts.first().close * 100.0;
             const QString delta_color = pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
             const QString sign = pct >= 0 ? "+" : "";
-            guard->status_->setText(
-                QString("<span style='color:%1;'>%2 close $%3</span> · "
-                        "<span style='color:%4;'>%5%6%</span> over %7")
-                    .arg(ui::colors::TEXT_SECONDARY(), guard->ticker_)
-                    .arg(pts.last().close, 0, 'f', 2)
-                    .arg(delta_color, sign)
-                    .arg(pct, 0, 'f', 1)
-                    .arg(guard->period_));
+            guard->status_->setText(QString("<span style='color:%1;'>%2 close $%3</span> · "
+                                            "<span style='color:%4;'>%5%6%</span> over %7")
+                                        .arg(ui::colors::TEXT_SECONDARY(), guard->ticker_)
+                                        .arg(pts.last().close, 0, 'f', 2)
+                                        .arg(delta_color, sign)
+                                        .arg(pct, 0, 'f', 1)
+                                        .arg(guard->period_));
 
             auto* chart = new QChart;
             chart->legend()->hide();

@@ -52,12 +52,12 @@ class AiRolesSection : public QWidget {
     /// Find an existing profile for (provider, model), or create one.
     QString profile_for_model(const QString& provider, const QString& model_id);
 
-    QMap<QString, QComboBox*> role_combos_;      // role id → its dropdown
+    QMap<QString, QComboBox*> role_combos_;       // role id → its dropdown
     QVector<QPair<QString, QString>> configured_; // (provider, model) rows
     QString default_provider_;
     QLabel* status_ = nullptr;
     QLabel* provider_note_ = nullptr;
-    bool loading_ = false;  // suppresses currentIndexChanged during repopulation
+    bool loading_ = false; // suppresses currentIndexChanged during repopulation
 };
 
 } // namespace fincept::screens

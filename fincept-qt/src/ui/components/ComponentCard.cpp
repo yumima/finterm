@@ -21,15 +21,24 @@ constexpr const char* kScreenIdMime = "application/x-fincept-screen-id";
 // glance — the same Bloomberg trick of colour-coding asset classes in the
 // Function Menu.
 QString category_color(const QString& category) {
-    if (category == "Core")        return "#d97706"; // amber
-    if (category == "Trading")     return "#16a34a"; // green
-    if (category == "Research")    return "#0891b2"; // cyan
-    if (category == "QuantLib")    return "#7c3aed"; // purple
-    if (category == "AI")          return "#c026d3"; // magenta
-    if (category == "Economics")   return "#2563eb"; // blue
-    if (category == "Geopolitics") return "#dc2626"; // red
-    if (category == "Tools")       return "#64748b"; // slate
-    if (category == "Community")   return "#059669"; // emerald
+    if (category == "Core")
+        return "#d97706"; // amber
+    if (category == "Trading")
+        return "#16a34a"; // green
+    if (category == "Research")
+        return "#0891b2"; // cyan
+    if (category == "QuantLib")
+        return "#7c3aed"; // purple
+    if (category == "AI")
+        return "#c026d3"; // magenta
+    if (category == "Economics")
+        return "#2563eb"; // blue
+    if (category == "Geopolitics")
+        return "#dc2626"; // red
+    if (category == "Tools")
+        return "#64748b"; // slate
+    if (category == "Community")
+        return "#059669"; // emerald
     return "#4b5563";
 }
 
@@ -38,11 +47,16 @@ QString popularity_stars(int count) {
     // still earn one filled star after a couple of visits, and popular ones
     // eventually max out.
     int filled = 0;
-    if (count >= 1)  filled = 1;
-    if (count >= 5)  filled = 2;
-    if (count >= 20) filled = 3;
-    if (count >= 50) filled = 4;
-    if (count >= 150) filled = 5;
+    if (count >= 1)
+        filled = 1;
+    if (count >= 5)
+        filled = 2;
+    if (count >= 20)
+        filled = 3;
+    if (count >= 50)
+        filled = 4;
+    if (count >= 150)
+        filled = 5;
 
     QString out;
     for (int i = 0; i < 5; ++i)
@@ -52,8 +66,7 @@ QString popularity_stars(int count) {
 
 } // namespace
 
-ComponentCard::ComponentCard(ComponentMeta meta, QWidget* parent)
-    : QFrame(parent), meta_(std::move(meta)) {
+ComponentCard::ComponentCard(ComponentMeta meta, QWidget* parent) : QFrame(parent), meta_(std::move(meta)) {
     setFixedSize(260, 120);
     setCursor(Qt::PointingHandCursor);
     setObjectName("componentCard");
@@ -82,8 +95,8 @@ void ComponentCard::build_ui() {
     cat_row->setContentsMargins(0, 0, 0, 0);
     cat_row->setSpacing(0);
     auto* cat = new QLabel(meta_.category.toUpper(), body);
-    cat->setStyleSheet(QString("color:%1;font-size:12px;letter-spacing:1.5px;font-weight:700;")
-                           .arg(category_color(meta_.category)));
+    cat->setStyleSheet(
+        QString("color:%1;font-size:12px;letter-spacing:1.5px;font-weight:700;").arg(category_color(meta_.category)));
     cat_row->addWidget(cat);
     cat_row->addStretch(1);
     auto* stars = new QLabel(popularity_stars(meta_.popularity), body);
@@ -118,8 +131,7 @@ void ComponentCard::restyle() {
         border = "#6b7280";
         bg = "#1a2332";
     }
-    setStyleSheet(QString("#componentCard{background:%1;border:1px solid %2;border-radius:4px;}")
-                      .arg(bg, border));
+    setStyleSheet(QString("#componentCard{background:%1;border:1px solid %2;border-radius:4px;}").arg(bg, border));
 }
 
 void ComponentCard::set_selected(bool s) {

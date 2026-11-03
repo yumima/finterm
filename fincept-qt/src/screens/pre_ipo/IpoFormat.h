@@ -22,9 +22,12 @@ namespace fincept::pre_ipo::fmt {
 
 /// Compact money ("$1.25B", "$350M", "$12K"). Em-dash for non-positive.
 inline QString money(double dollars) {
-    if (dollars <= 0)   return QStringLiteral("—");
-    if (dollars >= 1e9) return QStringLiteral("$%1B").arg(dollars / 1e9, 0, 'f', 2);
-    if (dollars >= 1e6) return QStringLiteral("$%1M").arg(dollars / 1e6, 0, 'f', 0);
+    if (dollars <= 0)
+        return QStringLiteral("—");
+    if (dollars >= 1e9)
+        return QStringLiteral("$%1B").arg(dollars / 1e9, 0, 'f', 2);
+    if (dollars >= 1e6)
+        return QStringLiteral("$%1M").arg(dollars / 1e6, 0, 'f', 0);
     return QStringLiteral("$%1K").arg(dollars / 1e3, 0, 'f', 0);
 }
 
@@ -32,10 +35,14 @@ inline QString money(double dollars) {
 /// volumes. Deliberately adjacent to money() because confusing the two is the
 /// specific mistake this exists to prevent.
 inline QString count(double n) {
-    if (n <= 0)   return QStringLiteral("—");
-    if (n >= 1e9) return QStringLiteral("%1B").arg(n / 1e9, 0, 'f', 2);
-    if (n >= 1e6) return QStringLiteral("%1M").arg(n / 1e6, 0, 'f', 1);
-    if (n >= 1e3) return QStringLiteral("%1K").arg(n / 1e3, 0, 'f', 0);
+    if (n <= 0)
+        return QStringLiteral("—");
+    if (n >= 1e9)
+        return QStringLiteral("%1B").arg(n / 1e9, 0, 'f', 2);
+    if (n >= 1e6)
+        return QStringLiteral("%1M").arg(n / 1e6, 0, 'f', 1);
+    if (n >= 1e3)
+        return QStringLiteral("%1K").arg(n / 1e3, 0, 'f', 0);
     return QString::number(n, 'f', 0);
 }
 
@@ -45,10 +52,13 @@ inline QString count(double n) {
 inline double leading_number(const QString& s, bool* ok) {
     const QString t = s.trimmed();
     int end = 0;
-    while (end < t.size() && (t.at(end).isDigit() || t.at(end) == '.' ||
-                              ((end == 0) && (t.at(end) == '+' || t.at(end) == '-'))))
+    while (end < t.size() &&
+           (t.at(end).isDigit() || t.at(end) == '.' || ((end == 0) && (t.at(end) == '+' || t.at(end) == '-'))))
         ++end;
-    if (end == 0) { *ok = false; return 0; }
+    if (end == 0) {
+        *ok = false;
+        return 0;
+    }
     return t.left(end).toDouble(ok);
 }
 
@@ -59,16 +69,20 @@ inline double leading_number(const QString& s, bool* ok) {
 /// is the honest outcome — the alternative, silently returning one end, is a
 /// deal size that is wrong by 10–20% and looks exactly like a right one.
 inline double price_mid(const QString& price_range, bool* ok_out = nullptr) {
-    if (ok_out) *ok_out = false;
-    if (price_range.isEmpty()) return 0;
+    if (ok_out)
+        *ok_out = false;
+    if (price_range.isEmpty())
+        return 0;
     QString pr = price_range;
     pr.remove('$');
     const QStringList parts = pr.split('-', Qt::SkipEmptyParts);
-    if (parts.isEmpty()) return 0;
+    if (parts.isEmpty())
+        return 0;
 
     bool ok_lo = false;
     const double lo = leading_number(parts.at(0), &ok_lo);
-    if (!ok_lo) return 0;
+    if (!ok_lo)
+        return 0;
 
     if (parts.size() == 1) {
         // A single part is one PRICE only if no second number hides behind a
@@ -76,21 +90,23 @@ inline double price_mid(const QString& price_range, bool* ok_out = nullptr) {
         // word "to" ("$15.00 – $17.00", "$15.00 to $17.00").
         const QString only = parts.at(0).trimmed();
         int num_end = 0;
-        while (num_end < only.size() &&
-               (only.at(num_end).isDigit() || only.at(num_end) == '.' ||
-                only.at(num_end) == '+' || only.at(num_end) == '-'))
+        while (num_end < only.size() && (only.at(num_end).isDigit() || only.at(num_end) == '.' ||
+                                         only.at(num_end) == '+' || only.at(num_end) == '-'))
             ++num_end;
         for (int i = num_end; i < only.size(); ++i)
             if (only.at(i).isDigit())
-                return 0;   // an unpaired second number — unknown, not lo
-        if (ok_out) *ok_out = true;
+                return 0; // an unpaired second number — unknown, not lo
+        if (ok_out)
+            *ok_out = true;
         return lo;
     }
 
     bool ok_hi = false;
     const double hi = leading_number(parts.at(1), &ok_hi);
-    if (!ok_hi) return 0;   // a range we cannot resolve is NOT its low end
-    if (ok_out) *ok_out = true;
+    if (!ok_hi)
+        return 0; // a range we cannot resolve is NOT its low end
+    if (ok_out)
+        *ok_out = true;
     return (lo + hi) / 2.0;
 }
 

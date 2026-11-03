@@ -53,7 +53,7 @@ class EquityOptionsTab : public QWidget {
         bool is_call = false;
         double iv = 0; // fraction, e.g. 0.23
         double bid = 0, ask = 0;
-        int oi = -1;   // -1 = not reported
+        int oi = -1; // -1 = not reported
     };
     struct Atm {
         QString expiry;

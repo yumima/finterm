@@ -39,10 +39,10 @@
 namespace fincept::portfolio {
 
 struct PeriodReturn {
-    double twr_pct = 0;         // chained time-weighted return over the window, %
-    double gain_value = 0;      // currency gain net of external flows
+    double twr_pct = 0;           // chained time-weighted return over the window, %
+    double gain_value = 0;        // currency gain net of external flows
     double net_external_flow = 0; // Σ contributions − withdrawals inside the window
-    bool valid = false;         // false when no return could be computed at all
+    bool valid = false;           // false when no return could be computed at all
     // True when ≥1 segment had to be skipped (zero/dust base). twr_pct then
     // covers only the computable segments, and gain_value — which spans the
     // whole window — can misattribute day-one funding as gain when the very
@@ -87,10 +87,10 @@ QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, cons
 
 /// One flow-adjusted return over a run of TRADING sessions.
 struct SegmentReturn {
-    QString start_date;    // snapshot the segment starts from (YYYY-MM-DD)
-    QString end_date;      // snapshot the segment ends at
-    double pct = 0;        // flow-adjusted return over the segment, %; NaN = uncomputable
-    int trading_days = 0;  // trading sessions inside (start_date, end_date], ≥ 1
+    QString start_date;   // snapshot the segment starts from (YYYY-MM-DD)
+    QString end_date;     // snapshot the segment ends at
+    double pct = 0;       // flow-adjusted return over the segment, %; NaN = uncomputable
+    int trading_days = 0; // trading sessions inside (start_date, end_date], ≥ 1
 };
 
 /// Flow-adjusted returns rebuilt on a TRADING-DAY calendar.
@@ -133,8 +133,7 @@ struct NavPoint {
 /// (date[i−1], date[i]] (local trade date, converted at its own trade-date
 /// rate); out[0] = 0. `path` must be sorted by date. NaN when a flow in that
 /// segment has no known FX rate.
-QVector<double> segment_flows(const QVector<NavPoint>& path, const QVector<Transaction>& txns,
-                              const FxRates& fx = {});
+QVector<double> segment_flows(const QVector<NavPoint>& path, const QVector<Transaction>& txns, const FxRates& fx = {});
 
 /// Time-weighted growth index over `path` (sorted by date): 1.0 at the first
 /// point, then chained by each segment's flow-adjusted return — the series a

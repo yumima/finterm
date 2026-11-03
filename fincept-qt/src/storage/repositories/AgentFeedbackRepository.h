@@ -15,7 +15,7 @@ namespace fincept {
 struct AgentFeedbackRow {
     qint64 id = 0;
     QString request_id;
-    QString verdict;     ///< "wrong" | "right" | "unsure"
+    QString verdict; ///< "wrong" | "right" | "unsure"
     QString note;
     QString created_at;
 };
@@ -24,9 +24,7 @@ class AgentFeedbackRepository {
   public:
     static AgentFeedbackRepository& instance();
 
-    Result<void> create(const QString& request_id,
-                        const QString& verdict,
-                        const QString& note = {});
+    Result<void> create(const QString& request_id, const QString& verdict, const QString& note = {});
 
     Result<QVector<AgentFeedbackRow>> list_recent(int limit = 100);
     Result<QVector<AgentFeedbackRow>> list_by_request(const QString& request_id);

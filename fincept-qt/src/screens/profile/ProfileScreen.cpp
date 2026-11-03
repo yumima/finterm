@@ -61,8 +61,8 @@ QWidget* ProfileScreen::make_data_row(const QString& label, QLabel*& value_out) 
     hl->addWidget(lbl);
     hl->addStretch();
     value_out = new QLabel("\xe2\x80\x94");
-    value_out->setStyleSheet(
-        QString("color:%1;font-size:13px;font-weight:700;background:transparent;%2").arg(ui::colors::TEXT_PRIMARY(), MF));
+    value_out->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;background:transparent;%2")
+                                 .arg(ui::colors::TEXT_PRIMARY(), MF));
     hl->addWidget(value_out);
     return row;
 }
@@ -81,8 +81,9 @@ QWidget* ProfileScreen::make_tier_picker_row() {
     ov_tier_picker_->addItems({"free", "basic", "standard", "pro", "enterprise"});
     ov_tier_picker_->setCursor(Qt::PointingHandCursor);
     ov_tier_picker_->setStyleSheet(
-        QString("QComboBox{background:%1;color:%2;border:1px solid %3;padding:2px 8px;font-size:12px;font-weight:700;%4}"
-                "QComboBox::drop-down{border:none;}")
+        QString(
+            "QComboBox{background:%1;color:%2;border:1px solid %3;padding:2px 8px;font-size:12px;font-weight:700;%4}"
+            "QComboBox::drop-down{border:none;}")
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MF));
     connect(ov_tier_picker_, QOverload<int>::of(&QComboBox::activated), this,
             [this](int) { apply_tier_change(ov_tier_picker_->currentText()); });
@@ -94,22 +95,23 @@ void ProfileScreen::apply_tier_change(const QString& tier) {
     QJsonObject body;
     body["tier"] = tier;
     LOG_INFO("Profile", "Requesting tier change → " + tier);
-    fincept::HttpClient::instance().post(
-        "/user/set-tier", body, [this, tier](fincept::Result<QJsonDocument> r) {
-            if (!r.is_ok()) {
-                LOG_WARN("Profile", "set-tier failed: " + QString::fromStdString(r.error()));
-                QMessageBox::warning(this, "Tier change failed",
-                                     QString("Could not update tier to '%1'.\n\nIs the local stub server running?").arg(tier));
-                return;
-            }
-            LOG_INFO("Profile", "Tier updated to " + tier + " — refreshing session");
-            auth::AuthManager::instance().refresh_user_data();
-        });
+    fincept::HttpClient::instance().post("/user/set-tier", body, [this, tier](fincept::Result<QJsonDocument> r) {
+        if (!r.is_ok()) {
+            LOG_WARN("Profile", "set-tier failed: " + QString::fromStdString(r.error()));
+            QMessageBox::warning(
+                this, "Tier change failed",
+                QString("Could not update tier to '%1'.\n\nIs the local stub server running?").arg(tier));
+            return;
+        }
+        LOG_INFO("Profile", "Tier updated to " + tier + " — refreshing session");
+        auth::AuthManager::instance().refresh_user_data();
+    });
 }
 
 QWidget* ProfileScreen::make_stat_box(const QString& label, QLabel*& value_out, const QString& color) {
     auto* w = new QWidget(this);
-    w->setStyleSheet(QString("background:%1;border:1px solid %2;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+    w->setStyleSheet(
+        QString("background:%1;border:1px solid %2;").arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
     auto* vl = new QVBoxLayout(w);
     vl->setContentsMargins(12, 14, 12, 14);
     vl->setAlignment(Qt::AlignCenter);
@@ -177,7 +179,8 @@ void ProfileScreen::build_header(QVBoxLayout* root) {
     rb->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 10px;"
                 "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::TEXT_PRIMARY()));
     connect(rb, &QPushButton::clicked, this, []() { auth::AuthManager::instance().refresh_user_data(); });
     hl->addWidget(rb);
     root->addWidget(bar);
@@ -253,7 +256,8 @@ QWidget* ProfileScreen::build_overview() {
     eb->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 12px;margin:8px 12px;"
                 "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::TEXT_PRIMARY()));
     connect(eb, &QPushButton::clicked, this, &ProfileScreen::show_edit_profile_dialog);
     avl->addWidget(eb);
     grid->addWidget(acct, 0, 0);
@@ -291,7 +295,8 @@ QWidget* ProfileScreen::build_overview() {
     eb2->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 12px;"
                 "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::TEXT_PRIMARY()));
     connect(eb2, &QPushButton::clicked, this, &ProfileScreen::show_edit_profile_dialog);
     arl->addWidget(eb2);
     auto* lb = new QPushButton("LOGOUT");
@@ -404,7 +409,8 @@ QWidget* ProfileScreen::build_security() {
     sb->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 10px;"
                 "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::TEXT_PRIMARY()));
     connect(sb, &QPushButton::clicked, this, [this, sb]() {
         api_key_visible_ = !api_key_visible_;
         sb->setText(api_key_visible_ ? "HIDE" : "SHOW");
@@ -417,7 +423,8 @@ QWidget* ProfileScreen::build_security() {
     cb->setStyleSheet(
         QString("QPushButton{background:%1;color:%2;border:1px solid %3;padding:0 10px;"
                 "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}QPushButton:hover{color:%4;}")
-            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::TEXT_PRIMARY()));
     connect(cb, &QPushButton::clicked, this, [cb]() {
         auto key = auth::AuthManager::instance().session().api_key;
         if (!key.isEmpty()) {
@@ -747,13 +754,14 @@ void ProfileScreen::show_edit_profile_dialog() {
     vl->setContentsMargins(20, 16, 20, 16);
     vl->setSpacing(10);
     auto* t = new QLabel("EDIT PROFILE");
-    t->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;background:transparent;").arg(ui::colors::AMBER()));
+    t->setStyleSheet(
+        QString("color:%1;font-size:14px;font-weight:700;background:transparent;").arg(ui::colors::AMBER()));
     vl->addWidget(t);
     const auto& s = auth::AuthManager::instance().session();
     auto add_f = [&](const QString& l, const QString& v) -> QLineEdit* {
         auto* lb = new QLabel(l);
-        lb->setStyleSheet(
-            QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        lb->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
+                              .arg(ui::colors::TEXT_SECONDARY()));
         vl->addWidget(lb);
         auto* i = new QLineEdit(v);
         i->setFixedHeight(28);
@@ -835,7 +843,8 @@ void ProfileScreen::show_delete_account_dialog() {
     auto first = QMessageBox::warning(
         this, "Delete Account",
         QString("This will permanently delete your finterm account (%1) and all associated data.\n\n"
-                "This action CANNOT be undone. Are you sure?").arg(email),
+                "This action CANNOT be undone. Are you sure?")
+            .arg(email),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (first != QMessageBox::Yes)
         return;
@@ -851,7 +860,8 @@ void ProfileScreen::show_delete_account_dialog() {
     vl->setSpacing(10);
 
     auto* warn = new QLabel("TYPE YOUR EMAIL ADDRESS TO CONFIRM:");
-    warn->setStyleSheet(QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(ui::colors::NEGATIVE()));
+    warn->setStyleSheet(
+        QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(ui::colors::NEGATIVE()));
     vl->addWidget(warn);
 
     auto* hint = new QLabel(email);
@@ -873,29 +883,29 @@ void ProfileScreen::show_delete_account_dialog() {
     auto* confirm = new QPushButton("DELETE MY ACCOUNT");
     confirm->setFixedHeight(26);
     confirm->setEnabled(false);
-    confirm->setStyleSheet(
-        QString("QPushButton{background:%1;color:%2;border:none;padding:0 14px;"
-                "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
-                "QPushButton:disabled{background:#3f1515;color:#7f3333;}")
-            .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY()));
-    connect(input, &QLineEdit::textChanged, this, [confirm, email](const QString& text) {
-        confirm->setEnabled(text.trimmed() == email);
-    });
+    confirm->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:none;padding:0 14px;"
+                                   "font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
+                                   "QPushButton:disabled{background:#3f1515;color:#7f3333;}")
+                               .arg(ui::colors::NEGATIVE(), ui::colors::TEXT_PRIMARY()));
+    connect(input, &QLineEdit::textChanged, this,
+            [confirm, email](const QString& text) { confirm->setEnabled(text.trimmed() == email); });
 
     QPointer<ProfileScreen> self = this;
     QPointer<QDialog> dlg_ptr = dlg;
     connect(confirm, &QPushButton::clicked, this, [self, dlg_ptr]() {
-        if (!self) return;
-        if (dlg_ptr) dlg_ptr->accept();
+        if (!self)
+            return;
+        if (dlg_ptr)
+            dlg_ptr->accept();
         auth::UserApi::instance().delete_user_account([self](auth::ApiResponse r) {
-            if (!self) return;
+            if (!self)
+                return;
             if (r.success) {
                 LOG_INFO("Profile", "Account deleted successfully");
                 auth::AuthManager::instance().logout(/*wipe_device_pin=*/true);
             } else {
                 LOG_ERROR("Profile", "Account deletion failed: " + r.error);
-                QMessageBox::critical(self, "Delete Failed",
-                                      "Account deletion failed: " + r.error);
+                QMessageBox::critical(self, "Delete Failed", "Account deletion failed: " + r.error);
             }
         });
     });

@@ -34,10 +34,9 @@ void SchedulerSection::build_ui() {
     root->setContentsMargins(16, 16, 16, 16);
     root->setSpacing(12);
 
-    auto* hdr = new QLabel(QStringLiteral(
-        "<b>Scheduler</b> — agent runs that fire on a cron schedule.  "
-        "Grammar: <code>@daily HH:MM</code> or <code>@every Nm</code> / "
-        "<code>@every Nh</code>."));
+    auto* hdr = new QLabel(QStringLiteral("<b>Scheduler</b> — agent runs that fire on a cron schedule.  "
+                                          "Grammar: <code>@daily HH:MM</code> or <code>@every Nm</code> / "
+                                          "<code>@every Nh</code>."));
     hdr->setWordWrap(true);
     root->addWidget(hdr);
 
@@ -63,18 +62,16 @@ void SchedulerSection::build_ui() {
 
     table_ = new QTableWidget(this);
     table_->setColumnCount(kColCount);
-    table_->setHorizontalHeaderLabels(
-        {QStringLiteral("ID"), QStringLiteral("Agent"), QStringLiteral("Skill"),
-         QStringLiteral("Cron"), QStringLiteral("Enabled"),
-         QStringLiteral("Last run"), QStringLiteral("Last status")});
+    table_->setHorizontalHeaderLabels({QStringLiteral("ID"), QStringLiteral("Agent"), QStringLiteral("Skill"),
+                                       QStringLiteral("Cron"), QStringLiteral("Enabled"), QStringLiteral("Last run"),
+                                       QStringLiteral("Last status")});
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(kColId, QHeaderView::ResizeToContents);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->verticalHeader()->setVisible(false);
-    connect(table_, &QTableWidget::itemSelectionChanged,
-            this, &SchedulerSection::on_selection_changed);
+    connect(table_, &QTableWidget::itemSelectionChanged, this, &SchedulerSection::on_selection_changed);
     root->addWidget(table_, 1);
 
     status_lbl_ = new QLabel;
@@ -105,16 +102,13 @@ void SchedulerSection::on_selection_changed() {
     remove_btn_->setEnabled(has);
     toggle_btn_->setEnabled(has);
     run_now_btn_->setEnabled(has);
-    toggle_btn_->setText(has && selected_enabled()
-                             ? QStringLiteral("Disable")
-                             : QStringLiteral("Enable"));
+    toggle_btn_->setText(has && selected_enabled() ? QStringLiteral("Disable") : QStringLiteral("Enable"));
 }
 
 void SchedulerSection::reload() {
     auto r = services::AgentScheduler::instance().list_entries();
     if (r.is_err()) {
-        show_status(QStringLiteral("Failed to load: %1")
-                        .arg(QString::fromStdString(r.error())), true);
+        show_status(QStringLiteral("Failed to load: %1").arg(QString::fromStdString(r.error())), true);
         table_->setRowCount(0);
         return;
     }
@@ -126,16 +120,16 @@ void SchedulerSection::reload() {
         table_->setItem(i, kColAgent, new QTableWidgetItem(e.agent_id));
         table_->setItem(i, kColSkill, new QTableWidgetItem(e.skill));
         table_->setItem(i, kColCron, new QTableWidgetItem(e.cron));
-        table_->setItem(i, kColEnabled,
-                        new QTableWidgetItem(e.enabled ? QStringLiteral("yes")
-                                                        : QStringLiteral("no")));
+        table_->setItem(i, kColEnabled, new QTableWidgetItem(e.enabled ? QStringLiteral("yes") : QStringLiteral("no")));
         table_->setItem(i, kColLastRun, new QTableWidgetItem(e.last_run_at));
         table_->setItem(i, kColLastStatus, new QTableWidgetItem(e.last_status));
     }
     on_selection_changed();
 }
 
-void SchedulerSection::on_refresh() { reload(); }
+void SchedulerSection::on_refresh() {
+    reload();
+}
 
 void SchedulerSection::on_add() {
     // Small modal — agent_id, skill, cron, args_json.  Validation
@@ -228,8 +222,7 @@ void SchedulerSection::on_run_now() {
 
 void SchedulerSection::show_status(const QString& msg, bool error) {
     status_lbl_->setText(msg);
-    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;")
-                                     : QStringLiteral("color: #393;"));
+    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;") : QStringLiteral("color: #393;"));
 }
 
 } // namespace fincept::screens

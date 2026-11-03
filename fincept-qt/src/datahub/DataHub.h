@@ -61,14 +61,14 @@ enum class SubscriptionState : int {
 struct TopicStats {
     QString topic;
     int subscriber_count = 0;
-    qint64 last_publish_ms = 0;          ///< QDateTime::currentMSecsSinceEpoch at last publish
-    qint64 last_refresh_request_ms = 0;  ///< last time scheduler asked producer to refresh
-    qint64 last_error_ms = 0;            ///< last time a refresh error was reported (0 = never)
+    qint64 last_publish_ms = 0;         ///< QDateTime::currentMSecsSinceEpoch at last publish
+    qint64 last_refresh_request_ms = 0; ///< last time scheduler asked producer to refresh
+    qint64 last_error_ms = 0;           ///< last time a refresh error was reported (0 = never)
     int total_publishes = 0;
     int total_errors = 0;
-    bool in_flight = false;              ///< producer has an outstanding refresh()
+    bool in_flight = false; ///< producer has an outstanding refresh()
     bool push_only = false;
-    QString last_error;                  ///< most recent error string, empty if none or cleared
+    QString last_error; ///< most recent error string, empty if none or cleared
 };
 
 /// In-process pub/sub data layer. See DATAHUB_ARCHITECTURE.md §4.
@@ -86,20 +86,13 @@ class DataHub : public QObject {
     /// subscription auto-cancels when the owner is destroyed. `slot`
     /// receives the current cached value immediately (if fresh) and every
     /// future `publish()` for this topic.
-    QMetaObject::Connection subscribe(
-        QObject* owner,
-        const QString& topic,
-        std::function<void(const QVariant&)> slot);
+    QMetaObject::Connection subscribe(QObject* owner, const QString& topic, std::function<void(const QVariant&)> slot);
 
     /// Typed variant — unwraps `QVariant` to `T` automatically. `T` must
     /// be registered via `Q_DECLARE_METATYPE` + `qRegisterMetaType<T>()`.
     template <typename T>
-    QMetaObject::Connection subscribe(
-        QObject* owner,
-        const QString& topic,
-        std::function<void(const T&)> slot) {
-        static_assert(QMetaTypeId2<T>::Defined,
-                      "T must be registered with Q_DECLARE_METATYPE");
+    QMetaObject::Connection subscribe(QObject* owner, const QString& topic, std::function<void(const T&)> slot) {
+        static_assert(QMetaTypeId2<T>::Defined, "T must be registered with Q_DECLARE_METATYPE");
         return subscribe(owner, topic, [slot](const QVariant& v) {
             if (v.canConvert<T>())
                 slot(v.value<T>());
@@ -108,10 +101,8 @@ class DataHub : public QObject {
 
     /// Subscribe to a pattern (`*`-suffix wildcard, e.g. `"market:quote:*"`).
     /// The slot receives `(topic, value)` for every matching publish.
-    QMetaObject::Connection subscribe_pattern(
-        QObject* owner,
-        const QString& pattern,
-        std::function<void(const QString&, const QVariant&)> slot);
+    QMetaObject::Connection subscribe_pattern(QObject* owner, const QString& pattern,
+                                              std::function<void(const QString&, const QVariant&)> slot);
 
     /// Remove every subscription owned by `owner`.
     void unsubscribe(QObject* owner);
@@ -130,16 +121,13 @@ class DataHub : public QObject {
     // auto-cleanup on destroyed().
 
     /// Receive `publish_error()` events for a single concrete topic.
-    QMetaObject::Connection subscribe_errors(
-        QObject* owner,
-        const QString& topic,
-        std::function<void(const QString& error)> slot);
+    QMetaObject::Connection subscribe_errors(QObject* owner, const QString& topic,
+                                             std::function<void(const QString& error)> slot);
 
     /// Receive `publish_error()` events for every topic matching `pattern`.
-    QMetaObject::Connection subscribe_pattern_errors(
-        QObject* owner,
-        const QString& pattern,
-        std::function<void(const QString& topic, const QString& error)> slot);
+    QMetaObject::Connection
+    subscribe_pattern_errors(QObject* owner, const QString& pattern,
+                             std::function<void(const QString& topic, const QString& error)> slot);
 
     void unsubscribe_errors(QObject* owner, const QString& topic);
     void unsubscribe_pattern_errors(QObject* owner, const QString& pattern);
@@ -153,8 +141,7 @@ class DataHub : public QObject {
 
     /// Per-publish TTL override (used by push-only producers that want
     /// values to age out even though the scheduler ignores them).
-    void publish(const QString& topic, const QVariant& value,
-                 std::chrono::milliseconds ttl);
+    void publish(const QString& topic, const QVariant& value, std::chrono::milliseconds ttl);
 
     /// Signal that a refresh() for `topic` has failed. Clears the
     /// `in_flight` flag so the scheduler can retry on the next pass and
@@ -264,7 +251,7 @@ class DataHub : public QObject {
     // ── Internal types ──────────────────────────────────────────────────────
     struct Subscription {
         QPointer<QObject> owner;
-        std::function<void(const QVariant&)> slot;          // single-topic
+        std::function<void(const QVariant&)> slot; // single-topic
         std::function<void(const QString&, const QVariant&)> pattern_slot;
         bool is_pattern = false;
     };
@@ -299,11 +286,11 @@ class DataHub : public QObject {
         int total_errors = 0;
         bool in_flight = false;
         TopicPolicy policy;
-        bool policy_explicit = false;  ///< set_policy() was called
-        QString last_error;            ///< most recent error string; cleared on successful publish
+        bool policy_explicit = false; ///< set_policy() was called
+        QString last_error;           ///< most recent error string; cleared on successful publish
         // Coalesce state — non-zero policy.coalesce_within_ms only.
-        bool coalesce_pending = false;   ///< a deferred publish is armed
-        QVariant coalesce_latest;        ///< most recent value inside window
+        bool coalesce_pending = false; ///< a deferred publish is armed
+        QVariant coalesce_latest;      ///< most recent value inside window
         // Last SubscriptionState emitted via topic_state_changed. Used to
         // suppress duplicate transitions when the computed state hasn't
         // actually changed. Initialised to Empty (default) so the first
@@ -312,16 +299,14 @@ class DataHub : public QObject {
     };
 
     // ── Helpers ─────────────────────────────────────────────────────────────
-    void deliver_initial_value(QObject* owner, const QString& topic,
-                               const std::function<void(const QVariant&)>& slot);
+    void deliver_initial_value(QObject* owner, const QString& topic, const std::function<void(const QVariant&)>& slot);
     void on_owner_destroyed(QObject* owner);
     Producer* find_producer(const QString& topic) const;
     TopicPolicy resolve_policy(const QString& topic) const;
     TopicState& state_for(const QString& topic);
     static bool pattern_matches(const QString& pattern, const QString& topic);
     void emit_to_subscribers(const QString& topic, const QVariant& value);
-    void do_publish(const QString& topic, const QVariant& value,
-                    std::chrono::milliseconds ttl_override);
+    void do_publish(const QString& topic, const QVariant& value, std::chrono::milliseconds ttl_override);
     void do_coalesced_flush(const QString& topic);
     void scheduler_body();
     // Periodic eviction of topics that have no subscribers (concrete or
@@ -337,11 +322,14 @@ class DataHub : public QObject {
     // update the tracker and queue a topic_state_changed signal. Caller
     // must hold mutex_; the signal is emitted *after* the lock is dropped
     // by the caller using the returned pending-emit pair.
-    struct StateTransition { bool changed = false; SubscriptionState to = SubscriptionState::Empty; };
+    struct StateTransition {
+        bool changed = false;
+        SubscriptionState to = SubscriptionState::Empty;
+    };
     StateTransition record_state_transition_locked(TopicState& st);
     qint64 last_sweep_ms_ = 0;
-    static constexpr qint64 kSweepIntervalMs = 60 * 1000;        // sweep once per minute
-    static constexpr qint64 kStaleTopicTtlMs = 5 * 60 * 1000;    // 5 min idle → eligible
+    static constexpr qint64 kSweepIntervalMs = 60 * 1000;     // sweep once per minute
+    static constexpr qint64 kStaleTopicTtlMs = 5 * 60 * 1000; // 5 min idle → eligible
 
     // ── State ───────────────────────────────────────────────────────────────
     mutable QMutex mutex_;
@@ -359,7 +347,7 @@ class DataHub : public QObject {
     // fan-out path inside publish_error().
     struct ErrorSub {
         QPointer<QObject> owner;
-        std::function<void(const QString&)> single_slot;        // subscribe_errors
+        std::function<void(const QString&)> single_slot;                  // subscribe_errors
         std::function<void(const QString&, const QString&)> pattern_slot; // subscribe_pattern_errors
         bool is_pattern = false;
     };
@@ -385,12 +373,12 @@ class DataHub : public QObject {
     // pattern for exact matches). Replaces O(N_producers × N_patterns)
     // iteration with a cheaper cache-friendly scan.
     struct PatternEntry {
-        QString prefix;    ///< pattern with trailing '*' stripped, or full pattern
-        bool is_wildcard;  ///< true if original pattern ended with '*'
+        QString prefix;   ///< pattern with trailing '*' stripped, or full pattern
+        bool is_wildcard; ///< true if original pattern ended with '*'
         Producer* owner;
     };
     QVector<PatternEntry> pattern_index_;
-    void rebuild_pattern_index();  // caller holds mutex_
+    void rebuild_pattern_index(); // caller holds mutex_
 
     QTimer scheduler_;
 

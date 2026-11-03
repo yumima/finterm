@@ -18,15 +18,15 @@ class PreIpoService : public QObject {
 
     void load_data();
 
-    QVector<PrivateCompany> companies()       const;
-    PrivateCompany          company(const QString& id) const;
-    QVector<FormDFiling>    recent_form_d()   const;
-    QVector<S1Filing>       ipo_pipeline()    const;
+    QVector<PrivateCompany> companies() const;
+    PrivateCompany company(const QString& id) const;
+    QVector<FormDFiling> recent_form_d() const;
+    QVector<S1Filing> ipo_pipeline() const;
 
     void toggle_watch(const QString& id);
 
-    bool      is_loaded()     const { return summary_.loaded; }
-    QDateTime last_updated()  const { return summary_.last_updated; }
+    bool is_loaded() const { return summary_.loaded; }
+    QDateTime last_updated() const { return summary_.last_updated; }
 
   signals:
     void data_loaded(fincept::pre_ipo::PreIpoSummary summary);

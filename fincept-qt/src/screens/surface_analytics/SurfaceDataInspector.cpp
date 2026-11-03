@@ -76,9 +76,7 @@ SurfaceDataInspector::SurfaceDataInspector(QWidget* parent) : QWidget(parent) {
 }
 
 void SurfaceDataInspector::setup_ui() {
-    setStyleSheet(QString("background:%1; color:%2;")
-                      .arg(colors::BG_BASE())
-                      .arg(colors::TEXT_PRIMARY()));
+    setStyleSheet(QString("background:%1; color:%2;").arg(colors::BG_BASE()).arg(colors::TEXT_PRIMARY()));
     setMinimumHeight(190);
 
     auto* outer = new QHBoxLayout(this);
@@ -126,9 +124,8 @@ void SurfaceDataInspector::setup_ui() {
 
     // ── COLUMN 2: Lineage ──────────────────────────────────────────────────
     auto* col2 = new QWidget(this);
-    col2->setStyleSheet(QString("background:%1; border-left:1px solid %2;")
-                            .arg(colors::BG_BASE())
-                            .arg(colors::BORDER_DIM()));
+    col2->setStyleSheet(
+        QString("background:%1; border-left:1px solid %2;").arg(colors::BG_BASE()).arg(colors::BORDER_DIM()));
     auto* col2_layout = new QVBoxLayout(col2);
     col2_layout->setContentsMargins(0, 0, 0, 0);
     col2_layout->setSpacing(0);
@@ -147,13 +144,11 @@ void SurfaceDataInspector::setup_ui() {
         auto* row = new QHBoxLayout();
         row->setSpacing(6);
         auto* k = new QLabel(key, lin_body);
-        k->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;")
-                             .arg(colors::TEXT_SECONDARY()));
+        k->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;").arg(colors::TEXT_SECONDARY()));
         k->setMinimumWidth(72);
         row->addWidget(k);
         target = new QLabel("—", lin_body);
-        target->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;")
-                                  .arg(colors::TEXT_PRIMARY()));
+        target->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;").arg(colors::TEXT_PRIMARY()));
         target->setWordWrap(true);
         row->addWidget(target, 1);
         lin_l->addLayout(row);
@@ -172,9 +167,8 @@ void SurfaceDataInspector::setup_ui() {
 
     // ── COLUMN 3: Status / errors ──────────────────────────────────────────
     auto* col3 = new QWidget(this);
-    col3->setStyleSheet(QString("background:%1; border-left:1px solid %2;")
-                            .arg(colors::BG_BASE())
-                            .arg(colors::BORDER_DIM()));
+    col3->setStyleSheet(
+        QString("background:%1; border-left:1px solid %2;").arg(colors::BG_BASE()).arg(colors::BORDER_DIM()));
     auto* col3_layout = new QVBoxLayout(col3);
     col3_layout->setContentsMargins(0, 0, 0, 0);
     col3_layout->setSpacing(0);
@@ -202,8 +196,7 @@ void SurfaceDataInspector::setup_ui() {
 
     error_label_ = new QLabel("", status_body);
     error_label_->setWordWrap(true);
-    error_label_->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;")
-                                    .arg(colors::NEGATIVE()));
+    error_label_->setStyleSheet(QString("color:%1; font-size:12px; font-family:Consolas;").arg(colors::NEGATIVE()));
     status_l->addWidget(error_label_);
 
     view_raw_btn_ = new QPushButton("VIEW RAW RESPONSE", status_body);
@@ -269,9 +262,8 @@ void SurfaceDataInspector::on_tab_changed(int index) {
     table_view_->resizeColumnsToContents();
 }
 
-void SurfaceDataInspector::set_lineage(const QString& dataset, const QString& schema,
-                                       const QString& symbology, const QString& symbols,
-                                       const QString& date_range, qint64 row_count,
+void SurfaceDataInspector::set_lineage(const QString& dataset, const QString& schema, const QString& symbology,
+                                       const QString& symbols, const QString& date_range, qint64 row_count,
                                        double cost_usd) {
     lin_dataset_->setText(dataset.isEmpty() ? "—" : dataset);
     lin_schema_->setText(schema.isEmpty() ? "—" : schema);
@@ -285,8 +277,7 @@ void SurfaceDataInspector::set_lineage(const QString& dataset, const QString& sc
 void SurfaceDataInspector::set_status(const QString& message, bool ok) {
     QString stamp = QDateTime::currentDateTime().toString("hh:mm:ss");
     status_label_->setText(QString("[%1] %2").arg(stamp).arg(message));
-    status_dot_->setStyleSheet(QString("color:%1; font-size:14px;")
-                                   .arg(ok ? colors::POSITIVE() : colors::NEGATIVE()));
+    status_dot_->setStyleSheet(QString("color:%1; font-size:14px;").arg(ok ? colors::POSITIVE() : colors::NEGATIVE()));
     if (ok)
         error_label_->setText("");
 }
@@ -330,8 +321,7 @@ void SurfaceDataInspector::on_export_csv_clicked() {
     const auto& snap = snapshots_[idx];
 
     QString suggested = QString("%1.csv").arg(snap.name);
-    QString path = QFileDialog::getSaveFileName(this, "Export CSV", suggested,
-                                                "CSV files (*.csv)");
+    QString path = QFileDialog::getSaveFileName(this, "Export CSV", suggested, "CSV files (*.csv)");
     if (path.isEmpty())
         return;
     QFile f(path);

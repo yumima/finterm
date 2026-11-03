@@ -17,21 +17,21 @@
 #include "ui/theme/Theme.h"
 
 #include <QDate>
-#include <QJsonArray>
-#include <QJsonValue>
-#include <QMap>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QFrame>
 #include <QHBoxLayout>
+#include <QJsonArray>
+#include <QJsonValue>
 #include <QLabel>
+#include <QMap>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QSplitter>
 #include <QStackedWidget>
 #include <QStringList>
-#include <QVariant>
 #include <QVBoxLayout>
+#include <QVariant>
 
 #include <cmath>
 #include <cstdlib>
@@ -192,12 +192,10 @@ void SurfaceAnalyticsScreen::setup_ui() {
     root->addWidget(outer, 1);
 
     // Wire control panel signals
-    connect(control_panel_, &SurfaceControlPanel::controls_changed, this,
-            &SurfaceAnalyticsScreen::on_controls_changed);
+    connect(control_panel_, &SurfaceControlPanel::controls_changed, this, &SurfaceAnalyticsScreen::on_controls_changed);
     connect(control_panel_, &SurfaceControlPanel::symbol_changed, this,
             &SurfaceAnalyticsScreen::on_control_symbol_changed);
-    connect(control_panel_, &SurfaceControlPanel::fetch_requested, this,
-            &SurfaceAnalyticsScreen::on_fetch_requested);
+    connect(control_panel_, &SurfaceControlPanel::fetch_requested, this, &SurfaceAnalyticsScreen::on_fetch_requested);
 
     // Default visibility / capability for active surface
     control_panel_->set_capability(active_chart_);
@@ -378,9 +376,9 @@ void SurfaceAnalyticsScreen::clear_symbol_surfaces() {
     // change because the user typed another ticker), and the bar-derived risk
     // surfaces are keyed on the basket, not the underlying — both survive.
     static const QSet<ChartType> kSurvivesSymbolChange = {
-        ChartType::YieldCurve, ChartType::RealYield, ChartType::InflationExpectations,
+        ChartType::YieldCurve,  ChartType::RealYield,   ChartType::InflationExpectations,
         ChartType::ForwardRate, ChartType::Correlation, ChartType::PCA,
-        ChartType::VaR, ChartType::Drawdown, ChartType::BetaSurface,
+        ChartType::VaR,         ChartType::Drawdown,    ChartType::BetaSurface,
     };
     for (auto it = fetched_.begin(); it != fetched_.end();)
         it = kSurvivesSymbolChange.contains(*it) ? std::next(it) : fetched_.erase(it);
@@ -408,15 +406,14 @@ void SurfaceAnalyticsScreen::update_chart() {
     if (surface_3d_) {
         const char* feed = required_feed(active_chart_);
         const auto& ecap = capability_for(active_chart_);
-        surface_3d_->set_empty_text(
-            feed ? QStringLiteral("NO DATA — this surface needs %1.\n\n"
-                                  "Nothing is drawn rather than a modelled shape:\n"
-                                  "an invented surface is worse than an empty one.")
-                       .arg(QString::fromUtf8(feed))
-            : ecap.tier != SurfaceTier::DEMO
-                ? QStringLiteral("NO DATA LOADED\n\nPress FETCH to load real data from %1.")
-                      .arg(QString::fromUtf8(ecap.dataset))
-                : QString());
+        surface_3d_->set_empty_text(feed ? QStringLiteral("NO DATA — this surface needs %1.\n\n"
+                                                          "Nothing is drawn rather than a modelled shape:\n"
+                                                          "an invented surface is worse than an empty one.")
+                                               .arg(QString::fromUtf8(feed))
+                                    : ecap.tier != SurfaceTier::DEMO
+                                        ? QStringLiteral("NO DATA LOADED\n\nPress FETCH to load real data from %1.")
+                                              .arg(QString::fromUtf8(ecap.dataset))
+                                        : QString());
     }
 
     auto minmax = [](const std::vector<std::vector<float>>& z, float& mn, float& mx) {
@@ -860,9 +857,7 @@ void SurfaceAnalyticsScreen::update_chart() {
             // Name the benchmark on the axis. "BETA" alone is not a number
             // anyone can act on — beta to what?
             const std::string blabel =
-                beta_benchmark_.isEmpty()
-                    ? std::string("BETA")
-                    : "BETA vs " + beta_benchmark_.toUpper().toStdString();
+                beta_benchmark_.isEmpty() ? std::string("BETA") : "BETA vs " + beta_benchmark_.toUpper().toStdString();
             std::vector<std::string> al(beta_data_.assets);
             surface_3d_->set_surface(beta_data_.z, "HORIZON", blabel, "ASSET", mn, mx, true, &hl2,
                                      al.empty() ? nullptr : &al);
@@ -916,41 +911,76 @@ void SurfaceAnalyticsScreen::update_metrics() {
 
 const std::vector<std::vector<float>>* SurfaceAnalyticsScreen::active_z_grid() const {
     switch (active_chart_) {
-        case ChartType::Volatility: return &vol_data_.z;
-        case ChartType::DeltaSurface: return &delta_data_.z;
-        case ChartType::GammaSurface: return &gamma_data_.z;
-        case ChartType::VegaSurface: return &vega_data_.z;
-        case ChartType::ThetaSurface: return &theta_data_.z;
-        case ChartType::SkewSurface: return &skew_data_.z;
-        case ChartType::LocalVolSurface: return &local_vol_data_.z;
-        case ChartType::YieldCurve: return &yield_data_.z;
-        case ChartType::SwaptionVol: return &swaption_data_.z;
-        case ChartType::CapFloorVol: return &capfloor_data_.z;
-        case ChartType::BondSpread: return &bond_spread_data_.z;
-        case ChartType::OISBasis: return &ois_data_.z;
-        case ChartType::RealYield: return &real_yield_data_.z;
-        case ChartType::ForwardRate: return &fwd_rate_data_.z;
-        case ChartType::FXVol: return &fx_vol_data_.z;
-        case ChartType::FXForwardPoints: return &fx_fwd_data_.z;
-        case ChartType::CrossCurrencyBasis: return &xccy_data_.z;
-        case ChartType::CDSSpread: return &cds_data_.z;
-        case ChartType::CreditTransition: return &credit_trans_data_.z;
-        case ChartType::RecoveryRate: return &recovery_data_.z;
-        case ChartType::CommodityForward: return &cmdty_fwd_data_.z;
-        case ChartType::CommodityVol: return &cmdty_vol_data_.z;
-        case ChartType::CrackSpread: return &crack_data_.z;
-        case ChartType::ContangoBackwardation: return &contango_data_.z;
-        case ChartType::Correlation: return &corr_data_.z;
-        case ChartType::PCA: return &pca_data_.z;
-        case ChartType::VaR: return &var_data_.z;
-        case ChartType::StressTestPnL: return &stress_data_.z;
-        case ChartType::FactorExposure: return &factor_data_.z;
-        case ChartType::LiquidityHeatmap: return &liquidity_data_.z;
-        case ChartType::Drawdown: return &drawdown_data_.z;
-        case ChartType::BetaSurface: return &beta_data_.z;
-        case ChartType::ImpliedDividend: return &impl_div_data_.z;
-        case ChartType::InflationExpectations: return &inflation_data_.z;
-        case ChartType::MonetaryPolicyPath: return &monetary_data_.z;
+        case ChartType::Volatility:
+            return &vol_data_.z;
+        case ChartType::DeltaSurface:
+            return &delta_data_.z;
+        case ChartType::GammaSurface:
+            return &gamma_data_.z;
+        case ChartType::VegaSurface:
+            return &vega_data_.z;
+        case ChartType::ThetaSurface:
+            return &theta_data_.z;
+        case ChartType::SkewSurface:
+            return &skew_data_.z;
+        case ChartType::LocalVolSurface:
+            return &local_vol_data_.z;
+        case ChartType::YieldCurve:
+            return &yield_data_.z;
+        case ChartType::SwaptionVol:
+            return &swaption_data_.z;
+        case ChartType::CapFloorVol:
+            return &capfloor_data_.z;
+        case ChartType::BondSpread:
+            return &bond_spread_data_.z;
+        case ChartType::OISBasis:
+            return &ois_data_.z;
+        case ChartType::RealYield:
+            return &real_yield_data_.z;
+        case ChartType::ForwardRate:
+            return &fwd_rate_data_.z;
+        case ChartType::FXVol:
+            return &fx_vol_data_.z;
+        case ChartType::FXForwardPoints:
+            return &fx_fwd_data_.z;
+        case ChartType::CrossCurrencyBasis:
+            return &xccy_data_.z;
+        case ChartType::CDSSpread:
+            return &cds_data_.z;
+        case ChartType::CreditTransition:
+            return &credit_trans_data_.z;
+        case ChartType::RecoveryRate:
+            return &recovery_data_.z;
+        case ChartType::CommodityForward:
+            return &cmdty_fwd_data_.z;
+        case ChartType::CommodityVol:
+            return &cmdty_vol_data_.z;
+        case ChartType::CrackSpread:
+            return &crack_data_.z;
+        case ChartType::ContangoBackwardation:
+            return &contango_data_.z;
+        case ChartType::Correlation:
+            return &corr_data_.z;
+        case ChartType::PCA:
+            return &pca_data_.z;
+        case ChartType::VaR:
+            return &var_data_.z;
+        case ChartType::StressTestPnL:
+            return &stress_data_.z;
+        case ChartType::FactorExposure:
+            return &factor_data_.z;
+        case ChartType::LiquidityHeatmap:
+            return &liquidity_data_.z;
+        case ChartType::Drawdown:
+            return &drawdown_data_.z;
+        case ChartType::BetaSurface:
+            return &beta_data_.z;
+        case ChartType::ImpliedDividend:
+            return &impl_div_data_.z;
+        case ChartType::InflationExpectations:
+            return &inflation_data_.z;
+        case ChartType::MonetaryPolicyPath:
+            return &monetary_data_.z;
     }
     return nullptr;
 }
@@ -963,9 +993,8 @@ void SurfaceAnalyticsScreen::update_inspector_lineage() {
     if (control_panel_) {
         const auto& s = control_panel_->state();
         if (s.start_date.isValid() && s.end_date.isValid())
-            date_range = QString("%1 → %2")
-                             .arg(s.start_date.toString("yyyy-MM-dd"))
-                             .arg(s.end_date.toString("yyyy-MM-dd"));
+            date_range =
+                QString("%1 → %2").arg(s.start_date.toString("yyyy-MM-dd")).arg(s.end_date.toString("yyyy-MM-dd"));
     }
     QString sym = current_symbol_or_default();
     if (cap.tier == SurfaceTier::EQUITIES && control_panel_)
@@ -982,40 +1011,33 @@ void SurfaceAnalyticsScreen::update_inspector_lineage() {
     const auto imported = imported_from_.constFind(active_chart_);
     const bool is_import = imported != imported_from_.constEnd();
     if (control_panel_)
-        control_panel_->set_provenance(is_import ? SurfaceProvenance::Imported
+        control_panel_->set_provenance(is_import   ? SurfaceProvenance::Imported
                                        : synthetic ? SurfaceProvenance::None
                                                    : SurfaceProvenance::Fetched);
     if (is_import) {
         // The file IS the source. No dataset, no schema, and no cost query —
         // nothing here went near Databento.
-        data_inspector_->set_lineage(imported.value(), QStringLiteral("imported CSV"),
-                                     QStringLiteral("—"), sym, QString(), count, 0.0);
+        data_inspector_->set_lineage(imported.value(), QStringLiteral("imported CSV"), QStringLiteral("—"), sym,
+                                     QString(), count, 0.0);
         return;
     }
     // Name the window the rates surfaces actually cover.
     if (!rates_dates_.isEmpty() && !synthetic &&
         (active_chart_ == ChartType::YieldCurve || active_chart_ == ChartType::RealYield ||
-         active_chart_ == ChartType::InflationExpectations ||
-         active_chart_ == ChartType::ForwardRate)) {
-        data_inspector_->set_lineage(QStringLiteral("FRED (St. Louis Fed)"),
-                                     QStringLiteral("constant-maturity series"),
+         active_chart_ == ChartType::InflationExpectations || active_chart_ == ChartType::ForwardRate)) {
+        data_inspector_->set_lineage(QStringLiteral("FRED (St. Louis Fed)"), QStringLiteral("constant-maturity series"),
                                      QStringLiteral("series id"), sym,
-                                     QStringLiteral("%1 → %2").arg(rates_dates_.first(),
-                                                                   rates_dates_.last()),
-                                     count, 0.0);
+                                     QStringLiteral("%1 → %2").arg(rates_dates_.first(), rates_dates_.last()), count,
+                                     0.0);
         return;
     }
     if (synthetic) {
-        data_inspector_->set_lineage(QStringLiteral("— no data loaded —"),
-                                     QStringLiteral("—"),
-                                     QStringLiteral("—"),
+        data_inspector_->set_lineage(QStringLiteral("— no data loaded —"), QStringLiteral("—"), QStringLiteral("—"),
                                      sym, QString(), count, 0.0);
         return;
     }
-    data_inspector_->set_lineage(QString::fromUtf8(cap.dataset),
-                                 QString::fromUtf8(cap.schema),
-                                 QString::fromUtf8(cap.symbology),
-                                 sym, date_range, count, 0.0);
+    data_inspector_->set_lineage(QString::fromUtf8(cap.dataset), QString::fromUtf8(cap.schema),
+                                 QString::fromUtf8(cap.symbology), sym, date_range, count, 0.0);
 
     // Fire-and-forget cost lookup. Skip for DEMO (no dataset) and for
     // capabilities whose schema is a composite ("definition+cbbo-1s") since
@@ -1057,8 +1079,7 @@ void SurfaceAnalyticsScreen::update_inspector_lineage() {
             return;
         if (!r.success)
             return;
-        self->data_inspector_->set_lineage(ds, sch, symb, sym_text, dr,
-                                           row_ct > 0 ? row_ct : r.record_count,
+        self->data_inspector_->set_lineage(ds, sch, symb, sym_text, dr, row_ct > 0 ? row_ct : r.record_count,
                                            r.cost_usd);
     });
 }
@@ -1068,7 +1089,8 @@ void SurfaceAnalyticsScreen::update_line_view() {
         return;
     auto fmt_months_str = [](const std::vector<int>& v) {
         QStringList out;
-        for (int i : v) out << QString("%1M").arg(i);
+        for (int i : v)
+            out << QString("%1M").arg(i);
         return out;
     };
 
@@ -1085,8 +1107,8 @@ void SurfaceAnalyticsScreen::update_line_view() {
                 // both use today's curve.
                 ys.push_back(yield_data_.z.back().size() > i ? yield_data_.z.back()[i] : 0.0f);
             }
-            surface_line_->set_curve("YIELD CURVE", xs, ys, fmt_months_str(yield_data_.maturities),
-                                     "Maturity (months)", "Yield %", QColor(63, 185, 80));
+            surface_line_->set_curve("YIELD CURVE", xs, ys, fmt_months_str(yield_data_.maturities), "Maturity (months)",
+                                     "Yield %", QColor(63, 185, 80));
             return;
         }
         case ChartType::ContangoBackwardation: {
@@ -1097,9 +1119,8 @@ void SurfaceAnalyticsScreen::update_line_view() {
                 for (size_t k = 0; k < contango_data_.contract_months.size(); ++k)
                     s.x_values.push_back((float)contango_data_.contract_months[k]);
                 s.y_values.assign(contango_data_.z[i].begin(), contango_data_.z[i].end());
-                static const QColor palette[] = {
-                    QColor(217, 119, 6), QColor(88, 166, 255), QColor(63, 185, 80),
-                    QColor(220, 80, 80), QColor(155, 114, 255), QColor(89, 196, 217)};
+                static const QColor palette[] = {QColor(217, 119, 6), QColor(88, 166, 255),  QColor(63, 185, 80),
+                                                 QColor(220, 80, 80), QColor(155, 114, 255), QColor(89, 196, 217)};
                 s.color = palette[i % 6];
                 series.push_back(s);
             }
@@ -1114,9 +1135,8 @@ void SurfaceAnalyticsScreen::update_line_view() {
                 for (size_t k = 0; k < cmdty_fwd_data_.contract_months.size(); ++k)
                     s.x_values.push_back((float)cmdty_fwd_data_.contract_months[k]);
                 s.y_values.assign(cmdty_fwd_data_.z[i].begin(), cmdty_fwd_data_.z[i].end());
-                static const QColor palette[] = {
-                    QColor(217, 119, 6), QColor(88, 166, 255), QColor(63, 185, 80),
-                    QColor(220, 80, 80), QColor(155, 114, 255), QColor(89, 196, 217)};
+                static const QColor palette[] = {QColor(217, 119, 6), QColor(88, 166, 255),  QColor(63, 185, 80),
+                                                 QColor(220, 80, 80), QColor(155, 114, 255), QColor(89, 196, 217)};
                 s.color = palette[i % 6];
                 series.push_back(s);
             }
@@ -1131,8 +1151,8 @@ void SurfaceAnalyticsScreen::update_line_view() {
                 for (size_t k = 0; k < crack_data_.contract_months.size(); ++k)
                     s.x_values.push_back((float)crack_data_.contract_months[k]);
                 s.y_values.assign(crack_data_.z[i].begin(), crack_data_.z[i].end());
-                static const QColor palette[] = {QColor(217, 119, 6), QColor(88, 166, 255),
-                                                 QColor(63, 185, 80), QColor(220, 80, 80)};
+                static const QColor palette[] = {QColor(217, 119, 6), QColor(88, 166, 255), QColor(63, 185, 80),
+                                                 QColor(220, 80, 80)};
                 s.color = palette[i % 4];
                 series.push_back(s);
             }
@@ -1147,8 +1167,8 @@ void SurfaceAnalyticsScreen::update_line_view() {
                 for (size_t k = 0; k < fx_fwd_data_.tenors.size(); ++k)
                     s.x_values.push_back((float)fx_fwd_data_.tenors[k]);
                 s.y_values.assign(fx_fwd_data_.z[i].begin(), fx_fwd_data_.z[i].end());
-                static const QColor palette[] = {QColor(217, 119, 6), QColor(88, 166, 255),
-                                                 QColor(63, 185, 80), QColor(220, 80, 80)};
+                static const QColor palette[] = {QColor(217, 119, 6), QColor(88, 166, 255), QColor(63, 185, 80),
+                                                 QColor(220, 80, 80)};
                 s.color = palette[i % 4];
                 series.push_back(s);
             }
@@ -1161,13 +1181,12 @@ void SurfaceAnalyticsScreen::update_line_view() {
             std::vector<float> xs, ys;
             for (size_t i = 0; i < inflation_data_.horizons.size(); ++i) {
                 xs.push_back((float)inflation_data_.horizons[i]);
-                ys.push_back(inflation_data_.z.back().size() > i ? inflation_data_.z.back()[i]
-                                                                  : 0.0f);
+                ys.push_back(inflation_data_.z.back().size() > i ? inflation_data_.z.back()[i] : 0.0f);
             }
             QStringList xl;
-            for (int h : inflation_data_.horizons) xl << QString("%1Y").arg(h);
-            surface_line_->set_curve("INFLATION EXPECTATIONS", xs, ys, xl,
-                                     "Horizon (years)", "Breakeven %",
+            for (int h : inflation_data_.horizons)
+                xl << QString("%1Y").arg(h);
+            surface_line_->set_curve("INFLATION EXPECTATIONS", xs, ys, xl, "Horizon (years)", "Breakeven %",
                                      QColor(89, 196, 217));
             return;
         }
@@ -1179,8 +1198,8 @@ void SurfaceAnalyticsScreen::update_line_view() {
                 for (size_t k = 0; k < monetary_data_.meetings_ahead.size(); ++k)
                     s.x_values.push_back((float)monetary_data_.meetings_ahead[k]);
                 s.y_values.assign(monetary_data_.z[i].begin(), monetary_data_.z[i].end());
-                static const QColor palette[] = {QColor(217, 119, 6), QColor(88, 166, 255),
-                                                 QColor(63, 185, 80), QColor(220, 80, 80)};
+                static const QColor palette[] = {QColor(217, 119, 6), QColor(88, 166, 255), QColor(63, 185, 80),
+                                                 QColor(220, 80, 80)};
                 s.color = palette[i % 4];
                 series.push_back(s);
             }
@@ -1328,14 +1347,41 @@ void SurfaceAnalyticsScreen::on_fetch_requested() {
 
     DatabentoFetchParams p;
     static const char* CT_NAMES[] = {
-        "Volatility", "DeltaSurface", "GammaSurface", "VegaSurface", "ThetaSurface",
-        "SkewSurface", "LocalVolSurface", "YieldCurve", "SwaptionVol", "CapFloorVol",
-        "BondSpread", "OISBasis", "RealYield", "ForwardRate", "FXVol",
-        "FXForwardPoints", "CrossCurrencyBasis", "CDSSpread", "CreditTransition",
-        "RecoveryRate", "CommodityForward", "CommodityVol", "CrackSpread",
-        "ContangoBackwardation", "Correlation", "PCA", "VaR", "StressTestPnL",
-        "FactorExposure", "LiquidityHeatmap", "Drawdown", "BetaSurface",
-        "ImpliedDividend", "InflationExpectations", "MonetaryPolicyPath",
+        "Volatility",
+        "DeltaSurface",
+        "GammaSurface",
+        "VegaSurface",
+        "ThetaSurface",
+        "SkewSurface",
+        "LocalVolSurface",
+        "YieldCurve",
+        "SwaptionVol",
+        "CapFloorVol",
+        "BondSpread",
+        "OISBasis",
+        "RealYield",
+        "ForwardRate",
+        "FXVol",
+        "FXForwardPoints",
+        "CrossCurrencyBasis",
+        "CDSSpread",
+        "CreditTransition",
+        "RecoveryRate",
+        "CommodityForward",
+        "CommodityVol",
+        "CrackSpread",
+        "ContangoBackwardation",
+        "Correlation",
+        "PCA",
+        "VaR",
+        "StressTestPnL",
+        "FactorExposure",
+        "LiquidityHeatmap",
+        "Drawdown",
+        "BetaSurface",
+        "ImpliedDividend",
+        "InflationExpectations",
+        "MonetaryPolicyPath",
     };
     int idx = (int)active_chart_;
     if (idx >= 0 && idx < (int)(sizeof(CT_NAMES) / sizeof(CT_NAMES[0])))
@@ -1370,12 +1416,12 @@ void SurfaceAnalyticsScreen::on_fetch_requested() {
         case ChartType::LiquidityHeatmap:
             if (p.spot_override <= 0.0f) {
                 if (data_inspector_) {
-                    data_inspector_->set_status(
-                        QStringLiteral("No live quote for %1").arg(p.symbol), false);
+                    data_inspector_->set_status(QStringLiteral("No live quote for %1").arg(p.symbol), false);
                     data_inspector_->set_error(
                         QStringLiteral("This surface is priced against spot, and no quote for %1 "
                                        "has been published yet. Open the symbol on a screen that "
-                                       "subscribes to its quote, then fetch again.").arg(p.symbol));
+                                       "subscribes to its quote, then fetch again.")
+                            .arg(p.symbol));
                 }
                 return;
             }
@@ -1385,8 +1431,8 @@ void SurfaceAnalyticsScreen::on_fetch_requested() {
     }
 
     if (data_inspector_)
-        data_inspector_->set_status(
-            QString("Fetching %1 …").arg(QString::fromUtf8(chart_type_name(active_chart_))), true);
+        data_inspector_->set_status(QString("Fetching %1 …").arg(QString::fromUtf8(chart_type_name(active_chart_))),
+                                    true);
     svc.fetch_with_params(p);
 }
 
@@ -1400,7 +1446,7 @@ void SurfaceAnalyticsScreen::dispatch_csv(const QString& path) {
     // "no data loaded" — a false claim about data that is on screen.
     const auto mark_imported = [this, &path]() {
         imported_from_.insert(active_chart_, QFileInfo(path).fileName());
-        fetched_.remove(active_chart_);   // a file replaces whatever was fetched
+        fetched_.remove(active_chart_); // a file replaces whatever was fetched
         update_inspector_lineage();
     };
     switch (active_chart_) {
@@ -1462,8 +1508,8 @@ void SurfaceAnalyticsScreen::on_vol_surface_received(const fincept::DatabentoVol
     // "Loaded" is only claimed when at least one grid actually landed — a
     // successful fetch whose rows all parsed empty used to report "Vol
     // surface loaded" over an unchanged blank chart.
-    const bool any_loaded = !r.vol.z.empty() || !r.delta.z.empty() || !r.gamma.z.empty() ||
-                            !r.vega.z.empty() || !r.theta.z.empty() || !r.skew.z.empty();
+    const bool any_loaded = !r.vol.z.empty() || !r.delta.z.empty() || !r.gamma.z.empty() || !r.vega.z.empty() ||
+                            !r.theta.z.empty() || !r.skew.z.empty();
 
     if (!r.vol.z.empty()) {
         vol_data_ = r.vol;
@@ -1502,8 +1548,7 @@ void SurfaceAnalyticsScreen::on_vol_surface_received(const fincept::DatabentoVol
     }
 
     if (data_inspector_) {
-        data_inspector_->set_status(any_loaded ? "Vol surface loaded"
-                                               : "Fetch succeeded but no usable surface points",
+        data_inspector_->set_status(any_loaded ? "Vol surface loaded" : "Fetch succeeded but no usable surface points",
                                     any_loaded);
 
         // Rebuild the table only when THIS fetch delivered a vol grid —
@@ -1540,8 +1585,7 @@ void SurfaceAnalyticsScreen::on_ohlcv_received(const fincept::DatabentoOhlcvResu
             QVector<QStringList> rows;
             for (auto it = r.data.constBegin(); it != r.data.constEnd(); ++it) {
                 for (const QJsonObject& bar : it.value()) {
-                    rows.push_back({it.key(),
-                                    bar.value("date").toString(),
+                    rows.push_back({it.key(), bar.value("date").toString(),
                                     QString::number(bar.value("open").toDouble(), 'f', 2),
                                     QString::number(bar.value("high").toDouble(), 'f', 2),
                                     QString::number(bar.value("low").toDouble(), 'f', 2),
@@ -1572,15 +1616,14 @@ void SurfaceAnalyticsScreen::on_ohlcv_received(const fincept::DatabentoOhlcvResu
 namespace {
 
 struct FredSeriesSpec {
-    const char* series;   ///< FRED series id
-    int         months;   ///< maturity/horizon this series represents
+    const char* series; ///< FRED series id
+    int months;         ///< maturity/horizon this series represents
 };
 
 // Constant-maturity nominal Treasury yields.
 const std::vector<FredSeriesSpec> kCurveSeries = {
-    {"DGS1MO", 1},  {"DGS3MO", 3},  {"DGS6MO", 6},   {"DGS1", 12},  {"DGS2", 24},
-    {"DGS3", 36},   {"DGS5", 60},   {"DGS7", 84},    {"DGS10", 120},
-    {"DGS20", 240}, {"DGS30", 360},
+    {"DGS1MO", 1}, {"DGS3MO", 3}, {"DGS6MO", 6},  {"DGS1", 12},   {"DGS2", 24},   {"DGS3", 36},
+    {"DGS5", 60},  {"DGS7", 84},  {"DGS10", 120}, {"DGS20", 240}, {"DGS30", 360},
 };
 // TIPS constant-maturity real yields.
 const std::vector<FredSeriesSpec> kRealSeries = {
@@ -1592,12 +1635,14 @@ const std::vector<FredSeriesSpec> kRealSeries = {
 // what their consumers format — the two axes genuinely differ, and storing 60
 // here drew the 5-year breakeven labelled "60Y".
 const std::vector<FredSeriesSpec> kBreakevenSeries = {
-    {"T5YIE", 5}, {"T10YIE", 10},
+    {"T5YIE", 5},
+    {"T10YIE", 10},
 };
 
 QStringList series_ids(const std::vector<FredSeriesSpec>& specs) {
     QStringList out;
-    for (const auto& s : specs) out << QString::fromUtf8(s.series);
+    for (const auto& s : specs)
+        out << QString::fromUtf8(s.series);
     return out;
 }
 
@@ -1613,7 +1658,7 @@ QString first_series_error(const QJsonObject& payload) {
     for (const auto& v : arr) {
         const QJsonObject o = v.toObject();
         if (!o.value(QStringLiteral("observations")).toArray().isEmpty())
-            return {};   // at least one series came back — not a blanket failure
+            return {}; // at least one series came back — not a blanket failure
         const QString e = o.value(QStringLiteral("error")).toString();
         if (first.isEmpty() && !e.isEmpty())
             first = e;
@@ -1647,7 +1692,7 @@ QMap<QString, QHash<QString, double>> by_date(const QJsonObject& payload) {
                 val = vv.toDouble();
                 ok = true;
             } else if (vv.isString()) {
-                val = vv.toString().toDouble(&ok);   // "." parses as not-ok
+                val = vv.toString().toDouble(&ok); // "." parses as not-ok
             }
             // A day a series has no observation is a hole, and it stays one.
             if (ok && !date.isEmpty())
@@ -1660,19 +1705,19 @@ QMap<QString, QHash<QString, double>> by_date(const QJsonObject& payload) {
 /// Fill a maturity x date grid, newest `max_dates` dates, oldest first.
 /// Returns false when nothing usable came back, so the caller can leave the
 /// surface empty rather than draw a grid of holes.
-bool fill_grid(const QJsonObject& payload, const std::vector<FredSeriesSpec>& specs,
-               int max_dates, std::vector<int>& maturities,
-               std::vector<int>& time_points, std::vector<std::vector<float>>& z,
+bool fill_grid(const QJsonObject& payload, const std::vector<FredSeriesSpec>& specs, int max_dates,
+               std::vector<int>& maturities, std::vector<int>& time_points, std::vector<std::vector<float>>& z,
                QStringList* out_dates = nullptr) {
     const auto rows = by_date(payload);
     if (rows.isEmpty())
         return false;
-    QStringList dates = rows.keys();          // QMap keys are sorted: oldest first
+    QStringList dates = rows.keys(); // QMap keys are sorted: oldest first
     if (dates.size() > max_dates)
         dates = dates.mid(dates.size() - max_dates);
 
     maturities.clear();
-    for (const auto& sp : specs) maturities.push_back(sp.months);
+    for (const auto& sp : specs)
+        maturities.push_back(sp.months);
     time_points.clear();
     z.clear();
     int filled = 0;
@@ -1704,30 +1749,32 @@ bool fill_grid(const QJsonObject& payload, const std::vector<FredSeriesSpec>& sp
 void SurfaceAnalyticsScreen::load_rates_from_fred() {
     auto& econ = fincept::services::EconomicsService::instance();
     const QString start = QDate::currentDate().addDays(-180).toString(Qt::ISODate);
-    const QString end   = QDate::currentDate().toString(Qt::ISODate);
+    const QString end = QDate::currentDate().toString(Qt::ISODate);
 
-    const struct { const char* rid; const std::vector<FredSeriesSpec>* specs; } jobs[] = {
-        {"surface_curve",     &kCurveSeries},
-        {"surface_real",      &kRealSeries},
+    const struct {
+        const char* rid;
+        const std::vector<FredSeriesSpec>* specs;
+    } jobs[] = {
+        {"surface_curve", &kCurveSeries},
+        {"surface_real", &kRealSeries},
         {"surface_breakeven", &kBreakevenSeries},
     };
     for (const auto& j : jobs) {
         QStringList args = series_ids(*j.specs);
         args << start << end;
-        econ.execute(QStringLiteral("surface_analytics"), QStringLiteral("fred_data.py"),
-                     QStringLiteral("multiple"), args, QString::fromUtf8(j.rid));
+        econ.execute(QStringLiteral("surface_analytics"), QStringLiteral("fred_data.py"), QStringLiteral("multiple"),
+                     args, QString::fromUtf8(j.rid));
     }
 }
 
-void SurfaceAnalyticsScreen::on_fred_result(const QString& request_id,
-                                            const fincept::services::EconomicsResult& r) {
+void SurfaceAnalyticsScreen::on_fred_result(const QString& request_id, const fincept::services::EconomicsResult& r) {
     if (!r.success) {
         // FRED needs a key. Say which surfaces are empty because of it rather
         // than leaving three panels blank with no reason.
         if (request_id.startsWith(QStringLiteral("surface_")) && data_inspector_)
-            data_inspector_->set_error(
-                QStringLiteral("FRED fetch failed (%1). Set FRED_API_KEY to fill the curve, "
-                               "real-yield and breakeven surfaces.").arg(r.error.left(120)));
+            data_inspector_->set_error(QStringLiteral("FRED fetch failed (%1). Set FRED_API_KEY to fill the curve, "
+                                                      "real-yield and breakeven surfaces.")
+                                           .arg(r.error.left(120)));
         return;
     }
     // fred_data.py's `multiple` returns an ARRAY, which EconomicsService wraps
@@ -1737,23 +1784,22 @@ void SurfaceAnalyticsScreen::on_fred_result(const QString& request_id,
     // runs: three panels stay blank with nothing said. Look inside.
     if (const QString per_series = first_series_error(r.data); !per_series.isEmpty()) {
         if (data_inspector_)
-            data_inspector_->set_error(
-                QStringLiteral("FRED returned no data: %1").arg(per_series.left(160)));
+            data_inspector_->set_error(QStringLiteral("FRED returned no data: %1").arg(per_series.left(160)));
         return;
     }
     if (request_id == QStringLiteral("surface_curve")) {
-        if (fill_grid(r.data, kCurveSeries, 60, yield_data_.maturities,
-                      yield_data_.time_points, yield_data_.z, &rates_dates_)) {
+        if (fill_grid(r.data, kCurveSeries, 60, yield_data_.maturities, yield_data_.time_points, yield_data_.z,
+                      &rates_dates_)) {
             fetched_.insert(ChartType::YieldCurve);
             build_forward_rates();
         }
     } else if (request_id == QStringLiteral("surface_real")) {
-        if (fill_grid(r.data, kRealSeries, 60, real_yield_data_.maturities,
-                      real_yield_data_.time_points, real_yield_data_.z))
+        if (fill_grid(r.data, kRealSeries, 60, real_yield_data_.maturities, real_yield_data_.time_points,
+                      real_yield_data_.z))
             fetched_.insert(ChartType::RealYield);
     } else if (request_id == QStringLiteral("surface_breakeven")) {
-        if (fill_grid(r.data, kBreakevenSeries, 60, inflation_data_.horizons,
-                      inflation_data_.time_points, inflation_data_.z))
+        if (fill_grid(r.data, kBreakevenSeries, 60, inflation_data_.horizons, inflation_data_.time_points,
+                      inflation_data_.z))
             fetched_.insert(ChartType::InflationExpectations);
     } else {
         return;
@@ -1778,7 +1824,8 @@ void SurfaceAnalyticsScreen::build_forward_rates() {
     fwd_rate_data_.start_tenors.clear();
     fwd_rate_data_.forward_periods.clear();
     fwd_rate_data_.z.clear();
-    for (int m : mats) fwd_rate_data_.start_tenors.push_back(m);
+    for (int m : mats)
+        fwd_rate_data_.start_tenors.push_back(m);
     const std::vector<int> periods = {12, 24, 60, 120};
     fwd_rate_data_.forward_periods = periods;
 
@@ -1846,7 +1893,7 @@ void SurfaceAnalyticsScreen::compute_equity_surfaces(const fincept::DatabentoOhl
             prices[it.key().toStdString()] = std::move(closes);
     }
     if (prices.size() < 2)
-        return;   // a correlation of one asset with itself is not a surface
+        return; // a correlation of one asset with itself is not a surface
 
     // ── Correlation ─────────────────────────────────────────────────────
     const CorrelationResult corr = compute_correlation(prices);
@@ -1900,7 +1947,10 @@ void SurfaceAnalyticsScreen::compute_equity_surfaces(const fincept::DatabentoOhl
         static const std::vector<std::string> kBroad = {"SPY", "IVV", "VOO", "VTI", "QQQ"};
         std::string bench;
         for (const auto& cand : kBroad)
-            if (prices.count(cand)) { bench = cand; break; }
+            if (prices.count(cand)) {
+                bench = cand;
+                break;
+            }
 
         std::vector<double> bench_rets;
         if (!bench.empty()) {
@@ -1944,8 +1994,7 @@ void SurfaceAnalyticsScreen::compute_equity_surfaces(const fincept::DatabentoOhl
                 }
                 beta_data_.z.push_back(std::move(row));
             }
-            beta_benchmark_ = QString::fromStdString(
-                bench.empty() ? std::string("equal-weighted basket") : bench);
+            beta_benchmark_ = QString::fromStdString(bench.empty() ? std::string("equal-weighted basket") : bench);
             fetched_.insert(ChartType::BetaSurface);
         }
     }
@@ -2074,9 +2123,7 @@ void SurfaceAnalyticsScreen::on_db_fetch_failed(const QString& err) {
 void SurfaceAnalyticsScreen::on_db_connection_tested(bool ok, const QString& msg) {
     if (!control_panel_)
         return;
-    control_panel_->set_provider_status("databento",
-                                        ok ? "connected" : "error",
-                                        ok ? QString() : msg);
+    control_panel_->set_provider_status("databento", ok ? "connected" : "error", ok ? QString() : msg);
 }
 
 void SurfaceAnalyticsScreen::on_db_raw_response(const QString& cmd, const QString& raw_stdout) {
@@ -2090,10 +2137,8 @@ void SurfaceAnalyticsScreen::refresh_provider_status() {
     if (!control_panel_)
         return;
     auto& svc = DatabentoService::instance();
-    control_panel_->set_provider_status(
-        "databento",
-        svc.has_api_key() ? "configured" : "not configured",
-        svc.has_api_key() ? "key set" : "Settings → Credentials");
+    control_panel_->set_provider_status("databento", svc.has_api_key() ? "configured" : "not configured",
+                                        svc.has_api_key() ? "key set" : "Settings → Credentials");
 }
 
 void SurfaceAnalyticsScreen::load_dataset_range_for_active_capability() {
@@ -2118,24 +2163,23 @@ void SurfaceAnalyticsScreen::load_dataset_range_for_active_capability() {
 void SurfaceAnalyticsScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     auto& svc = DatabentoService::instance();
-    connect(&svc, &DatabentoService::vol_surface_ready, this,
-            &SurfaceAnalyticsScreen::on_vol_surface_received, Qt::UniqueConnection);
-    connect(&svc, &DatabentoService::ohlcv_ready, this,
-            &SurfaceAnalyticsScreen::on_ohlcv_received, Qt::UniqueConnection);
-    connect(&svc, &DatabentoService::futures_ready, this,
-            &SurfaceAnalyticsScreen::on_futures_received, Qt::UniqueConnection);
-    connect(&svc, &DatabentoService::surface_ready, this,
-            &SurfaceAnalyticsScreen::on_surface_received, Qt::UniqueConnection);
-    connect(&svc, &DatabentoService::fetch_started, this,
-            &SurfaceAnalyticsScreen::on_db_fetch_started, Qt::UniqueConnection);
-    connect(&svc, &DatabentoService::fetch_failed, this,
-            &SurfaceAnalyticsScreen::on_db_fetch_failed, Qt::UniqueConnection);
-    connect(&svc, &DatabentoService::connection_tested, this,
-            &SurfaceAnalyticsScreen::on_db_connection_tested, Qt::UniqueConnection);
-    connect(&svc, &DatabentoService::raw_response, this,
-            &SurfaceAnalyticsScreen::on_db_raw_response, Qt::UniqueConnection);
-    connect(&fincept::services::EconomicsService::instance(),
-            &fincept::services::EconomicsService::result_ready, this,
+    connect(&svc, &DatabentoService::vol_surface_ready, this, &SurfaceAnalyticsScreen::on_vol_surface_received,
+            Qt::UniqueConnection);
+    connect(&svc, &DatabentoService::ohlcv_ready, this, &SurfaceAnalyticsScreen::on_ohlcv_received,
+            Qt::UniqueConnection);
+    connect(&svc, &DatabentoService::futures_ready, this, &SurfaceAnalyticsScreen::on_futures_received,
+            Qt::UniqueConnection);
+    connect(&svc, &DatabentoService::surface_ready, this, &SurfaceAnalyticsScreen::on_surface_received,
+            Qt::UniqueConnection);
+    connect(&svc, &DatabentoService::fetch_started, this, &SurfaceAnalyticsScreen::on_db_fetch_started,
+            Qt::UniqueConnection);
+    connect(&svc, &DatabentoService::fetch_failed, this, &SurfaceAnalyticsScreen::on_db_fetch_failed,
+            Qt::UniqueConnection);
+    connect(&svc, &DatabentoService::connection_tested, this, &SurfaceAnalyticsScreen::on_db_connection_tested,
+            Qt::UniqueConnection);
+    connect(&svc, &DatabentoService::raw_response, this, &SurfaceAnalyticsScreen::on_db_raw_response,
+            Qt::UniqueConnection);
+    connect(&fincept::services::EconomicsService::instance(), &fincept::services::EconomicsService::result_ready, this,
             &SurfaceAnalyticsScreen::on_fred_result, Qt::UniqueConnection);
     load_rates_from_fred();
     refresh_provider_status();
@@ -2185,8 +2229,10 @@ void SurfaceAnalyticsScreen::restore_state(const QVariantMap& state) {
         cs.dataset = state.value("dataset", cs.dataset).toString();
         QString sd = state.value("start_date").toString();
         QString ed = state.value("end_date").toString();
-        if (!sd.isEmpty()) cs.start_date = QDate::fromString(sd, Qt::ISODate);
-        if (!ed.isEmpty()) cs.end_date = QDate::fromString(ed, Qt::ISODate);
+        if (!sd.isEmpty())
+            cs.start_date = QDate::fromString(sd, Qt::ISODate);
+        if (!ed.isEmpty())
+            cs.end_date = QDate::fromString(ed, Qt::ISODate);
         cs.strike_window_pct = state.value("strike_window_pct", cs.strike_window_pct).toInt();
         cs.dte_min = state.value("dte_min", cs.dte_min).toInt();
         cs.dte_max = state.value("dte_max", cs.dte_max).toInt();
@@ -2196,7 +2242,7 @@ void SurfaceAnalyticsScreen::restore_state(const QVariantMap& state) {
         clear_symbol_surfaces();
         update_chart();
         update_metrics();
-        update_inspector_lineage();   // clear_symbol_surfaces() cleared fetched_
+        update_inspector_lineage(); // clear_symbol_surfaces() cleared fetched_
     }
 }
 

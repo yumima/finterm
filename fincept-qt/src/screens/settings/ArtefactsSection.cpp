@@ -33,7 +33,7 @@ constexpr int kArtColCount = 7;
 /// pretty JSON when the payload doesn't match the expected shape.
 struct Exported {
     QString text;
-    QString suggested_suffix;  // ".csv" / ".md" / ".json"
+    QString suggested_suffix; // ".csv" / ".md" / ".json"
 };
 
 Exported render_for_export(const ChatArtefactRow& a) {
@@ -50,8 +50,7 @@ Exported render_for_export(const ChatArtefactRow& a) {
             QStringList lines;
             auto escape = [](const QString& v) -> QString {
                 QString s = v;
-                const bool needs_quote = s.contains(',') || s.contains('"')
-                                         || s.contains('\n') || s.contains('\r');
+                const bool needs_quote = s.contains(',') || s.contains('"') || s.contains('\n') || s.contains('\r');
                 s.replace("\"", "\"\"");
                 return needs_quote ? "\"" + s + "\"" : s;
             };
@@ -106,9 +105,9 @@ void ArtefactsSection::build_ui() {
     root->setContentsMargins(16, 16, 16, 16);
     root->setSpacing(12);
 
-    auto* hdr = new QLabel(QStringLiteral(
-        "<b>Artefacts</b> — typed slash output (comps tables, models, "
-        "memos, reports).  Re-runnable + exportable, never lost in chat scrollback."));
+    auto* hdr =
+        new QLabel(QStringLiteral("<b>Artefacts</b> — typed slash output (comps tables, models, "
+                                  "memos, reports).  Re-runnable + exportable, never lost in chat scrollback."));
     hdr->setWordWrap(true);
     root->addWidget(hdr);
 
@@ -134,10 +133,9 @@ void ArtefactsSection::build_ui() {
 
     table_ = new QTableWidget(this);
     table_->setColumnCount(kArtColCount);
-    table_->setHorizontalHeaderLabels(
-        {QStringLiteral("ID"), QStringLiteral("Title"), QStringLiteral("Kind"),
-         QStringLiteral("Agent"), QStringLiteral("Skill"),
-         QStringLiteral("Status"), QStringLiteral("Created")});
+    table_->setHorizontalHeaderLabels({QStringLiteral("ID"), QStringLiteral("Title"), QStringLiteral("Kind"),
+                                       QStringLiteral("Agent"), QStringLiteral("Skill"), QStringLiteral("Status"),
+                                       QStringLiteral("Created")});
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     table_->horizontalHeader()->setSectionResizeMode(kArtColId, QHeaderView::ResizeToContents);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -145,10 +143,8 @@ void ArtefactsSection::build_ui() {
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->verticalHeader()->setVisible(false);
     table_->setToolTip(QStringLiteral("Double-click to view the full payload."));
-    connect(table_, &QTableWidget::cellDoubleClicked,
-            this, &ArtefactsSection::on_double_clicked);
-    connect(table_, &QTableWidget::itemSelectionChanged,
-            this, &ArtefactsSection::on_selection_changed);
+    connect(table_, &QTableWidget::cellDoubleClicked, this, &ArtefactsSection::on_double_clicked);
+    connect(table_, &QTableWidget::itemSelectionChanged, this, &ArtefactsSection::on_selection_changed);
     root->addWidget(table_, 1);
 
     status_lbl_ = new QLabel;
@@ -161,15 +157,16 @@ void ArtefactsSection::build_ui() {
 void ArtefactsSection::reload() {
     auto r = ChatArtefactRepository::instance().list_recent(kArtListLimit);
     if (r.is_err()) {
-        show_status(QStringLiteral("Failed to load artefacts: %1")
-                        .arg(QString::fromStdString(r.error())), true);
+        show_status(QStringLiteral("Failed to load artefacts: %1").arg(QString::fromStdString(r.error())), true);
         table_->setRowCount(0);
         return;
     }
     populate(r.value());
 }
 
-void ArtefactsSection::on_refresh() { reload(); }
+void ArtefactsSection::on_refresh() {
+    reload();
+}
 
 void ArtefactsSection::populate(const QVector<ChatArtefactRow>& rows) {
     table_->setRowCount(rows.size());
@@ -234,20 +231,16 @@ void ArtefactsSection::on_double_clicked(int row, int /*column*/) {
     auto* layout = new QVBoxLayout(&dlg);
     layout->setContentsMargins(16, 16, 16, 16);
 
-    auto* meta = new QLabel(QStringLiteral(
-        "<b>%1</b> · kind: %2 · agent: %3 · skill: %4 · status: %5 · created: %6")
-                                .arg(a.title, a.kind, a.source_agent_id,
-                                     a.source_skill, a.status, a.created_at));
+    auto* meta = new QLabel(QStringLiteral("<b>%1</b> · kind: %2 · agent: %3 · skill: %4 · status: %5 · created: %6")
+                                .arg(a.title, a.kind, a.source_agent_id, a.source_skill, a.status, a.created_at));
     meta->setWordWrap(true);
     layout->addWidget(meta);
 
     auto* payload_view = new QPlainTextEdit;
     payload_view->setReadOnly(true);
     const QJsonDocument doc = QJsonDocument::fromJson(a.payload_json.toUtf8());
-    payload_view->setPlainText(
-        doc.isObject() || doc.isArray()
-            ? QString::fromUtf8(doc.toJson(QJsonDocument::Indented))
-            : a.payload_json);
+    payload_view->setPlainText(doc.isObject() || doc.isArray() ? QString::fromUtf8(doc.toJson(QJsonDocument::Indented))
+                                                               : a.payload_json);
     layout->addWidget(payload_view, 1);
 
     auto* close_btn = new QPushButton(QStringLiteral("Close"));
@@ -267,10 +260,10 @@ void ArtefactsSection::on_rerun() {
     }
     const ChatArtefactRow a = r.value();
     if (a.source_agent_id.isEmpty() || a.source_skill.isEmpty()) {
-        show_status(QStringLiteral(
-            "Cannot re-run — no source agent / skill recorded.  "
-            "Artefacts created outside slash dispatch don't carry "
-            "the re-run handle."), true);
+        show_status(QStringLiteral("Cannot re-run — no source agent / skill recorded.  "
+                                   "Artefacts created outside slash dispatch don't carry "
+                                   "the re-run handle."),
+                    true);
         return;
     }
 
@@ -301,7 +294,8 @@ void ArtefactsSection::on_rerun() {
     } catch (const std::exception& ex) {
         show_status(QStringLiteral("Re-run dispatch failed: %1 — predecessor "
                                    "left active for retry")
-                        .arg(QString::fromUtf8(ex.what())), true);
+                        .arg(QString::fromUtf8(ex.what())),
+                    true);
         return;
     }
 
@@ -313,15 +307,13 @@ void ArtefactsSection::on_rerun() {
     // user can still see the predecessor in the table and manually
     // un-supersede via the row's "status" cell once we wire editing
     // there.
-    if (auto sup = ChatArtefactRepository::instance().mark_superseded(a.id);
-        sup.is_err()) {
+    if (auto sup = ChatArtefactRepository::instance().mark_superseded(a.id); sup.is_err()) {
         show_status(QStringLiteral("Re-running %1 (request %2) — note: "
                                    "failed to mark predecessor superseded: %3")
-                        .arg(a.title, req_id.left(8),
-                             QString::fromStdString(sup.error())), false);
+                        .arg(a.title, req_id.left(8), QString::fromStdString(sup.error())),
+                    false);
     } else {
-        show_status(QStringLiteral("Re-running %1 (request %2)")
-                        .arg(a.title, req_id.left(8)));
+        show_status(QStringLiteral("Re-running %1 (request %2)").arg(a.title, req_id.left(8)));
     }
     reload();
 }
@@ -338,16 +330,14 @@ void ArtefactsSection::on_export() {
     QString safe_title = a.title;
     safe_title.replace(QRegularExpression(QStringLiteral("[^A-Za-z0-9_-]")), "_");
     const QString suggested = safe_title + out.suggested_suffix;
-    const QString path = QFileDialog::getSaveFileName(
-        this, QStringLiteral("Export artefact"), suggested,
-        QStringLiteral("All files (*.*)"));
+    const QString path = QFileDialog::getSaveFileName(this, QStringLiteral("Export artefact"), suggested,
+                                                      QStringLiteral("All files (*.*)"));
     if (path.isEmpty())
         return;
 
     QFile f(path);
     if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-        show_status(QStringLiteral("Failed to open %1: %2").arg(path, f.errorString()),
-                    true);
+        show_status(QStringLiteral("Failed to open %1: %2").arg(path, f.errorString()), true);
         return;
     }
     f.write(out.text.toUtf8());
@@ -359,11 +349,10 @@ void ArtefactsSection::on_supersede() {
     const QString id = selected_id();
     if (id.isEmpty())
         return;
-    const auto choice = QMessageBox::question(
-        this, QStringLiteral("Mark superseded"),
-        QStringLiteral("Mark this artefact as superseded?  It stays in the "
-                       "table for audit but drops off the active filter."),
-        QMessageBox::Yes | QMessageBox::No);
+    const auto choice = QMessageBox::question(this, QStringLiteral("Mark superseded"),
+                                              QStringLiteral("Mark this artefact as superseded?  It stays in the "
+                                                             "table for audit but drops off the active filter."),
+                                              QMessageBox::Yes | QMessageBox::No);
     if (choice != QMessageBox::Yes)
         return;
     auto r = ChatArtefactRepository::instance().mark_superseded(id);
@@ -396,13 +385,12 @@ void ArtefactsSection::on_lineage() {
     auto* layout = new QVBoxLayout(&dlg);
     layout->setContentsMargins(16, 16, 16, 16);
 
-    auto* meta = new QLabel(QStringLiteral(
-        "Re-run chain for this artefact, newest first.  Resolved by "
-        "explicit <code>supersedes_id</code> link when present (v039+), "
-        "with a fallback to grouping by dispatch identity "
-        "(<b>agent</b> · <b>skill</b> · <b>args</b>) for legacy rows.  "
-        "The selected artefact is highlighted; predecessors (typically "
-        "<code>superseded</code>) trail underneath."));
+    auto* meta = new QLabel(QStringLiteral("Re-run chain for this artefact, newest first.  Resolved by "
+                                           "explicit <code>supersedes_id</code> link when present (v039+), "
+                                           "with a fallback to grouping by dispatch identity "
+                                           "(<b>agent</b> · <b>skill</b> · <b>args</b>) for legacy rows.  "
+                                           "The selected artefact is highlighted; predecessors (typically "
+                                           "<code>superseded</code>) trail underneath."));
     meta->setWordWrap(true);
     meta->setStyleSheet(QStringLiteral("color:#aaa;"));
     layout->addWidget(meta);
@@ -410,8 +398,7 @@ void ArtefactsSection::on_lineage() {
     auto* tbl = new QTableWidget;
     tbl->setColumnCount(4);
     tbl->setHorizontalHeaderLabels(
-        {QStringLiteral("ID"), QStringLiteral("Status"),
-         QStringLiteral("Created"), QStringLiteral("Title")});
+        {QStringLiteral("ID"), QStringLiteral("Status"), QStringLiteral("Created"), QStringLiteral("Title")});
     tbl->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     tbl->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
     tbl->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -447,8 +434,7 @@ void ArtefactsSection::on_lineage() {
 
 void ArtefactsSection::show_status(const QString& msg, bool error) {
     status_lbl_->setText(msg);
-    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;")
-                                     : QStringLiteral("color: #393;"));
+    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;") : QStringLiteral("color: #393;"));
 }
 
 } // namespace fincept::screens

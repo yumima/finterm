@@ -153,7 +153,8 @@ void FederalReservePanel::on_result(const QString& request_id, const services::E
         };
         QList<QJsonValue> sorted(clean.begin(), clean.end());
         std::stable_sort(sorted.begin(), sorted.end(), [&](const QJsonValue& a, const QJsonValue& b) {
-            return tenor_months(a.toObject()["maturity"].toString()) < tenor_months(b.toObject()["maturity"].toString());
+            return tenor_months(a.toObject()["maturity"].toString()) <
+                   tenor_months(b.toObject()["maturity"].toString());
         });
         clean = QJsonArray();
         for (const auto& v : sorted)
@@ -161,9 +162,9 @@ void FederalReservePanel::on_result(const QString& request_id, const services::E
     }
 
     const bool known = idx >= 0;
-    const QString title = "Federal Reserve: " + (known ? kFedReserveSeries[idx].label : cmd) +
-                          (cmd == QLatin1String("money_measures") ? QStringLiteral(" ($ billions)")
-                                                                  : QStringLiteral(" (rates in %)"));
+    const QString title =
+        "Federal Reserve: " + (known ? kFedReserveSeries[idx].label : cmd) +
+        (cmd == QLatin1String("money_measures") ? QStringLiteral(" ($ billions)") : QStringLiteral(" (rates in %)"));
 
     display(clean, title, known ? kFedReserveSeries[idx].value_key : QString(),
             known ? kFedReserveSeries[idx].date_key : QString());

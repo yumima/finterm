@@ -13,7 +13,6 @@
 // leave a half-truncated JSON that fails to parse on next launch.
 #pragma once
 #include "core/config/AppPaths.h"
-
 #include "core/logging/Logger.h"
 
 #include <QByteArray>
@@ -31,7 +30,7 @@
 namespace fincept::services::util {
 
 class DiskCache {
-public:
+  public:
     // service_id becomes the subdirectory under AppPaths::cache() — the app's
     // regenerable-data folder, which Settings › Storage can clear. Use short
     // lowercase identifiers ("pre_ipo", "portfolio", "markets", etc.). The
@@ -61,13 +60,13 @@ public:
     QJsonDocument load(const QString& filename) const {
         const QString p = path(filename);
         const QFile::Permissions cur = QFile::permissions(p);
-        const QFile::Permissions owner_only =
-            QFile::ReadOwner | QFile::WriteOwner;
+        const QFile::Permissions owner_only = QFile::ReadOwner | QFile::WriteOwner;
         if (cur && (cur & ~owner_only)) {
             QFile::setPermissions(p, owner_only);
         }
         QFile f(p);
-        if (!f.open(QIODevice::ReadOnly)) return {};
+        if (!f.open(QIODevice::ReadOnly))
+            return {};
         const QByteArray bytes = f.readAll();
         f.close();
         return QJsonDocument::fromJson(bytes);
@@ -85,15 +84,13 @@ public:
         const QString final_path = path(filename);
         QSaveFile f(final_path);
         if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
-            LOG_WARN(service_id_.toUtf8().constData(),
-                     QStringLiteral("DiskCache: failed to open ") + final_path);
+            LOG_WARN(service_id_.toUtf8().constData(), QStringLiteral("DiskCache: failed to open ") + final_path);
             return false;
         }
         const QByteArray bytes = doc.toJson(QJsonDocument::Compact);
         if (f.write(bytes) != bytes.size()) {
             f.cancelWriting();
-            LOG_WARN(service_id_.toUtf8().constData(),
-                     QStringLiteral("DiskCache: short write for ") + final_path);
+            LOG_WARN(service_id_.toUtf8().constData(), QStringLiteral("DiskCache: short write for ") + final_path);
             return false;
         }
         // Clamp perms on the temp file BEFORE commit() does the rename so
@@ -103,8 +100,7 @@ public:
         // other users on a multi-user box.
         f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         if (!f.commit()) {
-            LOG_WARN(service_id_.toUtf8().constData(),
-                     QStringLiteral("DiskCache: commit failed for ") + final_path);
+            LOG_WARN(service_id_.toUtf8().constData(), QStringLiteral("DiskCache: commit failed for ") + final_path);
             return false;
         }
         return true;
@@ -136,23 +132,24 @@ public:
     // proportional to file count, not file size, and 200 small JSON
     // entries hydrate in ~50ms.
     int trim_to(int keep_most_recent) const {
-        if (keep_most_recent < 0) return 0;
+        if (keep_most_recent < 0)
+            return 0;
         QDir d(dir());
-        const QStringList by_newest = d.entryList(
-            QDir::Files | QDir::NoDotAndDotDot, QDir::Time);
-        if (by_newest.size() <= keep_most_recent) return 0;
+        const QStringList by_newest = d.entryList(QDir::Files | QDir::NoDotAndDotDot, QDir::Time);
+        if (by_newest.size() <= keep_most_recent)
+            return 0;
         int removed = 0;
         for (int i = keep_most_recent; i < by_newest.size(); ++i) {
-            if (QFile::remove(d.filePath(by_newest[i]))) ++removed;
+            if (QFile::remove(d.filePath(by_newest[i])))
+                ++removed;
         }
         if (removed > 0) {
-            LOG_INFO(service_id_.toUtf8().constData(),
-                     QStringLiteral("DiskCache: trimmed %1 old files").arg(removed));
+            LOG_INFO(service_id_.toUtf8().constData(), QStringLiteral("DiskCache: trimmed %1 old files").arg(removed));
         }
         return removed;
     }
 
-private:
+  private:
     QString service_id_;
 };
 

@@ -32,11 +32,11 @@ class OwnershipCalendarWidget : public BaseWidget {
     void refresh_data();
     void populate();
 
-    QWidget*     header_widget_ = nullptr;
-    QFrame*      header_sep_    = nullptr;
-    QScrollArea* scroll_area_   = nullptr;
-    QVBoxLayout* list_layout_   = nullptr;
-    QLabel*      status_label_  = nullptr;
+    QWidget* header_widget_ = nullptr;
+    QFrame* header_sep_ = nullptr;
+    QScrollArea* scroll_area_ = nullptr;
+    QVBoxLayout* list_layout_ = nullptr;
+    QLabel* status_label_ = nullptr;
     QVector<QLabel*> header_labels_;
 };
 

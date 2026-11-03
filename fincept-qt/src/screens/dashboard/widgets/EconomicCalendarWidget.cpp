@@ -72,8 +72,8 @@ EconomicCalendarWidget::EconomicCalendarWidget(QWidget* parent)
 void EconomicCalendarWidget::apply_styles() {
     header_widget_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : header_labels_)
-        lbl->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;")
-                               .arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(
+            QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     header_sep_->setStyleSheet(QString("background: %1;").arg(ui::colors::BORDER_DIM()));
     scroll_area_->setStyleSheet(
         QString("QScrollArea { border: none; background: transparent; }"
@@ -81,8 +81,8 @@ void EconomicCalendarWidget::apply_styles() {
                 "QScrollBar::handle:vertical { background: %1; border-radius: 2px; min-height: 20px; }"
                 "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
             .arg(ui::colors::BORDER_MED()));
-    status_label_->setStyleSheet(QString("color: %1; padding: 16px; background: transparent;")
-                                     .arg(ui::colors::TEXT_SECONDARY()));
+    status_label_->setStyleSheet(
+        QString("color: %1; padding: 16px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
 }
 
 void EconomicCalendarWidget::on_theme_changed() {
@@ -92,7 +92,8 @@ void EconomicCalendarWidget::on_theme_changed() {
 }
 
 void EconomicCalendarWidget::refresh_data() {
-    if (pending_fetches_ > 0) return; // prior fetch still in flight — callbacks will populate
+    if (pending_fetches_ > 0)
+        return; // prior fetch still in flight — callbacks will populate
 
     // ForexFactory public JSON calendar — no API key required.
     // Two requests: this week + next week, merged and sorted before display.
@@ -109,7 +110,8 @@ void EconomicCalendarWidget::refresh_data() {
     QPointer<EconomicCalendarWidget> self = this;
     for (const auto* url : kUrls) {
         HttpClient::instance().get(QString(url), [self](Result<QJsonDocument> res) {
-            if (!self) return;
+            if (!self)
+                return;
             if (res.is_ok() && res.value().isArray()) {
                 ++self->ok_fetches_;
                 self->on_fetch_done(res.value().array());
@@ -142,15 +144,19 @@ void EconomicCalendarWidget::on_fetch_done(const QJsonArray& week_events) {
 
     // Parse "MMM d yyyy" dates so we can sort chronologically.
     // ForexFactory date examples: "May 14 2026", "Jun 2 2026"
-    static const char* kMonths[] = {
-        "", "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"};
+    static const char* kMonths[] = {"",    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
 
     auto parse_ff_date = [&](const QString& s) -> QDate {
         const QStringList parts = s.split(' ', Qt::SkipEmptyParts);
-        if (parts.size() < 3) return {};
+        if (parts.size() < 3)
+            return {};
         int mon = 0;
         for (int i = 1; i <= 12; ++i)
-            if (parts[0].startsWith(kMonths[i], Qt::CaseInsensitive)) { mon = i; break; }
+            if (parts[0].startsWith(kMonths[i], Qt::CaseInsensitive)) {
+                mon = i;
+                break;
+            }
         return QDate(parts[2].toInt(), mon, parts[1].toInt());
     };
 
@@ -168,18 +174,19 @@ void EconomicCalendarWidget::on_fetch_done(const QJsonArray& week_events) {
     for (const auto& e : sorted) {
         const QDate d = parse_ff_date(e["date"].toString());
         const QString impact = e["impact"].toString();
-        int imp = impact.startsWith("H", Qt::CaseInsensitive) ? 3
-                : impact.startsWith("M", Qt::CaseInsensitive) ? 2
-                : impact.startsWith("L", Qt::CaseInsensitive) ? 1 : 0;
+        int imp = impact.startsWith("H", Qt::CaseInsensitive)   ? 3
+                  : impact.startsWith("M", Qt::CaseInsensitive) ? 2
+                  : impact.startsWith("L", Qt::CaseInsensitive) ? 1
+                                                                : 0;
         QJsonObject mapped;
-        mapped["event"]      = e["title"].toString();
-        mapped["country"]    = e["country"].toString();
-        mapped["date"]       = d.isValid() ? d.toString(Qt::ISODate) : e["date"].toString();
-        mapped["time"]       = e["time"].toString();
+        mapped["event"] = e["title"].toString();
+        mapped["country"] = e["country"].toString();
+        mapped["date"] = d.isValid() ? d.toString(Qt::ISODate) : e["date"].toString();
+        mapped["time"] = e["time"].toString();
         mapped["importance"] = imp;
-        mapped["actual"]     = e["actual"].toString();
-        mapped["forecast"]   = e["forecast"].toString();
-        mapped["previous"]   = e["previous"].toString();
+        mapped["actual"] = e["actual"].toString();
+        mapped["forecast"] = e["forecast"].toString();
+        mapped["previous"] = e["previous"].toString();
         out.append(mapped);
     }
 
@@ -261,8 +268,7 @@ void EconomicCalendarWidget::populate(const QJsonArray& events) {
             display_name = display_name.left(26) + "…";
         auto* ev_lbl = new QLabel(display_name);
         ev_lbl->setToolTip(event_name); // full name on hover
-        ev_lbl->setStyleSheet(
-            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
+        ev_lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
         rl->addWidget(ev_lbl, 4);
 
         auto* cty_lbl = new QLabel(country);
@@ -270,8 +276,7 @@ void EconomicCalendarWidget::populate(const QJsonArray& events) {
         rl->addWidget(cty_lbl, 1);
 
         auto* date_lbl = new QLabel(date_display);
-        date_lbl->setStyleSheet(
-            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        date_lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         rl->addWidget(date_lbl, 2);
 
         auto* act_lbl = new QLabel(actual.isEmpty() ? "--" : actual);
@@ -282,14 +287,12 @@ void EconomicCalendarWidget::populate(const QJsonArray& events) {
 
         auto* fcst_lbl = new QLabel(forecast.isEmpty() ? "--" : forecast);
         fcst_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        fcst_lbl->setStyleSheet(
-            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        fcst_lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         rl->addWidget(fcst_lbl, 1);
 
         auto* imp_lbl = new QLabel(imp_text);
         imp_lbl->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-        imp_lbl->setStyleSheet(
-            QString("color: %1; font-weight: bold; background: transparent;").arg(imp_color));
+        imp_lbl->setStyleSheet(QString("color: %1; font-weight: bold; background: transparent;").arg(imp_color));
         rl->addWidget(imp_lbl, 1);
 
         list_layout_->addWidget(row);

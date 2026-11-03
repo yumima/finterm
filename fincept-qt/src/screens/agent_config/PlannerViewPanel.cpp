@@ -259,7 +259,8 @@ QWidget* PlannerViewPanel::build_plan_editor() {
         QString("QPushButton{background:%1;color:%2;border:none;padding:10px;"
                 "font-size:12px;font-weight:700;letter-spacing:1px;}QPushButton:hover{background:%1;}"
                 "QPushButton:disabled{background:%3;color:%4;}")
-            .arg(ui::colors::POSITIVE(), ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY()));
+            .arg(ui::colors::POSITIVE(), ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(),
+                 ui::colors::TEXT_SECONDARY()));
     vl->addWidget(execute_btn_);
     return p;
 }
@@ -296,7 +297,8 @@ QWidget* PlannerViewPanel::build_results_panel() {
         QString("QTextEdit{background:%1;color:%2;border:1px solid %3;padding:8px;font-size:12px;}"
                 "QScrollBar:vertical{background:%1;width:6px;}"
                 "QScrollBar::handle:vertical{background:%4;min-height:20px;}")
-            .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::BORDER_BRIGHT()));
+            .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
+                 ui::colors::BORDER_BRIGHT()));
     vl->addWidget(result_display_, 1);
     return p;
 }
@@ -329,8 +331,9 @@ void PlannerViewPanel::setup_connections() {
         if (!plan.warnings.isEmpty()) {
             result_display_->setPlainText("Planner warnings:\n- " + plan.warnings.join("\n- "));
             plan_status_->setText("READY (WARNINGS)");
-            plan_status_->setStyleSheet(QString("color:%1;font-size:12px;background:%2;padding:1px 6px;border-radius:2px;")
-                                            .arg(ui::colors::WARNING(), ui::colors::BG_RAISED()));
+            plan_status_->setStyleSheet(
+                QString("color:%1;font-size:12px;background:%2;padding:1px 6px;border-radius:2px;")
+                    .arg(ui::colors::WARNING(), ui::colors::BG_RAISED()));
             return;
         }
         plan_status_->setText("READY");

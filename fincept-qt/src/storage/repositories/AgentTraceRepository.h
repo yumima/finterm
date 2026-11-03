@@ -21,8 +21,8 @@ struct AgentTraceRow {
     qint64 id = 0;
     QString request_id;
     QString agent_id;
-    QString runtime;     ///< anthropic | local | agno | unknown
-    QString source;      ///< chat | chat_slash | scheduler | api | ...
+    QString runtime; ///< anthropic | local | agno | unknown
+    QString source;  ///< chat | chat_slash | scheduler | api | ...
     QString query;
     QString config_json;
     QString started_at;
@@ -45,11 +45,11 @@ struct AgentTraceRow {
 /// readable as the trace columns grow.
 struct AgentTraceCreate {
     QString request_id;
-    QString agent_id;     ///< empty allowed (general router)
-    QString runtime;      ///< empty if unknown at dispatch time
-    QString source;       ///< empty allowed
+    QString agent_id; ///< empty allowed (general router)
+    QString runtime;  ///< empty if unknown at dispatch time
+    QString source;   ///< empty allowed
     QString query;
-    QJsonObject config;   ///< serialised as compact JSON into config_json
+    QJsonObject config; ///< serialised as compact JSON into config_json
 };
 
 /// Args for finish().  Optional fields only set when the runtime

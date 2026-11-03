@@ -168,13 +168,11 @@ Result<void> NewsArticleRepository::upsert_batch(const QVector<NewsArticle>& art
     // but offer diminishing returns past a few hundred rows.
     constexpr int kCols = 18;
     constexpr int kChunkRows = 50;
-    static const QString kRowPlaceholder =
-        QStringLiteral("(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
-    static const QString kSqlPrefix =
-        QStringLiteral("INSERT OR IGNORE INTO news_articles "
-                       "(id, headline, summary, source, region, category, link, sort_ts, "
-                       " priority, sentiment, impact, tickers, tier, lang, "
-                       " threat_level, threat_cat, threat_conf, source_flag) VALUES ");
+    static const QString kRowPlaceholder = QStringLiteral("(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+    static const QString kSqlPrefix = QStringLiteral("INSERT OR IGNORE INTO news_articles "
+                                                     "(id, headline, summary, source, region, category, link, sort_ts, "
+                                                     " priority, sentiment, impact, tickers, tier, lang, "
+                                                     " threat_level, threat_cat, threat_conf, source_flag) VALUES ");
 
     int inserted = 0;
     const int total_rows = static_cast<int>(articles.size());
@@ -192,15 +190,13 @@ Result<void> NewsArticleRepository::upsert_batch(const QVector<NewsArticle>& art
             QJsonArray tickers_arr;
             for (const auto& t : a.tickers)
                 tickers_arr.append(t);
-            const QString tickers_json = QString::fromUtf8(
-                QJsonDocument(tickers_arr).toJson(QJsonDocument::Compact));
+            const QString tickers_json = QString::fromUtf8(QJsonDocument(tickers_arr).toJson(QJsonDocument::Compact));
 
             placeholders.append(kRowPlaceholder);
-            params << a.id << a.headline << a.summary << a.source << a.region
-                   << a.category << a.link << static_cast<qint64>(a.sort_ts)
-                   << priority_str(a.priority) << sentiment_str(a.sentiment)
-                   << impact_str(a.impact) << tickers_json << a.tier << a.lang
-                   << threat_level_str(a.threat.level) << a.threat.category
+            params << a.id << a.headline << a.summary << a.source << a.region << a.category << a.link
+                   << static_cast<qint64>(a.sort_ts) << priority_str(a.priority) << sentiment_str(a.sentiment)
+                   << impact_str(a.impact) << tickers_json << a.tier << a.lang << threat_level_str(a.threat.level)
+                   << a.threat.category
                    << QVariant() /* threat_conf: not computed */ << static_cast<int>(a.source_flag);
         }
 
@@ -208,8 +204,7 @@ Result<void> NewsArticleRepository::upsert_batch(const QVector<NewsArticle>& art
         auto r = database.execute(sql, params);
         if (r.is_err()) {
             LOG_ERROR("NewsArticleRepo",
-                      QString("upsert_batch chunk failed: %1")
-                          .arg(QString::fromStdString(r.error())));
+                      QString("upsert_batch chunk failed: %1").arg(QString::fromStdString(r.error())));
             database.rollback();
             return Result<void>::err(r.error());
         }
@@ -225,8 +220,7 @@ Result<void> NewsArticleRepository::upsert_batch(const QVector<NewsArticle>& art
         return ct;
     }
 
-    LOG_DEBUG("NewsArticleRepo",
-              QString("upsert_batch: %1 new / %2 total").arg(inserted).arg(articles.size()));
+    LOG_DEBUG("NewsArticleRepo", QString("upsert_batch: %1 new / %2 total").arg(inserted).arg(articles.size()));
     return Result<void>::ok();
 }
 

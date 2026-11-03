@@ -1,7 +1,7 @@
 // src/services/pre_ipo/PreIpoService.cpp
 #include "services/pre_ipo/PreIpoService.h"
-#include "core/config/AppPaths.h"
 
+#include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 
@@ -18,8 +18,8 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QStandardPaths>
-#include <QTimer>
 #include <QTimeZone>
+#include <QTimer>
 #include <QtMath>
 
 #include <algorithm>
@@ -37,13 +37,13 @@ QString valuation_overrides_path() {
 }
 } // namespace
 
-
 using namespace fincept::pre_ipo;
 
 namespace {
 
 QString sector_for_industry(const QString& industry_group) {
-    if (industry_group.isEmpty()) return {};
+    if (industry_group.isEmpty())
+        return {};
     const QString g = industry_group.toLower();
     if (g.contains("technology") || g.contains("computer") || g.contains("software"))
         return "Technology";
@@ -66,14 +66,18 @@ QStringList tags_for_company(const PrivateCompany& c) {
     QStringList out;
     const QString s = (c.sector + " " + c.sub_sector + " " + c.description).toLower();
     auto maybe = [&](const QString& tag, const QStringList& kws) {
-        for (const auto& k : kws) if (s.contains(k)) { out << tag; return; }
+        for (const auto& k : kws)
+            if (s.contains(k)) {
+                out << tag;
+                return;
+            }
     };
-    maybe("ai",       {"ai", "artificial intelligence", "machine learning", "llm"});
-    maybe("fintech",  {"fintech", "payments", "financial", "banking"});
-    maybe("biotech",  {"biotech", "pharma", "therapeutics", "drug"});
-    maybe("defense",  {"defense", "aerospace", "military"});
-    maybe("crypto",   {"crypto", "blockchain", "web3"});
-    maybe("saas",     {"saas", "cloud", "software"});
+    maybe("ai", {"ai", "artificial intelligence", "machine learning", "llm"});
+    maybe("fintech", {"fintech", "payments", "financial", "banking"});
+    maybe("biotech", {"biotech", "pharma", "therapeutics", "drug"});
+    maybe("defense", {"defense", "aerospace", "military"});
+    maybe("crypto", {"crypto", "blockchain", "web3"});
+    maybe("saas", {"saas", "cloud", "software"});
     out.removeDuplicates();
     return out;
 }
@@ -91,8 +95,10 @@ QString slugify(const QString& s) {
     QString out = s.toLower();
     static const QRegularExpression non_alnum("[^a-z0-9]+");
     out.replace(non_alnum, "-");
-    while (out.endsWith('-')) out.chop(1);
-    while (out.startsWith('-')) out.remove(0, 1);
+    while (out.endsWith('-'))
+        out.chop(1);
+    while (out.startsWith('-'))
+        out.remove(0, 1);
     return out;
 }
 
@@ -108,36 +114,50 @@ QString slugify(const QString& s) {
 // A NEW value-bearing PrivateCompany field that is NOT in one of those rebuild
 // passes must be added below, or it will be lost when `other` is removed.
 void merge_company_into(PrivateCompany& primary, const PrivateCompany& other) {
-    if (primary.cik.isEmpty())        primary.cik = other.cik;
+    if (primary.cik.isEmpty())
+        primary.cik = other.cik;
     // The EDGAR-read fields travel with the rounds they describe. Without
     // this, a merged duplicate keeps the loser's rounds (below) while the
     // coverage flags stay at their defaults, and the funding header prints a
     // partial read as though it were the company's whole history.
     if (primary.revenue_range.isEmpty()) {
-        primary.revenue_range      = other.revenue_range;
+        primary.revenue_range = other.revenue_range;
         primary.revenue_range_as_of = other.revenue_range_as_of;
     }
     if (primary.form_d_filings_total == 0) {
-        primary.form_d_filings_total   = other.form_d_filings_total;
+        primary.form_d_filings_total = other.form_d_filings_total;
         primary.form_d_rounds_complete = other.form_d_rounds_complete;
     }
-    if (primary.name.isEmpty())       primary.name = other.name;
-    if (primary.sector.isEmpty())     primary.sector = other.sector;
-    if (primary.sub_sector.isEmpty()) primary.sub_sector = other.sub_sector;
-    if (primary.hq_city.isEmpty())    primary.hq_city = other.hq_city;
-    if (primary.hq_state.isEmpty())   primary.hq_state = other.hq_state;
-    if (primary.hq_country.isEmpty()) primary.hq_country = other.hq_country;
-    if (!primary.founded.isValid())   primary.founded = other.founded;
-    if (primary.employee_count_est == 0) primary.employee_count_est = other.employee_count_est;
-    if (primary.key_investors.isEmpty()) primary.key_investors = other.key_investors;
+    if (primary.name.isEmpty())
+        primary.name = other.name;
+    if (primary.sector.isEmpty())
+        primary.sector = other.sector;
+    if (primary.sub_sector.isEmpty())
+        primary.sub_sector = other.sub_sector;
+    if (primary.hq_city.isEmpty())
+        primary.hq_city = other.hq_city;
+    if (primary.hq_state.isEmpty())
+        primary.hq_state = other.hq_state;
+    if (primary.hq_country.isEmpty())
+        primary.hq_country = other.hq_country;
+    if (!primary.founded.isValid())
+        primary.founded = other.founded;
+    if (primary.employee_count_est == 0)
+        primary.employee_count_est = other.employee_count_est;
+    if (primary.key_investors.isEmpty())
+        primary.key_investors = other.key_investors;
     if (primary.cumulative_raised_m < other.cumulative_raised_m)
         primary.cumulative_raised_m = other.cumulative_raised_m;
-    if (primary.rounds.isEmpty())     primary.rounds = other.rounds;
-    if (primary.fund_marks.isEmpty()) primary.fund_marks = other.fund_marks;
-    if (primary.secondary.isEmpty())  primary.secondary = other.secondary;
+    if (primary.rounds.isEmpty())
+        primary.rounds = other.rounds;
+    if (primary.fund_marks.isEmpty())
+        primary.fund_marks = other.fund_marks;
+    if (primary.secondary.isEmpty())
+        primary.secondary = other.secondary;
     if (!primary.s1.first_filed.isValid() && other.s1.first_filed.isValid())
         primary.s1 = other.s1;
-    if (primary.fin.revenue_m == 0 && other.fin.revenue_m != 0) primary.fin = other.fin;
+    if (primary.fin.revenue_m == 0 && other.fin.revenue_m != 0)
+        primary.fin = other.fin;
     if (!primary.last_round_date.isValid() && other.last_round_date.isValid()) {
         primary.last_round_date = other.last_round_date;
         primary.last_round_name = other.last_round_name;
@@ -150,20 +170,31 @@ void merge_company_into(PrivateCompany& primary, const PrivateCompany& other) {
     // change merge behaviour as a side effect.
     const auto progress = [](IpoStatus s) {
         switch (s) {
-            case IpoStatus::Acquired:  return 6;
-            case IpoStatus::Listed:    return 5;
-            case IpoStatus::Priced:    return 4;
-            case IpoStatus::Withdrawn: return 3; // terminal, but behind any outcome
-            case IpoStatus::Filed:     return 2;
-            case IpoStatus::Rumored:   return 1;
-            case IpoStatus::Unknown:   break;
+            case IpoStatus::Acquired:
+                return 6;
+            case IpoStatus::Listed:
+                return 5;
+            case IpoStatus::Priced:
+                return 4;
+            case IpoStatus::Withdrawn:
+                return 3; // terminal, but behind any outcome
+            case IpoStatus::Filed:
+                return 2;
+            case IpoStatus::Rumored:
+                return 1;
+            case IpoStatus::Unknown:
+                break;
         }
         return 0;
     };
     if (progress(other.ipo_status) > progress(primary.ipo_status))
         primary.ipo_status = other.ipo_status;
-    for (const auto& t : other.tags) if (!primary.tags.contains(t)) primary.tags << t;
-    for (const auto& a : other.aliases) if (!primary.aliases.contains(a)) primary.aliases << a;
+    for (const auto& t : other.tags)
+        if (!primary.tags.contains(t))
+            primary.tags << t;
+    for (const auto& a : other.aliases)
+        if (!primary.aliases.contains(a))
+            primary.aliases << a;
     if (!other.id.isEmpty() && other.id != primary.id && !primary.aliases.contains(other.id))
         primary.aliases << other.id;
 }
@@ -193,7 +224,8 @@ PreIpoService::PreIpoService(QObject* parent) : QObject(parent) {
 // ── Public API ────────────────────────────────────────────────────────────────
 
 void PreIpoService::load_data() {
-    if (loading_) return;
+    if (loading_)
+        return;
     //   1. Hydrate from disk cache (if any) and emit immediately so views
     //      populate with no network wait.
     //   2. Anti-thrash gate: if we ran a check very recently (< kMinCheckSecs),
@@ -214,13 +246,10 @@ void PreIpoService::load_data() {
     // changed), so stable data doesn't force a re-probe on every open.
     constexpr qint64 kMinCheckSecs = 6 * 60 * 60;
     const QDateTime last_checked =
-        QDateTime::fromString(cursors_.value(QStringLiteral("last_checked")).toString(),
-                              Qt::ISODate);
-    if (had_cache && last_checked.isValid() &&
-        last_checked.secsTo(QDateTime::currentDateTime()) < kMinCheckSecs) {
-        LOG_INFO("PreIpo",
-                 QString("Checked %1 min ago — skipping probe (data-based gate).")
-                     .arg(last_checked.secsTo(QDateTime::currentDateTime()) / 60));
+        QDateTime::fromString(cursors_.value(QStringLiteral("last_checked")).toString(), Qt::ISODate);
+    if (had_cache && last_checked.isValid() && last_checked.secsTo(QDateTime::currentDateTime()) < kMinCheckSecs) {
+        LOG_INFO("PreIpo", QString("Checked %1 min ago — skipping probe (data-based gate).")
+                               .arg(last_checked.secsTo(QDateTime::currentDateTime()) / 60));
         return;
     }
 
@@ -246,7 +275,8 @@ void PreIpoService::refresh_internal(bool force) {
         emit error_occurred(QStringLiteral("Python runtime unavailable."));
         return;
     }
-    if (loading_) return;
+    if (loading_)
+        return;
     loading_ = true;
     force_refresh_ = force;
     if (force) {
@@ -264,12 +294,11 @@ void PreIpoService::refresh_internal(bool force) {
         dossier_candidates_.clear();
     }
     pending_bits_ = FB_All;
-    failed_bits_  = 0;
+    failed_bits_ = 0;
 
     // Stamp the probe time up front (and persist) so a crash or rapid re-open
     // mid-fetch doesn't immediately re-probe.
-    cursors_[QStringLiteral("last_checked")] =
-        QDateTime::currentDateTime().toString(Qt::ISODate);
+    cursors_[QStringLiteral("last_checked")] = QDateTime::currentDateTime().toString(Qt::ISODate);
     save_cursors();
     // Only show the "Loading…" status if we don't already have cached
     // rows on screen. When the cache hydrated, load_data() has already
@@ -291,11 +320,14 @@ void PreIpoService::refresh_internal(bool force) {
     run_spv_fetch();
 }
 
-QVector<PrivateCompany> PreIpoService::companies() const { return companies_; }
+QVector<PrivateCompany> PreIpoService::companies() const {
+    return companies_;
+}
 
 PrivateCompany PreIpoService::company(const QString& id) const {
     for (const auto& c : companies_)
-        if (c.id == id) return c;
+        if (c.id == id)
+            return c;
     return {};
 }
 
@@ -320,12 +352,13 @@ QString PreIpoService::add_user_company(const QJsonObject& entry_in) {
     // Require a name; derive the slug id from it when one isn't supplied.
     const QString name = entry.value(QStringLiteral("name")).toString().trimmed();
     QString id = entry.value(QStringLiteral("id")).toString().trimmed();
-    if (id.isEmpty()) id = slugify(name);
+    if (id.isEmpty())
+        id = slugify(name);
     if (id.isEmpty() || name.isEmpty()) {
         LOG_WARN("PreIpo", "add_user_company: a company name is required");
         return {};
     }
-    entry[QStringLiteral("id")]   = id;
+    entry[QStringLiteral("id")] = id;
     entry[QStringLiteral("name")] = name;
 
     // Override file: the same path load_valuation_seed() reads the user's
@@ -335,23 +368,30 @@ QString PreIpoService::add_user_company(const QJsonObject& entry_in) {
 
     // Load any existing override entries (tolerant of a missing/invalid file).
     QJsonObject root;
-    QJsonArray  entries;
+    QJsonArray entries;
     QFile in(path);
     if (in.open(QIODevice::ReadOnly)) {
         const QJsonDocument doc = QJsonDocument::fromJson(in.readAll());
         in.close();
-        if (doc.isObject()) { root = doc.object(); entries = root.value(QStringLiteral("entries")).toArray(); }
+        if (doc.isObject()) {
+            root = doc.object();
+            entries = root.value(QStringLiteral("entries")).toArray();
+        }
     }
 
     // Upsert by id (same semantics as the override merge in load_valuation_seed).
     bool replaced = false;
     for (int i = 0; i < entries.size(); ++i) {
         if (entries[i].toObject().value(QStringLiteral("id")).toString() == id) {
-            entries[i] = entry; replaced = true; break;
+            entries[i] = entry;
+            replaced = true;
+            break;
         }
     }
-    if (!replaced) entries.append(entry);
-    if (!root.contains(QStringLiteral("version"))) root[QStringLiteral("version")] = 1;
+    if (!replaced)
+        entries.append(entry);
+    if (!root.contains(QStringLiteral("version")))
+        root[QStringLiteral("version")] = 1;
     root[QStringLiteral("entries")] = entries;
 
     QFile out(path);
@@ -367,16 +407,24 @@ QString PreIpoService::add_user_company(const QJsonObject& entry_in) {
     load_valuation_seed();
     emit_summary();
 
-    LOG_INFO("PreIpo", QString("add_user_company: %1 %2")
-                           .arg(replaced ? QStringLiteral("updated") : QStringLiteral("added"), id));
+    LOG_INFO(
+        "PreIpo",
+        QString("add_user_company: %1 %2").arg(replaced ? QStringLiteral("updated") : QStringLiteral("added"), id));
     return id;
 }
 
-QVector<FormDFiling> PreIpoService::recent_form_d() const { return form_d_; }
-QVector<S1Filing>    PreIpoService::ipo_pipeline()  const { return pipeline_; }
-QVector<Signal>      PreIpoService::signal_list()   const { return signals_; }
-QVector<FundEntry>   PreIpoService::funds()         const { return funds_; }
-
+QVector<FormDFiling> PreIpoService::recent_form_d() const {
+    return form_d_;
+}
+QVector<S1Filing> PreIpoService::ipo_pipeline() const {
+    return pipeline_;
+}
+QVector<Signal> PreIpoService::signal_list() const {
+    return signals_;
+}
+QVector<FundEntry> PreIpoService::funds() const {
+    return funds_;
+}
 
 // ── Fetchers ─────────────────────────────────────────────────────────────────
 
@@ -388,12 +436,12 @@ void PreIpoService::run_form_d_fetch() {
     // a clock that we agreed remains under the data-based design.
     if (!force_refresh_) {
         const QDateTime ts = QDateTime::fromString(
-            cursors_.value(QStringLiteral("form_d")).toObject()
-                    .value(QStringLiteral("ts")).toString(), Qt::ISODate);
+            cursors_.value(QStringLiteral("form_d")).toObject().value(QStringLiteral("ts")).toString(), Qt::ISODate);
         if (ts.isValid() && ts.secsTo(QDateTime::currentDateTime()) < 24 * 60 * 60) {
             LOG_INFO("PreIpo", "Form D discovery sweep < 24h old — skipping.");
             pending_bits_ &= ~FB_FormD;
-            if (pending_bits_ == 0) finalize_load();
+            if (pending_bits_ == 0)
+                finalize_load();
             return;
         }
     }
@@ -411,7 +459,8 @@ void PreIpoService::run_form_d_fetch() {
         {QStringLiteral("all_data"),
          QStringLiteral("{\"days_back_fd\":365,\"parse_xml_max\":30,\"include_known\":true}")},
         [self](python::PythonResult result) {
-            if (!self) return;
+            if (!self)
+                return;
             bool parsed = false;
             QJsonDocument doc;
             if (result.success && !result.output.trimmed().isEmpty()) {
@@ -421,8 +470,7 @@ void PreIpoService::run_form_d_fetch() {
                     self->parse_form_d_response(doc.object());
                     self->save_cache(QStringLiteral("form_d.json"), doc);
                     QJsonObject fc;
-                    fc[QStringLiteral("ts")] =
-                        QDateTime::currentDateTime().toString(Qt::ISODate);
+                    fc[QStringLiteral("ts")] = QDateTime::currentDateTime().toString(Qt::ISODate);
                     self->cursors_[QStringLiteral("form_d")] = fc;
                     self->save_cursors();
                     parsed = true;
@@ -436,7 +484,8 @@ void PreIpoService::run_form_d_fetch() {
             // Emit progressively so the user sees Form D companies as soon
             // as this source returns, instead of waiting for all three.
             self->emit_summary();
-            if (self->pending_bits_ == 0) self->finalize_load();
+            if (self->pending_bits_ == 0)
+                self->finalize_load();
         },
         /*stream*/ {}, /*timeout*/ 120'000);
 }
@@ -449,12 +498,13 @@ void PreIpoService::run_nport_marks_fetch() {
     // than mark depth.
     QJsonObject base;
     base[QStringLiteral("quarters_back")] = 1;
-    base[QStringLiteral("families_max")]  = 6;
+    base[QStringLiteral("families_max")] = 6;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_nport_marks.py"),
         {QStringLiteral("marks_all"), cursor_payload(base, QStringLiteral("marks"))},
         [self](python::PythonResult result) {
-            if (!self) return;
+            if (!self)
+                return;
             bool parsed = false;
             if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
@@ -463,7 +513,7 @@ void PreIpoService::run_nport_marks_fetch() {
                     const QJsonObject o = doc.object();
                     if (o.value(QStringLiteral("unchanged")).toBool()) {
                         LOG_INFO("PreIpo", "N-PORT marks unchanged — no new fund filings.");
-                        parsed = true;  // success, just nothing new
+                        parsed = true; // success, just nothing new
                     } else {
                         self->parse_marks_response(o);
                         self->save_cache(QStringLiteral("marks.json"), doc);
@@ -481,7 +531,8 @@ void PreIpoService::run_nport_marks_fetch() {
                 self->failed_bits_ |= FB_Marks;
             }
             self->pending_bits_ &= ~FB_Marks;
-            if (self->pending_bits_ == 0) self->finalize_load();
+            if (self->pending_bits_ == 0)
+                self->finalize_load();
         },
         /*stream*/ {}, /*timeout*/ 240'000);
 }
@@ -499,16 +550,15 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
     for (const auto& v : o.value(QStringLiteral("rounds")).toArray()) {
         const auto r = v.toObject();
         pre_ipo::PrimaryRound pr;
-        pr.accession  = r.value(QStringLiteral("accession")).toString();
-        pr.form       = r.value(QStringLiteral("form")).toString();
+        pr.accession = r.value(QStringLiteral("accession")).toString();
+        pr.form = r.value(QStringLiteral("form")).toString();
         pr.superseded = r.value(QStringLiteral("superseded")).toBool();
         pr.filed_date = to_date(r.value(QStringLiteral("filed_date")).toString());
         pr.first_sale_date = to_date(r.value(QStringLiteral("first_sale_date")).toString());
         pr.amount_sold_m = r.value(QStringLiteral("amount_sold_usd")).toDouble() / 1e6;
         pr.amount_offered_m = r.value(QStringLiteral("amount_offered_usd")).toDouble() / 1e6;
         pr.offering_indefinite = r.value(QStringLiteral("offering_indefinite")).toBool();
-        pr.minimum_investment_usd =
-            r.value(QStringLiteral("minimum_investment_usd")).toDouble();
+        pr.minimum_investment_usd = r.value(QStringLiteral("minimum_investment_usd")).toDouble();
         pr.exemption = r.value(QStringLiteral("exemption")).toString();
         pr.edgar_url = r.value(QStringLiteral("edgar_url")).toString();
         for (const auto& pv : r.value(QStringLiteral("related_persons")).toArray()) {
@@ -527,17 +577,17 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
     for (const auto& v : o.value(QStringLiteral("spv_activity")).toArray()) {
         const auto sv = v.toObject();
         pre_ipo::SpvActivity a;
-        a.underlying_id    = c.id;
-        a.underlying_name  = c.name;
-        a.spv_name         = sv.value(QStringLiteral("spv_name")).toString();
-        a.cik              = sv.value(QStringLiteral("cik")).toString();
-        a.sponsor          = sv.value(QStringLiteral("sponsor")).toString();
-        a.filed_date       = to_date(sv.value(QStringLiteral("filed_date")).toString());
-        a.amount_sold_m    = sv.value(QStringLiteral("amount_sold_m")).toDouble();
+        a.underlying_id = c.id;
+        a.underlying_name = c.name;
+        a.spv_name = sv.value(QStringLiteral("spv_name")).toString();
+        a.cik = sv.value(QStringLiteral("cik")).toString();
+        a.sponsor = sv.value(QStringLiteral("sponsor")).toString();
+        a.filed_date = to_date(sv.value(QStringLiteral("filed_date")).toString());
+        a.amount_sold_m = sv.value(QStringLiteral("amount_sold_m")).toDouble();
         a.amount_offered_m = sv.value(QStringLiteral("amount_offered_m")).toDouble();
         a.offering_indefinite = sv.value(QStringLiteral("offering_indefinite")).toBool();
-        a.num_investors    = sv.value(QStringLiteral("num_investors")).toInt();
-        a.edgar_url        = sv.value(QStringLiteral("edgar_url")).toString();
+        a.num_investors = sv.value(QStringLiteral("num_investors")).toInt();
+        a.edgar_url = sv.value(QStringLiteral("edgar_url")).toString();
         if (!a.spv_name.isEmpty())
             spvs.push_back(a);
     }
@@ -551,11 +601,9 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
         // a raise filed at $114M and amended to $199M and then $281M is
         // $281M, not $595M — so the total comes from the script, which groups
         // the filings by their date of first sale.
-        c.cumulative_raised_m =
-            o.value(QStringLiteral("cumulative_raised_usd")).toDouble() / 1e6;
+        c.cumulative_raised_m = o.value(QStringLiteral("cumulative_raised_usd")).toDouble() / 1e6;
         for (const auto& r : rounds) {
-            if (r.filed_date.isValid() &&
-                (!c.last_round_date.isValid() || r.filed_date > c.last_round_date))
+            if (r.filed_date.isValid() && (!c.last_round_date.isValid() || r.filed_date > c.last_round_date))
                 c.last_round_date = r.filed_date;
         }
         // The label travels with the date. Left alone it kept whatever the
@@ -563,8 +611,7 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
         // which prints name and date side by side, read "Form D (Mar 2016)
         // (Nov 2024)".
         if (c.last_round_date.isValid()) {
-            c.last_round_name =
-                QStringLiteral("Form D (%1)").arg(c.last_round_date.toString("MMM yyyy"));
+            c.last_round_name = QStringLiteral("Form D (%1)").arg(c.last_round_date.toString("MMM yyyy"));
         }
     }
     // Outside the rounds guard: if the filer has thirty filings and every XML
@@ -573,8 +620,7 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
     if (o.contains(QStringLiteral("filings_total"))) {
         c.form_d_filings_total = o.value(QStringLiteral("filings_total")).toInt();
         c.form_d_rounds_complete =
-            o.value(QStringLiteral("rounds_complete")).toBool(true) &&
-            c.form_d_filings_total <= c.rounds.size();
+            o.value(QStringLiteral("rounds_complete")).toBool(true) && c.form_d_filings_total <= c.rounds.size();
     }
     // Into their own table, not spv_raw_ and not straight onto the company.
     // attach_spv_activity() clears and rebuilds every company's spv_activity
@@ -583,15 +629,16 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
     // of minutes later, and a direct write to the company survives only to the
     // next repaint. Both tables are joined, so the deep scan's finds and the
     // dossier's add up instead of taking turns overwriting each other.
-    const auto same_filing = [](const pre_ipo::SpvActivity& a,
-                                const pre_ipo::SpvActivity& b) {
-        return a.cik == b.cik && a.filed_date == b.filed_date &&
-               a.underlying_id == b.underlying_id;
+    const auto same_filing = [](const pre_ipo::SpvActivity& a, const pre_ipo::SpvActivity& b) {
+        return a.cik == b.cik && a.filed_date == b.filed_date && a.underlying_id == b.underlying_id;
     };
     for (const auto& a : spvs) {
         bool known = false;
         for (const auto& e : dossier_spv_) {
-            if (same_filing(e, a)) { known = true; break; }
+            if (same_filing(e, a)) {
+                known = true;
+                break;
+            }
         }
         if (!known)
             dossier_spv_.push_back(a);
@@ -600,7 +647,10 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
     for (const auto& a : spvs) {
         bool shown = false;
         for (const auto& e : c.spv_activity) {
-            if (same_filing(e, a)) { shown = true; break; }
+            if (same_filing(e, a)) {
+                shown = true;
+                break;
+            }
         }
         if (!shown)
             c.spv_activity.push_back(a);
@@ -609,16 +659,12 @@ void PreIpoService::apply_dossier(pre_ipo::PrivateCompany& c, const QJsonObject&
     // next emit. Without this the rows just added sit at the bottom of a
     // date-sorted table, a 2026 feeder below a 2019 one.
     std::sort(c.spv_activity.begin(), c.spv_activity.end(),
-              [](const pre_ipo::SpvActivity& x, const pre_ipo::SpvActivity& y) {
-                  return x.filed_date > y.filed_date;
-              });
+              [](const pre_ipo::SpvActivity& x, const pre_ipo::SpvActivity& y) { return x.filed_date > y.filed_date; });
     const QString industry = o.value(QStringLiteral("industry_group")).toString();
     if (c.sector.isEmpty() && !industry.isEmpty())
         c.sector = industry;
     c.revenue_range = o.value(QStringLiteral("revenue_range")).toString();
-    c.revenue_range_as_of =
-        QDate::fromString(o.value(QStringLiteral("revenue_range_as_of")).toString(),
-                          Qt::ISODate);
+    c.revenue_range_as_of = QDate::fromString(o.value(QStringLiteral("revenue_range_as_of")).toString(), Qt::ISODate);
     const auto hq = o.value(QStringLiteral("hq")).toObject();
     if (c.hq_city.isEmpty())
         c.hq_city = hq.value(QStringLiteral("city")).toString();
@@ -650,12 +696,14 @@ void PreIpoService::reapply_dossiers() {
 
 PreIpoService::DossierState PreIpoService::dossier_state(const QString& company_id) const {
     const auto f = dossier_failed_at_.constFind(company_id);
-    if (f != dossier_failed_at_.constEnd() &&
-        QDateTime::currentMSecsSinceEpoch() - *f < kDossierRetryMs)
+    if (f != dossier_failed_at_.constEnd() && QDateTime::currentMSecsSinceEpoch() - *f < kDossierRetryMs)
         return DossierState::Failed;
-    if (dossier_no_filer_.contains(company_id)) return DossierState::NoFiler;
-    if (dossier_loaded_.contains(company_id))   return DossierState::Loaded;
-    if (dossier_requested_.contains(company_id)) return DossierState::Fetching;
+    if (dossier_no_filer_.contains(company_id))
+        return DossierState::NoFiler;
+    if (dossier_loaded_.contains(company_id))
+        return DossierState::Loaded;
+    if (dossier_requested_.contains(company_id))
+        return DossierState::Fetching;
     return DossierState::NotAsked;
 }
 
@@ -665,7 +713,7 @@ void PreIpoService::persist_resolved_cik(const QString& id, const QString& cik) 
     const QString path = valuation_overrides_path();
     QFile in(path);
     if (!in.open(QIODevice::ReadOnly))
-        return;   // no user overrides — nothing of the user's to update
+        return; // no user overrides — nothing of the user's to update
     const QJsonDocument doc = QJsonDocument::fromJson(in.readAll());
     in.close();
     if (!doc.isObject())
@@ -678,14 +726,14 @@ void PreIpoService::persist_resolved_cik(const QString& id, const QString& cik) 
         if (e.value(QStringLiteral("id")).toString() != id)
             continue;
         if (e.value(QStringLiteral("cik")).toString() == cik)
-            return;   // already recorded
+            return; // already recorded
         e[QStringLiteral("cik")] = cik;
         entries[i] = e;
         touched = true;
         break;
     }
     if (!touched)
-        return;   // a curated entry, not the user's — leave the shipped seed alone
+        return; // a curated entry, not the user's — leave the shipped seed alone
     root[QStringLiteral("entries")] = entries;
     QFile out(path);
     if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
@@ -716,7 +764,7 @@ void PreIpoService::fetch_dossier_for(const QString& company_id) {
     for (const auto& c : companies_) {
         if (c.id == company_id) {
             name = c.name;
-            cik  = c.cik;
+            cik = c.cik;
             // A company often files under a name nobody calls it — SpaceX
             // files as Space Exploration Technologies Corp — and the aliases
             // already on the dossier are that list.
@@ -731,18 +779,18 @@ void PreIpoService::fetch_dossier_for(const QString& company_id) {
     dossier_requested_.insert(company_id);
     QJsonObject payload;
     payload[QStringLiteral("name")] = name;
-    payload[QStringLiteral("cik")]  = cik;
+    payload[QStringLiteral("cik")] = cik;
     payload[QStringLiteral("aliases")] = QJsonArray::fromStringList(aliases);
-    payload[QStringLiteral("max_rounds")]    = 12;
+    payload[QStringLiteral("max_rounds")] = 12;
     payload[QStringLiteral("spv_parse_max")] = 12;
 
     QPointer<PreIpoService> self = this;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_form_d_data.py"),
-        {QStringLiteral("company_dossier"),
-         QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
+        {QStringLiteral("company_dossier"), QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
         [self, company_id](python::PythonResult result) {
-            if (!self) return;
+            if (!self)
+                return;
             self->dossier_requested_.remove(company_id);
             // A failed REQUEST is not an answer about the company, so it is
             // never recorded as "no such filer". But it cannot be left as
@@ -760,8 +808,7 @@ void PreIpoService::fetch_dossier_for(const QString& company_id) {
                 fail(result.error.left(200));
                 return;
             }
-            const QJsonDocument doc =
-                QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
+            const QJsonDocument doc = QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
             if (!doc.isObject()) {
                 fail(QStringLiteral("no JSON in reply"));
                 return;
@@ -773,8 +820,7 @@ void PreIpoService::fetch_dossier_for(const QString& company_id) {
                 // a local, permanent answer — the name strips to nothing to
                 // search by, EDGAR was never asked — and dressing it as a
                 // failure promises a retry that cannot succeed.
-                if (err == QLatin1String("search_unavailable") ||
-                    err == QLatin1String("submissions_unavailable")) {
+                if (err == QLatin1String("search_unavailable") || err == QLatin1String("submissions_unavailable")) {
                     fail(err);
                 } else {
                     self->dossier_reason_[company_id] = err;
@@ -820,15 +866,14 @@ void PreIpoService::fetch_financials_for(const QString& company_id) {
     if (company_id.isEmpty())
         return;
     // Already have them, already asked, or already know there are none.
-    if (fin_requested_.contains(company_id) || fin_absent_.contains(company_id) ||
-        fin_answered_.contains(company_id))
+    if (fin_requested_.contains(company_id) || fin_absent_.contains(company_id) || fin_answered_.contains(company_id))
         return;
 
     QString cik;
     for (const auto& c : companies_) {
         if (c.id == company_id) {
             if (c.fin.as_of.isValid())
-                return;              // already loaded
+                return; // already loaded
             cik = c.cik;
             break;
         }
@@ -845,17 +890,16 @@ void PreIpoService::fetch_financials_for(const QString& company_id) {
     payload[QStringLiteral("cik")] = cik;
     python::PythonRunner::instance().run(
         QStringLiteral("sec_s1_pipeline.py"),
-        {QStringLiteral("facts_for"),
-         QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
+        {QStringLiteral("facts_for"), QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact))},
         [self, company_id](python::PythonResult result) {
-            if (!self) return;
+            if (!self)
+                return;
             self->fin_requested_.remove(company_id);
             if (!result.success || result.output.trimmed().isEmpty()) {
                 LOG_WARN("PreIpo", "financials fetch failed for " + company_id);
-                return;   // transient — do NOT mark absent, allow a retry
+                return; // transient — do NOT mark absent, allow a retry
             }
-            const QJsonDocument doc =
-                QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
+            const QJsonDocument doc = QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
             const QJsonObject o = doc.isObject() ? doc.object() : QJsonObject();
 
             // A failed REQUEST is not an answer. _get() in the script swallows
@@ -863,9 +907,8 @@ void PreIpoService::fetch_financials_for(const QString& company_id) {
             // SEC rate-limit would be cached as "this company files no
             // financials" for the rest of the session.
             if (!doc.isObject() || o.contains(QStringLiteral("error"))) {
-                LOG_WARN("PreIpo", "financials fetch errored for " + company_id +
-                                       " — will retry");
-                return;   // deliberately NOT recorded, so a retry can happen
+                LOG_WARN("PreIpo", "financials fetch errored for " + company_id + " — will retry");
+                return; // deliberately NOT recorded, so a retry can happen
             }
 
             // We now have a real answer, whatever it says. Record that BEFORE
@@ -878,12 +921,14 @@ void PreIpoService::fetch_financials_for(const QString& company_id) {
             // present". A pre-revenue biotech or a SPAC tags NetIncomeLoss and
             // CashAndCashEquivalents but no Revenues concept — keying on
             // revenue threw those real figures away.
-            static const QStringList kValueKeys{
-                QStringLiteral("revenue_m"), QStringLiteral("net_income_m"),
-                QStringLiteral("cash_m"),    QStringLiteral("gross_margin_pct")};
+            static const QStringList kValueKeys{QStringLiteral("revenue_m"), QStringLiteral("net_income_m"),
+                                                QStringLiteral("cash_m"), QStringLiteral("gross_margin_pct")};
             bool any_value = false;
             for (const auto& k : kValueKeys)
-                if (o.contains(k)) { any_value = true; break; }
+                if (o.contains(k)) {
+                    any_value = true;
+                    break;
+                }
             if (!any_value) {
                 self->fin_absent_.insert(company_id);
                 LOG_INFO("PreIpo", company_id + " files no XBRL financials");
@@ -891,18 +936,16 @@ void PreIpoService::fetch_financials_for(const QString& company_id) {
                 return;
             }
             for (auto& c : self->companies_) {
-                if (c.id != company_id) continue;
-                c.fin.revenue_m    = o.value(QStringLiteral("revenue_m")).toDouble();
+                if (c.id != company_id)
+                    continue;
+                c.fin.revenue_m = o.value(QStringLiteral("revenue_m")).toDouble();
                 c.fin.net_income_m = o.value(QStringLiteral("net_income_m")).toDouble();
-                c.fin.cash_m       = o.value(QStringLiteral("cash_m")).toDouble();
-                c.fin.gross_margin_pct =
-                    o.value(QStringLiteral("gross_margin_pct")).toDouble();
-                c.fin.revenue_growth_yoy_pct =
-                    o.value(QStringLiteral("revenue_growth_yoy_pct")).toDouble();
+                c.fin.cash_m = o.value(QStringLiteral("cash_m")).toDouble();
+                c.fin.gross_margin_pct = o.value(QStringLiteral("gross_margin_pct")).toDouble();
+                c.fin.revenue_growth_yoy_pct = o.value(QStringLiteral("revenue_growth_yoy_pct")).toDouble();
                 // as_of is the availability flag every consumer keys on, so it
                 // is set LAST and only when a period end was actually reported.
-                c.fin.as_of = QDate::fromString(
-                    o.value(QStringLiteral("revenue_end")).toString(), Qt::ISODate);
+                c.fin.as_of = QDate::fromString(o.value(QStringLiteral("revenue_end")).toString(), Qt::ISODate);
                 break;
             }
             // Order matters. recompute_analytics() zeroes last_valuation_usd
@@ -931,7 +974,8 @@ void PreIpoService::run_s1_pipeline_fetch() {
         QStringLiteral("sec_s1_pipeline.py"),
         {QStringLiteral("pipeline_all"), cursor_payload(base, QStringLiteral("s1"))},
         [self](python::PythonResult result) {
-            if (!self) return;
+            if (!self)
+                return;
             bool parsed = false;
             if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
@@ -963,7 +1007,8 @@ void PreIpoService::run_s1_pipeline_fetch() {
                 self->failed_bits_ |= FB_S1;
             }
             self->pending_bits_ &= ~FB_S1;
-            if (self->pending_bits_ == 0) self->finalize_load();
+            if (self->pending_bits_ == 0)
+                self->finalize_load();
         },
         /*stream*/ {}, /*timeout*/ 120'000);
 }
@@ -978,15 +1023,15 @@ void PreIpoService::run_s1_pipeline_fetch() {
 // robust regardless of which fetch lands first.
 void PreIpoService::run_spv_fetch() {
     QJsonObject base;
-    base[QStringLiteral("spv_days_back")]       = 1825;
+    base[QStringLiteral("spv_days_back")] = 1825;
     base[QStringLiteral("spv_hits_per_target")] = 30;
-    base[QStringLiteral("spv_parse_max")]       = 40;
+    base[QStringLiteral("spv_parse_max")] = 40;
     QPointer<PreIpoService> self = this;
     python::PythonRunner::instance().run(
-        QStringLiteral("sec_form_d_data.py"),
-        {QStringLiteral("spv_deep"), cursor_payload(base, QStringLiteral("spv"))},
+        QStringLiteral("sec_form_d_data.py"), {QStringLiteral("spv_deep"), cursor_payload(base, QStringLiteral("spv"))},
         [self](python::PythonResult result) {
-            if (!self) return;
+            if (!self)
+                return;
             if (result.success && !result.output.trimmed().isEmpty()) {
                 const QString js = python::extract_json(result.output);
                 const QJsonDocument doc = QJsonDocument::fromJson(js.toUtf8());
@@ -1016,26 +1061,29 @@ void PreIpoService::parse_spv_response(const QJsonObject& root) {
     for (const auto& v : root.value(QStringLiteral("spv_activity")).toArray()) {
         const auto o = v.toObject();
         SpvActivity s;
-        s.underlying_id    = o[QStringLiteral("underlying_id")].toString();
-        s.underlying_name  = o[QStringLiteral("underlying_name")].toString();
-        s.sponsor          = o[QStringLiteral("sponsor")].toString();
-        s.spv_name         = o[QStringLiteral("spv_name")].toString();
-        s.cik              = o[QStringLiteral("cik")].toString();
-        s.filed_date       = QDate::fromString(o[QStringLiteral("filed_date")].toString(), Qt::ISODate);
-        s.amount_sold_m    = o[QStringLiteral("amount_sold_m")].toDouble();
+        s.underlying_id = o[QStringLiteral("underlying_id")].toString();
+        s.underlying_name = o[QStringLiteral("underlying_name")].toString();
+        s.sponsor = o[QStringLiteral("sponsor")].toString();
+        s.spv_name = o[QStringLiteral("spv_name")].toString();
+        s.cik = o[QStringLiteral("cik")].toString();
+        s.filed_date = QDate::fromString(o[QStringLiteral("filed_date")].toString(), Qt::ISODate);
+        s.amount_sold_m = o[QStringLiteral("amount_sold_m")].toDouble();
         s.amount_offered_m = o[QStringLiteral("amount_offered_m")].toDouble();
         s.offering_indefinite = o[QStringLiteral("offering_indefinite")].toBool();
         s.minimum_investment_usd = o[QStringLiteral("minimum_investment_usd")].toDouble();
-        s.num_investors    = o[QStringLiteral("num_investors")].toInt();
-        s.edgar_url        = o[QStringLiteral("edgar_url")].toString();
-        if (!s.underlying_id.isEmpty()) out.append(s);
+        s.num_investors = o[QStringLiteral("num_investors")].toInt();
+        s.edgar_url = o[QStringLiteral("edgar_url")].toString();
+        if (!s.underlying_id.isEmpty())
+            out.append(s);
     }
     // Don't wipe a good prior result on an empty/failed response.
-    if (!out.isEmpty()) spv_raw_ = out;
+    if (!out.isEmpty())
+        spv_raw_ = out;
 }
 
 void PreIpoService::attach_spv_activity() {
-    for (auto& c : companies_) c.spv_activity.clear();
+    for (auto& c : companies_)
+        c.spv_activity.clear();
     // Both tables. The deep scan owns spv_raw_ and replaces it wholesale;
     // per-company dossier reads accumulate in dossier_spv_. Joining only the
     // first would drop everything the dossiers found on the next deep scan.
@@ -1043,8 +1091,7 @@ void PreIpoService::attach_spv_activity() {
     for (const auto& d : dossier_spv_) {
         bool known = false;
         for (const auto& e : spv_raw_) {
-            if (e.cik == d.cik && e.filed_date == d.filed_date &&
-                e.underlying_id == d.underlying_id) {
+            if (e.cik == d.cik && e.filed_date == d.filed_date && e.underlying_id == d.underlying_id) {
                 known = true;
                 break;
             }
@@ -1052,27 +1099,30 @@ void PreIpoService::attach_spv_activity() {
         if (!known)
             all.push_back(d);
     }
-    if (all.isEmpty()) return;
+    if (all.isEmpty())
+        return;
 
     QHash<QString, int> by_any_id;
     for (int i = 0; i < companies_.size(); ++i) {
         by_any_id[companies_[i].id] = i;
-        for (const auto& al : companies_[i].aliases) by_any_id[al] = i;
+        for (const auto& al : companies_[i].aliases)
+            by_any_id[al] = i;
     }
 
     for (const auto& s : all) {
         int idx = -1;
-        if (auto it = by_any_id.find(s.underlying_id); it != by_any_id.end()) idx = *it;
+        if (auto it = by_any_id.find(s.underlying_id); it != by_any_id.end())
+            idx = *it;
         if (idx < 0) {
             // Target not in the Form D / N-PORT universe yet — stub it so the
             // SPV interest is still visible. Idempotent across emits: the stub
             // persists in companies_, so the next attach finds it here.
             PrivateCompany stub;
-            stub.id          = s.underlying_id;
-            stub.name        = s.underlying_name;
+            stub.id = s.underlying_id;
+            stub.name = s.underlying_name;
             stub.description = QStringLiteral("Tracked via secondary-market SPV filings");
-            stub.ipo_status  = IpoStatus::Unknown;
-            stub.tags        = tags_for_company(stub);
+            stub.ipo_status = IpoStatus::Unknown;
+            stub.tags = tags_for_company(stub);
             by_any_id[stub.id] = companies_.size();
             companies_.append(stub);
             idx = companies_.size() - 1;
@@ -1082,48 +1132,47 @@ void PreIpoService::attach_spv_activity() {
 
     for (auto& c : companies_)
         std::sort(c.spv_activity.begin(), c.spv_activity.end(),
-                  [](const SpvActivity& a, const SpvActivity& b) {
-                      return a.filed_date > b.filed_date;
-                  });
+                  [](const SpvActivity& a, const SpvActivity& b) { return a.filed_date > b.filed_date; });
 }
-
 
 // ── Parsers ──────────────────────────────────────────────────────────────────
 
 void PreIpoService::parse_form_d_response(const QJsonObject& root) {
     QHash<QString, int> by_id;
-    for (int i = 0; i < companies_.size(); ++i) by_id[companies_[i].id] = i;
+    for (int i = 0; i < companies_.size(); ++i)
+        by_id[companies_[i].id] = i;
 
     // form_d_companies → PrivateCompany universe
     for (const auto& v : root.value(QStringLiteral("form_d_companies")).toArray()) {
         const auto o = v.toObject();
         PrivateCompany c;
-        c.id          = o[QStringLiteral("id")].toString();
-        c.cik         = o[QStringLiteral("cik")].toString();
-        c.name        = o[QStringLiteral("name")].toString();
-        c.sector      = sector_for_industry(o[QStringLiteral("industry_group")].toString());
-        c.sub_sector  = o[QStringLiteral("industry_group")].toString();
-        c.hq_city     = o[QStringLiteral("city")].toString();
-        c.hq_state    = o[QStringLiteral("state")].toString();
-        c.hq_country  = "USA";
+        c.id = o[QStringLiteral("id")].toString();
+        c.cik = o[QStringLiteral("cik")].toString();
+        c.name = o[QStringLiteral("name")].toString();
+        c.sector = sector_for_industry(o[QStringLiteral("industry_group")].toString());
+        c.sub_sector = o[QStringLiteral("industry_group")].toString();
+        c.hq_city = o[QStringLiteral("city")].toString();
+        c.hq_state = o[QStringLiteral("state")].toString();
+        c.hq_country = "USA";
         const QString yoi = o[QStringLiteral("year_of_incorporation")].toString();
         bool ok = false;
         const int yr = yoi.toInt(&ok);
-        if (ok && yr > 1900 && yr < 2100) c.founded = QDate(yr, 1, 1);
+        if (ok && yr > 1900 && yr < 2100)
+            c.founded = QDate(yr, 1, 1);
         c.cumulative_raised_m = o[QStringLiteral("cumulative_raised_m")].toDouble();
         c.description = QStringLiteral("Source: SEC EDGAR Form D");
-        c.ipo_status  = IpoStatus::Unknown;
+        c.ipo_status = IpoStatus::Unknown;
 
         for (const auto& rv : o[QStringLiteral("rounds")].toArray()) {
             const auto ro = rv.toObject();
             PrimaryRound r;
-            r.accession      = ro[QStringLiteral("adsh")].toString();
-            r.filed_date     = QDate::fromString(ro[QStringLiteral("filed_date")].toString(), Qt::ISODate);
+            r.accession = ro[QStringLiteral("adsh")].toString();
+            r.filed_date = QDate::fromString(ro[QStringLiteral("filed_date")].toString(), Qt::ISODate);
             r.first_sale_date = QDate::fromString(ro[QStringLiteral("first_sale_date")].toString(), Qt::ISODate);
-            r.amount_sold_m  = ro[QStringLiteral("amount_m")].toDouble();
+            r.amount_sold_m = ro[QStringLiteral("amount_m")].toDouble();
             r.amount_offered_m = ro[QStringLiteral("offering_m")].toDouble();
             r.offering_indefinite = ro[QStringLiteral("offering_indefinite")].toBool();
-            r.exemption      = ro[QStringLiteral("exemption")].toString();
+            r.exemption = ro[QStringLiteral("exemption")].toString();
             for (const auto& t : ro[QStringLiteral("securities_types")].toArray())
                 r.securities_types << t.toString();
             r.minimum_investment_usd = ro[QStringLiteral("minimum_investment_usd")].toDouble();
@@ -1131,7 +1180,8 @@ void PreIpoService::parse_form_d_response(const QJsonObject& root) {
                 const auto po = pv.toObject();
                 RelatedPerson rp;
                 rp.name = po[QStringLiteral("name")].toString();
-                for (const auto& rl : po[QStringLiteral("roles")].toArray()) rp.roles << rl.toString();
+                for (const auto& rl : po[QStringLiteral("roles")].toArray())
+                    rp.roles << rl.toString();
                 r.related_persons << rp;
             }
             r.edgar_url = ro[QStringLiteral("edgar_url")].toString();
@@ -1140,28 +1190,26 @@ void PreIpoService::parse_form_d_response(const QJsonObject& root) {
         if (!c.rounds.isEmpty()) {
             // newest first by filed_date
             std::sort(c.rounds.begin(), c.rounds.end(),
-                      [](const PrimaryRound& a, const PrimaryRound& b) {
-                          return a.filed_date > b.filed_date;
-                      });
+                      [](const PrimaryRound& a, const PrimaryRound& b) { return a.filed_date > b.filed_date; });
             c.last_round_date = c.rounds.first().filed_date;
             c.last_round_name = c.rounds.first().round_name_inferred.isEmpty()
-                ? QStringLiteral("Form D (%1)").arg(c.last_round_date.toString("MMM yyyy"))
-                : c.rounds.first().round_name_inferred;
+                                    ? QStringLiteral("Form D (%1)").arg(c.last_round_date.toString("MMM yyyy"))
+                                    : c.rounds.first().round_name_inferred;
         }
         c.tags = tags_for_company(c);
 
         if (auto it = by_id.find(c.id); it != by_id.end()) {
             // Preserve fund_marks / s1 / watched that may have arrived earlier
             const auto& existing = companies_[*it];
-            c.watched        = existing.watched;
-            c.fund_marks     = existing.fund_marks;
+            c.watched = existing.watched;
+            c.fund_marks = existing.fund_marks;
             // spv_activity is intentionally NOT preserved here: it's a transient
             // projection of spv_raw_, rebuilt for every company by
             // attach_spv_activity() at the top of each emit_summary().
-            c.secondary      = existing.secondary;
-            c.s1             = existing.s1;
-            c.fin            = existing.fin;
-            companies_[*it]  = c;
+            c.secondary = existing.secondary;
+            c.s1 = existing.s1;
+            c.fin = existing.fin;
+            companies_[*it] = c;
         } else {
             by_id[c.id] = companies_.size();
             companies_.append(c);
@@ -1173,15 +1221,16 @@ void PreIpoService::parse_form_d_response(const QJsonObject& root) {
     for (const auto& v : root.value(QStringLiteral("recent_form_d")).toArray()) {
         const auto o = v.toObject();
         FormDFiling f;
-        f.company_name  = o[QStringLiteral("company_name")].toString();
-        f.cik           = o[QStringLiteral("cik")].toString();
-        f.filed_date    = QDate::fromString(o[QStringLiteral("filed_date")].toString(), Qt::ISODate);
+        f.company_name = o[QStringLiteral("company_name")].toString();
+        f.cik = o[QStringLiteral("cik")].toString();
+        f.filed_date = QDate::fromString(o[QStringLiteral("filed_date")].toString(), Qt::ISODate);
         f.amount_raised = o[QStringLiteral("amount_raised")].toDouble();
-        f.exemption     = o[QStringLiteral("exemption")].toString();
+        f.exemption = o[QStringLiteral("exemption")].toString();
         f.offering_type = o[QStringLiteral("offering_type")].toString();
-        f.state         = o[QStringLiteral("state")].toString();
-        f.edgar_url     = o[QStringLiteral("edgar_url")].toString();
-        if (!f.company_name.isEmpty()) form_d_.append(f);
+        f.state = o[QStringLiteral("state")].toString();
+        f.edgar_url = o[QStringLiteral("edgar_url")].toString();
+        if (!f.company_name.isEmpty())
+            form_d_.append(f);
     }
 
     // Note: the Form D Python script also returns a lightweight `s1_filings`
@@ -1200,7 +1249,8 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
     //   3. case-folded name match (last resort)
     QHash<QString, int> by_cik, by_id;
     for (int i = 0; i < companies_.size(); ++i) {
-        if (!companies_[i].cik.isEmpty()) by_cik[companies_[i].cik] = i;
+        if (!companies_[i].cik.isEmpty())
+            by_cik[companies_[i].cik] = i;
         by_id[companies_[i].id] = i;
     }
 
@@ -1210,7 +1260,8 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
     // every company's existing fund-mark data.
     const auto marks_root = root.value(QStringLiteral("marks")).toObject();
     if (!marks_root.isEmpty()) {
-        for (auto& c : companies_) c.fund_marks.clear();
+        for (auto& c : companies_)
+            c.fund_marks.clear();
     }
 
     // Alias map (cid → {name, cik, aliases}) — lets us reverse-look up a
@@ -1227,29 +1278,36 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
 
         int idx = -1;
         if (!alias_cik.isEmpty()) {
-            if (auto fc = by_cik.find(alias_cik); fc != by_cik.end()) idx = *fc;
+            if (auto fc = by_cik.find(alias_cik); fc != by_cik.end())
+                idx = *fc;
         }
         if (idx < 0) {
-            if (auto fi = by_id.find(cid); fi != by_id.end()) idx = *fi;
+            if (auto fi = by_id.find(cid); fi != by_id.end())
+                idx = *fi;
         }
         if (idx < 0 && !canonical.isEmpty()) {
             const QString cf = canonical.toLower();
             for (int i = 0; i < companies_.size(); ++i)
-                if (companies_[i].name.toLower() == cf) { idx = i; break; }
+                if (companies_[i].name.toLower() == cf) {
+                    idx = i;
+                    break;
+                }
         }
         if (idx >= 0) {
             auto& c = companies_[idx];
             // Mirror the canonical id into the company's aliases so future
             // lookups by cid resolve.
-            if (!c.aliases.contains(cid)) c.aliases.append(cid);
-            by_id[cid] = idx;  // keep the index map consistent
+            if (!c.aliases.contains(cid))
+                c.aliases.append(cid);
+            by_id[cid] = idx; // keep the index map consistent
         }
     }
 
     for (auto it = marks_root.begin(); it != marks_root.end(); ++it) {
         const QString cid = it.key();
         const auto arr = it.value().toArray();
-        if (arr.isEmpty()) continue;
+        if (arr.isEmpty())
+            continue;
 
         const auto first_mark = arr.first().toObject();
         const QString mark_cik = first_mark[QStringLiteral("company_cik")].toString();
@@ -1259,25 +1317,27 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
         // fall back to creating a stub.
         int idx = -1;
         if (!mark_cik.isEmpty()) {
-            if (auto fc = by_cik.find(mark_cik); fc != by_cik.end()) idx = *fc;
+            if (auto fc = by_cik.find(mark_cik); fc != by_cik.end())
+                idx = *fc;
         }
         if (idx < 0) {
-            if (auto fi = by_id.find(cid); fi != by_id.end()) idx = *fi;
+            if (auto fi = by_id.find(cid); fi != by_id.end())
+                idx = *fi;
         }
         if (idx < 0) {
             PrivateCompany c;
-            c.id   = cid;
-            c.cik  = mark_cik;
+            c.id = cid;
+            c.cik = mark_cik;
             // Prefer the canonical alias name over slugified cid; fall back
             // to a humanized cid if neither is available.
-            c.name = !canonical.isEmpty() ? canonical
-                                          : cid.left(1).toUpper() + cid.mid(1).replace('-', ' ');
+            c.name = !canonical.isEmpty() ? canonical : cid.left(1).toUpper() + cid.mid(1).replace('-', ' ');
             c.aliases.append(cid);
             c.description = QStringLiteral("Tracked via mutual-fund N-PORT marks");
-            c.ipo_status  = IpoStatus::Unknown;
+            c.ipo_status = IpoStatus::Unknown;
             c.tags = tags_for_company(c);
             by_id[cid] = companies_.size();
-            if (!c.cik.isEmpty()) by_cik[c.cik] = companies_.size();
+            if (!c.cik.isEmpty())
+                by_cik[c.cik] = companies_.size();
             companies_.append(c);
             idx = companies_.size() - 1;
         }
@@ -1286,19 +1346,18 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
         for (const auto& mv : arr) {
             const auto mo = mv.toObject();
             FundMark m;
-            m.fund_name      = mo[QStringLiteral("fund_name")].toString();
-            m.fund_cik       = mo[QStringLiteral("fund_cik")].toString();
-            m.issuer_raw     = mo[QStringLiteral("issuer_raw")].toString();
-            m.as_of          = QDate::fromString(mo[QStringLiteral("as_of")].toString(), Qt::ISODate);
+            m.fund_name = mo[QStringLiteral("fund_name")].toString();
+            m.fund_cik = mo[QStringLiteral("fund_cik")].toString();
+            m.issuer_raw = mo[QStringLiteral("issuer_raw")].toString();
+            m.as_of = QDate::fromString(mo[QStringLiteral("as_of")].toString(), Qt::ISODate);
             m.as_of_estimated = mo[QStringLiteral("as_of_estimated")].toBool();
-            m.filed_date     = QDate::fromString(mo[QStringLiteral("filed_date")].toString(), Qt::ISODate);
-            m.shares_held    = mo[QStringLiteral("shares_held")].toDouble();
+            m.filed_date = QDate::fromString(mo[QStringLiteral("filed_date")].toString(), Qt::ISODate);
+            m.shares_held = mo[QStringLiteral("shares_held")].toDouble();
             m.fair_value_usd = mo[QStringLiteral("fair_value_usd")].toDouble();
-            m.mark_pps       = mo[QStringLiteral("mark_pps")].toDouble();
+            m.mark_pps = mo[QStringLiteral("mark_pps")].toDouble();
             marks.append(m);
         }
-        std::sort(marks.begin(), marks.end(),
-                  [](const FundMark& a, const FundMark& b) { return a.as_of > b.as_of; });
+        std::sort(marks.begin(), marks.end(), [](const FundMark& a, const FundMark& b) { return a.as_of > b.as_of; });
     }
 
     funds_.clear();
@@ -1306,7 +1365,7 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
         const auto o = v.toObject();
         FundEntry f;
         f.label = o[QStringLiteral("label")].toString();
-        f.cik   = o[QStringLiteral("cik")].toString();
+        f.cik = o[QStringLiteral("cik")].toString();
         funds_.append(f);
     }
 }
@@ -1314,19 +1373,21 @@ void PreIpoService::parse_marks_response(const QJsonObject& root) {
 void PreIpoService::parse_pipeline_response(const QJsonArray& arr) {
     QHash<QString, int> by_cik;
     for (int i = 0; i < companies_.size(); ++i)
-        if (!companies_[i].cik.isEmpty()) by_cik[companies_[i].cik] = i;
+        if (!companies_[i].cik.isEmpty())
+            by_cik[companies_[i].cik] = i;
 
     pipeline_.clear();
     for (const auto& v : arr) {
         const auto o = v.toObject();
         S1Filing s;
-        s.company_name    = o[QStringLiteral("company_name")].toString();
-        s.cik             = o[QStringLiteral("cik")].toString();
-        s.filed_date      = QDate::fromString(o[QStringLiteral("first_filed")].toString(), Qt::ISODate);
+        s.company_name = o[QStringLiteral("company_name")].toString();
+        s.cik = o[QStringLiteral("cik")].toString();
+        s.filed_date = QDate::fromString(o[QStringLiteral("first_filed")].toString(), Qt::ISODate);
         s.amendment_count = o[QStringLiteral("amendment_count")].toInt();
-        s.is_amendment    = s.amendment_count > 0;
-        s.edgar_url       = o[QStringLiteral("edgar_url")].toString();
-        if (!s.company_name.isEmpty()) pipeline_.append(s);
+        s.is_amendment = s.amendment_count > 0;
+        s.edgar_url = o[QStringLiteral("edgar_url")].toString();
+        if (!s.company_name.isEmpty())
+            pipeline_.append(s);
 
         int idx = -1;
         if (auto it = by_cik.find(s.cik); it != by_cik.end()) {
@@ -1337,18 +1398,20 @@ void PreIpoService::parse_pipeline_response(const QJsonArray& arr) {
             // a pipeline card produces no Markets dossier because the
             // PipelineView's cik→id lookup misses.
             PrivateCompany stub;
-            stub.cik    = s.cik;
-            stub.name   = s.company_name;
+            stub.cik = s.cik;
+            stub.name = s.company_name;
             // Slugify the name for the id. Keep simple — same regex as the
             // Python form-d script's _slug.
             static const QRegularExpression non_alnum("[^a-z0-9]+");
             QString slug = s.company_name.toLower();
             slug.replace(non_alnum, "-");
-            while (slug.endsWith('-')) slug.chop(1);
-            while (slug.startsWith('-')) slug.remove(0, 1);
+            while (slug.endsWith('-'))
+                slug.chop(1);
+            while (slug.startsWith('-'))
+                slug.remove(0, 1);
             stub.id = slug.isEmpty() ? s.cik : slug;
             stub.description = QStringLiteral("Tracked via SEC S-1 / F-1 filings");
-            stub.ipo_status  = IpoStatus::Filed;
+            stub.ipo_status = IpoStatus::Filed;
             stub.tags = tags_for_company(stub);
             by_cik[stub.cik] = companies_.size();
             companies_.append(stub);
@@ -1357,29 +1420,25 @@ void PreIpoService::parse_pipeline_response(const QJsonArray& arr) {
 
         if (idx >= 0) {
             auto& c = companies_[idx];
-            c.s1.first_filed     = s.filed_date;
+            c.s1.first_filed = s.filed_date;
             c.s1.amendment_count = s.amendment_count;
-            c.s1.latest_amended  = QDate::fromString(o[QStringLiteral("latest_amended")].toString(), Qt::ISODate);
+            c.s1.latest_amended = QDate::fromString(o[QStringLiteral("latest_amended")].toString(), Qt::ISODate);
             c.s1.days_since_first_filed = o[QStringLiteral("days_since_first")].toInt();
-            c.s1.edgar_url       = s.edgar_url;
-            c.s1.withdrawn       = o[QStringLiteral("withdrawn")].toBool();
-            c.s1.withdrawn_date  =
-                QDate::fromString(o[QStringLiteral("withdrawn_date")].toString(), Qt::ISODate);
-            const bool priced    = o[QStringLiteral("priced")].toBool();
-            c.s1.priced_date     =
-                QDate::fromString(o[QStringLiteral("priced_date")].toString(), Qt::ISODate);
+            c.s1.edgar_url = s.edgar_url;
+            c.s1.withdrawn = o[QStringLiteral("withdrawn")].toBool();
+            c.s1.withdrawn_date = QDate::fromString(o[QStringLiteral("withdrawn_date")].toString(), Qt::ISODate);
+            const bool priced = o[QStringLiteral("priced")].toBool();
+            c.s1.priced_date = QDate::fromString(o[QStringLiteral("priced_date")].toString(), Qt::ISODate);
             // Order matters: withdrawn beats priced beats amended. A 424B
             // followed by an RW is a pulled deal, not a priced one.
-            c.s1.status_label    = c.s1.withdrawn      ? QStringLiteral("Withdrawn")
-                                   : priced            ? QStringLiteral("Priced")
-                                   : s.amendment_count > 0 ? QStringLiteral("Amended")
-                                                           : QStringLiteral("Filed");
+            c.s1.status_label = c.s1.withdrawn          ? QStringLiteral("Withdrawn")
+                                : priced                ? QStringLiteral("Priced")
+                                : s.amendment_count > 0 ? QStringLiteral("Amended")
+                                                        : QStringLiteral("Filed");
             c.s1.form_types.clear();
             for (const auto& ft : o[QStringLiteral("form_types")].toArray())
                 c.s1.form_types << ft.toString();
-            c.ipo_status   = c.s1.withdrawn ? IpoStatus::Withdrawn
-                             : priced       ? IpoStatus::Priced
-                                            : IpoStatus::Filed;
+            c.ipo_status = c.s1.withdrawn ? IpoStatus::Withdrawn : priced ? IpoStatus::Priced : IpoStatus::Filed;
             c.s1_filed_date = s.filed_date;
         }
     }
@@ -1400,17 +1459,23 @@ void PreIpoService::recompute_analytics() {
             QVector<double> latest;
             double sum_w = 0, sum_wx = 0;
             for (const auto& m : c.fund_marks) {
-                if (m.mark_pps <= 0) continue;
-                if (newest.isValid() && m.as_of.daysTo(newest) > 120) continue;
+                if (m.mark_pps <= 0)
+                    continue;
+                if (newest.isValid() && m.as_of.daysTo(newest) > 120)
+                    continue;
                 const double w = std::max(m.shares_held, 1.0);
-                sum_w  += w;
+                sum_w += w;
                 sum_wx += w * m.mark_pps;
                 latest.append(m.mark_pps);
             }
-            if (sum_w > 0) a.consensus_mark_pps = sum_wx / sum_w;
+            if (sum_w > 0)
+                a.consensus_mark_pps = sum_wx / sum_w;
             if (latest.size() >= 2 && a.consensus_mark_pps > 0) {
                 double var = 0;
-                for (double v : latest) { const double d = v - a.consensus_mark_pps; var += d * d; }
+                for (double v : latest) {
+                    const double d = v - a.consensus_mark_pps;
+                    var += d * d;
+                }
                 const double sd = std::sqrt(var / latest.size());
                 a.mark_dispersion_pct = (sd / a.consensus_mark_pps) * 100.0;
             }
@@ -1427,7 +1492,8 @@ void PreIpoService::recompute_analytics() {
             const QDate newest_as_of = c.fund_marks.first().as_of;
             double baseline = 0;
             for (const auto& m : c.fund_marks) {
-                if (m.mark_pps <= 0) continue;
+                if (m.mark_pps <= 0)
+                    continue;
                 // newest_as_of.daysTo(m.as_of) is negative when m is older;
                 // ≤ -45 means m is at least 45 days older than the newest.
                 if (newest_as_of.daysTo(m.as_of) <= -45) {
@@ -1436,8 +1502,7 @@ void PreIpoService::recompute_analytics() {
                 }
             }
             if (baseline > 0 && std::abs(baseline - a.consensus_mark_pps) > 1e-9) {
-                a.mark_drift_vs_last_round_pct =
-                    (a.consensus_mark_pps - baseline) / baseline * 100.0;
+                a.mark_drift_vs_last_round_pct = (a.consensus_mark_pps - baseline) / baseline * 100.0;
             }
             // No 45-day-stale baseline: leave drift as 0. The picks/signals
             // engine then won't fire a MarkUp signal off a 2-week wobble.
@@ -1473,26 +1538,25 @@ void PreIpoService::recompute_analytics() {
         // company with a disclosed $0 raise is known, and must not outrank a
         // documented peer merely by being undocumented.
         const bool have_financials = c.fin.as_of.isValid();
-        const bool have_form_d     = !c.rounds.isEmpty();
+        const bool have_form_d = !c.rounds.isEmpty();
 
         int earned = 0, possible = 0;
         const auto term = [&](bool available, bool met, int weight) {
-            if (!available) return;
+            if (!available)
+                return;
             possible += weight;
-            if (met) earned += weight;
+            if (met)
+                earned += weight;
         };
         term(true, c.s1.first_filed.isValid(), 30);
         term(true, c.s1.amendment_count >= 1, 15);
         term(have_financials, c.fin.revenue_m >= 100, 20);
-        term(have_form_d, c.founded.isValid() &&
-                          c.founded.daysTo(QDate::currentDate()) >= 7 * 365, 10);
+        term(have_form_d, c.founded.isValid() && c.founded.daysTo(QDate::currentDate()) >= 7 * 365, 10);
         term(have_form_d, c.cumulative_raised_m >= 500, 10);
 
         a.ipo_readiness_available = have_financials || have_form_d;
         a.ipo_readiness_score =
-            a.ipo_readiness_available && possible > 0
-                ? std::min(100, qRound(100.0 * earned / possible))
-                : 0;
+            a.ipo_readiness_available && possible > 0 ? std::min(100, qRound(100.0 * earned / possible)) : 0;
         // A pulled registration is not "ready" however thick the file is.
         if (c.s1.withdrawn) {
             a.ipo_readiness_available = true;
@@ -1513,7 +1577,7 @@ void PreIpoService::recompute_analytics() {
         // Only a published readiness contributes. Crediting an
         // unavailable one would rank stubs above documented companies.
         if (a.ipo_readiness_available)
-            cp += 0.4 * a.ipo_readiness_score;             // up to 40
+            cp += 0.4 * a.ipo_readiness_score; // up to 40
         cp += 0.15 * std::min(50.0, std::abs(a.mark_drift_vs_last_round_pct));
         cp += 0.10 * std::min(50.0, a.consensus_mark_pps > 0 ? 50.0 : 0.0);
         cp += 0.10 * std::min(40, a.smart_money_index * 8);
@@ -1527,7 +1591,7 @@ void PreIpoService::recompute_analytics() {
         // mark ($/share) instead.
         c.last_valuation_usd = 0;
         c.revenue_est_usd = c.fin.revenue_m;
-        c.s1_filed_date   = c.s1.first_filed;
+        c.s1_filed_date = c.s1.first_filed;
         if (c.s1.first_filed.isValid())
             c.ipo_expected_window = QString("S-1 filed %1").arg(c.s1.first_filed.toString("MMM yyyy"));
 
@@ -1538,13 +1602,13 @@ void PreIpoService::recompute_analytics() {
         // chronological sort downstream is meaningful — every signal would
         // otherwise share the same `now` and the sort would be a no-op.
         if (a.consensus_mark_pps > 0 && a.mark_drift_vs_last_round_pct > 10) {
-            Signal s; s.company_id = c.id; s.company_name = c.name;
+            Signal s;
+            s.company_id = c.id;
+            s.company_name = c.name;
             s.kind = SignalKind::MarkUp;
-            s.description = QString("Consensus mark +%1% vs prior quarter")
-                                .arg(a.mark_drift_vs_last_round_pct, 0, 'f', 1);
-            s.at = c.fund_marks.isEmpty()
-                ? now
-                : QDateTime(c.fund_marks.first().as_of, QTime(16, 0));
+            s.description =
+                QString("Consensus mark +%1% vs prior quarter").arg(a.mark_drift_vs_last_round_pct, 0, 'f', 1);
+            s.at = c.fund_marks.isEmpty() ? now : QDateTime(c.fund_marks.first().as_of, QTime(16, 0));
             signals_.append(s);
         }
         // A withdrawn registration must never emit the burst signal. The
@@ -1552,46 +1616,44 @@ void PreIpoService::recompute_analytics() {
         // precedes an RW increments it — so without this guard withdrawal
         // and imminent pricing produce the same bullish bullet.
         if (c.s1.withdrawn) {
-            Signal s; s.company_id = c.id; s.company_name = c.name;
+            Signal s;
+            s.company_id = c.id;
+            s.company_name = c.name;
             s.kind = SignalKind::Withdrawn;
             s.description = c.s1.withdrawn_date.isValid()
-                ? QString("Registration withdrawn %1 — deal pulled")
-                      .arg(c.s1.withdrawn_date.toString(QStringLiteral("d MMM yyyy")))
-                : QStringLiteral("Registration withdrawn — deal pulled");
-            s.at = c.s1.withdrawn_date.isValid()
-                       ? QDateTime(c.s1.withdrawn_date, QTime(16, 0))
-                       : now;
+                                ? QString("Registration withdrawn %1 — deal pulled")
+                                      .arg(c.s1.withdrawn_date.toString(QStringLiteral("d MMM yyyy")))
+                                : QStringLiteral("Registration withdrawn — deal pulled");
+            s.at = c.s1.withdrawn_date.isValid() ? QDateTime(c.s1.withdrawn_date, QTime(16, 0)) : now;
             signals_.append(s);
         } else if (c.s1.amendment_count >= 3) {
-            Signal s; s.company_id = c.id; s.company_name = c.name;
+            Signal s;
+            s.company_id = c.id;
+            s.company_name = c.name;
             s.kind = SignalKind::AmendmentBurst;
             s.description = QString("%1 S-1 amendments — pricing imminent").arg(c.s1.amendment_count);
-            s.at = c.s1.latest_amended.isValid()
-                ? QDateTime(c.s1.latest_amended, QTime(16, 0))
-                : now;
+            s.at = c.s1.latest_amended.isValid() ? QDateTime(c.s1.latest_amended, QTime(16, 0)) : now;
             signals_.append(s);
         }
         if (a.ipo_readiness_available && a.ipo_readiness_score >= 70) {
-            Signal s; s.company_id = c.id; s.company_name = c.name;
+            Signal s;
+            s.company_id = c.id;
+            s.company_name = c.name;
             s.kind = SignalKind::ReadinessJump;
             s.description = QString("IPO readiness %1/100").arg(a.ipo_readiness_score);
-            s.at = c.s1.first_filed.isValid()
-                ? QDateTime(c.s1.first_filed, QTime(16, 0))
-                : now;
+            s.at = c.s1.first_filed.isValid() ? QDateTime(c.s1.first_filed, QTime(16, 0)) : now;
             signals_.append(s);
         }
     }
 
     // Sort universe by composite picks score desc so left-rail prioritizes interesting names.
-    std::sort(companies_.begin(), companies_.end(),
-              [](const PrivateCompany& a, const PrivateCompany& b) {
-                  if (a.analytics.composite_picks_score != b.analytics.composite_picks_score)
-                      return a.analytics.composite_picks_score > b.analytics.composite_picks_score;
-                  return a.cumulative_raised_m > b.cumulative_raised_m;
-              });
+    std::sort(companies_.begin(), companies_.end(), [](const PrivateCompany& a, const PrivateCompany& b) {
+        if (a.analytics.composite_picks_score != b.analytics.composite_picks_score)
+            return a.analytics.composite_picks_score > b.analytics.composite_picks_score;
+        return a.cumulative_raised_m > b.cumulative_raised_m;
+    });
 
-    std::sort(signals_.begin(), signals_.end(),
-              [](const Signal& a, const Signal& b) { return a.at > b.at; });
+    std::sort(signals_.begin(), signals_.end(), [](const Signal& a, const Signal& b) { return a.at > b.at; });
 }
 
 // ── Emit ─────────────────────────────────────────────────────────────────────
@@ -1599,51 +1661,55 @@ void PreIpoService::recompute_analytics() {
 // ── Curated valuation seed ─────────────────────────────────────────────────────
 
 void PreIpoService::load_valuation_seed() {
-    if (seed_loaded_) return;
-    seed_loaded_ = true;  // attempt once per session regardless of outcome
+    if (seed_loaded_)
+        return;
+    seed_loaded_ = true; // attempt once per session regardless of outcome
 
     // Parse one seed file's `entries` array into ValuationSeed objects.
     auto parse_file = [](const QString& path, const char* label) -> QVector<ValuationSeed> {
         QVector<ValuationSeed> out;
         QFile f(path);
-        if (!f.open(QIODevice::ReadOnly)) return out;
+        if (!f.open(QIODevice::ReadOnly))
+            return out;
         QJsonParseError err{};
         const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
         f.close();
         if (err.error != QJsonParseError::NoError || !doc.isObject()) {
-            LOG_WARN("PreIpo", QString("valuation seed %1 parse failed: %2")
-                                   .arg(label, err.errorString()));
+            LOG_WARN("PreIpo", QString("valuation seed %1 parse failed: %2").arg(label, err.errorString()));
             return out;
         }
         for (const auto& v : doc.object().value(QStringLiteral("entries")).toArray()) {
             const auto o = v.toObject();
             ValuationSeed s;
             s.id = o[QStringLiteral("id")].toString();
-            if (s.id.isEmpty()) continue;
+            if (s.id.isEmpty())
+                continue;
             s.name = o[QStringLiteral("name")].toString();
-            s.cik  = o[QStringLiteral("cik")].toString();
-            for (const auto& a : o[QStringLiteral("aliases")].toArray()) s.aliases << a.toString();
+            s.cik = o[QStringLiteral("cik")].toString();
+            for (const auto& a : o[QStringLiteral("aliases")].toArray())
+                s.aliases << a.toString();
             s.last_valuation_usd = o[QStringLiteral("last_valuation_usd")].toDouble();
-            s.as_of        = QDate::fromString(o[QStringLiteral("as_of")].toString(), Qt::ISODate);
+            s.as_of = QDate::fromString(o[QStringLiteral("as_of")].toString(), Qt::ISODate);
             s.source_label = o[QStringLiteral("source_label")].toString();
-            s.source_url   = o[QStringLiteral("source_url")].toString();
-            s.round_name   = o[QStringLiteral("round_name")].toString();
-            s.sector       = o[QStringLiteral("sector")].toString();
-            s.description  = o[QStringLiteral("description")].toString();
-            s.hq_city      = o[QStringLiteral("hq_city")].toString();
-            s.hq_state     = o[QStringLiteral("hq_state")].toString();
-            s.hq_country   = o[QStringLiteral("hq_country")].toString();
+            s.source_url = o[QStringLiteral("source_url")].toString();
+            s.round_name = o[QStringLiteral("round_name")].toString();
+            s.sector = o[QStringLiteral("sector")].toString();
+            s.description = o[QStringLiteral("description")].toString();
+            s.hq_city = o[QStringLiteral("hq_city")].toString();
+            s.hq_state = o[QStringLiteral("hq_state")].toString();
+            s.hq_country = o[QStringLiteral("hq_country")].toString();
             s.founded_year = o[QStringLiteral("founded")].toInt();
-            for (const auto& k : o[QStringLiteral("key_investors")].toArray()) s.key_investors << k.toString();
-            for (const auto& t : o[QStringLiteral("tags")].toArray()) s.tags << t.toString();
+            for (const auto& k : o[QStringLiteral("key_investors")].toArray())
+                s.key_investors << k.toString();
+            for (const auto& t : o[QStringLiteral("tags")].toArray())
+                s.tags << t.toString();
             out.append(s);
         }
         return out;
     };
 
     // 1) Bundled seed (ships with the app, under scripts/).
-    seed_ = parse_file(
-        python::PythonRunner::instance().scripts_dir() + "/pre_ipo_valuation_seed.json", "bundled");
+    seed_ = parse_file(python::PythonRunner::instance().scripts_dir() + "/pre_ipo_valuation_seed.json", "bundled");
 
     // 2) User override (optional): user/files/pre_ipo/valuation_overrides.json.
     //    Lets the user refresh stale
@@ -1654,47 +1720,65 @@ void PreIpoService::load_valuation_seed() {
     for (const auto& ov : overrides) {
         int idx = -1;
         for (int i = 0; i < seed_.size(); ++i)
-            if (seed_[i].id == ov.id) { idx = i; break; }
-        if (idx >= 0) { seed_[idx] = ov; ++replaced; }
-        else          { seed_.append(ov); ++added; }
+            if (seed_[i].id == ov.id) {
+                idx = i;
+                break;
+            }
+        if (idx >= 0) {
+            seed_[idx] = ov;
+            ++replaced;
+        } else {
+            seed_.append(ov);
+            ++added;
+        }
     }
 
     LOG_INFO("PreIpo", QString("loaded %1 curated valuation seeds (overrides: %2 replaced, %3 added)")
-                           .arg(seed_.size()).arg(replaced).arg(added));
+                           .arg(seed_.size())
+                           .arg(replaced)
+                           .arg(added));
 }
 
 QSet<QString> PreIpoService::seed_fuzzy_norms(const ValuationSeed& s) const {
     QSet<QString> norms;
     const QString nm = norm_name(s.name);
-    if (!nm.isEmpty()) norms.insert(nm);
+    if (!nm.isEmpty())
+        norms.insert(nm);
     // Only multi-word aliases participate in fuzzy matching — a bare single
     // token (e.g. "figure") is too generic and would bind to an unrelated
     // company. Single-token aliases still match exactly via the id tier.
     for (const auto& a : s.aliases) {
-        if (!a.contains(' ')) continue;
+        if (!a.contains(' '))
+            continue;
         const QString an = norm_name(a);
-        if (!an.isEmpty()) norms.insert(an);
+        if (!an.isEmpty())
+            norms.insert(an);
     }
     return norms;
 }
 
-bool PreIpoService::seed_matches(const PrivateCompany& c, const ValuationSeed& s,
-                                 const QSet<QString>& norms) const {
+bool PreIpoService::seed_matches(const PrivateCompany& c, const ValuationSeed& s, const QSet<QString>& norms) const {
     // 1. CIK (most reliable — set only for verified operating-company filers).
-    if (!s.cik.isEmpty() && c.cik == s.cik) return true;
+    if (!s.cik.isEmpty() && c.cik == s.cik)
+        return true;
     // 2. Exact id/alias: the seed id, or any seed alias (slugified) matching the
     //    company id or one of its aliases. This is how single-token aliases
     //    (e.g. "scaleai") match — they're excluded from the fuzzy tier.
-    if (c.id == s.id || c.aliases.contains(s.id)) return true;
+    if (c.id == s.id || c.aliases.contains(s.id))
+        return true;
     for (const auto& a : s.aliases) {
         const QString slug = slugify(a);
-        if (c.aliases.contains(a)) return true;
-        if (!slug.isEmpty() && (c.id == slug || c.aliases.contains(slug))) return true;
+        if (c.aliases.contains(a))
+            return true;
+        if (!slug.isEmpty() && (c.id == slug || c.aliases.contains(slug)))
+            return true;
     }
     // 3. Fuzzy normalized-name match (canonical name + multi-word aliases only).
-    if (norms.contains(norm_name(c.name))) return true;
+    if (norms.contains(norm_name(c.name)))
+        return true;
     for (const auto& a : c.aliases)
-        if (norms.contains(norm_name(a))) return true;
+        if (norms.contains(norm_name(a)))
+            return true;
     return false;
 }
 
@@ -1706,14 +1790,17 @@ int PreIpoService::find_company_for_seed(const ValuationSeed& s) const {
     // match — but the CIK-first pass keeps the choice deterministic regardless.
     if (!s.cik.isEmpty())
         for (int i = 0; i < companies_.size(); ++i)
-            if (companies_[i].cik == s.cik) return i;
+            if (companies_[i].cik == s.cik)
+                return i;
     for (int i = 0; i < companies_.size(); ++i)
-        if (seed_matches(companies_[i], s, norms)) return i;
+        if (seed_matches(companies_[i], s, norms))
+            return i;
     return -1;
 }
 
 void PreIpoService::seed_ensure_companies() {
-    if (seed_.isEmpty()) return;
+    if (seed_.isEmpty())
+        return;
     for (const auto& s : seed_) {
         // Fuzzy norm-set (canonical name + multi-word aliases) — shared with
         // find_company_for_seed so the two passes can't disagree on matching.
@@ -1725,23 +1812,27 @@ void PreIpoService::seed_ensure_companies() {
         // can't disagree about what a seed maps to.
         QVector<int> matches;
         for (int i = 0; i < companies_.size(); ++i)
-            if (seed_matches(companies_[i], s, norms)) matches.append(i);
+            if (seed_matches(companies_[i], s, norms))
+                matches.append(i);
 
         if (matches.isEmpty()) {
             // Seeded name with no SEC footprint (OpenAI, Anthropic, …): stub it
             // so marquee names always appear. Stubs are rebuilt from seed_ each
             // emit, so they survive cache hydration without being persisted.
             PrivateCompany stub;
-            stub.id   = s.id;
-            stub.cik  = s.cik;
+            stub.id = s.id;
+            stub.cik = s.cik;
             stub.name = s.name;
             stub.aliases = s.aliases;
-            stub.sector  = s.sector;
-            stub.hq_city = s.hq_city; stub.hq_state = s.hq_state; stub.hq_country = s.hq_country;
-            if (s.founded_year > 1900 && s.founded_year < 2100) stub.founded = QDate(s.founded_year, 1, 1);
+            stub.sector = s.sector;
+            stub.hq_city = s.hq_city;
+            stub.hq_state = s.hq_state;
+            stub.hq_country = s.hq_country;
+            if (s.founded_year > 1900 && s.founded_year < 2100)
+                stub.founded = QDate(s.founded_year, 1, 1);
             stub.key_investors = s.key_investors;
-            stub.description = s.description.isEmpty()
-                ? QStringLiteral("Tracked via curated valuation seed") : s.description;
+            stub.description =
+                s.description.isEmpty() ? QStringLiteral("Tracked via curated valuation seed") : s.description;
             stub.ipo_status = IpoStatus::Rumored;
             stub.tags = s.tags.isEmpty() ? tags_for_company(stub) : s.tags;
             companies_.append(stub);
@@ -1754,53 +1845,67 @@ void PreIpoService::seed_ensure_companies() {
         for (int idx : matches) {
             const auto& c = companies_[idx];
             const auto& p = companies_[primary];
-            const bool better =
-                (!c.cik.isEmpty() && p.cik.isEmpty()) ||
-                (c.cik.isEmpty() == p.cik.isEmpty() && c.rounds.size() > p.rounds.size());
-            if (better) primary = idx;
+            const bool better = (!c.cik.isEmpty() && p.cik.isEmpty()) ||
+                                (c.cik.isEmpty() == p.cik.isEmpty() && c.rounds.size() > p.rounds.size());
+            if (better)
+                primary = idx;
         }
         QVector<int> remove;
         for (int idx : matches)
-            if (idx != primary) { merge_company_into(companies_[primary], companies_[idx]); remove.append(idx); }
+            if (idx != primary) {
+                merge_company_into(companies_[primary], companies_[idx]);
+                remove.append(idx);
+            }
 
         auto& p = companies_[primary];
         auto add_alias = [&](const QString& a) {
-            if (!a.isEmpty() && a != p.id && !p.aliases.contains(a)) p.aliases << a;
+            if (!a.isEmpty() && a != p.id && !p.aliases.contains(a))
+                p.aliases << a;
         };
         // Prefer the friendlier seed display name (e.g. "SpaceX" over the Form D
         // legal name); keep the legal name searchable as an alias.
-        if (!s.name.isEmpty() && p.name != s.name) { add_alias(p.name); p.name = s.name; }
+        if (!s.name.isEmpty() && p.name != s.name) {
+            add_alias(p.name);
+            p.name = s.name;
+        }
         add_alias(s.id);
         add_alias(slugify(s.name));
-        for (const auto& a : s.aliases) add_alias(a);
+        for (const auto& a : s.aliases)
+            add_alias(a);
         // Fill descriptive fields only where SEC data is absent.
-        if (p.sector.isEmpty())  p.sector = s.sector;
+        if (p.sector.isEmpty())
+            p.sector = s.sector;
         if (!p.founded.isValid() && s.founded_year > 1900 && s.founded_year < 2100)
             p.founded = QDate(s.founded_year, 1, 1);
-        if (p.hq_city.isEmpty())    p.hq_city = s.hq_city;
-        if (p.hq_state.isEmpty())   p.hq_state = s.hq_state;
-        if (p.hq_country.isEmpty()) p.hq_country = s.hq_country;
-        if (p.key_investors.isEmpty()) p.key_investors = s.key_investors;
-        if (!s.description.isEmpty() &&
-            (p.description.isEmpty() || p.description.startsWith("Tracked via") ||
-             p.description.startsWith("Source: SEC")))
+        if (p.hq_city.isEmpty())
+            p.hq_city = s.hq_city;
+        if (p.hq_state.isEmpty())
+            p.hq_state = s.hq_state;
+        if (p.hq_country.isEmpty())
+            p.hq_country = s.hq_country;
+        if (p.key_investors.isEmpty())
+            p.key_investors = s.key_investors;
+        if (!s.description.isEmpty() && (p.description.isEmpty() || p.description.startsWith("Tracked via") ||
+                                         p.description.startsWith("Source: SEC")))
             p.description = s.description;
 
         std::sort(remove.begin(), remove.end(), std::greater<int>());
-        for (int idx : remove) companies_.removeAt(idx);
+        for (int idx : remove)
+            companies_.removeAt(idx);
     }
 }
 
 void PreIpoService::seed_apply_valuation() {
     for (const auto& s : seed_) {
         const int idx = find_company_for_seed(s);
-        if (idx < 0) continue;
+        if (idx < 0)
+            continue;
         auto& c = companies_[idx];
-        c.last_valuation_usd = s.last_valuation_usd;  // overwrites the 0 set by recompute
-        c.seed_source     = s.source_label;
+        c.last_valuation_usd = s.last_valuation_usd; // overwrites the 0 set by recompute
+        c.seed_source = s.source_label;
         c.seed_source_url = s.source_url;
-        c.seed_as_of      = s.as_of;
-        c.seed_round      = s.round_name;
+        c.seed_as_of = s.as_of;
+        c.seed_round = s.round_name;
     }
 }
 
@@ -1816,17 +1921,17 @@ void PreIpoService::emit_summary() {
     // showing the sweep's single filing and its naive total until some
     // unrelated event repainted it.
     reapply_dossiers();
-    attach_spv_activity();  // re-join the SPV side table to the latest companies_
+    attach_spv_activity(); // re-join the SPV side table to the latest companies_
     recompute_analytics();
     seed_apply_valuation();
     PreIpoSummary summary;
-    summary.companies     = companies_;
+    summary.companies = companies_;
     summary.recent_form_d = form_d_;
-    summary.ipo_pipeline  = pipeline_;
-    summary.signal_list   = signals_;
-    summary.funds         = funds_;
-    summary.last_updated  = QDateTime::currentDateTime();
-    summary.loaded        = (pending_bits_ == 0 && failed_bits_ == 0);
+    summary.ipo_pipeline = pipeline_;
+    summary.signal_list = signals_;
+    summary.funds = funds_;
+    summary.last_updated = QDateTime::currentDateTime();
+    summary.loaded = (pending_bits_ == 0 && failed_bits_ == 0);
     emit data_loaded(summary);
 }
 
@@ -1835,18 +1940,16 @@ void PreIpoService::finalize_load() {
     force_refresh_ = false;
     const bool any_failed = failed_bits_ != 0;
     loaded_ = !any_failed;
-    LOG_INFO("PreIpo",
-             QString("Load finished: %1 companies, %2 S-1 filers, %3 signals, "
-                     "%4 funds (failed_bits=%5)")
-                 .arg(companies_.size())
-                 .arg(pipeline_.size())
-                 .arg(signals_.size())
-                 .arg(funds_.size())
-                 .arg(failed_bits_));
+    LOG_INFO("PreIpo", QString("Load finished: %1 companies, %2 S-1 filers, %3 signals, "
+                               "%4 funds (failed_bits=%5)")
+                           .arg(companies_.size())
+                           .arg(pipeline_.size())
+                           .arg(signals_.size())
+                           .arg(funds_.size())
+                           .arg(failed_bits_));
     if (any_failed) {
-        emit error_occurred(
-            QStringLiteral("One or more SEC sources failed; partial data shown. "
-                           "The screen will retry on next open."));
+        emit error_occurred(QStringLiteral("One or more SEC sources failed; partial data shown. "
+                                           "The screen will retry on next open."));
     }
 }
 
@@ -1860,23 +1963,23 @@ void PreIpoService::schedule_next_daily_refresh() {
     }
     const QDateTime now_et = QDateTime::currentDateTime().toTimeZone(et);
     QDateTime target(now_et.date(), QTime(5, 0), et);
-    if (target <= now_et) target = target.addDays(1);
+    if (target <= now_et)
+        target = target.addDays(1);
     const qint64 ms = now_et.msecsTo(target);
 
-    LOG_INFO("PreIpo",
-             QString("Next daily auto-refresh at %1 ET (%2 min away)")
-                 .arg(target.toString("yyyy-MM-dd hh:mm"))
-                 .arg(ms / 60'000));
+    LOG_INFO("PreIpo", QString("Next daily auto-refresh at %1 ET (%2 min away)")
+                           .arg(target.toString("yyyy-MM-dd hh:mm"))
+                           .arg(ms / 60'000));
 
     QPointer<PreIpoService> self = this;
-    QTimer::singleShot(static_cast<int>(std::min<qint64>(ms, INT_MAX)),
-                       this, [self]() {
-        if (!self) return;
+    QTimer::singleShot(static_cast<int>(std::min<qint64>(ms, INT_MAX)), this, [self]() {
+        if (!self)
+            return;
         if (self->loading_) {
             LOG_INFO("PreIpo", "Daily auto-refresh fired while a load is in flight — skipping this tick");
         } else {
             LOG_INFO("PreIpo", "Daily auto-refresh firing (05:00 ET pre-warm)");
-            self->refresh_internal(/*force*/ false);  // data-based: cheap if nothing filed
+            self->refresh_internal(/*force*/ false); // data-based: cheap if nothing filed
         }
         self->schedule_next_daily_refresh();
     });
@@ -1895,7 +1998,8 @@ bool PreIpoService::load_from_cache() {
     auto read = [&](const QString& filename) -> QJsonDocument {
         const QString path = cache_dir() + "/" + filename;
         QFile f(path);
-        if (!f.open(QIODevice::ReadOnly)) return {};
+        if (!f.open(QIODevice::ReadOnly))
+            return {};
         const QByteArray bytes = f.readAll();
         f.close();
         return QJsonDocument::fromJson(bytes);
@@ -1909,8 +2013,7 @@ bool PreIpoService::load_from_cache() {
     // would never reload. Drop the cursor for any source that didn't hydrate so
     // the next refresh fetches it in full (which rewrites both cache + cursor).
     bool cursors_changed = false;
-    auto load_source = [&](const QString& file, const QString& cursor_key,
-                           auto&& parse_if_ok) {
+    auto load_source = [&](const QString& file, const QString& cursor_key, auto&& parse_if_ok) {
         const QJsonDocument doc = read(file);
         if (parse_if_ok(doc)) {
             loaded_any = true;
@@ -1920,39 +2023,39 @@ bool PreIpoService::load_from_cache() {
         }
     };
 
-    load_source(QStringLiteral("form_d.json"), QStringLiteral("form_d"),
-                [&](const QJsonDocument& d) {
-                    if (!d.isObject()) return false;
-                    parse_form_d_response(d.object());
-                    return true;
-                });
-    load_source(QStringLiteral("marks.json"), QStringLiteral("marks"),
-                [&](const QJsonDocument& d) {
-                    if (!d.isObject()) return false;
-                    parse_marks_response(d.object());
-                    return true;
-                });
-    load_source(QStringLiteral("pipeline.json"), QStringLiteral("s1"),
-                [&](const QJsonDocument& d) {
-                    if (!d.isArray()) return false;
-                    parse_pipeline_response(d.array());
-                    return true;
-                });
-    load_source(QStringLiteral("spv.json"), QStringLiteral("spv"),
-                [&](const QJsonDocument& d) {
-                    if (!d.isObject()) return false;
-                    parse_spv_response(d.object());  // attached on the next emit_summary()
-                    return true;
-                });
+    load_source(QStringLiteral("form_d.json"), QStringLiteral("form_d"), [&](const QJsonDocument& d) {
+        if (!d.isObject())
+            return false;
+        parse_form_d_response(d.object());
+        return true;
+    });
+    load_source(QStringLiteral("marks.json"), QStringLiteral("marks"), [&](const QJsonDocument& d) {
+        if (!d.isObject())
+            return false;
+        parse_marks_response(d.object());
+        return true;
+    });
+    load_source(QStringLiteral("pipeline.json"), QStringLiteral("s1"), [&](const QJsonDocument& d) {
+        if (!d.isArray())
+            return false;
+        parse_pipeline_response(d.array());
+        return true;
+    });
+    load_source(QStringLiteral("spv.json"), QStringLiteral("spv"), [&](const QJsonDocument& d) {
+        if (!d.isObject())
+            return false;
+        parse_spv_response(d.object()); // attached on the next emit_summary()
+        return true;
+    });
 
-    if (cursors_changed) save_cursors();
+    if (cursors_changed)
+        save_cursors();
 
     if (loaded_any) {
-        LOG_INFO("PreIpo",
-                 QString("Hydrated %1 companies from cache (%2 S-1 filers, %3 funds)")
-                     .arg(companies_.size())
-                     .arg(pipeline_.size())
-                     .arg(funds_.size()));
+        LOG_INFO("PreIpo", QString("Hydrated %1 companies from cache (%2 S-1 filers, %3 funds)")
+                               .arg(companies_.size())
+                               .arg(pipeline_.size())
+                               .arg(funds_.size()));
     }
     return loaded_any;
 }
@@ -1972,7 +2075,8 @@ void PreIpoService::save_cache(const QString& filename, const QJsonDocument& doc
 
 void PreIpoService::load_cursors() {
     QFile f(cache_dir() + "/cursors.json");
-    if (!f.open(QIODevice::ReadOnly)) return;
+    if (!f.open(QIODevice::ReadOnly))
+        return;
     cursors_ = QJsonDocument::fromJson(f.readAll()).object();
     f.close();
 }

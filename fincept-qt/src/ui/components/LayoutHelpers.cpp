@@ -10,25 +10,27 @@
 #include <QSizePolicy>
 #include <QTableWidget>
 #include <QTimer>
+
 #include <algorithm>
 
 namespace fincept::ui {
 
-void equalize_and_distribute(const QList<QPushButton*>& peers,
-                             const QFont&               font,
-                             int                        hpad) {
-    if (peers.isEmpty()) return;
+void equalize_and_distribute(const QList<QPushButton*>& peers, const QFont& font, int hpad) {
+    if (peers.isEmpty())
+        return;
 
     const QFontMetrics fm(font);
     int longest = 0;
     for (QPushButton* b : peers) {
-        if (!b) continue;
+        if (!b)
+            continue;
         longest = std::max(longest, fm.horizontalAdvance(b->text()));
     }
     const int min_w = longest + hpad;
 
     for (QPushButton* b : peers) {
-        if (!b) continue;
+        if (!b)
+            continue;
         b->setMinimumWidth(min_w);
         // Preserve the existing vertical policy — pills are typically Fixed
         // height. We only override horizontal to Expanding so peers grow
@@ -40,7 +42,8 @@ void equalize_and_distribute(const QList<QPushButton*>& peers,
 }
 
 void ensure_header_fits(QTableWidget* table, int hpad) {
-    if (!table) return;
+    if (!table)
+        return;
 
     // Defer to the next event-loop iteration so this runs AFTER the caller's
     // own per-column `resizeSection` / `setSectionResizeMode` calls in the
@@ -50,9 +53,11 @@ void ensure_header_fits(QTableWidget* table, int hpad) {
     // being destroyed before the timer fires.
     QPointer<QTableWidget> guard(table);
     QTimer::singleShot(0, table, [guard, hpad]() {
-        if (!guard) return;
+        if (!guard)
+            return;
         QHeaderView* h = guard->horizontalHeader();
-        if (!h) return;
+        if (!h)
+            return;
 
         QFont hdr_font = h->font();
         hdr_font.setBold(true);
@@ -71,10 +76,12 @@ void ensure_header_fits(QTableWidget* table, int hpad) {
         // table's own width carries the header.
         const int cols = guard->columnCount();
         for (int c = 0; c < cols; ++c) {
-            if (h->sectionResizeMode(c) == QHeaderView::Stretch) continue;
+            if (h->sectionResizeMode(c) == QHeaderView::Stretch)
+                continue;
             QTableWidgetItem* item = guard->horizontalHeaderItem(c);
             const QString text = item ? item->text() : QString();
-            if (text.isEmpty()) continue;
+            if (text.isEmpty())
+                continue;
             const int needed = fm.horizontalAdvance(text) + hpad;
             if (h->sectionSize(c) < needed)
                 h->resizeSection(c, needed);

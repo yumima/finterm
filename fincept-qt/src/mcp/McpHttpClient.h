@@ -54,8 +54,7 @@ class McpHttpClient : public McpClientBase {
 
     // MCP prompts
     Result<std::vector<ExternalPrompt>> list_prompts() override;
-    Result<PromptResult> get_prompt(const QString& name,
-                                    const QHash<QString, QString>& args) override;
+    Result<PromptResult> get_prompt(const QString& name, const QHash<QString, QString>& args) override;
 
     const McpServerConfig& config() const override { return config_; }
 
@@ -67,9 +66,7 @@ class McpHttpClient : public McpClientBase {
     static QString secure_key_for_server(const QString& server_id);
 
   private:
-    Result<QJsonObject> send_request(const QString& method,
-                                     const QJsonObject& params,
-                                     int timeout_ms = 30000);
+    Result<QJsonObject> send_request(const QString& method, const QJsonObject& params, int timeout_ms = 30000);
 
     /// Adds Authorization / custom-header auth based on config_.auth_scheme.
     /// Returns false (and logs) when the scheme is unsupported (oauth in

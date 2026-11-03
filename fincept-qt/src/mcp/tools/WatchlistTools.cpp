@@ -232,10 +232,9 @@ std::vector<Resource> get_watchlist_resources() {
         Resource r;
         r.uri = QStringLiteral("finterm://watchlist/all");
         r.name = QStringLiteral("All watchlists");
-        r.description = QStringLiteral(
-            "Every configured watchlist with its symbols.  Read this for "
-            "context on the user's tracked tickers; use the get_watchlists "
-            "tool when you need to chain follow-up writes.");
+        r.description = QStringLiteral("Every configured watchlist with its symbols.  Read this for "
+                                       "context on the user's tracked tickers; use the get_watchlists "
+                                       "tool when you need to chain follow-up writes.");
         r.mime_type = QStringLiteral("application/json");
         r.handler = []() -> ResourceContent {
             ResourceContent rc;
@@ -245,8 +244,7 @@ std::vector<Resource> get_watchlist_resources() {
             auto& repo = WatchlistRepository::instance();
             auto lists = repo.list_all();
             if (lists.is_err()) {
-                rc.error = "Failed to load watchlists: " +
-                           QString::fromStdString(lists.error());
+                rc.error = "Failed to load watchlists: " + QString::fromStdString(lists.error());
                 return rc;
             }
 
@@ -256,9 +254,7 @@ std::vector<Resource> get_watchlist_resources() {
                 QJsonArray symbols;
                 if (stocks.is_ok()) {
                     for (const auto& s : stocks.value()) {
-                        symbols.append(QJsonObject{{"symbol", s.symbol},
-                                                   {"name", s.name},
-                                                   {"added_at", s.added_at}});
+                        symbols.append(QJsonObject{{"symbol", s.symbol}, {"name", s.name}, {"added_at", s.added_at}});
                     }
                 }
                 arr.append(QJsonObject{{"id", wl.id},
@@ -273,8 +269,7 @@ std::vector<Resource> get_watchlist_resources() {
                 {"watchlist_count", arr.size()},
                 {"watchlists", arr},
             };
-            rc.text =
-                QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
+            rc.text = QString::fromUtf8(QJsonDocument(envelope).toJson(QJsonDocument::Compact));
             return rc;
         };
         resources.push_back(std::move(r));

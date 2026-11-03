@@ -27,16 +27,16 @@ class NewsWidget : public BaseWidget {
     /// a long idle — otherwise the refresh button looks broken.
     void finalize_refresh(const QString& outcome);
 
-    QScrollArea* scroll_area_  = nullptr;
-    QVBoxLayout* news_layout_  = nullptr;
-    QLabel*      status_label_ = nullptr; // "Last updated HH:MM · N items"
+    QScrollArea* scroll_area_ = nullptr;
+    QVBoxLayout* news_layout_ = nullptr;
+    QLabel* status_label_ = nullptr; // "Last updated HH:MM · N items"
     /// Watchdog: clears the loading spinner if the daemon callback never
     /// returns within kRefreshTimeoutMs. The PythonWorker has its own
     /// timeout but a missed dispatch (worker not yet ready, queue drop)
     /// could otherwise leave the spinner on forever.
-    QTimer*      watchdog_     = nullptr;
-    QJsonArray   last_articles_; // cached for theme-change re-populate
-    qint64       refresh_token_ = 0; // increments per click; callbacks check it
+    QTimer* watchdog_ = nullptr;
+    QJsonArray last_articles_; // cached for theme-change re-populate
+    qint64 refresh_token_ = 0; // increments per click; callbacks check it
 };
 
 } // namespace fincept::screens::widgets

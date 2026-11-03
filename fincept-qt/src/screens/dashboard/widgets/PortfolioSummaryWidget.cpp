@@ -1,25 +1,23 @@
 #include "screens/dashboard/widgets/PortfolioSummaryWidget.h"
 
-#include "screens/dashboard/widgets/ExtendedHoursMath.h"
-
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "python/PythonWorker.h"
+#include "screens/dashboard/widgets/ExtendedHoursMath.h"
 #include "services/portfolio/PortfolioService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
-
+#include <QDateTime>
 #include <QFrame>
 #include <QHBoxLayout>
-#include <QDateTime>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
 #include <QScrollArea>
-#include <QSet>
 #include <QScrollBar>
+#include <QSet>
 #include <QSettings>
 #include <QTimeZone>
 
@@ -57,16 +55,11 @@ struct Column {
 };
 
 constexpr Column kColumns[] = {
-    {"SYM",      3, Qt::AlignLeft},
-    {"SHARES",   2, Qt::AlignRight},   // share counts are short; give the space away
-    {"PRICE",    3, Qt::AlignRight},
-    {"VALUE",    3, Qt::AlignRight},
-    {"P&L%",     3, Qt::AlignRight},
-    {"DAY CHG%", 3, Qt::AlignRight},
-    {"AFT%",     4, Qt::AlignRight},   // widest: carries a sign, 2dp and a '%'
+    {"SYM", 3, Qt::AlignLeft},       {"SHARES", 2, Qt::AlignRight}, // share counts are short; give the space away
+    {"PRICE", 3, Qt::AlignRight},    {"VALUE", 3, Qt::AlignRight},  {"P&L%", 3, Qt::AlignRight},
+    {"DAY CHG%", 3, Qt::AlignRight}, {"AFT%", 4, Qt::AlignRight}, // widest: carries a sign, 2dp and a '%'
 };
-constexpr int kColSym = 0, kColShares = 1, kColPrice = 2, kColValue = 3,
-              kColPnl = 4, kColDayChg = 5, kColAft = 6;
+constexpr int kColSym = 0, kColShares = 1, kColPrice = 2, kColValue = 3, kColPnl = 4, kColDayChg = 5, kColAft = 6;
 
 /// Strip the size hint out of the width calculation — see Column above.
 void size_by_stretch_only(QWidget* w) {
@@ -122,12 +115,12 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     };
 
     // Two rows × three pairs — width is plentiful, vertical space is precious.
-    make_metric("TOTAL VALUE", total_value_lbl_,   0, 0);
-    make_metric("DAY P&L",     day_pnl_lbl_,       0, 1);
-    make_metric("DAY CHG%",    day_chg_pct_lbl_,   0, 2);
-    make_metric("HOLDINGS",    num_holdings_lbl_,  1, 0);
-    make_metric("TOTAL P&L",   total_pnl_lbl_,     1, 1);
-    make_metric("TOTAL CHG%",  total_chg_pct_lbl_, 1, 2);
+    make_metric("TOTAL VALUE", total_value_lbl_, 0, 0);
+    make_metric("DAY P&L", day_pnl_lbl_, 0, 1);
+    make_metric("DAY CHG%", day_chg_pct_lbl_, 0, 2);
+    make_metric("HOLDINGS", num_holdings_lbl_, 1, 0);
+    make_metric("TOTAL P&L", total_pnl_lbl_, 1, 1);
+    make_metric("TOTAL CHG%", total_chg_pct_lbl_, 1, 2);
 
     vl->addWidget(summary_card_);
 
@@ -147,9 +140,9 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
         header_labels_.append(l);
         hl->addWidget(l, col.stretch);
     }
-    header_labels_.at(kColPnl)->setToolTip(QStringLiteral(
-        "Return on cost for the position: (price − average cost) ÷ average cost. "
-        "The cash figure is in TOTAL P&L above."));
+    header_labels_.at(kColPnl)->setToolTip(
+        QStringLiteral("Return on cost for the position: (price − average cost) ÷ average cost. "
+                       "The cash figure is in TOTAL P&L above."));
     aft_header_ = header_labels_.at(kColAft);
     set_aft_header_state(AftState::Idle);
     vl->addWidget(header_row_);
@@ -161,11 +154,10 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     // so the columns would drift apart by exactly the bar's width the moment a
     // book grew past the visible area. Reserve the same gutter in the header
     // whenever the bar is actually there.
-    connect(scroll_area_->verticalScrollBar(), &QScrollBar::rangeChanged, this,
-            [this](int min, int max) {
-                const int gutter = (max > min) ? scroll_area_->verticalScrollBar()->width() : 0;
-                header_row_->layout()->setContentsMargins(8, 3, 8 + gutter, 3);
-            });
+    connect(scroll_area_->verticalScrollBar(), &QScrollBar::rangeChanged, this, [this](int min, int max) {
+        const int gutter = (max > min) ? scroll_area_->verticalScrollBar()->width() : 0;
+        header_row_->layout()->setContentsMargins(8, 3, 8 + gutter, 3);
+    });
 
     auto* list_widget = new QWidget(this);
     list_widget->setStyleSheet("background: transparent;");
@@ -195,10 +187,8 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
 
     // Stay in sync with the real portfolio backend the Portfolio screen uses.
     auto& svc = services::PortfolioService::instance();
-    connect(&svc, &services::PortfolioService::portfolios_loaded, this,
-            &PortfolioSummaryWidget::on_portfolios_loaded);
-    connect(&svc, &services::PortfolioService::summary_loaded, this,
-            &PortfolioSummaryWidget::on_summary_loaded);
+    connect(&svc, &services::PortfolioService::portfolios_loaded, this, &PortfolioSummaryWidget::on_portfolios_loaded);
+    connect(&svc, &services::PortfolioService::summary_loaded, this, &PortfolioSummaryWidget::on_summary_loaded);
     // A buy/sell in the shown portfolio (from anywhere) refreshes this widget.
     auto refresh_if_selected = [this](const QString& portfolio_id) {
         if (!selected_id_.isEmpty() && portfolio_id == selected_id_)
@@ -213,7 +203,6 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
 
     apply_styles();
     set_loading(true);
-
 }
 
 void PortfolioSummaryWidget::showEvent(QShowEvent* e) {
@@ -238,17 +227,14 @@ void PortfolioSummaryWidget::hideEvent(QHideEvent* e) {
 void PortfolioSummaryWidget::apply_styles() {
     summary_card_->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : metric_labels_)
-        lbl->setStyleSheet(
-            QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color: %1; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     for (auto* val : metric_values_)
         val->setStyleSheet(
-            QString("color: %1; font-weight: bold; background: transparent;")
-                .arg(ui::colors::TEXT_PRIMARY()));
+            QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_PRIMARY()));
     header_row_->setStyleSheet(QString("background: %1;").arg(ui::colors::BG_RAISED()));
     for (auto* lbl : header_labels_)
         lbl->setStyleSheet(
-            QString("color: %1; font-weight: bold; background: transparent;")
-                .arg(ui::colors::TEXT_SECONDARY()));
+            QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     scroll_area_->setStyleSheet(
         QString("QScrollArea { border: none; background: transparent; }"
                 "QScrollBar:vertical { width: 4px; background: transparent; }"
@@ -268,8 +254,8 @@ void PortfolioSummaryWidget::apply_styles() {
                     "QComboBox::drop-down { border:none; width:14px; }"
                     "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3;"
                     "  selection-background-color:%6; selection-color:%2; outline:none; }")
-                .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),
-                     ui::fonts::ui_px(), ui::colors::AMBER(), ui::colors::BG_HOVER()));
+                .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::fonts::ui_px(),
+                     ui::colors::AMBER(), ui::colors::BG_HOVER()));
 }
 
 void PortfolioSummaryWidget::on_theme_changed() {
@@ -388,13 +374,17 @@ void PortfolioSummaryWidget::fetch_prices(const QVector<Holding>& holdings) {
 
 PortfolioSummaryWidget::ExtSession PortfolioSummaryWidget::current_session() {
     const QDateTime et = QDateTime::currentDateTime().toTimeZone(QTimeZone("America/New_York"));
-    if (et.date().dayOfWeek() >= 6)             // Sat / Sun
+    if (et.date().dayOfWeek() >= 6) // Sat / Sun
         return ExtSession::Closed;
     const QTime t = et.time();
-    if (t < QTime(4, 0))    return ExtSession::Closed;
-    if (t < QTime(9, 30))   return ExtSession::Pre;
-    if (t < QTime(16, 0))   return ExtSession::Regular;
-    if (t < QTime(20, 0))   return ExtSession::Post;
+    if (t < QTime(4, 0))
+        return ExtSession::Closed;
+    if (t < QTime(9, 30))
+        return ExtSession::Pre;
+    if (t < QTime(16, 0))
+        return ExtSession::Regular;
+    if (t < QTime(20, 0))
+        return ExtSession::Post;
     // Past 20:00 the session is over, but the evening's post-market move is
     // still the most recent thing that happened and hasn't been absorbed by a
     // regular session yet — so it stays on screen rather than blanking at 8pm.
@@ -405,12 +395,12 @@ void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
     if (!aft_header_)
         return;
     aft_state_ = state;
-    static constexpr auto kBase = QLatin1String(
-        "Move in extended-hours trading against the last regular close — pre-market "
-        "before the open, post-market after it. The cell says which session it came "
-        "from.\n\n"
-        "During the regular session this is the LAST extended move, not a live one, and "
-        "it is already inside DAY CHG% — the two are not additive.");
+    static constexpr auto kBase =
+        QLatin1String("Move in extended-hours trading against the last regular close — pre-market "
+                      "before the open, post-market after it. The cell says which session it came "
+                      "from.\n\n"
+                      "During the regular session this is the LAST extended move, not a live one, and "
+                      "it is already inside DAY CHG% — the two are not additive.");
     switch (state) {
         case AftState::Idle:
             aft_header_->setText(QStringLiteral("AFT%"));
@@ -425,10 +415,9 @@ void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
             break;
         case AftState::Failed:
             aft_header_->setText(QStringLiteral("AFT% !"));
-            aft_header_->setToolTip(
-                QString("%1\n\nThe last extended-hours fetch failed: %2\nRetrying on the next "
-                        "refresh; the tile's refresh button retries immediately.")
-                    .arg(kBase, aft_error_));
+            aft_header_->setToolTip(QString("%1\n\nThe last extended-hours fetch failed: %2\nRetrying on the next "
+                                            "refresh; the tile's refresh button retries immediately.")
+                                        .arg(kBase, aft_error_));
             break;
     }
 }
@@ -476,14 +465,13 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
         QStringLiteral("extended_hours"), payload,
         [guard, gen, is_retry](bool ok, QJsonObject result, QString err) {
             if (!guard || gen != guard->aft_gen_)
-                return;  // superseded by a newer fetch, or the tile is gone
+                return; // superseded by a newer fetch, or the tile is gone
             guard->aft_in_flight_ = false;
             if (!ok) {
                 // Keep whatever the column already shows. A failed background
                 // refresh is a reason to leave the last good number up, not to
                 // blank a column the user may be reading.
-                LOG_WARN("PortfolioSummary",
-                         QString("extended-hours fetch failed: %1").arg(err.left(120)));
+                LOG_WARN("PortfolioSummary", QString("extended-hours fetch failed: %1").arg(err.left(120)));
                 guard->aft_error_ = err.left(120);
                 // Drop the covered-symbols marker: it is what tells the
                 // regular-session path "already fetched", and leaving it set
@@ -521,8 +509,7 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                 if (!q || !exthours::pairing_is_sound(*q, QDateTime::currentSecsSinceEpoch()))
                     continue;
                 fresh.insert(sym, AftQuote{q->pct, q->price, q->regular,
-                                           q->from_pre ? QStringLiteral("PRE")
-                                                       : QStringLiteral("POST"),
+                                           q->from_pre ? QStringLiteral("PRE") : QStringLiteral("POST"),
                                            QDateTime::currentSecsSinceEpoch()});
             }
             // Merge, never replace. Yahoo's multi-symbol intraday download
@@ -547,7 +534,6 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
         },
         python::PythonWorker::kComputeActionTimeoutMs);
 }
-
 
 void PortfolioSummaryWidget::hub_resubscribe(const QVector<Holding>& holdings) {
     auto& hub = datahub::DataHub::instance();
@@ -584,7 +570,6 @@ void PortfolioSummaryWidget::rebuild_from_cache() {
     if (!quotes.isEmpty())
         render(last_holdings_, quotes);
 }
-
 
 void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVector<services::QuoteData>& quotes) {
     last_holdings_ = holdings;
@@ -653,12 +638,9 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         };
 
         cell(kColSym, h.symbol, ui::colors::TEXT_PRIMARY);
-        cell(kColShares, QString::number(h.shares, 'f', h.shares == (int)h.shares ? 0 : 2),
-             ui::colors::TEXT_SECONDARY);
-        cell(kColPrice, price > 0 ? QString("$%1").arg(price, 0, 'f', 2) : "--",
-             ui::colors::TEXT_PRIMARY);
-        cell(kColValue, value > 0 ? QString("$%1").arg(value, 0, 'f', 0) : "--",
-             ui::colors::TEXT_PRIMARY);
+        cell(kColShares, QString::number(h.shares, 'f', h.shares == (int)h.shares ? 0 : 2), ui::colors::TEXT_SECONDARY);
+        cell(kColPrice, price > 0 ? QString("$%1").arg(price, 0, 'f', 2) : "--", ui::colors::TEXT_PRIMARY);
+        cell(kColValue, value > 0 ? QString("$%1").arg(value, 0, 'f', 0) : "--", ui::colors::TEXT_PRIMARY);
 
         // P&L as return on cost. The cash number for the whole book is in the
         // summary card above; per row the percentage is what compares across
@@ -672,8 +654,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
             pnl_str = QString("%1%2%").arg(pnl_pct >= 0 ? "+" : "").arg(pnl_pct, 0, 'f', 2);
             pnl_color = pnl_pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
             pnl_tip = QString("%1 on a $%2 cost basis (avg $%3 per share)")
-                          .arg(pnl >= 0 ? QString("+$%1").arg(pnl, 0, 'f', 2)
-                                        : QString("-$%1").arg(-pnl, 0, 'f', 2))
+                          .arg(pnl >= 0 ? QString("+$%1").arg(pnl, 0, 'f', 2) : QString("-$%1").arg(-pnl, 0, 'f', 2))
                           .arg(cost, 0, 'f', 2)
                           .arg(h.avg_cost, 0, 'f', 2);
         }
@@ -683,8 +664,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         QString chg_pct_str;
         QString chg_pct_color;
         if (q && std::isfinite(q->change_pct)) {
-            chg_pct_str = QString("%1%2%").arg(q->change_pct >= 0 ? "+" : "")
-                                          .arg(q->change_pct, 0, 'f', 2);
+            chg_pct_str = QString("%1%2%").arg(q->change_pct >= 0 ? "+" : "").arg(q->change_pct, 0, 'f', 2);
             chg_pct_color = q->change_pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
         } else {
             chg_pct_str = "--";
@@ -708,17 +688,16 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
             aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
             aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
             aft_tip = QString("%1-market $%2 against the $%3 close, as of %5%4")
-                          .arg(it->session == QLatin1String("PRE") ? QStringLiteral("Pre")
-                                                                   : QStringLiteral("Post"))
+                          .arg(it->session == QLatin1String("PRE") ? QStringLiteral("Pre") : QStringLiteral("Post"))
                           .arg(it->price, 0, 'f', 2)
                           .arg(it->regular, 0, 'f', 2)
                           .arg(h.shares > 0
                                    ? QString("\n%1 on this position")
                                          .arg((it->price - it->regular) * h.shares * h.fx_rate >= 0
-                                                  ? QString("+$%1").arg((it->price - it->regular) * h.shares * h.fx_rate,
-                                                                        0, 'f', 2)
-                                                  : QString("-$%1").arg(-(it->price - it->regular) * h.shares * h.fx_rate,
-                                                                        0, 'f', 2))
+                                                  ? QString("+$%1").arg(
+                                                        (it->price - it->regular) * h.shares * h.fx_rate, 0, 'f', 2)
+                                                  : QString("-$%1").arg(
+                                                        -(it->price - it->regular) * h.shares * h.fx_rate, 0, 'f', 2))
                                    : QString())
                           // EVENT-STAMP: when we fetched — a real moment, shown as a clock time.
                           .arg(QDateTime::fromSecsSinceEpoch(it->fetched_at).toString("HH:mm:ss"));
@@ -741,13 +720,13 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
     const int valued_count = static_cast<int>(holdings.size()) - static_cast<int>(no_price.size());
     const QString approx = excluded_notes.isEmpty() ? QString() : QStringLiteral("\u2248");
     const QString partial_tip = excluded_notes.isEmpty()
-        ? QString()
-        : QString("PARTIAL — excluded from the totals:\n%1").arg(excluded_notes.join("\n"));
+                                    ? QString()
+                                    : QString("PARTIAL — excluded from the totals:\n%1").arg(excluded_notes.join("\n"));
     if (valued_count <= 0 && !(holdings.isEmpty() && fx_excluded_.isEmpty())) {
         // Nothing could be valued: every total is unknown.
         const QString dash = ui::formatting::placeholder();
-        const QString muted = QString("color: %1; font-weight: bold; background: transparent;")
-                                  .arg(ui::colors::TEXT_SECONDARY());
+        const QString muted =
+            QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_SECONDARY());
         total_value_lbl_->setText(dash);
         total_value_lbl_->setToolTip(partial_tip);
         num_holdings_lbl_->setText(QString::number(holdings.size() + fx_excluded_.size()));
@@ -766,25 +745,21 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
 
     const double total_pnl = total_value - total_cost;
     const double day_basis = total_value - day_pnl;
-    const bool   have_day  = !day_unknown && day_basis > 0;
-    const bool   have_tot  = total_cost > 0;
-    const double day_pct   = have_day ? (day_pnl  / day_basis) * 100.0 : 0.0;
+    const bool have_day = !day_unknown && day_basis > 0;
+    const bool have_tot = total_cost > 0;
+    const double day_pct = have_day ? (day_pnl / day_basis) * 100.0 : 0.0;
     const double total_pct = have_tot ? (total_pnl / total_cost) * 100.0 : 0.0;
 
     auto signed_dollars = [](double v) {
-        return v >= 0 ? QString("+$%1").arg(v, 0, 'f', 0)
-                      : QString("-$%1").arg(-v, 0, 'f', 0);
+        return v >= 0 ? QString("+$%1").arg(v, 0, 'f', 0) : QString("-$%1").arg(-v, 0, 'f', 0);
     };
-    auto signed_pct = [](double v) {
-        return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 2);
-    };
+    auto signed_pct = [](double v) { return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 2); };
     auto pl_style = [](double v) {
         return QString("color: %1; font-weight: bold; background: transparent;")
             .arg(v >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE());
     };
     const QString muted_style =
-        QString("color: %1; font-weight: bold; background: transparent;")
-            .arg(ui::colors::TEXT_SECONDARY());
+        QString("color: %1; font-weight: bold; background: transparent;").arg(ui::colors::TEXT_SECONDARY());
 
     if (day_unknown) {
         day_pnl_lbl_->setText("--");

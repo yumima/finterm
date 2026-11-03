@@ -32,10 +32,10 @@ class AccountDataStream : public QObject {
     QString broker_id() const { return broker_id_; }
 
     // --- Lifecycle ---
-    void start();   // Load credentials, open WS / start timers
-    void stop();    // Close WS, stop timers
-    void pause();   // Stop timers (screen hidden), keep WS alive
-    void resume();  // Restart timers (screen shown)
+    void start();  // Load credentials, open WS / start timers
+    void stop();   // Close WS, stop timers
+    void pause();  // Stop timers (screen hidden), keep WS alive
+    void resume(); // Restart timers (screen shown)
     bool is_running() const { return running_; }
 
     // --- Symbol management ---
@@ -66,10 +66,8 @@ class AccountDataStream : public QObject {
     void orders_updated(const QString& account_id, const QVector<BrokerOrderInfo>& orders);
     void funds_updated(const QString& account_id, const BrokerFunds& funds);
     void candles_fetched(const QString& account_id, const QVector<BrokerCandle>& candles);
-    void orderbook_fetched(const QString& account_id,
-                           const QVector<QPair<double, double>>& bids,
-                           const QVector<QPair<double, double>>& asks,
-                           double spread, double spread_pct);
+    void orderbook_fetched(const QString& account_id, const QVector<QPair<double, double>>& bids,
+                           const QVector<QPair<double, double>>& asks, double spread, double spread_pct);
     void time_sales_fetched(const QString& account_id, const QVector<BrokerTrade>& trades);
     void latest_trade_fetched(const QString& account_id, const BrokerTrade& trade);
     void calendar_fetched(const QString& account_id, const QVector<MarketCalendarDay>& days);

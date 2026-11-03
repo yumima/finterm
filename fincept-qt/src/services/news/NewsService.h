@@ -1,4 +1,6 @@
 #pragma once
+#include "datahub/Producer.h"
+
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -9,8 +11,6 @@
 #include <QStringList>
 #include <QTimer>
 #include <QVector>
-
-#    include "datahub/Producer.h"
 
 class QWebSocket;
 
@@ -57,8 +57,8 @@ struct NewsArticle {
     int tier = 4;        // 1=wire, 2=major, 3=specialty, 4=blog
     ThreatClassification threat;
     SourceFlag source_flag = SourceFlag::NONE;
-    QString lang; // ISO language code (e.g., "en", "fr", "ar")
-    int similar = 0; // same-source items differing only in numbers folded into this row (NewsFeedMerge.h)
+    QString lang;             // ISO language code (e.g., "en", "fr", "ar")
+    int similar = 0;          // same-source items differing only in numbers folded into this row (NewsFeedMerge.h)
     QStringList also_sources; // other outlets whose copy of this story was folded into this row (NewsFeedMerge.h)
 };
 
@@ -124,9 +124,7 @@ struct HeadlineSummary {
 /// `news:category:*`, `news:cluster:*`. Existing `articles_updated`
 /// / `articles_partial` Qt signals remain live in parallel with hub
 /// publishes so consumers can migrate incrementally.
-class NewsService : public QObject
-    , public fincept::datahub::Producer
-{
+class NewsService : public QObject, public fincept::datahub::Producer {
     Q_OBJECT
   public:
     using ArticlesCallback = std::function<void(bool ok, QVector<NewsArticle>)>;
@@ -148,7 +146,7 @@ class NewsService : public QObject
     /// `news:symbol:<sym>` / `news:category:<cat>` derive from the
     /// general fetch + filter; `news:cluster:*` is push-only.
     void refresh(const QStringList& topics) override;
-    int max_requests_per_sec() const override;  // RSS — cap at 2/s
+    int max_requests_per_sec() const override; // RSS — cap at 2/s
 
     void fetch_all_news(bool force, ArticlesCallback cb);
     void analyze_article(const QString& url, AnalysisCallback cb);

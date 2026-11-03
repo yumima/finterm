@@ -99,13 +99,12 @@ std::vector<ToolDef> get_investment_portfolio_tools() {
                         "increases the quantity and recomputes the weighted average cost. "
                         "Omit portfolio_id to use the first portfolio.";
         t.category = "portfolio";
-        t.input_schema.properties =
-            QJsonObject{{"portfolio_id",
-                         QJsonObject{{"type", "string"},
-                                     {"description", "Portfolio ID (optional; defaults to first portfolio)"}}},
-                        {"symbol", QJsonObject{{"type", "string"}, {"description", "Ticker symbol (e.g. AAPL)"}}},
-                        {"shares", QJsonObject{{"type", "number"}, {"description", "Number of shares/units"}}},
-                        {"avg_cost", QJsonObject{{"type", "number"}, {"description", "Average cost per share/unit"}}}};
+        t.input_schema.properties = QJsonObject{
+            {"portfolio_id",
+             QJsonObject{{"type", "string"}, {"description", "Portfolio ID (optional; defaults to first portfolio)"}}},
+            {"symbol", QJsonObject{{"type", "string"}, {"description", "Ticker symbol (e.g. AAPL)"}}},
+            {"shares", QJsonObject{{"type", "number"}, {"description", "Number of shares/units"}}},
+            {"avg_cost", QJsonObject{{"type", "number"}, {"description", "Average cost per share/unit"}}}};
         t.input_schema.required = {"symbol", "shares", "avg_cost"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             QString symbol = args["symbol"].toString().trimmed().toUpper();
@@ -122,8 +121,7 @@ std::vector<ToolDef> get_investment_portfolio_tools() {
 
             // Recorded as a BUY transaction — see PortfolioTools.cpp add_holding.
             auto r = PortfolioRepository::instance().add_transaction(
-                portfolio_id, symbol, "BUY", shares, avg_cost,
-                QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
+                portfolio_id, symbol, "BUY", shares, avg_cost, QDateTime::currentDateTimeUtc().toString(Qt::ISODate));
             if (r.is_err())
                 return ToolResult::fail("Failed to add holding: " + QString::fromStdString(r.error()));
             const auto pos = services::PortfolioService::instance().rebuild_position(portfolio_id, symbol);
@@ -131,7 +129,10 @@ std::vector<ToolDef> get_investment_portfolio_tools() {
             services::PortfolioService::instance().invalidate_cache(portfolio_id);
 
             LOG_INFO(TAG, QString("Added holding: %1 x%2 @ %3 (portfolio %4)")
-                              .arg(symbol).arg(shares).arg(avg_cost).arg(portfolio_id));
+                              .arg(symbol)
+                              .arg(shares)
+                              .arg(avg_cost)
+                              .arg(portfolio_id));
 
             return ToolResult::ok("Holding added (recorded as a BUY transaction)",
                                   QJsonObject{{"transaction_id", r.value()},
@@ -153,13 +154,12 @@ std::vector<ToolDef> get_investment_portfolio_tools() {
                         "log — the next transaction on this symbol re-derives the position from the "
                         "log and overrides this value. Prefer add_transaction (BUY/SELL/SPLIT).";
         t.category = "portfolio";
-        t.input_schema.properties =
-            QJsonObject{{"portfolio_id",
-                         QJsonObject{{"type", "string"},
-                                     {"description", "Portfolio ID (optional; defaults to first portfolio)"}}},
-                        {"id", QJsonObject{{"type", "integer"}, {"description", "Holding ID (from get_holdings)"}}},
-                        {"shares", QJsonObject{{"type", "number"}, {"description", "Updated share count"}}},
-                        {"avg_cost", QJsonObject{{"type", "number"}, {"description", "Updated average cost"}}}};
+        t.input_schema.properties = QJsonObject{
+            {"portfolio_id",
+             QJsonObject{{"type", "string"}, {"description", "Portfolio ID (optional; defaults to first portfolio)"}}},
+            {"id", QJsonObject{{"type", "integer"}, {"description", "Holding ID (from get_holdings)"}}},
+            {"shares", QJsonObject{{"type", "number"}, {"description", "Updated share count"}}},
+            {"avg_cost", QJsonObject{{"type", "number"}, {"description", "Updated average cost"}}}};
         t.input_schema.required = {"id", "shares", "avg_cost"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             int id = args["id"].toInt(-1);
@@ -195,11 +195,10 @@ std::vector<ToolDef> get_investment_portfolio_tools() {
         t.description = "Remove a holding from a portfolio by ID (the id from get_holdings). "
                         "Omit portfolio_id to use the first portfolio.";
         t.category = "portfolio";
-        t.input_schema.properties =
-            QJsonObject{{"portfolio_id",
-                         QJsonObject{{"type", "string"},
-                                     {"description", "Portfolio ID (optional; defaults to first portfolio)"}}},
-                        {"id", QJsonObject{{"type", "integer"}, {"description", "Holding ID (from get_holdings)"}}}};
+        t.input_schema.properties = QJsonObject{
+            {"portfolio_id",
+             QJsonObject{{"type", "string"}, {"description", "Portfolio ID (optional; defaults to first portfolio)"}}},
+            {"id", QJsonObject{{"type", "integer"}, {"description", "Holding ID (from get_holdings)"}}}};
         t.input_schema.required = {"id"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             int id = args["id"].toInt(-1);

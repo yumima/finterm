@@ -12,16 +12,16 @@ namespace fincept {
 /// The observation fields are write-once. Only `resolve()` ever mutates a row,
 /// and only the outcome columns.
 struct EarningsSignalRecord {
-    qint64  id = 0;
+    qint64 id = 0;
     QString symbol;
-    qint64  report_ts = 0;        // the print this reading is about
-    QString observed_on;          // YYYY-MM-DD in market time
-    QString captured_at;          // ISO-8601 UTC
-    int     days_to_report = 0;
+    qint64 report_ts = 0; // the print this reading is about
+    QString observed_on;  // YYYY-MM-DD in market time
+    QString captured_at;  // ISO-8601 UTC
+    int days_to_report = 0;
 
-    QString verdict;              // BUY | HOLD | SELL (v1) · OUTLOOK (v2)
-    double  score = 0.0;          // -100 … +100
-    double  confidence = 0.0;     // 0 … 1
+    QString verdict;         // BUY | HOLD | SELL (v1) · OUTLOOK (v2)
+    double score = 0.0;      // -100 … +100
+    double confidence = 0.0; // 0 … 1
     std::optional<double> setup_score;
     std::optional<double> bar_score;
     // The typical SIZE of this name's print reaction, unsigned — the band, not
@@ -39,15 +39,15 @@ struct EarningsSignalRecord {
     /// NULL on rows written by the v1 scorecard. From 2 the row records the
     /// outlook: `verdict` is "OUTLOOK", score/confidence are 0, and
     /// `expected_move_pct` is the volatility-blended size the tab displays.
-    std::optional<int>    model_version;
-    std::optional<double> p_beat;            // 0 … 1, stated before the print
-    std::optional<double> implied_move_pct;  // options event move, when separable
+    std::optional<int> model_version;
+    std::optional<double> p_beat;           // 0 … 1, stated before the print
+    std::optional<double> implied_move_pct; // options event move, when separable
 
-    bool    resolved = false;
+    bool resolved = false;
     std::optional<double> actual_eps;
     std::optional<double> surprise_pct;
     std::optional<double> actual_move_pct;
-    std::optional<bool>   direction_hit;
+    std::optional<bool> direction_hit;
     QString resolved_at;
 };
 
@@ -89,8 +89,7 @@ class EarningsSignalRepository : public BaseRepository<EarningsSignalRecord> {
     /// resolution is per-report: a caller that screens one row cannot stop
     /// this from settling its siblings.
     int resolve(const QString& symbol, qint64 report_ts, std::optional<double> actual_eps,
-                std::optional<double> surprise_pct, double actual_move_pct,
-                const QString& print_day);
+                std::optional<double> surprise_pct, double actual_move_pct, const QString& print_day);
 
   private:
     static EarningsSignalRecord map_row(QSqlQuery& q);

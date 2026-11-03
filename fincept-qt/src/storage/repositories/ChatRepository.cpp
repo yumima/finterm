@@ -20,9 +20,8 @@ ChatMessage ChatRepository::map_message(QSqlQuery& q) {
             q.value(4).toString(), q.value(5).toString(), q.value(6).toInt(),    q.value(7).toString()};
 }
 
-Result<ChatSession> ChatRepository::create_session(const QString& title, const QString& provider,
-                                                   const QString& model, const QString& persona_id,
-                                                   const QString& context_tag) {
+Result<ChatSession> ChatRepository::create_session(const QString& title, const QString& provider, const QString& model,
+                                                   const QString& persona_id, const QString& context_tag) {
     QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     auto r = exec_write("INSERT INTO chat_sessions (id, title, provider, model, persona_id, context_tag) "
                         "VALUES (?, ?, ?, ?, ?, ?)",
@@ -36,8 +35,7 @@ static const char* kSessionCols =
     "id, title, provider, model, message_count, created_at, updated_at, persona_id, context_tag";
 
 Result<ChatSession> ChatRepository::get_session(const QString& id) {
-    return query_one(QStringLiteral("SELECT %1 FROM chat_sessions WHERE id = ?").arg(kSessionCols), {id},
-                     map_session);
+    return query_one(QStringLiteral("SELECT %1 FROM chat_sessions WHERE id = ?").arg(kSessionCols), {id}, map_session);
 }
 
 Result<std::optional<ChatSession>> ChatRepository::latest_session_for_context(const QString& context_tag) {

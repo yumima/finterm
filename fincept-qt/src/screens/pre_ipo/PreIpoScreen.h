@@ -9,7 +9,9 @@
 
 namespace fincept::screens {
 
-namespace widgets { class IpoWatchView; }
+namespace widgets {
+class IpoWatchView;
+}
 
 /// IPO Watch — single-pane Bloomberg-style research screen.
 ///
@@ -48,7 +50,7 @@ class PreIpoScreen : public QWidget, public IStatefulScreen {
     // Selection persistence — kept across the v2→v3 state migration so a
     // restored layout doesn't lose the user's previously-focused deal id.
     QString selected_company_id_;
-    bool    first_show_ = true;
+    bool first_show_ = true;
 };
 
 } // namespace fincept::screens

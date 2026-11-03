@@ -50,19 +50,20 @@ CredentialsSection::CredentialsSection(QWidget* parent) : QWidget(parent) {
 
 void CredentialsSection::apply_theme() {
     // One sheet keyed on object names, so a theme switch restyles every card.
-    setStyleSheet(QString("QScrollArea{border:none;background:transparent;}"
-                          "QFrame#credCard{background:%1;border:1px solid %2;border-radius:4px;}"
-                          "QLabel#credName{color:%3;font-weight:600;background:transparent;border:none;}"
-                          "QLabel#credEnv{color:%4;background:transparent;border:none;}"
-                          "QLabel#credStatus{color:%5;background:transparent;border:none;}"
-                          "QLabel#credStatus[state=\"ok\"]{color:%6;}"
-                          "QLabel#credStatus[state=\"err\"]{color:%7;}")
-                      .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY(),
-                           ui::colors::TEXT_TERTIARY(), ui::colors::TEXT_SECONDARY(), ui::colors::POSITIVE(),
-                           ui::colors::NEGATIVE()) +
-                  QString("QLabel#credGroup{%1}QLabel#credTitle{%2}QLabel#credInfo{%3}")
-                      .arg(settings_style::sub_title_ss(), settings_style::section_title_ss(), settings_style::label_ss()) +
-                  settings_style::input_ss() + settings_style::check_ss());
+    setStyleSheet(
+        QString("QScrollArea{border:none;background:transparent;}"
+                "QFrame#credCard{background:%1;border:1px solid %2;border-radius:4px;}"
+                "QLabel#credName{color:%3;font-weight:600;background:transparent;border:none;}"
+                "QLabel#credEnv{color:%4;background:transparent;border:none;}"
+                "QLabel#credStatus{color:%5;background:transparent;border:none;}"
+                "QLabel#credStatus[state=\"ok\"]{color:%6;}"
+                "QLabel#credStatus[state=\"err\"]{color:%7;}")
+            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY(),
+                 ui::colors::TEXT_TERTIARY(), ui::colors::TEXT_SECONDARY(), ui::colors::POSITIVE(),
+                 ui::colors::NEGATIVE()) +
+        QString("QLabel#credGroup{%1}QLabel#credTitle{%2}QLabel#credInfo{%3}")
+            .arg(settings_style::sub_title_ss(), settings_style::section_title_ss(), settings_style::label_ss()) +
+        settings_style::input_ss() + settings_style::check_ss());
     for (auto it = cards_.begin(); it != cards_.end(); ++it) {
         if (it->reveal)
             it->reveal->setStyleSheet(settings_style::btn_secondary_ss());
@@ -259,8 +260,7 @@ void CredentialsSection::set_card_state(const QString& key, bool configured) {
     }
     // A value the user typed but has not saved survives a reload (the page
     // reloads every time it is opened); a fetched or stale value does not.
-    const bool typed = c.field->isModified() && !c.field->text().isEmpty() &&
-                       !c.field->property("revealed").toBool();
+    const bool typed = c.field->isModified() && !c.field->text().isEmpty() && !c.field->property("revealed").toBool();
     if (!typed) {
         c.field->clear();
         if (c.secret)

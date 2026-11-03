@@ -1,9 +1,8 @@
 // src/screens/portfolio/PortfolioFFNView.cpp
 #include "screens/portfolio/PortfolioFFNView.h"
 
-#include "screens/portfolio/PortfolioDetailWrapper.h"
-
 #include "core/logging/Logger.h"
+#include "screens/portfolio/PortfolioDetailWrapper.h"
 #include "services/portfolio/PortfolioAnalyticsService.h"
 #include "services/portfolio/PortfolioService.h"
 #include "ui/formatting/NumberFormat.h"
@@ -126,12 +125,12 @@ void PortfolioFFNView::build_ui() {
     run_btn_ = new QPushButton("RUN FFN ANALYSIS");
     run_btn_->setFixedHeight(24);
     run_btn_->setCursor(Qt::PointingHandCursor);
-    run_btn_->setStyleSheet(
-        QString("QPushButton { background:%1; color:%4; border:none;"
-                "  padding:0 12px; font-size:12px; font-weight:700; letter-spacing:0.5px; }"
-                "QPushButton:hover { background:%1; }"
-                "QPushButton:disabled { background:%2; color:%3; }")
-            .arg(ui::colors::POSITIVE(), ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_BASE()));
+    run_btn_->setStyleSheet(QString("QPushButton { background:%1; color:%4; border:none;"
+                                    "  padding:0 12px; font-size:12px; font-weight:700; letter-spacing:0.5px; }"
+                                    "QPushButton:hover { background:%1; }"
+                                    "QPushButton:disabled { background:%2; color:%3; }")
+                                .arg(ui::colors::POSITIVE(), ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(),
+                                     ui::colors::BG_BASE()));
     connect(run_btn_, &QPushButton::clicked, this, &PortfolioFFNView::run_ffn);
     h_layout->addWidget(run_btn_);
 
@@ -271,7 +270,8 @@ void PortfolioFFNView::build_ui() {
         tvl->addWidget(opt_weights_table_);
 
         auto* stats_hdr = new QLabel("STRATEGY PERFORMANCE STATS");
-        stats_hdr->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
+        stats_hdr->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700;").arg(ui::colors::TEXT_SECONDARY()));
         tvl->addWidget(stats_hdr);
 
         opt_stats_table_ = make_table(5, {"STRATEGY", "TOTAL RETURN", "VOLATILITY", "SHARPE (GEO)", "MAX DRAWDOWN"});
@@ -399,8 +399,7 @@ void PortfolioFFNView::update_overview() {
     // (optimization.stats.current). A weight-average of per-symbol volatility
     // or Sharpe is not the portfolio's — it ignores correlation — and used to
     // be shown under these labels.
-    const QJsonObject cur_stats =
-        ffn_data_["optimization"].toObject()["stats"].toObject()["current"].toObject();
+    const QJsonObject cur_stats = ffn_data_["optimization"].toObject()["stats"].toObject()["current"].toObject();
     const double total_ann_ret = num(cur_stats["cagr"]);
     const double total_ann_vol = num(cur_stats["volatility"]);
     const double total_sharpe = num(cur_stats["sharpe"]);
@@ -467,8 +466,10 @@ void PortfolioFFNView::update_overview() {
              pnl_pct >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE},
             {"Win Rate", fmt(win_rate) + "%", "--", ui::colors::CYAN},
             {"Positions", QString::number(summary_.total_positions), "--", ui::colors::CYAN},
-            {"Total Value", currency_ + " " + summary_.total_text(fmt(summary_.total_market_value)), "--", ui::colors::WARNING},
-            {"Cost Basis", currency_ + " " + summary_.total_text(fmt(summary_.total_cost_basis)), "--", ui::colors::TEXT_SECONDARY},
+            {"Total Value", currency_ + " " + summary_.total_text(fmt(summary_.total_market_value)), "--",
+             ui::colors::WARNING},
+            {"Cost Basis", currency_ + " " + summary_.total_text(fmt(summary_.total_cost_basis)), "--",
+             ui::colors::TEXT_SECONDARY},
         };
     } else {
         // Pre-run: show live data and prompt user. No volatility/Sharpe here:
@@ -481,8 +482,10 @@ void PortfolioFFNView::update_overview() {
             {"Sharpe Ratio (geo)", ui::formatting::placeholder(), "--", ui::colors::TEXT_SECONDARY},
             {"Win Rate", fmt(win_rate) + "%", "--", ui::colors::CYAN},
             {"Positions", QString::number(summary_.total_positions), "--", ui::colors::CYAN},
-            {"Total Value", currency_ + " " + summary_.total_text(fmt(summary_.total_market_value)), "--", ui::colors::WARNING},
-            {"Cost Basis", currency_ + " " + summary_.total_text(fmt(summary_.total_cost_basis)), "--", ui::colors::TEXT_SECONDARY},
+            {"Total Value", currency_ + " " + summary_.total_text(fmt(summary_.total_market_value)), "--",
+             ui::colors::WARNING},
+            {"Cost Basis", currency_ + " " + summary_.total_text(fmt(summary_.total_cost_basis)), "--",
+             ui::colors::TEXT_SECONDARY},
             {"FFN Deep Metrics", "Click RUN FFN ANALYSIS for full stats", "--", ui::colors::AMBER},
         };
     }
@@ -523,11 +526,11 @@ void PortfolioFFNView::update_benchmark() {
 
         rows = {
             {"Total Return", pct_str(total_ret)}, {"CAGR", pct_str(cagr)},           {"Volatility", pct_str(vol)},
-            {"Sharpe Ratio (geo)", fmt(sharpe)},        {"Max Drawdown", pct_str(max_dd)},
+            {"Sharpe Ratio (geo)", fmt(sharpe)},  {"Max Drawdown", pct_str(max_dd)},
         };
     } else {
         rows = {
-            {"Total Return", "--"}, {"CAGR", "--"},         {"Volatility", "--"},
+            {"Total Return", "--"},       {"CAGR", "--"},         {"Volatility", "--"},
             {"Sharpe Ratio (geo)", "--"}, {"Max Drawdown", "--"},
         };
     }
@@ -585,17 +588,14 @@ void PortfolioFFNView::update_optimization() {
         opt_weights_table_->setItem(r, 0,
                                     make_item(sym, Qt::AlignLeft | Qt::AlignVCenter, QColor(ui::colors::AMBER())));
         opt_weights_table_->setItem(
-            r, 1,
-            make_item(pct(current_obj[sym]), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::CYAN())));
-        opt_weights_table_->setItem(r, 2,
-                                    make_item(pct(erc_obj[sym]), Qt::AlignRight | Qt::AlignVCenter,
-                                              QColor(ui::colors::TEXT_PRIMARY())));
-        opt_weights_table_->setItem(r, 3,
-                                    make_item(pct(inv_obj[sym]), Qt::AlignRight | Qt::AlignVCenter,
-                                              QColor(ui::colors::TEXT_PRIMARY())));
-        opt_weights_table_->setItem(r, 4,
-                                    make_item(pct(equal_obj[sym]), Qt::AlignRight | Qt::AlignVCenter,
-                                              QColor(ui::colors::TEXT_PRIMARY())));
+            r, 1, make_item(pct(current_obj[sym]), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::CYAN())));
+        opt_weights_table_->setItem(
+            r, 2, make_item(pct(erc_obj[sym]), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::TEXT_PRIMARY())));
+        opt_weights_table_->setItem(
+            r, 3, make_item(pct(inv_obj[sym]), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::TEXT_PRIMARY())));
+        opt_weights_table_->setItem(
+            r, 4,
+            make_item(pct(equal_obj[sym]), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::TEXT_PRIMARY())));
     }
 
     // ── Stats table ───────────────────────────────────────────────────────────
@@ -620,8 +620,7 @@ void PortfolioFFNView::update_optimization() {
                                   make_item(pct_str(tr), Qt::AlignRight | Qt::AlignVCenter, QColor(sign_color(tr))));
         opt_stats_table_->setItem(
             r, 2, make_item(pct_str(vol), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::CYAN())));
-        opt_stats_table_->setItem(r, 3,
-                                  make_item(fmt(sh), Qt::AlignRight | Qt::AlignVCenter, QColor(sign_color(sh))));
+        opt_stats_table_->setItem(r, 3, make_item(fmt(sh), Qt::AlignRight | Qt::AlignVCenter, QColor(sign_color(sh))));
         opt_stats_table_->setItem(
             r, 4, make_item(pct_str(dd), Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::NEGATIVE())));
     }
@@ -906,8 +905,7 @@ void PortfolioFFNView::run_ffn() {
     }
     if (symbols.isEmpty()) {
         run_btn_->setEnabled(true);
-        status_label_->setText(QString("FFN unavailable — no valued holdings (excluded: %1)")
-                                   .arg(excluded.join(", ")));
+        status_label_->setText(QString("FFN unavailable — no valued holdings (excluded: %1)").arg(excluded.join(", ")));
         status_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
         return;
     }
@@ -916,67 +914,68 @@ void PortfolioFFNView::run_ffn() {
     PortfolioAnalyticsService::instance().run_ffn(
         symbols, weights_obj, services::PortfolioService::instance().risk_free_rate(),
         [self, excluded](const AnalyticsResult& r) {
-        if (!self)
-            return;
-        QMetaObject::invokeMethod(
-            self,
-            [self, r, excluded]() {
-                if (!self)
-                    return;
+            if (!self)
+                return;
+            QMetaObject::invokeMethod(
+                self,
+                [self, r, excluded]() {
+                    if (!self)
+                        return;
 
-                self->run_btn_->setEnabled(true);
+                    self->run_btn_->setEnabled(true);
 
-                if (!r.success) {
-                    self->status_label_->setText(
-                        r.error.isEmpty() ? QStringLiteral("FFN failed — check Python/yfinance")
-                                          : QStringLiteral("FFN failed — ") + r.error.left(120));
-                    self->status_label_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
-                    LOG_ERROR("FFNView", "FFN script failed: " + r.error.left(300));
-                    return;
-                }
+                    if (!r.success) {
+                        self->status_label_->setText(r.error.isEmpty()
+                                                         ? QStringLiteral("FFN failed — check Python/yfinance")
+                                                         : QStringLiteral("FFN failed — ") + r.error.left(120));
+                        self->status_label_->setStyleSheet(
+                            QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
+                        LOG_ERROR("FFNView", "FFN script failed: " + r.error.left(300));
+                        return;
+                    }
 
-                self->ffn_data_ = r.data;
+                    self->ffn_data_ = r.data;
 
-                // Count only per-symbol keys (exclude the section keys)
-                static const QStringList k_section_keys = {"rebased", "drawdown_series", "rolling_corr", "optimization",
-                                                           "error", "dropped_symbols"};
-                int sym_count = 0;
-                for (const auto& k : self->ffn_data_.keys())
-                    if (!k_section_keys.contains(k))
-                        ++sym_count;
+                    // Count only per-symbol keys (exclude the section keys)
+                    static const QStringList k_section_keys = {"rebased",      "drawdown_series", "rolling_corr",
+                                                               "optimization", "error",           "dropped_symbols"};
+                    int sym_count = 0;
+                    for (const auto& k : self->ffn_data_.keys())
+                        if (!k_section_keys.contains(k))
+                            ++sym_count;
 
-                // Symbols with no price data are not in the analysis — say so
-                // rather than reporting a complete run.
-                QStringList dropped;
-                for (const auto& v : self->ffn_data_["dropped_symbols"].toArray())
-                    dropped.append(v.toString());
-                for (const auto& x : excluded)
-                    dropped.append(x + QStringLiteral(" (no price/FX)"));
-                if (dropped.isEmpty()) {
-                    self->status_label_->setText(
-                        QString("FFN complete — %1 symbol%2").arg(sym_count).arg(sym_count != 1 ? "s" : ""));
-                    self->status_label_->setStyleSheet(
-                        QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
-                } else {
-                    self->status_label_->setText(QString("FFN partial — %1 symbol%2; no data for %3")
-                                                     .arg(sym_count)
-                                                     .arg(sym_count != 1 ? "s" : "")
-                                                     .arg(dropped.join(", ")));
-                    self->status_label_->setStyleSheet(
-                        QString("color:%1; font-size:12px;").arg(ui::colors::WARNING()));
-                }
+                    // Symbols with no price data are not in the analysis — say so
+                    // rather than reporting a complete run.
+                    QStringList dropped;
+                    for (const auto& v : self->ffn_data_["dropped_symbols"].toArray())
+                        dropped.append(v.toString());
+                    for (const auto& x : excluded)
+                        dropped.append(x + QStringLiteral(" (no price/FX)"));
+                    if (dropped.isEmpty()) {
+                        self->status_label_->setText(
+                            QString("FFN complete — %1 symbol%2").arg(sym_count).arg(sym_count != 1 ? "s" : ""));
+                        self->status_label_->setStyleSheet(
+                            QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
+                    } else {
+                        self->status_label_->setText(QString("FFN partial — %1 symbol%2; no data for %3")
+                                                         .arg(sym_count)
+                                                         .arg(sym_count != 1 ? "s" : "")
+                                                         .arg(dropped.join(", ")));
+                        self->status_label_->setStyleSheet(
+                            QString("color:%1; font-size:12px;").arg(ui::colors::WARNING()));
+                    }
 
-                LOG_INFO("FFNView", QString("FFN analysis complete for %1 symbol(s)").arg(sym_count));
+                    LOG_INFO("FFNView", QString("FFN analysis complete for %1 symbol(s)").arg(sym_count));
 
-                self->update_overview();
-                self->update_benchmark();
-                self->update_optimization();
-                self->update_rebased();
-                self->update_drawdowns();
-                self->update_rolling();
-            },
-            Qt::QueuedConnection);
-    });
+                    self->update_overview();
+                    self->update_benchmark();
+                    self->update_optimization();
+                    self->update_rebased();
+                    self->update_drawdowns();
+                    self->update_rolling();
+                },
+                Qt::QueuedConnection);
+        });
 }
 
 } // namespace fincept::screens

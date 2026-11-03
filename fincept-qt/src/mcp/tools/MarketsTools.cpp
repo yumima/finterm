@@ -59,13 +59,12 @@ std::vector<ToolDef> get_markets_tools() {
                         "not the exchange's last-trade time.";
         t.category = "markets";
         t.default_timeout_ms = 20000;
-        t.input_schema.properties = QJsonObject{
-            {"symbol", QJsonObject{{"type", "string"},
-                                   {"description", "Ticker symbol, or several comma-separated "
-                                                   "(e.g. AAPL or AAPL,MSFT,BTC-USD)"}}}};
+        t.input_schema.properties =
+            QJsonObject{{"symbol", QJsonObject{{"type", "string"},
+                                               {"description", "Ticker symbol, or several comma-separated "
+                                                               "(e.g. AAPL or AAPL,MSFT,BTC-USD)"}}}};
         t.input_schema.required = {"symbol"};
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                             std::shared_ptr<QPromise<ToolResult>> promise) {
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             QStringList symbols;
             for (const QString& part : args["symbol"].toString().split(',', Qt::SkipEmptyParts)) {
                 const QString s = part.trimmed().toUpper();
@@ -78,40 +77,39 @@ std::vector<ToolDef> get_markets_tools() {
                 return;
             }
             auto* svc = &services::MarketDataService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise, [svc, symbols](auto resolve) {
-                    svc->fetch_quotes(symbols, [resolve, symbols](bool ok, QVector<services::QuoteData> qs) {
-                        if (!ok) {
-                            resolve(ToolResult::fail("Quote fetch failed for " + symbols.join(", ") +
-                                                     " — data unavailable right now."));
-                            return;
-                        }
-                        const QString fetched_at = markets_now_utc_iso();
-                        QJsonArray quotes;
-                        QStringList found;
-                        for (const auto& q : qs) {
-                            if (q.symbol.isEmpty() || !(q.price > 0))
-                                continue; // price 0 = vendor returned nothing usable
-                            QJsonObject o = markets_quote_json(q);
-                            o["fetched_at"] = fetched_at;
-                            quotes.append(o);
-                            found.append(q.symbol.toUpper());
-                        }
-                        QStringList missing;
-                        for (const auto& s : symbols)
-                            if (!found.contains(s))
-                                missing.append(s);
-                        if (quotes.isEmpty()) {
-                            resolve(ToolResult::fail("No quote data returned for " + symbols.join(", ") +
-                                                     " (unknown symbol or data source unavailable)."));
-                            return;
-                        }
-                        QJsonObject out{{"quotes", quotes}, {"fetched_at", fetched_at}};
-                        if (!missing.isEmpty())
-                            out["unavailable"] = QJsonArray::fromStringList(missing);
-                        resolve(ToolResult::ok_data(out));
-                    });
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, symbols](auto resolve) {
+                svc->fetch_quotes(symbols, [resolve, symbols](bool ok, QVector<services::QuoteData> qs) {
+                    if (!ok) {
+                        resolve(ToolResult::fail("Quote fetch failed for " + symbols.join(", ") +
+                                                 " — data unavailable right now."));
+                        return;
+                    }
+                    const QString fetched_at = markets_now_utc_iso();
+                    QJsonArray quotes;
+                    QStringList found;
+                    for (const auto& q : qs) {
+                        if (q.symbol.isEmpty() || !(q.price > 0))
+                            continue; // price 0 = vendor returned nothing usable
+                        QJsonObject o = markets_quote_json(q);
+                        o["fetched_at"] = fetched_at;
+                        quotes.append(o);
+                        found.append(q.symbol.toUpper());
+                    }
+                    QStringList missing;
+                    for (const auto& s : symbols)
+                        if (!found.contains(s))
+                            missing.append(s);
+                    if (quotes.isEmpty()) {
+                        resolve(ToolResult::fail("No quote data returned for " + symbols.join(", ") +
+                                                 " (unknown symbol or data source unavailable)."));
+                        return;
+                    }
+                    QJsonObject out{{"quotes", quotes}, {"fetched_at", fetched_at}};
+                    if (!missing.isEmpty())
+                        out["unavailable"] = QJsonArray::fromStringList(missing);
+                    resolve(ToolResult::ok_data(out));
                 });
+            });
         };
         tools.push_back(std::move(t));
     }
@@ -127,41 +125,39 @@ std::vector<ToolDef> get_markets_tools() {
                         "fetched_at is when finterm retrieved the list (cached up to 60s).";
         t.category = "markets";
         t.default_timeout_ms = 20000;
-        t.input_schema.properties = QJsonObject{
-            {"count", QJsonObject{{"type", "integer"},
-                                  {"description", "Movers per side (1-25, default 10)"},
-                                  {"minimum", 1},
-                                  {"maximum", 25},
-                                  {"default", 10}}}};
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                             std::shared_ptr<QPromise<ToolResult>> promise) {
+        t.input_schema.properties =
+            QJsonObject{{"count", QJsonObject{{"type", "integer"},
+                                              {"description", "Movers per side (1-25, default 10)"},
+                                              {"minimum", 1},
+                                              {"maximum", 25},
+                                              {"default", 10}}}};
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const int count = qBound(1, args["count"].toInt(10), 25);
             auto* svc = &services::MarketDataService::instance();
-            AsyncDispatch::callback_to_promise(
-                svc, std::move(ctx), promise, [svc, count](auto resolve) {
-                    svc->fetch_top_movers(count, [resolve](bool ok, services::MarketDataService::TopMovers tm) {
-                        if (!ok) {
-                            resolve(ToolResult::fail("Top movers unavailable — the screener request failed."));
-                            return;
-                        }
-                        if (tm.gainers.isEmpty() && tm.losers.isEmpty()) {
-                            resolve(ToolResult::fail("Top movers unavailable — the screener returned no rows."));
-                            return;
-                        }
-                        auto side = [](const QVector<services::QuoteData>& v) {
-                            QJsonArray arr;
-                            for (const auto& q : v)
-                                arr.append(markets_quote_json(q));
-                            return arr;
-                        };
-                        resolve(ToolResult::ok_data(QJsonObject{
-                            {"gainers", side(tm.gainers)},
-                            {"losers", side(tm.losers)},
-                            {"universe", "US equities (yfinance day_gainers / day_losers screeners)"},
-                            {"fetched_at", markets_now_utc_iso()},
-                        }));
-                    });
+            AsyncDispatch::callback_to_promise(svc, std::move(ctx), promise, [svc, count](auto resolve) {
+                svc->fetch_top_movers(count, [resolve](bool ok, services::MarketDataService::TopMovers tm) {
+                    if (!ok) {
+                        resolve(ToolResult::fail("Top movers unavailable — the screener request failed."));
+                        return;
+                    }
+                    if (tm.gainers.isEmpty() && tm.losers.isEmpty()) {
+                        resolve(ToolResult::fail("Top movers unavailable — the screener returned no rows."));
+                        return;
+                    }
+                    auto side = [](const QVector<services::QuoteData>& v) {
+                        QJsonArray arr;
+                        for (const auto& q : v)
+                            arr.append(markets_quote_json(q));
+                        return arr;
+                    };
+                    resolve(ToolResult::ok_data(QJsonObject{
+                        {"gainers", side(tm.gainers)},
+                        {"losers", side(tm.losers)},
+                        {"universe", "US equities (yfinance day_gainers / day_losers screeners)"},
+                        {"fetched_at", markets_now_utc_iso()},
+                    }));
                 });
+            });
         };
         tools.push_back(std::move(t));
     }

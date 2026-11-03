@@ -51,8 +51,8 @@ class SortItem : public QTableWidgetItem {
                 return false;
             // Ascending sorts by <, so "last" means missing compares greater;
             // descending reverses it, so there missing must compare smaller.
-            const bool ascending = tableWidget() && tableWidget()->horizontalHeader()->sortIndicatorOrder() ==
-                                                        Qt::AscendingOrder;
+            const bool ascending =
+                tableWidget() && tableWidget()->horizontalHeader()->sortIndicatorOrder() == Qt::AscendingOrder;
             return ascending ? bm : am;
         }
         const QVariant a = data(kSortKey), b = other.data(kSortKey);
@@ -71,8 +71,7 @@ double move_key(const BookPosition& p, const QString& action) {
         return 1e9;
     if (action == QLatin1String("exited"))
         return -1.0;
-    if (action == QLatin1String("added") || action == QLatin1String("trimmed") ||
-        action == QLatin1String("held"))
+    if (action == QLatin1String("added") || action == QLatin1String("trimmed") || action == QLatin1String("held"))
         return p.pct_change.value_or(0.0);
     return 0.0;
 }
@@ -108,8 +107,7 @@ FirmDetailPanel::FirmDetailPanel(QWidget* parent) : QWidget(parent) {
     positions_->setHorizontalHeaderLabels({QStringLiteral("Issuer"), QStringLiteral("Ticker"),
                                            QStringLiteral("% of book"), QStringLiteral("Shares"),
                                            QStringLiteral("Value"), QStringLiteral("Move"),
-                                           QStringLiteral("Since Q-end"),
-                                           QStringLiteral("3M"), QStringLiteral("6M")});
+                                           QStringLiteral("Since Q-end"), QStringLiteral("3M"), QStringLiteral("6M")});
     positions_->verticalHeader()->setVisible(false);
     positions_->setSelectionBehavior(QAbstractItemView::SelectRows);
     positions_->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -192,8 +190,7 @@ void FirmDetailPanel::render() {
     // can never be left up over a finished or failed book.
     loading_->hide_loading();
     if (cik.isEmpty()) {
-        status_->setText(svc.index_ready() ? QStringLiteral("Pick a filer.")
-                                           : QStringLiteral("No 13F index yet."));
+        status_->setText(svc.index_ready() ? QStringLiteral("Pick a filer.") : QStringLiteral("No 13F index yet."));
         status_->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_SECONDARY()));
         positions_->setRowCount(0);
         book_title_->clear();
@@ -225,20 +222,19 @@ void FirmDetailPanel::render() {
         return;
     }
 
-    book_title_->setText(b.manager.isEmpty()
-                             ? QStringLiteral("Holdings")
-                             : b.manager + QStringLiteral(" — disclosed equity holdings"));
+    book_title_->setText(b.manager.isEmpty() ? QStringLiteral("Holdings")
+                                             : b.manager + QStringLiteral(" — disclosed equity holdings"));
 
     // Breadth is stated with the size: a book of 49,751 names is an index
     // book whatever its value, and the reader should know which kind of
     // book they are reading before they read a weight in it.
-    QString head = QStringLiteral("%1 positions%2 · %3 · quarter end %4 · filed by %5")
-                       .arg(b.position_count)
-                       .arg(b.position_count >= 1000 ? QStringLiteral(" (a broad book — rebalances rather than decides)")
-                                                     : QString())
-                       .arg(fmt::format_compact(b.total_value),
-                            b.period.toString(QStringLiteral("d MMM yyyy")),
-                            b.period.addDays(45).toString(QStringLiteral("d MMM yyyy")));
+    QString head =
+        QStringLiteral("%1 positions%2 · %3 · quarter end %4 · filed by %5")
+            .arg(b.position_count)
+            .arg(b.position_count >= 1000 ? QStringLiteral(" (a broad book — rebalances rather than decides)")
+                                          : QString())
+            .arg(fmt::format_compact(b.total_value), b.period.toString(QStringLiteral("d MMM yyyy")),
+                 b.period.addDays(45).toString(QStringLiteral("d MMM yyyy")));
     if (b.prior_period.isValid())
         head += QStringLiteral(" · vs ") + b.prior_period.toString(QStringLiteral("MMM yyyy"));
     if (b.book_return_since_quarter_end && b.return_coverage >= ownership::kMinReturnCoverage) {
@@ -250,14 +246,12 @@ void FirmDetailPanel::render() {
                     .arg(fmt::format_percent(*b.book_return_since_quarter_end * 100.0, 1, true),
                          b.period.toString(QStringLiteral("d MMM")));
         if (b.return_coverage < 0.95)
-            head += QStringLiteral(" (on %1 of book value)")
-                        .arg(fmt::format_percent(b.return_coverage * 100.0, 0));
+            head += QStringLiteral(" (on %1 of book value)").arg(fmt::format_percent(b.return_coverage * 100.0, 0));
         // The quarter-end return depends on which quarter this filer is in; the
         // trailing three months is the same window for every firm, so it is the
         // one that can be compared across the ranked list.
         if (b.book_return_3m)
-            head += QStringLiteral(" · %1 over 3M")
-                        .arg(fmt::format_percent(*b.book_return_3m * 100.0, 1, true));
+            head += QStringLiteral(" · %1 over 3M").arg(fmt::format_percent(*b.book_return_3m * 100.0, 1, true));
     } else if (!b.return_error.isEmpty()) {
         head += QStringLiteral(" · returns unavailable (") + b.return_error + QStringLiteral(")");
     } else if (b.book_return_since_quarter_end) {
@@ -286,21 +280,18 @@ void FirmDetailPanel::render() {
         const QString action = exited ? QStringLiteral("exited") : p.action;
         const QString col = action_colour(action);
         auto* issuer_cell = cell(p.issuer);
-        issuer_cell->setToolTip(p.issuer);   // the column is capped; the full name is a hover away
+        issuer_cell->setToolTip(p.issuer); // the column is capped; the full name is a hover away
         positions_->setItem(r, 0, issuer_cell);
         positions_->setItem(r, 1, cell(p.ticker));
-        positions_->setItem(r, 2, cell(p.weight ? fmt::format_percent(*p.weight * 100.0, 2)
-                                                : fmt::placeholder(),
-                                       exited ? col : ui::colors::AMBER()));
-        positions_->setItem(r, 3, cell(p.shares ? fmt::format_compact(*p.shares)
-                                                : fmt::placeholder()));
-        positions_->setItem(r, 4, cell(p.value ? fmt::format_compact(*p.value)
-                                               : fmt::placeholder()));
+        positions_->setItem(r, 2,
+                            cell(p.weight ? fmt::format_percent(*p.weight * 100.0, 2) : fmt::placeholder(),
+                                 exited ? col : ui::colors::AMBER()));
+        positions_->setItem(r, 3, cell(p.shares ? fmt::format_compact(*p.shares) : fmt::placeholder()));
+        positions_->setItem(r, 4, cell(p.value ? fmt::format_compact(*p.value) : fmt::placeholder()));
         QString move = action.isEmpty() ? fmt::placeholder() : action;
         if (p.shares_delta && *p.shares_delta != 0.0) {
-            move += QStringLiteral("  %1%2")
-                        .arg(*p.shares_delta > 0 ? QStringLiteral("+") : QStringLiteral("-"),
-                             fmt::format_compact(std::abs(*p.shares_delta)));
+            move += QStringLiteral("  %1%2").arg(*p.shares_delta > 0 ? QStringLiteral("+") : QStringLiteral("-"),
+                                                 fmt::format_compact(std::abs(*p.shares_delta)));
         }
         positions_->setItem(r, 5, cell(move, col));
 
@@ -315,17 +306,17 @@ void FirmDetailPanel::render() {
                 // wrong one is worse than saying nothing.
                 if (exited)
                     it->setToolTip(QStringLiteral("Exited positions are not priced — there is no "
-                                                 "position left to value."));
+                                                  "position left to value."));
                 else if (p.ticker.isEmpty())
                     it->setToolTip(QStringLiteral("This CUSIP is not mapped to a ticker yet, so "
-                                                 "it cannot be priced."));
+                                                  "it cannot be priced."));
                 else if (!p.priced)
                     it->setToolTip(QStringLiteral("Outside the priced set — the largest positions "
-                                                 "by value are priced, this one is further down "
-                                                 "the book."));
+                                                  "by value are priced, this one is further down "
+                                                  "the book."));
                 else
                     it->setToolTip(QStringLiteral("Priced, but the daily history does not reach "
-                                                 "back over this window."));
+                                                  "back over this window."));
             }
             return it;
         };
@@ -334,7 +325,8 @@ void FirmDetailPanel::render() {
         positions_->setItem(r, 8, ret(p.ret_6m));
         // Numeric sort keys; issuer and ticker sort as text.
         auto key = [&](int c, double v) {
-            if (auto* it = positions_->item(r, c)) it->setData(kSortKey, v);
+            if (auto* it = positions_->item(r, c))
+                it->setData(kSortKey, v);
         };
         auto opt_key = [&](int c, const std::optional<double>& v) {
             if (auto* it = positions_->item(r, c)) {

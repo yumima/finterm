@@ -46,16 +46,16 @@ constexpr double kShrinkQuarters = 8.0;
 struct ScenarioSpec {
     const char* label;
     const char* range;
-    double upper;          // inclusive upper bound on surprise %
+    double upper; // inclusive upper bound on surprise %
     double pooled_share;
     double move_multiple;
     double up_rate;
 };
 constexpr std::array<ScenarioSpec, 4> kScenarios{{
-    {"MISS",        "at or below consensus", 0.0,  0.176, -0.67, 0.34},
-    {"SLIGHT BEAT", "0 – 3% above",          3.0,  0.188, -0.19, 0.44},
-    {"SOLID BEAT",  "3 – 10% above",         10.0, 0.313,  0.19, 0.55},
-    {"BIG BEAT",    "over 10% above",        1e18, 0.323,  0.41, 0.60},
+    {"MISS", "at or below consensus", 0.0, 0.176, -0.67, 0.34},
+    {"SLIGHT BEAT", "0 – 3% above", 3.0, 0.188, -0.19, 0.44},
+    {"SOLID BEAT", "3 – 10% above", 10.0, 0.313, 0.19, 0.55},
+    {"BIG BEAT", "over 10% above", 1e18, 0.323, 0.41, 0.60},
 }};
 
 // Analyst spread on the coming quarter, as a percentage of the mean, above
@@ -72,23 +72,25 @@ constexpr double kFlatDriftPct = 0.5;
 // eight-print mean, and a least-squares refit gained only 0.05 pp more. The coefficients are rounded on purpose —
 // every blend between 0.55/1.0 and 0.3/1.6 landed within a point of the best.
 constexpr double kMoveFromHistory = 0.5;
-constexpr double kMoveFromVol     = 1.0;
+constexpr double kMoveFromVol = 1.0;
 // Realised |move| ÷ expected move, pooled quantiles: the forecast's own ranges.
-constexpr double kHalfWithin = 0.95;   // 50th percentile
-constexpr double kMostWithin = 1.88;   // 80th
-constexpr double kTailBeyond = 2.46;   // 90th
+constexpr double kHalfWithin = 0.95; // 50th percentile
+constexpr double kMostWithin = 1.88; // 80th
+constexpr double kTailBeyond = 2.46; // 90th
 
 // ── Priced in ────────────────────────────────────────────────────────────────
 // The one backward-looking input with any sign at all: names in the top third
 // of 20-session run-ups into a print rose on 49% of them, the bottom third on
 // 53% (IC −0.025). Too faint to call a direction with; worth one line of
 // context at the extremes.
-constexpr double kHotRunupPct  = 4.7;    // top-third cutoff, pooled
-constexpr double kColdRunupPct = -1.2;   // bottom-third cutoff, pooled
-constexpr double kNearHighPct  = 3.0;    // "at its high" within this many percent
-constexpr double kGapNotablePct = 10.0;  // price vs estimate race worth naming
+constexpr double kHotRunupPct = 4.7;    // top-third cutoff, pooled
+constexpr double kColdRunupPct = -1.2;  // bottom-third cutoff, pooled
+constexpr double kNearHighPct = 3.0;    // "at its high" within this many percent
+constexpr double kGapNotablePct = 10.0; // price vs estimate race worth naming
 
-double clamp01(double v) { return std::clamp(v, 0.0, 1.0); }
+double clamp01(double v) {
+    return std::clamp(v, 0.0, 1.0);
+}
 
 QString pct_str(double v, int decimals = 1) {
     return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', decimals));
@@ -100,29 +102,34 @@ QString abs_pct(double v, int decimals = 1) {
 
 const EarningsTrendRow* find_trend(const EarningsAnalysis& a, const QString& period) {
     for (const auto& r : a.trend)
-        if (r.period == period) return &r;
+        if (r.period == period)
+            return &r;
     return nullptr;
 }
 
 const EarningsRevisionRow* find_revision(const EarningsAnalysis& a, const QString& period) {
     for (const auto& r : a.revisions)
-        if (r.period == period) return &r;
+        if (r.period == period)
+            return &r;
     return nullptr;
 }
 
 /// Percent change between two consensus readings. nullopt unless both are
 /// present and the reference is non-zero — a company swinging through zero EPS
 /// makes the percentage meaningless rather than merely large.
-std::optional<double> revision_pct(const std::optional<double>& current,
-                                   const std::optional<double>& reference) {
-    if (!current.has_value() || !reference.has_value()) return std::nullopt;
-    if (std::abs(*reference) < 1e-6) return std::nullopt;
+std::optional<double> revision_pct(const std::optional<double>& current, const std::optional<double>& reference) {
+    if (!current.has_value() || !reference.has_value())
+        return std::nullopt;
+    if (std::abs(*reference) < 1e-6)
+        return std::nullopt;
     return (*current - *reference) / std::abs(*reference) * 100.0;
 }
 
 /// A quarter that has been reported and settled — the only kind any record
 /// may be built from.
-bool settled(const EarningsPoint& p) { return !p.is_estimate && p.reaction_pct.has_value(); }
+bool settled(const EarningsPoint& p) {
+    return !p.is_estimate && p.reaction_pct.has_value();
+}
 
 /// A quarter whose surprise is a real beat or miss (not projected, not a
 /// GAAP-vs-adjusted artefact).
@@ -142,15 +149,16 @@ SizeRead size_from(const QVector<EarningsPoint>& h, int from, const std::optiona
     SizeRead s;
     double abs_sum = 0;
     for (int j = from; j < h.size() && s.n < kSizeQuarters; ++j) {
-        if (!settled(h[j])) continue;
+        if (!settled(h[j]))
+            continue;
         abs_sum += std::abs(*h[j].reaction_pct);
         ++s.n;
     }
-    if (s.n < kMinQuarters || abs_sum <= 0) return s;
+    if (s.n < kMinQuarters || abs_sum <= 0)
+        return s;
     s.trailing = abs_sum / s.n;
-    s.expected = pre_vol.has_value() && *pre_vol > 0
-                     ? kMoveFromHistory * *s.trailing + kMoveFromVol * *pre_vol
-                     : *s.trailing;
+    s.expected =
+        pre_vol.has_value() && *pre_vol > 0 ? kMoveFromHistory * *s.trailing + kMoveFromVol * *pre_vol : *s.trailing;
     return s;
 }
 
@@ -168,10 +176,12 @@ BeatRead beat_from(const QVector<EarningsPoint>& h, int from) {
     QVector<double> surprises;
     for (int j = from; j < h.size() && b.n < kWindowQuarters; ++j) {
         const int k = scenario_index(h[j]);
-        if (k < 0) continue;
+        if (k < 0)
+            continue;
         ++b.counts[k];
         ++b.n;
-        if (*h[j].surprise_pct > 0) ++b.beats;
+        if (*h[j].surprise_pct > 0)
+            ++b.beats;
         surprises.append(*h[j].surprise_pct);
     }
     if (!surprises.isEmpty()) {
@@ -179,15 +189,17 @@ BeatRead beat_from(const QVector<EarningsPoint>& h, int from) {
         const int m = surprises.size();
         b.median_surprise = m % 2 ? surprises[m / 2] : 0.5 * (surprises[m / 2 - 1] + surprises[m / 2]);
     }
-    if (b.n < kMinQuarters) return b;
+    if (b.n < kMinQuarters)
+        return b;
     for (size_t k = 0; k < kScenarios.size(); ++k)
-        b.probs[k] = (b.counts[k] + kShrinkQuarters * kScenarios[k].pooled_share) /
-                     (b.n + kShrinkQuarters);
+        b.probs[k] = (b.counts[k] + kShrinkQuarters * kScenarios[k].pooled_share) / (b.n + kShrinkQuarters);
     // The shares sum to 1 by construction; renormalise anyway so rounding in
     // the pooled table can never leave a probability mass unaccounted for.
     double total = 0;
-    for (const double p : b.probs) total += p;
-    for (double& p : b.probs) p /= total;
+    for (const double p : b.probs)
+        total += p;
+    for (double& p : b.probs)
+        p /= total;
     b.p_beat = clamp01(1.0 - b.probs[0]);
     return b;
 }
@@ -198,7 +210,8 @@ BeatRead beat_from(const QVector<EarningsPoint>& h, int from) {
 std::optional<double> consensus_dispersion(const EarningsAnalysis& a) {
     auto spread = [](const std::optional<double>& lo, const std::optional<double>& hi,
                      const std::optional<double>& avg) -> std::optional<double> {
-        if (!lo || !hi || !avg || std::abs(*avg) < 1e-6 || *hi < *lo) return std::nullopt;
+        if (!lo || !hi || !avg || std::abs(*avg) < 1e-6 || *hi < *lo)
+            return std::nullopt;
         return (*hi - *lo) / std::abs(*avg) * 100.0;
     };
     if (const auto d = spread(a.next.eps_low, a.next.eps_high, a.next.eps_avg))
@@ -215,12 +228,15 @@ void read_drift(const EarningsAnalysis& a, EarningsOutlook& o) {
     const auto d30 = t ? revision_pct(t->current, t->d30) : std::nullopt;
     const auto d90 = t ? revision_pct(t->current, t->d90) : std::nullopt;
     QStringList bits;
-    if (d30) bits << QString("%1 in 30 days").arg(pct_str(*d30, 1));
-    if (d90) bits << QString("%1 in 90").arg(pct_str(*d90, 1));
+    if (d30)
+        bits << QString("%1 in 30 days").arg(pct_str(*d30, 1));
+    if (d90)
+        bits << QString("%1 in 90").arg(pct_str(*d90, 1));
     if (const auto* r = find_revision(a, QStringLiteral("0q"))) {
         const int up = static_cast<int>(r->up_30d.value_or(0.0));
         const int down = static_cast<int>(r->down_30d.value_or(0.0));
-        if (up + down > 0) bits << QString("%1 raised / %2 cut this month").arg(up).arg(down);
+        if (up + down > 0)
+            bits << QString("%1 raised / %2 cut this month").arg(up).arg(down);
     }
     if (const auto* t1 = find_trend(a, QStringLiteral("+1q"))) {
         if (const auto n90 = revision_pct(t1->current, t1->d90))
@@ -270,7 +286,8 @@ void read_priced_in(const EarningsAnalysis& a, EarningsOutlook& o) {
         const double gap = *a.runup_90d_pct - *est_90d;
         QString line = QString("Over 90 days the stock did %1 while this quarter's estimate moved %2")
                            .arg(pct_str(*a.runup_90d_pct), pct_str(*est_90d));
-        line += gap > kGapNotablePct    ? QStringLiteral(" — the multiple did the work, so the bar is higher than the estimate says.")
+        line += gap > kGapNotablePct
+                    ? QStringLiteral(" — the multiple did the work, so the bar is higher than the estimate says.")
                 : gap < -kGapNotablePct ? QStringLiteral(" — estimates have run ahead of the price.")
                                         : QStringLiteral(" — they have moved together.");
         o.priced_in << line;
@@ -288,10 +305,12 @@ void read_priced_in(const EarningsAnalysis& a, EarningsOutlook& o) {
 } // namespace
 
 int scenario_index(const EarningsPoint& p) {
-    if (!scored(p)) return -1;
+    if (!scored(p))
+        return -1;
     const double s = *p.surprise_pct;
     for (size_t k = 0; k < kScenarios.size(); ++k)
-        if (s <= kScenarios[k].upper) return static_cast<int>(k);
+        if (s <= kScenarios[k].upper)
+            return static_cast<int>(k);
     return static_cast<int>(kScenarios.size()) - 1;
 }
 
@@ -320,7 +339,8 @@ EarningsOutlook evaluate_outlook(const EarningsAnalysis& a) {
     o.expected_move_pct = s.expected;
     o.trailing_move_pct = s.trailing;
     for (const auto& p : a.history)
-        if (settled(p)) ++o.reaction_quarters;
+        if (settled(p))
+            ++o.reaction_quarters;
     if (s.expected) {
         o.half_within_pct = *s.expected * kHalfWithin;
         o.most_within_pct = *s.expected * kMostWithin;
@@ -368,9 +388,9 @@ EarningsOutlook evaluate_outlook(const EarningsAnalysis& a) {
         const auto& solid = o.scenarios[2];
         const auto& big = o.scenarios[3];
         const double w = solid.probability + big.probability;
-        const double clear = w > 0 ? (solid.probability * solid.typical_move_pct +
-                                      big.probability * big.typical_move_pct) / w
-                                   : 0.5 * (solid.typical_move_pct + big.typical_move_pct);
+        const double clear =
+            w > 0 ? (solid.probability * solid.typical_move_pct + big.probability * big.typical_move_pct) / w
+                  : 0.5 * (solid.typical_move_pct + big.typical_move_pct);
         o.headline += QString(" A miss has typically meant %1; a beat of more than 3% about %2.")
                           .arg(pct_str(o.scenarios[0].typical_move_pct), pct_str(clear));
     }
@@ -401,8 +421,7 @@ EarningsOutlook evaluate_outlook(const EarningsAnalysis& a) {
                                                       : QStringLiteral("a much smaller"),
                               abs_pct(*o.implied_move_pct), abs_pct(*o.expected_move_pct));
     }
-    if (a.valuation.analyst_count.has_value() && *a.valuation.analyst_count > 0 &&
-        *a.valuation.analyst_count < 5) {
+    if (a.valuation.analyst_count.has_value() && *a.valuation.analyst_count > 0 && *a.valuation.analyst_count < 5) {
         const int n = static_cast<int>(*a.valuation.analyst_count);
         o.caveats << QString("Only %1 %2 this name — consensus is easily skewed.")
                          .arg(n)
@@ -413,13 +432,15 @@ EarningsOutlook evaluate_outlook(const EarningsAnalysis& a) {
 
 ForecastRecord forecast_record(const EarningsAnalysis& a) {
     ForecastRecord r;
-    if (!a.valid) return r;
+    if (!a.valid)
+        return r;
     double p_sum = 0;
     // history is newest-first; quarter i is forecast from i+1 onward — the
     // quarters that had already happened when it was still ahead.
     for (int i = 0; i < a.history.size(); ++i) {
         const auto& p = a.history[i];
-        if (!settled(p)) continue;
+        if (!settled(p))
+            continue;
         PrintForecast f;
         f.timestamp = p.timestamp;
         f.actual_move_pct = p.reaction_pct;
@@ -427,18 +448,21 @@ ForecastRecord forecast_record(const EarningsAnalysis& a) {
         f.expected_move_pct = s.expected;
         const BeatRead b = beat_from(a.history, i + 1);
         f.p_beat = b.p_beat;
-        if (scored(p)) f.beat = *p.surprise_pct > 0;
+        if (scored(p))
+            f.beat = *p.surprise_pct > 0;
 
         if (s.expected) {
             const double actual = std::abs(*p.reaction_pct);
             ++r.size_graded;
-            if (actual <= *s.expected) ++r.size_inside;
+            if (actual <= *s.expected)
+                ++r.size_inside;
             r.size_mae += std::abs(*s.expected - actual);
             r.trailing_mae += std::abs(*s.trailing - actual);
         }
         if (f.p_beat && f.beat.has_value()) {
             ++r.beat_graded;
-            if (*f.beat) ++r.beat_hits;
+            if (*f.beat)
+                ++r.beat_hits;
             p_sum += *f.p_beat;
         }
         r.prints.append(f);
@@ -447,7 +471,8 @@ ForecastRecord forecast_record(const EarningsAnalysis& a) {
         r.size_mae /= r.size_graded;
         r.trailing_mae /= r.size_graded;
     }
-    if (r.beat_graded > 0) r.mean_p_beat = p_sum / r.beat_graded;
+    if (r.beat_graded > 0)
+        r.mean_p_beat = p_sum / r.beat_graded;
     std::reverse(r.prints.begin(), r.prints.end());
     return r;
 }
@@ -458,8 +483,10 @@ std::optional<double> metric_value(const EarningsPoint& p, ReactionMetric m) {
             // A flagged surprise is a GAAP-vs-adjusted artefact; one +213%
             // point would set a Pearson r almost by itself.
             return p.surprise_suspect ? std::nullopt : p.surprise_pct;
-        case ReactionMetric::QoQ:      return p.eps_qoq_pct;
-        case ReactionMetric::YoY:      return p.eps_yoy_pct;
+        case ReactionMetric::QoQ:
+            return p.eps_qoq_pct;
+        case ReactionMetric::YoY:
+            return p.eps_yoy_pct;
     }
     return std::nullopt;
 }
@@ -477,24 +504,29 @@ QVector<ReactionCorrelation> correlate_reactions(const EarningsAnalysis& a) {
         c.label = QString::fromLatin1(label);
         QVector<double> xs, ys;
         for (const auto& p : a.history) {
-            if (p.is_estimate) continue;
+            if (p.is_estimate)
+                continue;
             const auto x = metric_value(p, metric);
-            if (!x.has_value() || !p.reaction_pct.has_value()) continue;
+            if (!x.has_value() || !p.reaction_pct.has_value())
+                continue;
             xs.append(*x);
             ys.append(*p.reaction_pct);
         }
         c.n = xs.size();
         if (c.n >= 3) {
             double mx = 0, my = 0;
-            for (int i = 0; i < c.n; ++i) { mx += xs[i]; my += ys[i]; }
+            for (int i = 0; i < c.n; ++i) {
+                mx += xs[i];
+                my += ys[i];
+            }
             mx /= c.n;
             my /= c.n;
             double num = 0, dx = 0, dy = 0;
             for (int i = 0; i < c.n; ++i) {
                 const double ax = xs[i] - mx, ay = ys[i] - my;
                 num += ax * ay;
-                dx  += ax * ax;
-                dy  += ay * ay;
+                dx += ax * ax;
+                dy += ay * ay;
             }
             // A metric that never moved has no variance to correlate against.
             if (dx > 1e-12 && dy > 1e-12)
@@ -510,7 +542,8 @@ int days_to_next_earnings(const EarningsAnalysis& a) {
 }
 
 int days_to_next_earnings(const EarningsAnalysis& a, const QDateTime& now) {
-    if (!a.next.timestamp.has_value()) return -1;
+    if (!a.next.timestamp.has_value())
+        return -1;
     // Calendar days between the two dates *in market time*, not 24-hour
     // intervals from this instant: "reports tomorrow before the open" is a
     // statement about sessions, and reading the dates locally drifts the

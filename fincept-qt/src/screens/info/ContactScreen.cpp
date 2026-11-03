@@ -109,10 +109,11 @@ ContactScreen::ContactScreen(QWidget* parent) : QWidget(parent) {
 
             auto* btn = new QPushButton(QString("→  %1").arg(c.label));
             btn->setCursor(Qt::PointingHandCursor);
-            btn->setStyleSheet(QString("QPushButton { color: %1; background: transparent; border: none; text-align: left; "
-                                       "padding: 0; font-size: 13px; font-weight: 600; %2 } "
-                                       "QPushButton:hover { color: %3; }")
-                                   .arg(colors::CYAN(), MF, colors::AMBER()));
+            btn->setStyleSheet(
+                QString("QPushButton { color: %1; background: transparent; border: none; text-align: left; "
+                        "padding: 0; font-size: 13px; font-weight: 600; %2 } "
+                        "QPushButton:hover { color: %3; }")
+                    .arg(colors::CYAN(), MF, colors::AMBER()));
             const QString url = c.url;
             connect(btn, &QPushButton::clicked, btn, [url]() { QDesktopServices::openUrl(QUrl(url)); });
             rl->addWidget(btn);
@@ -139,11 +140,10 @@ ContactScreen::ContactScreen(QWidget* parent) : QWidget(parent) {
 
         pvl->addWidget(make_header("?", "ABOUT THIS PROJECT", colors::CYAN));
 
-        auto* body = new QLabel(
-            "finterm is a community fork of an open-source terminal, distributed under AGPL-3.0. "
-            "There is no commercial entity behind it, no email support, no phone, no SLA. "
-            "The maintainer(s) review GitHub issues and PRs as time permits. "
-            "Patches are the most reliable way to get something fixed.");
+        auto* body = new QLabel("finterm is a community fork of an open-source terminal, distributed under AGPL-3.0. "
+                                "There is no commercial entity behind it, no email support, no phone, no SLA. "
+                                "The maintainer(s) review GitHub issues and PRs as time permits. "
+                                "Patches are the most reliable way to get something fixed.");
         body->setWordWrap(true);
         body->setStyleSheet(QString("color: %1; font-size: 12px; line-height: 165%%; background: transparent; "
                                     "padding: 14px; %2")

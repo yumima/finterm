@@ -67,11 +67,21 @@ static void ma_dispatch(const QString& context, std::shared_ptr<QPromise<ToolRes
 
 namespace {
 
-QJsonObject num(const char* d) { return {{"type", "number"}, {"description", d}}; }
-QJsonObject integer(const char* d) { return {{"type", "integer"}, {"description", d}}; }
-QJsonObject str(const char* d) { return {{"type", "string"}, {"description", d}}; }
-QJsonObject boolean(const char* d) { return {{"type", "boolean"}, {"description", d}}; }
-QJsonObject object(const char* d) { return {{"type", "object"}, {"description", d}}; }
+QJsonObject num(const char* d) {
+    return {{"type", "number"}, {"description", d}};
+}
+QJsonObject integer(const char* d) {
+    return {{"type", "integer"}, {"description", d}};
+}
+QJsonObject str(const char* d) {
+    return {{"type", "string"}, {"description", d}};
+}
+QJsonObject boolean(const char* d) {
+    return {{"type", "boolean"}, {"description", d}};
+}
+QJsonObject object(const char* d) {
+    return {{"type", "object"}, {"description", d}};
+}
 QJsonObject num_array(const char* d) {
     return {{"type", "array"}, {"items", QJsonObject{{"type", "number"}}}, {"description", d}};
 }
@@ -241,14 +251,14 @@ std::vector<ToolDef> get_ma_analytics_tools() {
                     {"interim_distributions", num_array("Distributions in years 1..N-1 (optional)")}},
         {"equity_invested", "holding_period"}));
 
-    tools.push_back(ma_tool(
-        "ma_lbo_model", "lbo_model", &MaSvc::build_lbo_model,
-        "Full LBO: sources & uses (sponsor equity is the plug), revenue/EBITDA projection, debt waterfall with "
-        "mandatory amortization and cash sweep, exit at an EV/EBITDA multiple, IRR and MOIC.",
-        lbo_props(),
-        {"ebitda", "revenue", "entry_multiple", "exit_multiple", "holding_period", "revenue_growth", "ebitda_margin",
-         "d_and_a_pct", "capex_pct", "nwc_pct", "tax_rate", "senior_debt", "senior_rate", "senior_amort_pct",
-         "sweep_pct"}));
+    tools.push_back(
+        ma_tool("ma_lbo_model", "lbo_model", &MaSvc::build_lbo_model,
+                "Full LBO: sources & uses (sponsor equity is the plug), revenue/EBITDA projection, debt waterfall with "
+                "mandatory amortization and cash sweep, exit at an EV/EBITDA multiple, IRR and MOIC.",
+                lbo_props(),
+                {"ebitda", "revenue", "entry_multiple", "exit_multiple", "holding_period", "revenue_growth",
+                 "ebitda_margin", "d_and_a_pct", "capex_pct", "nwc_pct", "tax_rate", "senior_debt", "senior_rate",
+                 "senior_amort_pct", "sweep_pct"}));
 
     tools.push_back(ma_tool(
         "ma_lbo_debt_schedule", "lbo_debt_schedule", &MaSvc::analyze_lbo_debt_schedule,
@@ -272,15 +282,15 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         {"years", "ebitda", "ebitda_growth", "d_and_a", "capex", "nwc_change", "tax_rate", "sweep_pct",
          "senior_debt"}));
 
-    tools.push_back(ma_tool("ma_lbo_sensitivity", "lbo_sensitivity", &MaSvc::calculate_lbo_sensitivity,
-                            "LBO IRR / MOIC grid over entry x exit multiples around the base case (all ma_lbo_model "
-                            "inputs plus the grid).",
-                            merge({lbo_props(),
-                                   QJsonObject{{"range", num("Grid half-width in multiple turns")},
-                                               {"steps", integer("Points per axis (2-15)")},
-                                               {"entry_base", num("Grid centre entry multiple (default: entry_multiple)")},
-                                               {"exit_base", num("Grid centre exit multiple (default: exit_multiple)")}}}),
-                            {"ebitda", "revenue", "entry_multiple", "exit_multiple", "holding_period", "range", "steps"}));
+    tools.push_back(ma_tool(
+        "ma_lbo_sensitivity", "lbo_sensitivity", &MaSvc::calculate_lbo_sensitivity,
+        "LBO IRR / MOIC grid over entry x exit multiples around the base case (all ma_lbo_model "
+        "inputs plus the grid).",
+        merge({lbo_props(), QJsonObject{{"range", num("Grid half-width in multiple turns")},
+                                        {"steps", integer("Points per axis (2-15)")},
+                                        {"entry_base", num("Grid centre entry multiple (default: entry_multiple)")},
+                                        {"exit_base", num("Grid centre exit multiple (default: exit_multiple)")}}}),
+        {"ebitda", "revenue", "entry_multiple", "exit_multiple", "holding_period", "range", "steps"}));
 
     tools.push_back(ma_tool(
         "ma_trading_comps", "trading_comps", &MaSvc::calculate_trading_comps,
@@ -347,58 +357,58 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         "ma_pro_forma", "pro_forma", &MaSvc::build_pro_forma,
         "Multi-year pro forma accretion/dilution: standalone net incomes grown at the given rates, synergies phased "
         "per year, integration costs per year; acquisition debt held constant.",
-        merge({ad_props(),
-               QJsonObject{{"years", integer("Projection years (1-10)")},
-                           {"acquirer_ni_growth", num("Acquirer standalone NI growth (decimal)")},
-                           {"target_ni_growth", num("Target standalone NI growth (decimal)")},
-                           {"synergy_phase_in_by_year", num_array("Fraction of run-rate synergies per year")},
-                           {"integration_costs_by_year", num_array("Pre-tax integration costs per year")},
-                           {"revenue_growth", num("Combined revenue growth (optional, decimal)")},
-                           {"acquirer_revenue", num("Acquirer revenue (optional)")},
-                           {"target_revenue", num("Target revenue (optional)")}}}),
+        merge(
+            {ad_props(), QJsonObject{{"years", integer("Projection years (1-10)")},
+                                     {"acquirer_ni_growth", num("Acquirer standalone NI growth (decimal)")},
+                                     {"target_ni_growth", num("Target standalone NI growth (decimal)")},
+                                     {"synergy_phase_in_by_year", num_array("Fraction of run-rate synergies per year")},
+                                     {"integration_costs_by_year", num_array("Pre-tax integration costs per year")},
+                                     {"revenue_growth", num("Combined revenue growth (optional, decimal)")},
+                                     {"acquirer_revenue", num("Acquirer revenue (optional)")},
+                                     {"target_revenue", num("Target revenue (optional)")}}}),
         QStringList(ad_required) << "years" << "acquirer_ni_growth" << "target_ni_growth"));
 
-    tools.push_back(ma_tool(
-        "ma_sources_uses", "sources_uses", &MaSvc::calculate_sources_uses,
-        "Sources & uses as entered (no plug, no estimated fees); reports any funding shortfall or surplus.",
-        QJsonObject{{"purchase_price", num("Equity purchase price")},
-                    {"target_debt_refinanced", num("Target debt refinanced")},
-                    {"transaction_fees", num("Transaction fees")},
-                    {"financing_fees", num("Financing fees")},
-                    {"acquirer_cash", num("Acquirer cash used")},
-                    {"new_debt", num("New debt raised")},
-                    {"new_equity", num("New equity issued")}},
-        {"purchase_price"}));
+    tools.push_back(
+        ma_tool("ma_sources_uses", "sources_uses", &MaSvc::calculate_sources_uses,
+                "Sources & uses as entered (no plug, no estimated fees); reports any funding shortfall or surplus.",
+                QJsonObject{{"purchase_price", num("Equity purchase price")},
+                            {"target_debt_refinanced", num("Target debt refinanced")},
+                            {"transaction_fees", num("Transaction fees")},
+                            {"financing_fees", num("Financing fees")},
+                            {"acquirer_cash", num("Acquirer cash used")},
+                            {"new_debt", num("New debt raised")},
+                            {"new_equity", num("New equity issued")}},
+                {"purchase_price"}));
 
-    tools.push_back(ma_tool(
-        "ma_contribution_analysis", "contribution", &MaSvc::analyze_contribution,
-        "Contribution analysis: each party's share of combined revenue / EBITDA / net income / assets vs the "
-        "ownership split.",
-        QJsonObject{{"acquirer", object("Acquirer financials: revenue, ebitda, net_income, total_assets")},
-                    {"target", object("Target financials: revenue, ebitda, net_income, total_assets")},
-                    {"ownership_split", num("Target holders' share of the combined company (decimal)")}},
-        {"acquirer", "target", "ownership_split"}));
+    tools.push_back(
+        ma_tool("ma_contribution_analysis", "contribution", &MaSvc::analyze_contribution,
+                "Contribution analysis: each party's share of combined revenue / EBITDA / net income / assets vs the "
+                "ownership split.",
+                QJsonObject{{"acquirer", object("Acquirer financials: revenue, ebitda, net_income, total_assets")},
+                            {"target", object("Target financials: revenue, ebitda, net_income, total_assets")},
+                            {"ownership_split", num("Target holders' share of the combined company (decimal)")}},
+                {"acquirer", "target", "ownership_split"}));
 
     tools.push_back(ma_tool(
         "ma_revenue_synergies", "revenue_synergies", &MaSvc::calculate_revenue_synergies,
         "Value revenue synergies (ramped, taxed at the synergy margin, discounted). type: simple (combined_revenue x "
         "synergy_pct), cross_sell, market_expansion, pricing_power.",
         merge({synergy_timing_props(),
-               QJsonObject{{"type", enum_str("Synergy model", {"simple", "cross_sell", "market_expansion",
-                                                               "pricing_power"})},
-                           {"combined_revenue", num("Combined revenue (simple, pricing_power)")},
-                           {"synergy_pct", num("Run-rate synergy as a fraction of revenue (simple)")},
-                           {"revenue_synergy_margin", num("Margin earned on synergy revenue (decimal)")},
-                           {"acquirer_customers", num("cross_sell")},
-                           {"target_customers", num("cross_sell")},
-                           {"acquirer_arpu", num("cross_sell")},
-                           {"target_arpu", num("cross_sell")},
-                           {"cross_sell_rate", num("cross_sell (decimal)")},
-                           {"target_revenue_new_markets", num("market_expansion")},
-                           {"acquirer_product_penetration", num("market_expansion (decimal)")},
-                           {"market_share_gain", num("market_expansion (decimal)")},
-                           {"price_increase", num("pricing_power (decimal)")},
-                           {"volume_elasticity", num("pricing_power")}}}),
+               QJsonObject{
+                   {"type", enum_str("Synergy model", {"simple", "cross_sell", "market_expansion", "pricing_power"})},
+                   {"combined_revenue", num("Combined revenue (simple, pricing_power)")},
+                   {"synergy_pct", num("Run-rate synergy as a fraction of revenue (simple)")},
+                   {"revenue_synergy_margin", num("Margin earned on synergy revenue (decimal)")},
+                   {"acquirer_customers", num("cross_sell")},
+                   {"target_customers", num("cross_sell")},
+                   {"acquirer_arpu", num("cross_sell")},
+                   {"target_arpu", num("cross_sell")},
+                   {"cross_sell_rate", num("cross_sell (decimal)")},
+                   {"target_revenue_new_markets", num("market_expansion")},
+                   {"acquirer_product_penetration", num("market_expansion (decimal)")},
+                   {"market_share_gain", num("market_expansion (decimal)")},
+                   {"price_increase", num("pricing_power (decimal)")},
+                   {"volume_elasticity", num("pricing_power")}}}),
         {"revenue_synergy_margin", "tax_rate", "discount_rate", "ramp_years", "projection_years"}));
 
     tools.push_back(ma_tool(
@@ -440,32 +450,32 @@ std::vector<ToolDef> get_ma_analytics_tools() {
                            {"integration_cost_years", integer("Years the integration cost is spread over")}}}),
         {"tax_rate", "discount_rate", "ramp_years", "projection_years"}));
 
-    tools.push_back(ma_tool(
-        "ma_integration_costs", "integration_costs", &MaSvc::estimate_integration_costs,
-        "Integration cost build-up from user-supplied cost items and drivers (no built-in unit costs).",
-        QJsonObject{{"deal_value", num("Deal value")},
-                    {"cost_items", obj_array("Line items: {category, amount, year?, capitalized?}")},
-                    {"integration_cost_pct", num("Total integration cost as a fraction of deal value")},
-                    {"systems_to_integrate", num("IT systems (with cost_per_system)")},
-                    {"cost_per_system", num("Cost per IT system")},
-                    {"key_employees", num("Retention: key employees")},
-                    {"average_compensation", num("Retention: average compensation")},
-                    {"retention_bonus_pct", num("Retention bonus as a fraction of compensation")},
-                    {"severance_roles", num("Roles eliminated")},
-                    {"severance_cost_per_role", num("Severance per role")},
-                    {"training_hours_per_employee", num("Training hours per employee")},
-                    {"training_cost_per_hour", num("Training cost per hour")},
-                    {"employees_to_train", num("Employees to train")},
-                    {"advisory_fee_pct", num("Advisory fees as a fraction of deal value")},
-                    {"legal_fees", num("Legal fees")},
-                    {"accounting_fees", num("Accounting fees")},
-                    {"rebranding_cost", num("Rebranding cost")},
-                    {"facilities_cost", num("Facilities cost")},
-                    {"other_costs", num("Other costs")},
-                    {"contingency_pct", num("Contingency as a fraction (optional)")},
-                    {"combined_revenue", num("Combined revenue (optional, for ratios)")},
-                    {"combined_headcount", num("Combined headcount (optional)")}},
-        {"deal_value"}));
+    tools.push_back(
+        ma_tool("ma_integration_costs", "integration_costs", &MaSvc::estimate_integration_costs,
+                "Integration cost build-up from user-supplied cost items and drivers (no built-in unit costs).",
+                QJsonObject{{"deal_value", num("Deal value")},
+                            {"cost_items", obj_array("Line items: {category, amount, year?, capitalized?}")},
+                            {"integration_cost_pct", num("Total integration cost as a fraction of deal value")},
+                            {"systems_to_integrate", num("IT systems (with cost_per_system)")},
+                            {"cost_per_system", num("Cost per IT system")},
+                            {"key_employees", num("Retention: key employees")},
+                            {"average_compensation", num("Retention: average compensation")},
+                            {"retention_bonus_pct", num("Retention bonus as a fraction of compensation")},
+                            {"severance_roles", num("Roles eliminated")},
+                            {"severance_cost_per_role", num("Severance per role")},
+                            {"training_hours_per_employee", num("Training hours per employee")},
+                            {"training_cost_per_hour", num("Training cost per hour")},
+                            {"employees_to_train", num("Employees to train")},
+                            {"advisory_fee_pct", num("Advisory fees as a fraction of deal value")},
+                            {"legal_fees", num("Legal fees")},
+                            {"accounting_fees", num("Accounting fees")},
+                            {"rebranding_cost", num("Rebranding cost")},
+                            {"facilities_cost", num("Facilities cost")},
+                            {"other_costs", num("Other costs")},
+                            {"contingency_pct", num("Contingency as a fraction (optional)")},
+                            {"combined_revenue", num("Combined revenue (optional, for ratios)")},
+                            {"combined_headcount", num("Combined headcount (optional)")}},
+                {"deal_value"}));
 
     // ════════════════════════════════════════════════════════════════════
     // DEAL STRUCTURE
@@ -520,18 +530,18 @@ std::vector<ToolDef> get_ma_analytics_tools() {
                     {"price_scenarios", num_array("Acquirer prices to evaluate (optional)")}},
         {"base_ratio", "floor_price", "cap_price", "acquirer_price"}));
 
-    tools.push_back(ma_tool(
-        "ma_cvr", "cvr", &MaSvc::value_cvr,
-        "Contingent value right: probability x payment discounted to today (optional appeal leg).",
-        QJsonObject{{"payment", num("Total payment if triggered")},
-                    {"probability", num("Trigger probability (decimal)")},
-                    {"years", num("Years to the trigger")},
-                    {"discount_rate", num("Discount rate (decimal)")},
-                    {"type", str("Label: milestone / revenue / regulatory")},
-                    {"shares_outstanding", num("CVRs outstanding (optional, for per-CVR value)")},
-                    {"appeal_probability", num("Probability of a later payment after appeal (optional)")},
-                    {"appeal_delay_years", num("Extra years for the appeal leg (optional)")}},
-        {"payment", "probability", "years", "discount_rate"}));
+    tools.push_back(
+        ma_tool("ma_cvr", "cvr", &MaSvc::value_cvr,
+                "Contingent value right: probability x payment discounted to today (optional appeal leg).",
+                QJsonObject{{"payment", num("Total payment if triggered")},
+                            {"probability", num("Trigger probability (decimal)")},
+                            {"years", num("Years to the trigger")},
+                            {"discount_rate", num("Discount rate (decimal)")},
+                            {"type", str("Label: milestone / revenue / regulatory")},
+                            {"shares_outstanding", num("CVRs outstanding (optional, for per-CVR value)")},
+                            {"appeal_probability", num("Probability of a later payment after appeal (optional)")},
+                            {"appeal_delay_years", num("Extra years for the appeal leg (optional)")}},
+                {"payment", "probability", "years", "discount_rate"}));
 
     // ════════════════════════════════════════════════════════════════════
     // DEAL DATABASE
@@ -578,14 +588,13 @@ std::vector<ToolDef> get_ma_analytics_tools() {
         t.description = "Add a new deal record to the M&A deal database (any other ma_deals column, e.g. "
                         "payment_method, premium_1day, enterprise_value, may also be passed).";
         t.category = "ma-analytics";
-        t.input_schema.properties =
-            QJsonObject{{"acquirer", str("Acquirer company name")},
-                        {"target", str("Target company name")},
-                        {"deal_value", num("Deal value in USD (absolute, not millions)")},
-                        {"deal_type", str("Acquisition, Merger, LBO, etc.")},
-                        {"industry", str("Industry sector")},
-                        {"announced_date", str("Announcement date YYYY-MM-DD")},
-                        {"status", str("Announced, Pending, Completed, Failed")}};
+        t.input_schema.properties = QJsonObject{{"acquirer", str("Acquirer company name")},
+                                                {"target", str("Target company name")},
+                                                {"deal_value", num("Deal value in USD (absolute, not millions)")},
+                                                {"deal_type", str("Acquisition, Merger, LBO, etc.")},
+                                                {"industry", str("Industry sector")},
+                                                {"announced_date", str("Announcement date YYYY-MM-DD")},
+                                                {"status", str("Announced, Pending, Completed, Failed")}};
         t.input_schema.required = {"acquirer", "target", "announced_date", "deal_type", "status"};
         t.default_timeout_ms = kMaTimeoutMs;
         t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
@@ -654,24 +663,24 @@ std::vector<ToolDef> get_ma_analytics_tools() {
                     {"stage", str("Label (optional)")}},
         {"benchmark_pre_money", "assessments"}));
 
-    tools.push_back(ma_tool(
-        "ma_startup_first_chicago", "first_chicago", &MaSvc::calculate_first_chicago,
-        "First Chicago: sum over scenarios of probability x exit value discounted at the discount rate; "
-        "probabilities must sum to 1.",
-        QJsonObject{{"discount_rate", num("Discount rate (decimal)")},
-                    {"years", num("Years to exit (used when a scenario has no exit_year)")},
-                    {"scenarios", obj_array("{name, probability, exit_value, exit_year?}")}},
-        {"discount_rate", "scenarios"}));
+    tools.push_back(
+        ma_tool("ma_startup_first_chicago", "first_chicago", &MaSvc::calculate_first_chicago,
+                "First Chicago: sum over scenarios of probability x exit value discounted at the discount rate; "
+                "probabilities must sum to 1.",
+                QJsonObject{{"discount_rate", num("Discount rate (decimal)")},
+                            {"years", num("Years to exit (used when a scenario has no exit_year)")},
+                            {"scenarios", obj_array("{name, probability, exit_value, exit_year?}")}},
+                {"discount_rate", "scenarios"}));
 
-    tools.push_back(ma_tool(
-        "ma_startup_risk_factor", "risk_factor", &MaSvc::calculate_risk_factor,
-        "Risk factor summation: base pre-money + sum(score x adjustment per step) over 12 risks scored -2..+2 "
-        "(management, stage, legislation, manufacturing, sales, funding, competition, technology, litigation, "
-        "international, reputation, exit).",
-        QJsonObject{{"base_valuation", num("Base pre-money ($)")},
-                    {"adjustment_per_step", num("$ adjustment per +/-1 step")},
-                    {"assessments", num_array("12 integer scores -2..+2 in the order above")}},
-        {"base_valuation", "adjustment_per_step", "assessments"}));
+    tools.push_back(
+        ma_tool("ma_startup_risk_factor", "risk_factor", &MaSvc::calculate_risk_factor,
+                "Risk factor summation: base pre-money + sum(score x adjustment per step) over 12 risks scored -2..+2 "
+                "(management, stage, legislation, manufacturing, sales, funding, competition, technology, litigation, "
+                "international, reputation, exit).",
+                QJsonObject{{"base_valuation", num("Base pre-money ($)")},
+                            {"adjustment_per_step", num("$ adjustment per +/-1 step")},
+                            {"assessments", num_array("12 integer scores -2..+2 in the order above")}},
+                {"base_valuation", "adjustment_per_step", "assessments"}));
 
     tools.push_back(ma_tool(
         "ma_startup_comprehensive", "startup_comprehensive", &MaSvc::calculate_comprehensive_startup,
@@ -698,19 +707,18 @@ std::vector<ToolDef> get_ma_analytics_tools() {
                     {"week52_high", num("52-week high (optional)")}},
         {"offer_price", "methods"}));
 
-    tools.push_back(ma_tool(
-        "ma_premium_analysis", "premium_analysis", &MaSvc::analyze_premium,
-        "Offer premium vs UNAFFECTED reference prices: premium = offer / reference - 1.",
-        QJsonObject{{"offer_price", num("Offer price per share")},
-                    {"price_1d", num("Unaffected price 1 day before announcement")},
-                    {"price_1w", num("1 week prior (optional)")},
-                    {"price_4w", num("4 weeks prior (optional)")},
-                    {"price_1m", num("1 month prior (optional)")},
-                    {"price_3m", num("3 months prior (optional)")},
-                    {"price_52w", num("52-week high (optional)")},
-                    {"price_52w_low", num("52-week low (optional)")},
-                    {"shares_outstanding", num("Diluted shares (optional)")}},
-        {"offer_price", "price_1d"}));
+    tools.push_back(ma_tool("ma_premium_analysis", "premium_analysis", &MaSvc::analyze_premium,
+                            "Offer premium vs UNAFFECTED reference prices: premium = offer / reference - 1.",
+                            QJsonObject{{"offer_price", num("Offer price per share")},
+                                        {"price_1d", num("Unaffected price 1 day before announcement")},
+                                        {"price_1w", num("1 week prior (optional)")},
+                                        {"price_4w", num("4 weeks prior (optional)")},
+                                        {"price_1m", num("1 month prior (optional)")},
+                                        {"price_3m", num("3 months prior (optional)")},
+                                        {"price_52w", num("52-week high (optional)")},
+                                        {"price_52w_low", num("52-week low (optional)")},
+                                        {"shares_outstanding", num("Diluted shares (optional)")}},
+                            {"offer_price", "price_1d"}));
 
     tools.push_back(ma_tool(
         "ma_process_quality", "process_quality", &MaSvc::assess_process_quality,
@@ -752,19 +760,19 @@ std::vector<ToolDef> get_ma_analytics_tools() {
                     {"enterprise_value", num("Enterprise value (optional, for multiples)")}},
         {"sector"}));
 
-    tools.push_back(ma_tool(
-        "ma_healthcare_metrics", "healthcare_metrics", &MaSvc::calculate_healthcare_metrics,
-        "Healthcare KPIs computed from the inputs (no benchmark tables).",
-        QJsonObject{{"sector", enum_str("Sub-sector", {"pharma", "biotech", "devices", "services"})},
-                    {"revenue", num("Revenue")},
-                    {"ebitda_margin", num("EBITDA margin (decimal)")},
-                    {"ebitda", num("EBITDA, instead of ebitda_margin")},
-                    {"rd_spend", num("R&D spend")},
-                    {"pipeline_npv", num("User's risk-adjusted pipeline NPV")},
-                    {"phase3_candidates", integer("Phase 3 candidates")},
-                    {"patent_expiry_revenue", num("Share of revenue losing exclusivity (decimal)")},
-                    {"enterprise_value", num("Enterprise value (optional)")}},
-        {"sector", "revenue"}));
+    tools.push_back(
+        ma_tool("ma_healthcare_metrics", "healthcare_metrics", &MaSvc::calculate_healthcare_metrics,
+                "Healthcare KPIs computed from the inputs (no benchmark tables).",
+                QJsonObject{{"sector", enum_str("Sub-sector", {"pharma", "biotech", "devices", "services"})},
+                            {"revenue", num("Revenue")},
+                            {"ebitda_margin", num("EBITDA margin (decimal)")},
+                            {"ebitda", num("EBITDA, instead of ebitda_margin")},
+                            {"rd_spend", num("R&D spend")},
+                            {"pipeline_npv", num("User's risk-adjusted pipeline NPV")},
+                            {"phase3_candidates", integer("Phase 3 candidates")},
+                            {"patent_expiry_revenue", num("Share of revenue losing exclusivity (decimal)")},
+                            {"enterprise_value", num("Enterprise value (optional)")}},
+                {"sector", "revenue"}));
 
     tools.push_back(ma_tool(
         "ma_financial_metrics", "finserv_metrics", &MaSvc::calculate_financial_services_metrics,
@@ -797,23 +805,23 @@ std::vector<ToolDef> get_ma_analytics_tools() {
     // ════════════════════════════════════════════════════════════════════
     // ADVANCED ANALYTICS
     // ════════════════════════════════════════════════════════════════════
-    tools.push_back(ma_tool(
-        "ma_monte_carlo", "monte_carlo", &MaSvc::run_monte_carlo,
-        "Monte Carlo DCF SIMULATION: each path draws annual revenue growth and FCF margin from normal "
-        "distributions; Gordon terminal value. Returns the EV distribution (mean, percentiles) and the "
-        "zero-volatility EV.",
-        QJsonObject{{"base_revenue", num("Current revenue")},
-                    {"rev_growth_mean", num("Mean annual revenue growth (decimal)")},
-                    {"rev_growth_std", num("Std dev of annual growth (decimal)")},
-                    {"margin_mean", num("Mean FCF margin (FCF / revenue, decimal)")},
-                    {"margin_std", num("Std dev of FCF margin (decimal)")},
-                    {"discount_rate", num("Discount rate (decimal)")},
-                    {"terminal_growth", num("Terminal growth (decimal, below discount_rate)")},
-                    {"projection_years", integer("Projection years (1-30)")},
-                    {"simulations", integer("Paths (100-200000)")},
-                    {"seed", integer("Random seed (optional)")}},
-        {"base_revenue", "rev_growth_mean", "rev_growth_std", "margin_mean", "margin_std", "discount_rate",
-         "terminal_growth", "projection_years", "simulations"}));
+    tools.push_back(
+        ma_tool("ma_monte_carlo", "monte_carlo", &MaSvc::run_monte_carlo,
+                "Monte Carlo DCF SIMULATION: each path draws annual revenue growth and FCF margin from normal "
+                "distributions; Gordon terminal value. Returns the EV distribution (mean, percentiles) and the "
+                "zero-volatility EV.",
+                QJsonObject{{"base_revenue", num("Current revenue")},
+                            {"rev_growth_mean", num("Mean annual revenue growth (decimal)")},
+                            {"rev_growth_std", num("Std dev of annual growth (decimal)")},
+                            {"margin_mean", num("Mean FCF margin (FCF / revenue, decimal)")},
+                            {"margin_std", num("Std dev of FCF margin (decimal)")},
+                            {"discount_rate", num("Discount rate (decimal)")},
+                            {"terminal_growth", num("Terminal growth (decimal, below discount_rate)")},
+                            {"projection_years", integer("Projection years (1-30)")},
+                            {"simulations", integer("Paths (100-200000)")},
+                            {"seed", integer("Random seed (optional)")}},
+                {"base_revenue", "rev_growth_mean", "rev_growth_std", "margin_mean", "margin_std", "discount_rate",
+                 "terminal_growth", "projection_years", "simulations"}));
 
     tools.push_back(ma_tool(
         "ma_regression", "regression", &MaSvc::run_regression,
@@ -827,8 +835,8 @@ std::vector<ToolDef> get_ma_analytics_tools() {
                                              {"description", "Override regressors (optional)"}}},
                     {"confidence", num("Prediction-interval confidence (optional, default 0.95)")},
                     {"y_values", num_array("Raw mode: dependent values")},
-                    {"x_values", QJsonObject{{"type", "array"},
-                                             {"description", "Raw mode: regressor values (numbers or arrays)"}}},
+                    {"x_values",
+                     QJsonObject{{"type", "array"}, {"description", "Raw mode: regressor values (numbers or arrays)"}}},
                     {"variable_names", QJsonObject{{"type", "array"},
                                                    {"items", QJsonObject{{"type", "string"}}},
                                                    {"description", "Raw mode: regressor names"}}}},
@@ -841,13 +849,13 @@ std::vector<ToolDef> get_ma_analytics_tools() {
                             "Compare deals: median / mean deal value, premium and multiples (missing fields skipped).",
                             deals_prop(), {"deals"}));
 
-    tools.push_back(ma_tool("ma_rank_deals", "rank_deals", &MaSvc::rank_deals,
-                            "Rank deals by a metric; deals missing it are listed separately; ties share a rank.",
-                            merge({deals_prop(),
-                                   QJsonObject{{"criteria", enum_str("Metric", {"premium", "deal_value", "ev_revenue",
-                                                                                "ev_ebitda", "synergies"})},
-                                               {"ascending", boolean("Sort ascending (optional)")}}}),
-                            {"deals", "criteria"}));
+    tools.push_back(
+        ma_tool("ma_rank_deals", "rank_deals", &MaSvc::rank_deals,
+                "Rank deals by a metric; deals missing it are listed separately; ties share a rank.",
+                merge({deals_prop(), QJsonObject{{"criteria", enum_str("Metric", {"premium", "deal_value", "ev_revenue",
+                                                                                  "ev_ebitda", "synergies"})},
+                                                 {"ascending", boolean("Sort ascending (optional)")}}}),
+                {"deals", "criteria"}));
 
     tools.push_back(ma_tool("ma_benchmark_premium", "benchmark_premium", &MaSvc::benchmark_deal_premium,
                             "Benchmark a deal premium against comparable deals: percentile rank and quartiles.",

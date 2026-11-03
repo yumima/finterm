@@ -44,8 +44,7 @@ QString EmbeddingsClient::base_url() {
     return HearthService::instance().engine_base_url();
 }
 
-void EmbeddingsClient::embed(
-    const QString& text, std::function<void(std::optional<QVector<float>>)> done) {
+void EmbeddingsClient::embed(const QString& text, std::function<void(std::optional<QVector<float>>)> done) {
     if (text.trimmed().isEmpty()) {
         done(std::nullopt);
         return;
@@ -70,35 +69,33 @@ void EmbeddingsClient::embed(
             reply->abort();
     });
 
-    QObject::connect(
-        reply, &QNetworkReply::finished, reply, [reply, done = std::move(done)]() {
-            const QByteArray resp = reply->readAll();
-            const auto err = reply->error();
-            reply->deleteLater();
+    QObject::connect(reply, &QNetworkReply::finished, reply, [reply, done = std::move(done)]() {
+        const QByteArray resp = reply->readAll();
+        const auto err = reply->error();
+        reply->deleteLater();
 
-            if (err != QNetworkReply::NoError) {
-                LOG_DEBUG(kTag, QString("embeddings request failed: %1")
-                                    .arg(static_cast<int>(err)));
-                done(std::nullopt);
-                return;
-            }
-            const QJsonDocument doc = QJsonDocument::fromJson(resp);
-            const QJsonArray data = doc.object().value("data").toArray();
-            if (data.isEmpty()) {
-                done(std::nullopt);
-                return;
-            }
-            const QJsonArray vec = data.first().toObject().value("embedding").toArray();
-            if (vec.isEmpty()) {
-                done(std::nullopt);
-                return;
-            }
-            QVector<float> out;
-            out.reserve(vec.size());
-            for (const auto& v : vec)
-                out.push_back(static_cast<float>(v.toDouble()));
-            done(std::move(out));
-        });
+        if (err != QNetworkReply::NoError) {
+            LOG_DEBUG(kTag, QString("embeddings request failed: %1").arg(static_cast<int>(err)));
+            done(std::nullopt);
+            return;
+        }
+        const QJsonDocument doc = QJsonDocument::fromJson(resp);
+        const QJsonArray data = doc.object().value("data").toArray();
+        if (data.isEmpty()) {
+            done(std::nullopt);
+            return;
+        }
+        const QJsonArray vec = data.first().toObject().value("embedding").toArray();
+        if (vec.isEmpty()) {
+            done(std::nullopt);
+            return;
+        }
+        QVector<float> out;
+        out.reserve(vec.size());
+        for (const auto& v : vec)
+            out.push_back(static_cast<float>(v.toDouble()));
+        done(std::move(out));
+    });
 }
 
 } // namespace fincept

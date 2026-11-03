@@ -22,17 +22,26 @@ LlmConfigRepository& LlmConfigRepository::instance() {
 LlmConfig LlmConfigRepository::map_config(QSqlQuery& q) {
     // Column 1 (api_key) is migrated away from this table — see v022.
     // Filled in from SecureStorage by the callers below.
-    LlmConfig c{q.value(0).toString(), {},                  q.value(2).toString(), q.value(3).toString(),
-                q.value(4).toBool(),   q.value(5).toBool(), q.value(6).toString(), q.value(7).toString()};
+    LlmConfig c{q.value(0).toString(), {},
+                q.value(2).toString(), q.value(3).toString(),
+                q.value(4).toBool(),   q.value(5).toBool(),
+                q.value(6).toString(), q.value(7).toString()};
     c.api_key = llm_secure_load(llm_secure_key_for_provider(c.provider));
     return c;
 }
 
 LlmModelConfig LlmConfigRepository::map_model(QSqlQuery& q) {
     // Column 4 (api_key) is migrated away — see v022.  Filled below.
-    LlmModelConfig m{q.value(0).toString(), q.value(1).toString(), q.value(2).toString(), q.value(3).toString(),
-                     {},                    q.value(5).toString(), q.value(6).toBool(),   q.value(7).toBool(),
-                     q.value(8).toString(), q.value(9).toString()};
+    LlmModelConfig m{q.value(0).toString(),
+                     q.value(1).toString(),
+                     q.value(2).toString(),
+                     q.value(3).toString(),
+                     {},
+                     q.value(5).toString(),
+                     q.value(6).toBool(),
+                     q.value(7).toBool(),
+                     q.value(8).toString(),
+                     q.value(9).toString()};
     m.api_key = llm_secure_load(llm_secure_key_for_model(m.id));
     return m;
 }

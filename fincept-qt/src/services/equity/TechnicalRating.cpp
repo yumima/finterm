@@ -15,7 +15,9 @@ void IndicatorRow::set(const QString& column, double value) {
         values_.insert(column, value);
 }
 
-bool IndicatorRow::has(const QString& column) const { return values_.contains(column); }
+bool IndicatorRow::has(const QString& column) const {
+    return values_.contains(column);
+}
 
 double IndicatorRow::get(const QString& column, double fallback) const {
     return values_.value(column, fallback);
@@ -121,8 +123,7 @@ S score_vs_price(double ma, double prev_ma, double close, double atr) {
     const bool rising = have_slope && ma > prev_ma;
     const bool falling = have_slope && ma < prev_ma;
 
-    const bool far = atr > 0.0 ? std::abs(gap) > kStrongGapAtr * atr
-                               : std::abs(gap) / ma > kStrongGapPct;
+    const bool far = atr > 0.0 ? std::abs(gap) > kStrongGapAtr * atr : std::abs(gap) / ma > kStrongGapPct;
 
     if (gap > 0.0)
         return (far && rising) ? S::StrongBuy : S::Buy;
@@ -152,8 +153,12 @@ S score_zero_line(double value, double prev, bool have_prev) {
     return S::Neutral;
 }
 
-IndicatorVerdict voting(S s, const char* bucket) { return {s, true, QString::fromLatin1(bucket)}; }
-IndicatorVerdict display_only(S s) { return {s, false, QString()}; }
+IndicatorVerdict voting(S s, const char* bucket) {
+    return {s, true, QString::fromLatin1(bucket)};
+}
+IndicatorVerdict display_only(S s) {
+    return {s, false, QString()};
+}
 
 /// The two readings the headline verdict is actually cut from.
 ///
@@ -241,9 +246,8 @@ bool has_sufficient_history(const RatingInput& in) {
     // The three structural readings, one per thing the rating relies on:
     // a medium-term average to place price against, MACD for the crossover,
     // and ADX with its DI legs — which is also what arms the trend filter.
-    return in.now.has("sma_50") && in.now.has("sma_200") && in.now.has("atr") &&
-           in.now.has("macd") && in.now.has("macd_signal") &&
-           in.now.has("adx") && in.now.has("adx_pos") && in.now.has("adx_neg");
+    return in.now.has("sma_50") && in.now.has("sma_200") && in.now.has("atr") && in.now.has("macd") &&
+           in.now.has("macd_signal") && in.now.has("adx") && in.now.has("adx_pos") && in.now.has("adx_neg");
 }
 
 // ── score ────────────────────────────────────────────────────────────────────
@@ -256,14 +260,12 @@ IndicatorVerdict score(const QString& column, const RatingInput& in) {
 
     // ── Moving averages — price above is bullish, below bearish ──────────────
     if (is_moving_average(column))
-        return voting(score_vs_price(value, in.prev.has(column) ? prev : 0.0, in.close,
-                                     in.now.get("atr", 0.0)),
+        return voting(score_vs_price(value, in.prev.has(column) ? prev : 0.0, in.close, in.now.get("atr", 0.0)),
                       column == "vwap" ? kBucketVolume : kBucketTrend);
 
     // The Bollinger mid-line is the 20-SMA; show it, do not count it twice.
     if (column == "bb_mavg")
-        return display_only(
-            score_vs_price(value, in.prev.has(column) ? prev : 0.0, in.close, in.now.get("atr", 0.0)));
+        return display_only(score_vs_price(value, in.prev.has(column) ? prev : 0.0, in.close, in.now.get("atr", 0.0)));
 
     // ── MACD — the histogram, against the signal line ────────────────────────
     // The old rule tested `macd > 0`, which says nothing about the crossover

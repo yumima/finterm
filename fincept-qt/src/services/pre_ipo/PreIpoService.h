@@ -6,8 +6,8 @@
 #include <QJsonObject>
 #include <QObject>
 #include <QSet>
-#include <QStringList>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 class QJsonArray;
@@ -61,10 +61,9 @@ class PreIpoService : public QObject {
     QString add_user_company(const QJsonObject& entry);
 
     QVector<pre_ipo::FormDFiling> recent_form_d() const;
-    QVector<pre_ipo::S1Filing>    ipo_pipeline() const;
-    QVector<pre_ipo::Signal>      signal_list() const;
-    QVector<pre_ipo::FundEntry>   funds() const;
-
+    QVector<pre_ipo::S1Filing> ipo_pipeline() const;
+    QVector<pre_ipo::Signal> signal_list() const;
+    QVector<pre_ipo::FundEntry> funds() const;
 
     bool is_loaded() const { return loaded_; }
 
@@ -108,20 +107,16 @@ class PreIpoService : public QObject {
     /// Filers EDGAR does list under that name, when none of them is the
     /// company itself — usually the SPVs named after it. Lets the UI show what
     /// it found instead of asserting the company does not exist.
-    QStringList dossier_candidates(const QString& company_id) const {
-        return dossier_candidates_.value(company_id);
-    }
+    QStringList dossier_candidates(const QString& company_id) const { return dossier_candidates_.value(company_id); }
     /// Machine-readable reason behind a NoFiler state, or empty when EDGAR
     /// simply lists nothing under the name.
-    QString dossier_reason(const QString& company_id) const {
-        return dossier_reason_.value(company_id);
-    }
+    QString dossier_reason(const QString& company_id) const { return dossier_reason_.value(company_id); }
 
   signals:
     void data_loaded(fincept::pre_ipo::PreIpoSummary summary);
     void company_updated(QString id);
     void error_occurred(QString message);
-    void progress(QString message);  // "Loading Form D…", "Loading marks…"
+    void progress(QString message); // "Loading Form D…", "Loading marks…"
 
   private:
     explicit PreIpoService(QObject* parent = nullptr);
@@ -166,11 +161,11 @@ class PreIpoService : public QObject {
     struct ValuationSeed {
         QString id, name, cik;
         QStringList aliases;
-        double  last_valuation_usd = 0;
-        QDate   as_of;
+        double last_valuation_usd = 0;
+        QDate as_of;
         QString source_label, source_url, round_name;
         QString sector, description, hq_city, hq_state, hq_country;
-        int     founded_year = 0;
+        int founded_year = 0;
         QStringList key_investors, tags;
     };
     /// Load the seed file once (tolerant of a missing/invalid file).
@@ -185,7 +180,7 @@ class PreIpoService : public QObject {
     void seed_apply_valuation();
     /// Best single company match for a seed (CIK → id/alias-exact → fuzzy
     /// name). -1 when no match.
-    int  find_company_for_seed(const ValuationSeed& s) const;
+    int find_company_for_seed(const ValuationSeed& s) const;
     /// Normalized-name set used for the FUZZY (last-resort) match tier: the
     /// canonical name plus only multi-word aliases. Single-token aliases are
     /// excluded so a generic word (e.g. "figure") can't bind a seed to an
@@ -195,8 +190,7 @@ class PreIpoService : public QObject {
     /// and seed_ensure_companies so the two passes can't drift: CIK, then exact
     /// id/alias (seed id and each slugified alias), then fuzzy name (`norms`).
     /// `norms` is seed_fuzzy_norms(s), passed in so callers compute it once.
-    bool seed_matches(const pre_ipo::PrivateCompany& c, const ValuationSeed& s,
-                      const QSet<QString>& norms) const;
+    bool seed_matches(const pre_ipo::PrivateCompany& c, const ValuationSeed& s, const QSet<QString>& norms) const;
 
     /// Emit the current data state. Called both incrementally (as each of
     /// the 3 fetches lands) and finally (when all three are done).
@@ -210,9 +204,9 @@ class PreIpoService : public QObject {
     QString cache_dir() const;
     /// Returns true if at least one cache file was successfully loaded and
     /// parsed; populates companies_/form_d_/pipeline_/funds_ from cache.
-    bool   load_from_cache();
+    bool load_from_cache();
     /// Persist the most recent raw response for a single source.
-    void   save_cache(const QString& filename, const QJsonDocument& doc);
+    void save_cache(const QString& filename, const QJsonDocument& doc);
 
     // ── Data-based change cursors ─────────────────────────────────────────────
     // Per-source opaque markers (EDGAR all-time hit counts / newest accessions)
@@ -220,8 +214,8 @@ class PreIpoService : public QObject {
     // which short-circuits with {"unchanged":true} when the marker hasn't moved
     // — so a quiet day costs a cheap probe, not a full scan. Replaces the old
     // single 24h time-to-live gate.
-    void   load_cursors();
-    void   save_cursors();
+    void load_cursors();
+    void save_cursors();
 
     /// company_id -> financials fetch already issued this session, and
     /// company_id -> confirmed to have NO XBRL facts. Split so a company that
@@ -274,9 +268,7 @@ class PreIpoService : public QObject {
   public:
     /// True once SEC has confirmed this company tags no XBRL financials, so
     /// the UI can say that instead of showing a fetch that will never finish.
-    bool financials_confirmed_absent(const QString& company_id) const {
-        return fin_absent_.contains(company_id);
-    }
+    bool financials_confirmed_absent(const QString& company_id) const { return fin_absent_.contains(company_id); }
 
   private:
     /// Compact JSON payload for a Python action, injecting the stored prior
@@ -287,20 +279,20 @@ class PreIpoService : public QObject {
     // and remember per-source success so a failed fetcher can be retried
     // independently rather than the whole load being marked permanent.
     enum FetchBit { FB_FormD = 1, FB_Marks = 2, FB_S1 = 4, FB_All = 7 };
-    int  pending_bits_ = 0;
-    int  failed_bits_  = 0;
+    int pending_bits_ = 0;
+    int failed_bits_ = 0;
     bool loading_ = false;
-    bool force_refresh_ = false;     // set for the duration of a forced refresh
-    QJsonObject cursors_;            // per-source change markers (cursors.json)
+    bool force_refresh_ = false; // set for the duration of a forced refresh
+    QJsonObject cursors_;        // per-source change markers (cursors.json)
 
     QVector<pre_ipo::PrivateCompany> companies_;
-    QVector<ValuationSeed>           seed_;      // curated valuation overlay
-    bool                             seed_loaded_ = false;
-    QVector<pre_ipo::SpvActivity>    spv_raw_;   // side table, re-joined each emit
-    QVector<pre_ipo::FormDFiling>    form_d_;
-    QVector<pre_ipo::S1Filing>       pipeline_;
-    QVector<pre_ipo::Signal>         signals_;
-    QVector<pre_ipo::FundEntry>      funds_;
+    QVector<ValuationSeed> seed_; // curated valuation overlay
+    bool seed_loaded_ = false;
+    QVector<pre_ipo::SpvActivity> spv_raw_; // side table, re-joined each emit
+    QVector<pre_ipo::FormDFiling> form_d_;
+    QVector<pre_ipo::S1Filing> pipeline_;
+    QVector<pre_ipo::Signal> signals_;
+    QVector<pre_ipo::FundEntry> funds_;
     bool loaded_ = false;
 };
 

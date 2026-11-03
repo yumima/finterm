@@ -1,20 +1,18 @@
 #include "screens/dashboard/MarketPulsePanel.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/markets/MarketChartDialog.h"
-
 #include "services/markets/MarketDataService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
-#    include <QSet>
-
 #include <QDateTime>
 #include <QFrame>
 #include <QPalette>
 #include <QPointer>
+#include <QSet>
 #include <QShowEvent>
 #include <QTimeZone>
 
@@ -234,12 +232,11 @@ void MarketPulsePanel::refresh_theme() {
         fg_gauge_icon_->setStyleSheet(
             QString("color: %1; font-size: 12px; background: transparent;").arg(ui::colors::AMBER()));
     if (fg_gradient_bar_)
-        fg_gradient_bar_->setStyleSheet(
-            QString("QFrame { border-radius: 3px; "
-                    "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
-                    "stop:0 %1, stop:0.25 %2, stop:0.5 %3, stop:0.75 %4, stop:1 %5); }")
-                .arg(ui::colors::NEGATIVE(), ui::colors::AMBER(), ui::colors::WARNING(),
-                     ui::colors::POSITIVE_DIM(), ui::colors::POSITIVE()));
+        fg_gradient_bar_->setStyleSheet(QString("QFrame { border-radius: 3px; "
+                                                "background: qlineargradient(x1:0, y1:0, x2:1, y2:0, "
+                                                "stop:0 %1, stop:0.25 %2, stop:0.5 %3, stop:0.75 %4, stop:1 %5); }")
+                                            .arg(ui::colors::NEGATIVE(), ui::colors::AMBER(), ui::colors::WARNING(),
+                                                 ui::colors::POSITIVE_DIM(), ui::colors::POSITIVE()));
     if (fg_score_val_)
         fg_score_val_->setStyleSheet(QString("color: %1; font-size: 18px; font-weight: bold; background: transparent;")
                                          .arg(ui::colors::TEXT_SECONDARY()));
@@ -599,11 +596,9 @@ void MarketPulsePanel::update_mover_row(MoverRow& row, const services::QuoteData
     row.sym->setText(q.symbol);
     MarketChartDialog::set_target(row.container, q.symbol, q.name);
     row.arrow->setText(positive ? QChar(0x25B2) : QChar(0x25BC));
-    row.arrow->setStyleSheet(
-        QString("color: %1; font-size: 8px; background: transparent;").arg(col));
+    row.arrow->setStyleSheet(QString("color: %1; font-size: 8px; background: transparent;").arg(col));
     row.chg->setText(ui::formatting::format_percent(q.change_pct, 2, true));
-    row.chg->setStyleSheet(
-        QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(col));
+    row.chg->setStyleSheet(QString("color: %1; font-size: 10px; font-weight: bold; background: transparent;").arg(col));
     const QString volume = ui::formatting::format_compact_volume(q.volume);
     row.vol->setText(volume.isEmpty() ? QString() : QString("VOL: %1").arg(volume));
     row.container->show();
@@ -696,8 +691,8 @@ QWidget* MarketPulsePanel::build_global_snapshot_section() {
         StatRow& row;
     };
     RowDef defs[] = {
-        {"VIX", vix_row_},     {"US 10Y", us10y_row_}, {"DXY", dxy_row_},
-        {"GOLD", gold_row_},   {"OIL WTI", oil_row_},  {"BTC", btc_row_},
+        {"VIX", vix_row_},   {"US 10Y", us10y_row_}, {"DXY", dxy_row_},
+        {"GOLD", gold_row_}, {"OIL WTI", oil_row_},  {"BTC", btc_row_},
     };
 
     for (auto& d : defs) {
@@ -787,7 +782,8 @@ QWidget* MarketPulsePanel::build_market_hours_section() {
         const char* region;
     };
     ExDef exchanges[] = {
-        {"NYSE/NASDAQ", "US"}, {"LSE", "UK"}, {"XETRA (FRANKFURT)", "DE"}, {"TSE (TOKYO)", "JP"}, {"SSE (SHANGHAI)", "CN"},
+        {"NYSE/NASDAQ", "US"},    {"LSE", "UK"}, {"XETRA (FRANKFURT)", "DE"}, {"TSE (TOKYO)", "JP"},
+        {"SSE (SHANGHAI)", "CN"},
     };
 
     for (auto& ex : exchanges) {
@@ -850,7 +846,7 @@ QString MarketPulsePanel::market_status(const QString& region) {
 void MarketPulsePanel::refresh_market_hours() {
     for (auto& hr : hours_rows_) {
         QString status = market_status(hr.region);
-        QString color = (status == "OPEN")                      ? ui::colors::POSITIVE()
+        QString color = (status == "OPEN")                       ? ui::colors::POSITIVE()
                         : (status == "PRE" || status == "BREAK") ? ui::colors::WARNING()
                                                                  : ui::colors::NEGATIVE();
         hr.dot->setStyleSheet(QString("background: %1; border-radius: 2px;").arg(color));
@@ -859,7 +855,6 @@ void MarketPulsePanel::refresh_market_hours() {
             QString("color: %1; font-size: 8px; font-weight: bold; background: transparent;").arg(color));
     }
 }
-
 
 void MarketPulsePanel::rebuild_breadth_from_cache() {
     if (breadth_cache_.isEmpty())
@@ -878,7 +873,7 @@ void MarketPulsePanel::rebuild_breadth_from_cache() {
             continue;
         }
         if (!std::isfinite(q.change_pct))
-            continue;  // unknown change — not an advancer, decliner or "neutral"
+            continue; // unknown change — not an advancer, decliner or "neutral"
         if (q.change_pct > 0.3) {
             ++bullish;
         } else if (q.change_pct < -0.3) {
@@ -1073,7 +1068,6 @@ void MarketPulsePanel::hub_unsubscribe_all() {
     hub_active_ = false;
 }
 
-
 void MarketPulsePanel::refresh_data() {
     // Hub owns cadence. Force a kick so consumers see data immediately
     // (e.g., on theme-triggered refresh while visible).
@@ -1090,9 +1084,8 @@ void MarketPulsePanel::refresh_data() {
     };
     push(kBreadthSymbols);
     push(kSnapshotSymbols);
-    hub.request(topics, /*force=*/true);  // user-triggered refresh
+    hub.request(topics, /*force=*/true); // user-triggered refresh
     fetch_movers();
 }
 
 } // namespace fincept::screens
-

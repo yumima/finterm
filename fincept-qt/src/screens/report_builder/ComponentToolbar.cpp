@@ -14,7 +14,8 @@ ComponentToolbar::ComponentToolbar(QWidget* parent) : QWidget(parent) {
     // drive resize and the collapse animation can drive maximumWidth → 0.
     setMinimumWidth(0);
     setMaximumWidth(240);
-    setStyleSheet(QString("background: %1; border-right: 1px solid %2;").arg(ui::colors::PANEL(), ui::colors::BORDER()));
+    setStyleSheet(
+        QString("background: %1; border-right: 1px solid %2;").arg(ui::colors::PANEL(), ui::colors::BORDER()));
 
     // Wrap content in a scroll area so it doesn't clip on small displays
     auto* scroll = new QScrollArea(this);
@@ -158,11 +159,11 @@ ComponentToolbar::ComponentToolbar(QWidget* parent) : QWidget(parent) {
 
     structure_list_ = new QListWidget;
     structure_list_->setMinimumHeight(120);
-    structure_list_->setStyleSheet(
-        QString("QListWidget { background: %1; border: 1px solid %2; } "
-                "QListWidget::item { color: %3; padding: 3px; font-size: 11px; } "
-                "QListWidget::item:selected { background: %4; color: %5; }")
-            .arg(ui::colors::DARK(), ui::colors::BORDER(), ui::colors::GRAY(), ui::colors::BG_RAISED(), ui::colors::WHITE()));
+    structure_list_->setStyleSheet(QString("QListWidget { background: %1; border: 1px solid %2; } "
+                                           "QListWidget::item { color: %3; padding: 3px; font-size: 11px; } "
+                                           "QListWidget::item:selected { background: %4; color: %5; }")
+                                       .arg(ui::colors::DARK(), ui::colors::BORDER(), ui::colors::GRAY(),
+                                            ui::colors::BG_RAISED(), ui::colors::WHITE()));
     connect(structure_list_, &QListWidget::currentRowChanged, this, &ComponentToolbar::structure_selected);
     vl->addWidget(structure_list_, 1);
 
@@ -219,11 +220,11 @@ ComponentToolbar::ComponentToolbar(QWidget* parent) : QWidget(parent) {
 void ComponentToolbar::add_type_button(QVBoxLayout* layout, const QString& label, const QString& type) {
     auto* btn = new QPushButton(label);
     btn->setFixedHeight(26);
-    btn->setStyleSheet(
-        QString("QPushButton { background: %1; color: %2; border: 1px solid %3; "
-                "text-align: left; padding: 0 8px; font-size: 12px; }"
-                "QPushButton:hover { background: %4; color: %5; }")
-            .arg(ui::colors::DARK(), ui::colors::GRAY(), ui::colors::BORDER(), ui::colors::BG_RAISED(), ui::colors::WHITE()));
+    btn->setStyleSheet(QString("QPushButton { background: %1; color: %2; border: 1px solid %3; "
+                               "text-align: left; padding: 0 8px; font-size: 12px; }"
+                               "QPushButton:hover { background: %4; color: %5; }")
+                           .arg(ui::colors::DARK(), ui::colors::GRAY(), ui::colors::BORDER(), ui::colors::BG_RAISED(),
+                                ui::colors::WHITE()));
     connect(btn, &QPushButton::clicked, this, [this, type]() { emit add_component(type); });
     layout->addWidget(btn);
 }

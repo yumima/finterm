@@ -28,11 +28,11 @@
 namespace fincept::services {
 
 struct SkillProposal {
-    QString skill_name;        ///< extracted from trace config_json
-    QString skill_path;        ///< absolute path to the SKILL.md
-    QString original_content;  ///< the SKILL.md as it stands today
-    QString proposed_content;  ///< model's suggested replacement
-    QString rationale;         ///< model's one-paragraph reasoning
+    QString skill_name;       ///< extracted from trace config_json
+    QString skill_path;       ///< absolute path to the SKILL.md
+    QString original_content; ///< the SKILL.md as it stands today
+    QString proposed_content; ///< model's suggested replacement
+    QString rationale;        ///< model's one-paragraph reasoning
 };
 
 class SkillProposalService {
@@ -52,8 +52,7 @@ class SkillProposalService {
     ///   - SKILL.md path resolution failure
     ///   - file read failure
     ///   - LlmService not configured / API error
-    Result<SkillProposal> propose(const AgentTraceRow& trace,
-                                  const QString& user_note) const;
+    Result<SkillProposal> propose(const AgentTraceRow& trace, const QString& user_note) const;
 
     SkillProposalService(const SkillProposalService&) = delete;
     SkillProposalService& operator=(const SkillProposalService&) = delete;

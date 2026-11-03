@@ -37,31 +37,31 @@ enum class Pattern { Unclassified, Routine, Opportunistic };
 
 /// One line from a Form 4 table.
 struct InsiderTransaction {
-    QString   insider;      ///< reporting owner name as filed
-    QStringList roles;      ///< Director, officer title, 10% owner
-    QDate     date;         ///< transaction date, not the filing date
-    QDate     filed_date;
-    QString   code;         ///< SEC transaction code (P, S, A, M, F, …)
-    QString   code_label;   ///< human reading of the code
-    QString   security;     ///< "Common Stock", "Stock Option", …
-    bool      derivative = false;
+    QString insider;   ///< reporting owner name as filed
+    QStringList roles; ///< Director, officer title, 10% owner
+    QDate date;        ///< transaction date, not the filing date
+    QDate filed_date;
+    QString code;       ///< SEC transaction code (P, S, A, M, F, …)
+    QString code_label; ///< human reading of the code
+    QString security;   ///< "Common Stock", "Stock Option", …
+    bool derivative = false;
     /// True only for P and S. Everything else is compensation mechanics or
     /// administrative — a grant vesting is not a director deciding to buy, and
     /// mixing them is what makes naive insider screens useless.
-    bool      open_market = false;
-    bool      acquired = false;   ///< direction as filed (A vs D)
+    bool open_market = false;
+    bool acquired = false; ///< direction as filed (A vs D)
     /// A 10% beneficial owner is a holder, not an insider in the sense the
     /// evidence is about: their purchase ranking inverts (Lakonishok & Lee),
     /// so they are shown and never scored.
-    bool      ten_percent_owner = false;
+    bool ten_percent_owner = false;
     /// The filing's 10b5-1 checkbox. A plan trade was decided months before it
     /// printed. Absent on pre-2023 filings — unknown, which is not false.
     std::optional<bool> plan_10b5_1;
-    QString   source_url;         ///< the filing this row was read from
+    QString source_url; ///< the filing this row was read from
 
     std::optional<double> shares;
     std::optional<double> price;
-    std::optional<double> value;             ///< shares x price, when both filed
+    std::optional<double> value; ///< shares x price, when both filed
     std::optional<double> shares_held_after;
 
     /// What the stock did AFTER the trade, from the daily close on the trade
@@ -73,8 +73,7 @@ struct InsiderTransaction {
 
     /// A decision about price by someone whose decisions carry information.
     bool scorable_buy() const {
-        return open_market && acquired && !derivative && !ten_percent_owner &&
-               !plan_10b5_1.value_or(false);
+        return open_market && acquired && !derivative && !ten_percent_owner && !plan_10b5_1.value_or(false);
     }
 };
 
@@ -82,19 +81,19 @@ struct InsiderTransaction {
 struct InsiderProfile {
     QString insider;
     Pattern pattern = Pattern::Unclassified;
-    int     trades = 0;
-    int     trades_in_window = 0;
-    int     years_observed = 0;
-    int     routine_month = 0;     ///< 1-12 when pattern is Routine
-    QString reason;                ///< why unclassified, when it is
+    int trades = 0;
+    int trades_in_window = 0;
+    int years_observed = 0;
+    int routine_month = 0; ///< 1-12 when pattern is Routine
+    QString reason;        ///< why unclassified, when it is
 };
 
 /// A window in which two or more insiders bought on the open market.
 struct BuyCluster {
-    QDate       start;
-    QDate       end;
+    QDate start;
+    QDate end;
     QStringList insiders;
-    double      total_value = 0.0;
+    double total_value = 0.0;
 };
 
 /// A 5% beneficial-ownership filing.
@@ -104,12 +103,12 @@ struct BuyCluster {
 /// number that looks authoritative and is sometimes wrong. The document link
 /// is offered instead.
 struct BeneficialStake {
-    QString form;               ///< SC 13D, SC 13G, with /A for amendments
-    bool    activist = false;   ///< 13D declares intent to influence; 13G is passive
-    bool    amendment = false;
-    QDate   filed_date;
-    QString filer;              ///< who took the stake, from the submission header
-    bool    subject_verified = true;
+    QString form;          ///< SC 13D, SC 13G, with /A for amendments
+    bool activist = false; ///< 13D declares intent to influence; 13G is passive
+    bool amendment = false;
+    QDate filed_date;
+    QString filer; ///< who took the stake, from the submission header
+    bool subject_verified = true;
     QString url;
 };
 
@@ -123,15 +122,15 @@ struct Holder {
     QString tier;
     std::optional<double> shares;
     std::optional<double> value;
-    std::optional<double> weight;       ///< of the filer's disclosed equity book
+    std::optional<double> weight; ///< of the filer's disclosed equity book
     std::optional<double> book_total;
     int position_count = 0;
     /// "new", "added", "trimmed", "held", "first seen", or empty with one quarter.
     QString action;
     std::optional<double> shares_delta;
     std::optional<double> pct_change;
-    QString put_call;                   ///< "" for stock; PUT/CALL never counted as long
-    bool    is_derivative = false;
+    QString put_call; ///< "" for stock; PUT/CALL never counted as long
+    bool is_derivative = false;
     QString note;
 
     bool is_focused() const { return tier == QLatin1String("focused"); }
@@ -141,14 +140,14 @@ struct Holder {
 struct HoldersSummary {
     QDate quarter;
     QDate prior_quarter;
-    int   holder_count = 0;
-    int   option_holders = 0;
+    int holder_count = 0;
+    int option_holders = 0;
     double total_shares = 0.0;
     double total_value = 0.0;
-    int   buyers = 0;      ///< added shares vs the prior quarter
-    int   new_holders = 0; ///< filed last quarter, did not hold
-    int   sellers = 0;
-    int   exited = 0;      ///< held last quarter, filed this one, do not hold
+    int buyers = 0;      ///< added shares vs the prior quarter
+    int new_holders = 0; ///< filed last quarter, did not hold
+    int sellers = 0;
+    int exited = 0; ///< held last quarter, filed this one, do not hold
     double exited_shares = 0.0;
     /// Value share of the ten largest positions, over the filers that pass the
     /// book-size / position-count floors (min_book_value, min_book_positions).
@@ -156,11 +155,11 @@ struct HoldersSummary {
     /// Value share held by index and broad books — the part of the register
     /// that rebalances rather than decides.
     std::optional<double> broad_share;
-    QString sort;          ///< "value" or "weight" — which ranking the rows are in
-    double min_book_value = 0.0;  ///< filers with a smaller equity book are excluded
-    int    min_book_positions = 0; ///< filers with fewer stock positions are excluded
-    QDate partial_quarter; ///< a newer, incomplete quarter exists in the index
-    int   partial_filers = 0;
+    QString sort;                ///< "value" or "weight" — which ranking the rows are in
+    double min_book_value = 0.0; ///< filers with a smaller equity book are excluded
+    int min_book_positions = 0;  ///< filers with fewer stock positions are excluded
+    QDate partial_quarter;       ///< a newer, incomplete quarter exists in the index
+    int partial_filers = 0;
 
     /// 13F is due 45 days after the quarter it describes.
     QDate filed_by() const { return quarter.isValid() ? quarter.addDays(45) : QDate(); }
@@ -184,19 +183,19 @@ struct VendorFloat {
 
 /// One FINRA consolidated short-interest reading.
 struct ShortReading {
-    QDate  settlement;
-    QDate  published_after;   ///< roughly when FINRA made it public
+    QDate settlement;
+    QDate published_after; ///< roughly when FINRA made it public
     std::optional<double> shares_short;
     std::optional<double> prior;
     std::optional<double> avg_daily_volume;
     std::optional<double> days_to_cover;
-    std::optional<double> change_pct;   ///< vs the prior settlement
+    std::optional<double> change_pct; ///< vs the prior settlement
 };
 
 /// A symbol's readings, newest first.
 struct ShortHistory {
     QVector<ShortReading> rows;
-    QString source;   ///< "finra" or "local cache"
+    QString source; ///< "finra" or "local cache"
     QString error;
     bool has_data() const { return !rows.isEmpty(); }
     const ShortReading* latest() const { return rows.isEmpty() ? nullptr : &rows.first(); }
@@ -205,10 +204,10 @@ struct ShortHistory {
 /// Daily short-sale volume from FINRA — flow, not a position. Kept as one
 /// line: the trend of a symbol against its own recent range.
 struct ShortVolume {
-    QDate  as_of;
+    QDate as_of;
     double latest = 0.0;
     double avg_20 = 0.0;
-    int    days = 0;
+    int days = 0;
     QString error;
     bool has_data() const { return days > 0; }
 };
@@ -218,7 +217,7 @@ struct BookPosition {
     QString issuer;
     QString cusip;
     QString security_class;
-    QString ticker;    ///< from the index's CUSIP map; empty when unmapped
+    QString ticker; ///< from the index's CUSIP map; empty when unmapped
     std::optional<double> shares;
     std::optional<double> value;
     std::optional<double> weight;
@@ -257,8 +256,7 @@ inline std::optional<double> close_on_or_before(const QJsonArray& series, const 
 }
 
 /// The same lookup for several dates in ONE pass over the series.
-inline QVector<std::optional<double>> closes_on_or_before(const QJsonArray& series,
-                                                         const QVector<QDate>& on) {
+inline QVector<std::optional<double>> closes_on_or_before(const QJsonArray& series, const QVector<QDate>& on) {
     QVector<std::optional<double>> best(on.size());
     QVector<QDate> best_date(on.size());
     for (const auto& v : series) {
@@ -290,13 +288,13 @@ inline constexpr double kMinReturnCoverage = 0.5;
 struct ManagerBook {
     QString manager;
     QString cik;
-    QDate   period;
-    QDate   prior_period;
-    double  total_value = 0.0;
-    int     position_count = 0;
+    QDate period;
+    QDate prior_period;
+    double total_value = 0.0;
+    int position_count = 0;
     std::optional<double> book_return_since_quarter_end;
     std::optional<double> book_return_3m;
-    double  return_coverage = 0.0;
+    double return_coverage = 0.0;
     QString return_error;
     QVector<BookPosition> positions;
     QVector<BookPosition> exits;
@@ -307,8 +305,8 @@ struct ManagerBook {
 struct Manager {
     QString name;
     QString cik;
-    double  book_value = 0.0;
-    int     position_count = 0;
+    double book_value = 0.0;
+    int position_count = 0;
 };
 
 /// Everything the per-stock tab shows for one symbol, plus what it could not.
@@ -319,41 +317,40 @@ struct OwnershipSnapshot {
 
     // ── Form 4 and 13D/G, from EDGAR ────────────────────────────────────────
     QVector<InsiderTransaction> transactions;
-    QVector<InsiderProfile>     insiders;
-    QVector<BeneficialStake>    stakes;
-    int  filings_found = 0;
-    int  filings_parsed = 0;
-    int  filings_truncated = 0;
-    int  insider_rows_filed_as_owner = 0;
+    QVector<InsiderProfile> insiders;
+    QVector<BeneficialStake> stakes;
+    int filings_found = 0;
+    int filings_parsed = 0;
+    int filings_truncated = 0;
+    int insider_rows_filed_as_owner = 0;
     QStringList insider_other_issuers;
-    int  stakes_filed_by_this_cik = 0;
-    int  stakes_unverified = 0;
-    int  stakes_truncated = 0;
-    int  window_months = 0;
-    bool    edgar_ok = false;
+    int stakes_filed_by_this_cik = 0;
+    int stakes_unverified = 0;
+    int stakes_truncated = 0;
+    int window_months = 0;
+    bool edgar_ok = false;
     QString edgar_error;
-    bool    returns_ok = false;   ///< forward returns on the Form 4 rows landed
+    bool returns_ok = false; ///< forward returns on the Form 4 rows landed
 
     // ── 13F holders, from the local index ───────────────────────────────────
-    QVector<Holder> holders;      ///< the display slice, in summary.sort order
-    HoldersSummary  summary;
-    bool    holders_ok = false;
+    QVector<Holder> holders; ///< the display slice, in summary.sort order
+    HoldersSummary summary;
+    bool holders_ok = false;
     QString holders_error;
 
     // ── Vendor share count and FINRA short interest ─────────────────────────
-    VendorFloat  vendor;
-    bool    market_ok = false;
+    VendorFloat vendor;
+    bool market_ok = false;
     QString market_error;
     ShortHistory short_history;
-    ShortVolume  short_volume;
+    ShortVolume short_volume;
     /// Where SI ÷ 13F shares sits across the ranked universe, when the
     /// market-wide ranking has been computed for the same settlement date.
     std::optional<double> sirio_percentile;
     int sirio_universe = 0;
 
     bool has_any() const {
-        return !transactions.isEmpty() || !stakes.isEmpty() || !holders.isEmpty() ||
-               short_history.has_data();
+        return !transactions.isEmpty() || !stakes.isEmpty() || !holders.isEmpty() || short_history.has_data();
     }
 };
 
@@ -363,40 +360,40 @@ struct OwnershipSnapshot {
 struct InsiderBuyRow {
     QString symbol;
     QString issuer;
-    int     insiders = 0;   ///< distinct buyers — the cluster, stated as a count
-    int     trades = 0;
-    double  value = 0.0;
-    double  shares = 0.0;
+    int insiders = 0; ///< distinct buyers — the cluster, stated as a count
+    int trades = 0;
+    double value = 0.0;
+    double shares = 0.0;
     std::optional<double> avg_price;
-    QDate   first_trade;
-    QDate   last_trade;
-    QDate   last_filed;
+    QDate first_trade;
+    QDate last_trade;
+    QDate last_filed;
     QStringList roles;
-    std::optional<double> stake_increase;   ///< shares bought / shares held before
-    bool    any_plan = false;
-    bool    any_ten_pct = false;
-    int     plan_unknown = 0;   ///< rows read before the 10b5-1 column existed
+    std::optional<double> stake_increase; ///< shares bought / shares held before
+    bool any_plan = false;
+    bool any_ten_pct = false;
+    int plan_unknown = 0; ///< rows read before the 10b5-1 column existed
     std::optional<double> ret_1w;
     std::optional<double> ret_1m;
 };
 
 struct InsiderBuyQuery {
-    int    days = 30;
-    int    min_insiders = 2;
+    int days = 30;
+    int min_insiders = 2;
     double min_value = 25'000.0;
-    bool   exclude_ten_pct = true;
-    bool   exclude_plan = true;
+    bool exclude_ten_pct = true;
+    bool exclude_plan = true;
 };
 
 struct InsiderBuys {
     InsiderBuyQuery query;
     QVector<InsiderBuyRow> rows;
-    int   days_scanned = 0;
-    int   days_wanted = 0;
+    int days_scanned = 0;
+    int days_wanted = 0;
     QDate last_scanned;
-    bool  returns_ok = false;
+    bool returns_ok = false;
     QString error;
-    bool  loaded = false;
+    bool loaded = false;
 };
 
 /// One symbol on one FINRA settlement date, joined to its 13F shares.
@@ -410,49 +407,49 @@ struct ShortRankRow {
     std::optional<double> change_pct;
     std::optional<double> inst_shares;
     int holders = 0;
-    std::optional<double> sirio;   ///< short interest ÷ 13F institutional shares
+    std::optional<double> sirio; ///< short interest ÷ 13F institutional shares
 };
 
 struct ShortRank {
-    QDate  settlement;
-    QDate  published_after;
-    QDate  quarter;          ///< the 13F quarter the denominator came from
-    int    symbols = 0;
-    int    joined = 0;
-    int    funds_dropped = 0;
+    QDate settlement;
+    QDate published_after;
+    QDate quarter; ///< the 13F quarter the denominator came from
+    int symbols = 0;
+    int joined = 0;
+    int funds_dropped = 0;
     QString sort;
     QVector<ShortRankRow> rows;
-    QVector<double> sirio_deciles;   ///< 10th..90th percentile cut points
+    QVector<double> sirio_deciles; ///< 10th..90th percentile cut points
     QString error;
-    bool   loaded = false;
+    bool loaded = false;
 };
 
 /// One security's holder-base change between the two indexed quarters.
 struct MoverRow {
     QString ticker;
     QString name;
-    bool    fund = false;
-    int     holders = 0;
-    int     holders_prior = 0;
-    int     delta_holders = 0;
-    int     new_holders = 0;
-    int     closed = 0;
-    int     added = 0;
-    int     reduced = 0;
-    double  shares = 0.0;
-    double  value = 0.0;
-    int     focused_holders = 0;
+    bool fund = false;
+    int holders = 0;
+    int holders_prior = 0;
+    int delta_holders = 0;
+    int new_holders = 0;
+    int closed = 0;
+    int added = 0;
+    int reduced = 0;
+    double shares = 0.0;
+    double value = 0.0;
+    int focused_holders = 0;
     std::optional<double> focused_net_shares;
     std::optional<double> top10_share;
 };
 
 struct Movers {
-    QDate   quarter;
-    QDate   prior_quarter;
+    QDate quarter;
+    QDate prior_quarter;
     QString sort;
     QVector<MoverRow> rows;
     QString error;
-    bool    loaded = false;
+    bool loaded = false;
 };
 
 /// The largest 13F filers and what each did since its previous filing.
@@ -464,37 +461,37 @@ struct Movers {
 struct FirmMoveTop {
     QString issuer;
     QString ticker;
-    double  value = 0.0;   // signed dollar flow
+    double value = 0.0; // signed dollar flow
 };
 
 struct TopFirm {
     QString cik;
     QString manager;
-    QDate   quarter;
-    double  book_value = 0.0;
-    int     position_count = 0;
+    QDate quarter;
+    double book_value = 0.0;
+    int position_count = 0;
     // Unset for a first filing (a new or restructured filer): nothing to
     // compare against, which is not the same as "no change".
-    std::optional<QDate>  prior_quarter;
+    std::optional<QDate> prior_quarter;
     std::optional<double> prior_book_value;
-    bool    has_moves = false;
-    int     new_positions = 0;
-    int     added = 0;
-    int     trimmed = 0;
-    int     held = 0;
-    int     exited = 0;
-    double  bought_value = 0.0;
-    double  sold_value = 0.0;
+    bool has_moves = false;
+    int new_positions = 0;
+    int added = 0;
+    int trimmed = 0;
+    int held = 0;
+    int exited = 0;
+    double bought_value = 0.0;
+    double sold_value = 0.0;
     std::optional<FirmMoveTop> top_buy;
     std::optional<FirmMoveTop> top_sell;
 };
 
 struct TopFirms {
     QVector<TopFirm> firms;
-    QDate   newest_quarter;
+    QDate newest_quarter;
     QStringList partial_quarters;
     QString error;
-    bool    loaded = false;
+    bool loaded = false;
 };
 
 // ── Where ownership reaches the reader: watchlist rows, alerts, a calendar ──
@@ -502,8 +499,8 @@ struct TopFirms {
 /// One watchlist line, from the three local stores. Absent fields mean the
 /// store has never seen the symbol — never zero.
 struct WatchRow {
-    std::optional<int>    holders;
-    std::optional<int>    delta_holders;
+    std::optional<int> holders;
+    std::optional<int> delta_holders;
     std::optional<double> top10_share;
     std::optional<double> shares_short;
     std::optional<double> days_to_cover;
@@ -513,38 +510,38 @@ struct WatchRow {
     /// store has read a day inside the window — "0" is a fact only about
     /// filings somebody has looked at.
     std::optional<int> insider_buys;
-    int    insider_buyers = 0;
+    int insider_buyers = 0;
     double insider_buy_value = 0.0;
-    QDate  last_insider_buy;
+    QDate last_insider_buy;
 };
 
 struct WatchRows {
     QHash<QString, WatchRow> rows;
-    QDate quarter;            ///< 13F quarter the holder figures describe
-    QDate settlement;         ///< FINRA settlement the short figures describe
+    QDate quarter;    ///< 13F quarter the holder figures describe
+    QDate settlement; ///< FINRA settlement the short figures describe
     QDate published_after;
     QDate form4_scanned_to;
-    int   days = 30;
+    int days = 30;
     QString error;
-    bool  loaded = false;
+    bool loaded = false;
 };
 
 /// A dated event that moves the numbers on the ownership screens.
 struct CalendarEntry {
     enum class Kind { Form13FDeadline, FinraPublication, LockupExpiry };
-    Kind    kind = Kind::Form13FDeadline;
-    QDate   date;             ///< the day the reader is waiting for
-    QDate   basis;            ///< quarter end / settlement date / pricing date
-    QString symbol;           ///< lock-ups only
+    Kind kind = Kind::Form13FDeadline;
+    QDate date;     ///< the day the reader is waiting for
+    QDate basis;    ///< quarter end / settlement date / pricing date
+    QString symbol; ///< lock-ups only
     QString company;
 };
 
 struct OwnershipCalendar {
     QDate as_of;
-    int   days = 90;
-    QVector<CalendarEntry> entries;   ///< by date, soonest first
+    int days = 90;
+    QVector<CalendarEntry> entries; ///< by date, soonest first
     QString error;
-    bool  loaded = false;
+    bool loaded = false;
 };
 
 } // namespace fincept::ownership

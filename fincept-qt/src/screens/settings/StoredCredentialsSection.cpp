@@ -83,8 +83,8 @@ StoredCredentialsSection::StoredCredentialsSection(QWidget* parent) : QWidget(pa
     vl->addWidget(title_);
     vl->addSpacing(8);
     info_ = new QLabel(tr("Everything finterm keeps in your OS keyring for this profile, in one place. "
-                               "Values are never shown here — each group names the screen that edits it. "
-                               "Nothing listed here leaves this computer."));
+                          "Values are never shown here — each group names the screen that edits it. "
+                          "Nothing listed here leaves this computer."));
     info_->setWordWrap(true);
     vl->addWidget(info_);
     vl->addSpacing(10);
@@ -164,19 +164,20 @@ void StoredCredentialsSection::reload() {
             const QString shown = (!me_prefix.isEmpty() && key.startsWith(me_prefix)) ? key.mid(me_prefix.size()) : key;
             auto* name = new QLabel(shown);
             name->setTextInteractionFlags(Qt::TextSelectableByMouse);
-            name->setStyleSheet(QString("color:%1;background:transparent;border:none;").arg(ui::colors::TEXT_PRIMARY()));
+            name->setStyleSheet(
+                QString("color:%1;background:transparent;border:none;").arg(ui::colors::TEXT_PRIMARY()));
             row->addWidget(name, 1);
             if (cat.removable) {
                 auto* rm = new QPushButton(tr("Remove"));
                 rm->setStyleSheet(settings_style::btn_danger_ss());
                 connect(rm, &QPushButton::clicked, this, [this, key]() {
-                    if (QMessageBox::question(this, tr("Remove credential"),
-                                              tr("Remove \"%1\" from this computer's keyring?").arg(key),
-                                              QMessageBox::Yes | QMessageBox::Cancel,
-                                              QMessageBox::Cancel) != QMessageBox::Yes)
+                    if (QMessageBox::question(
+                            this, tr("Remove credential"), tr("Remove \"%1\" from this computer's keyring?").arg(key),
+                            QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel) != QMessageBox::Yes)
                         return;
                     if (SecureStorage::instance().remove(key).is_err()) {
-                        QMessageBox::warning(this, tr("Remove credential"), tr("The keyring refused — is it unlocked?"));
+                        QMessageBox::warning(this, tr("Remove credential"),
+                                             tr("The keyring refused — is it unlocked?"));
                         return;
                     }
                     LOG_INFO("Credentials", "Removed stored credential: " + key);

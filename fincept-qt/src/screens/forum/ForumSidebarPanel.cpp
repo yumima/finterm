@@ -292,7 +292,8 @@ void ForumSidebarPanel::build_ui() {
 
     auto* ph = new QLabel("  loading...");
     ph->setFixedHeight(28);
-    ph->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(10)));
+    ph->setStyleSheet(
+        QString("color:%1;font-size:12px;background:transparent;%2").arg(ui::colors::TEXT_SECONDARY(), M(10)));
     contrib_layout_->addWidget(ph);
     body_vl->addWidget(contrib_container_);
 

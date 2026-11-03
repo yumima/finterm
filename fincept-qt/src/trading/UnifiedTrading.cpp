@@ -197,7 +197,7 @@ UnifiedOrderResponse UnifiedTrading::cancel_order(const QString& account_id, con
 }
 
 UnifiedOrderResponse UnifiedTrading::modify_order(const QString& account_id, const QString& order_id,
-                                                   const QJsonObject& modifications) {
+                                                  const QJsonObject& modifications) {
     auto account = AccountManager::instance().get_account(account_id);
     if (account.account_id.isEmpty())
         return {false, "", "Account not found: " + account_id, ""};
@@ -215,7 +215,7 @@ UnifiedOrderResponse UnifiedTrading::modify_order(const QString& account_id, con
 }
 
 UnifiedOrderResponse UnifiedTrading::place_paper_order_for_account(const QString& account_id,
-                                                                    const UnifiedOrder& order) {
+                                                                   const UnifiedOrder& order) {
     auto account = AccountManager::instance().get_account(account_id);
     if (account.paper_portfolio_id.isEmpty())
         return {false, "", "No paper portfolio for this account", "paper"};
@@ -248,7 +248,7 @@ UnifiedOrderResponse UnifiedTrading::place_paper_order_for_account(const QString
 }
 
 UnifiedOrderResponse UnifiedTrading::place_live_order_for_account(const QString& account_id,
-                                                                   const UnifiedOrder& order) {
+                                                                  const UnifiedOrder& order) {
     auto account = AccountManager::instance().get_account(account_id);
     auto* broker = BrokerRegistry::instance().get(account.broker_id);
     if (!broker)

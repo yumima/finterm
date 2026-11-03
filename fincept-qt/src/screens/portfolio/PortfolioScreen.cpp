@@ -4,22 +4,22 @@
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolRef.h"
-#include "services/app_context/AppContextService.h"
-#include "screens/portfolio/PortfolioInsightsPanel.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/portfolio/PortfolioBlotter.h"
 #include "screens/portfolio/PortfolioCommandBar.h"
 #include "screens/portfolio/PortfolioDetailWrapper.h"
 #include "screens/portfolio/PortfolioDialogs.h"
 #include "screens/portfolio/PortfolioFFNView.h"
 #include "screens/portfolio/PortfolioHeatmap.h"
+#include "screens/portfolio/PortfolioInsightsPanel.h"
 #include "screens/portfolio/PortfolioOrderPanel.h"
 #include "screens/portfolio/PortfolioPerfChart.h"
 #include "screens/portfolio/PortfolioSectorPanel.h"
 #include "screens/portfolio/PortfolioStatsRibbon.h"
 #include "screens/portfolio/PortfolioStatusBar.h"
 #include "screens/portfolio/PortfolioTxnPanel.h"
-#include "datahub/DataHub.h"
-#include "datahub/DataHubMetaTypes.h"
+#include "services/app_context/AppContextService.h"
 #include "services/file_manager/FileManagerService.h"
 #include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioService.h"
@@ -120,8 +120,8 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
                 // Benchmark overlay path — only the portfolio's currency
                 // benchmark (SPY for USD, ^GSPTSE for CAD, etc.) drives the
                 // overlay label and currency-normalisation logic.
-                const QString want = services::PortfolioService::default_benchmark_for_currency(
-                    current_summary_.portfolio.currency);
+                const QString want =
+                    services::PortfolioService::default_benchmark_for_currency(current_summary_.portfolio.currency);
                 if (symbol != want)
                     return; // ignore secondary fetches (focus symbol, SPY-for-Beta)
                 perf_chart_->set_benchmark_history(symbol, dates, closes);
@@ -139,13 +139,12 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
     });
     // After yfinance backfill lands, refresh snapshots and metrics so Beta/MDD
     // populate without requiring a manual refresh.
-    connect(&svc, &services::PortfolioService::history_backfilled, this,
-            [this](QString portfolio_id, int point_count) {
-                if (point_count <= 0 || !summary_loaded_ || portfolio_id != selected_id_)
-                    return;
-                services::PortfolioService::instance().load_snapshots(portfolio_id);
-                services::PortfolioService::instance().compute_metrics(current_summary_);
-            });
+    connect(&svc, &services::PortfolioService::history_backfilled, this, [this](QString portfolio_id, int point_count) {
+        if (point_count <= 0 || !summary_loaded_ || portfolio_id != selected_id_)
+            return;
+        services::PortfolioService::instance().load_snapshots(portfolio_id);
+        services::PortfolioService::instance().compute_metrics(current_summary_);
+    });
 
     // Restore persisted refresh interval (P17)
     {
@@ -162,8 +161,7 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(refresh_interval_ms_);
     // Timer ticks → background polling; don't bypass the cache (let TTL govern).
-    connect(refresh_timer_, &QTimer::timeout, this,
-            [this]() { request_refresh(/*force_fresh=*/false); });
+    connect(refresh_timer_, &QTimer::timeout, this, [this]() { request_refresh(/*force_fresh=*/false); });
     command_bar_->set_refresh_interval(refresh_interval_ms_);
 
     // DataHub debounce: collapses a burst of per-symbol quote arrivals
@@ -172,8 +170,7 @@ PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
     hub_refresh_timer_ = new QTimer(this);
     hub_refresh_timer_->setSingleShot(true);
     hub_refresh_timer_->setInterval(200);
-    connect(hub_refresh_timer_, &QTimer::timeout, this,
-            &PortfolioScreen::rebuild_summary_aggregates_and_refresh);
+    connect(hub_refresh_timer_, &QTimer::timeout, this, &PortfolioScreen::rebuild_summary_aggregates_and_refresh);
 
     // Load portfolios
     svc.load_portfolios();
@@ -334,9 +331,7 @@ void PortfolioScreen::build_ui() {
     insights_scrim_->hide();
 
     insights_panel_ = new PortfolioInsightsPanel(this);
-    connect(insights_panel_, &PortfolioInsightsPanel::close_requested, this, [this]() {
-        insights_scrim_->hide();
-    });
+    connect(insights_panel_, &PortfolioInsightsPanel::close_requested, this, [this]() { insights_scrim_->hide(); });
 
     // Wire export/import/AI/Agent signals from CommandBar
     connect(command_bar_, &PortfolioCommandBar::export_csv_requested, this, [this]() {
@@ -388,9 +383,8 @@ void PortfolioScreen::build_ui() {
     connect(&services::PortfolioService::instance(), &services::PortfolioService::import_complete, this,
             [this](portfolio::ImportResult result) {
                 if (result.portfolio_id.isEmpty()) {
-                    QString detail = result.errors.isEmpty()
-                                         ? QString("Import failed with no details.")
-                                         : result.errors.join("\n");
+                    QString detail =
+                        result.errors.isEmpty() ? QString("Import failed with no details.") : result.errors.join("\n");
                     QMessageBox::warning(this, "Portfolio Import Failed",
                                          "Could not import the portfolio.\n\n" + detail +
                                              "\n\nExpected format:\n"
@@ -833,8 +827,7 @@ void PortfolioScreen::on_summary_loaded(portfolio::PortfolioSummary summary) {
     // marshalling and signal dispatch on every refresh tick.
     {
         auto& svc = services::PortfolioService::instance();
-        const QString bench = services::PortfolioService::default_benchmark_for_currency(
-            summary.portfolio.currency);
+        const QString bench = services::PortfolioService::default_benchmark_for_currency(summary.portfolio.currency);
         if (!fetched_benchmarks_.contains(bench)) {
             fetched_benchmarks_.insert(bench);
             svc.fetch_benchmark_history(bench, "1y");
@@ -881,8 +874,7 @@ void PortfolioScreen::on_snapshots_loaded(QString portfolio_id, QVector<portfoli
         const auto txns = services::PortfolioService::instance().all_transactions(portfolio_id, &txns_ok);
         if (txns_ok)
             perf_chart_->set_history(
-                snapshots, txns,
-                services::PortfolioService::instance().fx_rates_for(portfolio_id, current_summary_));
+                snapshots, txns, services::PortfolioService::instance().fx_rates_for(portfolio_id, current_summary_));
         else
             LOG_WARN("PortfolioScreen", "Keeping the previous chart history — transaction log read failed");
     }
@@ -1057,15 +1049,14 @@ void PortfolioScreen::hub_resubscribe_holdings() {
                 if (h.fx_known) {
                     h.market_value = h.quantity * h.current_price * h.fx_rate;
                     h.unrealized_pnl = h.market_value - h.cost_basis;
-                    h.unrealized_pnl_percent = (h.cost_basis > 0)
-                        ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
+                    h.unrealized_pnl_percent = (h.cost_basis > 0) ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
                 } else {
                     // No conversion: portfolio-currency figures stay unknown,
                     // P&L % is currency-free (see HoldingWithQuote::fx_known).
                     h.market_value = 0;
                     h.unrealized_pnl = std::numeric_limits<double>::quiet_NaN();
-                    h.unrealized_pnl_percent = h.avg_buy_price > 0
-                        ? (h.current_price / h.avg_buy_price - 1.0) * 100.0 : 0;
+                    h.unrealized_pnl_percent =
+                        h.avg_buy_price > 0 ? (h.current_price / h.avg_buy_price - 1.0) * 100.0 : 0;
                 }
                 // Live price moved — re-derive the drop from the peak (and let
                 // a new high raise the peak).
@@ -1108,8 +1099,7 @@ void PortfolioScreen::rebuild_summary_aggregates_and_refresh() {
     current_summary_.fx_unknown_symbols.clear();
     for (const auto& h : current_summary_.holdings) {
         if (!h.valued()) {
-            (h.price_known ? current_summary_.fx_unknown_symbols : current_summary_.unpriced_symbols)
-                .append(h.symbol);
+            (h.price_known ? current_summary_.fx_unknown_symbols : current_summary_.unpriced_symbols).append(h.symbol);
             current_summary_.day_change_unknown_symbols.append(h.symbol);
             continue;
         }
@@ -1123,7 +1113,10 @@ void PortfolioScreen::rebuild_summary_aggregates_and_refresh() {
         } else {
             current_summary_.day_change_unknown_symbols.append(h.symbol);
         }
-        if (h.unrealized_pnl >= 0) ++gainers; else ++losers;
+        if (h.unrealized_pnl >= 0)
+            ++gainers;
+        else
+            ++losers;
     }
     for (auto& h : current_summary_.holdings)
         h.weight = (total_mv > 0) ? (h.market_value / total_mv) * 100.0 : 0;
@@ -1131,11 +1124,11 @@ void PortfolioScreen::rebuild_summary_aggregates_and_refresh() {
     current_summary_.total_market_value = total_mv;
     current_summary_.total_cost_basis = total_cost;
     current_summary_.total_unrealized_pnl = total_mv - total_cost;
-    current_summary_.total_unrealized_pnl_percent = (total_cost > 0)
-        ? ((total_mv - total_cost) / total_cost) * 100.0 : 0;
+    current_summary_.total_unrealized_pnl_percent =
+        (total_cost > 0) ? ((total_mv - total_cost) / total_cost) * 100.0 : 0;
     current_summary_.total_day_change = total_day;
-    current_summary_.total_day_change_percent = (day_base - total_day > 0)
-        ? (total_day / (day_base - total_day)) * 100.0 : 0;
+    current_summary_.total_day_change_percent =
+        (day_base - total_day > 0) ? (total_day / (day_base - total_day)) * 100.0 : 0;
     current_summary_.gainers = gainers;
     current_summary_.losers = losers;
     current_summary_.last_updated = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
@@ -1164,8 +1157,10 @@ QWidget* PortfolioScreen::build_main_view() {
     // dependent panels to portfolio-level (whole-NAV) view.
     connect(heatmap_, &PortfolioHeatmap::portfolio_view_requested, this, [this]() {
         selected_symbol_.clear();
-        if (perf_chart_) perf_chart_->clear_focus_symbol();
-        if (blotter_)    blotter_->set_selected_symbol({});
+        if (perf_chart_)
+            perf_chart_->clear_focus_symbol();
+        if (blotter_)
+            blotter_->set_selected_symbol({});
     });
     h_layout->addWidget(heatmap_);
 
@@ -1184,12 +1179,11 @@ QWidget* PortfolioScreen::build_main_view() {
     // Trigger backfill when the user clicks a period that needs more history
     // than we have cached. PortfolioService re-emits history_backfilled when
     // done, which routes back through the chart via load_snapshots.
-    connect(perf_chart_, &PortfolioPerfChart::backfill_period_requested, this,
-            [this](const QString& period) {
-                if (selected_id_.isEmpty())
-                    return;
-                services::PortfolioService::instance().backfill_history(selected_id_, period);
-            });
+    connect(perf_chart_, &PortfolioPerfChart::backfill_period_requested, this, [this](const QString& period) {
+        if (selected_id_.isEmpty())
+            return;
+        services::PortfolioService::instance().backfill_history(selected_id_, period);
+    });
     // Per-symbol focus: refetch daily closes when the user picks a row or
     // changes the period in focus mode.
     connect(perf_chart_, &PortfolioPerfChart::focus_symbol_period_requested, this,
@@ -1201,8 +1195,7 @@ QWidget* PortfolioScreen::build_main_view() {
     // interval; aggregate 1D passes an empty symbol and the service
     // ignores the period/interval (it only fans out 1d/1m).
     connect(perf_chart_, &PortfolioPerfChart::intraday_requested, this,
-            [this](const QString& symbol, const QString& period,
-                   const QString& interval) {
+            [this](const QString& symbol, const QString& period, const QString& interval) {
                 auto& svc = services::PortfolioService::instance();
                 if (!symbol.isEmpty()) {
                     svc.fetch_symbol_intraday(symbol, period, interval);
@@ -1210,13 +1203,12 @@ QWidget* PortfolioScreen::build_main_view() {
                     svc.fetch_portfolio_intraday(selected_id_);
                 }
             });
-    connect(&services::PortfolioService::instance(),
-            &services::PortfolioService::symbol_intraday_loaded,
-            perf_chart_, &PortfolioPerfChart::set_symbol_intraday);
-    connect(&services::PortfolioService::instance(),
-            &services::PortfolioService::portfolio_intraday_loaded, perf_chart_,
-            [this](const QString& portfolio_id, const QVector<qint64>& ts,
-                   const QVector<double>& navs, const QString& unavailable_reason) {
+    connect(&services::PortfolioService::instance(), &services::PortfolioService::symbol_intraday_loaded, perf_chart_,
+            &PortfolioPerfChart::set_symbol_intraday);
+    connect(&services::PortfolioService::instance(), &services::PortfolioService::portfolio_intraday_loaded,
+            perf_chart_,
+            [this](const QString& portfolio_id, const QVector<qint64>& ts, const QVector<double>& navs,
+                   const QString& unavailable_reason) {
                 // Discard stale fetches if the user switched portfolios mid-flight.
                 if (portfolio_id == selected_id_)
                     perf_chart_->set_portfolio_intraday(ts, navs, unavailable_reason);
@@ -1272,8 +1264,9 @@ QWidget* PortfolioScreen::build_main_view() {
     header_hl->addWidget(title_tick);
 
     auto* title = new QLabel("POSITIONS");
-    title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.2px; background:transparent;")
-                             .arg(ui::colors::TEXT_PRIMARY()));
+    title->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:1.2px; background:transparent;")
+            .arg(ui::colors::TEXT_PRIMARY()));
     header_hl->addWidget(title);
 
     // Count badge
@@ -1294,10 +1287,9 @@ QWidget* PortfolioScreen::build_main_view() {
     filter_wrap->setFixedHeight(22);
     filter_wrap->setMinimumWidth(200);
     filter_wrap->setObjectName("pfFilterWrap");
-    filter_wrap->setStyleSheet(
-        QString("#pfFilterWrap { background:%1; border:1px solid %2; border-radius:2px; }"
-                "#pfFilterWrap:focus-within { border-color:%3; }")
-            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+    filter_wrap->setStyleSheet(QString("#pfFilterWrap { background:%1; border:1px solid %2; border-radius:2px; }"
+                                       "#pfFilterWrap:focus-within { border-color:%3; }")
+                                   .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), ui::colors::AMBER()));
     auto* filter_hl = new QHBoxLayout(filter_wrap);
     filter_hl->setContentsMargins(8, 0, 8, 0);
     filter_hl->setSpacing(6);
@@ -1309,10 +1301,11 @@ QWidget* PortfolioScreen::build_main_view() {
 
     auto* filter_edit = new QLineEdit;
     filter_edit->setPlaceholderText("Filter positions…");
-    filter_edit->setStyleSheet(QString("QLineEdit { background:transparent; color:%1; border:none;"
-                                       "  font-size:12px; font-family:%2; }"
-                                       "QLineEdit:focus { color:%3; }")
-                                   .arg(ui::colors::TEXT_SECONDARY(), ui::fonts::DATA_FAMILY, ui::colors::TEXT_PRIMARY()));
+    filter_edit->setStyleSheet(
+        QString("QLineEdit { background:transparent; color:%1; border:none;"
+                "  font-size:12px; font-family:%2; }"
+                "QLineEdit:focus { color:%3; }")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::fonts::DATA_FAMILY, ui::colors::TEXT_PRIMARY()));
     filter_hl->addWidget(filter_edit, 1);
 
     header_hl->addWidget(filter_wrap);
@@ -1347,9 +1340,9 @@ QWidget* PortfolioScreen::build_main_view() {
             }
         }
         if (!match) {
-            QMessageBox::information(this, "Edit Transaction",
-                                     QString("No BUY transaction recorded for %1, so there is no cost lot to edit.")
-                                         .arg(symbol));
+            QMessageBox::information(
+                this, "Edit Transaction",
+                QString("No BUY transaction recorded for %1, so there is no cost lot to edit.").arg(symbol));
             return;
         }
 
@@ -1422,7 +1415,7 @@ QWidget* PortfolioScreen::build_main_view() {
     connect(order_panel_, &PortfolioOrderPanel::close_requested, this, &PortfolioScreen::on_order_panel_close);
     connect(order_panel_, &PortfolioOrderPanel::buy_submitted, this, [this]() {
         AddAssetDialog dlg(this, pending_buy_symbol_);
-        pending_buy_symbol_.clear();  // one-shot prefill
+        pending_buy_symbol_.clear(); // one-shot prefill
         if (dlg.exec() == QDialog::Accepted) {
             services::PortfolioService::instance().add_asset(selected_id_, dlg.symbol(), dlg.quantity(), dlg.price());
         }
@@ -1443,8 +1436,7 @@ QWidget* PortfolioScreen::build_main_view() {
         }
         SellAssetDialog dlg(current_summary_.holdings, selected_symbol_, this);
         if (dlg.exec() == QDialog::Accepted) {
-            services::PortfolioService::instance().sell_asset(selected_id_, dlg.symbol(), dlg.quantity(),
-                                                              dlg.price());
+            services::PortfolioService::instance().sell_asset(selected_id_, dlg.symbol(), dlg.quantity(), dlg.price());
         }
     });
 
@@ -1519,8 +1511,7 @@ void PortfolioScreen::on_symbol_selected(const QString& symbol) {
     // Publish to the linked group so other panels (Equity Research, Watchlist
     // …) follow the selection. Only when actually linked.
     if (link_group_ != SymbolGroup::None && !symbol.isEmpty()) {
-        SymbolContext::instance().set_group_symbol(
-            link_group_, SymbolRef::equity(symbol), this);
+        SymbolContext::instance().set_group_symbol(link_group_, SymbolRef::equity(symbol), this);
     }
 }
 

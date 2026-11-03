@@ -164,9 +164,13 @@ TokenExchangeResponse IBKRBroker::exchange_token(const QString& api_key, const Q
     QJsonObject obj = doc.object();
     bool authenticated = obj.value("authenticated").toBool();
     if (!authenticated) {
-        return {false, "", "", "",
+        return {false,
+                "",
+                "",
+                "",
                 "Gateway is running but not authenticated. "
-                "Please log in via the gateway browser interface first.", ""};
+                "Please log in via the gateway browser interface first.",
+                ""};
     }
 
     // Store gateway URL as "access_token" — it's the only credential we need at runtime

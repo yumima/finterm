@@ -1,8 +1,7 @@
 #pragma once
-#include "core/util/BarTime.h"
 #include "core/result/Result.h"
-
-#    include "datahub/Producer.h"
+#include "core/util/BarTime.h"
+#include "datahub/Producer.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -91,9 +90,9 @@ struct InfoData {
     double current_ratio = kUnknownNum;
     // Narrative + leadership — used by the IPO Watch detail rail to render
     // a "who's behind this company" section beyond pure numbers.
-    QString description;     // longBusinessSummary
+    QString description; // longBusinessSummary
     QString website;
-    int     employees = 0;
+    int employees = 0;
     QVector<OfficerInfo> officers;
 };
 
@@ -143,9 +142,7 @@ struct RegionalMarket {
 ///   - Quote caching: returns cached data immediately, refreshes in background
 ///   - DataHub producer: owns the `market:quote:*` topic family. Phase 2 —
 ///     see fincept-qt/docs/datahub-phases/phase-02-market-data-pilot.md.
-class MarketDataService : public QObject
-    , public fincept::datahub::Producer
-{
+class MarketDataService : public QObject, public fincept::datahub::Producer {
     Q_OBJECT
   public:
     using QuoteCallback = std::function<void(bool, QVector<QuoteData>)>;
@@ -204,10 +201,10 @@ class MarketDataService : public QObject
     /// focus mode for one ticker).
     struct OrderbookData {
         QString symbol;
-        double  bid       = 0;
-        double  ask       = 0;
-        double  bid_size  = 0;
-        double  ask_size  = 0;
+        double bid = 0;
+        double ask = 0;
+        double bid_size = 0;
+        double ask_size = 0;
     };
     using OrderbookCallback = std::function<void(bool, OrderbookData)>;
     void fetch_orderbook(const QString& symbol, OrderbookCallback cb);
@@ -227,11 +224,11 @@ class MarketDataService : public QObject
         QString industry;
         QString website;
         QString country;
-        double  market_cap = 0;
-        int     employees  = 0;
-        bool    known_none = false;   // Yahoo answered "unknown ticker" (404) — no profile exists
-        bool    refused    = false;   // Yahoo refused / did not answer for this ticker — ask again
-        bool    failed     = false;   // the lookup errored (not Yahoo's answer) — not cached
+        double market_cap = 0;
+        int employees = 0;
+        bool known_none = false; // Yahoo answered "unknown ticker" (404) — no profile exists
+        bool refused = false;    // Yahoo refused / did not answer for this ticker — ask again
+        bool failed = false;     // the lookup errored (not Yahoo's answer) — not cached
     };
     /// ok=false when the lookup failed — cached rows may still come along.
     using ProfileCallback = std::function<void(bool, QVector<CompanyProfile>)>;
@@ -241,15 +238,21 @@ class MarketDataService : public QObject
     /// quarterly financials, institutional/major holders, and recent news.
     /// Designed for lazy-fetch on row click — see IpoWatchView's NEWS /
     /// FINANCIALS / HOLDERS tabs.
-    struct FinancialPoint  { QString date; double value = 0; };
+    struct FinancialPoint {
+        QString date;
+        double value = 0;
+    };
     struct InstitutionalHolder {
         QString holder;
-        double  pct    = 0; // 0..1
-        double  shares = 0;
-        double  value  = 0; // dollars
+        double pct = 0; // 0..1
+        double shares = 0;
+        double value = 0; // dollars
         QString date;
     };
-    struct MajorHolderRow { QString label; double value = 0; };
+    struct MajorHolderRow {
+        QString label;
+        double value = 0;
+    };
     struct NewsItem {
         QString title;
         QString link;
@@ -258,17 +261,17 @@ class MarketDataService : public QObject
     };
     struct IpoExtras {
         QString symbol;
-        QVector<FinancialPoint>     quarterly_revenue;
-        QVector<FinancialPoint>     quarterly_net_income;
+        QVector<FinancialPoint> quarterly_revenue;
+        QVector<FinancialPoint> quarterly_net_income;
         // Annual series — same source EquityResearch's FinancialsTab uses
         // for its YoY labels. ~4 years of history per yfinance.
-        QVector<FinancialPoint>     annual_revenue;
-        QVector<FinancialPoint>     annual_net_income;
-        QVector<FinancialPoint>     annual_gross_profit;
-        QVector<FinancialPoint>     annual_operating_income;
+        QVector<FinancialPoint> annual_revenue;
+        QVector<FinancialPoint> annual_net_income;
+        QVector<FinancialPoint> annual_gross_profit;
+        QVector<FinancialPoint> annual_operating_income;
         QVector<InstitutionalHolder> institutional_holders;
-        QVector<MajorHolderRow>     major_holders;
-        QVector<NewsItem>           news;
+        QVector<MajorHolderRow> major_holders;
+        QVector<NewsItem> news;
     };
     using IpoExtrasCallback = std::function<void(bool, IpoExtras)>;
     void fetch_ipo_extras(const QString& symbol, IpoExtrasCallback cb);
@@ -277,11 +280,11 @@ class MarketDataService : public QObject
     /// `User-Agent: <name> <email>` header is mandated by SEC). Returns the
     /// 25 most-recent filings for the ticker (S-1, 10-K, 8-K, Form 4, etc.).
     struct SecFiling {
-        QString form;          // "S-1" | "10-K" | "8-K" | "4" | …
-        QString filing_date;   // "YYYY-MM-DD"
-        QString accession;     // "0000320193-25-000005"
-        QString primary_doc;   // filename within the accession folder
-        QString url;           // pre-built EDGAR document URL
+        QString form;        // "S-1" | "10-K" | "8-K" | "4" | …
+        QString filing_date; // "YYYY-MM-DD"
+        QString accession;   // "0000320193-25-000005"
+        QString primary_doc; // filename within the accession folder
+        QString url;         // pre-built EDGAR document URL
     };
     using SecFilingsCallback = std::function<void(bool, QVector<SecFiling>)>;
     void fetch_sec_filings(const QString& ticker, SecFilingsCallback cb);
@@ -292,8 +295,8 @@ class MarketDataService : public QObject
     /// the article's lead paragraph in plain text, no key needed.
     struct WikipediaSummary {
         QString title;
-        QString description;   // short tagline ("American technology company")
-        QString extract;       // first ~3 sentences of the article
+        QString description; // short tagline ("American technology company")
+        QString extract;     // first ~3 sentences of the article
         QString url;
     };
     using WikipediaCallback = std::function<void(bool, WikipediaSummary)>;
@@ -307,8 +310,8 @@ class MarketDataService : public QObject
     /// Caller passes the S-1 document URL we already discovered via
     /// fetch_sec_filings — we don't re-walk the submissions API here.
     struct S1Funding {
-        QString source_url;            // S-1 document URL on sec.gov
-        QString section_text;          // cleaned "Recent Sales..." section
+        QString source_url;   // S-1 document URL on sec.gov
+        QString section_text; // cleaned "Recent Sales..." section
         // Additional standardized prospectus sections — each is the cleaned
         // plain-text excerpt, lifted verbatim from the S-1. Empty when the
         // section isn't present (common for shell-company SPAC S-1s).
@@ -319,7 +322,11 @@ class MarketDataService : public QObject
         QStringList risk_factors;       // top-level risk headings (≤15)
         // Best-effort structured rows extracted from section_text. Always
         // partial; treat as hints, not the authoritative record.
-        struct Round { QString date; QString amount; QString context; };
+        struct Round {
+            QString date;
+            QString amount;
+            QString context;
+        };
         QVector<Round> rounds;
     };
     using S1FundingCallback = std::function<void(bool, S1Funding)>;
@@ -406,26 +413,29 @@ class MarketDataService : public QObject
     /// the total work.
     void drain_refresh_chunk();
     static constexpr int kRefreshChunkSize = 15;
-    struct PendingSparkline { QString symbol; QVector<double> points; };
+    struct PendingSparkline {
+        QString symbol;
+        QVector<double> points;
+    };
     struct PendingHistory {
         QString symbol;
         QString period;
         QString interval;
         QVector<HistoryPoint> points;
     };
-    QVector<QuoteData>        refresh_pending_quotes_;
+    QVector<QuoteData> refresh_pending_quotes_;
     // symbol -> absolute position in refresh_pending_quotes_ (minus _base_ =
     // index), so a newer print replaces a waiting one in O(1).
-    QHash<QString, qint64>    refresh_pending_quote_at_;
-    qint64                    refresh_pending_quote_base_ = 0;   // count taken from the front
+    QHash<QString, qint64> refresh_pending_quote_at_;
+    qint64 refresh_pending_quote_base_ = 0; // count taken from the front
     QVector<PendingSparkline> refresh_pending_sparks_;
-    QVector<PendingHistory>   refresh_pending_hists_;
-    bool                      refresh_drain_scheduled_ = false;
+    QVector<PendingHistory> refresh_pending_hists_;
+    bool refresh_drain_scheduled_ = false;
     // Totals only used for the "drain complete" log line, so we report the
     // burst size the user sees instead of "0 quotes" once the queue drains.
     int refresh_quotes_total_ = 0;
     int refresh_sparks_total_ = 0;
-    int refresh_hists_total_  = 0;
+    int refresh_hists_total_ = 0;
     qint64 refresh_started_ms_ = 0;
 
     // ── Batching ──
@@ -448,7 +458,7 @@ class MarketDataService : public QObject
     //                          the user sees their last-known prices the
     //                          instant the app launches while the live
     //                          quote refresh runs in the background.
-    static constexpr int kQuoteCacheTtlSec     = 30;
+    static constexpr int kQuoteCacheTtlSec = 30;
     /// Oldest a cached quote may be and still be published at cold start.
     /// The 7-day fallback TTL is right for "better than nothing" during a
     /// rate-limited session, and wrong for presenting a price as current.
@@ -479,9 +489,9 @@ class MarketDataService : public QObject
     // fetching company_tickers.json (~700KB) on the first SEC request and
     // caching it in memory for the rest of the session. SEC publishes the
     // file weekly so a per-session cache is plenty.
-    QHash<QString, int>      sec_cik_map_;       // upper-case ticker → CIK
-    bool                     sec_cik_loaded_   = false;
-    bool                     sec_cik_loading_  = false;
+    QHash<QString, int> sec_cik_map_; // upper-case ticker → CIK
+    bool sec_cik_loaded_ = false;
+    bool sec_cik_loading_ = false;
     QVector<std::function<void(bool)>> sec_cik_waiters_;
 };
 

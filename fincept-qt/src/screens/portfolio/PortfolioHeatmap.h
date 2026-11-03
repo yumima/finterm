@@ -29,8 +29,7 @@ class PortfolioHeatmap : public QWidget {
     /// update_portfolio_detail() and refreshes naturally once set_holdings
     /// runs from on_summary_loaded → update_main_view_data.
     void clear_metrics();
-    void set_portfolio_fundamentals(const QString& portfolio_id,
-                                    const portfolio::PortfolioFundamentals& f);
+    void set_portfolio_fundamentals(const QString& portfolio_id, const portfolio::PortfolioFundamentals& f);
     /// Reset analyst-target / P/E / yield / consensus to placeholders.
     /// Called on portfolio switch so the panel never briefly shows the prior
     /// portfolio's targets between the switch and the new fundamentals
@@ -77,27 +76,27 @@ class PortfolioHeatmap : public QWidget {
     void update_top_movers();
 
     // Mode buttons
-    QPushButton* pnl_btn_    = nullptr;
+    QPushButton* pnl_btn_ = nullptr;
     QPushButton* weight_btn_ = nullptr;
-    QPushButton* day_btn_    = nullptr;
-    QPushButton* aft_btn_    = nullptr;  // after-hours (pre/post market change)
+    QPushButton* day_btn_ = nullptr;
+    QPushButton* aft_btn_ = nullptr; // after-hours (pre/post market change)
 
     // AFT cache — populated on demand via the yfinance daemon's
     // `extended_hours` action when the user enters AFT mode. Map of
     // symbol → post/pre-market percent change. Missing-key vs zero-value
     // is meaningful — missing renders neutral gray in block_color().
     QHash<QString, double> aft_quotes_;
-    quint64  aft_gen_    = 0;             // supersedes in-flight stale requests
-    bool     aft_in_flight_ = false;      // suppresses duplicate refetches
+    quint64 aft_gen_ = 0;        // supersedes in-flight stale requests
+    bool aft_in_flight_ = false; // suppresses duplicate refetches
     // Symbol set the last (or in-flight) AFT fetch covered. set_holdings
     // compares against it so late-arriving holdings or a portfolio switch
     // re-fetch instead of leaving every tile stuck on gray "—". Cleared on
     // a failed fetch so the next holdings tick (20 s) retries.
     QStringList aft_fetched_symbols_;
-    QLabel*  aft_status_ = nullptr;       // visible only in AFT mode
+    QLabel* aft_status_ = nullptr; // visible only in AFT mode
     // Whether aft_status_ currently reads as a failure — lets refresh_theme
     // re-derive its colour from the new palette without re-running the fetch.
-    bool     aft_status_error_ = false;
+    bool aft_status_error_ = false;
     /// Fetch extended-hours quotes for the current holdings. `is_retry`
     /// marks the single automatic retry so a second failure reports instead
     /// of looping.
@@ -126,15 +125,15 @@ class PortfolioHeatmap : public QWidget {
 
     // Portfolio-level detail (no symbol selected)
     QWidget* portfolio_panel_ = nullptr;
-    QLabel* pfund_name_      = nullptr;  // portfolio name / "PORTFOLIO"
-    QLabel* pfund_tgt_low_   = nullptr;
-    QLabel* pfund_tgt_mean_  = nullptr;
-    QLabel* pfund_tgt_high_  = nullptr;
+    QLabel* pfund_name_ = nullptr; // portfolio name / "PORTFOLIO"
+    QLabel* pfund_tgt_low_ = nullptr;
+    QLabel* pfund_tgt_mean_ = nullptr;
+    QLabel* pfund_tgt_high_ = nullptr;
     QLabel* pfund_consensus_ = nullptr;
-    QLabel* pfund_pe_        = nullptr;
-    QLabel* pfund_yield_     = nullptr;
-    QLabel* pfund_beta_      = nullptr;
-    QLabel* pfund_breadth_   = nullptr;
+    QLabel* pfund_pe_ = nullptr;
+    QLabel* pfund_yield_ = nullptr;
+    QLabel* pfund_beta_ = nullptr;
+    QLabel* pfund_breadth_ = nullptr;
 
     // Risk gauge
     QLabel* risk_label_ = nullptr;

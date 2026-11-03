@@ -51,9 +51,9 @@ class ContentLoader : public QObject {
     bool loaded_ = false;
     QHash<QString, KnowledgeCategory> categories_;
     QStringList category_order_;
-    QHash<QString, const KnowledgeEntry*> entry_index_;   // id → entry*
-    QHash<QString, QString> alias_index_;                // alias (lower) → id
-    QHash<QString, QString> abbreviations_;              // acronym → expansion
+    QHash<QString, const KnowledgeEntry*> entry_index_; // id → entry*
+    QHash<QString, QString> alias_index_;               // alias (lower) → id
+    QHash<QString, QString> abbreviations_;             // acronym → expansion
     mutable QHash<QString, QString> body_cache_;
 };
 

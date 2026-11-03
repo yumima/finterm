@@ -8,8 +8,7 @@ namespace fincept {
 
 namespace {
 
-constexpr const char* kTeamCols =
-    "id, name, coordinator_agent_id, mode, description, created_at, updated_at";
+constexpr const char* kTeamCols = "id, name, coordinator_agent_id, mode, description, created_at, updated_at";
 
 TeamRow map_row(QSqlQuery& q) {
     TeamRow t;
@@ -31,10 +30,9 @@ TeamRepository& TeamRepository::instance() {
 }
 
 Result<QStringList> TeamRepository::load_members(const QString& team_id) {
-    auto r = Database::instance().execute(
-        QStringLiteral("SELECT agent_id FROM team_members "
-                       "WHERE team_id = ? ORDER BY position ASC"),
-        {team_id});
+    auto r = Database::instance().execute(QStringLiteral("SELECT agent_id FROM team_members "
+                                                         "WHERE team_id = ? ORDER BY position ASC"),
+                                          {team_id});
     if (r.is_err())
         return Result<QStringList>::err(r.error());
     QStringList out;
@@ -52,9 +50,7 @@ Result<void> TeamRepository::write_members(const QString& team_id, const QString
     auto& db = Database::instance();
     if (auto bt = db.begin_transaction(); bt.is_err())
         return Result<void>::err(bt.error());
-    if (auto r = db.execute(
-            QStringLiteral("DELETE FROM team_members WHERE team_id = ?"), {team_id});
-        r.is_err()) {
+    if (auto r = db.execute(QStringLiteral("DELETE FROM team_members WHERE team_id = ?"), {team_id}); r.is_err()) {
         db.rollback();
         return Result<void>::err(r.error());
     }
@@ -62,10 +58,9 @@ Result<void> TeamRepository::write_members(const QString& team_id, const QString
     for (const QString& agent_id : member_agent_ids) {
         if (agent_id.isEmpty())
             continue;
-        if (auto r = db.execute(
-                QStringLiteral("INSERT INTO team_members (team_id, agent_id, position) "
-                               "VALUES (?, ?, ?)"),
-                {team_id, agent_id, pos});
+        if (auto r = db.execute(QStringLiteral("INSERT INTO team_members (team_id, agent_id, position) "
+                                               "VALUES (?, ?, ?)"),
+                                {team_id, agent_id, pos});
             r.is_err()) {
             db.rollback();
             return Result<void>::err(r.error());
@@ -85,8 +80,7 @@ Result<void> TeamRepository::create(const TeamCreate& c) {
     auto r = Database::instance().execute(
         QStringLiteral("INSERT INTO teams (id, name, coordinator_agent_id, mode, description) "
                        "VALUES (?, ?, ?, ?, ?)"),
-        {c.id, c.name, c.coordinator_agent_id,
-         c.mode.isEmpty() ? QStringLiteral("coordinate") : c.mode,
+        {c.id, c.name, c.coordinator_agent_id, c.mode.isEmpty() ? QStringLiteral("coordinate") : c.mode,
          c.description});
     if (r.is_err())
         return Result<void>::err(r.error());
@@ -96,8 +90,7 @@ Result<void> TeamRepository::create(const TeamCreate& c) {
         // we don't leave an orphan team-with-no-members.  delete_
         // cascades on team_members but write_members's transaction
         // already rolled back, so this is just the parent row.
-        Database::instance().execute(
-            QStringLiteral("DELETE FROM teams WHERE id = ?"), {c.id});
+        Database::instance().execute(QStringLiteral("DELETE FROM teams WHERE id = ?"), {c.id});
     }
     return mr;
 }
@@ -105,14 +98,13 @@ Result<void> TeamRepository::create(const TeamCreate& c) {
 Result<void> TeamRepository::update(const TeamCreate& c) {
     if (c.id.isEmpty())
         return Result<void>::err("TeamRepository::update: empty id");
-    auto r = Database::instance().execute(
-        QStringLiteral("UPDATE teams SET "
-                       "  name = ?, coordinator_agent_id = ?, mode = ?, "
-                       "  description = ?, updated_at = datetime('now') "
-                       "WHERE id = ?"),
-        {c.name, c.coordinator_agent_id,
-         c.mode.isEmpty() ? QStringLiteral("coordinate") : c.mode,
-         c.description, c.id});
+    auto r =
+        Database::instance().execute(QStringLiteral("UPDATE teams SET "
+                                                    "  name = ?, coordinator_agent_id = ?, mode = ?, "
+                                                    "  description = ?, updated_at = datetime('now') "
+                                                    "WHERE id = ?"),
+                                     {c.name, c.coordinator_agent_id,
+                                      c.mode.isEmpty() ? QStringLiteral("coordinate") : c.mode, c.description, c.id});
     if (r.is_err())
         return Result<void>::err(r.error());
     return write_members(c.id, c.member_agent_ids);
@@ -122,8 +114,7 @@ Result<void> TeamRepository::delete_(const QString& id) {
     if (id.isEmpty())
         return Result<void>::err("TeamRepository::delete_: empty id");
     // ON DELETE CASCADE on team_members handles the membership rows.
-    auto r = Database::instance().execute(
-        QStringLiteral("DELETE FROM teams WHERE id = ?"), {id});
+    auto r = Database::instance().execute(QStringLiteral("DELETE FROM teams WHERE id = ?"), {id});
     if (r.is_err())
         return Result<void>::err(r.error());
     return Result<void>::ok();

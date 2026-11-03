@@ -26,7 +26,7 @@ class ShortInterestPanel : public QWidget {
   private:
     class Chart;
     QLabel* title_note_ = nullptr;
-    Chart*  chart_ = nullptr;
+    Chart* chart_ = nullptr;
     QLabel* figures_ = nullptr;
     QLabel* foot_ = nullptr;
 };

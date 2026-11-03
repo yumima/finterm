@@ -249,7 +249,7 @@ CryptoOrderEntry::CryptoOrderEntry(QWidget* parent) : QWidget(parent) {
 
 void CryptoOrderEntry::set_buy_side(bool is_buy) {
     if (is_buy == is_buy_side_)
-        return;  // no-op — avoids repoling children on redundant clicks
+        return; // no-op — avoids repoling children on redundant clicks
     is_buy_side_ = is_buy;
     buy_tab_->setProperty("active", is_buy);
     sell_tab_->setProperty("active", !is_buy);

@@ -176,8 +176,7 @@ void PythonSetupManager::write_marker_hash(const QString& venv_name, const QStri
 // partial install — never on the fast path.
 // ─────────────────────────────────────────────────────────────────────────────
 
-bool PythonSetupManager::verify_packages_installed(const QString& venv_name,
-                                                    const QString& requirements_file) const {
+bool PythonSetupManager::verify_packages_installed(const QString& venv_name, const QString& requirements_file) const {
     QString req_path = find_requirements_file(requirements_file);
     if (req_path.isEmpty()) {
         LOG_WARN("PythonSetup",
@@ -204,8 +203,7 @@ bool PythonSetupManager::verify_packages_installed(const QString& venv_name,
     // when Windows Defender is scanning the venv directory.  A false 30s timeout
     // previously marked a correctly-installed venv as broken, forcing a full reinstall.
     if (!proc.waitForFinished(90000) || proc.exitCode() != 0) {
-        LOG_WARN("PythonSetup",
-                 QString("[%1] verify: uv pip list failed or timed out").arg(venv_name));
+        LOG_WARN("PythonSetup", QString("[%1] verify: uv pip list failed or timed out").arg(venv_name));
         return false;
     }
 
@@ -243,9 +241,10 @@ bool PythonSetupManager::verify_packages_installed(const QString& venv_name,
     }
 
     if (!missing.isEmpty()) {
-        LOG_WARN("PythonSetup",
-                 QString("[%1] verify: %2 package(s) missing: %3")
-                     .arg(venv_name).arg(missing.size()).arg(missing.join(", ").left(400)));
+        LOG_WARN("PythonSetup", QString("[%1] verify: %2 package(s) missing: %3")
+                                    .arg(venv_name)
+                                    .arg(missing.size())
+                                    .arg(missing.join(", ").left(400)));
         return false;
     }
 
@@ -265,15 +264,14 @@ SetupStatus PythonSetupManager::check_status() const {
     LOG_INFO("PythonSetup", "=== check_status BEGIN === install_dir: " + status.install_dir);
 
     // ── File-existence checks (always fast) ───────────────────────────────────
-    status.uv_installed        = QFileInfo::exists(uv_path());
+    status.uv_installed = QFileInfo::exists(uv_path());
     status.venv_numpy1_created = QFileInfo::exists(python_path("venv-numpy1"));
     status.venv_numpy2_created = QFileInfo::exists(python_path("venv-numpy2"));
 
-    LOG_INFO("PythonSetup",
-             QString("Existence: uv=%1 (%2)  venv1_python=%3 (%4)  venv2_python=%5 (%6)")
-                 .arg(status.uv_installed ? "YES" : "NO", uv_path())
-                 .arg(status.venv_numpy1_created ? "YES" : "NO", python_path("venv-numpy1"))
-                 .arg(status.venv_numpy2_created ? "YES" : "NO", python_path("venv-numpy2")));
+    LOG_INFO("PythonSetup", QString("Existence: uv=%1 (%2)  venv1_python=%3 (%4)  venv2_python=%5 (%6)")
+                                .arg(status.uv_installed ? "YES" : "NO", uv_path())
+                                .arg(status.venv_numpy1_created ? "YES" : "NO", python_path("venv-numpy1"))
+                                .arg(status.venv_numpy2_created ? "YES" : "NO", python_path("venv-numpy2")));
 
     // ── Compute current requirements hashes ───────────────────────────────────
     // If a file is not found the hash is empty — treated as "not current",
@@ -281,19 +279,16 @@ SetupStatus PythonSetupManager::check_status() const {
     const QString req_hash1 = compute_requirements_hash("requirements-numpy1.txt");
     const QString req_hash2 = compute_requirements_hash("requirements-numpy2.txt");
 
-    LOG_INFO("PythonSetup",
-             QString("Requirements hashes — numpy1: %1  numpy2: %2")
-                 .arg(req_hash1.isEmpty() ? "(file not found)" : req_hash1.left(16) + "...")
-                 .arg(req_hash2.isEmpty() ? "(file not found)" : req_hash2.left(16) + "..."));
+    LOG_INFO("PythonSetup", QString("Requirements hashes — numpy1: %1  numpy2: %2")
+                                .arg(req_hash1.isEmpty() ? "(file not found)" : req_hash1.left(16) + "...")
+                                .arg(req_hash2.isEmpty() ? "(file not found)" : req_hash2.left(16) + "..."));
 
     if (req_hash1.isEmpty())
-        LOG_WARN("PythonSetup",
-                 "requirements-numpy1.txt NOT FOUND — find_requirements_file() returned empty. "
-                 "Check that resources/ folder is deployed beside the exe.");
+        LOG_WARN("PythonSetup", "requirements-numpy1.txt NOT FOUND — find_requirements_file() returned empty. "
+                                "Check that resources/ folder is deployed beside the exe.");
     if (req_hash2.isEmpty())
-        LOG_WARN("PythonSetup",
-                 "requirements-numpy2.txt NOT FOUND — find_requirements_file() returned empty. "
-                 "Check that resources/ folder is deployed beside the exe.");
+        LOG_WARN("PythonSetup", "requirements-numpy2.txt NOT FOUND — find_requirements_file() returned empty. "
+                                "Check that resources/ folder is deployed beside the exe.");
 
     // A venv is "ready" only when its marker content equals the current hash.
     // Empty stored hash  → old "ok\n" marker or absent file → not current.
@@ -315,13 +310,12 @@ SetupStatus PythonSetupManager::check_status() const {
 
     const bool sentinel_exists = QFileInfo::exists(sentinel_path_for(install_dir()));
     LOG_INFO("PythonSetup",
-             QString("Sentinel: %1 (%2)")
-                 .arg(sentinel_exists ? "EXISTS" : "ABSENT", sentinel_path_for(install_dir())));
+             QString("Sentinel: %1 (%2)").arg(sentinel_exists ? "EXISTS" : "ABSENT", sentinel_path_for(install_dir())));
 
     // ── Fast path: sentinel + UV + both markers current ───────────────────────
     if (sentinel_exists && status.uv_installed && status.venv_numpy1_ready && status.venv_numpy2_ready) {
         status.python_installed = true;
-        status.needs_setup      = false;
+        status.needs_setup = false;
         LOG_INFO("PythonSetup", "Fast-path OK — sentinel + both hash-markers current → needs_setup=false");
         return status;
     }
@@ -339,24 +333,22 @@ SetupStatus PythonSetupManager::check_status() const {
     const bool venv1_needs_full_install = status.venv_numpy1_created && venv1_marker_absent;
     const bool venv2_needs_full_install = status.venv_numpy2_created && venv2_marker_absent;
 
-    if (sentinel_exists && status.uv_installed && status.venv_numpy1_created && status.venv_numpy2_created
-        && !venv1_needs_full_install && !venv2_needs_full_install) {
+    if (sentinel_exists && status.uv_installed && status.venv_numpy1_created && status.venv_numpy2_created &&
+        !venv1_needs_full_install && !venv2_needs_full_install) {
         // Verify Python is present (cheap — just check the exe path).
         QString py = base_python_path();
-        LOG_INFO("PythonSetup",
-                 QString("Sync-check: base python = %1  exists = %2")
-                     .arg(py.isEmpty() ? "(not found)" : py)
-                     .arg(QFileInfo::exists(py) ? "YES" : "NO"));
+        LOG_INFO("PythonSetup", QString("Sync-check: base python = %1  exists = %2")
+                                    .arg(py.isEmpty() ? "(not found)" : py)
+                                    .arg(QFileInfo::exists(py) ? "YES" : "NO"));
         if (!py.isEmpty() && QFileInfo::exists(py)) {
             status.python_installed = true;
             if (!pkg1_current || !pkg2_current) {
-                status.needs_setup        = false;
+                status.needs_setup = false;
                 status.needs_package_sync = true;
-                LOG_INFO("PythonSetup",
-                         QString("Package-sync path: infra OK, hash stale — needs_sync=true "
-                                 "(venv1_current=%1 venv2_current=%2)")
-                             .arg(pkg1_current ? "YES" : "NO")
-                             .arg(pkg2_current ? "YES" : "NO"));
+                LOG_INFO("PythonSetup", QString("Package-sync path: infra OK, hash stale — needs_sync=true "
+                                                "(venv1_current=%1 venv2_current=%2)")
+                                            .arg(pkg1_current ? "YES" : "NO")
+                                            .arg(pkg2_current ? "YES" : "NO"));
                 return status;
             }
         }
@@ -375,10 +367,9 @@ SetupStatus PythonSetupManager::check_status() const {
     // partial install when no window is visible yet).
     if (status.uv_installed) {
         QString py = base_python_path();
-        LOG_INFO("PythonSetup",
-                 QString("Python check: path=%1  exists=%2")
-                     .arg(py.isEmpty() ? "(not found)" : py)
-                     .arg(py.isEmpty() ? "N/A" : (QFileInfo::exists(py) ? "YES" : "NO")));
+        LOG_INFO("PythonSetup", QString("Python check: path=%1  exists=%2")
+                                    .arg(py.isEmpty() ? "(not found)" : py)
+                                    .arg(py.isEmpty() ? "N/A" : (QFileInfo::exists(py) ? "YES" : "NO")));
         if (!py.isEmpty() && QFileInfo::exists(py)) {
             QProcess proc;
 #ifdef _WIN32
@@ -389,13 +380,12 @@ SetupStatus PythonSetupManager::check_status() const {
             proc.start(py, {"--version"});
             if (proc.waitForFinished(5000) && proc.exitCode() == 0) {
                 status.python_installed = true;
-                status.python_version   = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+                status.python_version = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
                 LOG_INFO("PythonSetup", "Python OK: " + status.python_version);
             } else {
-                LOG_WARN("PythonSetup",
-                         QString("Python --version failed: exit=%1 stderr=%2")
-                             .arg(proc.exitCode())
-                             .arg(QString::fromUtf8(proc.readAllStandardError()).left(300)));
+                LOG_WARN("PythonSetup", QString("Python --version failed: exit=%1 stderr=%2")
+                                            .arg(proc.exitCode())
+                                            .arg(QString::fromUtf8(proc.readAllStandardError()).left(300)));
             }
         } else {
             LOG_WARN("PythonSetup", "Python not installed yet (UV present but python path missing)");
@@ -419,10 +409,9 @@ SetupStatus PythonSetupManager::check_status() const {
             status.venv_numpy1_ready = true;
             LOG_INFO("PythonSetup", "venv-numpy1: verification passed — marker written");
         } else {
-            LOG_WARN("PythonSetup",
-                     QString("venv-numpy1: packages absent/incomplete/changed — needs install "
-                             "(req_hash_empty=%1)")
-                         .arg(req_hash1.isEmpty() ? "YES" : "NO"));
+            LOG_WARN("PythonSetup", QString("venv-numpy1: packages absent/incomplete/changed — needs install "
+                                            "(req_hash_empty=%1)")
+                                        .arg(req_hash1.isEmpty() ? "YES" : "NO"));
         }
     }
 
@@ -433,30 +422,27 @@ SetupStatus PythonSetupManager::check_status() const {
             status.venv_numpy2_ready = true;
             LOG_INFO("PythonSetup", "venv-numpy2: verification passed — marker written");
         } else {
-            LOG_WARN("PythonSetup",
-                     QString("venv-numpy2: packages absent/incomplete/changed — needs install "
-                             "(req_hash_empty=%1)")
-                         .arg(req_hash2.isEmpty() ? "YES" : "NO"));
+            LOG_WARN("PythonSetup", QString("venv-numpy2: packages absent/incomplete/changed — needs install "
+                                            "(req_hash_empty=%1)")
+                                        .arg(req_hash2.isEmpty() ? "YES" : "NO"));
         }
     }
 
     status.needs_setup =
-        !status.uv_installed || !status.python_installed ||
-        !status.venv_numpy1_ready || !status.venv_numpy2_ready;
+        !status.uv_installed || !status.python_installed || !status.venv_numpy1_ready || !status.venv_numpy2_ready;
 
-    LOG_INFO("PythonSetup",
-             QString("=== check_status RESULT === uv=%1 py=%2 "
-                     "venv1_created=%3 venv1_ready=%4 "
-                     "venv2_created=%5 venv2_ready=%6 "
-                     "needs_setup=%7 needs_sync=%8")
-                 .arg(status.uv_installed ? "YES" : "NO")
-                 .arg(status.python_installed ? "YES" : "NO")
-                 .arg(status.venv_numpy1_created ? "YES" : "NO")
-                 .arg(status.venv_numpy1_ready ? "YES" : "NO")
-                 .arg(status.venv_numpy2_created ? "YES" : "NO")
-                 .arg(status.venv_numpy2_ready ? "YES" : "NO")
-                 .arg(status.needs_setup ? "YES" : "NO")
-                 .arg(status.needs_package_sync ? "YES" : "NO"));
+    LOG_INFO("PythonSetup", QString("=== check_status RESULT === uv=%1 py=%2 "
+                                    "venv1_created=%3 venv1_ready=%4 "
+                                    "venv2_created=%5 venv2_ready=%6 "
+                                    "needs_setup=%7 needs_sync=%8")
+                                .arg(status.uv_installed ? "YES" : "NO")
+                                .arg(status.python_installed ? "YES" : "NO")
+                                .arg(status.venv_numpy1_created ? "YES" : "NO")
+                                .arg(status.venv_numpy1_ready ? "YES" : "NO")
+                                .arg(status.venv_numpy2_created ? "YES" : "NO")
+                                .arg(status.venv_numpy2_ready ? "YES" : "NO")
+                                .arg(status.needs_setup ? "YES" : "NO")
+                                .arg(status.needs_package_sync ? "YES" : "NO"));
     return status;
 }
 
@@ -485,12 +471,11 @@ void PythonSetupManager::run_setup() {
 
         LOG_INFO("PythonSetup", "run_setup: calling check_status...");
         auto status = self->check_status();
-        LOG_INFO("PythonSetup",
-                 QString("run_setup: status — uv=%1 py=%2 venv1_ready=%3 venv2_ready=%4")
-                     .arg(status.uv_installed ? "YES" : "NO")
-                     .arg(status.python_installed ? "YES" : "NO")
-                     .arg(status.venv_numpy1_ready ? "YES" : "NO")
-                     .arg(status.venv_numpy2_ready ? "YES" : "NO"));
+        LOG_INFO("PythonSetup", QString("run_setup: status — uv=%1 py=%2 venv1_ready=%3 venv2_ready=%4")
+                                    .arg(status.uv_installed ? "YES" : "NO")
+                                    .arg(status.python_installed ? "YES" : "NO")
+                                    .arg(status.venv_numpy1_ready ? "YES" : "NO")
+                                    .arg(status.venv_numpy2_ready ? "YES" : "NO"));
 
         // ── Step 1: Download UV standalone binary (~13MB) ────────────────────
         if (!status.uv_installed) {
@@ -680,10 +665,10 @@ bool PythonSetupManager::download_uv() {
         }
         if (!extracted) {
             // Fallback: PowerShell Expand-Archive
-            extracted = run_command("powershell",
-                                    {"-NoProfile", "-NonInteractive", "-Command",
-                                     QString("Expand-Archive -Path '%1' -DestinationPath '%2' -Force")
-                                         .arg(archive_path, dir)});
+            extracted =
+                run_command("powershell",
+                            {"-NoProfile", "-NonInteractive", "-Command",
+                             QString("Expand-Archive -Path '%1' -DestinationPath '%2' -Force").arg(archive_path, dir)});
         }
         if (!extracted) {
             LOG_ERROR("PythonSetup", "Failed to extract UV archive");
@@ -793,22 +778,20 @@ bool PythonSetupManager::install_packages(const QString& venv_name, const QStrin
     // Derive step key first — needed for all emit_progress calls including early returns
     const QString step_key = venv_name.contains("numpy1") ? "packages-numpy1" : "packages-numpy2";
 
-    LOG_INFO("PythonSetup",
-             QString("install_packages: venv=%1  req_file=%2  venv_python=%3")
-                 .arg(venv_name, requirements_file, python_path(venv_name)));
+    LOG_INFO("PythonSetup", QString("install_packages: venv=%1  req_file=%2  venv_python=%3")
+                                .arg(venv_name, requirements_file, python_path(venv_name)));
 
     QString req_path = find_requirements_file(requirements_file);
     if (req_path.isEmpty()) {
         QString exe_dir = QCoreApplication::applicationDirPath();
-        LOG_ERROR("PythonSetup",
-                  QString("Requirements file not found: %1\n"
-                          "  exe_dir: %2\n"
-                          "  Expected: %2/resources/%1\n"
-                          "  The resources/ folder must be deployed beside the exe.\n"
-                          "  CMakeLists.txt POST_BUILD should copy resources/*.txt — rebuild to fix.")
-                      .arg(requirements_file, exe_dir));
-        emit_progress(step_key, 0,
-                      QString("Setup file missing: %1 — reinstall the application").arg(requirements_file), true);
+        LOG_ERROR("PythonSetup", QString("Requirements file not found: %1\n"
+                                         "  exe_dir: %2\n"
+                                         "  Expected: %2/resources/%1\n"
+                                         "  The resources/ folder must be deployed beside the exe.\n"
+                                         "  CMakeLists.txt POST_BUILD should copy resources/*.txt — rebuild to fix.")
+                                     .arg(requirements_file, exe_dir));
+        emit_progress(step_key, 0, QString("Setup file missing: %1 — reinstall the application").arg(requirements_file),
+                      true);
         return false;
     }
 
@@ -842,11 +825,10 @@ bool PythonSetupManager::install_packages(const QString& venv_name, const QStrin
     }
 
     // ── Pass 2: bulk failed — install packages one-by-one, skip failures ────
-    LOG_WARN("PythonSetup",
-             QString("[%1] Bulk install failed — falling back to per-package install.\n"
-                     "  UV command: %2 pip install --python %3 -r %4\n"
-                     "  stderr (first 600 chars): %5")
-                 .arg(venv_name, uv_path(), venv_python, req_path, bulk_stderr.left(600)));
+    LOG_WARN("PythonSetup", QString("[%1] Bulk install failed — falling back to per-package install.\n"
+                                    "  UV command: %2 pip install --python %3 -r %4\n"
+                                    "  stderr (first 600 chars): %5")
+                                .arg(venv_name, uv_path(), venv_python, req_path, bulk_stderr.left(600)));
     emit_progress(step_key, 10, "Bulk install failed — retrying package by package...");
 
     QStringList packages = read_packages_from_file(req_path);
@@ -972,8 +954,8 @@ QString PythonSetupManager::find_requirements_file(const QString& filename) cons
     }
 
     for (const auto& c : candidates) {
-        LOG_DEBUG("PythonSetup", "find_requirements_file candidate: " + c +
-                  (QFileInfo::exists(c) ? " [EXISTS]" : " [missing]"));
+        LOG_DEBUG("PythonSetup",
+                  "find_requirements_file candidate: " + c + (QFileInfo::exists(c) ? " [EXISTS]" : " [missing]"));
         if (QFileInfo::exists(c)) {
             QString resolved = QDir::cleanPath(c);
             LOG_INFO("PythonSetup", "find_requirements_file found (candidate): " + resolved);
@@ -982,11 +964,15 @@ QString PythonSetupManager::find_requirements_file(const QString& filename) cons
         }
     }
 
-    LOG_ERROR("PythonSetup",
-              "find_requirements_file: " + filename + " NOT FOUND anywhere.\n"
-              "  exe_dir=" + exe_dir + "\n"
-              "  Tried: " + candidates.join(", ") + "\n"
-              "  Fix: ensure the POST_BUILD CMake step copies resources/ beside the exe.");
+    LOG_ERROR("PythonSetup", "find_requirements_file: " + filename +
+                                 " NOT FOUND anywhere.\n"
+                                 "  exe_dir=" +
+                                 exe_dir +
+                                 "\n"
+                                 "  Tried: " +
+                                 candidates.join(", ") +
+                                 "\n"
+                                 "  Fix: ensure the POST_BUILD CMake step copies resources/ beside the exe.");
     return {};
 }
 
@@ -997,8 +983,8 @@ QString PythonSetupManager::find_requirements_file(const QString& filename) cons
 // Returns true on exit-code 0; populates stderr_out (may be nullptr to discard).
 // ─────────────────────────────────────────────────────────────────────────────
 
-static bool run_process(const QString& program, const QStringList& args,
-                        const QStringList& env_vars, QString* stderr_out) {
+static bool run_process(const QString& program, const QStringList& args, const QStringList& env_vars,
+                        QString* stderr_out) {
     QProcess proc;
 
     if (!env_vars.isEmpty()) {
@@ -1043,8 +1029,7 @@ bool PythonSetupManager::run_command(const QString& program, const QStringList& 
     QString stderr_out;
     const bool ok = run_process(program, args, env_vars, &stderr_out);
     if (!ok) {
-        LOG_ERROR("PythonSetup",
-                  QString("Command failed: %1\nStderr: %2").arg(program, stderr_out.left(500)));
+        LOG_ERROR("PythonSetup", QString("Command failed: %1\nStderr: %2").arg(program, stderr_out.left(500)));
     }
     return ok;
 }
@@ -1074,8 +1059,7 @@ QString PythonSetupManager::download_file(const QString& url, const QString& des
         if (run_process("curl.exe", {"--version"}, {}, &unused)) {
             QString curl_err;
             downloaded = run_process("curl.exe",
-                                     {"-L", "--fail", "--retry", "3",
-                                      "--connect-timeout", "30", "-o", dest_path, url},
+                                     {"-L", "--fail", "--retry", "3", "--connect-timeout", "30", "-o", dest_path, url},
                                      {}, &curl_err);
             if (!downloaded)
                 LOG_WARN("PythonSetup", "curl.exe failed, falling back to PowerShell: " + curl_err.left(300));

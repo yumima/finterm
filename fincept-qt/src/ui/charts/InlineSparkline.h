@@ -18,7 +18,10 @@ class InlineSparkline : public QWidget {
     explicit InlineSparkline(QWidget* parent = nullptr);
 
     void set_points(const QVector<double>& pts);
-    void clear() { pts_.clear(); update(); }
+    void clear() {
+        pts_.clear();
+        update();
+    }
 
   protected:
     void paintEvent(QPaintEvent* event) override;

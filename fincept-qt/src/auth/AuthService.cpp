@@ -7,8 +7,8 @@
 #include "storage/sqlite/Database.h"
 
 #include <QCryptographicHash>
-#include <QDir>
 #include <QDateTime>
+#include <QDir>
 #include <QFile>
 #include <QRandomGenerator>
 #include <QSqlError>
@@ -68,8 +68,12 @@ void AuthService::init_schema() {
 // ── Session persistence ───────────────────────────────────────────────────────
 
 void AuthService::save_session(const QString& api_key, const QString& session_json) {
-    if (api_key.isEmpty()) return;
-    if (!db_.isOpen()) { LOG_WARN("AuthService", "save_session: auth.db not open"); return; }
+    if (api_key.isEmpty())
+        return;
+    if (!db_.isOpen()) {
+        LOG_WARN("AuthService", "save_session: auth.db not open");
+        return;
+    }
     QSqlQuery q(db_);
     q.prepare(R"(INSERT INTO sessions (api_key, session_json, updated_at)
                  VALUES (?, ?, datetime('now'))
@@ -81,8 +85,12 @@ void AuthService::save_session(const QString& api_key, const QString& session_js
 }
 
 QString AuthService::load_session(const QString& api_key) {
-    if (api_key.isEmpty()) return {};
-    if (!db_.isOpen()) { LOG_WARN("AuthService", "load_session: auth.db not open"); return {}; }
+    if (api_key.isEmpty())
+        return {};
+    if (!db_.isOpen()) {
+        LOG_WARN("AuthService", "load_session: auth.db not open");
+        return {};
+    }
     QSqlQuery q(db_);
     q.prepare("SELECT session_json FROM sessions WHERE api_key = ?");
     q.addBindValue(api_key);
@@ -91,7 +99,8 @@ QString AuthService::load_session(const QString& api_key) {
 }
 
 void AuthService::remove_session(const QString& api_key) {
-    if (api_key.isEmpty()) return;
+    if (api_key.isEmpty())
+        return;
     QSqlQuery q(db_);
     q.prepare("DELETE FROM sessions WHERE api_key = ?");
     q.addBindValue(api_key);
@@ -123,14 +132,12 @@ void AuthService::open_user_db(const QString& api_key) {
     const QString path = user_db_path(username);
     // Skip reopen if the correct DB is already open — avoids an unnecessary
     // close/reopen when load_session() and complete_auth_flow() both call us.
-    if (fincept::Database::instance().is_open() &&
-        fincept::Database::instance().path() == path) {
+    if (fincept::Database::instance().is_open() && fincept::Database::instance().path() == path) {
         return;
     }
     auto r = fincept::Database::instance().reopen(path);
     if (r.is_err())
-        LOG_ERROR("AuthService", "Failed to open user DB for " + username + ": "
-                  + QString::fromStdString(r.error()));
+        LOG_ERROR("AuthService", "Failed to open user DB for " + username + ": " + QString::fromStdString(r.error()));
     else
         LOG_INFO("AuthService", "Opened user DB: " + path);
 }
@@ -149,8 +156,7 @@ QString AuthService::hash_password(const QString& password) const {
         salt[i] = static_cast<char>(QRandomGenerator::global()->generate() & 0xFF);
     const QString salt_hex = QString::fromLatin1(salt.toHex());
     QByteArray payload = salt + password.toUtf8();
-    const QString hash_hex = QString::fromLatin1(
-        QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex());
+    const QString hash_hex = QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex());
     return salt_hex + ":" + hash_hex;
 }
 
@@ -161,8 +167,8 @@ bool AuthService::verify_password(const QString& password, const QString& stored
     const QByteArray salt = QByteArray::fromHex(stored.left(colon).toLatin1());
     const QString expected_hash = stored.mid(colon + 1);
     QByteArray payload = salt + password.toUtf8();
-    const QString actual_hash = QString::fromLatin1(
-        QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex());
+    const QString actual_hash =
+        QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256).toHex());
     return actual_hash == expected_hash;
 }
 
@@ -170,18 +176,18 @@ QString AuthService::make_token() const {
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
 }
 
-QJsonObject AuthService::profile_json(int id, const QString& username, const QString& email,
-                                       const QString& created_at, const QString& last_login) const {
+QJsonObject AuthService::profile_json(int id, const QString& username, const QString& email, const QString& created_at,
+                                      const QString& last_login) const {
     QJsonObject obj;
-    obj["id"]            = id;
-    obj["username"]      = username;
-    obj["email"]         = email;
-    obj["account_type"]  = "local";
+    obj["id"] = id;
+    obj["username"] = username;
+    obj["email"] = email;
+    obj["account_type"] = "local";
     obj["credit_balance"] = 9999;
-    obj["is_verified"]   = true;
-    obj["is_admin"]      = false;
-    obj["mfa_enabled"]   = false;
-    obj["created_at"]    = created_at;
+    obj["is_verified"] = true;
+    obj["is_admin"] = false;
+    obj["mfa_enabled"] = false;
+    obj["created_at"] = created_at;
     obj["last_login_at"] = last_login;
     return obj;
 }
@@ -223,7 +229,7 @@ QVector<QJsonObject> AuthService::list_local_users() {
     }
     while (q.next()) {
         QJsonObject row;
-        row["username"]      = q.value(0).toString();
+        row["username"] = q.value(0).toString();
         row["last_login_at"] = q.value(1).toString();
         out.append(row);
     }
@@ -261,7 +267,7 @@ void AuthService::register_local_user(const QString& username, const QString& pi
     LOG_INFO("AuthService", "Registered local user: " + u);
     QJsonObject data;
     data["username"] = u;
-    data["api_key"]  = api_key;
+    data["api_key"] = api_key;
     cb({true, data, {}, 200});
 }
 
@@ -283,16 +289,16 @@ void AuthService::login_local(const QString& username, const QString& pin, Callb
     }
 
     const QString stored_username = q.value(0).toString();
-    const QString stored_email    = q.value(1).toString();
-    const QString stored_hash     = q.value(2).toString();
-    const QString api_key         = q.value(3).toString();
+    const QString stored_email = q.value(1).toString();
+    const QString stored_hash = q.value(2).toString();
+    const QString api_key = q.value(3).toString();
 
     if (!verify_password(pin, stored_hash)) {
         cb({false, {}, "Incorrect PIN.", 401});
         return;
     }
 
-    const QString now           = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     const QString session_token = make_token();
 
     QSqlQuery upd(db_);
@@ -302,12 +308,12 @@ void AuthService::login_local(const QString& username, const QString& pin, Callb
     upd.exec();
 
     QJsonObject data;
-    data["api_key"]        = api_key;
-    data["session_token"]  = session_token;
+    data["api_key"] = api_key;
+    data["session_token"] = session_token;
     data["active_session"] = false;
-    data["mfa_required"]   = false;
-    data["username"]       = stored_username;
-    data["email"]          = stored_email;
+    data["mfa_required"] = false;
+    data["username"] = stored_username;
+    data["email"] = stored_email;
     LOG_INFO("AuthService", "Local login: " + stored_username);
     cb({true, data, {}, 200});
 }
@@ -343,11 +349,11 @@ void AuthService::login(const LoginRequest& req, Callback cb) {
         return;
     }
 
-    const QString username     = q.value(0).toString();
-    const QString email        = q.value(1).toString();
-    const QString stored_hash  = q.value(2).toString();
-    const QString api_key      = q.value(3).toString();
-    const bool    otp_verified = q.value(4).toBool();
+    const QString username = q.value(0).toString();
+    const QString email = q.value(1).toString();
+    const QString stored_hash = q.value(2).toString();
+    const QString api_key = q.value(3).toString();
+    const bool otp_verified = q.value(4).toBool();
 
     if (!verify_password(req.password, stored_hash)) {
         cb({false, {}, "Incorrect email or password.", 401});
@@ -359,7 +365,7 @@ void AuthService::login(const LoginRequest& req, Callback cb) {
     }
 
     // Update last_login_at and issue a fresh session_token
-    const QString now           = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     const QString session_token = make_token();
 
     QSqlQuery upd(db_);
@@ -369,10 +375,10 @@ void AuthService::login(const LoginRequest& req, Callback cb) {
     upd.exec();
 
     QJsonObject data;
-    data["api_key"]        = api_key;
-    data["session_token"]  = session_token;
+    data["api_key"] = api_key;
+    data["session_token"] = session_token;
     data["active_session"] = false;
-    data["mfa_required"]   = false;
+    data["mfa_required"] = false;
 
     LOG_INFO("AuthService", "Login: " + email);
     cb({true, data, {}, 200});
@@ -383,8 +389,8 @@ void AuthService::login(const LoginRequest& req, Callback cb) {
 void AuthService::verify_otp(const VerifyOtpRequest& req, Callback cb) {
     // Validate: must be exactly 6 ASCII digits (including "000000").
     const QString otp = req.otp.trimmed();
-    const bool all_digits = otp.length() == 6 &&
-        std::all_of(otp.begin(), otp.end(), [](QChar c) { return c.isDigit(); });
+    const bool all_digits =
+        otp.length() == 6 && std::all_of(otp.begin(), otp.end(), [](QChar c) { return c.isDigit(); });
     if (!all_digits) {
         cb({false, {}, "Please enter a 6-digit verification code.", 400});
         return;
@@ -399,17 +405,17 @@ void AuthService::verify_otp(const VerifyOtpRequest& req, Callback cb) {
         return;
     }
 
-    const int     id         = q.value(0).toInt();
-    const QString username   = q.value(1).toString();
-    const QString email      = q.value(2).toString();
-    QString       api_key    = q.value(3).toString();
+    const int id = q.value(0).toInt();
+    const QString username = q.value(1).toString();
+    const QString email = q.value(2).toString();
+    QString api_key = q.value(3).toString();
     const QString created_at = q.value(4).toString();
 
     // Generate api_key once (first OTP verification)
     if (api_key.isEmpty())
         api_key = make_token();
 
-    const QString now           = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
+    const QString now = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
     const QString session_token = make_token();
 
     QSqlQuery upd(db_);
@@ -424,9 +430,9 @@ void AuthService::verify_otp(const VerifyOtpRequest& req, Callback cb) {
     }
 
     QJsonObject data;
-    data["api_key"]       = api_key;
+    data["api_key"] = api_key;
     data["session_token"] = session_token;
-    data["user"]          = profile_json(id, username, email, created_at, now);
+    data["user"] = profile_json(id, username, email, created_at, now);
 
     LOG_INFO("AuthService", "OTP verified: " + email);
     cb({true, data, {}, 200});
@@ -437,8 +443,7 @@ void AuthService::verify_otp(const VerifyOtpRequest& req, Callback cb) {
 void AuthService::forgot_password(const ForgotPasswordRequest& req, Callback cb) {
     // Local build: no email server. Instruct user to use any 6-digit code.
     LOG_INFO("AuthService",
-             "Password reset requested for " + req.email +
-             " — local build: use any 6-digit code in reset_password()");
+             "Password reset requested for " + req.email + " — local build: use any 6-digit code in reset_password()");
     cb({true, {}, {}, 200});
 }
 
@@ -497,11 +502,11 @@ void AuthService::get_user_profile(const QString& api_key, Callback cb) {
         cb({false, {}, "Invalid or expired API key.", 401});
         return;
     }
-    const int     id           = q.value(0).toInt();
-    const QString username     = q.value(1).toString();
-    const QString email        = q.value(2).toString();
-    const QString created_at   = q.value(3).toString();
-    const QString last_login   = q.value(4).toString();
+    const int id = q.value(0).toInt();
+    const QString username = q.value(1).toString();
+    const QString email = q.value(2).toString();
+    const QString created_at = q.value(3).toString();
+    const QString last_login = q.value(4).toString();
 
     cb({true, profile_json(id, username, email, created_at, last_login), {}, 200});
 }

@@ -251,7 +251,8 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
     // Total value
     const QString sub_color = ui::colors::TEXT_SECONDARY();
     auto compose = [&](const QString& value, const QString& sub) {
-        if (sub.isEmpty()) return value;
+        if (sub.isEmpty())
+            return value;
         return QString("%1 <span style=\"color:%2; font-weight:500;\">&nbsp;\xc2\xb7&nbsp; %3</span>")
             .arg(value, sub_color, sub);
     };
@@ -290,17 +291,19 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
         value_tip += tr("\n\nESTIMATE: no fresh quote for %1 — valued at the last known price "
                         "(up to 7 days old).")
                          .arg(s.stale_symbols.join(", "));
-    total_value_.value->setText(compose(none ? dash : approx + fmt(s.total_market_value),
-                                        with_note(s.portfolio.currency)));
+    total_value_.value->setText(
+        compose(none ? dash : approx + fmt(s.total_market_value), with_note(s.portfolio.currency)));
     total_value_.container->setToolTip(value_tip);
     apply_hero_styles(total_value_, ui::colors::WARNING);
 
     // P&L — value = absolute P&L, sub = percent
-    pnl_.value->setText(
-        none ? compose(dash, dash)
-             : compose(QString("%1%2%3").arg(approx, s.total_unrealized_pnl >= 0 ? "+" : "").arg(fmt(s.total_unrealized_pnl)),
-                       with_note(QString("%1%2%").arg(s.total_unrealized_pnl_percent >= 0 ? "+" : "")
-                                     .arg(fmt(s.total_unrealized_pnl_percent)))));
+    pnl_.value->setText(none ? compose(dash, dash)
+                             : compose(QString("%1%2%3")
+                                           .arg(approx, s.total_unrealized_pnl >= 0 ? "+" : "")
+                                           .arg(fmt(s.total_unrealized_pnl)),
+                                       with_note(QString("%1%2%")
+                                                     .arg(s.total_unrealized_pnl_percent >= 0 ? "+" : "")
+                                                     .arg(fmt(s.total_unrealized_pnl_percent)))));
     apply_hero_styles(pnl_, none ? ui::colors::TEXT_SECONDARY : color_tok(s.total_unrealized_pnl));
 
     // Day change — also partial when some holding's day move is unknown
@@ -321,19 +324,21 @@ void PortfolioStatsRibbon::set_summary(const portfolio::PortfolioSummary& s) {
         QString("%1%2%").arg(s.total_day_change_percent >= 0 ? "+" : "").arg(fmt(s.total_day_change_percent));
     day_change_.value->setText(
         none ? compose(dash, dash)
-             : compose(QString("%1%2%3").arg(day_approx, s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change)),
-                       day_note.isEmpty() ? day_pct : day_pct + QStringLiteral(" · ") + day_note));
+             : compose(
+                   QString("%1%2%3").arg(day_approx, s.total_day_change >= 0 ? "+" : "").arg(fmt(s.total_day_change)),
+                   day_note.isEmpty() ? day_pct : day_pct + QStringLiteral(" · ") + day_note));
     apply_hero_styles(day_change_, none ? ui::colors::TEXT_SECONDARY : color_tok(s.total_day_change));
 
     // Positions
-    positions_.value->setText(compose(
-        QString::number(s.total_positions),
-        QString("\u25B2 %1  \u25BC %2").arg(s.gainers).arg(s.losers)));
+    positions_.value->setText(
+        compose(QString::number(s.total_positions), QString("\u25B2 %1  \u25BC %2").arg(s.gainers).arg(s.losers)));
     apply_hero_styles(positions_, ui::colors::TEXT_PRIMARY);
 
     // Cost basis chip uses summary too
-    cost_basis_.value->setText(none ? dash
-                                    : fmt(s.total_cost_basis) + (note.isEmpty() ? QString() : QStringLiteral(" (") + note + QStringLiteral(")")));
+    cost_basis_.value->setText(
+        none ? dash
+             : fmt(s.total_cost_basis) +
+                   (note.isEmpty() ? QString() : QStringLiteral(" (") + note + QStringLiteral(")")));
     apply_chip_styles(cost_basis_, ui::colors::CYAN);
 
     // Realized / dividends come from the transaction log, not from prices —
@@ -352,9 +357,8 @@ void PortfolioStatsRibbon::set_metrics(const portfolio::ComputedMetrics& m) {
         return v.has_value() ? QString::number(*v, 'f', dp) : "--";
     };
 
-    concentration_.value->setText(m.concentration_top3.has_value()
-                                      ? QString("%1%").arg(QString::number(*m.concentration_top3, 'f', 1))
-                                      : "--");
+    concentration_.value->setText(
+        m.concentration_top3.has_value() ? QString("%1%").arg(QString::number(*m.concentration_top3, 'f', 1)) : "--");
     apply_chip_styles(concentration_, ui::colors::AMBER);
 
     // A carried-over (stale) risk-free rate is marked with "*" and named,
@@ -364,12 +368,11 @@ void PortfolioStatsRibbon::set_metrics(const portfolio::ComputedMetrics& m) {
     // Every series metric below is measured over the same snapshot window;
     // each tooltip names it, and the VOL label carries its span.
     const QString window = portfolio::metrics_window_note(m);
-    sharpe_.container->setToolTip(
-        tr("Sharpe Ratio (arithmetic): risk-adjusted return over a risk-free rate.\n"
-           "Formula: (mean daily return − risk-free rate) / std dev × √252.\n"
-           "The QuantStats/FFN views report the geometric variant ((CAGR − rf) / vol).\n"
-           "Above 1.0 = good, above 2.0 = very good, below 0 = worse than risk-free.\n\n") +
-        portfolio::rf_label(m) + QStringLiteral("\n") + window);
+    sharpe_.container->setToolTip(tr("Sharpe Ratio (arithmetic): risk-adjusted return over a risk-free rate.\n"
+                                     "Formula: (mean daily return − risk-free rate) / std dev × √252.\n"
+                                     "The QuantStats/FFN views report the geometric variant ((CAGR − rf) / vol).\n"
+                                     "Above 1.0 = good, above 2.0 = very good, below 0 = worse than risk-free.\n\n") +
+                                  portfolio::rf_label(m) + QStringLiteral("\n") + window);
     apply_chip_styles(sharpe_, ui::colors::CYAN);
 
     // Beta's benchmark: the book's base-currency index when loaded, else SPY.
@@ -394,9 +397,8 @@ void PortfolioStatsRibbon::set_metrics(const portfolio::ComputedMetrics& m) {
                                       window);
     apply_chip_styles(volatility_, ui::colors::AMBER);
 
-    max_drawdown_.value->setText(m.max_drawdown.has_value()
-                                     ? QString("%1%").arg(QString::number(*m.max_drawdown, 'f', 1))
-                                     : "--");
+    max_drawdown_.value->setText(
+        m.max_drawdown.has_value() ? QString("%1%").arg(QString::number(*m.max_drawdown, 'f', 1)) : "--");
     max_drawdown_.container->setToolTip(tr("Maximum peak-to-trough decline in portfolio value\n"
                                            "(flow-adjusted growth index, so deposits and withdrawals\n"
                                            "are neither gains nor crashes).\n\n") +
@@ -404,16 +406,15 @@ void PortfolioStatsRibbon::set_metrics(const portfolio::ComputedMetrics& m) {
     apply_chip_styles(max_drawdown_, ui::colors::NEGATIVE);
 
     var95_.value->setText(m.var_95.has_value() ? QString::number(*m.var_95, 'f', 2) : ui::formatting::placeholder());
-    var95_.container->setToolTip(
-        m.var_95.has_value()
-            ? tr("Value at Risk at 95% confidence — the maximum expected\n"
-                 "single-day loss 95% of the time based on historical returns.\n\n") +
-                  window
-            : m.return_days < portfolio::kMinVarSample
-                  ? tr("VaR 95%: insufficient history (n=%1; needs %2 one-session returns).")
-                        .arg(m.return_days)
-                        .arg(portfolio::kMinVarSample)
-                  : tr("VaR 95%: unavailable — the book has holdings without a price or FX rate."));
+    var95_.container->setToolTip(m.var_95.has_value()
+                                     ? tr("Value at Risk at 95% confidence — the maximum expected\n"
+                                          "single-day loss 95% of the time based on historical returns.\n\n") +
+                                           window
+                                 : m.return_days < portfolio::kMinVarSample
+                                     ? tr("VaR 95%: insufficient history (n=%1; needs %2 one-session returns).")
+                                           .arg(m.return_days)
+                                           .arg(portfolio::kMinVarSample)
+                                     : tr("VaR 95%: unavailable — the book has holdings without a price or FX rate."));
     apply_chip_styles(var95_, ui::colors::NEGATIVE);
 
     if (m.risk_score.has_value()) {

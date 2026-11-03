@@ -15,9 +15,9 @@
 namespace fincept {
 
 struct ToolKillswitchEntry {
-    QString tool_name;     ///< wire-form: `<server_id>__<tool_name>`
-    QString reason;        ///< user-supplied; surfaced in the error message
-    QString disabled_at;   ///< ISO timestamp
+    QString tool_name;   ///< wire-form: `<server_id>__<tool_name>`
+    QString reason;      ///< user-supplied; surfaced in the error message
+    QString disabled_at; ///< ISO timestamp
 };
 
 class ToolKillswitchRepository {

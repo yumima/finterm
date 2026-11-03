@@ -1,15 +1,14 @@
 #include "screens/news/NewsSidePanel.h"
 
 #include "screens/news/NewsBriefFormat.h"
-
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-#include <QPushButton>
 #include <QFontMetrics>
+#include <QPushButton>
 #include <QResizeEvent>
-#include <QTimer>
 #include <QScrollArea>
+#include <QTimer>
 
 namespace fincept::screens {
 
@@ -41,11 +40,10 @@ QString elide_row(const QPushButton* b, const QString& text) {
 
 } // namespace
 
-
 NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     setObjectName("newsDrawerPanel");
-    setMinimumWidth(200);  // resizable via the content splitter; opens at ~280
-    hide(); // start hidden — toggled by INTEL button
+    setMinimumWidth(200); // resizable via the content splitter; opens at ~280
+    hide();               // start hidden — toggled by INTEL button
 
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
@@ -89,7 +87,6 @@ NewsSidePanel::NewsSidePanel(QWidget* parent) : QWidget(parent) {
     auto* layout = new QVBoxLayout(content);
     layout->setContentsMargins(10, 8, 10, 8);
     layout->setSpacing(10);
-
 
     build_top_stories_section(layout);
     build_categories_section(layout);
@@ -314,7 +311,6 @@ void NewsSidePanel::build_deviations_section(QVBoxLayout* parent) {
 
 // ── Update methods ──────────────────────────────────────────────────────────
 
-
 void NewsSidePanel::update_top_stories(const QVector<services::NewsArticle>& top) {
     // Clear existing
     while (top_stories_layout_->count() > 0) {
@@ -452,7 +448,8 @@ void NewsSidePanel::update_deviations(const QVector<QPair<QString, double>>& dev
         auto* score_label =
             new QLabel(QStringLiteral("%1%2σ").arg(z_score >= 0 ? "+" : "").arg(z_score, 0, 'f', 1), this);
         score_label->setObjectName("newsDeviationScore");
-        score_label->setToolTip(QStringLiteral("Volume z-score: standard deviations from this category's hourly baseline"));
+        score_label->setToolTip(
+            QStringLiteral("Volume z-score: standard deviations from this category's hourly baseline"));
         hl->addWidget(score_label);
 
         deviations_layout_->addWidget(row);

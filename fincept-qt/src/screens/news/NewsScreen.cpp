@@ -1,5 +1,7 @@
 #include "screens/news/NewsScreen.h"
 
+#include "ai_chat/Degeneracy.h"
+#include "ai_chat/LlmService.h"
 #include "core/keys/KeyConfigManager.h"
 #include "core/logging/Logger.h"
 #include "core/session/ScreenStateManager.h"
@@ -10,13 +12,11 @@
 #include "screens/news/NewsSidePanel.h"
 #include "screens/news/NewsTickerStrip.h"
 #include "services/news/NewsCategories.h"
-#include "services/news/NewsRegions.h"
 #include "services/news/NewsCorrelationService.h"
 #include "services/news/NewsNlpService.h"
+#include "services/news/NewsRegions.h"
 #include "services/notifications/NotificationService.h"
 #include "storage/repositories/NewsArticleRepository.h"
-#include "ai_chat/Degeneracy.h"
-#include "ai_chat/LlmService.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/StyleSheets.h"
@@ -57,21 +57,21 @@ constexpr int kBriefStoryCount = 20;
 // fallback is to match the ticker itself as a word.
 const QStringList& portfolio_aliases(const QString& sym_upper) {
     static const QHash<QString, QStringList> map = {
-        {"AAPL",  {"Apple"}},
-        {"AMZN",  {"Amazon"}},
-        {"GOOG",  {"Google", "Alphabet"}},
+        {"AAPL", {"Apple"}},
+        {"AMZN", {"Amazon"}},
+        {"GOOG", {"Google", "Alphabet"}},
         {"GOOGL", {"Google", "Alphabet"}},
-        {"NVDA",  {"Nvidia", "NVIDIA"}},
-        {"PLTR",  {"Palantir"}},
-        {"AVGO",  {"Broadcom"}},
+        {"NVDA", {"Nvidia", "NVIDIA"}},
+        {"PLTR", {"Palantir"}},
+        {"AVGO", {"Broadcom"}},
         {"BRK-B", {"Berkshire"}},
         {"BRK.B", {"Berkshire"}},
-        {"ARM",   {"Arm Holdings", "Arm Ltd"}},
-        {"IONQ",  {"IonQ"}},
-        {"MSFT",  {"Microsoft"}},
-        {"META",  {"Meta Platforms", "Facebook"}},
-        {"TSLA",  {"Tesla"}},
-        {"AMD",   {"Advanced Micro Devices"}},
+        {"ARM", {"Arm Holdings", "Arm Ltd"}},
+        {"IONQ", {"IonQ"}},
+        {"MSFT", {"Microsoft"}},
+        {"META", {"Meta Platforms", "Facebook"}},
+        {"TSLA", {"Tesla"}},
+        {"AMD", {"Advanced Micro Devices"}},
     };
     static const QStringList empty;
     auto it = map.find(sym_upper);
@@ -101,8 +101,7 @@ QRegularExpression build_portfolio_text_regex(const QSet<QString>& ptf_tickers) 
     }
     if (alternatives.isEmpty())
         return QRegularExpression{};
-    QRegularExpression re("(?:" + alternatives.join("|") + ")",
-                          QRegularExpression::CaseInsensitiveOption);
+    QRegularExpression re("(?:" + alternatives.join("|") + ")", QRegularExpression::CaseInsensitiveOption);
     re.optimize();
     return re;
 }
@@ -124,9 +123,9 @@ NewsScreen::NewsScreen(QWidget* parent) : QWidget(parent) {
     // read as "the news screen stopped fetching articles". Time range, sort
     // and view mode below are genuine preferences and do persist.
     active_category_ = QStringLiteral("ALL");
-    time_range_      = settings_.value("news/time_range", "24H").toString();
-    sort_mode_       = settings_.value("news/sort_mode",  "RELEVANCE").toString();
-    view_mode_       = settings_.value("news/view_mode",  "WIRE").toString();
+    time_range_ = settings_.value("news/time_range", "24H").toString();
+    sort_mode_ = settings_.value("news/sort_mode", "RELEVANCE").toString();
+    view_mode_ = settings_.value("news/view_mode", "WIRE").toString();
 
     // Debounce filter-write storms — a user clicking through pill options
     // generates a burst of setValue() calls. We coalesce the resulting
@@ -134,9 +133,7 @@ NewsScreen::NewsScreen(QWidget* parent) : QWidget(parent) {
     settings_write_debounce_ = new QTimer(this);
     settings_write_debounce_->setSingleShot(true);
     settings_write_debounce_->setInterval(500);
-    connect(settings_write_debounce_, &QTimer::timeout, this, [this]() {
-        settings_.sync();
-    });
+    connect(settings_write_debounce_, &QTimer::timeout, this, [this]() { settings_.sync(); });
 
     build_ui();
     connect_signals();
@@ -219,15 +216,13 @@ void NewsScreen::connect_signals() {
     // NewsClusterService promotes is_breaking ahead of everything else).
     // Gives the user a one-click jump from "8 BREAKING" → seeing what
     // those 8 are.
-    connect(command_bar_, &NewsCommandBar::breaking_filter_requested, this, [this]() {
-        on_view_mode_changed(QStringLiteral("CLUSTERS"));
-    });
+    connect(command_bar_, &NewsCommandBar::breaking_filter_requested, this,
+            [this]() { on_view_mode_changed(QStringLiteral("CLUSTERS")); });
     // "X NEW" click — back-out from the BREAKING/clusters view to the
     // default WIRE feed. Gives the user a one-click escape from the
     // alert filter without hunting for the WIRE pill.
-    connect(command_bar_, &NewsCommandBar::unseen_clicked, this, [this]() {
-        on_view_mode_changed(QStringLiteral("WIRE"));
-    });
+    connect(command_bar_, &NewsCommandBar::unseen_clicked, this,
+            [this]() { on_view_mode_changed(QStringLiteral("WIRE")); });
 
     // PTF pill — toggle the holdings-intersection filter. apply_filters_async
     // refreshes portfolio_tickers_ on every pass, so a user who just added a
@@ -256,13 +251,11 @@ void NewsScreen::connect_signals() {
         ensure_drawer_open_for_digest();
         if (all_articles_.isEmpty()) {
             // Surface the empty-feed case instead of silently no-op'ing.
-            side_panel_->show_digest(QStringLiteral(
-                "No headlines yet. Refresh the feed and try again."));
+            side_panel_->show_digest(QStringLiteral("No headlines yet. Refresh the feed and try again."));
             return;
         }
         if (!fincept::ai_chat::LlmService::instance().is_configured()) {
-            side_panel_->show_digest(QStringLiteral(
-                "LLM not configured. Open Settings -> AI Chat to add an API key."));
+            side_panel_->show_digest(QStringLiteral("LLM not configured. Open Settings -> AI Chat to add an API key."));
             return;
         }
         set_tldr_in_flight(true);
@@ -436,9 +429,8 @@ void NewsScreen::connect_signals() {
 
         // "TL;DR" when unfiltered, "TL;DR — MKT" when drilled in, so the brief
         // can never be mistaken for a read of the whole market.
-        const QString scope_title = (active_category_ == "ALL")
-                                        ? QStringLiteral("TL;DR")
-                                        : QStringLiteral("TL;DR — %1").arg(active_category_);
+        const QString scope_title =
+            (active_category_ == "ALL") ? QStringLiteral("TL;DR") : QStringLiteral("TL;DR — %1").arg(active_category_);
 
         // Render the brief in the detail panel's TL;DR section (a proper, full-size
         // surface that opens the panel) instead of cramming it into the 60px
@@ -455,35 +447,36 @@ void NewsScreen::connect_signals() {
         QPointer<NewsScreen> self = this;
         const int request_gen = ++tldr_request_gen_;
         services::NewsService::instance().summarize_headlines(
-            filtered_articles_, kBriefStoryCount, [self, scope_title](bool ok, QString summary) {
-            if (!self)
-                return;
-            self->set_tldr_in_flight(false);
-            // Treat ok-but-empty as a failure so the panel doesn't stay stuck on
-            // "Generating brief…" (show_tldr_summary hides the section on empty).
-            const bool have_text = ok && !summary.trimmed().isEmpty();
-            if (have_text) {
-                self->detail_panel_->show_tldr_summary(summary, scope_title);
-                return;
-            }
-            // Say why. This used to render a bare "AI brief is unavailable
-            // right now", which is indistinguishable between "the local model
-            // isn't running", "it timed out" and "it returned nothing" — the
-            // reason was logged but never shown, so the one person who could
-            // act on it never saw it.
-            const QString why = fincept::ai_chat::LlmService::instance().is_configured()
-                                    ? QStringLiteral("The local model returned nothing — check that hearth is "
-                                                     "running and the chat model is loaded.")
-                                    : QStringLiteral("No LLM is configured. Open Settings -> AI Chat.");
-            // The user opened an article while the model was working: this
-            // notice is about a brief they have left, so drop it.
-            if (!self->detail_panel_->brief_pending())
-                return;
-            // Same reasoning as the empty-feed branch: a one-line failure
-            // notice is not worth evicting the story the reader has open.
-            self->detail_panel_->show_brief_unavailable(
-                QStringLiteral("**AI brief unavailable.** %1").arg(why), scope_title);
-        },
+            filtered_articles_, kBriefStoryCount,
+            [self, scope_title](bool ok, QString summary) {
+                if (!self)
+                    return;
+                self->set_tldr_in_flight(false);
+                // Treat ok-but-empty as a failure so the panel doesn't stay stuck on
+                // "Generating brief…" (show_tldr_summary hides the section on empty).
+                const bool have_text = ok && !summary.trimmed().isEmpty();
+                if (have_text) {
+                    self->detail_panel_->show_tldr_summary(summary, scope_title);
+                    return;
+                }
+                // Say why. This used to render a bare "AI brief is unavailable
+                // right now", which is indistinguishable between "the local model
+                // isn't running", "it timed out" and "it returned nothing" — the
+                // reason was logged but never shown, so the one person who could
+                // act on it never saw it.
+                const QString why = fincept::ai_chat::LlmService::instance().is_configured()
+                                        ? QStringLiteral("The local model returned nothing — check that hearth is "
+                                                         "running and the chat model is loaded.")
+                                        : QStringLiteral("No LLM is configured. Open Settings -> AI Chat.");
+                // The user opened an article while the model was working: this
+                // notice is about a brief they have left, so drop it.
+                if (!self->detail_panel_->brief_pending())
+                    return;
+                // Same reasoning as the empty-feed branch: a one-line failure
+                // notice is not worth evicting the story the reader has open.
+                self->detail_panel_->show_brief_unavailable(QStringLiteral("**AI brief unavailable.** %1").arg(why),
+                                                            scope_title);
+            },
             // The top half lands while the category breakdown is still being
             // written: start synthesising the read-aloud's opening now, so the
             // speaker plays at once when the brief appears.
@@ -793,7 +786,7 @@ void NewsScreen::on_monitor_deleted(const QString& id) {
 }
 
 void NewsScreen::on_analyze_requested(const QString& url) {
-    if (analyze_in_flight_)  // local LLM can outlast the button timeout — don't double-launch
+    if (analyze_in_flight_) // local LLM can outlast the button timeout — don't double-launch
         return;
     analyze_in_flight_ = true;
     QPointer<NewsScreen> self = this;
@@ -805,14 +798,13 @@ void NewsScreen::on_analyze_requested(const QString& url) {
             // Name the model that actually wrote it when a quota fallback
             // switched away from the configured one (display only).
             if (analysis.fell_back && !analysis.model_used.isEmpty())
-                analysis.summary += QStringLiteral("\n\n(Answered by %1 via %2 — fell back from %3 after a quota limit.)")
-                                        .arg(analysis.model_used, analysis.provider_used,
-                                             analysis.requested_model.isEmpty()
-                                                 ? QStringLiteral("the configured model")
-                                                 : analysis.requested_model);
+                analysis.summary +=
+                    QStringLiteral("\n\n(Answered by %1 via %2 — fell back from %3 after a quota limit.)")
+                        .arg(analysis.model_used, analysis.provider_used,
+                             analysis.requested_model.isEmpty() ? QStringLiteral("the configured model")
+                                                                : analysis.requested_model);
             self->detail_panel_->show_analysis(analysis);
-        }
-        else
+        } else
             self->detail_panel_->show_analysis_error("AI analysis is unavailable right now.");
     });
 }
@@ -872,7 +864,7 @@ void NewsScreen::on_drawer_toggle() {
         if (w > 0)
             drawer_width_ = w;
     }
-    side_panel_->toggle_drawer();  // flips visibility
+    side_panel_->toggle_drawer(); // flips visibility
     const bool now_open = side_panel_->is_drawer_open();
     if (now_open) {
         // Give the freshly-shown drawer its remembered width; feed takes the rest.
@@ -987,8 +979,8 @@ void NewsScreen::apply_filters_async() {
         }
     }
 
-    (void)QtConcurrent::run([self, gen, articles_copy = std::move(articles_copy), category, time_range, search_lower, sort,
-                       variant, ptf_active, ptf_tickers]() {
+    (void)QtConcurrent::run([self, gen, articles_copy = std::move(articles_copy), category, time_range, search_lower,
+                             sort, variant, ptf_active, ptf_tickers]() {
         int64_t window_sec = 0;
         if (time_range == "1H")
             window_sec = 3600;
@@ -1087,8 +1079,7 @@ void NewsScreen::apply_filters_async() {
                     }
                 }
                 if (!overlap && ptf_text_re.isValid() && !ptf_text_re.pattern().isEmpty()) {
-                    overlap = ptf_text_re.match(a.headline).hasMatch() ||
-                              ptf_text_re.match(a.summary).hasMatch();
+                    overlap = ptf_text_re.match(a.headline).hasMatch() || ptf_text_re.match(a.summary).hasMatch();
                 }
                 if (!overlap) {
                     ++rejected_ptf;
@@ -1151,10 +1142,15 @@ void NewsScreen::apply_filters_async() {
         if (!articles_copy.isEmpty()) {
             const int kept = static_cast<int>(filtered.size());
             const int total = static_cast<int>(articles_copy.size());
-            const QString breakdown =
-                QString("kept=%1/%2 (time=%3 variant=%4 category=%5 search=%6 ptf=%7 range=%8)")
-                    .arg(kept).arg(total).arg(rejected_time).arg(rejected_variant)
-                    .arg(rejected_category).arg(rejected_search).arg(rejected_ptf).arg(time_range);
+            const QString breakdown = QString("kept=%1/%2 (time=%3 variant=%4 category=%5 search=%6 ptf=%7 range=%8)")
+                                          .arg(kept)
+                                          .arg(total)
+                                          .arg(rejected_time)
+                                          .arg(rejected_variant)
+                                          .arg(rejected_category)
+                                          .arg(rejected_search)
+                                          .arg(rejected_ptf)
+                                          .arg(time_range);
             if (kept == 0)
                 LOG_WARN("NewsScreen", "Filter rejected ALL articles — " + breakdown);
             else if (kept * 2 < total)
@@ -1205,10 +1201,13 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
     if (!auto_tldr_done_ && !loading_ && !filtered.isEmpty()) {
         auto_tldr_done_ = true;
         if (!tldr_in_flight_)
-            QMetaObject::invokeMethod(this, [this]() {
-                if (!tldr_in_flight_ && !filtered_articles_.isEmpty())
-                    QMetaObject::invokeMethod(command_bar_, "summarize_clicked", Qt::DirectConnection);
-            }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(
+                this,
+                [this]() {
+                    if (!tldr_in_flight_ && !filtered_articles_.isEmpty())
+                        QMetaObject::invokeMethod(command_bar_, "summarize_clicked", Qt::DirectConnection);
+                },
+                Qt::QueuedConnection);
     }
 
     // Update feed model
@@ -1275,8 +1274,7 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
                     }
                 }
                 if (!overlap && text_re_valid) {
-                    overlap = text_re.match(a.headline).hasMatch() ||
-                              text_re.match(a.summary).hasMatch();
+                    overlap = text_re.match(a.headline).hasMatch() || text_re.match(a.summary).hasMatch();
                 }
                 if (overlap)
                     ++preview;
@@ -1324,8 +1322,8 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
             const services::NewsArticle* trigger = nullptr;
             bool claimed_before = false;
             for (const auto& m : cluster.articles) {
-                if ((m.priority == services::Priority::FLASH || m.priority == services::Priority::URGENT)
-                    && (!trigger || m.sort_ts > trigger->sort_ts))
+                if ((m.priority == services::Priority::FLASH || m.priority == services::Priority::URGENT) &&
+                    (!trigger || m.sort_ts > trigger->sort_ts))
                     trigger = &m;
                 claimed_before = claimed_before || notified_breaking_.contains(alert_key(m));
             }
@@ -1380,8 +1378,8 @@ bool NewsScreen::is_alertable(const services::NewsArticle& a, int64_t now) const
     // The age cap bounds the late case: a story hidden by the active filter is
     // first seen when the filter is cleared, possibly hours on, and by then it
     // is not news. An hour clears the 10-minute refresh plus feed lag.
-    return a.sort_ts > 0 && a.sort_ts >= alert_since_ts_ && a.sort_ts >= now - kAlertMaxAgeSec
-           && a.sort_ts <= now + kAlertFutureSlackSec && !future_dated_.contains(alert_key(a));
+    return a.sort_ts > 0 && a.sort_ts >= alert_since_ts_ && a.sort_ts >= now - kAlertMaxAgeSec &&
+           a.sort_ts <= now + kAlertFutureSlackSec && !future_dated_.contains(alert_key(a));
 }
 
 bool NewsScreen::claim_alert(QSet<QString>& notified, const services::NewsArticle& a, int64_t now) {
@@ -1655,7 +1653,7 @@ QVariantMap NewsScreen::save_state() const {
     // on next launch (the search input widget doesn't display restored
     // queries, so users can't see what's hiding articles).
     return {
-        {"category", active_category_}, {"time_range", time_range_}, {"sort_mode", sort_mode_},
+        {"category", active_category_}, {"time_range", time_range_},  {"sort_mode", sort_mode_},
         {"view_mode", view_mode_},      {"variant", active_variant_},
     };
 }

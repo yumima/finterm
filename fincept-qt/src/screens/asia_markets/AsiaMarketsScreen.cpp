@@ -115,7 +115,7 @@ static const QString kStyle =
         .arg(colors::BORDER_BRIGHT())  // %8
         .arg(colors::BG_HOVER())       // %9
         .arg(colors::AMBER_DIM())      // %10
-        .arg(colors::TEXT_SECONDARY())       // %11
+        .arg(colors::TEXT_SECONDARY()) // %11
         .arg(colors::CYAN())           // %12
         .arg(colors::NEGATIVE())       // %13
     ;
@@ -525,9 +525,8 @@ void AsiaMarketsScreen::load_endpoints(int cat_index) {
 
             const QJsonObject obj = r.data;
             fincept::CacheManager::instance().put(
-                cache_key,
-                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
-                60 * 60, "asia_markets");
+                cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), 60 * 60,
+                "asia_markets");
             self->endpoint_cache_[script] = obj;
             self->populate_endpoint_list(obj);
         });
@@ -635,8 +634,7 @@ void AsiaMarketsScreen::execute_query(const QString& endpoint, const QStringList
     QPointer<AsiaMarketsScreen> self = this;
 
     services::asia_markets::AsiaMarketsService::instance().query(
-        script, endpoint, extra_args,
-        [self, endpoint, cache_key](const services::asia_markets::QueryResult& r) {
+        script, endpoint, extra_args, [self, endpoint, cache_key](const services::asia_markets::QueryResult& r) {
             if (!self)
                 return;
             self->set_loading(false);
@@ -654,9 +652,7 @@ void AsiaMarketsScreen::execute_query(const QString& endpoint, const QStringList
 
             if (!data_array.isEmpty()) {
                 fincept::CacheManager::instance().put(
-                    cache_key,
-                    QVariant(QString::fromUtf8(
-                        QJsonDocument(data_array).toJson(QJsonDocument::Compact))),
+                    cache_key, QVariant(QString::fromUtf8(QJsonDocument(data_array).toJson(QJsonDocument::Compact))),
                     2 * 60, "asia_markets");
             }
 

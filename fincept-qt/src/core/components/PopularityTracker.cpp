@@ -1,8 +1,8 @@
 #include "core/components/PopularityTracker.h"
 
-#include <QSettings>
-
 #include "core/config/AppIdentity.h"
+
+#include <QSettings>
 
 namespace fincept {
 

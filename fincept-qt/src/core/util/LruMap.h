@@ -43,9 +43,7 @@ class LruMap {
     }
 
     /// True if the key exists. Does NOT mark MRU.
-    bool contains(const Key& key) const {
-        return index_.find(key) != index_.end();
-    }
+    bool contains(const Key& key) const { return index_.find(key) != index_.end(); }
 
     /// Returns the value if present, otherwise `default_value`. Does NOT
     /// mark MRU — use this for the cheap-lookup path where readers should
@@ -66,7 +64,8 @@ class LruMap {
 
     void erase(const Key& key) {
         auto it = index_.find(key);
-        if (it == index_.end()) return;
+        if (it == index_.end())
+            return;
         order_.erase(it->second);
         index_.erase(it);
     }
@@ -90,7 +89,7 @@ class LruMap {
 
   private:
     int max_size_;
-    std::list<std::pair<Key, Value>> order_;   // front = MRU, back = LRU
+    std::list<std::pair<Key, Value>> order_; // front = MRU, back = LRU
     using ListIt = typename std::list<std::pair<Key, Value>>::iterator;
     std::unordered_map<Key, ListIt> index_;
 };

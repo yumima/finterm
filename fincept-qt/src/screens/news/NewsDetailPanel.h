@@ -13,7 +13,9 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::ui { class ReadAloudToggle; }
+namespace fincept::ui {
+class ReadAloudToggle;
+}
 
 namespace fincept::screens {
 
@@ -111,7 +113,7 @@ class NewsDetailPanel : public QWidget {
     // when the user scrolls through the feed. Populated by NewsScreen via
     // show_tldr_summary() after NewsService::summarize_headlines() returns.
     QWidget* tldr_section_ = nullptr;
-    QLabel* tldr_title_ = nullptr;  ///< section header — "TL;DR" or "DIGEST"
+    QLabel* tldr_title_ = nullptr; ///< section header — "TL;DR" or "DIGEST"
     QLabel* tldr_label_ = nullptr;
 
     // Lower half of a brief: the per-category breakdown. show_tldr_summary()
@@ -125,9 +127,9 @@ class NewsDetailPanel : public QWidget {
     // Article section
     /// The loose article widgets that are not inside a section container.
     /// Held so a brief can collapse the whole story, not just parts of it.
-    QWidget* article_meta_row_   = nullptr;
-    QWidget* article_actions_    = nullptr;
-    QWidget* article_separator_  = nullptr;
+    QWidget* article_meta_row_ = nullptr;
+    QWidget* article_actions_ = nullptr;
+    QWidget* article_separator_ = nullptr;
     QLabel* headline_label_ = nullptr;
     QLabel* priority_badge_ = nullptr;
     QLabel* sentiment_badge_ = nullptr;
@@ -151,19 +153,19 @@ class NewsDetailPanel : public QWidget {
     // pipeline and honors the full Qt rich-text subset. Configured for
     // static display (read-only, no frame, scrollbars off — outer scroll
     // area handles overflow, auto-resized to document height).
-    QWidget*       body_section_ = nullptr;
-    QLabel*        body_title_   = nullptr; // "ARTICLE" header, hidden on failure
-    QLabel*        body_status_  = nullptr; // "loading…" / error message
-    QTextBrowser*  body_label_   = nullptr; // the extracted prose itself
+    QWidget* body_section_ = nullptr;
+    QLabel* body_title_ = nullptr;       // "ARTICLE" header, hidden on failure
+    QLabel* body_status_ = nullptr;      // "loading…" / error message
+    QTextBrowser* body_label_ = nullptr; // the extracted prose itself
     // Generation token so a stale extraction callback for a previous article
     // doesn't repaint a body we no longer care about (e.g. user clicked B
     // while A was still extracting). Bumped on every show_article().
-    int      body_gen_     = 0;
+    int body_gen_ = 0;
     // Plain-text body cached from the most recent successful extraction —
     // the SAVE button writes this to disk alongside the headline + summary
     // so saved articles include the full story, not just the metadata.
     // Cleared on each new article (before the next fetch resolves).
-    QString  current_body_text_;
+    QString current_body_text_;
 
     // AI analysis section
     QWidget* analysis_section_ = nullptr;
@@ -206,19 +208,19 @@ class NewsDetailPanel : public QWidget {
     QStackedWidget* stack_ = nullptr;
     services::NewsArticle current_article_;
     bool has_article_ = false;
-    ui::ReadAloudToggle* listen_toggle_ = nullptr;  ///< article LISTEN ↔ TtsService
+    ui::ReadAloudToggle* listen_toggle_ = nullptr; ///< article LISTEN ↔ TtsService
 
     // Read-aloud for the TL;DR, on the ARTICLE DETAIL header bar. Synthesised
     // by the configured LLM engine (TtsService::speak_via_engine). Visible only
     // while a finished brief owns the pane — there is nothing to read otherwise.
     QPushButton* tldr_listen_btn_ = nullptr;
     ui::ReadAloudToggle* tldr_listen_ = nullptr;
-    QString tldr_text_;  ///< the brief's markdown, as rendered
+    QString tldr_text_; ///< the brief's markdown, as rendered
     /// Show/hide the header button for the current brief state, and stop the
     /// brief's playback when the brief leaves the pane.
     void sync_tldr_listen();
-    QString tldr_plain_text() const;  ///< tldr_text_ as spoken (markdown rendered)
-    static QString spoken_text(const QString& markdown);  ///< markdown → the words read aloud
+    QString tldr_plain_text() const;                     ///< tldr_text_ as spoken (markdown rendered)
+    static QString spoken_text(const QString& markdown); ///< markdown → the words read aloud
 };
 
 } // namespace fincept::screens

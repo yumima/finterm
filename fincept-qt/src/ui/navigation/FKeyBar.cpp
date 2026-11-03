@@ -18,15 +18,27 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
     tab_layout_->setSpacing(2);
 
     QVector<TabDef> tabs = {
-        {"dashboard", "DASHBOARD"}, {"markets", "MARKETS"},   {"crypto_trading", "CRYPTO"},  {"portfolio", "PORTFOLIO"},
-        {"ownership", "OWNERSHIP"}, {"screener", "SCREENER"}, {"pre_ipo", "IPO WATCH"},
+        {"dashboard", "DASHBOARD"},
+        {"markets", "MARKETS"},
+        {"crypto_trading", "CRYPTO"},
+        {"portfolio", "PORTFOLIO"},
+        {"ownership", "OWNERSHIP"},
+        {"screener", "SCREENER"},
+        {"pre_ipo", "IPO WATCH"},
         // "equity_research" replaced "fingpt" (which had replaced "ai_chat"):
         // the per-stock AI — both forecast engines, headline sentiment and the
         // stock chat — now lives in Equity Research's AI tab, and the global
         // chat floats in the bubble.
-        {"news", "NEWS"},           {"equity_research", "RESEARCH"}, {"backtesting", "BACKTEST"},   {"algo_trading", "ALGO"},
-        {"node_editor", "NODES"},   {"code_editor", "CODE"},  {"ai_quant_lab", "QUANT LAB"}, {"quantlib", "QUANTLIB"},
-        {"forum", "FORUM"},         {"knowledge", "KNOWLEDGE"},
+        {"news", "NEWS"},
+        {"equity_research", "RESEARCH"},
+        {"backtesting", "BACKTEST"},
+        {"algo_trading", "ALGO"},
+        {"node_editor", "NODES"},
+        {"code_editor", "CODE"},
+        {"ai_quant_lab", "QUANT LAB"},
+        {"quantlib", "QUANTLIB"},
+        {"forum", "FORUM"},
+        {"knowledge", "KNOWLEDGE"},
         // SETTINGS and PROFILE deliberately absent: they merged into one screen
         // reached from the "Settings" button in the top bar, next to the user
         // name. Two tabs for "my account and my setup" was the redundancy.
@@ -66,7 +78,8 @@ void TabBar::set_active(const QString& tab_id) {
 }
 
 void TabBar::refresh_theme() {
-    setStyleSheet(QString("background:%1;border-bottom:1px solid %2;").arg(colors::BG_BASE()).arg(colors::BORDER_DIM()));
+    setStyleSheet(
+        QString("background:%1;border-bottom:1px solid %2;").arg(colors::BG_BASE()).arg(colors::BORDER_DIM()));
     update_styles();
 }
 

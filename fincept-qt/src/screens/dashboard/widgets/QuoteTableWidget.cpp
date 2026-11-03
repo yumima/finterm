@@ -1,12 +1,10 @@
 #include "screens/dashboard/widgets/QuoteTableWidget.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/markets/MarketChartDialog.h"
-
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QHeaderView>
 #include <QTableWidgetItem>
@@ -36,12 +34,11 @@ namespace {
 // and chart window through the daemon's cache, and only while on screen.
 constexpr int kFutRefreshMs = 60'000;
 constexpr int kColFut = 4;
-constexpr auto kFutTip =
-    "Each index's futures quote: the future's change since its previous close, live day and "
-    "night — after the cash close this is the index's after-hours move. Hover a cell for the "
-    "contract, its last price and the close it is measured from.\n\n"
-    "A dash means there is no honest number for that row right now; hover it for why (no future "
-    "on the feed for that index, or still fetching).";
+constexpr auto kFutTip = "Each index's futures quote: the future's change since its previous close, live day and "
+                         "night — after the cash close this is the index's after-hours move. Hover a cell for the "
+                         "contract, its last price and the close it is measured from.\n\n"
+                         "A dash means there is no honest number for that row right now; hover it for why (no future "
+                         "on the feed for that index, or still fetching).";
 } // namespace
 
 void QuoteTableWidget::build_table() {
@@ -106,7 +103,7 @@ void QuoteTableWidget::fit_columns() {
     // gives way first (it elides), so no number is ever cut.
     auto* h = table_->horizontalHeader();
     const int n = table_->columnCount();
-    table_->resizeColumnsToContents();   // measures cells and header alike
+    table_->resizeColumnsToContents(); // measures cells and header alike
     QVector<int> need(n);
     int total = 0;
     for (int c = 0; c < n; ++c) {
@@ -230,7 +227,6 @@ void QuoteTableWidget::refresh_data() {
     fetch_futures();
 }
 
-
 void QuoteTableWidget::hub_subscribe_all() {
     auto& hub = datahub::DataHub::instance();
     for (const auto& sym : symbols_) {
@@ -283,8 +279,8 @@ void QuoteTableWidget::render_from_cache() {
         QString price_str = QString::number(q.price, 'f', price_decimals_);
         double chg_abs = q.change;
         QString chg_str = std::isfinite(chg_abs)
-            ? QString("%1%2").arg(chg_abs >= 0 ? "+" : "").arg(chg_abs, 0, 'f', price_decimals_)
-            : ui::formatting::placeholder();
+                              ? QString("%1%2").arg(chg_abs >= 0 ? "+" : "").arg(chg_abs, 0, 'f', price_decimals_)
+                              : ui::formatting::placeholder();
         QString pct_str = ui::formatting::format_percent(q.change_pct, 2, true);
 
         QStringList cells{display_name, price_str, chg_str, pct_str};
@@ -310,6 +306,5 @@ void QuoteTableWidget::render_from_cache() {
     }
     schedule_fit();
 }
-
 
 } // namespace fincept::screens::widgets

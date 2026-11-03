@@ -45,13 +45,13 @@ namespace fincept::ownership {
 
 // ── Thresholds ──────────────────────────────────────────────────────────────
 // Named here rather than buried in the branches so they can be argued with.
-inline constexpr int    kClusterWindowDays   = 30;    // Lakonishok & Lee's month
-inline constexpr int    kClusterMinInsiders  = 2;     // OpenInsider's default group floor
-inline constexpr double kDaysToCoverElevated = 5.0;   // a week of volume to exit
-inline constexpr double kShortFloatElevated  = 0.10;  // 10% of float
-inline constexpr double kSirioTopDecile      = 0.90;  // Drechsler & Drechsler's decile 10
-inline constexpr double kTop10OfSharesOut    = 0.40;  // ten holders own 40% of the company
-inline constexpr int    kHeaderWindowMonths  = 6;     // Bloomberg OWN's insider window
+inline constexpr int kClusterWindowDays = 30;       // Lakonishok & Lee's month
+inline constexpr int kClusterMinInsiders = 2;       // OpenInsider's default group floor
+inline constexpr double kDaysToCoverElevated = 5.0; // a week of volume to exit
+inline constexpr double kShortFloatElevated = 0.10; // 10% of float
+inline constexpr double kSirioTopDecile = 0.90;     // Drechsler & Drechsler's decile 10
+inline constexpr double kTop10OfSharesOut = 0.40;   // ten holders own 40% of the company
+inline constexpr int kHeaderWindowMonths = 6;       // Bloomberg OWN's insider window
 
 /// Open-market purchases by two or more distinct insiders inside a window.
 ///
@@ -67,9 +67,7 @@ inline QVector<BuyCluster> find_cluster_buys(const QVector<InsiderTransaction>& 
         if (t.scorable_buy() && t.date.isValid())
             buys.push_back(&t);
     std::sort(buys.begin(), buys.end(),
-              [](const InsiderTransaction* a, const InsiderTransaction* b) {
-                  return a->date < b->date;
-              });
+              [](const InsiderTransaction* a, const InsiderTransaction* b) { return a->date < b->date; });
 
     QVector<BuyCluster> out;
     int i = 0;
@@ -106,29 +104,28 @@ struct HeaderStats {
     /// Institutional shares from the filings over the vendor's share count.
     std::optional<double> inst_pct_out;
     std::optional<double> inst_pct_float;
-    std::optional<double> vendor_inst_pct;   ///< the vendor's own figure, for comparison
+    std::optional<double> vendor_inst_pct; ///< the vendor's own figure, for comparison
     std::optional<double> insiders_pct;
-    std::optional<double> top10_share;       ///< of institutional value
-    std::optional<double> top10_pct_out;     ///< of shares outstanding
+    std::optional<double> top10_share;   ///< of institutional value
+    std::optional<double> top10_pct_out; ///< of shares outstanding
     std::optional<double> broad_share;
 
     std::optional<double> si_pct_float;
     std::optional<double> days_to_cover;
-    std::optional<double> sirio;             ///< short interest ÷ 13F shares
+    std::optional<double> sirio; ///< short interest ÷ 13F shares
     std::optional<double> si_change_pct;
     QDate si_settlement;
     QDate si_published_after;
 
-    int insider_buys = 0;    ///< scorable open-market buys in the window
-    int insider_sells = 0;   ///< open-market sells, shown never scored
+    int insider_buys = 0;  ///< scorable open-market buys in the window
+    int insider_sells = 0; ///< open-market sells, shown never scored
     double insider_buy_value = 0.0;
     double insider_sell_value = 0.0;
     int activist_filings = 0;
     QDate latest_activist;
 };
 
-inline HeaderStats derive_header(const OwnershipSnapshot& s,
-                                 const QDate& today = QDate::currentDate()) {
+inline HeaderStats derive_header(const OwnershipSnapshot& s, const QDate& today = QDate::currentDate()) {
     HeaderStats h;
     const auto& v = s.vendor;
     const auto& sum = s.summary;
@@ -142,8 +139,7 @@ inline HeaderStats derive_header(const OwnershipSnapshot& s,
     // The vendor's figure is institutions ÷ FLOAT in practice, and on a
     // closely held name it exceeds 1.0. Shown for comparison; an incoherent
     // one is not shown at all.
-    if (v.held_pct_institutions && *v.held_pct_institutions >= 0.0 &&
-        *v.held_pct_institutions <= 1.0)
+    if (v.held_pct_institutions && *v.held_pct_institutions >= 0.0 && *v.held_pct_institutions <= 1.0)
         h.vendor_inst_pct = v.held_pct_institutions;
     if (v.held_pct_insiders && *v.held_pct_insiders >= 0.0 && *v.held_pct_insiders <= 1.0)
         h.insiders_pct = v.held_pct_insiders;
@@ -179,7 +175,7 @@ inline HeaderStats derive_header(const OwnershipSnapshot& s,
             continue;
         if (t.acquired) {
             if (!t.scorable_buy())
-                continue;   // a 10% owner or a plan buy is not counted as a decision
+                continue; // a 10% owner or a plan buy is not counted as a decision
             ++h.insider_buys;
             h.insider_buy_value += t.value.value_or(0.0);
         } else {
@@ -201,10 +197,10 @@ enum class FlagKind { InsiderClusterBuy, ShortConstrained, Concentrated };
 
 struct Flag {
     FlagKind kind = FlagKind::Concentrated;
-    QString  headline;   ///< three or four words
-    QString  detail;     ///< one sentence carrying the driving number
-    QString  basis;      ///< the rule, its threshold, its source
-    QDate    as_of;      ///< the date the driving number was true
+    QString headline; ///< three or four words
+    QString detail;   ///< one sentence carrying the driving number
+    QString basis;    ///< the rule, its threshold, its source
+    QDate as_of;      ///< the date the driving number was true
 };
 
 namespace detail {
@@ -213,17 +209,19 @@ inline QString pct(double fraction, int dp = 0) {
 }
 inline QString compact(double v) {
     const double a = std::fabs(v);
-    if (a >= 1e9) return QString::number(v / 1e9, 'f', 1) + QStringLiteral("B");
-    if (a >= 1e6) return QString::number(v / 1e6, 'f', 1) + QStringLiteral("M");
-    if (a >= 1e3) return QString::number(v / 1e3, 'f', 0) + QStringLiteral("K");
+    if (a >= 1e9)
+        return QString::number(v / 1e9, 'f', 1) + QStringLiteral("B");
+    if (a >= 1e6)
+        return QString::number(v / 1e6, 'f', 1) + QStringLiteral("M");
+    if (a >= 1e3)
+        return QString::number(v / 1e3, 'f', 0) + QStringLiteral("K");
     return QString::number(v, 'f', 0);
 }
 } // namespace detail
 
 /// The three flags, in the order they matter: the one with alpha behind it,
 /// then the two risk reads.
-inline QVector<Flag> derive_flags(const OwnershipSnapshot& s,
-                                  const QDate& today = QDate::currentDate()) {
+inline QVector<Flag> derive_flags(const OwnershipSnapshot& s, const QDate& today = QDate::currentDate()) {
     using detail::compact;
     using detail::pct;
     QVector<Flag> out;
@@ -236,13 +234,12 @@ inline QVector<Flag> derive_flags(const OwnershipSnapshot& s,
         Flag f;
         f.kind = FlagKind::InsiderClusterBuy;
         f.headline = QStringLiteral("Insider cluster buy");
-        f.detail = QStringLiteral("%1 insiders bought on the open market between %2 and %3%4.")
-                       .arg(c.insiders.size())
-                       .arg(c.start.toString(QStringLiteral("d MMM yyyy")),
-                            c.end.toString(QStringLiteral("d MMM yyyy")),
-                            c.total_value > 0.0
-                                ? QStringLiteral(", $") + compact(c.total_value) + QStringLiteral(" in total")
-                                : QString());
+        f.detail =
+            QStringLiteral("%1 insiders bought on the open market between %2 and %3%4.")
+                .arg(c.insiders.size())
+                .arg(c.start.toString(QStringLiteral("d MMM yyyy")), c.end.toString(QStringLiteral("d MMM yyyy")),
+                     c.total_value > 0.0 ? QStringLiteral(", $") + compact(c.total_value) + QStringLiteral(" in total")
+                                         : QString());
         f.basis = QStringLiteral("%1 or more distinct insiders with code-P purchases inside %2 "
                                  "days; 10% owners and 10b5-1 plan trades excluded. Lakonishok "
                                  "& Lee 2001: +4.8%/yr, +7.3%/yr in small caps (t 3.1). The "
@@ -255,11 +252,9 @@ inline QVector<Flag> derive_flags(const OwnershipSnapshot& s,
 
     // ── Short-constrained ───────────────────────────────────────────────────
     {
-        const bool by_levels = h.days_to_cover && h.si_pct_float &&
-                               *h.days_to_cover >= kDaysToCoverElevated &&
+        const bool by_levels = h.days_to_cover && h.si_pct_float && *h.days_to_cover >= kDaysToCoverElevated &&
                                *h.si_pct_float >= kShortFloatElevated;
-        const bool by_decile = s.sirio_percentile && *s.sirio_percentile >= kSirioTopDecile &&
-                               h.sirio;
+        const bool by_decile = s.sirio_percentile && *s.sirio_percentile >= kSirioTopDecile && h.sirio;
         if (by_levels || by_decile) {
             Flag f;
             f.kind = FlagKind::ShortConstrained;
@@ -282,8 +277,7 @@ inline QVector<Flag> derive_flags(const OwnershipSnapshot& s,
                                      "(Drechsler & Drechsler: 1.51%/mo four-factor alpha, "
                                      "t 9.0). Squeeze cost at high utilisation eats two-thirds "
                                      "of it (Schultz 2024) — a risk statement, not a trade.")
-                          .arg(QString::number(kDaysToCoverElevated, 'f', 0),
-                               pct(kShortFloatElevated));
+                          .arg(QString::number(kDaysToCoverElevated, 'f', 0), pct(kShortFloatElevated));
             f.as_of = h.si_settlement;
             out.push_back(f);
         }
@@ -296,8 +290,7 @@ inline QVector<Flag> derive_flags(const OwnershipSnapshot& s,
         f.headline = QStringLiteral("Concentrated register");
         f.detail = QStringLiteral("The ten largest 13F holders own %1 of the company (%2 of "
                                   "institutional value, across %3 filers).")
-                       .arg(pct(*h.top10_pct_out), pct(*h.top10_share),
-                            QString::number(s.summary.holder_count));
+                       .arg(pct(*h.top10_pct_out), pct(*h.top10_share), QString::number(s.summary.holder_count));
         f.basis = QStringLiteral("Top-10 holders ≥ %1 of shares outstanding. Ben-David et al. "
                                  "2021: concentrated ownership raises volatility and returns "
                                  "fall in the worst 5%% of quarters, ≈ zero otherwise. A "

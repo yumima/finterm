@@ -236,8 +236,8 @@ QDoubleSpinBox* MAModulePanel::add_field(QWidget* tab, QVBoxLayout* vl, const QS
     return spin;
 }
 
-QSpinBox* MAModulePanel::add_int_field(QWidget* tab, QVBoxLayout* vl, const QString& key, const QString& label,
-                                       int min, int max, int val) {
+QSpinBox* MAModulePanel::add_int_field(QWidget* tab, QVBoxLayout* vl, const QString& key, const QString& label, int min,
+                                       int max, int val) {
     auto* spin = make_int_spin(min, max, val, tab);
     int_inputs_[key] = spin;
     vl->addWidget(build_input_row(label, spin, tab));
@@ -359,7 +359,7 @@ QJsonObject MAModulePanel::collect(const QString& tab, QString* error) const {
             continue;
         const QString path = it.key().mid(prefix.size());
         const QString kind = text_kinds_.value(it.key());
-        if (kind.isEmpty()) {  // choice
+        if (kind.isEmpty()) { // choice
             const QString v = it.value()->currentData().toString();
             if (v == QLatin1String("true") || v == QLatin1String("false"))
                 put_path(o, path, v == QLatin1String("true"));
@@ -400,8 +400,7 @@ QJsonObject MAModulePanel::collect(const QString& tab, QString* error) const {
                 *error = QString("Invalid JSON: %1").arg(pe.errorString());
             return {};
         }
-        put_path(o, it.key().mid(prefix.size()),
-                 doc.isArray() ? QJsonValue(doc.array()) : QJsonValue(doc.object()));
+        put_path(o, it.key().mid(prefix.size()), doc.isArray() ? QJsonValue(doc.array()) : QJsonValue(doc.object()));
     }
     return o;
 }
@@ -412,7 +411,6 @@ bool MAModulePanel::run_guard(const QString& error) {
     display_error(error);
     return false;
 }
-
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // MODULE 1: VALUATION TOOLKIT
@@ -453,8 +451,7 @@ QWidget* MAModulePanel::build_valuation_panel() {
         add_field(tab, t, "dcf.terminal_growth", "Terminal Growth (Gordon)", -5, 5, 2, "%");
         add_field(tab, t, "dcf.exit_multiple", "Exit Multiple (EV/EBITDA)", 0, 100, 1, "x");
         add_field(tab, t, "dcf.ebitda", "Base-Year EBITDA ($, exit multiple)", -kMax, kMax, 0);
-        add_choice(tab, t, "dcf.mid_year_convention", "Discounting",
-                   {"End of year|false", "Mid-year convention|true"});
+        add_choice(tab, t, "dcf.mid_year_convention", "Discounting", {"End of year|false", "Mid-year convention|true"});
         add_section(tab, t, "Equity bridge");
         add_field(tab, t, "dcf.debt", "Total Debt ($)", 0, kMax, 0);
         add_field(tab, t, "dcf.cash", "Cash ($)", 0, kMax, 0);
@@ -693,8 +690,9 @@ QWidget* MAModulePanel::build_merger_panel() {
     // ── Pro forma (multi-year A/D on the Accretion/Dilution tab's deal) ──
     {
         auto* tab = new_tab(t);
-        add_hint(tab, t, "Multi-year accretion/dilution for the deal on the Accretion/Dilution tab. Acquisition "
-                         "debt is held constant.");
+        add_hint(tab, t,
+                 "Multi-year accretion/dilution for the deal on the Accretion/Dilution tab. Acquisition "
+                 "debt is held constant.");
         add_int_field(tab, t, "pf.years", "Years", 1, 10, 3);
         add_field(tab, t, "pf.acquirer_ni_growth", "Acquirer Net Income Growth", -50, 200, 2, "%");
         add_field(tab, t, "pf.target_ni_growth", "Target Net Income Growth", -50, 200, 2, "%");
@@ -981,8 +979,9 @@ QWidget* MAModulePanel::build_startup_panel() {
     // Per-method payload builders, shared with the All Methods tab.
     const QStringList berkus_factors = {"Sound Idea", "Prototype", "Quality Team", "Strategic Relationships",
                                         "Product Rollout"};
-    const QStringList sc_factors = {"Management Team",  "Market Size", "Product/Technology", "Competition",
-                                    "Marketing/Sales", "Need for Funding", "Other"};
+    const QStringList sc_factors = {
+        "Management Team",  "Market Size", "Product/Technology", "Competition", "Marketing/Sales",
+        "Need for Funding", "Other"};
     const QStringList risk_factors = {"Management",        "Stage",         "Legislation", "Manufacturing",
                                       "Sales & Marketing", "Funding",       "Competition", "Technology",
                                       "Litigation",        "International", "Reputation",  "Exit Opportunity"};
@@ -1051,7 +1050,8 @@ QWidget* MAModulePanel::build_startup_panel() {
         auto* tab = new_tab(t);
         add_choice(tab, t, "sc.stage", "Stage (label)", {"seed", "early", "growth"});
         add_field(tab, t, "sc.benchmark_pre_money", "Benchmark Pre-Money ($)", 0, kMax, 0);
-        add_hint(tab, t, "Factor ratios vs the benchmark company (1.00x = average). Weights: Payne 30/25/15/10/10/5/5.");
+        add_hint(tab, t,
+                 "Factor ratios vs the benchmark company (1.00x = average). Weights: Payne 30/25/15/10/10/5/5.");
         for (int i = 0; i < sc_factors.size(); ++i)
             add_field(tab, t, QString("sc_f.%1").arg(i), sc_factors[i], 0, 3, 2, "x");
         finish_tab(tab, t, "CALCULATE SCORECARD", "Scorecard", [this, scorecard_payload]() {
@@ -1108,8 +1108,9 @@ QWidget* MAModulePanel::build_startup_panel() {
     // ── All methods ──
     {
         auto* tab = new_tab(t);
-        add_hint(tab, t, "Runs every method with the inputs on its own tab and reports the range; a method with "
-                         "missing inputs is listed under errors.");
+        add_hint(tab, t,
+                 "Runs every method with the inputs on its own tab and reports the range; a method with "
+                 "missing inputs is listed under errors.");
         finish_tab(tab, t, "RUN ALL METHODS", "All Methods",
                    [this, berkus_payload, scorecard_payload, vc_payload, fc_payload, rf_payload]() {
                        QJsonObject p;
@@ -1201,9 +1202,9 @@ QWidget* MAModulePanel::build_fairness_panel() {
     // ── Process quality ──
     {
         auto* tab = new_tab(t);
-        const QStringList pq_factors = {"Board Independence",  "Special Committee", "Independent Advisor",
-                                        "Market Check",        "Negotiation Process", "Due Diligence",
-                                        "Disclosure Quality",  "Timing Adequacy"};
+        const QStringList pq_factors = {"Board Independence", "Special Committee",   "Independent Advisor",
+                                        "Market Check",       "Negotiation Process", "Due Diligence",
+                                        "Disclosure Quality", "Timing Adequacy"};
         for (int i = 0; i < pq_factors.size(); ++i)
             add_int_field(tab, t, QString("pq_f.%1").arg(i), pq_factors[i] + " (1-5)", 1, 5, 3);
         finish_tab(tab, t, "ASSESS PROCESS QUALITY", "Process Quality", [this, n = pq_factors.size()]() {
@@ -1246,7 +1247,8 @@ QWidget* MAModulePanel::build_industry_panel() {
     {
         auto* tab = new_tab(t);
         add_hint(tab, t, "Fill the fields for the chosen sector; blank fields are not used.");
-        add_choice(tab, t, "tech.sector", "Sector", {"SaaS|saas", "Marketplace|marketplace", "Semiconductor|semiconductor"});
+        add_choice(tab, t, "tech.sector", "Sector",
+                   {"SaaS|saas", "Marketplace|marketplace", "Semiconductor|semiconductor"});
         add_section(tab, t, "SaaS");
         add_field(tab, t, "tech.arr", "ARR ($)", 0, kMax, 0);
         add_field(tab, t, "tech.growth", "ARR / Revenue Growth", -100, 1000, 1, "%");
@@ -1352,8 +1354,9 @@ QWidget* MAModulePanel::build_advanced_panel() {
     // ── Monte Carlo ──
     {
         auto* tab = new_tab(t);
-        add_hint(tab, t, "Simulated DCF: each path draws annual revenue growth and FCF margin from normal "
-                         "distributions. Results are a simulation, not a forecast.");
+        add_hint(tab, t,
+                 "Simulated DCF: each path draws annual revenue growth and FCF margin from normal "
+                 "distributions. Results are a simulation, not a forecast.");
         add_field(tab, t, "mc.base_revenue", "Base Revenue ($)", 0, kMax, 0);
         add_field(tab, t, "mc.rev_growth_mean", "Revenue Growth Mean", -99, 500, 2, "%");
         add_field(tab, t, "mc.rev_growth_std", "Revenue Growth Std Dev", 0, 500, 2, "%");
@@ -1388,8 +1391,9 @@ QWidget* MAModulePanel::build_advanced_panel() {
         add_field(tab, t, "reg.subject.revenue", "Subject Revenue ($)", 0, kMax, 0);
         add_field(tab, t, "reg.subject.ebitda", "Subject EBITDA ($)", -kMax, kMax, 0);
         add_field(tab, t, "reg.subject.growth", "Subject Growth", -100, 500, 2, "%");
-        add_hint(tab, t, "Comparable companies (JSON array, at least k+2): name, ev, revenue, ebitda, growth "
-                         "(decimal).");
+        add_hint(tab, t,
+                 "Comparable companies (JSON array, at least k+2): name, ev, revenue, ebitda, growth "
+                 "(decimal).");
         add_json_field(tab, t, "reg.comparables",
                        "[{\"name\":\"...\",\"ev\":N,\"revenue\":N,\"ebitda\":N,\"growth\":0.12}]");
         finish_tab(tab, t, "RUN REGRESSION", "Regression", [this]() {
@@ -1428,8 +1432,9 @@ QWidget* MAModulePanel::build_comparison_panel() {
 
     const QString deal_hint = "Deals as a JSON array. premium, cash_pct and stock_pct are in PERCENT (45.3 = 45.3%); "
                               "ev_revenue / ev_ebitda are multiples; deal_value in one consistent unit.";
-    const QString deal_example = "[{\"acquirer\":\"...\",\"target\":\"...\",\"deal_value\":N,\"premium\":N,"
-                                 "\"ev_revenue\":N,\"ev_ebitda\":N,\"cash_pct\":N,\"stock_pct\":N,\"industry\":\"...\"}]";
+    const QString deal_example =
+        "[{\"acquirer\":\"...\",\"target\":\"...\",\"deal_value\":N,\"premium\":N,"
+        "\"ev_revenue\":N,\"ev_ebitda\":N,\"cash_pct\":N,\"stock_pct\":N,\"industry\":\"...\"}]";
 
     // ── Compare ──
     {
@@ -1449,7 +1454,8 @@ QWidget* MAModulePanel::build_comparison_panel() {
     // ── Rank ──
     {
         auto* tab = new_tab(t);
-        add_choice(tab, t, "rank.criteria", "Rank By", {"premium", "deal_value", "ev_revenue", "ev_ebitda", "synergies"});
+        add_choice(tab, t, "rank.criteria", "Rank By",
+                   {"premium", "deal_value", "ev_revenue", "ev_ebitda", "synergies"});
         add_hint(tab, t, deal_hint);
         add_json_field(tab, t, "rank.deals", deal_example);
         finish_tab(tab, t, "RANK DEALS", "Rank", [this]() {

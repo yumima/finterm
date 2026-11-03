@@ -94,7 +94,7 @@ static const QString kScreenStyle =
         .arg(colors::BORDER_DIM())     // %9
         .arg(colors::BORDER_BRIGHT())  // %10
         .arg(colors::AMBER_DIM())      // %11
-        .arg(colors::TEXT_SECONDARY())       // %12
+        .arg(colors::TEXT_SECONDARY()) // %12
         .arg(colors::CYAN())           // %13
         .arg(colors::NEGATIVE())       // %14
     ;
@@ -912,9 +912,8 @@ void DerivativesScreen::run_pricing(const QString& command, const QStringList& a
             const QJsonObject obj = r.data;
 
             fincept::CacheManager::instance().put(
-                cache_key,
-                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
-                10 * 60, "derivatives");
+                cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), 10 * 60,
+                "derivatives");
 
             self->display_results(obj);
         });
@@ -1037,8 +1036,7 @@ void DerivativesScreen::display_results(const QJsonObject& result) {
     }
     // Implied volatility
     else if (result.contains("implied_volatility")) {
-        vl->addWidget(make_card("IMPLIED VOLATILITY",
-                                num_or_dash(result["implied_volatility"], 4, "%"), true));
+        vl->addWidget(make_card("IMPLIED VOLATILITY", num_or_dash(result["implied_volatility"], 4, "%"), true));
     }
     // FX option (price + greeks)
     else if (result.contains("price") && result.contains("notional")) {
@@ -1089,11 +1087,9 @@ void DerivativesScreen::display_results(const QJsonObject& result) {
         auto* r2l = new QHBoxLayout(row2);
         r2l->setContentsMargins(0, 0, 0, 0);
         r2l->setSpacing(8);
-        r2l->addWidget(
-            make_card("BREAKEVEN SPREAD", num_or_dash(result["breakeven_spread_bps"], 2, " bps")));
+        r2l->addWidget(make_card("BREAKEVEN SPREAD", num_or_dash(result["breakeven_spread_bps"], 2, " bps")));
         r2l->addWidget(make_card("HAZARD RATE", num_or_dash(result["hazard_rate"], 4, "%")));
-        r2l->addWidget(
-            make_card("SURVIVAL PROB", num_or_dash(result["survival_probability"], 2, "%")));
+        r2l->addWidget(make_card("SURVIVAL PROB", num_or_dash(result["survival_probability"], 2, "%")));
         vl->addWidget(row2);
     }
     // Generic fallback — display all keys

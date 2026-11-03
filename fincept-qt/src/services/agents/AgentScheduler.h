@@ -37,8 +37,8 @@ struct ScheduleEntry {
     QString id;
     QString agent_id;
     QString skill;
-    QString args_json;  // serialised QJsonObject
-    QString cron;       // grammar above
+    QString args_json; // serialised QJsonObject
+    QString cron;      // grammar above
     bool enabled = true;
     QString last_run_at;
     QString last_status; // "ok" | "error: <msg>"
@@ -50,9 +50,9 @@ struct ScheduleEntry {
 struct ScheduleSpec {
     enum Kind { Daily, EveryMinutes, EveryHours };
     Kind kind = Daily;
-    int hour = 0;       // for Daily
-    int minute = 0;     // for Daily
-    int interval = 0;   // for EveryMinutes / EveryHours
+    int hour = 0;     // for Daily
+    int minute = 0;   // for Daily
+    int interval = 0; // for EveryMinutes / EveryHours
 };
 
 /// Parse a cron string into a ScheduleSpec.  Returns nullopt on

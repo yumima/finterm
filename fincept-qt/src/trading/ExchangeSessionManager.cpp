@@ -82,8 +82,8 @@ SessionPublisher ExchangeSessionManager::build_publisher() {
     p.publish_candle = [](const QString& exchange, const QString& pair, const QString& interval, const Candle& c) {
         if (!hub_supported_exchange(exchange) || pair.isEmpty())
             return;
-        const QString topic = QStringLiteral("ws:") + exchange + QStringLiteral(":ohlc:") + pair +
-                              QLatin1Char(':') + interval;
+        const QString topic =
+            QStringLiteral("ws:") + exchange + QStringLiteral(":ohlc:") + pair + QLatin1Char(':') + interval;
         fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(c));
     };
     return p;

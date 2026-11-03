@@ -171,7 +171,8 @@ void DashboardToolBar::refresh_theme() {
     // Force child containers to re-evaluate their background after stylesheet change.
     // Without this, Qt may repaint them with the default palette grey on show events.
     auto repolish = [](QWidget* w) {
-        if (!w) return;
+        if (!w)
+            return;
         w->style()->unpolish(w);
         w->style()->polish(w);
         w->update();

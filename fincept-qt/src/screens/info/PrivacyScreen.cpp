@@ -103,7 +103,8 @@ PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
     pvl->addWidget(bullet("Login state for the localhost stub"));
 
     pvl->addSpacing(4);
-    pvl->addWidget(body_text("Locations: ~/.local/share/com.fincept.terminal/ (data) and ~/.config/Fincept/ (settings)."));
+    pvl->addWidget(
+        body_text("Locations: ~/.local/share/com.fincept.terminal/ (data) and ~/.config/Fincept/ (settings)."));
 
     // 3 — Outbound
     pvl->addWidget(section_heading("→", "OUTBOUND TRAFFIC"));

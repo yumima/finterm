@@ -12,7 +12,6 @@
 #include "screens/IStatefulScreen.h"
 #include "ui/widgets/GroupBadge.h"
 
-#include <cstdlib>
 #include <QApplication>
 #include <QClipboard>
 #include <QContextMenuEvent>
@@ -29,6 +28,7 @@
 #include <DockManager.h>
 #include <DockWidget.h>
 #include <DockWidgetTab.h>
+#include <cstdlib>
 
 namespace fincept {
 
@@ -170,23 +170,21 @@ void DockScreenRouter::attach_group_badge_to_tab(const QString& id, QWidget* scr
         return;
     }
 
-    connect(badge, &ui::GroupBadge::group_change_requested, this,
-            [linked, badge](SymbolGroup g) {
-                linked->set_group(g);
-                badge->set_group_silent(g);
-                // If the new group already has an active symbol, push it
-                // into the newly-linked screen immediately. Otherwise seed
-                // the group from the screen's current symbol.
-                const SymbolRef group_sym = SymbolContext::instance().group_symbol(g);
-                if (group_sym.is_valid()) {
-                    linked->on_group_symbol_changed(group_sym);
-                } else if (g != SymbolGroup::None) {
-                    const SymbolRef own = linked->current_symbol();
-                    if (own.is_valid())
-                        SymbolContext::instance().set_group_symbol(
-                            g, own, dynamic_cast<QObject*>(linked));
-                }
-            });
+    connect(badge, &ui::GroupBadge::group_change_requested, this, [linked, badge](SymbolGroup g) {
+        linked->set_group(g);
+        badge->set_group_silent(g);
+        // If the new group already has an active symbol, push it
+        // into the newly-linked screen immediately. Otherwise seed
+        // the group from the screen's current symbol.
+        const SymbolRef group_sym = SymbolContext::instance().group_symbol(g);
+        if (group_sym.is_valid()) {
+            linked->on_group_symbol_changed(group_sym);
+        } else if (g != SymbolGroup::None) {
+            const SymbolRef own = linked->current_symbol();
+            if (own.is_valid())
+                SymbolContext::instance().set_group_symbol(g, own, dynamic_cast<QObject*>(linked));
+        }
+    });
 
     group_badges_[id] = badge;
 }
@@ -564,8 +562,7 @@ void DockScreenRouter::raise(const QString& id) {
     LOG_INFO("DockRouter", "Raised existing panel: " + id);
 }
 
-void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea side,
-                                       ads::CDockAreaWidget* anchor) {
+void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea side, ads::CDockAreaWidget* anchor) {
     if (!factories_.contains(id) && !screens_.contains(id)) {
         LOG_WARN("DockRouter", "split_alongside: unknown screen: " + id);
         return;
@@ -623,10 +620,11 @@ void DockScreenRouter::split_alongside(const QString& id, ads::DockWidgetArea si
     current_id_ = id;
     SessionManager::instance().set_last_screen(id);
     emit screen_changed(id);
-    LOG_INFO("DockRouter",
-             QString("split_alongside [%1] placed (side=%2, anchor=%3, panel_count=%4)")
-                 .arg(id).arg(static_cast<int>(side))
-                 .arg(anchor ? "ok" : "none").arg(panel_count_));
+    LOG_INFO("DockRouter", QString("split_alongside [%1] placed (side=%2, anchor=%3, panel_count=%4)")
+                               .arg(id)
+                               .arg(static_cast<int>(side))
+                               .arg(anchor ? "ok" : "none")
+                               .arg(panel_count_));
 }
 
 void DockScreenRouter::after_layout_change() {
@@ -704,9 +702,8 @@ void DockScreenRouter::open_beside_focused(const QString& id) {
     // Split along the anchor's longer axis so the new panel lands beside a
     // wide panel and under a tall one, instead of a fixed grid slot.
     // (If `id` is already open, split_alongside just raises it.)
-    const auto side = (anchor && anchor->width() < anchor->height())
-                          ? ads::BottomDockWidgetArea
-                          : ads::RightDockWidgetArea;
+    const auto side =
+        (anchor && anchor->width() < anchor->height()) ? ads::BottomDockWidgetArea : ads::RightDockWidgetArea;
     split_alongside(id, side, anchor);
 }
 
@@ -861,10 +858,10 @@ ads::CDockWidget* DockScreenRouter::duplicate_panel(const QString& id) {
     if (fit == factories_.end()) {
         // Only eager (one-instance) screens reach here. Duplication is not
         // supported for them in this phase.
-        LOG_WARN("DockRouter",
-                 QString("duplicate_panel('%1'): factory not available — duplication requires "
-                         "register_factory() and the original factory is consumed on first materialise. "
-                         "Re-register a factory before duplication to support this path.").arg(base));
+        LOG_WARN("DockRouter", QString("duplicate_panel('%1'): factory not available — duplication requires "
+                                       "register_factory() and the original factory is consumed on first materialise. "
+                                       "Re-register a factory before duplication to support this path.")
+                                   .arg(base));
         return nullptr;
     }
 
@@ -880,7 +877,7 @@ ads::CDockWidget* DockScreenRouter::duplicate_panel(const QString& id) {
     // base factory too so further duplicates remain possible.
     ScreenFactory factory_copy = fit.value();
     factories_[dup_id] = factory_copy;
-    factories_[base]   = factory_copy;
+    factories_[base] = factory_copy;
 
     // Title: "<Original Title> 2", "<Original Title> 3", ...
     const int dup_index = n - 1;
@@ -934,12 +931,11 @@ void DockScreenRouter::show_tab_context_menu(const QString& id, const QPoint& gl
         return;
 
     QMenu menu;
-    menu.setStyleSheet(
-        "QMenu{background:#111827;color:#e5e7eb;border:1px solid #374151;padding:4px 0;}"
-        "QMenu::item{padding:5px 24px 5px 12px;}"
-        "QMenu::item:selected{background:#1f2937;color:#d97706;}"
-        "QMenu::item:disabled{color:#6b7280;}"
-        "QMenu::separator{background:#374151;height:1px;margin:4px 8px;}");
+    menu.setStyleSheet("QMenu{background:#111827;color:#e5e7eb;border:1px solid #374151;padding:4px 0;}"
+                       "QMenu::item{padding:5px 24px 5px 12px;}"
+                       "QMenu::item:selected{background:#1f2937;color:#d97706;}"
+                       "QMenu::item:disabled{color:#6b7280;}"
+                       "QMenu::separator{background:#374151;height:1px;margin:4px 8px;}");
 
     // Rename — reuses the inline editor code path. Simpler to pop a modal
     // prompt here; the inline editor requires the label's geometry which is
@@ -947,8 +943,8 @@ void DockScreenRouter::show_tab_context_menu(const QString& id, const QPoint& gl
     auto* act_rename = menu.addAction("Rename Tab…");
     connect(act_rename, &QAction::triggered, this, [this, id, dw]() {
         bool ok = false;
-        const QString name = QInputDialog::getText(nullptr, "Rename Tab", "New name:",
-                                                   QLineEdit::Normal, dw->windowTitle(), &ok);
+        const QString name =
+            QInputDialog::getText(nullptr, "Rename Tab", "New name:", QLineEdit::Normal, dw->windowTitle(), &ok);
         if (ok && !name.trimmed().isEmpty()) {
             dw->setWindowTitle(name.trimmed());
             save_tab_title(id, name.trimmed());
@@ -1031,9 +1027,7 @@ void DockScreenRouter::show_tab_context_menu(const QString& id, const QPoint& gl
             // as greyed-out entries so the full inventory stays visible.
             for (SymbolGroup g : all_symbol_groups()) {
                 const bool en = registry.enabled(g);
-                QString label = QStringLiteral("%1  (%2)")
-                                    .arg(registry.name(g))
-                                    .arg(symbol_group_letter(g));
+                QString label = QStringLiteral("%1  (%2)").arg(registry.name(g)).arg(symbol_group_letter(g));
                 if (!en)
                     label += QStringLiteral("  — disabled");
                 auto* a = group_menu->addAction(label);
@@ -1043,7 +1037,8 @@ void DockScreenRouter::show_tab_context_menu(const QString& id, const QPoint& gl
                 connect(a, &QAction::triggered, this, [this, id, g]() {
                     auto* s = screens_.value(id, nullptr);
                     auto* l = s ? dynamic_cast<IGroupLinked*>(s) : nullptr;
-                    if (!l) return;
+                    if (!l)
+                        return;
                     l->set_group(g);
                     QPointer<ui::GroupBadge> badge = group_badges_.value(id);
                     if (badge)
@@ -1052,8 +1047,7 @@ void DockScreenRouter::show_tab_context_menu(const QString& id, const QPoint& gl
                     // symbol (if any) so the other group panels follow it.
                     const SymbolRef own = l->current_symbol();
                     if (own.is_valid())
-                        SymbolContext::instance().set_group_symbol(
-                            g, own, dynamic_cast<QObject*>(l));
+                        SymbolContext::instance().set_group_symbol(g, own, dynamic_cast<QObject*>(l));
                 });
             }
         }
@@ -1064,9 +1058,7 @@ void DockScreenRouter::show_tab_context_menu(const QString& id, const QPoint& gl
     // Copy tab title to clipboard — small but handy for sharing a panel id
     // over chat / for scripting.
     auto* act_copy = menu.addAction("Copy Tab Title");
-    connect(act_copy, &QAction::triggered, this, [dw]() {
-        QApplication::clipboard()->setText(dw->windowTitle());
-    });
+    connect(act_copy, &QAction::triggered, this, [dw]() { QApplication::clipboard()->setText(dw->windowTitle()); });
 
     // Close tab.
     auto* act_close = menu.addAction("Close Tab");

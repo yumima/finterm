@@ -10,8 +10,8 @@
 #include <QHBoxLayout>
 #include <QJsonDocument>
 #include <QPointer>
-#include <QTimer>
 #include <QScrollArea>
+#include <QTimer>
 #include <QVBoxLayout>
 
 // ── Screen-level stylesheet ─────────────────────────────────────────────────
@@ -114,7 +114,7 @@ static const QString kStyle =
         .arg(colors::BORDER_BRIGHT())  // %9
         .arg(colors::BG_HOVER())       // %10
         .arg(colors::AMBER_DIM())      // %11
-        .arg(colors::TEXT_SECONDARY())       // %12
+        .arg(colors::TEXT_SECONDARY()) // %12
         .arg(colors::CYAN())           // %13
         .arg(colors::NEGATIVE())       // %14
     ;
@@ -577,8 +577,7 @@ void AkShareScreen::load_endpoints(const AkShareSource& source) {
     QPointer<AkShareScreen> self = this;
 
     services::akshare::AkShareService::instance().fetch_endpoints(
-        source.script,
-        [self, script = source.script, cache_key](const services::akshare::EndpointsResult& r) {
+        source.script, [self, script = source.script, cache_key](const services::akshare::EndpointsResult& r) {
             if (!self)
                 return;
 
@@ -591,9 +590,8 @@ void AkShareScreen::load_endpoints(const AkShareSource& source) {
 
             const QJsonObject obj = r.data;
             fincept::CacheManager::instance().put(
-                cache_key,
-                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
-                60 * 60, "akshare");
+                cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), 60 * 60,
+                "akshare");
             self->endpoint_cache_[script] = obj;
             self->populate_endpoint_list(obj);
         });
@@ -678,8 +676,7 @@ void AkShareScreen::execute_query(const QString& script, const QString& endpoint
     QPointer<AkShareScreen> self = this;
 
     services::akshare::AkShareService::instance().query(
-        script, endpoint, args,
-        [self, endpoint, cache_key](const services::akshare::QueryResult& r) {
+        script, endpoint, args, [self, endpoint, cache_key](const services::akshare::QueryResult& r) {
             if (!self)
                 return;
 
@@ -698,9 +695,7 @@ void AkShareScreen::execute_query(const QString& script, const QString& endpoint
 
             if (!data_array.isEmpty()) {
                 fincept::CacheManager::instance().put(
-                    cache_key,
-                    QVariant(QString::fromUtf8(
-                        QJsonDocument(data_array).toJson(QJsonDocument::Compact))),
+                    cache_key, QVariant(QString::fromUtf8(QJsonDocument(data_array).toJson(QJsonDocument::Compact))),
                     2 * 60, "akshare");
             }
 

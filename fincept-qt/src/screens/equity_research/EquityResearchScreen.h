@@ -15,7 +15,9 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens { class StockOwnershipPanel; }
+namespace fincept::screens {
+class StockOwnershipPanel;
+}
 
 namespace fincept::screens {
 
@@ -81,14 +83,14 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     // type → autocomplete dropdown of matching symbols → click or
     // Up/Down+Enter to load. Strips leading "/stock ", "/fund ", "/index "
     // prefixes if the user types them out of habit.
-    QLineEdit*   inline_search_input_ = nullptr;
+    QLineEdit* inline_search_input_ = nullptr;
     QListWidget* inline_search_popup_ = nullptr;
     void position_inline_search_popup();
     QString strip_search_prefix(const QString& raw) const;
 
     // Quote bar
     QLabel* sym_label_ = nullptr;
-    QLabel* mkt_status_label_ = nullptr;   // OPEN / PRE / AFTER / CLOSED chip
+    QLabel* mkt_status_label_ = nullptr; // OPEN / PRE / AFTER / CLOSED chip
     QLabel* price_label_ = nullptr;
     QLabel* change_label_ = nullptr;
     QLabel* vol_label_ = nullptr;
@@ -99,7 +101,7 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     // Last exchange code from StockInfo (e.g. "NYQ", "NMS"). Empty when
     // unknown — mkt_status badge stays hidden until info_loaded lands.
     QString current_exchange_;
-    QTimer* mkt_status_timer_ = nullptr;   // 30s tick to re-evaluate the badge
+    QTimer* mkt_status_timer_ = nullptr; // 30s tick to re-evaluate the badge
     void update_market_status_badge();
 
     // Finnhub analyst-recommendation chip. Subscribed in load_symbol;

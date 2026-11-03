@@ -367,12 +367,7 @@ struct BasketMargin {
     QVector<OrderMargin> orders; // per-order breakdown
 };
 
-enum class BrokerId {
-    Alpaca,
-    IBKR,
-    Tradier,
-    SaxoBank
-};
+enum class BrokerId { Alpaca, IBKR, Tradier, SaxoBank };
 
 inline const char* broker_id_str(BrokerId id) {
     switch (id) {

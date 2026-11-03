@@ -157,9 +157,9 @@ inline QString merge_duplicate_sections(const QString& detail) {
     }
 
     QString preamble;
-    QStringList order;                 // heading keys, first-seen order
-    QHash<QString, QString> display;   // key -> heading line as first written
-    QHash<QString, QStringList> body;  // key -> accumulated body lines
+    QStringList order;                // heading keys, first-seen order
+    QHash<QString, QString> display;  // key -> heading line as first written
+    QHash<QString, QStringList> body; // key -> accumulated body lines
 
     QString current;         // empty => still in the preamble
     QStringList split_names; // non-empty => `current` heading merged categories
@@ -284,8 +284,8 @@ inline QPair<QString, QString> split(const QString& text) {
                 // therefore failed tail_is_sections, the fallback gave up, and
                 // the whole brief rendered as one blob with an empty BY
                 // CATEGORY pane — the symptom this fallback exists to prevent.
-                if (u.isEmpty() || u.startsWith(QLatin1Char('#')) || u.startsWith(QLatin1Char('-'))
-                    || u.startsWith(QLatin1Char('*')) || u.startsWith(QChar(0x2022)))
+                if (u.isEmpty() || u.startsWith(QLatin1Char('#')) || u.startsWith(QLatin1Char('-')) ||
+                    u.startsWith(QLatin1Char('*')) || u.startsWith(QChar(0x2022)))
                     continue;
                 tail_is_sections = false;
                 break;
@@ -314,8 +314,7 @@ inline QPair<QString, QString> split(const QString& text) {
     // Compared char by char against the Latin-1 marker — QLatin1StringView is
     // 8-bit so it cannot be viewed as a QStringView, and this keeps the check
     // allocation-free on a path that runs once per stream chunk.
-    const qsizetype max_len =
-        std::min<qsizetype>(kCategoryMarker.size() - 1, text.size());
+    const qsizetype max_len = std::min<qsizetype>(kCategoryMarker.size() - 1, text.size());
     for (qsizetype len = max_len; len > 0; --len) {
         const QStringView tail = QStringView{text}.right(len);
         bool is_prefix = true;

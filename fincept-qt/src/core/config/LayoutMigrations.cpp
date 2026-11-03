@@ -4,14 +4,14 @@
 #include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
 #include "core/config/ProfileManager.h"
-#include "storage/sqlite/SqliteFiles.h"
 #include "python/PythonRunner.h"
+#include "storage/sqlite/SqliteFiles.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
-#include <QLockFile>
 #include <QFileInfo>
+#include <QLockFile>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QString>
@@ -45,11 +45,11 @@ void narrate(const QString& msg) {
 void migrate_settings_store(const char* new_app, const char* old_app) {
     QSettings dst(AppIdentity::kOrg, new_app);
     if (!dst.allKeys().isEmpty())
-        return;  // new store already populated — never overwrite
+        return; // new store already populated — never overwrite
     QSettings src(AppIdentity::kOrg, old_app);
     const QStringList keys = src.allKeys();
     if (keys.isEmpty())
-        return;  // no legacy store to import (e.g. a fresh install)
+        return; // no legacy store to import (e.g. a fresh install)
     for (const QString& k : keys)
         dst.setValue(k, src.value(k));
     dst.sync();
@@ -59,7 +59,7 @@ void migrate_settings_store(const char* new_app, const char* old_app) {
 }
 
 void step_v1_settings_rebrand() {
-    migrate_settings_store(AppIdentity::kApp,       AppIdentity::kAppLegacy);
+    migrate_settings_store(AppIdentity::kApp, AppIdentity::kAppLegacy);
     migrate_settings_store(AppIdentity::kAppSecure, AppIdentity::kAppSecureLegacy);
 }
 
@@ -72,15 +72,14 @@ void step_v1_settings_rebrand() {
 // after the legacy app, so the path is still derived from AppIdentity, never
 // hardcoded.
 void step_v2_orphan_cache_cleanup() {
-    const QString cur =
-        QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
+    const QString cur = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
     if (cur.isEmpty())
         return;
 
-    const QString cur_leaf = QDir(cur).dirName();  // == AppIdentity::kApp
+    const QString cur_leaf = QDir(cur).dirName(); // == AppIdentity::kApp
     const QString legacy_leaf = QString::fromLatin1(AppIdentity::kAppLegacy);
     if (cur_leaf == legacy_leaf)
-        return;  // names coincide (shouldn't happen) — nothing safe to do
+        return; // names coincide (shouldn't happen) — nothing safe to do
     // Resolve the parent by string, NOT QDir::cdUp(): cdUp() returns false when
     // the parent doesn't exist yet, which would silently leave us looking in the
     // wrong place. absolutePath() is pure string manipulation.
@@ -91,7 +90,7 @@ void step_v2_orphan_cache_cleanup() {
 
     QDir legacy(legacy_path);
     if (!legacy.exists())
-        return;  // no orphan — the overwhelmingly common case
+        return; // no orphan — the overwhelmingly common case
     // Path-aliasing safety: never delete the directory we're actively using.
     if (legacy.canonicalPath() == QDir(cur).canonicalPath())
         return;
@@ -99,8 +98,7 @@ void step_v2_orphan_cache_cleanup() {
     if (legacy.removeRecursively())
         narrate(QString("cache: removed orphaned legacy data dir %1").arg(legacy_path));
     else
-        narrate(QString("cache: could not remove legacy dir %1 (left in place)")
-                    .arg(legacy_path));
+        narrate(QString("cache: could not remove legacy dir %1 (left in place)").arg(legacy_path));
 }
 
 // ── Step v3: personal data under user/, every feature's data in one home ─────
@@ -154,7 +152,8 @@ struct V3 {
         bool split = false;
         if (!sqlite_files::move_unit(src, target, &split)) {
             narrate(split ? QString("data: WARNING — %1 is split between %1 and %2 (a companion file could not "
-                                    "be put back); move the remaining parts together by hand").arg(src, target)
+                                    "be put back); move the remaining parts together by hand")
+                                .arg(src, target)
                           : QString("data: could not move %1 → %2 (left in place, will retry)").arg(src, target));
             failed = true;
             return;
@@ -306,8 +305,8 @@ V3Result step_v3_user_data_home() {
     }
 
     // 3. Public-data indexes are the app's, not the user's.
-    for (const char* db : {"form4.sqlite", "form4_history.sqlite", "form13f.sqlite", "short_interest.sqlite",
-                           "ownership_watch.sqlite"})
+    for (const char* db :
+         {"form4.sqlite", "form4_history.sqlite", "form13f.sqlite", "short_interest.sqlite", "ownership_watch.sqlite"})
         m.move_group(root + "/" + db, root + "/market_data/" + db, root + "/market_data/imported");
 
     // 4. ~/.fincept (only finterm wrote here).
@@ -317,8 +316,7 @@ V3Result step_v3_user_data_home() {
     for (const char* mdl : {"advanced_models", "meta_learning", "online_learning"})
         m.merge_dir(dot + "/" + mdl, root + "/models/qlib/" + mdl, root + "/models/imported/" + mdl);
     // The user's own retraining schedules and configs are personal settings.
-    m.move_group(dot + "/rolling_schedules.json", user + "/features/qlib_rolling/rolling_schedules.json",
-                 conflicts);
+    m.move_group(dot + "/rolling_schedules.json", user + "/features/qlib_rolling/rolling_schedules.json", conflicts);
     m.merge_dir(dot + "/configs", user + "/features/qlib_rolling/configs", conflicts + "/qlib_rolling");
     m.merge_dir(dot + "/vision_quant", root + "/models/vision_quant", root + "/models/imported/vision_quant");
     QDir().rmdir(dot); // only finterm's known items moved; anything else stays
@@ -330,8 +328,7 @@ V3Result step_v3_user_data_home() {
         m.move_group(base + "/fincept-dev/ma_deals.db", user + "/features/ma/ma_deals.db", conflicts);
         m.merge_dir(base + "/fincept-dev/alpha_arena", user + "/features/alpha_arena", conflicts + "/alpha_arena");
         m.move_group(base + "/fincept-terminal/agents.db", user + "/agents/agents.db", conflicts);
-        m.merge_dir(base + "/fincept-terminal/rentech", user + "/features/renaissance/rentech",
-                    conflicts + "/rentech");
+        m.merge_dir(base + "/fincept-terminal/rentech", user + "/features/renaissance/rentech", conflicts + "/rentech");
         for (const char* d : {"/fincept-dev", "/fincept-terminal"})
             QDir().rmdir(base + d); // only if now empty
     }
@@ -369,10 +366,12 @@ void LayoutMigrations::run() {
     QSettings s(AppIdentity::kOrg, AppIdentity::kApp);
     const int stored = s.value(QString::fromLatin1(kVersionKey), 0).toInt();
     if (stored >= kCurrentVersion)
-        return;  // fast path: up to date — one read, no work, no output
+        return; // fast path: up to date — one read, no work, no output
 
-    if (stored < 1) step_v1_settings_rebrand();
-    if (stored < 2) step_v2_orphan_cache_cleanup();
+    if (stored < 1)
+        step_v1_settings_rebrand();
+    if (stored < 2)
+        step_v2_orphan_cache_cleanup();
     if (stored < 3) {
         const V3Result r = step_v3_user_data_home();
         if (r == V3Result::Deferred) {

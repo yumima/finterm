@@ -59,7 +59,7 @@ void WebSocketClient::on_disconnected() {
         // uniformly from [base/2, base*1.5] spreads the retries over a
         // realistic window without violating the backoff intent.
         const int base = std::min(1000 * (1 << reconnect_attempts_), 30000);
-        const int low  = base / 2;
+        const int low = base / 2;
         const int high = base + base / 2;
         const int delay = QRandomGenerator::global()->bounded(low, high + 1);
         reconnect_timer_.start(delay);

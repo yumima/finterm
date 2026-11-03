@@ -13,10 +13,10 @@ namespace fincept {
 
 namespace {
 constexpr const char* kHearthSupTag = "HearthSupervisor";
-constexpr int kRetryBaseMs  = 3000;
-constexpr int kRetryMaxMs   = 30000;
-constexpr int kMaxRetries   = 8;
-constexpr int kSettleMs     = 3000; // how long after start to promote Starting→Running
+constexpr int kRetryBaseMs = 3000;
+constexpr int kRetryMaxMs = 30000;
+constexpr int kMaxRetries = 8;
+constexpr int kSettleMs = 3000; // how long after start to promote Starting→Running
 } // namespace
 
 HearthSupervisor& HearthSupervisor::instance() {
@@ -32,8 +32,7 @@ HearthSupervisor::HearthSupervisor(QObject* parent) : QObject(parent) {
     settle_timer_ = new QTimer(this);
     settle_timer_->setSingleShot(true);
     connect(settle_timer_, &QTimer::timeout, this, [this]() {
-        if (process_ && process_->state() == QProcess::Running
-                && state_ == State::Starting) {
+        if (process_ && process_->state() == QProcess::Running && state_ == State::Starting) {
             retry_count_ = 0;
             set_state(State::Running);
         }
@@ -47,7 +46,7 @@ QString HearthSupervisor::hearth_binary() {
         return QString::fromUtf8(env);
 
     const QStringList candidates = {
-        QDir::homePath() + "/.local/bin/hearth",       // pip / pipx install
+        QDir::homePath() + "/.local/bin/hearth",           // pip / pipx install
         QDir::homePath() + "/fin/hearth/.venv/bin/hearth", // dev checkout
         QDir::homePath() + "/.hearth/bin/hearth",
     };
@@ -84,9 +83,8 @@ void HearthSupervisor::start_process() {
 
     const QString bin = hearth_binary();
     if (bin.isEmpty()) {
-        LOG_WARN(kHearthSupTag,
-            "hearth binary not found — install with `pip install hearth` "
-            "or set FINCEPT_HEARTH_BIN. Supervision disabled.");
+        LOG_WARN(kHearthSupTag, "hearth binary not found — install with `pip install hearth` "
+                                "or set FINCEPT_HEARTH_BIN. Supervision disabled.");
         // Sync enabled_ back to false AND re-persist so the checkbox reflects
         // reality (prevents the checkbox/enabled_ desync bug).
         enabled_ = false;
@@ -101,8 +99,7 @@ void HearthSupervisor::start_process() {
     if (!process_) {
         process_ = new QProcess(this);
         process_->setProcessChannelMode(QProcess::MergedChannels);
-        connect(process_, &QProcess::finished, this,
-                &HearthSupervisor::on_process_finished);
+        connect(process_, &QProcess::finished, this, &HearthSupervisor::on_process_finished);
     }
 
     ++gen_; // invalidate any pending stale-kill timer from a prior stop
@@ -140,8 +137,7 @@ void HearthSupervisor::stop_process() {
     set_state(State::Disabled);
 }
 
-void HearthSupervisor::on_process_finished(int exit_code,
-                                            QProcess::ExitStatus /*status*/) {
+void HearthSupervisor::on_process_finished(int exit_code, QProcess::ExitStatus /*status*/) {
     settle_timer_->stop();
 
     if (!enabled_) {
@@ -165,8 +161,8 @@ void HearthSupervisor::on_process_finished(int exit_code,
 
     const int delay = std::min(kRetryBaseMs * (1 << retry_count_), kRetryMaxMs);
     ++retry_count_;
-    LOG_INFO(kHearthSupTag, QString("restarting hearth in %1 ms (attempt %2/%3)")
-                          .arg(delay).arg(retry_count_).arg(kMaxRetries));
+    LOG_INFO(kHearthSupTag,
+             QString("restarting hearth in %1 ms (attempt %2/%3)").arg(delay).arg(retry_count_).arg(kMaxRetries));
     retry_timer_->start(delay);
 }
 

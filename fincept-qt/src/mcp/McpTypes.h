@@ -112,16 +112,16 @@ enum class LogLevel { Debug, Info, Notice, Warning, Error, Critical, Alert, Emer
 // revisit.
 
 struct SampleRequest {
-    QString prompt;          // user-message content
-    QString system_prompt;   // optional system-message preamble
+    QString prompt;        // user-message content
+    QString system_prompt; // optional system-message preamble
     int max_tokens = 512;
     double temperature = 0.7;
 };
 
 struct SampleResponse {
     QString text;
-    QString model;           // model id that produced the response (best-effort)
-    QString error;           // empty on success
+    QString model; // model id that produced the response (best-effort)
+    QString error; // empty on success
 };
 
 // ============================================================================
@@ -140,14 +140,14 @@ struct SampleResponse {
 //   - object    structured form            {type: "object", properties: ...}
 
 struct ElicitRequest {
-    QString prompt;          // user-visible question
-    QJsonObject schema;      // JSON Schema for the answer
+    QString prompt;     // user-visible question
+    QJsonObject schema; // JSON Schema for the answer
 };
 
 struct ElicitResponse {
-    QJsonValue value;        // user's answer matching the schema
-    bool declined = false;   // true if the user explicitly declined
-    QString error;           // transport / wiring errors only
+    QJsonValue value;      // user's answer matching the schema
+    bool declined = false; // true if the user explicitly declined
+    QString error;         // transport / wiring errors only
 };
 
 struct ToolContext {
@@ -190,10 +190,22 @@ struct ToolContext {
     bool cancelled() const { return is_cancelled && is_cancelled(); }
 
     // Logging convenience.  Branchless when on_log is null.
-    void log_debug(const QString& msg) const { if (on_log) on_log(LogLevel::Debug, msg); }
-    void log_info(const QString& msg) const { if (on_log) on_log(LogLevel::Info, msg); }
-    void log_warn(const QString& msg) const { if (on_log) on_log(LogLevel::Warning, msg); }
-    void log_error(const QString& msg) const { if (on_log) on_log(LogLevel::Error, msg); }
+    void log_debug(const QString& msg) const {
+        if (on_log)
+            on_log(LogLevel::Debug, msg);
+    }
+    void log_info(const QString& msg) const {
+        if (on_log)
+            on_log(LogLevel::Info, msg);
+    }
+    void log_warn(const QString& msg) const {
+        if (on_log)
+            on_log(LogLevel::Warning, msg);
+    }
+    void log_error(const QString& msg) const {
+        if (on_log)
+            on_log(LogLevel::Error, msg);
+    }
 
     // Sampling / elicitation convenience.  Return an error response
     // when the callback isn't wired so the handler can surface the
@@ -219,14 +231,22 @@ struct ToolContext {
 /// "warning", "error", …).
 inline const char* log_level_str(LogLevel l) {
     switch (l) {
-        case LogLevel::Debug: return "debug";
-        case LogLevel::Info: return "info";
-        case LogLevel::Notice: return "notice";
-        case LogLevel::Warning: return "warning";
-        case LogLevel::Error: return "error";
-        case LogLevel::Critical: return "critical";
-        case LogLevel::Alert: return "alert";
-        case LogLevel::Emergency: return "emergency";
+        case LogLevel::Debug:
+            return "debug";
+        case LogLevel::Info:
+            return "info";
+        case LogLevel::Notice:
+            return "notice";
+        case LogLevel::Warning:
+            return "warning";
+        case LogLevel::Error:
+            return "error";
+        case LogLevel::Critical:
+            return "critical";
+        case LogLevel::Alert:
+            return "alert";
+        case LogLevel::Emergency:
+            return "emergency";
     }
     return "info";
 }
@@ -238,8 +258,7 @@ inline const char* log_level_str(LogLevel l) {
 /// The promise is heap-allocated and shared so the handler can capture it
 /// by value into lambdas / network callbacks.
 using AsyncToolHandler =
-    std::function<void(const QJsonObject& args, ToolContext ctx,
-                       std::shared_ptr<QPromise<ToolResult>> promise)>;
+    std::function<void(const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise)>;
 
 // ============================================================================
 // Tool Input Schema — JSON Schema 2020-12 subset
@@ -262,32 +281,40 @@ struct ToolParam {
     QString type = "string"; // "string" | "integer" | "number" | "boolean" | "array" | "object"
     QString description;
     bool required = false;
-    QJsonValue default_value;          // null/undefined if no default
-    QStringList enum_values;            // string enums; empty if not enumerated
+    QJsonValue default_value; // null/undefined if no default
+    QStringList enum_values;  // string enums; empty if not enumerated
     std::optional<double> minimum;
     std::optional<double> maximum;
-    std::optional<int> min_length;      // for strings
-    std::optional<int> max_length;      // for strings
-    QString pattern;                    // regex string for strings
-    QJsonObject items;                  // schema for array elements (raw JSON)
+    std::optional<int> min_length; // for strings
+    std::optional<int> max_length; // for strings
+    QString pattern;               // regex string for strings
+    QJsonObject items;             // schema for array elements (raw JSON)
 
     QJsonObject to_json() const {
         QJsonObject j;
         j["type"] = type;
-        if (!description.isEmpty()) j["description"] = description;
+        if (!description.isEmpty())
+            j["description"] = description;
         if (!default_value.isNull() && !default_value.isUndefined())
             j["default"] = default_value;
         if (!enum_values.isEmpty()) {
             QJsonArray arr;
-            for (const auto& v : enum_values) arr.append(v);
+            for (const auto& v : enum_values)
+                arr.append(v);
             j["enum"] = arr;
         }
-        if (minimum.has_value())     j["minimum"] = *minimum;
-        if (maximum.has_value())     j["maximum"] = *maximum;
-        if (min_length.has_value())  j["minLength"] = *min_length;
-        if (max_length.has_value())  j["maxLength"] = *max_length;
-        if (!pattern.isEmpty())      j["pattern"] = pattern;
-        if (!items.isEmpty())        j["items"] = items;
+        if (minimum.has_value())
+            j["minimum"] = *minimum;
+        if (maximum.has_value())
+            j["maximum"] = *maximum;
+        if (min_length.has_value())
+            j["minLength"] = *min_length;
+        if (max_length.has_value())
+            j["maxLength"] = *max_length;
+        if (!pattern.isEmpty())
+            j["pattern"] = pattern;
+        if (!items.isEmpty())
+            j["items"] = items;
         return j;
     }
 };
@@ -361,11 +388,16 @@ enum class AuthLevel {
 
 inline const char* auth_level_str(AuthLevel a) {
     switch (a) {
-        case AuthLevel::None:            return "none";
-        case AuthLevel::Authenticated:   return "authenticated";
-        case AuthLevel::Verified:        return "verified";
-        case AuthLevel::Subscribed:      return "subscribed";
-        case AuthLevel::ExplicitConfirm: return "explicit_confirm";
+        case AuthLevel::None:
+            return "none";
+        case AuthLevel::Authenticated:
+            return "authenticated";
+        case AuthLevel::Verified:
+            return "verified";
+        case AuthLevel::Subscribed:
+            return "subscribed";
+        case AuthLevel::ExplicitConfirm:
+            return "explicit_confirm";
     }
     return "unknown";
 }
@@ -508,7 +540,7 @@ struct ExternalResource {
 // for surfacing those resolutions to the model.
 
 struct PromptArgument {
-    QString name;        // e.g. "date", "ticker"
+    QString name; // e.g. "date", "ticker"
     QString description;
     bool required = false;
 };
@@ -517,16 +549,16 @@ struct PromptArgument {
 /// "assistant" (matches MCP spec).  Content is plain text in the v1
 /// surface; richer content types (image, tool-result) deferred.
 struct PromptMessage {
-    QString role;        // "system" | "user" | "assistant"
+    QString role; // "system" | "user" | "assistant"
     QString text;
 };
 
 /// Result of expanding a prompt template — list of messages to feed
 /// into the next chat turn.
 struct PromptResult {
-    QString description;          // optional human-readable description
+    QString description; // optional human-readable description
     std::vector<PromptMessage> messages;
-    QString error;                // empty on success
+    QString error; // empty on success
 };
 
 /// Handler invoked by McpProvider::get_prompt.  Receives the user-
@@ -535,7 +567,7 @@ struct PromptResult {
 using PromptHandler = std::function<PromptResult(const QHash<QString, QString>&)>;
 
 struct Prompt {
-    QString name;        // user-visible identifier (slash-command stem)
+    QString name; // user-visible identifier (slash-command stem)
     QString description;
     std::vector<PromptArgument> arguments;
     PromptHandler handler;
@@ -555,10 +587,10 @@ struct ExternalPrompt {
 /// Result returned by a resource handler.
 struct ResourceContent {
     QString uri;
-    QString mime_type;     // "application/json", "text/plain", etc.
-    QString text;          // for text-based resources (JSON, markdown, …)
-    QByteArray blob;       // for binary resources (image, pdf, …)
-    QString error;         // empty on success
+    QString mime_type; // "application/json", "text/plain", etc.
+    QString text;      // for text-based resources (JSON, markdown, …)
+    QByteArray blob;   // for binary resources (image, pdf, …)
+    QString error;     // empty on success
 };
 
 /// Handler invoked on read_resource(uri).  Synchronous; expected to be
@@ -567,10 +599,10 @@ struct ResourceContent {
 using ResourceHandler = std::function<ResourceContent()>;
 
 struct Resource {
-    QString uri;           // e.g., "finterm://portfolio/snapshot"
-    QString name;          // display name
+    QString uri;  // e.g., "finterm://portfolio/snapshot"
+    QString name; // display name
     QString description;
-    QString mime_type;     // default content type when handler doesn't override
+    QString mime_type; // default content type when handler doesn't override
     ResourceHandler handler;
 };
 

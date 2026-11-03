@@ -99,8 +99,8 @@ class AiChatBubble : public QWidget {
     // bubble at least once — reposition() then respects custom_pos_ instead
     // of pinning to bottom-right. Persisted to SettingsRepository under
     // ui.chat_bubble.x / .y so the position survives launches.
-    bool   dragging_        = false;
-    bool   has_custom_pos_  = false;
+    bool dragging_ = false;
+    bool has_custom_pos_ = false;
     QPoint drag_press_pos_;     // global press position
     QPoint drag_widget_origin_; // bubble's top-left at press time
     QPoint custom_pos_;         // top-left of bubble in parent coords

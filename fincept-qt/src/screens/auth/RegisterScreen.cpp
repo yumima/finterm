@@ -16,36 +16,32 @@ namespace fincept::screens {
 namespace {
 
 QString panel_style() {
-    return QString(
-        "QWidget#authPanel { background:%1; border:1px solid %2; border-radius:6px; }"
-    ).arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_MED());
+    return QString("QWidget#authPanel { background:%1; border:1px solid %2; border-radius:6px; }")
+        .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_MED());
 }
 
 QString input_style() {
-    return QString(
-        "QLineEdit { background:%1; color:%2; border:1px solid %3; border-radius:3px;"
-        "  padding:8px 12px; font-size:14px; }"
-        "QLineEdit:focus { border:1px solid %4; }"
-    ).arg(fincept::ui::colors::BG_BASE(), fincept::ui::colors::TEXT_PRIMARY(),
-          fincept::ui::colors::BORDER_MED(), fincept::ui::colors::AMBER());
+    return QString("QLineEdit { background:%1; color:%2; border:1px solid %3; border-radius:3px;"
+                   "  padding:8px 12px; font-size:14px; }"
+                   "QLineEdit:focus { border:1px solid %4; }")
+        .arg(fincept::ui::colors::BG_BASE(), fincept::ui::colors::TEXT_PRIMARY(), fincept::ui::colors::BORDER_MED(),
+             fincept::ui::colors::AMBER());
 }
 
 QString primary_btn_style() {
-    return QString(
-        "QPushButton { background:%1; color:#fff; border:none; border-radius:3px;"
-        "  padding:10px 20px; font-size:13px; font-weight:700; letter-spacing:0.6px; }"
-        "QPushButton:hover { background:%2; }"
-        "QPushButton:disabled { background:%3; color:%4; }"
-    ).arg(fincept::ui::colors::AMBER(), fincept::ui::colors::AMBER_DIM(),
-          fincept::ui::colors::BG_RAISED(), fincept::ui::colors::TEXT_TERTIARY());
+    return QString("QPushButton { background:%1; color:#fff; border:none; border-radius:3px;"
+                   "  padding:10px 20px; font-size:13px; font-weight:700; letter-spacing:0.6px; }"
+                   "QPushButton:hover { background:%2; }"
+                   "QPushButton:disabled { background:%3; color:%4; }")
+        .arg(fincept::ui::colors::AMBER(), fincept::ui::colors::AMBER_DIM(), fincept::ui::colors::BG_RAISED(),
+             fincept::ui::colors::TEXT_TERTIARY());
 }
 
 QString link_btn_style() {
-    return QString(
-        "QPushButton { background:transparent; color:%1; border:none;"
-        "  padding:8px; font-size:12px; }"
-        "QPushButton:hover { color:%2; text-decoration:underline; }"
-    ).arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::AMBER());
+    return QString("QPushButton { background:transparent; color:%1; border:none;"
+                   "  padding:8px; font-size:12px; }"
+                   "QPushButton:hover { color:%2; text-decoration:underline; }")
+        .arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::AMBER());
 }
 
 } // namespace
@@ -54,9 +50,7 @@ RegisterScreen::RegisterScreen(QWidget* parent) : QWidget(parent) {
     build_form();
 
     auto& auth = auth::AuthManager::instance();
-    connect(&auth, &auth::AuthManager::signup_succeeded, this, [this]() {
-        emit navigate_login();
-    });
+    connect(&auth, &auth::AuthManager::signup_succeeded, this, [this]() { emit navigate_login(); });
     connect(&auth, &auth::AuthManager::signup_failed, this, [this](const QString& err) {
         error_label_->setText(err);
         error_label_->show();
@@ -70,10 +64,14 @@ void RegisterScreen::paintEvent(QPaintEvent*) {
 }
 
 void RegisterScreen::hideEvent(QHideEvent* event) {
-    if (username_)    username_->clear();
-    if (pin_)         pin_->clear();
-    if (pin_confirm_) pin_confirm_->clear();
-    if (error_label_) error_label_->hide();
+    if (username_)
+        username_->clear();
+    if (pin_)
+        pin_->clear();
+    if (pin_confirm_)
+        pin_confirm_->clear();
+    if (error_label_)
+        error_label_->hide();
     QWidget::hideEvent(event);
 }
 
@@ -96,10 +94,9 @@ void RegisterScreen::build_form() {
     title->setStyleSheet(QString("color:%1; font-size:18px; font-weight:700; letter-spacing:0.4px;")
                              .arg(fincept::ui::colors::TEXT_PRIMARY()));
 
-    auto* subtitle = new QLabel(
-        QStringLiteral("Pick a username and a 4\xe2\x80\x936 digit PIN. "
-                       "Everything stays on this machine."),
-        panel);
+    auto* subtitle = new QLabel(QStringLiteral("Pick a username and a 4\xe2\x80\x936 digit PIN. "
+                                               "Everything stays on this machine."),
+                                panel);
     subtitle->setAlignment(Qt::AlignCenter);
     subtitle->setWordWrap(true);
     subtitle->setStyleSheet(QString("color:%1; font-size:12px;").arg(fincept::ui::colors::TEXT_SECONDARY()));
@@ -111,8 +108,7 @@ void RegisterScreen::build_form() {
     // Min length is enforced both here (so the field can't visually accept a
     // single char that the handler will reject) and again in on_create() as
     // a defense-in-depth check.
-    username_->setValidator(new QRegularExpressionValidator(
-        QRegularExpression("^[a-zA-Z0-9_-]{2,32}$"), this));
+    username_->setValidator(new QRegularExpressionValidator(QRegularExpression("^[a-zA-Z0-9_-]{2,32}$"), this));
 
     pin_ = new QLineEdit(panel);
     pin_->setPlaceholderText(QStringLiteral("PIN (4\xe2\x80\x936 digits)"));
@@ -129,8 +125,8 @@ void RegisterScreen::build_form() {
     pin_confirm_->setStyleSheet(input_style());
 
     error_label_ = new QLabel(panel);
-    error_label_->setStyleSheet(QString("color:%1; font-size:12px; padding:4px 0;")
-                                     .arg(fincept::ui::colors::NEGATIVE()));
+    error_label_->setStyleSheet(
+        QString("color:%1; font-size:12px; padding:4px 0;").arg(fincept::ui::colors::NEGATIVE()));
     error_label_->setWordWrap(true);
     error_label_->hide();
 
@@ -166,7 +162,7 @@ void RegisterScreen::build_form() {
 
 void RegisterScreen::on_create() {
     const QString user = username_->text().trimmed().toLower();
-    const QString pin  = pin_->text();
+    const QString pin = pin_->text();
     const QString pin2 = pin_confirm_->text();
 
     auto show_error = [this](const QString& msg) {

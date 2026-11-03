@@ -53,7 +53,8 @@ void PropertiesPanel::build_empty_page() {
 
     auto* lbl = new QLabel("Select a component\nto edit properties");
     lbl->setAlignment(Qt::AlignCenter);
-    lbl->setStyleSheet(QString("color: %1; font-size: 13px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    lbl->setStyleSheet(
+        QString("color: %1; font-size: 13px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(lbl);
 
     stack_->addWidget(empty_widget_);
@@ -289,7 +290,8 @@ void PropertiesPanel::show_properties(const ReportComponent* component, int inde
 
         auto* hint = new QLabel("Tip: re-select component after\nediting data to re-render.");
         hint->setWordWrap(true);
-        hint->setStyleSheet(QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        hint->setStyleSheet(
+            QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         editor_layout_->addWidget(hint);
     }
 
@@ -411,7 +413,8 @@ void PropertiesPanel::show_properties(const ReportComponent* component, int inde
 
         auto* hint = new QLabel("Tip: re-select after editing\ndata to refresh sparkline.");
         hint->setWordWrap(true);
-        hint->setStyleSheet(QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        hint->setStyleSheet(
+            QString("color: %1; font-size: 10px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         editor_layout_->addWidget(hint);
     }
 
@@ -420,7 +423,8 @@ void PropertiesPanel::show_properties(const ReportComponent* component, int inde
         editor_layout_->addWidget(make_label("Image File:"));
         auto* path_lbl = new QLabel(component->config.value("path", "(none)"));
         path_lbl->setWordWrap(true);
-        path_lbl->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        path_lbl->setStyleSheet(
+            QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         editor_layout_->addWidget(path_lbl);
 
         // Browse button
@@ -550,7 +554,8 @@ void PropertiesPanel::show_properties(const ReportComponent* component, int inde
     if (component->type == "page_break") {
         auto* info = new QLabel("Inserts a page break\nin PDF/print output.");
         info->setAlignment(Qt::AlignCenter);
-        info->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        info->setStyleSheet(
+            QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         editor_layout_->addWidget(info);
     }
 
@@ -558,7 +563,8 @@ void PropertiesPanel::show_properties(const ReportComponent* component, int inde
     if (component->type == "toc") {
         auto* info = new QLabel("Auto-generated from\nHeading components.");
         info->setAlignment(Qt::AlignCenter);
-        info->setStyleSheet(QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
+        info->setStyleSheet(
+            QString("color: %1; font-size: 11px; background: transparent;").arg(ui::colors::TEXT_SECONDARY()));
         editor_layout_->addWidget(info);
     }
 

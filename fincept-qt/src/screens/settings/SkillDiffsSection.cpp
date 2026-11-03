@@ -28,11 +28,11 @@ constexpr const char* kSdSettingsKey = "skill_diffs.upstream_path";
 constexpr const char* kSdSettingsCat = "ai";
 constexpr const char* kSdTag = "SkillDiffsSection";
 
-constexpr int kSdColName    = 0;
-constexpr int kSdColKind    = 1;
+constexpr int kSdColName = 0;
+constexpr int kSdColKind = 1;
 constexpr int kSdColLocalSha = 2;
-constexpr int kSdColUpSha   = 3;
-constexpr int kSdColCount   = 4;
+constexpr int kSdColUpSha = 3;
+constexpr int kSdColCount = 4;
 
 /// Resolve the in-app `vendor_skills_diff.py` script.  Same pattern
 /// as TtsService — check the installed scripts/ dir first, then the
@@ -80,12 +80,11 @@ void SkillDiffsSection::build_ui() {
     root->setContentsMargins(16, 16, 16, 16);
     root->setSpacing(12);
 
-    auto* hdr = new QLabel(QStringLiteral(
-        "<b>Vendor skill drift</b> — compare finterm's bundled "
-        "<code>SKILL.md</code> files against an upstream clone of "
-        "<code>anthropics/financial-services</code>.  Review divergences "
-        "row-by-row; per-row <b>Accept upstream</b> overwrites the local "
-        "file (confirm required)."));
+    auto* hdr = new QLabel(QStringLiteral("<b>Vendor skill drift</b> — compare finterm's bundled "
+                                          "<code>SKILL.md</code> files against an upstream clone of "
+                                          "<code>anthropics/financial-services</code>.  Review divergences "
+                                          "row-by-row; per-row <b>Accept upstream</b> overwrites the local "
+                                          "file (confirm required)."));
     hdr->setWordWrap(true);
     root->addWidget(hdr);
 
@@ -102,10 +101,9 @@ void SkillDiffsSection::build_ui() {
     path_row->addWidget(run_btn_);
     root->addLayout(path_row);
 
-    hint_lbl_ = new QLabel(QStringLiteral(
-        "Configure the upstream path above, then click <b>Run diff</b>.  "
-        "Results appear in the table — drift rows show local vs upstream sha "
-        "and unlock the per-row actions."));
+    hint_lbl_ = new QLabel(QStringLiteral("Configure the upstream path above, then click <b>Run diff</b>.  "
+                                          "Results appear in the table — drift rows show local vs upstream sha "
+                                          "and unlock the per-row actions."));
     hint_lbl_->setWordWrap(true);
     hint_lbl_->setStyleSheet(QStringLiteral("color:#888;"));
     root->addWidget(hint_lbl_);
@@ -123,17 +121,15 @@ void SkillDiffsSection::build_ui() {
 
     table_ = new QTableWidget(this);
     table_->setColumnCount(kSdColCount);
-    table_->setHorizontalHeaderLabels(
-        {QStringLiteral("Skill"), QStringLiteral("State"),
-         QStringLiteral("Local sha"), QStringLiteral("Upstream sha")});
+    table_->setHorizontalHeaderLabels({QStringLiteral("Skill"), QStringLiteral("State"), QStringLiteral("Local sha"),
+                                       QStringLiteral("Upstream sha")});
     table_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table_->horizontalHeader()->setSectionResizeMode(kSdColName, QHeaderView::Stretch);
     table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
     table_->verticalHeader()->setVisible(false);
-    connect(table_, &QTableWidget::itemSelectionChanged,
-            this, &SkillDiffsSection::on_selection_changed);
+    connect(table_, &QTableWidget::itemSelectionChanged, this, &SkillDiffsSection::on_selection_changed);
     root->addWidget(table_, 1);
 
     status_lbl_ = new QLabel;
@@ -148,16 +144,15 @@ void SkillDiffsSection::load_upstream_path() {
 }
 
 void SkillDiffsSection::save_upstream_path(const QString& path) {
-    auto r = SettingsRepository::instance().set(
-        QString::fromUtf8(kSdSettingsKey), path, QString::fromUtf8(kSdSettingsCat));
+    auto r =
+        SettingsRepository::instance().set(QString::fromUtf8(kSdSettingsKey), path, QString::fromUtf8(kSdSettingsCat));
     if (r.is_err())
         LOG_WARN(kSdTag, QString("save_upstream_path: %1").arg(QString::fromStdString(r.error())));
 }
 
 void SkillDiffsSection::on_browse() {
     const QString chosen = QFileDialog::getExistingDirectory(
-        this, QStringLiteral("Select anthropics/financial-services clone"),
-        upstream_edit_->text());
+        this, QStringLiteral("Select anthropics/financial-services clone"), upstream_edit_->text());
     if (chosen.isEmpty())
         return;
     upstream_edit_->setText(chosen);
@@ -195,8 +190,8 @@ void SkillDiffsSection::on_run_diff() {
     diff_proc_ = new QProcess(this);
     diff_proc_->setProgram(QStringLiteral("python3"));
     diff_proc_->setArguments({script, "--upstream", upstream, "--json"});
-    connect(diff_proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished),
-            this, [this](int code, QProcess::ExitStatus) { on_diff_finished(code); });
+    connect(diff_proc_, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+            [this](int code, QProcess::ExitStatus) { on_diff_finished(code); });
     run_btn_->setEnabled(false);
     show_status(QStringLiteral("Running diff… (async)"));
     diff_proc_->start();
@@ -213,14 +208,14 @@ void SkillDiffsSection::on_diff_finished(int exit_code) {
 
     if (exit_code != 0 && exit_code != 1) {
         // 0 = clean, 1 = drift (still produces valid JSON), 2 = setup error.
-        show_status(QStringLiteral("Diff failed (exit %1): %2")
-                        .arg(exit_code).arg(QString::fromUtf8(err).left(300)), true);
+        show_status(QStringLiteral("Diff failed (exit %1): %2").arg(exit_code).arg(QString::fromUtf8(err).left(300)),
+                    true);
         return;
     }
     const QJsonDocument doc = QJsonDocument::fromJson(out);
     if (!doc.isObject()) {
-        show_status(QStringLiteral("Diff produced non-JSON output (head: %1)")
-                        .arg(QString::fromUtf8(out.left(200))), true);
+        show_status(QStringLiteral("Diff produced non-JSON output (head: %1)").arg(QString::fromUtf8(out.left(200))),
+                    true);
         return;
     }
     last_report_ = doc.object();
@@ -257,10 +252,8 @@ void SkillDiffsSection::populate_table(const QJsonObject& report) {
         name_item->setData(Qt::UserRole + 1, e.value(QStringLiteral("upstream_path")).toString());
         table_->setItem(row, kSdColName, name_item);
         table_->setItem(row, kSdColKind, new QTableWidgetItem(QStringLiteral("diverged")));
-        table_->setItem(row, kSdColLocalSha,
-                        new QTableWidgetItem(e.value(QStringLiteral("local_sha")).toString()));
-        table_->setItem(row, kSdColUpSha,
-                        new QTableWidgetItem(e.value(QStringLiteral("upstream_sha")).toString()));
+        table_->setItem(row, kSdColLocalSha, new QTableWidgetItem(e.value(QStringLiteral("local_sha")).toString()));
+        table_->setItem(row, kSdColUpSha, new QTableWidgetItem(e.value(QStringLiteral("upstream_sha")).toString()));
         ++row;
     }
 
@@ -325,14 +318,10 @@ SkillDiffsSection::Paths SkillDiffsSection::paths_for_row(int row) {
     // as above; without this Accept-upstream could read arbitrary
     // files (e.g. /etc/shadow) into a SKILL.md.
     if (!raw_upstream.isEmpty()) {
-        const QString up_root_raw =
-            last_report_.value(QStringLiteral("upstream_root")).toString();
-        const QString up_root = up_root_raw.isEmpty()
-            ? QString()
-            : QFileInfo(up_root_raw).canonicalFilePath();
+        const QString up_root_raw = last_report_.value(QStringLiteral("upstream_root")).toString();
+        const QString up_root = up_root_raw.isEmpty() ? QString() : QFileInfo(up_root_raw).canonicalFilePath();
         const QString up_canon = QFileInfo(raw_upstream).canonicalFilePath();
-        if (!up_canon.isEmpty() && !up_root.isEmpty()
-            && up_canon.startsWith(up_root + QLatin1Char('/'))) {
+        if (!up_canon.isEmpty() && !up_root.isEmpty() && up_canon.startsWith(up_root + QLatin1Char('/'))) {
             out.upstream = up_canon;
         }
     }
@@ -340,9 +329,7 @@ SkillDiffsSection::Paths SkillDiffsSection::paths_for_row(int row) {
 }
 
 void SkillDiffsSection::on_selection_changed() {
-    const auto sel = table_->selectionModel()
-        ? table_->selectionModel()->selectedRows()
-        : QModelIndexList{};
+    const auto sel = table_->selectionModel() ? table_->selectionModel()->selectedRows() : QModelIndexList{};
     const bool has_selection = !sel.isEmpty();
     bool diverged = false;
     if (has_selection) {
@@ -380,9 +367,8 @@ void SkillDiffsSection::on_view_diff() {
     dlg.resize(1100, 700);
     auto* dl = new QVBoxLayout(&dlg);
 
-    auto* meta = new QLabel(QStringLiteral(
-        "<b>Local</b>: <code>%1</code><br><b>Upstream</b>: <code>%2</code>")
-                                .arg(p.local, p.upstream));
+    auto* meta = new QLabel(
+        QStringLiteral("<b>Local</b>: <code>%1</code><br><b>Upstream</b>: <code>%2</code>").arg(p.local, p.upstream));
     meta->setTextInteractionFlags(Qt::TextSelectableByMouse);
     meta->setWordWrap(true);
     dl->addWidget(meta);
@@ -425,12 +411,11 @@ void SkillDiffsSection::on_accept_upstream() {
         return;
     }
 
-    const auto choice = QMessageBox::question(
-        this, QStringLiteral("Confirm accept upstream"),
-        QStringLiteral("Overwrite\n  <b>%1</b>\nwith\n  <b>%2</b>?\n\n"
-                       "Recover via <code>git checkout</code> if needed.")
-            .arg(p.local, p.upstream),
-        QMessageBox::Yes | QMessageBox::No);
+    const auto choice = QMessageBox::question(this, QStringLiteral("Confirm accept upstream"),
+                                              QStringLiteral("Overwrite\n  <b>%1</b>\nwith\n  <b>%2</b>?\n\n"
+                                                             "Recover via <code>git checkout</code> if needed.")
+                                                  .arg(p.local, p.upstream),
+                                              QMessageBox::Yes | QMessageBox::No);
     if (choice != QMessageBox::Yes)
         return;
 
@@ -470,8 +455,7 @@ void SkillDiffsSection::on_accept_upstream() {
 
 void SkillDiffsSection::show_status(const QString& msg, bool error) {
     status_lbl_->setText(msg);
-    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;")
-                                     : QStringLiteral("color: #393;"));
+    status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;") : QStringLiteral("color: #393;"));
 }
 
 } // namespace fincept::screens

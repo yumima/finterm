@@ -57,8 +57,8 @@ class CredentialsSection : public QWidget {
     QHash<QString, Card> cards_;
     QStringList order_; // catalogue order
     QSet<QString> configured_;
-    bool loaded_ = false;  ///< at least one successful keyring read
-    bool read_ok_ = true;  ///< the latest read succeeded
+    bool loaded_ = false; ///< at least one successful keyring read
+    bool read_ok_ = true; ///< the latest read succeeded
 
     QLabel* info_ = nullptr;
     QLabel* summary_ = nullptr;

@@ -31,9 +31,9 @@ class InsiderTimeline : public QWidget {
 
   private:
     struct Mark {
-        QDate  date;
-        bool   buy = true;
-        bool   scored = true;   ///< false for 10% owners and plan trades
+        QDate date;
+        bool buy = true;
+        bool scored = true;     ///< false for 10% owners and plan trades
         double magnitude = 0.0; ///< 0..1 of the largest value in the set
         QString tooltip;
     };

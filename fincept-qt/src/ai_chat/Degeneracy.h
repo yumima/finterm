@@ -65,8 +65,8 @@ inline bool looks_degenerate(const QString& text) {
     // a perfectly good answer. Measured on real output — good prose scores
     // 0.78-0.88, the observed collapses scored 0.09-0.14.
     for (const QString& line : text.split(QLatin1Char('\n'))) {
-        if (line.split(QLatin1Char(' '), Qt::SkipEmptyParts).size() > kMaxSaneLineWords
-            && vocab_ratio(line) < kMinVocabRatio)
+        if (line.split(QLatin1Char(' '), Qt::SkipEmptyParts).size() > kMaxSaneLineWords &&
+            vocab_ratio(line) < kMinVocabRatio)
             return true;
     }
 
@@ -92,18 +92,16 @@ inline bool looks_degenerate(const QString& text) {
     // the observed salad contains "cross-sector".
     {
         static const QString kBreaks = QStringLiteral(".,;:!?…");
-        static const QStringList kMarkers = {QStringLiteral("-"),   QStringLiteral("*"),
-                                             QStringLiteral("|"),   QStringLiteral("•"),
-                                             QStringLiteral("–"), QStringLiteral("—")};
+        static const QStringList kMarkers = {QStringLiteral("-"), QStringLiteral("*"), QStringLiteral("|"),
+                                             QStringLiteral("•"), QStringLiteral("–"), QStringLiteral("—")};
         // Tabs separate columns, so treat them as word separators too — split on
         // ' ' alone leaves a tab-joined row as a single unsplittable "word".
         static const QRegularExpression kSpace(QStringLiteral("[ \\t]+"));
         for (const QString& line : text.split(QLatin1Char('\n'))) {
             int run = 0; // a line break ends any run
             for (const QString& w : line.split(kSpace, Qt::SkipEmptyParts)) {
-                if (kMarkers.contains(w)
-                    || std::any_of(w.cbegin(), w.cend(),
-                                   [](QChar c) { return kBreaks.contains(c); })) {
+                if (kMarkers.contains(w) ||
+                    std::any_of(w.cbegin(), w.cend(), [](QChar c) { return kBreaks.contains(c); })) {
                     run = 0;
                     continue;
                 }
@@ -113,8 +111,7 @@ inline bool looks_degenerate(const QString& text) {
         }
     }
 
-    const QStringList words = text.split(QRegularExpression(QStringLiteral("\\W+")),
-                                         Qt::SkipEmptyParts);
+    const QStringList words = text.split(QRegularExpression(QStringLiteral("\\W+")), Qt::SkipEmptyParts);
     if (words.size() < kMinWordsToJudge)
         return false;
     return vocab_ratio(text) < kMinVocabRatio;

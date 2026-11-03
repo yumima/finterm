@@ -172,8 +172,7 @@ void CryptoChart::append_candle(const trading::Candle& candle) {
             // Evicting the oldest set may drop the current extreme — mark dirty
             // so we rescan exactly once on the next axis update.
             const auto* oldest = sets.first();
-            if (!bounds_dirty_ &&
-                (oldest->low() <= cached_min_price_ || oldest->high() >= cached_max_price_)) {
+            if (!bounds_dirty_ && (oldest->low() <= cached_min_price_ || oldest->high() >= cached_max_price_)) {
                 bounds_dirty_ = true;
             }
             series_->remove(sets.first());

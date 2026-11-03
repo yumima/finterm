@@ -33,18 +33,16 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 }
 
 static Result<void> apply_v039(QSqlDatabase& db) {
-    if (auto r = sql(db,
-            "ALTER TABLE chat_artefacts ADD COLUMN supersedes_id TEXT");
-        r.is_err()) {
+    if (auto r = sql(db, "ALTER TABLE chat_artefacts ADD COLUMN supersedes_id TEXT"); r.is_err()) {
         const QString msg = QString::fromStdString(r.error());
         if (!msg.contains(QStringLiteral("duplicate column"), Qt::CaseInsensitive))
             return r;
         LOG_INFO(kTag, "chat_artefacts.supersedes_id already present — skipping");
     }
     // Index the FK-shaped column for the lineage walk.
-    if (auto r = sql(db,
-            "CREATE INDEX IF NOT EXISTS idx_chat_artefacts_supersedes "
-            "ON chat_artefacts(supersedes_id)"); r.is_err())
+    if (auto r = sql(db, "CREATE INDEX IF NOT EXISTS idx_chat_artefacts_supersedes "
+                         "ON chat_artefacts(supersedes_id)");
+        r.is_err())
         LOG_WARN(kTag, QString("supersedes index create failed: %1").arg(QString::fromStdString(r.error())));
     LOG_INFO(kTag, "chat_artefacts.supersedes_id ready");
     return Result<void>::ok();

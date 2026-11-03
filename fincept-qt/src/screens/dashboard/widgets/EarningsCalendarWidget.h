@@ -55,7 +55,7 @@ class EarningsCalendarWidget : public BaseWidget {
         QDate date;
         QString symbol;
         QString company;
-        QString when;    // "BMO" / "AMC" (week view) or "in 5d" (portfolio view)
+        QString when; // "BMO" / "AMC" (week view) or "in 5d" (portfolio view)
         double eps_est = 0;
         bool has_est = false;
         double eps_ly = 0; // year-ago quarter's EPS — the growth comparison
@@ -145,8 +145,8 @@ class EarningsCalendarWidget : public BaseWidget {
     int pending_symbols_ = 0;
     int ok_days_ = 0;
     int ok_symbols_ = 0;
-    QStringList refused_symbols_;   // refused / unanswered (not "no earnings")
-    QString     refused_note_;      // names them under the list; replaced per fetch
+    QStringList refused_symbols_; // refused / unanswered (not "no earnings")
+    QString refused_note_;        // names them under the list; replaced per fetch
     bool week_rows_ready_ = false;
 
     QVector<portfolio::Portfolio> portfolios_;

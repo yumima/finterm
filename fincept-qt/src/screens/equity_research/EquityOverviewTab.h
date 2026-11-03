@@ -41,7 +41,7 @@ class ResearchCandleCanvas : public QWidget {
     void set_show_volume(bool on);
     /// Toggle individual moving-average overlays. SMAs are computed on the
     /// fly from candles_ (cheap — O(n) one pass per SMA).
-    void set_show_sma(int period, bool on);  // period ∈ {20, 50, 200}
+    void set_show_sma(int period, bool on); // period ∈ {20, 50, 200}
     /// Earnings markers — drawn as dashed vertical lines at each event
     /// whose timestamp lies within the visible candle window.
     void set_earnings_events(const QVector<services::equity::EarningsEvent>& events);
@@ -86,10 +86,10 @@ class ResearchCandleCanvas : public QWidget {
 
     // Pass 1 overlay state — every toggle invalidates the pixmap cache so
     // the next paintEvent rebuilds with the new options.
-    bool log_scale_   = false;
+    bool log_scale_ = false;
     bool show_volume_ = false;
-    bool show_sma20_  = false;
-    bool show_sma50_  = false;
+    bool show_sma20_ = false;
+    bool show_sma50_ = false;
     bool show_sma200_ = false;
     SeriesStyle series_style_ = SeriesStyle::Candles;
     bool intraday_ = false;
@@ -101,7 +101,7 @@ class ResearchCandleCanvas : public QWidget {
   public:
     struct Comparison {
         QString symbol;
-        QColor  color;
+        QColor color;
         QVector<services::equity::Candle> candles;
     };
     void set_comparisons(const QVector<Comparison>& list);
@@ -118,12 +118,12 @@ class ResearchCandleCanvas : public QWidget {
     // (NOT visible-window-relative). The cached geometry below is filled
     // in by rebuild_cache() so mouseMoveEvent and draw_hover_overlay()
     // can map cursor x → candle without re-deriving the layout.
-    int    hover_idx_     = -1;
-    int    last_plot_w_   = 0;
-    int    last_plot_h_   = 0;
-    int    last_start_    = 0;   // first visible candle (window slide)
-    int    last_count_    = 0;   // visible candle count
-    double last_slot_w_   = 0.0; // pixels per candle slot
+    int hover_idx_ = -1;
+    int last_plot_w_ = 0;
+    int last_plot_h_ = 0;
+    int last_start_ = 0;       // first visible candle (window slide)
+    int last_count_ = 0;       // visible candle count
+    double last_slot_w_ = 0.0; // pixels per candle slot
 
     // Upper bound on candles rendered in a single paint. Used as a safety
     // clamp only — the service shapes the dataset by period (1M/3M/6M/1Y/5Y)
@@ -165,7 +165,7 @@ class EquityOverviewTab : public QWidget {
     // relevant toggle / period button programmatically. Public so the
     // hosting screen can wire QShortcuts on the screen root without
     // poking into private button members.
-    void shortcut_set_period(int slot);   // 1..5 → 1mo/3mo/6mo/1y/5y
+    void shortcut_set_period(int slot); // 1..5 → 1mo/3mo/6mo/1y/5y
     void shortcut_toggle_log();
     void shortcut_toggle_volume();
     void shortcut_toggle_sma50();
@@ -286,14 +286,14 @@ class EquityOverviewTab : public QWidget {
     QLabel* short_pct_val_ = nullptr;
 
     // Chart
-    QFrame*               chart_panel_   = nullptr;
+    QFrame* chart_panel_ = nullptr;
     ResearchCandleCanvas* candle_canvas_ = nullptr;
     QPushButton* btn_1m_ = nullptr;
     QPushButton* btn_3m_ = nullptr;
     QPushButton* btn_6m_ = nullptr;
     QPushButton* btn_1y_ = nullptr;
     QPushButton* btn_5y_ = nullptr;
-    QPushButton* btn_custom_ = nullptr;   // opens date-range picker
+    QPushButton* btn_custom_ = nullptr; // opens date-range picker
     QPushButton* active_period_btn_ = nullptr;
     void open_custom_range_picker();
     /// Refresh the CUSTOM button's tooltip from current_period_. Must be
@@ -303,14 +303,14 @@ class EquityOverviewTab : public QWidget {
     // Overlay toggle buttons. Held as members so saved chart views can
     // re-check them programmatically on symbol switch — without these the
     // saved state could be applied to the canvas but the buttons would lie.
-    QPushButton* btn_log_   = nullptr;
-    QPushButton* btn_vol_   = nullptr;
+    QPushButton* btn_log_ = nullptr;
+    QPushButton* btn_vol_ = nullptr;
     QPushButton* btn_sma20_ = nullptr;
     QPushButton* btn_sma50_ = nullptr;
     class PriceRangeStrip* range_strip_ = nullptr;
-    QPushButton* btn_sma200_= nullptr;
-    QPushButton* btn_earn_  = nullptr;
-    QPushButton* btn_comp_  = nullptr;   // label + click-to-focus the inline input
+    QPushButton* btn_sma200_ = nullptr;
+    QPushButton* btn_earn_ = nullptr;
+    QPushButton* btn_comp_ = nullptr; // label + click-to-focus the inline input
 
     // Inline COMP controls — split across two rows:
     //   • Button row (btn_row): COMP focus-button + inline ticker input.
@@ -320,8 +320,8 @@ class EquityOverviewTab : public QWidget {
     //     price update dynamically as the user hovers the crosshair (via
     //     ResearchCandleCanvas::hover_changed); when not hovering they show
     //     the full-window return and the last close.
-    QHBoxLayout* comp_chips_   = nullptr;   ///< layout for chip widgets in comp_row_
-    QLineEdit*   comp_input_   = nullptr;   ///< inline ticker input (Enter to add)
+    QHBoxLayout* comp_chips_ = nullptr; ///< layout for chip widgets in comp_row_
+    QLineEdit* comp_input_ = nullptr;   ///< inline ticker input (Enter to add)
 
     // Permanent primary-ticker stats strip — date + OHLC + Δ + vol + 52w-hi
     // + SMA50. Sits between btn_row and comp_row, always visible. When the
@@ -329,11 +329,11 @@ class EquityOverviewTab : public QWidget {
     // it tracks the crosshair via the same hover_changed signal that drives
     // the comp chip labels. Each pointer is held so update_primary_stats_row
     // can rewrite text without rebuilding the row.
-    QLabel* primary_date_lbl_  = nullptr;
-    QLabel* primary_ohlc_lbl_  = nullptr;
+    QLabel* primary_date_lbl_ = nullptr;
+    QLabel* primary_ohlc_lbl_ = nullptr;
     QLabel* primary_delta_lbl_ = nullptr;
-    QLabel* primary_vol_lbl_   = nullptr;
-    QLabel* primary_52w_lbl_   = nullptr;
+    QLabel* primary_vol_lbl_ = nullptr;
+    QLabel* primary_52w_lbl_ = nullptr;
     QLabel* primary_sma50_lbl_ = nullptr;
     /// Per-comp label widget pointers, keyed by ticker symbol, so the hover
     /// slot can update chip text in O(1) without rebuilding the row. Cleared
@@ -366,7 +366,7 @@ class EquityOverviewTab : public QWidget {
     // out while #2 is still in flight.
     struct CompState {
         QString symbol;
-        QColor  color;
+        QColor color;
         QVector<services::equity::Candle> candles;
     };
     QVector<CompState> comp_state_;

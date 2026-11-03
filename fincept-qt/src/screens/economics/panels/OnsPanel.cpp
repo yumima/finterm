@@ -28,10 +28,14 @@ struct OnsSeries {
 
 // Commands must match ONS_SERIES in ons_data.py (one CDID each).
 static const QList<OnsSeries> kOnsSeries = {
-    {"GDP (Chained Volume, SA)", "gdp"},       {"CPI Annual Rate", "cpi"},
-    {"CPIH Annual Rate", "cpih"},              {"RPI Annual Rate", "rpi"},
-    {"Unemployment Rate", "unemployment"},     {"Employment Rate (16-64)", "employment"},
-    {"Trade Balance (BoP, quarterly)", "trade_balance"}, {"Average Weekly Earnings", "avg_earnings"},
+    {"GDP (Chained Volume, SA)", "gdp"},
+    {"CPI Annual Rate", "cpi"},
+    {"CPIH Annual Rate", "cpih"},
+    {"RPI Annual Rate", "rpi"},
+    {"Unemployment Rate", "unemployment"},
+    {"Employment Rate (16-64)", "employment"},
+    {"Trade Balance (BoP, quarterly)", "trade_balance"},
+    {"Average Weekly Earnings", "avg_earnings"},
     {"Public Sector Net Debt (% GDP)", "public_debt"},
 };
 
@@ -96,11 +100,10 @@ void OnsPanel::on_result(const QString& request_id, const services::EconomicsRes
     }
 
     const QString label = result.data["label"].toString();
-    const QString title =
-        "ONS: " +
-        (label.isEmpty() ? (series_combo_->currentIndex() >= 0 ? kOnsSeries[series_combo_->currentIndex()].label
-                                                               : request_id.mid(4))
-                         : label); // the script's label already carries the unit
+    const QString title = "ONS: " + (label.isEmpty() ? (series_combo_->currentIndex() >= 0
+                                                            ? kOnsSeries[series_combo_->currentIndex()].label
+                                                            : request_id.mid(4))
+                                                     : label); // the script's label already carries the unit
 
     display(rows, title, QStringLiteral("value"), QStringLiteral("date"));
     LOG_INFO("OnsPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));

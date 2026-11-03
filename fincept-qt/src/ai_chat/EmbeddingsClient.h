@@ -28,8 +28,7 @@ class EmbeddingsClient {
   public:
     /// Embed a single string.  `done` is invoked exactly once on the app
     /// thread with the float vector, or nullopt on any failure.
-    static void embed(const QString& text,
-                      std::function<void(std::optional<QVector<float>>)> done);
+    static void embed(const QString& text, std::function<void(std::optional<QVector<float>>)> done);
 
     /// Resolved embeddings base URL (without the `/embeddings` suffix).
     static QString base_url();

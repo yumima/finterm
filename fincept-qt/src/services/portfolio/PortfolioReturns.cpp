@@ -38,8 +38,7 @@ constexpr double kMinBaseNav = 0.01;
 // Flows are keyed by the LOCAL trade date — the calendar the snapshots are
 // written on (PortfolioDates.h).
 QMap<QString, double> external_flows_by_date(const QVector<Transaction>& txns, const QString& window_start,
-                                             const QString& window_end,
-                                             const FxRates& fx) {
+                                             const QString& window_end, const FxRates& fx) {
     QMap<QString, double> flows;
     for (const auto& t : txns) {
         const QString d = transaction_local_date(t);
@@ -125,8 +124,7 @@ PeriodReturn compute_period_return(QVector<PortfolioSnapshot> snapshots, double 
 
     // Net external flow per date. Only trade cash counts (see header);
     // flows dated at or before the window start are embedded in the baseline.
-    const QMap<QString, double> flow_by_date =
-        external_flows_by_date(txns, path.first().first, path.last().first, fx);
+    const QMap<QString, double> flow_by_date = external_flows_by_date(txns, path.first().first, path.last().first, fx);
 
     double growth = 1.0;
     bool any_segment = false;
@@ -183,9 +181,8 @@ QVector<double> flow_adjusted_returns(QVector<PortfolioSnapshot> snapshots, cons
     if (snapshots.size() < 2)
         return out;
 
-    const QMap<QString, double> flow_by_date =
-        external_flows_by_date(txns, snapshots.first().snapshot_date.left(10),
-                               snapshots.last().snapshot_date.left(10), fx);
+    const QMap<QString, double> flow_by_date = external_flows_by_date(txns, snapshots.first().snapshot_date.left(10),
+                                                                      snapshots.last().snapshot_date.left(10), fx);
 
     out.reserve(snapshots.size() - 1);
     auto flow_it = flow_by_date.constBegin();

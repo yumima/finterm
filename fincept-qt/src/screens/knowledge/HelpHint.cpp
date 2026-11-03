@@ -31,12 +31,12 @@ HelpHint::HelpHint(QString entry_id, QWidget* parent) : QPushButton(parent), ent
     setCursor(Qt::PointingHandCursor);
     setFocusPolicy(Qt::NoFocus);
     setToolTip(QString("Learn: %1").arg(entry_id_));
-    setStyleSheet(QString("QPushButton { color: %1; background: transparent; border: 1px solid %2;"
-                          " border-radius: 8px; font-size: 9px; font-weight: bold;"
-                          " font-family: 'Consolas','Courier New',monospace; padding: 0; }"
-                          "QPushButton:hover { color: %3; border-color: %3; background: %4; }")
-                      .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(),
-                           ui::colors::BG_RAISED()));
+    setStyleSheet(
+        QString("QPushButton { color: %1; background: transparent; border: 1px solid %2;"
+                " border-radius: 8px; font-size: 9px; font-weight: bold;"
+                " font-family: 'Consolas','Courier New',monospace; padding: 0; }"
+                "QPushButton:hover { color: %3; border-color: %3; background: %4; }")
+            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(), ui::colors::BG_RAISED()));
     connect(this, &QPushButton::clicked, this, &HelpHint::show_popover);
 }
 
@@ -112,8 +112,8 @@ void HelpHint::show_popover() {
                                         " padding: 6px 10px; font-size: 11px; font-weight: bold;"
                                         " font-family: 'Consolas','Courier New',monospace; }"
                                         "QPushButton:hover { background: %4; color: %5; border-color: %5; }")
-                                    .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(),
-                                         ui::colors::BORDER_DIM(), ui::colors::ACCENT_BG(), ui::colors::AMBER()));
+                                    .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM(),
+                                         ui::colors::ACCENT_BG(), ui::colors::AMBER()));
         QString id = entry->id;
         connect(open_btn, &QPushButton::clicked, popover, [popover, id]() {
             popover->close();

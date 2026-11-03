@@ -46,8 +46,7 @@ QByteArray hs_sync_get(const QString& url, int* status_out) {
     loop.exec();
 
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    const QByteArray body =
-        (reply->error() == QNetworkReply::NoError) ? reply->readAll() : QByteArray();
+    const QByteArray body = (reply->error() == QNetworkReply::NoError) ? reply->readAll() : QByteArray();
     if (status_out)
         *status_out = status;
     reply->deleteLater();
@@ -71,10 +70,10 @@ HearthService::Status hs_probe_status(const QString& base_root) {
             const int major = s.contract.split('.').value(0).toInt();
             if (major > HearthService::kKnownContractMajor) {
                 LOG_WARN(kHearthTag, QString("hearth contract %1 is newer than finterm "
-                                       "targets (%2.x) — some engine features may "
-                                       "not be wired")
-                                   .arg(s.contract)
-                                   .arg(HearthService::kKnownContractMajor));
+                                             "targets (%2.x) — some engine features may "
+                                             "not be wired")
+                                         .arg(s.contract)
+                                         .arg(HearthService::kKnownContractMajor));
             }
             return s;
         }
@@ -122,7 +121,8 @@ void HearthService::detect() {
         // slots run there — independent of which thread first touched the
         // singleton, so a future off-GUI caller can't break status delivery.
         QMetaObject::invokeMethod(
-            qApp, [self, s]() {
+            qApp,
+            [self, s]() {
                 if (self)
                     self->apply_status(s);
             },

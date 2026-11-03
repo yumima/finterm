@@ -42,12 +42,12 @@ using fincept::services::NewsCluster;
 /// prompt actually uses, plus the score that put it here.
 struct Story {
     QString headline;
-    QString summary;   // the lead article's RSS <description>
-    QString link;      // lead article URL; the enrichment step reads this
-    QString source;    // lead article's outlet
-    QString category;  // the cluster's category, from the shared classifier
+    QString summary;  // the lead article's RSS <description>
+    QString link;     // lead article URL; the enrichment step reads this
+    QString source;   // lead article's outlet
+    QString category; // the cluster's category, from the shared classifier
     QStringList tickers;
-    QString body;      // article lead paragraphs, filled in by the enrich step
+    QString body; // article lead paragraphs, filled in by the enrich step
     int tier = 4;
     int source_count = 1;
     int64_t sort_ts = 0;
@@ -146,12 +146,10 @@ inline QStringList cluster_holdings(const NewsCluster& c, const QSet<QString>& h
     return out;
 }
 
-inline double score_cluster(const NewsCluster& c, int64_t reference_ts, bool portfolio_hit,
-                            const Config& cfg) {
-    return breadth_of(c.source_count) * authority_of(c.tier)
-           * recency_of(reference_ts - c.latest_sort_ts, cfg.recency_half_life_sec)
-           * (portfolio_hit ? cfg.portfolio_boost : 1.0)
-           * (c.is_breaking ? cfg.breaking_boost : 1.0);
+inline double score_cluster(const NewsCluster& c, int64_t reference_ts, bool portfolio_hit, const Config& cfg) {
+    return breadth_of(c.source_count) * authority_of(c.tier) *
+           recency_of(reference_ts - c.latest_sort_ts, cfg.recency_half_life_sec) *
+           (portfolio_hit ? cfg.portfolio_boost : 1.0) * (c.is_breaking ? cfg.breaking_boost : 1.0);
 }
 
 // ── Selection ───────────────────────────────────────────────────────────────
@@ -194,8 +192,7 @@ inline bool story_precedes(const Story& a, const Story& b) {
 /// wall-clock now. Anchoring on now means the selection drifts every second
 /// even when the feed has not changed, which defeats the content-addressed
 /// cache and makes two briefs a minute apart gratuitously different.
-inline QVector<Story> select_stories(const QVector<NewsCluster>& clusters,
-                                     const QSet<QString>& portfolio_tickers,
+inline QVector<Story> select_stories(const QVector<NewsCluster>& clusters, const QSet<QString>& portfolio_tickers,
                                      const Config& cfg = {}) {
     if (clusters.isEmpty())
         return {};
@@ -380,8 +377,7 @@ inline QSet<QString> distinctive_tokens(const QString& text) {
 ///     not have — with no evidence about which fragment is relevant, all of
 ///     them are kept.
 inline QString detail_for_headline(const QString& headline, const QString& blurb) {
-    static const QRegularExpression kEllipsis(
-        QStringLiteral("\\s*(?:\\x{2026}|\\.\\.\\.)\\s*"));
+    static const QRegularExpression kEllipsis(QStringLiteral("\\s*(?:\\x{2026}|\\.\\.\\.)\\s*"));
     const QStringList parts = blurb.split(kEllipsis, Qt::SkipEmptyParts);
     if (parts.size() < 3)
         return blurb;
@@ -400,8 +396,7 @@ inline QString detail_for_headline(const QString& headline, const QString& blurb
 /// Outlet count is stated because it is the one piece of importance evidence
 /// the model cannot infer from the text, and saying it out loud is what lets
 /// the brief lead with the right story instead of the first one.
-inline QString render_stories(const QVector<Story>& stories, int body_chars = 700,
-                              int summary_chars = 320) {
+inline QString render_stories(const QVector<Story>& stories, int body_chars = 700, int summary_chars = 320) {
     QStringList out;
     out.reserve(stories.size());
     for (int i = 0; i < stories.size(); ++i) {
@@ -416,19 +411,16 @@ inline QString render_stories(const QVector<Story>& stories, int body_chars = 70
         // remaining markers as literal text in the model's prompt.
         QString block =
             QStringLiteral("[%1] %2 | %3 | %4 outlet%5")
-                .arg(QString::number(i + 1),
-                     s.category.isEmpty() ? QStringLiteral("GENERAL") : s.category, s.source,
-                     QString::number(s.source_count),
-                     s.source_count == 1 ? QString() : QStringLiteral("s"));
+                .arg(QString::number(i + 1), s.category.isEmpty() ? QStringLiteral("GENERAL") : s.category, s.source,
+                     QString::number(s.source_count), s.source_count == 1 ? QString() : QStringLiteral("s"));
         if (!s.tickers.isEmpty())
             block += QStringLiteral(" | ") + s.tickers.join(QStringLiteral(", "));
         block += QLatin1Char('\n') + s.headline;
         // Body first when we have one — it is strictly better evidence than
         // the RSS blurb, which on many feeds is just the headline again.
         const bool have_body = !s.body.trimmed().isEmpty();
-        const QString detail =
-            clip_to_sentence(detail_for_headline(s.headline, have_body ? s.body : s.summary),
-                             have_body ? body_chars : summary_chars);
+        const QString detail = clip_to_sentence(detail_for_headline(s.headline, have_body ? s.body : s.summary),
+                                                have_body ? body_chars : summary_chars);
         if (!detail.isEmpty() && detail.compare(s.headline.simplified(), Qt::CaseInsensitive) != 0)
             block += QLatin1Char('\n') + detail;
         out << block;
@@ -446,8 +438,7 @@ inline QString render_stories(const QVector<Story>& stories, int body_chars = 70
 /// categories, the same heading written twice, a story filed under a section
 /// the reader would not look for it in. It writes prose under fixed headings
 /// now, and nothing about the structure is left to it.
-inline QString render_stories_by_category(const QVector<Story>& stories,
-                                          const QStringList& categories,
+inline QString render_stories_by_category(const QVector<Story>& stories, const QStringList& categories,
                                           int summary_chars = 240) {
     QStringList out;
     for (const QString& cat : categories) {
@@ -461,9 +452,7 @@ inline QString render_stories_by_category(const QVector<Story>& stories,
                                .arg(s.headline, s.source, QString::number(s.source_count),
                                     s.source_count == 1 ? QString() : QStringLiteral("s"));
             const QString detail = clip_to_sentence(
-                detail_for_headline(s.headline,
-                                    s.body.trimmed().isEmpty() ? s.summary : s.body),
-                summary_chars);
+                detail_for_headline(s.headline, s.body.trimmed().isEmpty() ? s.summary : s.body), summary_chars);
             if (!detail.isEmpty() && detail.compare(s.headline.simplified(), Qt::CaseInsensitive) != 0)
                 line += QStringLiteral("\n  ") + detail;
             lines << line;

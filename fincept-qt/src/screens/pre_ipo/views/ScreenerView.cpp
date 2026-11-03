@@ -32,13 +32,11 @@ void ScreenerView::build_ui() {
     auto* title_row = new QHBoxLayout;
     title_row->setSpacing(8);
     auto* title = new QLabel("SCREENER");
-    title->setStyleSheet(
-        QString("color:%1;font-size:14px;font-weight:800;letter-spacing:1.5px;background:transparent;")
-            .arg(colors::AMBER()));
+    title->setStyleSheet(QString("color:%1;font-size:14px;font-weight:800;letter-spacing:1.5px;background:transparent;")
+                             .arg(colors::AMBER()));
     title_row->addWidget(title);
     auto* sub = new QLabel("Scan the universe by readiness, drift, raise, sector");
-    sub->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
+    sub->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;").arg(colors::TEXT_SECONDARY()));
     title_row->addWidget(sub);
     title_row->addStretch();
     root->addLayout(title_row);
@@ -54,8 +52,7 @@ void ScreenerView::build_ui() {
         QString("QLineEdit{background:%1;color:%2;border:1px solid %3;"
                 "  border-radius:3px;padding:4px 8px;font-size:12px;}"
                 "QLineEdit:focus{border-color:%4;}")
-            .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY(),
-                 colors::BORDER_DIM(), colors::AMBER()));
+            .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY(), colors::BORDER_DIM(), colors::AMBER()));
     connect(search_, &QLineEdit::textChanged, this, [this](const QString& t) {
         search_text_ = t;
         rebuild_table();
@@ -67,21 +64,20 @@ void ScreenerView::build_ui() {
         b->setCheckable(true);
         b->setCursor(Qt::PointingHandCursor);
         b->setFixedHeight(24);
-        b->setStyleSheet(
-            QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                    "  border-radius:12px;padding:0 10px;font-size:12px;font-weight:600;}"
-                    "QPushButton:checked{background:%3;color:%4;border-color:%3;}"
-                    "QPushButton:hover:!checked{color:%5;border-color:%5;}")
-                .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(),
-                     colors::AMBER(), colors::BG_BASE(), colors::TEXT_PRIMARY()));
-        connect(b, &QPushButton::toggled, this, [this](bool){ rebuild_table(); });
+        b->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
+                                 "  border-radius:12px;padding:0 10px;font-size:12px;font-weight:600;}"
+                                 "QPushButton:checked{background:%3;color:%4;border-color:%3;}"
+                                 "QPushButton:hover:!checked{color:%5;border-color:%5;}")
+                             .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(), colors::AMBER(), colors::BG_BASE(),
+                                  colors::TEXT_PRIMARY()));
+        connect(b, &QPushButton::toggled, this, [this](bool) { rebuild_table(); });
         return b;
     };
 
     filter_has_marks_ = chip("Has fund marks");
-    filter_filed_     = chip("S-1 filed");
-    filter_ai_        = chip("AI");
-    filter_fintech_   = chip("Fintech");
+    filter_filed_ = chip("S-1 filed");
+    filter_ai_ = chip("AI");
+    filter_fintech_ = chip("Fintech");
     filter_row->addWidget(filter_has_marks_);
     filter_row->addWidget(filter_filed_);
     filter_row->addWidget(filter_ai_);
@@ -107,7 +103,8 @@ void ScreenerView::build_ui() {
     hdr->setSectionResizeMode(0, QHeaderView::Stretch);
     hdr->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     hdr->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    for (int c = 3; c < 10; ++c) hdr->setSectionResizeMode(c, QHeaderView::Fixed);
+    for (int c = 3; c < 10; ++c)
+        hdr->setSectionResizeMode(c, QHeaderView::Fixed);
     hdr->resizeSection(3, 80);
     hdr->resizeSection(4, 60);
     hdr->resizeSection(5, 80);
@@ -123,19 +120,19 @@ void ScreenerView::build_ui() {
                 "QTableWidget::item:selected{background:rgba(217,119,6,0.18);color:%2;}"
                 "QScrollBar:vertical{width:6px;background:%1;}"
                 "QScrollBar::handle:vertical{background:%4;}")
-            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(),
-                 colors::BORDER_DIM(), colors::BORDER_DIM()));
-    hdr->setStyleSheet(
-        QString("QHeaderView::section{background:%1;color:%2;border:none;"
-                "  border-bottom:2px solid %3;padding:5px 8px;font-size:12px;font-weight:700;"
-                "  text-align:left;}")
-            .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
+            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM(), colors::BORDER_DIM()));
+    hdr->setStyleSheet(QString("QHeaderView::section{background:%1;color:%2;border:none;"
+                               "  border-bottom:2px solid %3;padding:5px 8px;font-size:12px;font-weight:700;"
+                               "  text-align:left;}")
+                           .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
 
     connect(table_, &QTableWidget::cellClicked, this, [this](int row, int) {
         auto* it = table_->item(row, 0);
-        if (!it) return;
+        if (!it)
+            return;
         const QString id = it->data(Qt::UserRole).toString();
-        if (!id.isEmpty()) emit company_selected(id);
+        if (!id.isEmpty())
+            emit company_selected(id);
     });
 
     root->addWidget(table_, 1);
@@ -144,9 +141,7 @@ void ScreenerView::build_ui() {
 bool ScreenerView::passes_filter(const PrivateCompany& c) const {
     if (!search_text_.isEmpty()) {
         const QString lo = search_text_.toLower();
-        if (!c.name.toLower().contains(lo) &&
-            !c.sector.toLower().contains(lo) &&
-            !c.hq_state.toLower().contains(lo) &&
+        if (!c.name.toLower().contains(lo) && !c.sector.toLower().contains(lo) && !c.hq_state.toLower().contains(lo) &&
             !c.hq_city.toLower().contains(lo))
             return false;
     }
@@ -189,7 +184,8 @@ void ScreenerView::rebuild_table() {
 
     int row = 0;
     for (const auto& c : companies_) {
-        if (!passes_filter(c)) continue;
+        if (!passes_filter(c))
+            continue;
         table_->insertRow(row);
 
         // numeric_item: numeric sort key in EditRole (used by Qt's default
@@ -216,32 +212,32 @@ void ScreenerView::rebuild_table() {
         table_->setItem(row, 0, name_it);
         table_->setItem(row, 1, text_item(c.sector.isEmpty() ? "—" : c.sector));
         QString hq = c.hq_city;
-        if (!hq.isEmpty() && !c.hq_state.isEmpty()) hq += ", " + c.hq_state;
-        else if (hq.isEmpty()) hq = c.hq_state;
+        if (!hq.isEmpty() && !c.hq_state.isEmpty())
+            hq += ", " + c.hq_state;
+        else if (hq.isEmpty())
+            hq = c.hq_state;
         table_->setItem(row, 2, text_item(hq.isEmpty() ? "—" : hq));
 
         // Override DisplayRole only — leave EditRole holding the numeric sort
         // key. Qt's QTableWidgetItem::operator< compares EditRole when sorting
         // is enabled, so columns sort numerically while the cell renders the
         // formatted string.
-        auto set_display = [](QTableWidgetItem* it, const QString& s) {
-            it->setData(Qt::DisplayRole, s);
-        };
+        auto set_display = [](QTableWidgetItem* it, const QString& s) { it->setData(Qt::DisplayRole, s); };
 
         auto* raised = numeric_item(c.cumulative_raised_m);
-        set_display(raised, c.cumulative_raised_m > 0
-            ? "$" + QString::number(qRound(c.cumulative_raised_m)) + "M" : "—");
+        set_display(raised,
+                    c.cumulative_raised_m > 0 ? "$" + QString::number(qRound(c.cumulative_raised_m)) + "M" : "—");
         table_->setItem(row, 3, raised);
 
         auto* funds = numeric_item(static_cast<double>(c.analytics.smart_money_index));
-        set_display(funds, c.analytics.smart_money_index > 0
-            ? QString::number(c.analytics.smart_money_index) : "—");
+        set_display(funds, c.analytics.smart_money_index > 0 ? QString::number(c.analytics.smart_money_index) : "—");
         funds->setTextAlignment(Qt::AlignCenter);
         table_->setItem(row, 4, funds);
 
         auto* mark = numeric_item(c.analytics.consensus_mark_pps);
         set_display(mark, c.analytics.consensus_mark_pps > 0
-            ? "$" + QString::number(c.analytics.consensus_mark_pps, 'f', 2) : "—");
+                              ? "$" + QString::number(c.analytics.consensus_mark_pps, 'f', 2)
+                              : "—");
         if (c.analytics.consensus_mark_pps > 0)
             mark->setForeground(QColor(colors::AMBER()));
         table_->setItem(row, 5, mark);
@@ -256,11 +252,11 @@ void ScreenerView::rebuild_table() {
 
         QString s1_label = "—";
         if (c.s1.first_filed.isValid())
-            s1_label = c.s1.amendment_count > 0
-                ? QString("A×%1").arg(c.s1.amendment_count) : "Filed";
+            s1_label = c.s1.amendment_count > 0 ? QString("A×%1").arg(c.s1.amendment_count) : "Filed";
         auto* s1 = text_item(s1_label);
         s1->setTextAlignment(Qt::AlignCenter);
-        if (c.s1.first_filed.isValid()) s1->setForeground(QColor(colors::AMBER()));
+        if (c.s1.first_filed.isValid())
+            s1->setForeground(QColor(colors::AMBER()));
         table_->setItem(row, 7, s1);
 
         // Estimated IPO date: today + analytics.days_to_price_est. Only

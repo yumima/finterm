@@ -207,8 +207,9 @@ void MaritimeScreen::set_status(const QString& text, const ui::ColorToken& color
     if (!status_label_)
         return;
     status_label_->setText(text);
-    status_label_->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; font-family:%2;").arg(C(color) ).arg(ui::fonts::DATA_FAMILY));
+    status_label_->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2;")
+                                     .arg(C(color))
+                                     .arg(ui::fonts::DATA_FAMILY));
 }
 
 // ── Build UI ─────────────────────────────────────────────────────────────────
@@ -345,9 +346,10 @@ QWidget* MaritimeScreen::build_left_panel() {
 
     vl->addSpacing(8);
     auto* routes_title = new QLabel("TRADE CORRIDORS", panel);
-    routes_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; font-family:%2; letter-spacing:1px;")
-                                    .arg(ui::colors::AMBER())
-                                    .arg(ui::fonts::DATA_FAMILY));
+    routes_title->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:700; font-family:%2; letter-spacing:1px;")
+            .arg(ui::colors::AMBER())
+            .arg(ui::fonts::DATA_FAMILY));
     vl->addWidget(routes_title);
 
     routes_table_ = new QTableWidget(panel);
@@ -631,8 +633,9 @@ QWidget* MaritimeScreen::build_status_bar() {
     hl->setContentsMargins(12, 0, 12, 0);
     hl->setSpacing(16);
 
-    auto s =
-        QString("color:%1; font-size:12px; font-family:%2;").arg(ui::colors::TEXT_SECONDARY()).arg(ui::fonts::DATA_FAMILY);
+    auto s = QString("color:%1; font-size:12px; font-family:%2;")
+                 .arg(ui::colors::TEXT_SECONDARY())
+                 .arg(ui::fonts::DATA_FAMILY);
     auto sv = QString("color:%1; font-size:12px; font-weight:700; font-family:%2;")
                   .arg(ui::colors::TEXT_PRIMARY())
                   .arg(ui::fonts::DATA_FAMILY);

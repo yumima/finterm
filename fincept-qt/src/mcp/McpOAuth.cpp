@@ -35,8 +35,7 @@ void put_secure(const QString& key, const QString& value) {
     }
     auto r = SecureStorage::instance().store(key, value);
     if (r.is_err())
-        LOG_WARN(TAG, QString("SecureStorage::store %1 failed: %2")
-                          .arg(key, QString::fromStdString(r.error())));
+        LOG_WARN(TAG, QString("SecureStorage::store %1 failed: %2").arg(key, QString::fromStdString(r.error())));
 }
 
 /// Sync GET.  Used for `.well-known` discovery — small responses,
@@ -75,19 +74,18 @@ Result<QJsonObject> http_get(const QUrl& url, int timeout_ms = 5000) {
     QJsonParseError perr;
     QJsonDocument doc = QJsonDocument::fromJson(response, &perr);
     if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
-        return Result<QJsonObject>::err(
-            QString("oauth: discovery returned non-JSON (status %1): %2").arg(status).arg(perr.errorString()).toStdString());
+        return Result<QJsonObject>::err(QString("oauth: discovery returned non-JSON (status %1): %2")
+                                            .arg(status)
+                                            .arg(perr.errorString())
+                                            .toStdString());
     }
     return Result<QJsonObject>::ok(doc.object());
 }
 
 /// Run a sync POST.  Caller is expected to be on a non-UI thread —
 /// McpHttpClient already enforces that for its own JSON-RPC calls.
-Result<QJsonObject> http_post(const QUrl& url,
-                              const QByteArray& body,
-                              const QByteArray& content_type,
-                              const QString& bearer = {},
-                              const QString& basic_auth = {}) {
+Result<QJsonObject> http_post(const QUrl& url, const QByteArray& body, const QByteArray& content_type,
+                              const QString& bearer = {}, const QString& basic_auth = {}) {
     QNetworkAccessManager nam;
     QNetworkRequest req(url);
     req.setHeader(QNetworkRequest::ContentTypeHeader, content_type);
@@ -120,29 +118,23 @@ Result<QJsonObject> http_post(const QUrl& url,
     reply->deleteLater();
 
     if (err != QNetworkReply::NoError) {
-        return Result<QJsonObject>::err(
-            QString("oauth: HTTP error %1 (status %2): %3")
-                .arg(static_cast<int>(err))
-                .arg(status)
-                .arg(QString::fromUtf8(response).left(300))
-                .toStdString());
+        return Result<QJsonObject>::err(QString("oauth: HTTP error %1 (status %2): %3")
+                                            .arg(static_cast<int>(err))
+                                            .arg(status)
+                                            .arg(QString::fromUtf8(response).left(300))
+                                            .toStdString());
     }
     QJsonParseError perr;
     QJsonDocument doc = QJsonDocument::fromJson(response, &perr);
     if (perr.error != QJsonParseError::NoError || !doc.isObject()) {
         return Result<QJsonObject>::err(
-            QString("oauth: invalid JSON (status %1): %2")
-                .arg(status)
-                .arg(perr.errorString())
-                .toStdString());
+            QString("oauth: invalid JSON (status %1): %2").arg(status).arg(perr.errorString()).toStdString());
     }
     QJsonObject obj = doc.object();
     if (status >= 400 || obj.contains("error")) {
-        const QString reason = obj.value("error_description").toString(
-            obj.value("error").toString("unknown"));
+        const QString reason = obj.value("error_description").toString(obj.value("error").toString("unknown"));
         return Result<QJsonObject>::err(
-            QString("oauth: server rejected (status %1): %2")
-                .arg(status).arg(reason).toStdString());
+            QString("oauth: server rejected (status %1): %2").arg(status).arg(reason).toStdString());
     }
     return Result<QJsonObject>::ok(obj);
 }
@@ -153,9 +145,8 @@ Result<QJsonObject> http_post(const QUrl& url,
 Result<QPair<QString, QString>> do_dcr(const OAuthConfig& cfg) {
     QJsonObject metadata;
     metadata["client_name"] = QStringLiteral("finterm");
-    metadata["grant_types"] = QJsonArray{cfg.grant_type.isEmpty()
-                                             ? QStringLiteral("client_credentials")
-                                             : cfg.grant_type};
+    metadata["grant_types"] =
+        QJsonArray{cfg.grant_type.isEmpty() ? QStringLiteral("client_credentials") : cfg.grant_type};
     metadata["token_endpoint_auth_method"] = QStringLiteral("client_secret_basic");
     if (!cfg.scope.isEmpty())
         metadata["scope"] = cfg.scope;
@@ -168,14 +159,12 @@ Result<QPair<QString, QString>> do_dcr(const OAuthConfig& cfg) {
     const QString cid = obj.value("client_id").toString();
     const QString secret = obj.value("client_secret").toString();
     if (cid.isEmpty())
-        return Result<QPair<QString, QString>>::err(
-            "oauth: registration response missing client_id");
+        return Result<QPair<QString, QString>>::err("oauth: registration response missing client_id");
     return Result<QPair<QString, QString>>::ok({cid, secret});
 }
 
 /// client_credentials token request (RFC 6749 §4.4).
-Result<QJsonObject> request_client_credentials(const OAuthConfig& cfg,
-                                               const QString& client_id,
+Result<QJsonObject> request_client_credentials(const OAuthConfig& cfg, const QString& client_id,
                                                const QString& client_secret) {
     QUrlQuery form;
     form.addQueryItem("grant_type", "client_credentials");
@@ -190,8 +179,7 @@ Result<QJsonObject> request_client_credentials(const OAuthConfig& cfg,
         form.addQueryItem("client_id", client_id);
     }
     const QByteArray body = form.toString(QUrl::FullyEncoded).toUtf8();
-    return http_post(QUrl(cfg.token_url), body,
-                     "application/x-www-form-urlencoded", QString{}, basic);
+    return http_post(QUrl(cfg.token_url), body, "application/x-www-form-urlencoded", QString{}, basic);
 }
 
 } // anonymous namespace
@@ -235,17 +223,14 @@ Result<QString> McpOAuth::ensure_access_token(const OAuthConfig& cfg) {
         const QJsonObject d = disc.value();
         const QString token = d.value(QStringLiteral("token_endpoint")).toString();
         if (token.isEmpty())
-            return Result<QString>::err(
-                "oauth: discovery document missing token_endpoint");
+            return Result<QString>::err("oauth: discovery document missing token_endpoint");
         effective.token_url = token;
         const QString reg = d.value(QStringLiteral("registration_endpoint")).toString();
         if (!reg.isEmpty() && effective.registration_url.isEmpty())
             effective.registration_url = reg;
     }
 
-    const QString grant = effective.grant_type.isEmpty()
-                              ? QStringLiteral("client_credentials")
-                              : effective.grant_type;
+    const QString grant = effective.grant_type.isEmpty() ? QStringLiteral("client_credentials") : effective.grant_type;
 
     // Cached path — return the access_token while it's still good.
     const QString cached = get_secure(secure_key_access_token(cfg.server_id));
@@ -273,26 +258,27 @@ Result<QString> McpOAuth::ensure_access_token(const OAuthConfig& cfg) {
             auto r = McpOAuthAuthCode::refresh(ac);
             if (r.is_ok())
                 return r;
-            LOG_WARN(TAG, QString("oauth: refresh failed, falling back to full flow: %1")
-                              .arg(QString::fromStdString(r.error())));
+            LOG_WARN(
+                TAG,
+                QString("oauth: refresh failed, falling back to full flow: %1").arg(QString::fromStdString(r.error())));
         }
         return McpOAuthAuthCode::run_flow(ac);
     }
 
     if (grant != QStringLiteral("client_credentials"))
-        return Result<QString>::err(
-            QString("oauth: grant_type '%1' not implemented (supported: "
-                    "client_credentials, authorization_code)").arg(grant).toStdString());
+        return Result<QString>::err(QString("oauth: grant_type '%1' not implemented (supported: "
+                                            "client_credentials, authorization_code)")
+                                        .arg(grant)
+                                        .toStdString());
 
     // Resolve client credentials, doing DCR if needed.
     QString client_id = get_secure(secure_key_client_id(effective.server_id));
     QString client_secret = get_secure(secure_key_client_secret(effective.server_id));
     if (client_id.isEmpty()) {
         if (effective.registration_url.isEmpty())
-            return Result<QString>::err(
-                "oauth: no client_id in SecureStorage and no registration_url "
-                "configured — set mcp.oauth.<server>.client_id manually or "
-                "configure DCR");
+            return Result<QString>::err("oauth: no client_id in SecureStorage and no registration_url "
+                                        "configured — set mcp.oauth.<server>.client_id manually or "
+                                        "configure DCR");
         LOG_INFO(TAG, QString("Running DCR against %1").arg(effective.registration_url));
         auto dcr = do_dcr(effective);
         if (dcr.is_err())
@@ -311,7 +297,7 @@ Result<QString> McpOAuth::ensure_access_token(const OAuthConfig& cfg) {
     const QString access = obj.value("access_token").toString();
     if (access.isEmpty())
         return Result<QString>::err("oauth: token response missing access_token");
-    const int expires_in = obj.value("expires_in").toInt(3600);  // RFC 6749 §5.1 default
+    const int expires_in = obj.value("expires_in").toInt(3600); // RFC 6749 §5.1 default
 
     // Cache the token + expiry.  Refresh tokens (when present) are
     // recorded too; the authorization_code grant uses them later.

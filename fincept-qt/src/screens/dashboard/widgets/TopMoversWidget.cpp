@@ -1,13 +1,11 @@
 #include "screens/dashboard/widgets/TopMoversWidget.h"
 
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/markets/MarketChartDialog.h"
-
 #include "ui/charts/InlineSparkline.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
-
-#include "datahub/DataHub.h"
-#include "datahub/DataHubMetaTypes.h"
 
 #include <QPointer>
 
@@ -143,13 +141,12 @@ void TopMoversWidget::resubscribe_sparklines() {
     for (const auto& sym : wanted) {
         if (subscribed_symbols_.contains(sym))
             continue;
-        hub.subscribe(this, QStringLiteral("market:sparkline:") + sym,
-                      [this, sym](const QVariant& v) {
-                          if (!v.canConvert<QVector<double>>())
-                              return;
-                          sparkline_cache_.insert(sym, v.value<QVector<double>>());
-                          coalesce_->start();
-                      });
+        hub.subscribe(this, QStringLiteral("market:sparkline:") + sym, [this, sym](const QVariant& v) {
+            if (!v.canConvert<QVector<double>>())
+                return;
+            sparkline_cache_.insert(sym, v.value<QVector<double>>());
+            coalesce_->start();
+        });
         subscribed_symbols_.append(sym);
     }
 }

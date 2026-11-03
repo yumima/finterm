@@ -32,12 +32,12 @@
 namespace fincept::screens::fingpt {
 
 struct ForecasterAnswer {
-    QString positives;    // body of [Positive Developments]
-    QString concerns;     // body of [Potential Concerns]
-    QString prediction;   // the "Prediction:" line's text
-    QString analysis;     // the "Analysis:" text (or the whole tail)
-    bool sections_ok = false;  // all three section markers were found
-    int direction = 0;         // +1 up, -1 down, 0 = flat if flat_stated, else not stated
+    QString positives;        // body of [Positive Developments]
+    QString concerns;         // body of [Potential Concerns]
+    QString prediction;       // the "Prediction:" line's text
+    QString analysis;         // the "Analysis:" text (or the whole tail)
+    bool sections_ok = false; // all three section markers were found
+    int direction = 0;        // +1 up, -1 down, 0 = flat if flat_stated, else not stated
     // The model explicitly called it flat / neutral / sideways. A flat call is
     // a real verdict ("I expect no material move"), not an absent one — the
     // two used to be indistinguishable, so MSFT's "Neutral, 0-1%" rendered as
@@ -67,9 +67,8 @@ namespace detail {
 /// concerns", models echo that sentence as a preamble, and an unanchored
 /// match sliced the answer at the echo instead of the section header.
 inline int find_marker(const QString& text, const char* core, int from, int* marker_start) {
-    const QRegularExpression re(
-        QStringLiteral("^[ \\t*#>-]*\\[?\\s*%1\\s*\\]?\\s*:?").arg(QLatin1String(core)),
-        QRegularExpression::CaseInsensitiveOption | QRegularExpression::MultilineOption);
+    const QRegularExpression re(QStringLiteral("^[ \\t*#>-]*\\[?\\s*%1\\s*\\]?\\s*:?").arg(QLatin1String(core)),
+                                QRegularExpression::CaseInsensitiveOption | QRegularExpression::MultilineOption);
     const QRegularExpressionMatch m = re.match(text, from);
     if (!m.hasMatch())
         return -1;
@@ -86,11 +85,10 @@ inline ForecasterAnswer parse_forecaster_answer(const QString& raw) {
 
     int pos_body = detail::find_marker(text, "Positive\\s+Developments", 0, nullptr);
     int con_start = -1;
-    int con_body = detail::find_marker(text, "Potential\\s+Concerns",
-                                       pos_body < 0 ? 0 : pos_body, &con_start);
+    int con_body = detail::find_marker(text, "Potential\\s+Concerns", pos_body < 0 ? 0 : pos_body, &con_start);
     int pred_start = -1;
-    int pred_body = detail::find_marker(text, "Prediction\\s*(?:&|and)\\s*Analysis",
-                                        con_body < 0 ? 0 : con_body, &pred_start);
+    int pred_body =
+        detail::find_marker(text, "Prediction\\s*(?:&|and)\\s*Analysis", con_body < 0 ? 0 : con_body, &pred_start);
 
     if (pos_body >= 0 && con_start > pos_body)
         a.positives = text.mid(pos_body, con_start - pos_body).trimmed();
@@ -105,8 +103,7 @@ inline ForecasterAnswer parse_forecaster_answer(const QString& raw) {
     if (!tail.isEmpty()) {
         const QRegularExpression pred_re(QStringLiteral("Prediction\\s*:\\s*([^\\n]*)"),
                                          QRegularExpression::CaseInsensitiveOption);
-        const QRegularExpression ana_re(QStringLiteral("Analysis\\s*:\\s*"),
-                                        QRegularExpression::CaseInsensitiveOption);
+        const QRegularExpression ana_re(QStringLiteral("Analysis\\s*:\\s*"), QRegularExpression::CaseInsensitiveOption);
         const auto pm = pred_re.match(tail);
         if (pm.hasMatch())
             a.prediction = pm.captured(1).trimmed();
@@ -184,7 +181,7 @@ inline ForecasterAnswer parse_forecaster_answer(const QString& raw) {
     qsizetype hedge_cut = -1;
     if (flat_at >= 0 && (dir_at < 0 || flat_at < dir_at)) {
         if (dir_at < 0) {
-            a.flat_stated = true;  // flat with nothing directional anywhere
+            a.flat_stated = true; // flat with nothing directional anywhere
         } else {
             // Flat led, direction follows. A concessive marker between them
             // makes the direction a hedge and flat the call ("flat, though
@@ -201,15 +198,14 @@ inline ForecasterAnswer parse_forecaster_answer(const QString& raw) {
             }
         }
     } else {
-        a.direction = dir;  // may stay 0: nothing stated at all
+        a.direction = dir; // may stay 0: nothing stated at all
     }
 
     // Magnitude band (map_bin_label's vocabulary, free-text tolerant).
     static const QRegularExpression range_re(
         QStringLiteral("(\\d+(?:\\.\\d+)?)\\s*(?:-|–|~|to)\\s*(\\d+(?:\\.\\d+)?)\\s*%"));
-    static const QRegularExpression more_re(
-        QStringLiteral("more\\s+than\\s+(\\d+(?:\\.\\d+)?)\\s*%"),
-        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression more_re(QStringLiteral("more\\s+than\\s+(\\d+(?:\\.\\d+)?)\\s*%"),
+                                            QRegularExpression::CaseInsensitiveOption);
     // The single-figure fallback requires a move-sized preposition: a bare
     // "45%" in the prediction sentence is as likely to be implied volatility
     // or a probability as the week's move, and a confidently wrong "UP by
@@ -265,20 +261,23 @@ inline QString truncate_repetition(const QString& text, bool* truncated = nullpt
     const QStringView v(text);
     qsizetype i = 0;
     while (i < v.size()) {
-        while (i < v.size() && v[i].isSpace()) ++i;
-        if (i >= v.size()) break;
+        while (i < v.size() && v[i].isSpace())
+            ++i;
+        if (i >= v.size())
+            break;
         const qsizetype b = i;
-        while (i < v.size() && !v[i].isSpace()) ++i;
+        while (i < v.size() && !v[i].isSpace())
+            ++i;
         starts.append(b);
         words.append(v.mid(b, i - b));
     }
-    constexpr int kMinLoopWords = 24;  // shortest run that is loop, not rhetoric
-    constexpr int kMaxPeriod = 160;    // longest cycle worth hunting (words)
+    constexpr int kMinLoopWords = 24; // shortest run that is loop, not rhetoric
+    constexpr int kMaxPeriod = 160;   // longest cycle worth hunting (words)
     const int n = static_cast<int>(words.size());
     if (n < kMinLoopWords)
         return text;
     for (int p = 1; p <= kMaxPeriod && p * 3 <= n; ++p) {
-        int run = 0;  // trailing words that echo the word one cycle back
+        int run = 0; // trailing words that echo the word one cycle back
         for (int k = n - 1; k - p >= 0 && words[k] == words[k - p]; --k)
             ++run;
         if (run >= 2 * p && run >= kMinLoopWords) {
@@ -312,8 +311,7 @@ inline QString describe_forecast(const ForecasterAnswer& a) {
         else if (a.bin_lo == a.bin_hi)
             s += QStringLiteral(" by ~%1%").arg(QString::number(a.bin_lo, 'g', 4));
         else
-            s += QStringLiteral(" by %1–%2%").arg(QString::number(a.bin_lo, 'g', 4),
-                                                  QString::number(a.bin_hi, 'g', 4));
+            s += QStringLiteral(" by %1–%2%").arg(QString::number(a.bin_lo, 'g', 4), QString::number(a.bin_hi, 'g', 4));
     }
     return s;
 }

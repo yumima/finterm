@@ -4,8 +4,6 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-#include <array>
-
 #include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
@@ -13,6 +11,8 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QVBoxLayout>
+
+#include <array>
 
 namespace fincept::screens {
 
@@ -37,8 +37,8 @@ class TemplatePreview : public QWidget {
         static const auto make_colors = []() {
             const auto& t = ui::ThemeManager::instance().tokens();
             return std::array<QColor, 6>{
-                QColor(t.accent),    QColor(t.positive), QColor(t.info),
-                QColor(t.negative),  QColor(t.cyan),     QColor(t.warning),
+                QColor(t.accent),   QColor(t.positive), QColor(t.info),
+                QColor(t.negative), QColor(t.cyan),     QColor(t.warning),
             };
         };
         const auto colors = make_colors();

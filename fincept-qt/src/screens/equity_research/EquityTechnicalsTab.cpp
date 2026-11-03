@@ -325,7 +325,8 @@ QString EquityTechnicalsTab::col_key_for(const QString& name) {
 QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
     if (col_key == "rsi")
         return "Relative Strength Index (RSI)\n\n"
-               "Momentum oscillator on a 0\xe2\x80\x93""100 scale comparing the size of recent gains to "
+               "Momentum oscillator on a 0\xe2\x80\x93"
+               "100 scale comparing the size of recent gains to "
                "recent losses (typically over 14 periods). Above 70 is considered overbought, "
                "below 30 oversold. Divergence between RSI and price often precedes a reversal.";
     if (col_key == "macd")
@@ -339,7 +340,8 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
                "signal line is a bullish trigger; crossing below is bearish.";
     if (col_key == "stoch_k")
         return "Stochastic Oscillator %K\n\n"
-               "Where the latest close sits within the recent high\xe2\x80\x93low range, 0\xe2\x80\x93""100. "
+               "Where the latest close sits within the recent high\xe2\x80\x93low range, 0\xe2\x80\x93"
+               "100. "
                "Above 80 is overbought, below 20 oversold. %K is the fast line; its crossover "
                "with the slower %D line is the trade trigger.";
     if (col_key == "stoch_d")
@@ -350,29 +352,38 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
     if (col_key == "williams_r")
         return "Williams %R\n\n"
                "Where the close sits within the recent high\xe2\x80\x93low range, on an inverted 0 to "
-               "\xe2\x88\x92""100 scale. Above \xe2\x88\x92""20 is overbought, below \xe2\x88\x92""80 oversold. Effectively a "
+               "\xe2\x88\x92"
+               "100 scale. Above \xe2\x88\x92"
+               "20 is overbought, below \xe2\x88\x92"
+               "80 oversold. Effectively a "
                "fast stochastic with a flipped axis.";
     if (col_key == "cci")
         return "Commodity Channel Index (CCI)\n\n"
                "How far price has stretched from its statistical average. Above +100 signals an "
-               "unusually strong up-move (overbought), below \xe2\x88\x92""100 an unusually weak one "
-               "(oversold); \xc2\xb1""200 marks extremes.";
+               "unusually strong up-move (overbought), below \xe2\x88\x92"
+               "100 an unusually weak one "
+               "(oversold); \xc2\xb1"
+               "200 marks extremes.";
     if (col_key == "adx")
         return "Average Directional Index (ADX)\n\n"
-               "Trend strength, not direction, on a 0\xe2\x80\x93""100 scale. Below 20 the market is "
+               "Trend strength, not direction, on a 0\xe2\x80\x93"
+               "100 scale. Below 20 the market is "
                "range-bound; above 25 a trend is in force; above 50 it is very strong. Use it "
                "to judge whether trend-following signals are trustworthy.";
     if (col_key == "aroon_up")
         return "Aroon Up\n\n"
-               "How recently the period's highest high was set, 0\xe2\x80\x93""100. Above 70 means new "
+               "How recently the period's highest high was set, 0\xe2\x80\x93"
+               "100. Above 70 means new "
                "highs keep being made (strong uptrend); below 30 the upside is stale.";
     if (col_key == "aroon_down")
         return "Aroon Down\n\n"
-               "How recently the period's lowest low was set, 0\xe2\x80\x93""100. Above 70 means new lows "
+               "How recently the period's lowest low was set, 0\xe2\x80\x93"
+               "100. Above 70 means new lows "
                "keep being made (strong downtrend); below 30 the downside is stale.";
     if (col_key == "mfi")
         return "Money Flow Index (MFI)\n\n"
-               "A volume-weighted RSI, 0\xe2\x80\x93""100: tracks whether money is flowing into or out of "
+               "A volume-weighted RSI, 0\xe2\x80\x93"
+               "100: tracks whether money is flowing into or out of "
                "the stock. Above 80 is overbought, below 20 oversold; divergence from price "
                "warns the move lacks real flow behind it.";
     if (col_key == "roc")
@@ -392,7 +403,8 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
         return "Average True Range (ATR)\n\n"
                "The average size of a bar's full trading range, in price units \xe2\x80\x94 a pure "
                "volatility gauge with no direction. Commonly used to size stop-losses "
-               "(e.g. 2\xc3\x97""ATR from entry) and positions.";
+               "(e.g. 2\xc3\x97"
+               "ATR from entry) and positions.";
     if (col_key == "bb_mavg")
         return "Bollinger Band Midline\n\n"
                "The 20-period simple moving average at the center of the Bollinger Bands, with "
@@ -411,12 +423,14 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
     if (col_key == "bb_pband")
         return "Bollinger %B\n\n"
                "Where price sits within the Bollinger Bands: 1 = at the upper band, 0 = at the "
-               "lower, 0.5 = at the midline. Readings outside 0\xe2\x80\x93""1 mean price closed beyond "
+               "lower, 0.5 = at the midline. Readings outside 0\xe2\x80\x93"
+               "1 mean price closed beyond "
                "the bands \xe2\x80\x94 a statistically stretched move.";
     if (col_key == "bb_wband")
         return "Bollinger Band Width\n\n"
                "The distance between the bands as a PERCENT of the midline \xe2\x80\x94 a direct read "
-               "of volatility (typical equity readings run about 2\xe2\x80\x93""20). A tight squeeze "
+               "of volatility (typical equity readings run about 2\xe2\x80\x93"
+               "20). A tight squeeze "
                "(under ~5) often precedes a sharp breakout; unusually wide bands (over ~30) mark "
                "volatility that tends to fade.";
     if (col_key == "obv")
@@ -435,9 +449,12 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
                "been in control over that window; below, sellers.";
     if (col_key == "cmf")
         return "Chaikin Money Flow (CMF)\n\n"
-               "Volume-weighted buying versus selling pressure over the period, from \xe2\x88\x92""1 to "
+               "Volume-weighted buying versus selling pressure over the period, from \xe2\x88\x92"
+               "1 to "
                "+1. Above +0.05 indicates accumulation (above +0.20, strong accumulation); below "
-               "\xe2\x88\x92""0.05 distribution (below \xe2\x88\x92""0.20, strong); near zero, balance.";
+               "\xe2\x88\x92"
+               "0.05 distribution (below \xe2\x88\x92"
+               "0.20, strong); near zero, balance.";
     if (col_key == "adi")
         return "Accumulation/Distribution Index (ADI)\n\n"
                "Cumulative volume weighted by where each close lands within its bar's range. "
@@ -495,11 +512,10 @@ void EquityTechnicalsTab::rebind() {
     if (!current_technicals_key_.isEmpty())
         store.unsubscribe(this, current_technicals_key_);
     auto& svc = services::equity::EquityResearchService::instance();
-    svc.subscribe_technicals(
-        this, current_symbol_, current_period_, current_interval_,
-        [this](const services::query::QueryStore::State& s) { apply_technicals_state(s); });
-    current_technicals_key_ = services::equity::EquityResearchService::technicals_key(
-        current_symbol_, current_period_, current_interval_);
+    svc.subscribe_technicals(this, current_symbol_, current_period_, current_interval_,
+                             [this](const services::query::QueryStore::State& s) { apply_technicals_state(s); });
+    current_technicals_key_ =
+        services::equity::EquityResearchService::technicals_key(current_symbol_, current_period_, current_interval_);
 }
 
 void EquityTechnicalsTab::refresh() {
@@ -544,16 +560,18 @@ void EquityTechnicalsTab::switch_interval(QPushButton* btn, const QString& inter
 
 // static
 QString EquityTechnicalsTab::period_btn_style_active() {
-    return QString("QPushButton{background:%1;color:%2;border:1px solid %1;"
-                   "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
+    return QString(
+               "QPushButton{background:%1;color:%2;border:1px solid %1;"
+               "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}")
         .arg(ui::colors::AMBER(), ui::colors::BG_BASE());
 }
 
 // static
 QString EquityTechnicalsTab::period_btn_style_inactive() {
-    return QString("QPushButton{background:transparent;color:%1;border:1px solid %2;"
-                   "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
-                   "QPushButton:hover{border-color:%3;background:%4;}")
+    return QString(
+               "QPushButton{background:transparent;color:%1;border:1px solid %2;"
+               "border-radius:2px;padding:3px 10px;font-size:12px;font-weight:700;font-family:'Consolas',monospace;}"
+               "QPushButton:hover{border-color:%3;background:%4;}")
         .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM(), ui::colors::AMBER(), ui::colors::BG_RAISED());
 }
 
@@ -580,15 +598,13 @@ void EquityTechnicalsTab::build_ui() {
     // pulled, not the bar size the indicators are built from — and since every
     // reading is taken off the latest daily bar with a fixed lookback, the
     // selections that clear the warm-up floor land on the same verdict.
-    period_lbl->setToolTip(
-        "How much price history is fetched.\n\n"
-        "Indicators are computed from daily bars and always from at least two years of "
-        "them, so that the 50- and 200-day averages, MACD and ADX are warmed up and the "
-        "rating has something to stand on. Because each indicator reads off the latest "
-        "bar with a fixed lookback, the shorter selections produce the same rating.");
-    period_lbl->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
-            .arg(ui::colors::TEXT_SECONDARY()));
+    period_lbl->setToolTip("How much price history is fetched.\n\n"
+                           "Indicators are computed from daily bars and always from at least two years of "
+                           "them, so that the 50- and 200-day averages, MACD and ADX are warmed up and the "
+                           "rating has something to stand on. Because each indicator reads off the latest "
+                           "bar with a fixed lookback, the shorter selections produce the same rating.");
+    period_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
+                                  .arg(ui::colors::TEXT_SECONDARY()));
     pb_hl->addWidget(period_lbl);
 
     auto make_btn = [&](const QString& label, QPushButton*& out, const QString& period) {
@@ -611,10 +627,14 @@ void EquityTechnicalsTab::build_ui() {
     make_btn("5Y", btn_5y_, "5y");
     // Derive initial active button from current_period_ — stays correct if default ever changes.
     const auto period_to_btn = [&](const QString& p) -> QPushButton* {
-        if (p == "1mo") return btn_1m_;
-        if (p == "3mo") return btn_3m_;
-        if (p == "6mo") return btn_6m_;
-        if (p == "5y")  return btn_5y_;
+        if (p == "1mo")
+            return btn_1m_;
+        if (p == "3mo")
+            return btn_3m_;
+        if (p == "6mo")
+            return btn_6m_;
+        if (p == "5y")
+            return btn_5y_;
         return btn_1y_;
     };
     active_period_btn_ = period_to_btn(current_period_);
@@ -626,15 +646,13 @@ void EquityTechnicalsTab::build_ui() {
     // describes the multi-week one — they disagree often, and that disagreement
     // is the useful part.
     auto* bars_lbl = new QLabel("BARS");
-    bars_lbl->setToolTip(
-        "Which bars the indicators are built from.\n\n"
-        "Daily reads the multi-week trend; weekly re-derives every indicator from weekly "
-        "highs, lows and closes and reads the multi-month one. A stock can be neutral on "
-        "the daily chart and strongly trending on the weekly, and vice versa \xe2\x80\x94 "
-        "the two answer different questions.");
-    bars_lbl->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
-            .arg(ui::colors::TEXT_SECONDARY()));
+    bars_lbl->setToolTip("Which bars the indicators are built from.\n\n"
+                         "Daily reads the multi-week trend; weekly re-derives every indicator from weekly "
+                         "highs, lows and closes and reads the multi-month one. A stock can be neutral on "
+                         "the daily chart and strongly trending on the weekly, and vice versa \xe2\x80\x94 "
+                         "the two answer different questions.");
+    bars_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
+                                .arg(ui::colors::TEXT_SECONDARY()));
     pb_hl->addSpacing(14);
     pb_hl->addWidget(bars_lbl);
 
@@ -642,10 +660,8 @@ void EquityTechnicalsTab::build_ui() {
         out = new QPushButton(label);
         out->setCursor(Qt::PointingHandCursor);
         out->setToolTip(bars_lbl->toolTip());
-        out->setStyleSheet(interval == current_interval_ ? period_btn_style_active()
-                                                          : period_btn_style_inactive());
-        connect(out, &QPushButton::clicked, this,
-                [this, out, interval]() { switch_interval(out, interval); });
+        out->setStyleSheet(interval == current_interval_ ? period_btn_style_active() : period_btn_style_inactive());
+        connect(out, &QPushButton::clicked, this, [this, out, interval]() { switch_interval(out, interval); });
         pb_hl->addWidget(out);
     };
     make_interval_btn("1D", btn_daily_, "1d");
@@ -758,18 +774,16 @@ void EquityTechnicalsTab::build_ui() {
     // came from.
     auto* tally_caption = new QLabel("WHAT THE INDICATORS SAY");
     tally_caption->setAlignment(Qt::AlignCenter);
-    tally_caption->setToolTip(
-        "The table's own tally, not the verdict.\n\n"
-        "The verdict above comes from how the 10/20/50/100/200-day averages are stacked "
-        "and how far price sits from the 50-day, in ATRs. Averaging ~20 correlated "
-        "indicator votes scored 80% against a 40-day trend label; those two readings score "
-        "96% on held-out years, so the tally is reported rather than counted.\n\n"
-        "The two disagreeing is normal and informative: oscillators fire against a move "
-        "while the trend structure describes it.");
-    tally_caption->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:600;letter-spacing:1px;"
-                "background:transparent;border:0;")
-            .arg(ui::colors::TEXT_TERTIARY()));
+    tally_caption->setToolTip("The table's own tally, not the verdict.\n\n"
+                              "The verdict above comes from how the 10/20/50/100/200-day averages are stacked "
+                              "and how far price sits from the 50-day, in ATRs. Averaging ~20 correlated "
+                              "indicator votes scored 80% against a 40-day trend label; those two readings score "
+                              "96% on held-out years, so the tally is reported rather than counted.\n\n"
+                              "The two disagreeing is normal and informative: oscillators fire against a move "
+                              "while the trend structure describes it.");
+    tally_caption->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;letter-spacing:1px;"
+                                         "background:transparent;border:0;")
+                                     .arg(ui::colors::TEXT_TERTIARY()));
     rp_vl->addWidget(tally_caption);
     rp_vl->addLayout(counts);
 
@@ -787,24 +801,22 @@ void EquityTechnicalsTab::build_ui() {
     accuracy_label_ = new QLabel("96% on the trend in place \xe2\x80\xb7 53% on the next 40 days");
     accuracy_label_->setAlignment(Qt::AlignCenter);
     accuracy_label_->setWordWrap(true);
-    accuracy_label_->setToolTip(
-        "This panel reports the trend that has already happened, and it is good at that: "
-        "scored against a 40-day regression label over 178 large caps and twelve years of "
-        "daily bars, the verdict agrees with the established trend 96% of the time.\n\n"
-        "The verdict comes from how the 10/20/50/100/200-day averages are stacked and how far "
-        "price sits from the 50-day, in ATRs \xe2\x80\x94 not from counting the table below. "
-        "Averaging ~20 correlated indicator votes scored 80%; these two readings score 96% on "
-        "held-out years. The table is shown because the detail is useful, not because the "
-        "headline is a tally of it.\n\n"
-        "It is not a forecast. The same evidence scored against the direction of the *next* "
-        "40 days lands at 53% \xe2\x80\x94 barely off a coin flip \xe2\x80\x94 and its "
-        "rank correlation with forward returns is indistinguishable from zero. Read the "
-        "verdict as a description of the move already in place, not as a forecast of the "
-        "next one.\n\n"
-        "Re-run the measurement yourself: python -m factor_rating --describe");
-    accuracy_label_->setStyleSheet(
-        QString("color:%1;font-size:12px;font-style:italic;background:transparent;border:0;")
-            .arg(ui::colors::TEXT_SECONDARY()));
+    accuracy_label_->setToolTip("This panel reports the trend that has already happened, and it is good at that: "
+                                "scored against a 40-day regression label over 178 large caps and twelve years of "
+                                "daily bars, the verdict agrees with the established trend 96% of the time.\n\n"
+                                "The verdict comes from how the 10/20/50/100/200-day averages are stacked and how far "
+                                "price sits from the 50-day, in ATRs \xe2\x80\x94 not from counting the table below. "
+                                "Averaging ~20 correlated indicator votes scored 80%; these two readings score 96% on "
+                                "held-out years. The table is shown because the detail is useful, not because the "
+                                "headline is a tally of it.\n\n"
+                                "It is not a forecast. The same evidence scored against the direction of the *next* "
+                                "40 days lands at 53% \xe2\x80\x94 barely off a coin flip \xe2\x80\x94 and its "
+                                "rank correlation with forward returns is indistinguishable from zero. Read the "
+                                "verdict as a description of the move already in place, not as a forecast of the "
+                                "next one.\n\n"
+                                "Re-run the measurement yourself: python -m factor_rating --describe");
+    accuracy_label_->setStyleSheet(QString("color:%1;font-size:12px;font-style:italic;background:transparent;border:0;")
+                                       .arg(ui::colors::TEXT_SECONDARY()));
     rp_vl->addWidget(accuracy_label_);
 
     // Which bar, fetched when. Without this line a pre-open snapshot, a
@@ -921,18 +933,16 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
         // and a needle sitting confidently at dead centre is the scored-flat
         // reading this branch exists to NOT claim.
         gauge_bar_->setValue(0);
-        gauge_bar_->setStyleSheet(
-            QString("QProgressBar{background:%1;border:1px solid %2;border-radius:0;}")
-                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+        gauge_bar_->setStyleSheet(QString("QProgressBar{background:%1;border:1px solid %2;border-radius:0;}")
+                                      .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
     } else {
         rating_label_->setText(signal_text(payload.overall_signal));
         rating_label_->setStyleSheet(
             QString("color:%1;font-size:22px;font-weight:700;letter-spacing:2px;background:transparent;border:0;")
                 .arg(signal_color(payload.overall_signal)));
-        gauge_bar_->setStyleSheet(
-            QString("QProgressBar{background:%1;border:1px solid %2;border-radius:0;}"
-                    "QProgressBar::chunk{background:%3;}")
-                .arg(ui::colors::NEGATIVE(), ui::colors::BORDER_DIM(), ui::colors::POSITIVE()));
+        gauge_bar_->setStyleSheet(QString("QProgressBar{background:%1;border:1px solid %2;border-radius:0;}"
+                                          "QProgressBar::chunk{background:%3;}")
+                                      .arg(ui::colors::NEGATIVE(), ui::colors::BORDER_DIM(), ui::colors::POSITIVE()));
         // The gauge is drawn off the same weighted score as the verdict, so the
         // bar and the words cannot disagree. It used to be bulls/total
         // *including* neutrals, which pinned it near the bottom of its range
@@ -947,9 +957,7 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
     strong_sell_count_->setText(QString::number(ss));
     // Counts cover the indicators that actually vote; `all` also holds the
     // reference-only rows, and conflating the two overstated the evidence.
-    total_label_->setText(QString("%1 OF %2 INDICATORS SCORED")
-                              .arg(payload.voting_count)
-                              .arg(all.size()));
+    total_label_->setText(QString("%1 OF %2 INDICATORS SCORED").arg(payload.voting_count).arg(all.size()));
     basis_label_->setText(payload.rating_basis);
     warning_label_->setText(payload.data_warning);
     warning_label_->setVisible(!payload.data_warning.isEmpty());
@@ -1133,8 +1141,9 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
             const char* sc = signal_color(ti.signal);
 
             auto* row = new QWidget(this);
-            row->setStyleSheet(QString("background:%1;border:0;border-bottom:1px solid %2;")
-                                   .arg(alt ? ui::colors::BG_RAISED() : ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
+            row->setStyleSheet(
+                QString("background:%1;border:0;border-bottom:1px solid %2;")
+                    .arg(alt ? ui::colors::BG_RAISED() : ui::colors::BG_BASE(), ui::colors::BORDER_DIM()));
             auto* rl = new QHBoxLayout(row);
             rl->setContentsMargins(12, 5, 12, 5);
             rl->setSpacing(0);
@@ -1197,18 +1206,17 @@ void EquityTechnicalsTab::populate(const services::equity::TechnicalsData& paylo
 
 void EquityTechnicalsTab::apply_technicals_state(const services::query::QueryStore::State& s) {
     if (!s.error.isEmpty()) {
-        if (loading_overlay_) loading_overlay_->hide_loading();
+        if (loading_overlay_)
+            loading_overlay_->hide_loading();
         if (!displayed_key_.isEmpty() && displayed_key_ == current_technicals_key_) {
             // The panels still belong to this exact (symbol, period, interval)
             // — keep the data, but say the refresh failed instead of silently
             // presenting old numbers, and stop the as-of line from promising
             // "refreshing…" for a refetch that just failed.
-            warning_label_->setText(
-                QString("Refresh failed — showing previously loaded data. (%1)").arg(s.error));
+            warning_label_->setText(QString("Refresh failed — showing previously loaded data. (%1)").arg(s.error));
             warning_label_->setVisible(true);
             if (!as_of_base_.isEmpty()) {
-                as_of_label_->setText(as_of_base_ +
-                                      QStringLiteral(" \xc2\xb7 STALE \xe2\x80\x94 refresh failed"));
+                as_of_label_->setText(as_of_base_ + QStringLiteral(" \xc2\xb7 STALE \xe2\x80\x94 refresh failed"));
                 as_of_label_->setVisible(true);
             }
         } else {
@@ -1217,8 +1225,7 @@ void EquityTechnicalsTab::apply_technicals_state(const services::query::QuerySto
             // which presented the previous symbol's STRONG BUY under the new
             // symbol's header — or the daily verdict under an active 1W button.
             reset_panels();
-            warning_label_->setText(
-                QString("Could not load technicals for %1: %2").arg(current_symbol_, s.error));
+            warning_label_->setText(QString("Could not load technicals for %1: %2").arg(current_symbol_, s.error));
             warning_label_->setVisible(true);
         }
         return;
@@ -1228,7 +1235,8 @@ void EquityTechnicalsTab::apply_technicals_state(const services::query::QuerySto
         return;
     }
     const auto payload = s.data.value<services::equity::TechnicalsData>();
-    if (loading_overlay_) loading_overlay_->hide_loading();
+    if (loading_overlay_)
+        loading_overlay_->hide_loading();
     populate(payload);
     // Deliveries are subscription-bound (rebind() unsubscribes the old key
     // first), so what just painted is exactly the current key's data.
@@ -1274,8 +1282,7 @@ void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& p
         // "Today" seen from the westernmost real exchange — errs toward
         // flagging a completed bar as still forming (harmless) rather than a
         // forming bar as complete (misleading).
-        const QDate today =
-            QDateTime::currentDateTimeUtc().addSecs(-9 * 3600).date();
+        const QDate today = QDateTime::currentDateTimeUtc().addSecs(-9 * 3600).date();
 
         if (payload.interval == QLatin1String("1wk")) {
             // No lower bound: `today` is computed from the westernmost
@@ -1291,8 +1298,7 @@ void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& p
             // correctly a live week.
             const bool forming = today < bar_date.addDays(5);
             bits << QString("Latest bar: week of %1%2")
-                        .arg(bar_date.toString("MMM d"),
-                             forming ? QStringLiteral(" — still forming") : QString());
+                        .arg(bar_date.toString("MMM d"), forming ? QStringLiteral(" — still forming") : QString());
         } else {
             const bool forming = bar_date >= today;
             bits << QString("Latest bar: %1%2")
@@ -1308,9 +1314,8 @@ void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& p
         const QDateTime local = s.fetched_at.toLocalTime();
         QString when = local.toString("HH:mm");
         if (local.date() != QDate::currentDate()) {
-            when = local.date() == QDate::currentDate().addDays(-1)
-                       ? QStringLiteral("yesterday ") + when
-                       : local.toString("MMM d HH:mm");
+            when = local.date() == QDate::currentDate().addDays(-1) ? QStringLiteral("yesterday ") + when
+                                                                    : local.toString("MMM d HH:mm");
         }
         bits << QString("fetched %1").arg(when);
     }
@@ -1321,13 +1326,12 @@ void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& p
         bits << QStringLiteral("STALE \xe2\x80\x94 refreshing\xe2\x80\xa6");
 
     as_of_label_->setText(bits.join(QStringLiteral(" \xc2\xb7 ")));
-    as_of_label_->setToolTip(
-        "Which bar the verdict describes and when the data was fetched.\n\n"
-        "Indicators read the latest bar in the series. During market hours that "
-        "bar is still forming — its close, high and low can all change until the "
-        "session (or, for weekly bars, the week) ends, and the verdict can move "
-        "with them. STALE means the value came from cache past its refresh "
-        "window; a background refetch is already running.");
+    as_of_label_->setToolTip("Which bar the verdict describes and when the data was fetched.\n\n"
+                             "Indicators read the latest bar in the series. During market hours that "
+                             "bar is still forming — its close, high and low can all change until the "
+                             "session (or, for weekly bars, the week) ends, and the verdict can move "
+                             "with them. STALE means the value came from cache past its refresh "
+                             "window; a background refetch is already running.");
     as_of_label_->setVisible(!bits.isEmpty());
 }
 

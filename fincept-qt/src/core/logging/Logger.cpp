@@ -38,20 +38,23 @@ QString redact_secrets(const QString& msg) {
     // these words. Both checks are plain substring scans.
     if (!msg.contains(QLatin1Char('=')) && !msg.contains(QLatin1Char(':')))
         return msg;
-    static const QLatin1String kWords[] = {QLatin1String("token"), QLatin1String("key"),
-                                           QLatin1String("secret"), QLatin1String("pass"),
-                                           QLatin1String("bearer"), QLatin1String("auth"),
+    static const QLatin1String kWords[] = {QLatin1String("token"), QLatin1String("key"),    QLatin1String("secret"),
+                                           QLatin1String("pass"),  QLatin1String("bearer"), QLatin1String("auth"),
                                            QLatin1String("sig")};
     bool maybe = false;
     for (const auto& w : kWords)
-        if (msg.contains(w, Qt::CaseInsensitive)) { maybe = true; break; }
+        if (msg.contains(w, Qt::CaseInsensitive)) {
+            maybe = true;
+            break;
+        }
     if (!maybe)
         return msg;
 
     // URL query / form parameters: ANY name ending in a credential word,
     // including bare ?key= (Google) and &auth= (ntfy), oauth_token, jKey.
     static const QRegularExpression kParam(
-        QStringLiteral(R"re(([?&;][A-Za-z0-9_.\-]*(?:token|key|secret|password|passwd|signature|sig|auth))=([^&\s"']+))re"),
+        QStringLiteral(
+            R"re(([?&;][A-Za-z0-9_.\-]*(?:token|key|secret|password|passwd|signature|sig|auth))=([^&\s"']+))re"),
         QRegularExpression::CaseInsensitiveOption);
     // Free-text name=value: names ENDING in a credential word, so
     // "oauth_token=" and "x_api_key=" match while "req_token_len=" and a
@@ -63,11 +66,13 @@ QString redact_secrets(const QString& msg) {
     // "Authorization": "Basic …". The value runs to its matching closing
     // quote, honouring backslash escapes and the other quote character.
     static const QRegularExpression kQuoted(
-        QStringLiteral(R"re((["'])((?:[A-Za-z0-9_\-]*(?:token|api[_-]?key|apikey|secret|password|passwd|private_key))|authorization|proxy-authorization)\1\s*:\s*(["'])(?:\\.|(?!\3).)*\3)re"),
+        QStringLiteral(
+            R"re((["'])((?:[A-Za-z0-9_\-]*(?:token|api[_-]?key|apikey|secret|password|passwd|private_key))|authorization|proxy-authorization)\1\s*:\s*(["'])(?:\\.|(?!\3).)*\3)re"),
         QRegularExpression::CaseInsensitiveOption);
     // HTTP headers: Authorization: Bearer|Token|Basic …, X-API-Key: …
     static const QRegularExpression kHeader(
-        QStringLiteral(R"re(\b(authorization|proxy-authorization|x-api-key|api-key|x-auth-token)\s*:\s*(?:(?:bearer|token|basic)\s+)?[^\s,;"']+)re"),
+        QStringLiteral(
+            R"re(\b(authorization|proxy-authorization|x-api-key|api-key|x-auth-token)\s*:\s*(?:(?:bearer|token|basic)\s+)?[^\s,;"']+)re"),
         QRegularExpression::CaseInsensitiveOption);
     static const QRegularExpression kBearer(QStringLiteral(R"re(\b(Bearer)\s+[A-Za-z0-9._~+/=-]{8,})re"),
                                             QRegularExpression::CaseInsensitiveOption);
@@ -90,10 +95,7 @@ QString format_timestamp() {
     const int offs_h = abs_sec / 3600;
     const int offs_m = (abs_sec % 3600) / 60;
     return now.toString("yyyy-MM-dd HH:mm:ss.zzz") +
-           QString("%1%2:%3")
-               .arg(sign)
-               .arg(offs_h, 2, 10, QChar('0'))
-               .arg(offs_m, 2, 10, QChar('0'));
+           QString("%1%2:%3").arg(sign).arg(offs_h, 2, 10, QChar('0')).arg(offs_m, 2, 10, QChar('0'));
 }
 
 constexpr std::array<const char*, 6> kLevelNames = {"TRACE", "DEBUG", "INFO", "WARN", "ERROR", "FATAL"};
@@ -188,8 +190,8 @@ void Logger::set_file(const QString& path) {
             bytes_written_ = log_file_.size();
             return true;
         }
-        fprintf(stderr, "[Logger] failed to open log file: %s error: %s\n",
-                qUtf8Printable(target), qUtf8Printable(log_file_.errorString()));
+        fprintf(stderr, "[Logger] failed to open log file: %s error: %s\n", qUtf8Printable(target),
+                qUtf8Printable(log_file_.errorString()));
         return false;
     };
 
@@ -235,8 +237,7 @@ void Logger::rotate_if_needed_locked() {
         bytes_since_flush_ = 0;
         last_flush_ms_ = QDateTime::currentMSecsSinceEpoch();
     } else {
-        qWarning() << "[Logger] rotate: reopen failed for" << base
-                   << "error:" << log_file_.errorString();
+        qWarning() << "[Logger] rotate: reopen failed for" << base << "error:" << log_file_.errorString();
     }
 }
 
@@ -249,12 +250,24 @@ void Logger::flush_and_close() {
     }
 }
 
-void Logger::trace(const QString& tag, const QString& msg) { write(LogLevel::Trace, tag, msg); }
-void Logger::debug(const QString& tag, const QString& msg) { write(LogLevel::Debug, tag, msg); }
-void Logger::info(const QString& tag, const QString& msg)  { write(LogLevel::Info,  tag, msg); }
-void Logger::warn(const QString& tag, const QString& msg)  { write(LogLevel::Warn,  tag, msg); }
-void Logger::error(const QString& tag, const QString& msg) { write(LogLevel::Error, tag, msg); }
-void Logger::fatal(const QString& tag, const QString& msg) { write(LogLevel::Fatal, tag, msg); }
+void Logger::trace(const QString& tag, const QString& msg) {
+    write(LogLevel::Trace, tag, msg);
+}
+void Logger::debug(const QString& tag, const QString& msg) {
+    write(LogLevel::Debug, tag, msg);
+}
+void Logger::info(const QString& tag, const QString& msg) {
+    write(LogLevel::Info, tag, msg);
+}
+void Logger::warn(const QString& tag, const QString& msg) {
+    write(LogLevel::Warn, tag, msg);
+}
+void Logger::error(const QString& tag, const QString& msg) {
+    write(LogLevel::Error, tag, msg);
+}
+void Logger::fatal(const QString& tag, const QString& msg) {
+    write(LogLevel::Fatal, tag, msg);
+}
 
 void Logger::write(LogLevel level, const QString& tag, const QString& raw_msg) {
     // Level check is also done by LOG_* macros, but re-check here for direct callers.
@@ -303,8 +316,7 @@ void Logger::write(LogLevel level, const QString& tag, const QString& raw_msg) {
         const bool urgent = (level == LogLevel::Error || level == LogLevel::Fatal);
         const qint64 now = QDateTime::currentMSecsSinceEpoch();
         const bool size_reached = bytes_since_flush_ >= kFlushBytesThreshold;
-        const bool time_reached = last_flush_ms_ == 0 ||
-                                  (now - last_flush_ms_) >= kFlushIntervalMs;
+        const bool time_reached = last_flush_ms_ == 0 || (now - last_flush_ms_) >= kFlushIntervalMs;
         if (urgent || size_reached || time_reached) {
             log_file_.flush();
             bytes_since_flush_ = 0;
@@ -315,8 +327,8 @@ void Logger::write(LogLevel level, const QString& tag, const QString& raw_msg) {
         // P1.9 — warn at most once per session (via stderr directly, not
         // qWarning, to avoid re-entering the logger through the Qt handler).
         degraded_.store(true, std::memory_order_relaxed);
-        fprintf(stderr, "[Logger] write failed (%lld bytes): %s\n",
-                static_cast<long long>(n), qUtf8Printable(log_file_.errorString()));
+        fprintf(stderr, "[Logger] write failed (%lld bytes): %s\n", static_cast<long long>(n),
+                qUtf8Printable(log_file_.errorString()));
     }
 }
 

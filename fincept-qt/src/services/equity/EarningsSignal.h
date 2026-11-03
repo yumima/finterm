@@ -39,17 +39,17 @@ namespace fincept::services::equity {
 
 /// One way the print can land, by EPS surprise against consensus.
 struct EarningsScenario {
-    QString label;              // "MISS", "SLIGHT BEAT", …
-    QString range;              // "below consensus", "0 – 3%", …
-    double  probability = 0.0;  // 0 … 1, this name's record shrunk to the pooled mix
-    int     name_count = 0;     // how many of the name's scored quarters landed here
+    QString label;            // "MISS", "SLIGHT BEAT", …
+    QString range;            // "below consensus", "0 – 3%", …
+    double probability = 0.0; // 0 … 1, this name's record shrunk to the pooled mix
+    int name_count = 0;       // how many of the name's scored quarters landed here
     /// Pooled mean next-session move for this outcome, in multiples of the
     /// name's own expected move. Stable across both halves of the sample;
     /// per-name versions are not (persistence IC −0.01), which is why the
     /// pooled figure is used and then scaled to this name's size.
-    double  move_multiple = 0.0;
-    double  typical_move_pct = 0.0;  // move_multiple × expected move
-    double  up_rate = 0.0;           // pooled share of these prints that rose
+    double move_multiple = 0.0;
+    double typical_move_pct = 0.0; // move_multiple × expected move
+    double up_rate = 0.0;          // pooled share of these prints that rose
 };
 
 /// Which way the street has been moving its numbers. Context for the beat
@@ -58,39 +58,39 @@ struct EarningsScenario {
 enum class EstimateDrift { Rising, Flat, Falling, Unknown };
 
 struct EarningsOutlook {
-    bool valid = false;               // false: nothing earnings-shaped to say
-    QString headline;                 // the three answers in one sentence
-    int days_to_report = -1;          // -1 when no date is published
+    bool valid = false;      // false: nothing earnings-shaped to say
+    QString headline;        // the three answers in one sentence
+    int days_to_report = -1; // -1 when no date is published
 
     // ── 1. Will they beat? ──────────────────────────────────────────────────
-    std::optional<double> p_beat;     // 0 … 1
-    double pooled_beat_rate = 0.0;    // what an unknown name would be given
-    int    beats = 0;                 // in the scored window
-    int    scored_quarters = 0;       // quarters with a usable surprise
-    std::optional<double> typical_surprise_pct;   // median of the scored window
-    QVector<EarningsScenario> scenarios;          // ordered worst → best
+    std::optional<double> p_beat;               // 0 … 1
+    double pooled_beat_rate = 0.0;              // what an unknown name would be given
+    int beats = 0;                              // in the scored window
+    int scored_quarters = 0;                    // quarters with a usable surprise
+    std::optional<double> typical_surprise_pct; // median of the scored window
+    QVector<EarningsScenario> scenarios;        // ordered worst → best
     EstimateDrift drift = EstimateDrift::Unknown;
-    QString drift_detail;             // "+2.1% in 90 days · 4 up / 0 down in 30"
-    std::optional<double> dispersion_pct;   // (high−low)/|mean| on this quarter's EPS
+    QString drift_detail;                 // "+2.1% in 90 days · 4 up / 0 down in 30"
+    std::optional<double> dispersion_pct; // (high−low)/|mean| on this quarter's EPS
     bool dispersion_is_wide = false;
 
     // ── 2. How big a move? ──────────────────────────────────────────────────
-    std::optional<double> expected_move_pct;   // one session, either direction
-    std::optional<double> trailing_move_pct;   // plain mean |move| over past prints
-    int    reaction_quarters = 0;
+    std::optional<double> expected_move_pct; // one session, either direction
+    std::optional<double> trailing_move_pct; // plain mean |move| over past prints
+    int reaction_quarters = 0;
     // Ranges the forecast actually achieves, in percent. Half of past prints
     // pooled landed inside `half_within`, four in five inside `most_within`,
     // and one in ten beyond `tail_beyond`.
     std::optional<double> half_within_pct;
     std::optional<double> most_within_pct;
     std::optional<double> tail_beyond_pct;
-    std::optional<double> implied_move_pct;    // options event move, when separable
+    std::optional<double> implied_move_pct; // options event move, when separable
     /// implied ÷ expected. Above 1 the options are pricing a bigger session
     /// than this name's history and current volatility suggest.
     std::optional<double> implied_ratio;
 
     // ── 3. Which way? — what is already priced in (context only) ────────────
-    QStringList priced_in;            // plain-English lines; never a call
+    QStringList priced_in; // plain-English lines; never a call
 
     QStringList caveats;
 };
@@ -102,25 +102,25 @@ EarningsOutlook evaluate_outlook(const EarningsAnalysis& a);
 /// quarters before it only, so nothing is informed by its own outcome.
 struct PrintForecast {
     qint64 timestamp = 0;
-    std::optional<double> expected_move_pct;   // size forecast before the print
-    std::optional<double> actual_move_pct;     // realised close-to-close
-    std::optional<double> p_beat;              // beat probability before the print
-    std::optional<bool>   beat;                // what happened (unset when suspect)
+    std::optional<double> expected_move_pct; // size forecast before the print
+    std::optional<double> actual_move_pct;   // realised close-to-close
+    std::optional<double> p_beat;            // beat probability before the print
+    std::optional<bool> beat;                // what happened (unset when suspect)
 };
 
 /// How this name's own forecasts have fared, walk-forward.
 struct ForecastRecord {
-    QVector<PrintForecast> prints;   // oldest first, aligned with the chart
+    QVector<PrintForecast> prints; // oldest first, aligned with the chart
     // Size: share of prints that landed inside the expected move (pooled
     // expectation is about half), and mean miss against the plain trailing
     // average — the baseline the blend has to beat to be worth having.
-    int    size_graded = 0;
-    int    size_inside = 0;
+    int size_graded = 0;
+    int size_inside = 0;
     double size_mae = 0.0;
     double trailing_mae = 0.0;
     // Beat: mean stated probability against the realised rate.
-    int    beat_graded = 0;
-    int    beat_hits = 0;
+    int beat_graded = 0;
+    int beat_hits = 0;
     double mean_p_beat = 0.0;
 };
 
@@ -134,8 +134,8 @@ enum class ReactionMetric { Surprise, QoQ, YoY };
 /// print, so they explain moves rather than predict them.
 struct ReactionCorrelation {
     ReactionMetric metric = ReactionMetric::Surprise;
-    QString label;                 // "SURPRISE", "QoQ", "YoY"
-    std::optional<double> r;       // Pearson, -1 … +1; unset when n < 3
+    QString label;           // "SURPRISE", "QoQ", "YoY"
+    std::optional<double> r; // Pearson, -1 … +1; unset when n < 3
     int n = 0;
 };
 

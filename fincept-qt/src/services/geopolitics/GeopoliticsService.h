@@ -1,5 +1,6 @@
 // src/services/geopolitics/GeopoliticsService.h
 #pragma once
+#include "datahub/Producer.h"
 #include "services/geopolitics/GeopoliticsTypes.h"
 
 #include <QHash>
@@ -7,14 +8,10 @@
 
 #include <functional>
 
-#    include "datahub/Producer.h"
-
 namespace fincept::services::geo {
 
 /// Singleton service for geopolitics data — news events API + HDX Python + trade analysis.
-class GeopoliticsService : public QObject
-    , public fincept::datahub::Producer
-{
+class GeopoliticsService : public QObject, public fincept::datahub::Producer {
     Q_OBJECT
   public:
     static GeopoliticsService& instance();

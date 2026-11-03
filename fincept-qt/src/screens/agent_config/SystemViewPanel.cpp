@@ -36,8 +36,8 @@ static QLabel* make_stat_label(const QString& text) {
 static QWidget* make_section_card(const QString& title, QVBoxLayout** content_layout,
                                   QPushButton** action_btn = nullptr, const QString& action_text = {}) {
     auto* card = new QFrame;
-    card->setStyleSheet(
-        QString("QFrame { background:%1;border:1px solid %2; }").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    card->setStyleSheet(QString("QFrame { background:%1;border:1px solid %2; }")
+                            .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
 
     auto* vl = new QVBoxLayout(card);
     vl->setContentsMargins(0, 0, 0, 0);
@@ -108,7 +108,8 @@ void SystemViewPanel::build_ui() {
     // Header
     auto* header_row = new QHBoxLayout;
     auto* title = new QLabel("SYSTEM CAPABILITIES");
-    title->setStyleSheet(QString("color:%1;font-size:13px;font-weight:700;letter-spacing:2px;").arg(ui::colors::AMBER()));
+    title->setStyleSheet(
+        QString("color:%1;font-size:13px;font-weight:700;letter-spacing:2px;").arg(ui::colors::AMBER()));
     header_row->addWidget(title);
     header_row->addStretch();
 

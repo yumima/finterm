@@ -53,8 +53,8 @@ inline QColor route_status_color(const QString& status) {
 struct IntelligenceData {
     QString threat_level; // low, medium, high, critical
     int active_vessels = 0;
-    int monitored_routes = 0;  // 0 = unknown (no data source)
-    QString trade_volume;      // empty = unavailable
+    int monitored_routes = 0; // 0 = unknown (no data source)
+    QString trade_volume;     // empty = unavailable
 };
 
 inline QColor threat_color(const QString& level) {

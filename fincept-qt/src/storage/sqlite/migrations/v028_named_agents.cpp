@@ -49,19 +49,16 @@ struct AgentSeed {
 // Common read-side tool families that several agents share.
 static QStringList market_reads() {
     return {
-        QStringLiteral("int__fd_*"),         // financial-datasets REST
-        QStringLiteral("int__get_quote*"),
-        QStringLiteral("int__get_news*"),
-        QStringLiteral("int__get_filing*"),
-        QStringLiteral("int__get_earnings*"),
+        QStringLiteral("int__fd_*"), // financial-datasets REST
+        QStringLiteral("int__get_quote*"),  QStringLiteral("int__get_news*"),
+        QStringLiteral("int__get_filing*"), QStringLiteral("int__get_earnings*"),
     };
 }
 static QStringList portfolio_reads() {
     return {
-        QStringLiteral("int__get_holdings"),
-        QStringLiteral("int__get_portfolios"),
+        QStringLiteral("int__get_holdings"),   QStringLiteral("int__get_portfolios"),
         QStringLiteral("int__get_watchlist*"),
-        QStringLiteral("int__get_paper_*"),  // read-side only
+        QStringLiteral("int__get_paper_*"), // read-side only
         QStringLiteral("int__get_notes*"),
     };
 }
@@ -81,11 +78,8 @@ static QVector<AgentSeed> all_seeds() {
             "catalysts, downside-case anchor.  Cite the data source for "
             "every claim.  Hedge only when the data genuinely disagrees "
             "with itself; don't pad with caveats.",
-            {QStringLiteral("comps-analysis"),
-             QStringLiteral("dcf-model"),
-             QStringLiteral("ic-memo"),
-             QStringLiteral("idea-generation"),
-             QStringLiteral("initiating-coverage")},
+            {QStringLiteral("comps-analysis"), QStringLiteral("dcf-model"), QStringLiteral("ic-memo"),
+             QStringLiteral("idea-generation"), QStringLiteral("initiating-coverage")},
             market_reads() + portfolio_reads(),
         },
         {
@@ -100,9 +94,7 @@ static QVector<AgentSeed> all_seeds() {
             "management, anticipated objections from the audience.  "
             "Pull from recent filings and news; mark items where the "
             "evidence is older than 30 days.",
-            {QStringLiteral("morning-note"),
-             QStringLiteral("client-review"),
-             QStringLiteral("ic-memo")},
+            {QStringLiteral("morning-note"), QStringLiteral("client-review"), QStringLiteral("ic-memo")},
             market_reads() + portfolio_reads(),
         },
         {
@@ -116,9 +108,7 @@ static QVector<AgentSeed> all_seeds() {
             "TAM, growth drivers, competitive landscape, regulatory "
             "exposure, key listed names.  Distinguish between "
             "data-supported claims and inference; flag the gap.",
-            {QStringLiteral("sector-overview"),
-             QStringLiteral("idea-generation"),
-             QStringLiteral("thesis-tracker"),
+            {QStringLiteral("sector-overview"), QStringLiteral("idea-generation"), QStringLiteral("thesis-tracker"),
              QStringLiteral("catalyst-calendar")},
             market_reads(),
         },
@@ -134,9 +124,7 @@ static QVector<AgentSeed> all_seeds() {
             "quarter: walk the KPIs vs consensus, flag the guide "
             "change, surface the call's biggest reveal in one "
             "sentence.  No hedging — be specific.",
-            {QStringLiteral("earnings-analysis"),
-             QStringLiteral("earnings-preview"),
-             QStringLiteral("morning-note")},
+            {QStringLiteral("earnings-analysis"), QStringLiteral("earnings-preview"), QStringLiteral("morning-note")},
             market_reads(),
         },
         {
@@ -150,9 +138,7 @@ static QVector<AgentSeed> all_seeds() {
             "assumption with its source.  Reject impossible inputs "
             "(negative revenue growth + expanding margins forever, "
             "etc.) instead of silently building.",
-            {QStringLiteral("3-statement-model"),
-             QStringLiteral("dcf-model"),
-             QStringLiteral("lbo-model"),
+            {QStringLiteral("3-statement-model"), QStringLiteral("dcf-model"), QStringLiteral("lbo-model"),
              QStringLiteral("model-update")},
             market_reads(),
         },
@@ -167,9 +153,7 @@ static QVector<AgentSeed> all_seeds() {
             "for the business, mis-anchored peer set, terminal-value "
             "growth that exceeds long-run GDP, mid-cycle margins "
             "that ignore the cycle.  Be direct about flaws.",
-            {QStringLiteral("comps-analysis"),
-             QStringLiteral("dcf-model"),
-             QStringLiteral("model-update")},
+            {QStringLiteral("comps-analysis"), QStringLiteral("dcf-model"), QStringLiteral("model-update")},
             market_reads(),
         },
         // ── Fund admin / accounting / compliance ─────────────────────
@@ -199,8 +183,7 @@ static QVector<AgentSeed> all_seeds() {
             "marks, assemble the sign-off package (positions, "
             "P&L, NAV walk, exposures).  Refuse to advance if "
             "any required input is missing — list what's blocking.",
-            {QStringLiteral("portfolio-monitoring"),
-             QStringLiteral("portfolio-rebalance")},
+            {QStringLiteral("portfolio-monitoring"), QStringLiteral("portfolio-rebalance")},
             portfolio_reads(),
         },
         {
@@ -228,7 +211,7 @@ static QVector<AgentSeed> all_seeds() {
             "presence using the supplied tools.  Surface every hit "
             "as a finding requiring human review.  Never auto-clear "
             "a hit — the user makes that call.",
-            {},  // skills TBD when KYC sources land
+            {}, // skills TBD when KYC sources land
             {QStringLiteral("int__fd_*"), QStringLiteral("int__get_news*")},
         },
     };
@@ -253,8 +236,7 @@ static QString build_config_json(const AgentSeed& s) {
 
 static Result<void> apply_v028(QSqlDatabase& db) {
     QSqlQuery exists(db);
-    if (!exists.exec(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_configs'")) {
+    if (!exists.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_configs'")) {
         return Result<void>::err(exists.lastError().text().toStdString());
     }
     if (!exists.next()) {
@@ -274,8 +256,7 @@ static Result<void> apply_v028(QSqlDatabase& db) {
         q.bindValue(3, build_config_json(s));
         q.bindValue(4, QString::fromUtf8(s.category));
         if (!q.exec()) {
-            LOG_WARN(kTag, QString("Failed to seed agent '%1': %2")
-                              .arg(QString::fromUtf8(s.id), q.lastError().text()));
+            LOG_WARN(kTag, QString("Failed to seed agent '%1': %2").arg(QString::fromUtf8(s.id), q.lastError().text()));
             continue;
         }
         if (q.numRowsAffected() > 0)

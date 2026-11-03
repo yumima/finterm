@@ -38,16 +38,16 @@ class FirmDetailPanel : public QWidget {
   private:
     void render();
 
-    QString       cik_;   // the book cache key: OwnershipService::book_key()
-    QLabel*       status_     = nullptr;
-    QLabel*       book_title_ = nullptr;
-    QTableWidget* positions_  = nullptr;
+    QString cik_; // the book cache key: OwnershipService::book_key()
+    QLabel* status_ = nullptr;
+    QLabel* book_title_ = nullptr;
+    QTableWidget* positions_ = nullptr;
     /// Over the holdings table while a book loads: an empty table with a
     /// one-line grey status read as "this fund has nothing".
     ui::LoadingOverlay* loading_ = nullptr;
     /// True while the table is being filled, so nothing a fill does to the
     /// selection can be mistaken for the user picking a holding.
-    bool          populating_ = false;
+    bool populating_ = false;
 };
 
 } // namespace fincept::screens

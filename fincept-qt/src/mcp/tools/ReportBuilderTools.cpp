@@ -67,9 +67,8 @@ void maybe_request_navigation() {
     if (!last_nav_ms.compare_exchange_strong(prev, now))
         return;
     LOG_INFO(RB_TOOLS_TAG, "Auto-navigate: publishing nav.switch_screen → report_builder");
-    fincept::EventBus::instance().publish(
-        "nav.switch_screen",
-        QVariantMap{{"screen_id", "report_builder"}, {"tab_index", 8}});
+    fincept::EventBus::instance().publish("nav.switch_screen",
+                                          QVariantMap{{"screen_id", "report_builder"}, {"tab_index", 8}});
 }
 
 // Helper: called at the top of every mutating tool.
@@ -127,9 +126,9 @@ QJsonObject metadata_to_json(const rep::ReportMetadata& m) {
 }
 
 bool valid_component_type(const QString& t) {
-    static const QStringList valid = {"heading",   "text",     "table",       "image",   "chart",
-                                      "sparkline", "stats_block", "callout", "code",    "divider",
-                                      "quote",     "list",     "market_data", "page_break", "toc"};
+    static const QStringList valid = {"heading",   "text",        "table",       "image",      "chart",
+                                      "sparkline", "stats_block", "callout",     "code",       "divider",
+                                      "quote",     "list",        "market_data", "page_break", "toc"};
     return valid.contains(t);
 }
 
@@ -195,7 +194,8 @@ std::vector<ToolDef> get_report_builder_tools() {
             "  Numeric cells right-align automatically. Shape (fill with REAL sourced values only, never invent):\n"
             "    'Metric,<period1>,<period2>|<metric name>,<value>,<value>'\n"
             "• chart: config={'chart_type':'bar'|'line'|'pie','title':'<title>','data':'<n1>,<n2>,<n3>',"
-            "  'labels':'<l1>,<l2>,<l3>','width':'640'}. Data is CSV numbers (real, sourced values only), labels CSV strings.\n"
+            "  'labels':'<l1>,<l2>,<l3>','width':'640'}. Data is CSV numbers (real, sourced values only), labels CSV "
+            "strings.\n"
             "• stats_block: config={'title':'Key Stats','data':'<Label>:<value>\\n<Label>:<value>\\n...'}. "
             "  Use Label:Value lines, \\n separated.\n"
             "• market_data: config={'symbol':'TSLA'}. The symbol is enough — quote auto-fills.\n"
@@ -210,22 +210,20 @@ std::vector<ToolDef> get_report_builder_tools() {
                          {"description",
                           "Component type: heading, text, table, image, chart, sparkline, stats_block, callout, "
                           "code, divider, quote, list, market_data, page_break, toc"}}},
-            {"content",
-             QJsonObject{{"type", "string"},
-                         {"description", "Text content (used by heading/text/quote/code/list/callout)"}}},
+            {"content", QJsonObject{{"type", "string"},
+                                    {"description", "Text content (used by heading/text/quote/code/list/callout)"}}},
             {"config",
              QJsonObject{{"type", "object"},
                          {"description", "Type-specific config (rows/cols, chart_type/title/data/labels, symbol, "
                                          "style, width/caption/align, …)"}}},
-            {"insert_at",
-             QJsonObject{{"type", "integer"},
-                         {"description", "Zero-based index to insert at; omit to append at the end"}}},
+            {"insert_at", QJsonObject{{"type", "integer"},
+                                      {"description", "Zero-based index to insert at; omit to append at the end"}}},
         };
         t.input_schema.required = {"type"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
-            LOG_INFO(RB_TOOLS_TAG, QString("report_add_component called args=%1")
-                                       .arg(QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact))
-                                                .left(300)));
+            LOG_INFO(RB_TOOLS_TAG,
+                     QString("report_add_component called args=%1")
+                         .arg(QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact)).left(300)));
             QString type = args.value("type").toString().trimmed();
             if (type.isEmpty())
                 return ToolResult::fail("Missing 'type'");
@@ -248,8 +246,8 @@ std::vector<ToolDef> get_report_builder_tools() {
                 idx = svc.index_of(new_id);
             });
 
-            LOG_INFO(RB_TOOLS_TAG, QString("report_add_component done id=%1 index=%2 type=%3")
-                                       .arg(new_id).arg(idx).arg(type));
+            LOG_INFO(RB_TOOLS_TAG,
+                     QString("report_add_component done id=%1 index=%2 type=%3").arg(new_id).arg(idx).arg(type));
             return ToolResult::ok(QString("Added %1 (id=%2)").arg(type).arg(new_id),
                                   QJsonObject{{"id", new_id}, {"index", idx}, {"type", type}});
         };
@@ -269,12 +267,12 @@ std::vector<ToolDef> get_report_builder_tools() {
             "the full config reference. Returns success and the resulting component.";
         t.category = "report-builder";
         t.input_schema.properties = QJsonObject{
-            {"id", QJsonObject{{"type", "integer"}, {"description", "Stable component id from report_add_component "
-                                                                    "or report_get_state"}}},
+            {"id", QJsonObject{{"type", "integer"},
+                               {"description", "Stable component id from report_add_component "
+                                               "or report_get_state"}}},
             {"content", QJsonObject{{"type", "string"}, {"description", "New content (omit to keep existing)"}}},
-            {"config",
-             QJsonObject{{"type", "object"},
-                         {"description", "Keys to merge into existing config (omit to keep existing)"}}},
+            {"config", QJsonObject{{"type", "object"},
+                                   {"description", "Keys to merge into existing config (omit to keep existing)"}}},
         };
         t.input_schema.required = {"id"};
         t.handler = [](const QJsonObject& args) -> ToolResult {
@@ -394,16 +392,26 @@ std::vector<ToolDef> get_report_builder_tools() {
             run_on_service_thread([&]() {
                 auto& svc = Service::instance();
                 rep::ReportMetadata m = svc.metadata();
-                if (args.contains("title")) m.title = args.value("title").toString();
-                if (args.contains("author")) m.author = args.value("author").toString();
-                if (args.contains("company")) m.company = args.value("company").toString();
-                if (args.contains("date")) m.date = args.value("date").toString();
-                if (args.contains("header_left")) m.header_left = args.value("header_left").toString();
-                if (args.contains("header_center")) m.header_center = args.value("header_center").toString();
-                if (args.contains("header_right")) m.header_right = args.value("header_right").toString();
-                if (args.contains("footer_left")) m.footer_left = args.value("footer_left").toString();
-                if (args.contains("footer_center")) m.footer_center = args.value("footer_center").toString();
-                if (args.contains("footer_right")) m.footer_right = args.value("footer_right").toString();
+                if (args.contains("title"))
+                    m.title = args.value("title").toString();
+                if (args.contains("author"))
+                    m.author = args.value("author").toString();
+                if (args.contains("company"))
+                    m.company = args.value("company").toString();
+                if (args.contains("date"))
+                    m.date = args.value("date").toString();
+                if (args.contains("header_left"))
+                    m.header_left = args.value("header_left").toString();
+                if (args.contains("header_center"))
+                    m.header_center = args.value("header_center").toString();
+                if (args.contains("header_right"))
+                    m.header_right = args.value("header_right").toString();
+                if (args.contains("footer_left"))
+                    m.footer_left = args.value("footer_left").toString();
+                if (args.contains("footer_center"))
+                    m.footer_center = args.value("footer_center").toString();
+                if (args.contains("footer_right"))
+                    m.footer_right = args.value("footer_right").toString();
                 if (args.contains("show_page_numbers"))
                     m.show_page_numbers = args.value("show_page_numbers").toBool();
                 svc.set_metadata(m);
@@ -457,13 +465,16 @@ std::vector<ToolDef> get_report_builder_tools() {
             if (name.isEmpty())
                 return ToolResult::fail("Missing 'name'");
             static const QStringList kTemplates = {
-                "Blank Report", "Meeting Notes", "Investment Memo", "Stock Research", "Portfolio Review",
-                "Watchlist Report", "Dividend Income Report", "Daily Market Brief", "Trade Journal",
-                "Technical Analysis", "Pre-Market Checklist", "Equity Research Report", "Earnings Review",
-                "M&A Deal Summary", "Sector Deep Dive", "Macro Economic Summary", "Country Risk Report",
-                "Central Bank Monitor", "Crypto Research Report", "DeFi Protocol Analysis",
-                "Crypto Portfolio Review", "Bond Research Report", "Yield Curve Analysis", "Quant Strategy Report",
-                "Risk Management Report", "Business Performance", "Project Status Report", "Financial Statement"};
+                "Blank Report",           "Meeting Notes",          "Investment Memo",
+                "Stock Research",         "Portfolio Review",       "Watchlist Report",
+                "Dividend Income Report", "Daily Market Brief",     "Trade Journal",
+                "Technical Analysis",     "Pre-Market Checklist",   "Equity Research Report",
+                "Earnings Review",        "M&A Deal Summary",       "Sector Deep Dive",
+                "Macro Economic Summary", "Country Risk Report",    "Central Bank Monitor",
+                "Crypto Research Report", "DeFi Protocol Analysis", "Crypto Portfolio Review",
+                "Bond Research Report",   "Yield Curve Analysis",   "Quant Strategy Report",
+                "Risk Management Report", "Business Performance",   "Project Status Report",
+                "Financial Statement"};
             if (!kTemplates.contains(name))
                 return ToolResult::fail("Unknown template '" + name + "'. Valid names: " + kTemplates.join(", "));
             on_llm_mutation_start();
@@ -479,8 +490,9 @@ std::vector<ToolDef> get_report_builder_tools() {
         t.name = "report_save";
         t.description = "Save the report to disk. If `path` is omitted, saves to the current file (errors if none).";
         t.category = "report-builder";
-        t.input_schema.properties =
-            QJsonObject{{"path", QJsonObject{{"type", "string"}, {"description", "Absolute file path (.finterm; legacy .fincept also opens)"}}}};
+        t.input_schema.properties = QJsonObject{
+            {"path", QJsonObject{{"type", "string"},
+                                 {"description", "Absolute file path (.finterm; legacy .fincept also opens)"}}}};
         t.handler = [](const QJsonObject& args) -> ToolResult {
             QString path = args.value("path").toString();
             on_llm_mutation_start();

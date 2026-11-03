@@ -4,14 +4,13 @@
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolDragSource.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/formatting/CsvWriter.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QFile>
 #include <QFileDialog>
@@ -109,7 +108,6 @@ static QString list_style() {
 WatchlistScreen::WatchlistScreen(QWidget* parent) : QWidget(parent) {
     build_ui();
     load_watchlists();
-
 
     connect(&ThemeManager::instance(), &ThemeManager::theme_changed, this,
             [this](const ThemeTokens&) { refresh_theme(); });
@@ -260,30 +258,25 @@ QWidget* WatchlistScreen::build_main_panel() {
     // The quote columns, then ownership from the local stores (Koyfin's
     // pattern: ownership as watchlist columns, not only a tab). Each is
     // dated in its header tooltip once the rows land.
-    table_->set_headers({"SYMBOL", "NAME", "PRICE", "CHANGE", "CHG %", "HIGH", "LOW", "VOLUME",
-                         "13F HOLDERS", "Δ HOLDERS", "SI ÷ 13F", "DAYS TO COVER", "INSIDER BUYS 30D"});
+    table_->set_headers({"SYMBOL", "NAME", "PRICE", "CHANGE", "CHG %", "HIGH", "LOW", "VOLUME", "13F HOLDERS",
+                         "Δ HOLDERS", "SI ÷ 13F", "DAYS TO COVER", "INSIDER BUYS 30D"});
     table_->set_column_widths({100, 160, 100, 90, 80, 90, 90, 110, 110, 100, 90, 135, 160});
-    connect(&services::OwnershipService::instance(), &services::OwnershipService::watch_updated, this,
-            [this]() {
-                refresh_ownership_headers();
-                apply_ownership_columns();
-            });
+    connect(&services::OwnershipService::instance(), &services::OwnershipService::watch_updated, this, [this]() {
+        refresh_ownership_headers();
+        apply_ownership_columns();
+    });
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
 
     // When the user selects a row, publish its symbol into the linked group.
     // Use itemSelectionChanged rather than cellClicked so keyboard navigation
     // also propagates.
-    connect(table_, &QTableWidget::itemSelectionChanged, this,
-            &WatchlistScreen::publish_selection_to_group);
+    connect(table_, &QTableWidget::itemSelectionChanged, this, &WatchlistScreen::publish_selection_to_group);
 
     // Drag-out: hold-and-drag a symbol row to broadcast the ticker to any
     // panel. The provider callback reads the current row at drag-start so
     // keyboard row-changes are reflected without reinstalling the filter.
-    symbol_dnd::installDragSource(
-        table_->viewport(),
-        [this]() { return current_symbol(); },
-        link_group_);
+    symbol_dnd::installDragSource(table_->viewport(), [this]() { return current_symbol(); }, link_group_);
 
     lay->addWidget(table_, 1);
 
@@ -467,15 +460,23 @@ void WatchlistScreen::refresh_ownership_headers() {
     // settlement, an insider count as of the last day the store read — three
     // clocks, stated on the column that runs on each.
     if (auto* hh = table_->horizontalHeaderItem(8))
-        hh->setToolTip(QStringLiteral("13F filers holding the name, and the change against the prior quarter — as of %1")
-                           .arg(w.quarter.isValid() ? w.quarter.toString(QStringLiteral("d MMM yyyy")) : QStringLiteral("no index")));
+        hh->setToolTip(
+            QStringLiteral("13F filers holding the name, and the change against the prior quarter — as of %1")
+                .arg(w.quarter.isValid() ? w.quarter.toString(QStringLiteral("d MMM yyyy"))
+                                         : QStringLiteral("no index")));
     if (auto* hh = table_->horizontalHeaderItem(10))
-        hh->setToolTip(QStringLiteral("Short interest ÷ 13F shares (the borrow-fee proxy) and days to cover — FINRA settlement %1, published ~%2")
-                           .arg(w.settlement.isValid() ? w.settlement.toString(QStringLiteral("d MMM yyyy")) : QStringLiteral("—"),
-                                w.published_after.isValid() ? w.published_after.toString(QStringLiteral("d MMM")) : QStringLiteral("—")));
+        hh->setToolTip(
+            QStringLiteral("Short interest ÷ 13F shares (the borrow-fee proxy) and days to cover — FINRA settlement "
+                           "%1, published ~%2")
+                .arg(w.settlement.isValid() ? w.settlement.toString(QStringLiteral("d MMM yyyy")) : QStringLiteral("—"),
+                     w.published_after.isValid() ? w.published_after.toString(QStringLiteral("d MMM"))
+                                                 : QStringLiteral("—")));
     if (auto* hh = table_->horizontalHeaderItem(12))
-        hh->setToolTip(QStringLiteral("Open-market insider purchases in the last %1 days — 10%% owners and 10b5-1 plan trades excluded; Form 4 store read to %2")
-                           .arg(w.days).arg(w.form4_scanned_to.isValid() ? w.form4_scanned_to.toString(QStringLiteral("d MMM")) : QStringLiteral("—")));
+        hh->setToolTip(QStringLiteral("Open-market insider purchases in the last %1 days — 10%% owners and 10b5-1 plan "
+                                      "trades excluded; Form 4 store read to %2")
+                           .arg(w.days)
+                           .arg(w.form4_scanned_to.isValid() ? w.form4_scanned_to.toString(QStringLiteral("d MMM"))
+                                                             : QStringLiteral("—")));
 }
 
 void WatchlistScreen::apply_ownership_columns() {
@@ -509,11 +510,14 @@ void WatchlistScreen::apply_ownership_columns() {
         }
         const auto& r = it.value();
         put(8, r.holders ? loc.toString(*r.holders) : fmt::placeholder());
-        put(9, r.delta_holders ? QStringLiteral("%1%2").arg(*r.delta_holders > 0 ? QStringLiteral("+") : QString())
-                                                        .arg(loc.toString(*r.delta_holders))
-                               : fmt::placeholder(),
-            r.delta_holders ? (*r.delta_holders > 0 ? QString(colors::POSITIVE)
-                                                     : *r.delta_holders < 0 ? QString(colors::NEGATIVE) : dim)
+        put(9,
+            r.delta_holders ? QStringLiteral("%1%2")
+                                  .arg(*r.delta_holders > 0 ? QStringLiteral("+") : QString())
+                                  .arg(loc.toString(*r.delta_holders))
+                            : fmt::placeholder(),
+            r.delta_holders ? (*r.delta_holders > 0   ? QString(colors::POSITIVE)
+                               : *r.delta_holders < 0 ? QString(colors::NEGATIVE)
+                                                      : dim)
                             : dim);
         put(10, r.sirio ? QString::number(*r.sirio, 'f', 3) : fmt::placeholder(),
             r.sirio && *r.sirio >= 0.2 ? QString(colors::WARNING) : QString());
@@ -521,13 +525,17 @@ void WatchlistScreen::apply_ownership_columns() {
             r.days_to_cover && *r.days_to_cover >= 5.0 ? QString(colors::WARNING) : QString());
         // Absent means the Form 4 store has not read this window yet — a
         // dash, not a zero the store cannot vouch for.
-        put(12, !r.insider_buys ? fmt::placeholder()
-                : *r.insider_buys > 0
-                    ? QStringLiteral("%1 by %2 · $%3").arg(*r.insider_buys).arg(r.insider_buyers)
-                          .arg(fmt::format_compact(r.insider_buy_value))
-                    : QStringLiteral("0"),
-            !r.insider_buys ? dim : r.insider_buyers >= 2 ? QString(colors::POSITIVE)
-                                   : *r.insider_buys > 0 ? QString() : dim);
+        put(12,
+            !r.insider_buys       ? fmt::placeholder()
+            : *r.insider_buys > 0 ? QStringLiteral("%1 by %2 · $%3")
+                                        .arg(*r.insider_buys)
+                                        .arg(r.insider_buyers)
+                                        .arg(fmt::format_compact(r.insider_buy_value))
+                                  : QStringLiteral("0"),
+            !r.insider_buys         ? dim
+            : r.insider_buyers >= 2 ? QString(colors::POSITIVE)
+            : *r.insider_buys > 0   ? QString()
+                                    : dim);
     }
 }
 
@@ -540,7 +548,6 @@ void WatchlistScreen::fetch_quotes() {
 
     hub_resubscribe_stocks();
 }
-
 
 void WatchlistScreen::rebuild_from_cache() {
     QVector<services::QuoteData> quotes;
@@ -598,7 +605,6 @@ void WatchlistScreen::hub_unsubscribe_all() {
     hub_active_ = false;
 }
 
-
 void WatchlistScreen::populate_table(const QVector<services::QuoteData>& quotes) {
     table_->clear_data();
 
@@ -612,15 +618,16 @@ void WatchlistScreen::populate_table(const QVector<services::QuoteData>& quotes)
         auto it = quote_map.find(s.symbol);
         if (it != quote_map.end()) {
             const auto& q = it.value();
-            table_->add_row({q.symbol, q.name.isEmpty() ? s.name : q.name, QString("$%1").arg(q.price, 0, 'f', 2),
-                             std::isfinite(q.change) ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2) : ui::formatting::placeholder(),
-                             ui::formatting::format_percent(q.change_pct, 2, true),
-                             QString("$%1").arg(q.high, 0, 'f', 2), QString("$%1").arg(q.low, 0, 'f', 2),
-                             ui::formatting::format_compact_volume(q.volume)});
+            table_->add_row(
+                {q.symbol, q.name.isEmpty() ? s.name : q.name, QString("$%1").arg(q.price, 0, 'f', 2),
+                 std::isfinite(q.change) ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2)
+                                         : ui::formatting::placeholder(),
+                 ui::formatting::format_percent(q.change_pct, 2, true), QString("$%1").arg(q.high, 0, 'f', 2),
+                 QString("$%1").arg(q.low, 0, 'f', 2), ui::formatting::format_compact_volume(q.volume)});
 
             int row = table_->rowCount() - 1;
             // Green = good, Red = bad
-            QString chg_color = ui::change_color(q.change_pct);  // neutral when unknown (NaN)
+            QString chg_color = ui::change_color(q.change_pct); // neutral when unknown (NaN)
             table_->set_cell_color(row, 3, chg_color);
             table_->set_cell_color(row, 4, chg_color);
         } else {
@@ -638,8 +645,10 @@ void WatchlistScreen::on_watchlist_selected(int row) {
     current_wl_id_ = watchlists_[row].id;
     panel_title_->setText(watchlists_[row].name.toUpper());
     load_stocks();
-    if (import_csv_btn_) import_csv_btn_->setEnabled(true);
-    if (export_csv_btn_) export_csv_btn_->setEnabled(true);
+    if (import_csv_btn_)
+        import_csv_btn_->setEnabled(true);
+    if (export_csv_btn_)
+        export_csv_btn_->setEnabled(true);
     ScreenStateManager::instance().notify_changed(this);
 }
 
@@ -673,8 +682,10 @@ void WatchlistScreen::on_delete_watchlist() {
     table_->clear_data();
     panel_title_->setText("Select a watchlist");
     stock_count_->clear();
-    if (import_csv_btn_) import_csv_btn_->setEnabled(false);
-    if (export_csv_btn_) export_csv_btn_->setEnabled(false);
+    if (import_csv_btn_)
+        import_csv_btn_->setEnabled(false);
+    if (export_csv_btn_)
+        export_csv_btn_->setEnabled(false);
     load_watchlists();
 }
 
@@ -731,8 +742,8 @@ void WatchlistScreen::on_export_csv() {
     if (wl_name.isEmpty())
         return;
 
-    const QString path = QFileDialog::getSaveFileName(
-        this, "Export Watchlist to CSV", wl_name + ".csv", "CSV Files (*.csv)");
+    const QString path =
+        QFileDialog::getSaveFileName(this, "Export Watchlist to CSV", wl_name + ".csv", "CSV Files (*.csv)");
     if (path.isEmpty())
         return;
 
@@ -757,14 +768,11 @@ void WatchlistScreen::on_export_csv() {
             continue;
         }
         const auto& q = it.value();
-        writer.write_row({q.symbol,
-                          q.name.isEmpty() ? s.name : q.name,
-                          QString::number(q.price, 'f', 2),
+        writer.write_row({q.symbol, q.name.isEmpty() ? s.name : q.name, QString::number(q.price, 'f', 2),
                           // Unknown change (NaN) exports as an empty cell, not "nan".
                           std::isfinite(q.change) ? QString::number(q.change, 'f', 2) : QString(),
                           std::isfinite(q.change_pct) ? QString::number(q.change_pct, 'f', 2) : QString(),
-                          QString::number(q.high, 'f', 2),
-                          QString::number(q.low, 'f', 2),
+                          QString::number(q.high, 'f', 2), QString::number(q.low, 'f', 2),
                           ui::formatting::format_compact_volume(q.volume)});
         ++written;
     }
@@ -778,7 +786,8 @@ void WatchlistScreen::on_export_csv() {
     if (unquoted > 0) {
         QMessageBox::information(this, "Export complete",
                                  QString("Exported %1 rows (%2 without live quotes — fields left blank).")
-                                     .arg(written + unquoted).arg(unquoted));
+                                     .arg(written + unquoted)
+                                     .arg(unquoted));
     }
 }
 
@@ -868,7 +877,9 @@ void WatchlistScreen::on_import_csv() {
 
     QMessageBox::information(this, "Import complete",
                              QString("Imported %1 new symbols.\nSkipped %2 duplicates, %3 blank rows.")
-                                 .arg(imported).arg(skipped_dupe).arg(skipped_blank));
+                                 .arg(imported)
+                                 .arg(skipped_dupe)
+                                 .arg(skipped_blank));
 }
 
 // ── IStatefulScreen ───────────────────────────────────────────────────────────

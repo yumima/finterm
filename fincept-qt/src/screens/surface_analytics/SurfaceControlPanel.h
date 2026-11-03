@@ -80,8 +80,7 @@ class SurfaceControlPanel : public QWidget {
 
     // Update the provider status pill (header). dataset is shown alongside
     // the dot. State is one of "connected", "disconnected", "not configured".
-    void set_provider_status(const QString& provider_name, const QString& state,
-                             const QString& detail = QString());
+    void set_provider_status(const QString& provider_name, const QString& state, const QString& detail = QString());
 
   signals:
     void controls_changed();

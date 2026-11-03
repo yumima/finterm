@@ -34,8 +34,8 @@ LiveDataPanel::LiveDataPanel(const QVector<LiveExample>& examples, QWidget* pare
     for (int i = 0; i < examples_.size(); ++i) {
         const auto& ex = examples_[i];
         auto* lbl = new QLabel(ex.label, this);
-        lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
-                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
+        lbl->setStyleSheet(
+            QString("color: %1; background: transparent; font-size: 11px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO));
         grid_->addWidget(lbl, i, 0);
 
         auto* val = new QLabel(QString::fromUtf8("—"), this);
@@ -77,19 +77,32 @@ void LiveDataPanel::fetch_all() {
                     }
                     const auto& m = ex.metric;
                     double v = NAN;
-                    if (m == "pe_ratio") v = info.pe_ratio;
-                    else if (m == "forward_pe") v = info.forward_pe;
-                    else if (m == "price_to_book") v = info.price_to_book;
-                    else if (m == "dividend_yield") v = info.dividend_yield;
-                    else if (m == "beta") v = info.beta;
-                    else if (m == "market_cap") v = info.market_cap;
-                    else if (m == "eps") v = info.eps;
-                    else if (m == "roe") v = info.roe;
-                    else if (m == "profit_margin") v = info.profit_margin;
-                    else if (m == "debt_to_equity") v = info.debt_to_equity;
-                    else if (m == "current_ratio") v = info.current_ratio;
-                    else if (m == "week52_high") v = info.week52_high;
-                    else if (m == "week52_low") v = info.week52_low;
+                    if (m == "pe_ratio")
+                        v = info.pe_ratio;
+                    else if (m == "forward_pe")
+                        v = info.forward_pe;
+                    else if (m == "price_to_book")
+                        v = info.price_to_book;
+                    else if (m == "dividend_yield")
+                        v = info.dividend_yield;
+                    else if (m == "beta")
+                        v = info.beta;
+                    else if (m == "market_cap")
+                        v = info.market_cap;
+                    else if (m == "eps")
+                        v = info.eps;
+                    else if (m == "roe")
+                        v = info.roe;
+                    else if (m == "profit_margin")
+                        v = info.profit_margin;
+                    else if (m == "debt_to_equity")
+                        v = info.debt_to_equity;
+                    else if (m == "current_ratio")
+                        v = info.current_ratio;
+                    else if (m == "week52_high")
+                        v = info.week52_high;
+                    else if (m == "week52_low")
+                        v = info.week52_low;
                     guard->apply_value(row, v, !std::isnan(v));
                 }
             });
@@ -105,8 +118,8 @@ void LiveDataPanel::apply_value(int row_index, double raw_value, bool ok) {
     // a missing one to hide — a company with no debt has a real 0.00 D/E.
     if (!ok) {
         lbl->setText("n/a");
-        lbl->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
-                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
+        lbl->setStyleSheet(
+            QString("color: %1; background: transparent; font-size: 11px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO));
         return;
     }
     lbl->setText(format_metric(examples_[row_index].metric, raw_value));
@@ -116,9 +129,12 @@ QString LiveDataPanel::format_metric(const QString& metric, double v) {
     if (metric == "market_cap") {
         // Format as $X.XB / $X.XT
         const double abs_v = std::abs(v);
-        if (abs_v >= 1e12) return QString("$%1T").arg(v / 1e12, 0, 'f', 2);
-        if (abs_v >= 1e9)  return QString("$%1B").arg(v / 1e9, 0, 'f', 1);
-        if (abs_v >= 1e6)  return QString("$%1M").arg(v / 1e6, 0, 'f', 1);
+        if (abs_v >= 1e12)
+            return QString("$%1T").arg(v / 1e12, 0, 'f', 2);
+        if (abs_v >= 1e9)
+            return QString("$%1B").arg(v / 1e9, 0, 'f', 1);
+        if (abs_v >= 1e6)
+            return QString("$%1M").arg(v / 1e6, 0, 'f', 1);
         return QString("$%1").arg(v, 0, 'f', 0);
     }
     if (metric == "dividend_yield" || metric == "roe" || metric == "profit_margin") {

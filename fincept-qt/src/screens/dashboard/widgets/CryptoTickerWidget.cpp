@@ -1,8 +1,8 @@
 #include "screens/dashboard/widgets/CryptoTickerWidget.h"
-#include "screens/markets/MarketChartDialog.h"
 
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
+#include "screens/markets/MarketChartDialog.h"
 #include "trading/TradingTypes.h"
 #include "ui/theme/Theme.h"
 
@@ -23,8 +23,7 @@ const QStringList kDefaultPairs = {"BTC/USD", "ETH/USD", "SOL/USD"};
 constexpr const char* kDefaultExchange = "kraken";
 } // namespace
 
-CryptoTickerWidget::CryptoTickerWidget(const QJsonObject& cfg, QWidget* parent)
-    : BaseWidget("CRYPTO TICKER", parent) {
+CryptoTickerWidget::CryptoTickerWidget(const QJsonObject& cfg, QWidget* parent) : BaseWidget("CRYPTO TICKER", parent) {
     auto* vl = content_layout();
     vl->setContentsMargins(10, 8, 10, 8);
     vl->setSpacing(4);
@@ -84,8 +83,7 @@ void CryptoTickerWidget::build_rows() {
 
     auto* hdr = new QLabel(exchange_.toUpper());
     hdr->setStyleSheet(
-        QString("color:%1;font-size:12px;background:transparent;padding:2px 0;")
-            .arg(ui::colors::TEXT_SECONDARY()));
+        QString("color:%1;font-size:12px;background:transparent;padding:2px 0;").arg(ui::colors::TEXT_SECONDARY()));
     vl->addWidget(hdr);
 
     auto* grid = new QGridLayout();
@@ -107,7 +105,7 @@ void CryptoTickerWidget::build_rows() {
         // comes from Yahoo, which quotes the coin against the dollar. Say so
         // in the title rather than pretend the chart is the exchange's book.
         QString base = pair.section(QLatin1Char('/'), 0, 0).toUpper();
-        if (base == QLatin1String("XBT"))   // Kraken's ticker for bitcoin
+        if (base == QLatin1String("XBT")) // Kraken's ticker for bitcoin
             base = QStringLiteral("BTC");
         if (!base.isEmpty()) {
             const QString yahoo = base + QStringLiteral("-USD");
@@ -127,8 +125,7 @@ void CryptoTickerWidget::hub_resubscribe() {
     auto& hub = datahub::DataHub::instance();
     hub.unsubscribe(this);
     for (const auto& pair : pairs_) {
-        const QString topic =
-            QStringLiteral("ws:") + exchange_ + QStringLiteral(":ticker:") + pair;
+        const QString topic = QStringLiteral("ws:") + exchange_ + QStringLiteral(":ticker:") + pair;
         const QString pair_copy = pair;
         hub.subscribe(this, topic, [this, pair_copy](const QVariant& v) {
             if (!v.canConvert<fincept::trading::TickerData>())
@@ -165,8 +162,7 @@ void CryptoTickerWidget::on_ticker(const QString& pair, const fincept::trading::
     const QString sign = t.percentage >= 0 ? "+" : "";
     r.change->setText(QString("%1%2%").arg(sign).arg(t.percentage, 0, 'f', 2));
     const QColor col = t.percentage >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE();
-    r.change->setStyleSheet(
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(col.name()));
+    r.change->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(col.name()));
     set_loading(false);
 }
 
@@ -213,14 +209,11 @@ void CryptoTickerWidget::on_theme_changed() {
 
 void CryptoTickerWidget::apply_styles() {
     const QString sym_css =
-        QString("color:%1;font-size:12px;font-weight:700;background:transparent;")
-            .arg(ui::colors::TEXT_PRIMARY());
+        QString("color:%1;font-size:12px;font-weight:700;background:transparent;").arg(ui::colors::TEXT_PRIMARY());
     const QString price_css =
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
-            .arg(ui::colors::TEXT_PRIMARY());
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(ui::colors::TEXT_PRIMARY());
     const QString chg_css =
-        QString("color:%1;font-size:12px;font-weight:600;background:transparent;")
-            .arg(ui::colors::TEXT_SECONDARY());
+        QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(ui::colors::TEXT_SECONDARY());
     for (auto it = rows_.begin(); it != rows_.end(); ++it) {
         if (it->symbol)
             it->symbol->setStyleSheet(sym_css);

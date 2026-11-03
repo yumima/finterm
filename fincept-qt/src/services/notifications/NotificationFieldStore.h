@@ -29,7 +29,7 @@ inline bool is_secret_field(const QString& field) {
     // are bearer credentials even though their names say nothing secret.
     if (f == QLatin1String("url") || f == QLatin1String("topic"))
         return true;
-    static const char* kSecretParts[] = {"pass", "token", "secret", "api_key", "apikey", "webhook",
+    static const char* kSecretParts[] = {"pass", "token",   "secret",   "api_key",     "apikey", "webhook",
                                          "auth", "private", "user_key", "routing_key", "sid"};
     for (const char* part : kSecretParts)
         if (f.contains(QLatin1String(part)))

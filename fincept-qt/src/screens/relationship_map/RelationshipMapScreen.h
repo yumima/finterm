@@ -53,7 +53,8 @@ class RelationshipMapScreen : public QWidget, public IStatefulScreen {
     void on_search();
     void on_search_text_changed(const QString& text);
     void fire_asset_search(const QString& query);
-    void on_asset_results(const QJsonArray& results, const QString& failure = {});  // failure: shown instead of "No results"
+    void on_asset_results(const QJsonArray& results,
+                          const QString& failure = {}); // failure: shown instead of "No results"
     void show_dropdown();
     void hide_dropdown();
     void on_data_ready(const fincept::relmap::RelationshipData& data);
@@ -71,8 +72,8 @@ class RelationshipMapScreen : public QWidget, public IStatefulScreen {
     relmap::RelationshipGraphView* view_ = nullptr;
 
     // Header
-    QWidget* header_bar_ = nullptr;  // wraps title + search + buttons — hidable for embedded mode
-    QWidget* status_bar_ = nullptr;  // bottom brand strip — hidable for embedded mode
+    QWidget* header_bar_ = nullptr; // wraps title + search + buttons — hidable for embedded mode
+    QWidget* status_bar_ = nullptr; // bottom brand strip — hidable for embedded mode
     QLineEdit* search_input_ = nullptr;
     QListWidget* search_dropdown_ = nullptr;
     QTimer* search_debounce_ = nullptr;
@@ -102,7 +103,7 @@ class RelationshipMapScreen : public QWidget, public IStatefulScreen {
     relmap::LayoutMode layout_mode_ = relmap::LayoutMode::Layered;
     relmap::RelationshipData current_data_;
     bool has_data_ = false;
-    QString loaded_ticker_;       // ticker currently shown in the graph
+    QString loaded_ticker_; // ticker currently shown in the graph
     // The ticker we most recently asked the service to fetch. Used to filter
     // data_ready emissions: RelationshipMapService is a singleton with a
     // single shared signal, so when ER embeds a RelationshipMapScreen the

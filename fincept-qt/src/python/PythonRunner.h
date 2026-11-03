@@ -44,8 +44,8 @@ class PythonRunner : public QObject {
     /// Optional `timeout_ms` overrides the default per-process timeout. Use
     /// for scripts that legitimately need to run longer than the default
     /// (e.g. network-heavy scrapers); 0 disables the timeout entirely.
-    void run(const QString& script, const QStringList& args, Callback cb,
-             StreamCallback on_line = {}, int timeout_ms = kProcessTimeoutMs);
+    void run(const QString& script, const QStringList& args, Callback cb, StreamCallback on_line = {},
+             int timeout_ms = kProcessTimeoutMs);
 
     /// Same as run(), for a short query a reader is actively waiting on — a
     /// click whose answer comes from a local index in a second or two.
@@ -106,11 +106,11 @@ class PythonRunner : public QObject {
     int interactive_active_ = 0;
 
     struct QueuedRequest {
-        QString        script;
-        QStringList    args;
-        Callback       cb;
+        QString script;
+        QStringList args;
+        Callback cb;
         StreamCallback on_line;
-        int            timeout_ms = kProcessTimeoutMs;
+        int timeout_ms = kProcessTimeoutMs;
     };
     QQueue<QueuedRequest> queue_;
     QQueue<QueuedRequest> interactive_queue_;
@@ -119,10 +119,10 @@ class PythonRunner : public QObject {
     struct ProcessBuffers {
         QByteArray stdout_buf;
         QByteArray stderr_buf;
-        int stdout_streamed = 0;  // offset into stdout_buf already streamed
+        int stdout_streamed = 0; // offset into stdout_buf already streamed
         int stderr_streamed = 0;
         StreamCallback on_line;
-        qint64 start_ms = 0;      // spawn timestamp for duration diagnostics
+        qint64 start_ms = 0;             // spawn timestamp for duration diagnostics
         QTimer* timeout_timer = nullptr; // killed + nulled in finished/error handlers
     };
     QHash<QProcess*, ProcessBuffers> proc_buffers_;

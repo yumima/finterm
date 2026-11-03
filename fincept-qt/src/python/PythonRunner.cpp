@@ -1,28 +1,26 @@
 #include "python/PythonRunner.h"
 
 #include "core/config/AppPaths.h"
-
+#include "core/keys/CredentialCatalogue.h"
 #include "core/logging/Logger.h"
 #include "python/PythonSetupManager.h"
 #include "storage/secure/SecureStorage.h"
 
-#include <memory>
-
 #include <QCoreApplication>
 #include <QDateTime>
-#include <QPointer>
-#include <QTimer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
 #include <QLatin1String>
+#include <QPointer>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QTimer>
 #include <QUuid>
 
-#include "core/keys/CredentialCatalogue.h"
+#include <memory>
 
 namespace fincept::python {
 
@@ -54,11 +52,9 @@ static const QStringList& managed_credential_keys() {
 // non-credential vars use it (CSRF_TOKEN, GITHUB_TOKEN for tooling). The
 // managed_credential_keys() allow-list is checked first so any key the user
 // configured in Settings is preserved, regardless of suffix.
-static void strip_unmanaged_credentials(QProcessEnvironment& env,
-                                        const QStringList& managed) {
+static void strip_unmanaged_credentials(QProcessEnvironment& env, const QStringList& managed) {
     static const QStringList kSuffixes = {
-        "_API_KEY", "_SECRET", "_SECRET_KEY", "_ACCESS_TOKEN",
-        "_AUTH_TOKEN", "_PASSWORD", "_PRIVATE_KEY",
+        "_API_KEY", "_SECRET", "_SECRET_KEY", "_ACCESS_TOKEN", "_AUTH_TOKEN", "_PASSWORD", "_PRIVATE_KEY",
     };
     const QStringList all_keys = env.keys();
     for (const QString& k : all_keys) {
@@ -151,8 +147,7 @@ QProcessEnvironment PythonRunner::build_python_env() const {
     const QChar kPathSep = ':';
 #endif
     const QString existing_pypath = env.value("PYTHONPATH");
-    QString new_pypath =
-        existing_pypath.isEmpty() ? scripts_dir_ : (scripts_dir_ + kPathSep + existing_pypath);
+    QString new_pypath = existing_pypath.isEmpty() ? scripts_dir_ : (scripts_dir_ + kPathSep + existing_pypath);
     env.insert("PYTHONPATH", new_pypath);
 
     // Inject credentials stored via SettingsScreen → SecureStorage. SecureStorage
@@ -310,8 +305,8 @@ QString PythonRunner::find_scripts_dir() {
 
 // ── Run Script ───────────────────────────────────────────────────────────────
 
-void PythonRunner::run(const QString& script, const QStringList& args, Callback cb,
-                       StreamCallback on_line, int timeout_ms) {
+void PythonRunner::run(const QString& script, const QStringList& args, Callback cb, StreamCallback on_line,
+                       int timeout_ms) {
     if (python_init_done_ && python_path_.isEmpty()) {
         cb({false, {}, "Python not available — run first-time setup from the app", -1});
         return;
@@ -328,8 +323,7 @@ void PythonRunner::run(const QString& script, const QStringList& args, Callback 
     start_next();
 }
 
-void PythonRunner::run_interactive(const QString& script, const QStringList& args, Callback cb,
-                                   int timeout_ms) {
+void PythonRunner::run_interactive(const QString& script, const QStringList& args, Callback cb, int timeout_ms) {
     if (python_init_done_ && python_path_.isEmpty()) {
         cb({false, {}, "Python not available — run first-time setup from the app", -1});
         return;
@@ -444,8 +438,8 @@ void PythonRunner::start_next() {
             for (const QString& arg : req.args) {
                 if (arg.size() > kArgSpillThreshold) {
                     QString temp_dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-                    QString temp_path = temp_dir + "/fincept_arg_" +
-                                       QUuid::createUuid().toString(QUuid::WithoutBraces) + ".json";
+                    QString temp_path =
+                        temp_dir + "/fincept_arg_" + QUuid::createUuid().toString(QUuid::WithoutBraces) + ".json";
                     QFile tf(temp_path);
                     if (tf.open(QIODevice::WriteOnly | QIODevice::Text)) {
                         tf.write(arg.toUtf8());
@@ -505,15 +499,18 @@ void PythonRunner::start_next() {
         // partial line (no \n yet) stays in the buffer for the next read.
         auto drain_lines = [this, proc](bool is_stderr) {
             auto& bufs = proc_buffers_[proc];
-            if (!bufs.on_line) return;
+            if (!bufs.on_line)
+                return;
             QByteArray& buf = is_stderr ? bufs.stderr_buf : bufs.stdout_buf;
             int& off = is_stderr ? bufs.stderr_streamed : bufs.stdout_streamed;
             while (true) {
                 int nl = buf.indexOf('\n', off);
-                if (nl < 0) break;
+                if (nl < 0)
+                    break;
                 // Line is buf[off..nl) — exclude the trailing \n; also trim \r for CRLF
                 QByteArray line = buf.mid(off, nl - off);
-                if (line.endsWith('\r')) line.chop(1);
+                if (line.endsWith('\r'))
+                    line.chop(1);
                 off = nl + 1;
                 bufs.on_line(QString::fromUtf8(line), is_stderr);
             }
@@ -522,101 +519,111 @@ void PythonRunner::start_next() {
         // Buffer stdout/stderr incrementally. After each append, drain complete lines
         // to the optional stream callback. The full buffer is still available for the
         // `finished` handler's authoritative parse.
-        connect(proc, &QProcess::readyReadStandardOutput, this,
-                [this, proc, drain_lines]() {
-                    proc_buffers_[proc].stdout_buf.append(proc->readAllStandardOutput());
-                    drain_lines(false);
-                });
-        connect(proc, &QProcess::readyReadStandardError, this,
-                [this, proc, drain_lines]() {
-                    proc_buffers_[proc].stderr_buf.append(proc->readAllStandardError());
-                    drain_lines(true);
-                });
+        connect(proc, &QProcess::readyReadStandardOutput, this, [this, proc, drain_lines]() {
+            proc_buffers_[proc].stdout_buf.append(proc->readAllStandardOutput());
+            drain_lines(false);
+        });
+        connect(proc, &QProcess::readyReadStandardError, this, [this, proc, drain_lines]() {
+            proc_buffers_[proc].stderr_buf.append(proc->readAllStandardError());
+            drain_lines(true);
+        });
 
         // Share cb and a done-flag across both signal handlers so only the FIRST
         // signal to fire claims the callback. When kill() is called, Qt emits
         // errorOccurred(Crashed) AND finished in sequence. The old code moved cb
         // into the finished lambda, leaving errorOccurred with a moved-from empty
         // std::function; calling it threw std::bad_function_call and crashed.
-        auto shared_cb   = std::make_shared<Callback>(std::move(req.cb));
-        auto done        = std::make_shared<bool>(false);
+        auto shared_cb = std::make_shared<Callback>(std::move(req.cb));
+        auto done = std::make_shared<bool>(false);
         auto script_name = std::move(req.script);
 
-        connect(proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
-                [this, proc, shared_cb, done, script_name, is_code, temp_file, lane](int exit_code, QProcess::ExitStatus) {
-                    if (*done) return; // errorOccurred already handled this — skip
-                    *done = true;
+        connect(
+            proc, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this,
+            [this, proc, shared_cb, done, script_name, is_code, temp_file, lane](int exit_code, QProcess::ExitStatus) {
+                if (*done)
+                    return; // errorOccurred already handled this — skip
+                *done = true;
 
-                    // Collect any remaining buffered data
-                    auto& bufs = proc_buffers_[proc];
-                    bufs.stdout_buf.append(proc->readAllStandardOutput());
-                    bufs.stderr_buf.append(proc->readAllStandardError());
+                // Collect any remaining buffered data
+                auto& bufs = proc_buffers_[proc];
+                bufs.stdout_buf.append(proc->readAllStandardOutput());
+                bufs.stderr_buf.append(proc->readAllStandardError());
 
-                    const qint64 duration_ms = bufs.start_ms > 0
-                        ? QDateTime::currentMSecsSinceEpoch() - bufs.start_ms : 0;
+                const qint64 duration_ms = bufs.start_ms > 0 ? QDateTime::currentMSecsSinceEpoch() - bufs.start_ms : 0;
 
-                    // Stop the hard-timeout timer — process finished normally (or was killed).
-                    if (bufs.timeout_timer) { bufs.timeout_timer->stop(); bufs.timeout_timer->deleteLater(); }
+                // Stop the hard-timeout timer — process finished normally (or was killed).
+                if (bufs.timeout_timer) {
+                    bufs.timeout_timer->stop();
+                    bufs.timeout_timer->deleteLater();
+                }
 
-                    QString stdout_str = QString::fromUtf8(bufs.stdout_buf);
-                    QString stderr_str = QString::fromUtf8(bufs.stderr_buf);
+                QString stdout_str = QString::fromUtf8(bufs.stdout_buf);
+                QString stderr_str = QString::fromUtf8(bufs.stderr_buf);
 
-                    proc_buffers_.remove(proc);
-                    proc->deleteLater();
+                proc_buffers_.remove(proc);
+                proc->deleteLater();
 
-                    if (is_code && !temp_file.isEmpty())
-                        QFile::remove(temp_file);
+                if (is_code && !temp_file.isEmpty())
+                    QFile::remove(temp_file);
 
-                    PythonResult result;
-                    result.exit_code = exit_code;
+                PythonResult result;
+                result.exit_code = exit_code;
 
-                    if (is_code) {
-                        result.success = (exit_code == 0);
-                        result.output = std::move(stdout_str);
-                        result.error = std::move(stderr_str);
-                    } else {
-                        QString json_out = extract_json(stdout_str);
-                        result.success = (exit_code == 0 && !json_out.isEmpty());
-                        result.output = json_out.isEmpty() ? std::move(stdout_str) : std::move(json_out);
-                        result.error = std::move(stderr_str);
-                    }
+                if (is_code) {
+                    result.success = (exit_code == 0);
+                    result.output = std::move(stdout_str);
+                    result.error = std::move(stderr_str);
+                } else {
+                    QString json_out = extract_json(stdout_str);
+                    result.success = (exit_code == 0 && !json_out.isEmpty());
+                    result.output = json_out.isEmpty() ? std::move(stdout_str) : std::move(json_out);
+                    result.error = std::move(stderr_str);
+                }
 
-                    if (!result.success && !is_code) {
-                        LOG_ERROR("Python", QString("Script %1 failed in %2ms (exit=%3): %4")
-                                                .arg(script_name).arg(duration_ms)
-                                                .arg(exit_code).arg(result.error.left(200)));
-                    } else if (!is_code) {
-                        LOG_DEBUG("Python", QString("Script %1 finished in %2ms")
-                                                .arg(script_name).arg(duration_ms));
-                    }
+                if (!result.success && !is_code) {
+                    LOG_ERROR("Python", QString("Script %1 failed in %2ms (exit=%3): %4")
+                                            .arg(script_name)
+                                            .arg(duration_ms)
+                                            .arg(exit_code)
+                                            .arg(result.error.left(200)));
+                } else if (!is_code) {
+                    LOG_DEBUG("Python", QString("Script %1 finished in %2ms").arg(script_name).arg(duration_ms));
+                }
 
-                    (*shared_cb)(std::move(result));
-                    if (lane) --interactive_active_; else --active_count_;
-                    start_next();
-                });
+                (*shared_cb)(std::move(result));
+                if (lane)
+                    --interactive_active_;
+                else
+                    --active_count_;
+                start_next();
+            });
 
         connect(proc, &QProcess::errorOccurred, this,
                 [this, proc, shared_cb, done, is_code, temp_file, lane](QProcess::ProcessError) {
-            if (*done) return; // finished() already handled this — skip
-            *done = true;
+                    if (*done)
+                        return; // finished() already handled this — skip
+                    *done = true;
 
-            QString error_msg = proc->errorString();
-            if (proc_buffers_.contains(proc) && proc_buffers_[proc].timeout_timer) {
-                proc_buffers_[proc].timeout_timer->stop();
-                proc_buffers_[proc].timeout_timer->deleteLater();
-            }
-            proc_buffers_.remove(proc);
-            auto spilled = proc->property("spilled_files").toStringList();
-            for (const QString& f : spilled)
-                QFile::remove(f);
-            proc->deleteLater();
-            if (is_code && !temp_file.isEmpty())
-                QFile::remove(temp_file);
+                    QString error_msg = proc->errorString();
+                    if (proc_buffers_.contains(proc) && proc_buffers_[proc].timeout_timer) {
+                        proc_buffers_[proc].timeout_timer->stop();
+                        proc_buffers_[proc].timeout_timer->deleteLater();
+                    }
+                    proc_buffers_.remove(proc);
+                    auto spilled = proc->property("spilled_files").toStringList();
+                    for (const QString& f : spilled)
+                        QFile::remove(f);
+                    proc->deleteLater();
+                    if (is_code && !temp_file.isEmpty())
+                        QFile::remove(temp_file);
 
-            (*shared_cb)({false, {}, "Process error: " + error_msg, -1});
-            if (lane) --interactive_active_; else --active_count_;
-            start_next();
-        });
+                    (*shared_cb)({false, {}, "Process error: " + error_msg, -1});
+                    if (lane)
+                        --interactive_active_;
+                    else
+                        --active_count_;
+                    start_next();
+                });
 
         LOG_INFO("Python", QString("Running (%1/%2 active, %3 queued%6): %4 %5")
                                .arg(active_count_)
@@ -641,7 +648,8 @@ void PythonRunner::start_next() {
             tmr->setInterval(timeout_ms);
             QPointer<QProcess> proc_guard(proc);
             connect(tmr, &QTimer::timeout, this, [this, proc_guard, script_name, timeout_ms]() {
-                if (!proc_guard || !proc_buffers_.contains(proc_guard.data())) return;
+                if (!proc_guard || !proc_buffers_.contains(proc_guard.data()))
+                    return;
                 LOG_WARN("Python", QString("Script %1 timed out after %2s — killing process")
                                        .arg(script_name)
                                        .arg(static_cast<double>(timeout_ms) / 1000.0, 0, 'f', 0));

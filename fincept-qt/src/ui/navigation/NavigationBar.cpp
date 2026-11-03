@@ -79,13 +79,13 @@ void NavigationBar::refresh_theme() {
                           "#navLogout { background:transparent; color:%7; border:1px solid %7;"
                           "  padding:0 10px; font-weight:700; }"
                           "#navLogout:hover { background:%7; color:%4; border-color:%7; }")
-                      .arg(colors::BG_BASE())       // %1
-                      .arg(colors::BORDER_DIM())    // %2
-                      .arg(colors::AMBER())         // %3
-                      .arg(colors::TEXT_PRIMARY())  // %4
-                      .arg(colors::POSITIVE())      // %5
+                      .arg(colors::BG_BASE())        // %1
+                      .arg(colors::BORDER_DIM())     // %2
+                      .arg(colors::AMBER())          // %3
+                      .arg(colors::TEXT_PRIMARY())   // %4
+                      .arg(colors::POSITIVE())       // %5
                       .arg(colors::TEXT_SECONDARY()) // %6
-                      .arg(colors::NEGATIVE()));    // %7
+                      .arg(colors::NEGATIVE()));     // %7
 }
 
 void NavigationBar::update_clock() {

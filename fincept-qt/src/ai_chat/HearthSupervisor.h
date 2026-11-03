@@ -17,7 +17,7 @@ namespace fincept {
 /// Thread: all methods and signals are on the GUI thread.
 class HearthSupervisor : public QObject {
     Q_OBJECT
-public:
+  public:
     static HearthSupervisor& instance();
 
     enum class State { Disabled, Starting, Running, Crashed };
@@ -35,11 +35,11 @@ public:
     /// Returns empty string when not found.
     static QString hearth_binary();
 
-signals:
+  signals:
     /// Emitted whenever state() changes.
     void state_changed(State state);
 
-private:
+  private:
     explicit HearthSupervisor(QObject* parent = nullptr);
     void start_process();
     void stop_process();
@@ -47,12 +47,12 @@ private:
     void on_process_finished(int exit_code, QProcess::ExitStatus status);
 
     QProcess* process_ = nullptr;
-    QTimer*   retry_timer_ = nullptr;
-    QTimer*   settle_timer_ = nullptr; // one member, not a singleShot, to cancel on stop
-    State     state_ = State::Disabled;
-    bool      enabled_ = false;
-    int       retry_count_ = 0;
-    int       gen_ = 0; // bumped on each start/stop; invalidates stale kill timers
+    QTimer* retry_timer_ = nullptr;
+    QTimer* settle_timer_ = nullptr; // one member, not a singleShot, to cancel on stop
+    State state_ = State::Disabled;
+    bool enabled_ = false;
+    int retry_count_ = 0;
+    int gen_ = 0; // bumped on each start/stop; invalidates stale kill timers
 };
 
 } // namespace fincept

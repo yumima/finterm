@@ -39,7 +39,7 @@ class PolymarketStatusBar : public QWidget {
     QLabel* next_session_ = nullptr;
     QLabel* ws_label_ = nullptr;
 
-    QColor accent_{0xD97706};  // default amber — Polymarket
+    QColor accent_{0xD97706}; // default amber — Polymarket
 };
 
 } // namespace fincept::screens::polymarket

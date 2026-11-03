@@ -35,8 +35,7 @@ class EarningsReactionChart : public QWidget {
     void set_metric(services::equity::ReactionMetric m);
     /// The size forecast before each past print (oldest first, as
     /// forecast_record() returns them) and the one standing for the next.
-    void set_forecasts(const QVector<services::equity::PrintForecast>& prints,
-                       std::optional<double> next_expected_pct);
+    void set_forecasts(const QVector<services::equity::PrintForecast>& prints, std::optional<double> next_expected_pct);
     services::equity::ReactionMetric metric() const { return metric_; }
 
   protected:
@@ -52,7 +51,7 @@ class EarningsReactionChart : public QWidget {
   private:
     struct Column {
         qint64 timestamp = 0;
-        std::optional<double> metric;    // the selected earnings metric
+        std::optional<double> metric; // the selected earnings metric
         std::optional<double> reaction;
         // The trailing column: a consensus bar (when one is published) and,
         // in place of a print reaction, where the price sits right now
@@ -79,7 +78,7 @@ class EarningsReactionChart : public QWidget {
     /// Bars beyond it are clamped and marked with a chevron.
     static double axis_extent(const QVector<double>& values);
 
-    QVector<services::equity::EarningsPoint> history_;   // oldest → newest
+    QVector<services::equity::EarningsPoint> history_; // oldest → newest
     QVector<services::equity::PrintForecast> forecasts_;
     std::optional<double> next_expected_;
     services::equity::ReactionMetric metric_ = services::equity::ReactionMetric::Surprise;

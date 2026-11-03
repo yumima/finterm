@@ -40,12 +40,13 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-#include <algorithm>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace fincept::screens {
 
@@ -314,8 +315,7 @@ void EconomicsScreen::restore_state(const QVariantMap& state) {
     // A layout can name a source that has since been removed (the old
     // "Proprietary Macro" tab, id "fincept"); switching to it would deselect
     // every badge and show no panel. Keep the default source instead.
-    const bool known = std::any_of(sources_.cbegin(), sources_.cend(),
-                                   [&](const auto& e) { return e.id == id; });
+    const bool known = std::any_of(sources_.cbegin(), sources_.cend(), [&](const auto& e) { return e.id == id; });
     if (known)
         switch_to(id);
 }

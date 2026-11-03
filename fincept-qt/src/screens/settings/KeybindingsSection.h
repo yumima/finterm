@@ -25,12 +25,12 @@ class KeyCaptureDialog : public QDialog {
     void keyPressEvent(QKeyEvent* event) override;
 
   private:
-    QLabel*      hint_label_     = nullptr;
-    QLabel*      captured_label_ = nullptr;
-    QLabel*      conflict_label_ = nullptr;
-    QPushButton* apply_btn_      = nullptr;
+    QLabel* hint_label_ = nullptr;
+    QLabel* captured_label_ = nullptr;
+    QLabel* conflict_label_ = nullptr;
+    QPushButton* apply_btn_ = nullptr;
 
-    KeyAction    action_;
+    KeyAction action_;
     QKeySequence captured_;
 };
 
@@ -49,7 +49,7 @@ class KeybindingsSection : public QWidget {
     QWidget* build_group(const QString& group_name, const QList<KeyAction>& actions);
 
     QVBoxLayout* groups_layout_ = nullptr;
-    QLineEdit*   search_input_  = nullptr;
+    QLineEdit* search_input_ = nullptr;
 };
 
 } // namespace fincept::screens

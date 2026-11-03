@@ -132,12 +132,13 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
             svc.set_dialog_parent(window());
             // Re-enable the button when the check completes. Using a unique
             // connection is fine since the service is a long-lived singleton.
-            connect(&svc, &services::UpdateService::check_finished, check_btn,
-                    [check_btn](bool /*found*/) {
-                        check_btn->setEnabled(true);
-                        check_btn->setText(QStringLiteral("Check for Updates"));
-                    },
-                    Qt::SingleShotConnection);
+            connect(
+                &svc, &services::UpdateService::check_finished, check_btn,
+                [check_btn](bool /*found*/) {
+                    check_btn->setEnabled(true);
+                    check_btn->setText(QStringLiteral("Check for Updates"));
+                },
+                Qt::SingleShotConnection);
             svc.check_for_updates(/*silent=*/false);
         });
         right->addWidget(check_btn);
@@ -245,9 +246,9 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
             QString url;
         };
         const Link links[] = {
-            {"AGPL-3.0 License",   "https://www.gnu.org/licenses/agpl-3.0.html"},
+            {"AGPL-3.0 License", "https://www.gnu.org/licenses/agpl-3.0.html"},
             {"Open-source Definition", "https://opensource.org/osd"},
-            {"Qt Documentation",   "https://doc.qt.io/qt-6/"},
+            {"Qt Documentation", "https://doc.qt.io/qt-6/"},
         };
 
         for (int i = 0; i < 3; ++i) {
@@ -271,10 +272,10 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
         pvl->setSpacing(0);
         pvl->addWidget(makePanelHeader("✉", "CONTACT", ui::colors::AMBER));
 
-        auto* body = new QLabel(
-            "This is an open-source project. There is no commercial support, no email, and no phone. "
-            "File bug reports, feature requests, and questions on GitHub. The maintainer(s) review "
-            "issues and PRs as time permits.");
+        auto* body =
+            new QLabel("This is an open-source project. There is no commercial support, no email, and no phone. "
+                       "File bug reports, feature requests, and questions on GitHub. The maintainer(s) review "
+                       "issues and PRs as time permits.");
         body->setWordWrap(true);
         body->setStyleSheet(QString("color: %1; font-size: 12px; line-height: 165%%; background: transparent; "
                                     "padding: 14px; "

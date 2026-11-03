@@ -46,98 +46,63 @@ static const CatalogEntry kCatalog[] = {
     // ── CORE ─────────────────────────────────────────────────────────────
     {"factor_discovery", "get_data", "quant_factor_get_data",
      "Fetch factor data from Qlib for instruments + date range."},
-    {"factor_discovery", "get_calendar", "quant_factor_get_calendar",
-     "Get Qlib trading calendar for a date range."},
+    {"factor_discovery", "get_calendar", "quant_factor_get_calendar", "Get Qlib trading calendar for a date range."},
     {"model_library", "train_model", "quant_model_train",
      "Train a Qlib model (LightGBM, XGBoost, LSTM, Transformer, etc)."},
-    {"model_library", "run_backtest", "quant_model_backtest",
-     "Backtest a trained Qlib model."},
-    {"backtesting", "run_backtest", "quant_run_backtest",
-     "Multi-strategy backtest with portfolio optimization."},
-    {"backtesting", "optimize_portfolio", "quant_optimize_portfolio",
-     "Run portfolio optimization across strategies."},
-    {"live_signals", "get_data", "quant_signals_get_data",
-     "Fetch live trading signal data."},
-    {"live_signals", "get_factor_analysis", "quant_signals_factor_analysis",
-     "Factor analysis on live signals."},
+    {"model_library", "run_backtest", "quant_model_backtest", "Backtest a trained Qlib model."},
+    {"backtesting", "run_backtest", "quant_run_backtest", "Multi-strategy backtest with portfolio optimization."},
+    {"backtesting", "optimize_portfolio", "quant_optimize_portfolio", "Run portfolio optimization across strategies."},
+    {"live_signals", "get_data", "quant_signals_get_data", "Fetch live trading signal data."},
+    {"live_signals", "get_factor_analysis", "quant_signals_factor_analysis", "Factor analysis on live signals."},
     {"live_signals", "get_feature_importance", "quant_signals_feature_importance",
      "Feature importance for live signal model."},
 
     // ── AI_ML ────────────────────────────────────────────────────────────
-    {"deep_agent", "execute_task", "quant_deep_agent_execute",
-     "Run an autonomous research task with the deep agent."},
-    {"deep_agent", "check_status", "quant_rd_agent_status",
-     "Check RD-Agent / deep-agent runtime status."},
-    {"deep_agent", "start_factor_mining", "quant_rd_start_factor_mining",
-     "Start an RD-Agent factor mining task."},
+    {"deep_agent", "execute_task", "quant_deep_agent_execute", "Run an autonomous research task with the deep agent."},
+    {"deep_agent", "check_status", "quant_rd_agent_status", "Check RD-Agent / deep-agent runtime status."},
+    {"deep_agent", "start_factor_mining", "quant_rd_start_factor_mining", "Start an RD-Agent factor mining task."},
     {"deep_agent", "start_model_optimization", "quant_rd_start_model_opt",
      "Start an RD-Agent model optimization task."},
-    {"deep_agent", "start_quant_research", "quant_rd_start_quant_research",
-     "Start an RD-Agent quant research task."},
-    {"deep_agent", "get_task_status", "quant_rd_task_status",
-     "Get status of an RD-Agent task by task_id."},
-    {"deep_agent", "get_discovered_factors", "quant_rd_get_factors",
-     "Get factors discovered by an RD-Agent task."},
+    {"deep_agent", "start_quant_research", "quant_rd_start_quant_research", "Start an RD-Agent quant research task."},
+    {"deep_agent", "get_task_status", "quant_rd_task_status", "Get status of an RD-Agent task by task_id."},
+    {"deep_agent", "get_discovered_factors", "quant_rd_get_factors", "Get factors discovered by an RD-Agent task."},
     {"deep_agent", "get_optimized_model", "quant_rd_get_model",
      "Get the optimized model produced by an RD-Agent task."},
-    {"deep_agent", "list_tasks", "quant_rd_list_tasks",
-     "List RD-Agent tasks; optional status filter."},
-    {"deep_agent", "stop_task", "quant_rd_stop_task",
-     "Stop a running RD-Agent task."},
-    {"deep_agent", "resume_task", "quant_rd_resume_task",
-     "Resume a stopped RD-Agent task; optional config."},
-    {"deep_agent", "start_ui", "quant_rd_start_ui",
-     "Launch the RD-Agent inspection UI."},
-    {"deep_agent", "start_mcp_server", "quant_rd_start_mcp",
-     "Start the RD-Agent MCP server (default port 18765)."},
-    {"deep_agent", "mcp_status", "quant_rd_mcp_status",
-     "Check the RD-Agent MCP server status."},
-    {"rl_trading", "train", "quant_rl_train",
-     "Train an RL trading agent (PPO/DQN/A2C/SAC/TD3). Streaming progress."},
-    {"rl_trading", "evaluate", "quant_rl_evaluate",
-     "Evaluate a trained RL trading agent."},
+    {"deep_agent", "list_tasks", "quant_rd_list_tasks", "List RD-Agent tasks; optional status filter."},
+    {"deep_agent", "stop_task", "quant_rd_stop_task", "Stop a running RD-Agent task."},
+    {"deep_agent", "resume_task", "quant_rd_resume_task", "Resume a stopped RD-Agent task; optional config."},
+    {"deep_agent", "start_ui", "quant_rd_start_ui", "Launch the RD-Agent inspection UI."},
+    {"deep_agent", "start_mcp_server", "quant_rd_start_mcp", "Start the RD-Agent MCP server (default port 18765)."},
+    {"deep_agent", "mcp_status", "quant_rd_mcp_status", "Check the RD-Agent MCP server status."},
+    {"rl_trading", "train", "quant_rl_train", "Train an RL trading agent (PPO/DQN/A2C/SAC/TD3). Streaming progress."},
+    {"rl_trading", "evaluate", "quant_rl_evaluate", "Evaluate a trained RL trading agent."},
     {"online_learning", "create_model", "quant_online_create_model",
      "Create an online-learning model with concept-drift detection."},
-    {"online_learning", "train", "quant_online_train",
-     "Incrementally train an online-learning model."},
-    {"online_learning", "predict", "quant_online_predict",
-     "Get predictions from an online-learning model."},
+    {"online_learning", "train", "quant_online_train", "Incrementally train an online-learning model."},
+    {"online_learning", "predict", "quant_online_predict", "Get predictions from an online-learning model."},
     {"online_learning", "performance", "quant_online_performance",
      "Get performance metrics for an online-learning model."},
-    {"meta_learning", "run_selection", "quant_meta_run_selection",
-     "Run meta-learning model selection / AutoML."},
-    {"meta_learning", "create_ensemble", "quant_meta_create_ensemble",
-     "Build a model ensemble via meta learning."},
+    {"meta_learning", "run_selection", "quant_meta_run_selection", "Run meta-learning model selection / AutoML."},
+    {"meta_learning", "create_ensemble", "quant_meta_create_ensemble", "Build a model ensemble via meta learning."},
     {"meta_learning", "tune_hyperparameters", "quant_meta_tune_hyperparams",
      "Hyperparameter tuning via meta learning."},
 
     // ── ADVANCED ─────────────────────────────────────────────────────────
-    {"hft", "fetch_orderbook", "quant_hft_orderbook",
-     "Fetch an order-book snapshot for HFT analysis."},
-    {"hft", "market_making", "quant_hft_market_making",
-     "Run a market-making strategy step."},
-    {"hft", "slippage", "quant_hft_slippage",
-     "Estimate slippage for a trade against the book."},
-    {"hft", "toxic_flow", "quant_hft_toxic_flow",
-     "Detect toxic order flow on a book."},
-    {"hft", "analyze", "quant_hft_analyze",
-     "General HFT order-book analytics."},
-    {"rolling_retraining", "create", "quant_rolling_create",
-     "Create a rolling-retraining schedule."},
-    {"rolling_retraining", "preview", "quant_rolling_preview",
-     "Preview the retrain tasks a schedule would generate."},
-    {"rolling_retraining", "delete", "quant_rolling_delete",
-     "Delete a rolling-retraining schedule."},
+    {"hft", "fetch_orderbook", "quant_hft_orderbook", "Fetch an order-book snapshot for HFT analysis."},
+    {"hft", "market_making", "quant_hft_market_making", "Run a market-making strategy step."},
+    {"hft", "slippage", "quant_hft_slippage", "Estimate slippage for a trade against the book."},
+    {"hft", "toxic_flow", "quant_hft_toxic_flow", "Detect toxic order flow on a book."},
+    {"hft", "analyze", "quant_hft_analyze", "General HFT order-book analytics."},
+    {"rolling_retraining", "create", "quant_rolling_create", "Create a rolling-retraining schedule."},
+    {"rolling_retraining", "preview", "quant_rolling_preview", "Preview the retrain tasks a schedule would generate."},
+    {"rolling_retraining", "delete", "quant_rolling_delete", "Delete a rolling-retraining schedule."},
     {"advanced_models", "create_model", "quant_adv_create_model",
      "Create an advanced model (LSTM/GRU/Transformer/Localformer/HIST/GAT)."},
-    {"advanced_models", "train_model", "quant_adv_train_model",
-     "Train an advanced model."},
-    {"feature_engineering", "evaluate_expression", "quant_feature_eval_expr",
-     "Evaluate a Qlib feature expression."},
+    {"advanced_models", "train_model", "quant_adv_train_model", "Train an advanced model."},
+    {"feature_engineering", "evaluate_expression", "quant_feature_eval_expr", "Evaluate a Qlib feature expression."},
     {"feature_engineering", "select_features_by_ic", "quant_feature_select_ic",
      "Select features by Information Coefficient."},
-    {"factor_evaluation", "calculate_ic", "quant_eval_ic",
-     "Calculate Information Coefficient metrics for a factor."},
+    {"factor_evaluation", "calculate_ic", "quant_eval_ic", "Calculate Information Coefficient metrics for a factor."},
     {"factor_evaluation", "calculate_risk_metrics", "quant_eval_risk_metrics",
      "Calculate factor risk metrics (Sharpe, IR, drawdown, etc)."},
     {"factor_evaluation", "generate_evaluation_report", "quant_eval_report",
@@ -146,64 +111,38 @@ static const CatalogEntry kCatalog[] = {
      "Strategy portfolio metrics (returns, risk, exposure)."},
     {"data_processors", "create_pipeline", "quant_dataproc_create_pipeline",
      "Create a Qlib data-processing pipeline (zscore/winsorize/cs_rank/tanh/fillna)."},
-    {"data_processors", "process_data", "quant_dataproc_process",
-     "Run a Qlib data-processing pipeline on a dataset."},
+    {"data_processors", "process_data", "quant_dataproc_process", "Run a Qlib data-processing pipeline on a dataset."},
 
     // ── ANALYTICS ────────────────────────────────────────────────────────
-    {"quant_reporting", "check_status", "quant_reporting_status",
-     "Check the quant-reporting service status."},
-    {"quant_reporting", "ic_analysis", "quant_reporting_ic",
-     "IC analysis report."},
-    {"quant_reporting", "model_performance", "quant_reporting_model_perf",
-     "Model performance report."},
-    {"quant_reporting", "cumulative_returns", "quant_reporting_cumret",
-     "Cumulative-returns report."},
-    {"quant_reporting", "risk_report", "quant_reporting_risk",
-     "Risk-analysis report."},
-    {"quant_reporting", "factor_quantiles", "quant_reporting_factor_quantiles",
-     "Factor quantile / decile report."},
-    {"cfa_quant", "trend_analysis", "quant_cfa_trend",
-     "CFA-style trend analysis on a time series."},
-    {"cfa_quant", "stationarity_test", "quant_cfa_stationarity",
-     "CFA-style stationarity tests (ADF, KPSS)."},
-    {"cfa_quant", "arima_model", "quant_cfa_arima",
-     "Fit an ARIMA model (CFA wrapper)."},
-    {"cfa_quant", "supervised_learning", "quant_cfa_supervised",
-     "Supervised-learning prediction (CFA wrapper)."},
+    {"quant_reporting", "check_status", "quant_reporting_status", "Check the quant-reporting service status."},
+    {"quant_reporting", "ic_analysis", "quant_reporting_ic", "IC analysis report."},
+    {"quant_reporting", "model_performance", "quant_reporting_model_perf", "Model performance report."},
+    {"quant_reporting", "cumulative_returns", "quant_reporting_cumret", "Cumulative-returns report."},
+    {"quant_reporting", "risk_report", "quant_reporting_risk", "Risk-analysis report."},
+    {"quant_reporting", "factor_quantiles", "quant_reporting_factor_quantiles", "Factor quantile / decile report."},
+    {"cfa_quant", "trend_analysis", "quant_cfa_trend", "CFA-style trend analysis on a time series."},
+    {"cfa_quant", "stationarity_test", "quant_cfa_stationarity", "CFA-style stationarity tests (ADF, KPSS)."},
+    {"cfa_quant", "arima_model", "quant_cfa_arima", "Fit an ARIMA model (CFA wrapper)."},
+    {"cfa_quant", "supervised_learning", "quant_cfa_supervised", "Supervised-learning prediction (CFA wrapper)."},
     {"cfa_quant", "unsupervised_learning", "quant_cfa_unsupervised",
      "Unsupervised-learning analysis (PCA, clustering)."},
-    {"cfa_quant", "resampling_methods", "quant_cfa_resampling",
-     "Bootstrap / resampling-based inference."},
-    {"cfa_quant", "validate_data", "quant_cfa_validate_data",
-     "Validate input data quality."},
-    {"gs_quant", "risk_metrics", "quant_gs_risk_metrics",
-     "GS-Quant risk metrics (VaR, ES, vol, beta, etc)."},
-    {"gs_quant", "portfolio_analytics", "quant_gs_portfolio_analytics",
-     "GS-Quant portfolio analytics."},
-    {"gs_quant", "greeks", "quant_gs_greeks",
-     "GS-Quant options Greeks."},
-    {"gs_quant", "var_analysis", "quant_gs_var_analysis",
-     "GS-Quant VaR analysis."},
-    {"gs_quant", "stress_test", "quant_gs_stress_test",
-     "GS-Quant scenario stress test."},
-    {"gs_quant", "backtest", "quant_gs_backtest",
-     "GS-Quant backtest engine."},
-    {"gs_quant", "statistics", "quant_gs_statistics",
-     "GS-Quant descriptive statistics."},
-    {"statsmodels", "check_status", "quant_statsmodels_status",
-     "Statsmodels service status."},
-    {"statsmodels", "ols", "quant_statsmodels_ols",
-     "Statsmodels OLS regression."},
-    {"statsmodels", "arima", "quant_statsmodels_arima",
-     "Statsmodels ARIMA fit."},
+    {"cfa_quant", "resampling_methods", "quant_cfa_resampling", "Bootstrap / resampling-based inference."},
+    {"cfa_quant", "validate_data", "quant_cfa_validate_data", "Validate input data quality."},
+    {"gs_quant", "risk_metrics", "quant_gs_risk_metrics", "GS-Quant risk metrics (VaR, ES, vol, beta, etc)."},
+    {"gs_quant", "portfolio_analytics", "quant_gs_portfolio_analytics", "GS-Quant portfolio analytics."},
+    {"gs_quant", "greeks", "quant_gs_greeks", "GS-Quant options Greeks."},
+    {"gs_quant", "var_analysis", "quant_gs_var_analysis", "GS-Quant VaR analysis."},
+    {"gs_quant", "stress_test", "quant_gs_stress_test", "GS-Quant scenario stress test."},
+    {"gs_quant", "backtest", "quant_gs_backtest", "GS-Quant backtest engine."},
+    {"gs_quant", "statistics", "quant_gs_statistics", "GS-Quant descriptive statistics."},
+    {"statsmodels", "check_status", "quant_statsmodels_status", "Statsmodels service status."},
+    {"statsmodels", "ols", "quant_statsmodels_ols", "Statsmodels OLS regression."},
+    {"statsmodels", "arima", "quant_statsmodels_arima", "Statsmodels ARIMA fit."},
     {"statsmodels", "stationarity_tests", "quant_statsmodels_stationarity",
      "Statsmodels stationarity tests (ADF, KPSS, PP)."},
-    {"statsmodels", "acf_pacf", "quant_statsmodels_acf_pacf",
-     "ACF and PACF computation."},
-    {"statsmodels", "granger_causality", "quant_statsmodels_granger",
-     "Granger causality test."},
-    {"statsmodels", "descriptive", "quant_statsmodels_descriptive",
-     "Descriptive statistics."},
+    {"statsmodels", "acf_pacf", "quant_statsmodels_acf_pacf", "ACF and PACF computation."},
+    {"statsmodels", "granger_causality", "quant_statsmodels_granger", "Granger causality test."},
+    {"statsmodels", "descriptive", "quant_statsmodels_descriptive", "Descriptive statistics."},
     // functime / gluonts / fortitudo have no dedicated rows: the old rows
     // named commands of the wrong scripts. The service now maps them to their
     // real wrappers (Analytics/{functime,gluonts,fortitudo_tech}_wrapper/
@@ -222,8 +161,7 @@ constexpr std::size_t kCatalogSize = sizeof(kCatalog) / sizeof(kCatalog[0]);
 // module_id). Two concurrent calls into the same module CAN have their
 // errors crossed. This mirrors the existing screen code's filter; until
 // the service grows per-call IDs there's no clean fix.
-void dispatch_quant_async(const QString& module_id, const QString& command,
-                          const QJsonObject& params, ToolContext ctx,
+void dispatch_quant_async(const QString& module_id, const QString& command, const QJsonObject& params, ToolContext ctx,
                           std::shared_ptr<QPromise<ToolResult>> promise) {
     auto* svc = &services::quant::AIQuantLabService::instance();
 
@@ -235,47 +173,42 @@ void dispatch_quant_async(const QString& module_id, const QString& command,
     // progress (no signals between run_module() and result_ready) — when
     // it does, plumb them into ctx.on_progress here.
     if (ctx.on_progress) {
-        ctx.on_progress(
-            0.0,
-            QStringLiteral("starting %1:%2…").arg(module_id, command));
+        ctx.on_progress(0.0, QStringLiteral("starting %1:%2…").arg(module_id, command));
     }
 
-    AsyncDispatch::callback_to_promise(
-        svc, ctx, promise,
-        [svc, module_id, command, params, ctx](auto resolve) {
-            auto* holder = new QObject(svc);
-            QObject::connect(svc, &services::quant::AIQuantLabService::result_ready, holder,
-                              [module_id, command, resolve, holder, ctx](QString mid, QString cmd,
-                                                                          QJsonObject data) {
-                                  if (mid != module_id || cmd != command)
-                                      return;
-                                  if (ctx.on_progress)
-                                      ctx.on_progress(1.0, QStringLiteral("done"));
-                                  // Some service paths emit result_ready with an in-band
-                                  // {"success": false / "error": ...} payload — that is a failure.
-                                  const QJsonValue ev = data.value("error");
-                                  const bool has_error = ev.isString() ? !ev.toString().isEmpty()
-                                                                       : (!ev.isUndefined() && !ev.isNull() &&
-                                                                          !(ev.isBool() && !ev.toBool()));
-                                  if (has_error || data.value("success").toBool(true) == false)
-                                      resolve(ToolResult::fail(ev.isString() && !ev.toString().isEmpty()
-                                                                   ? ev.toString()
-                                                                   : QStringLiteral("%1:%2 reported failure")
-                                                                         .arg(module_id, command)));
-                                  else
-                                      resolve(ToolResult::ok_data(data));
-                                  holder->deleteLater();
-                              });
-            QObject::connect(svc, &services::quant::AIQuantLabService::error_occurred, holder,
-                              [module_id, resolve, holder](QString mid, QString msg) {
-                                  if (mid != module_id)
-                                      return;
-                                  resolve(ToolResult::fail(
-                                      msg.isEmpty() ? QStringLiteral("%1 failed").arg(module_id) : msg));
-                                  holder->deleteLater();
-                              });
-            svc->run_module(module_id, command, params);
-        });
+    AsyncDispatch::callback_to_promise(svc, ctx, promise, [svc, module_id, command, params, ctx](auto resolve) {
+        auto* holder = new QObject(svc);
+        QObject::connect(
+            svc, &services::quant::AIQuantLabService::result_ready, holder,
+            [module_id, command, resolve, holder, ctx](QString mid, QString cmd, QJsonObject data) {
+                if (mid != module_id || cmd != command)
+                    return;
+                if (ctx.on_progress)
+                    ctx.on_progress(1.0, QStringLiteral("done"));
+                // Some service paths emit result_ready with an in-band
+                // {"success": false / "error": ...} payload — that is a failure.
+                const QJsonValue ev = data.value("error");
+                const bool has_error = ev.isString()
+                                           ? !ev.toString().isEmpty()
+                                           : (!ev.isUndefined() && !ev.isNull() && !(ev.isBool() && !ev.toBool()));
+                if (has_error || data.value("success").toBool(true) == false)
+                    resolve(ToolResult::fail(ev.isString() && !ev.toString().isEmpty()
+                                                 ? ev.toString()
+                                                 : QStringLiteral("%1:%2 reported failure").arg(module_id, command)));
+                else
+                    resolve(ToolResult::ok_data(data));
+                holder->deleteLater();
+            });
+        QObject::connect(svc, &services::quant::AIQuantLabService::error_occurred, holder,
+                         [module_id, resolve, holder](QString mid, QString msg) {
+                             if (mid != module_id)
+                                 return;
+                             resolve(
+                                 ToolResult::fail(msg.isEmpty() ? QStringLiteral("%1 failed").arg(module_id) : msg));
+                             holder->deleteLater();
+                         });
+        svc->run_module(module_id, command, params);
+    });
 }
 
 ToolSchema generic_params_schema(const QString& command_hint = {}) {
@@ -323,8 +256,9 @@ std::vector<ToolDef> get_quant_lab_tools() {
         t.description = "List known commands per AI Quant Lab module, with short descriptions.";
         t.category = "quant-lab";
         t.input_schema = ToolSchemaBuilder()
-            .string("module_id", "Filter by module id (empty = all modules)").default_str("")
-            .build();
+                             .string("module_id", "Filter by module id (empty = all modules)")
+                             .default_str("")
+                             .build();
         t.handler = [](const QJsonObject& args) -> ToolResult {
             const QString filter = args["module_id"].toString();
             QJsonObject by_module;
@@ -354,12 +288,15 @@ std::vector<ToolDef> get_quant_lab_tools() {
         t.is_destructive = true;
         t.default_timeout_ms = kQuantLabTimeoutMs;
         t.input_schema = ToolSchemaBuilder()
-            .string("module_id", "Module id (use list_quant_modules)").required().length(1, 64)
-            .string("command", "Module command (use list_quant_module_commands)").required().length(1, 64)
-            .object("params", "Module-specific arguments object")
-            .build();
-        t.async_handler = [](const QJsonObject& args, ToolContext ctx,
-                              std::shared_ptr<QPromise<ToolResult>> promise) {
+                             .string("module_id", "Module id (use list_quant_modules)")
+                             .required()
+                             .length(1, 64)
+                             .string("command", "Module command (use list_quant_module_commands)")
+                             .required()
+                             .length(1, 64)
+                             .object("params", "Module-specific arguments object")
+                             .build();
+        t.async_handler = [](const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             const QString module_id = args["module_id"].toString();
             const QString command = args["command"].toString();
             const QJsonObject params = args["params"].toObject();
@@ -382,7 +319,7 @@ std::vector<ToolDef> get_quant_lab_tools() {
         const QString module_id = QString::fromUtf8(e.module_id);
         const QString command = QString::fromUtf8(e.command);
         t.async_handler = [module_id, command](const QJsonObject& args, ToolContext ctx,
-                                                std::shared_ptr<QPromise<ToolResult>> promise) {
+                                               std::shared_ptr<QPromise<ToolResult>> promise) {
             dispatch_quant_async(module_id, command, args["params"].toObject(), std::move(ctx), promise);
         };
         tools.push_back(std::move(t));

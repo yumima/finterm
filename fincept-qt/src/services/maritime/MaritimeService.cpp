@@ -2,11 +2,10 @@
 #include "services/maritime/MaritimeService.h"
 
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "network/http/HttpClient.h"
 #include "storage/cache/CacheManager.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -19,7 +18,7 @@ namespace {
 inline void publish_to_hub(const QString& topic, const QVariant& value) {
     fincept::datahub::DataHub::instance().publish(topic, value);
 }
-}  // namespace
+} // namespace
 
 // Maritime intelligence endpoint was served by the external stub (now removed).
 // Every fetch method reports "unavailable" via error_occurred instead of
@@ -117,8 +116,7 @@ void MaritimeService::get_vessel_position(const QString& imo) {
     QPointer<MaritimeService> self = this;
     const QString imo_trimmed = imo.trimmed();
     HttpClient::instance().post(
-        QString(kMarineBase) + "/vessel/position", body,
-        [self, cache_key, imo_trimmed](Result<QJsonDocument> result) {
+        QString(kMarineBase) + "/vessel/position", body, [self, cache_key, imo_trimmed](Result<QJsonDocument> result) {
             if (!self)
                 return;
             if (!result.is_ok()) {
@@ -216,8 +214,7 @@ void MaritimeService::get_vessel_history(const QString& imo) {
     QPointer<MaritimeService> self = this;
     const QString imo_trimmed = imo.trimmed();
     HttpClient::instance().post(
-        QString(kMarineBase) + "/vessel/history", body,
-        [self, cache_key, imo_trimmed](Result<QJsonDocument> result) {
+        QString(kMarineBase) + "/vessel/history", body, [self, cache_key, imo_trimmed](Result<QJsonDocument> result) {
             if (!self)
                 return;
             if (!result.is_ok()) {
@@ -237,8 +234,7 @@ void MaritimeService::get_vessel_history(const QString& imo) {
                 history.append(self->parse_vessel(v.toObject()));
             emit self->vessel_history_loaded(history);
             if (self->hub_registered_)
-                publish_to_hub(QStringLiteral("maritime:history:") + imo_trimmed,
-                               QVariant::fromValue(history));
+                publish_to_hub(QStringLiteral("maritime:history:") + imo_trimmed, QVariant::fromValue(history));
         });
 }
 
@@ -278,8 +274,7 @@ void MaritimeService::refresh(const QStringList& topics) {
             get_vessel_position(parts[2]);
         } else if (parts.size() >= 3 && parts[1] == QStringLiteral("history")) {
             get_vessel_history(parts[2]);
-        } else if (parts.size() == 3 && parts[1] == QStringLiteral("vessels") &&
-                   parts[2] == QStringLiteral("multi")) {
+        } else if (parts.size() == 3 && parts[1] == QStringLiteral("vessels") && parts[2] == QStringLiteral("multi")) {
             search_vessels_by_area({});
         } else if (topic == QStringLiteral("maritime:health")) {
             check_health();
@@ -288,11 +283,12 @@ void MaritimeService::refresh(const QStringList& topics) {
 }
 
 int MaritimeService::max_requests_per_sec() const {
-    return 2;  // Fincept marine API — conservative
+    return 2; // Fincept marine API — conservative
 }
 
 void MaritimeService::ensure_registered_with_hub() {
-    if (hub_registered_) return;
+    if (hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
     hub.register_producer(this);
 

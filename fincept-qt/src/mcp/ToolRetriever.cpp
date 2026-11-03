@@ -35,18 +35,102 @@ void ToolRetriever::invalidate() {
 // — those are the ones that matter for tool-pick.
 static const QSet<QString>& stop_word_set() {
     static const QSet<QString> kStop = {
-        "a", "an", "and", "are", "as", "at", "be", "by", "for", "from",
-        "has", "he", "in", "is", "it", "its", "of", "on", "or", "that",
-        "the", "to", "was", "were", "will", "with", "this", "these", "those",
-        "i", "me", "my", "we", "us", "you", "your", "they", "them",
-        "but", "if", "so", "do", "does", "did", "have", "had", "having",
-        "can", "could", "should", "would", "may", "might", "must",
-        "what", "which", "who", "whom", "whose", "where", "when", "why", "how",
-        "all", "any", "both", "each", "few", "more", "most", "other", "some",
-        "such", "no", "not", "only", "own", "same", "than", "too", "very",
-        "just", "also", "now", "then", "here", "there",
+        "a",
+        "an",
+        "and",
+        "are",
+        "as",
+        "at",
+        "be",
+        "by",
+        "for",
+        "from",
+        "has",
+        "he",
+        "in",
+        "is",
+        "it",
+        "its",
+        "of",
+        "on",
+        "or",
+        "that",
+        "the",
+        "to",
+        "was",
+        "were",
+        "will",
+        "with",
+        "this",
+        "these",
+        "those",
+        "i",
+        "me",
+        "my",
+        "we",
+        "us",
+        "you",
+        "your",
+        "they",
+        "them",
+        "but",
+        "if",
+        "so",
+        "do",
+        "does",
+        "did",
+        "have",
+        "had",
+        "having",
+        "can",
+        "could",
+        "should",
+        "would",
+        "may",
+        "might",
+        "must",
+        "what",
+        "which",
+        "who",
+        "whom",
+        "whose",
+        "where",
+        "when",
+        "why",
+        "how",
+        "all",
+        "any",
+        "both",
+        "each",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "not",
+        "only",
+        "own",
+        "same",
+        "than",
+        "too",
+        "very",
+        "just",
+        "also",
+        "now",
+        "then",
+        "here",
+        "there",
         // Generic verbs that carry no discriminative weight in tool descs
-        "get", "set", "list", "show", "give", "make", "use", "run",
+        "get",
+        "set",
+        "list",
+        "show",
+        "give",
+        "make",
+        "use",
+        "run",
     };
     return kStop;
 }
@@ -151,8 +235,7 @@ void ToolRetriever::rebuild_index_locked() {
 
 // ── Search ──────────────────────────────────────────────────────────────
 
-std::vector<ToolMatch> ToolRetriever::search(const QString& query, int top_k,
-                                              const QString& category_filter) {
+std::vector<ToolMatch> ToolRetriever::search(const QString& query, int top_k, const QString& category_filter) {
     const QString q = query.trimmed();
     if (q.isEmpty())
         return {};
@@ -185,7 +268,10 @@ std::vector<ToolMatch> ToolRetriever::search(const QString& query, int top_k,
     // ("idf = log((N - df + 0.5) / (df + 0.5) + 1)") — keeps IDF non-negative
     // even for very common terms, which matters when the catalog is small.
 
-    struct Scored { int doc_idx; double score; };
+    struct Scored {
+        int doc_idx;
+        double score;
+    };
     std::vector<Scored> scored;
     scored.reserve(docs_.size());
 
@@ -235,8 +321,7 @@ std::vector<ToolMatch> ToolRetriever::search(const QString& query, int top_k,
                           [](const Scored& a, const Scored& b) { return a.score > b.score; });
         scored.resize(top_k);
     } else {
-        std::sort(scored.begin(), scored.end(),
-                  [](const Scored& a, const Scored& b) { return a.score > b.score; });
+        std::sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) { return a.score > b.score; });
     }
 
     // ── Build result ───────────────────────────────────────────────────
@@ -257,10 +342,8 @@ std::vector<ToolMatch> ToolRetriever::search(const QString& query, int top_k,
         out.push_back(std::move(m));
     }
 
-    LOG_INFO(TAG, QString("BM25 search: query=\"%1\" → %2 results (cap=%3)")
-                      .arg(q.left(80))
-                      .arg(out.size())
-                      .arg(top_k));
+    LOG_INFO(TAG,
+             QString("BM25 search: query=\"%1\" → %2 results (cap=%3)").arg(q.left(80)).arg(out.size()).arg(top_k));
     return out;
 }
 

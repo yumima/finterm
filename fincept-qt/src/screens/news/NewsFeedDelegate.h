@@ -18,7 +18,7 @@ class NewsFeedDelegate : public QStyledItemDelegate {
     // Source-column width is user-adjustable. NewsFeedPanel installs a
     // drag handle on the list viewport that calls set_source_col_width().
     void set_source_col_width(int px);
-    int  source_col_width() const { return source_col_width_; }
+    int source_col_width() const { return source_col_width_; }
 
     static constexpr int kSourceColMin = 60;
     static constexpr int kSourceColMax = 220;

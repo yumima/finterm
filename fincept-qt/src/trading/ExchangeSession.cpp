@@ -66,7 +66,7 @@ void ExchangeSession::set_credentials(const ExchangeCredentials& creds) {
 
     auto put_or_remove = [&](const QString& key, const QString& value) {
         if (value.isEmpty()) {
-            (void) ss.remove(key);
+            (void)ss.remove(key);
         } else {
             auto r = ss.store(key, value);
             if (r.is_err())
@@ -77,8 +77,9 @@ void ExchangeSession::set_credentials(const ExchangeCredentials& creds) {
     put_or_remove(k_sec, creds.secret);
     put_or_remove(k_pw, creds.password);
 
-    LOG_INFO(kSessionTag, QString("Credentials updated for %1 (persisted=%2)")
-                              .arg(exchange_id_, creds.api_key.isEmpty() ? "no" : "yes"));
+    LOG_INFO(
+        kSessionTag,
+        QString("Credentials updated for %1 (persisted=%2)").arg(exchange_id_, creds.api_key.isEmpty() ? "no" : "yes"));
 }
 
 void ExchangeSession::load_stored_credentials() {
@@ -182,9 +183,8 @@ bool ExchangeSession::start_ws(const QString& primary_symbol, const QStringList&
             LOG_WARN(kSessionTag, QString("[%1] WS stderr: %2").arg(exchange_id_, err));
     });
     connect(ws_process_, &QProcess::errorOccurred, this, [this](QProcess::ProcessError err) {
-        LOG_ERROR(kSessionTag, QString("[%1] WS process errorOccurred: %2")
-                                    .arg(exchange_id_)
-                                    .arg(static_cast<int>(err)));
+        LOG_ERROR(kSessionTag,
+                  QString("[%1] WS process errorOccurred: %2").arg(exchange_id_).arg(static_cast<int>(err)));
         ws_connected_ = false;
     });
 
@@ -377,7 +377,8 @@ void ExchangeSession::drain_ws_buffer() {
     if (ws_process_ && ws_process_->canReadLine()) {
         QPointer<ExchangeSession> self = this;
         QTimer::singleShot(1, this, [self]() {
-            if (self) self->drain_ws_buffer();
+            if (self)
+                self->drain_ws_buffer();
         });
     }
 }

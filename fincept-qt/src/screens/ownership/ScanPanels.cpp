@@ -1,7 +1,6 @@
 #include "screens/ownership/ScanPanels.h"
 
 #include "screens/ownership/FirmDetailPanel.h"
-
 #include "screens/ownership/OwnershipUi.h"
 #include "services/ownership/OwnershipService.h"
 #include "ui/components/TooltipText.h"
@@ -52,9 +51,8 @@ void connect_open(QTableWidget* t, QObject* owner, std::function<void(const QStr
 QTableWidgetItem* ticker_cell(const QString& sym, const QString& name) {
     auto* it = cell(sym.isEmpty() ? fmt::placeholder() : sym, sym.isEmpty() ? QString() : ui::colors::AMBER());
     it->setData(Qt::UserRole, sym);
-    it->setToolTip(ui::tooltip_wrap(sym.isEmpty()
-                                        ? QStringLiteral("%1 — the filing named no ticker").arg(name)
-                                        : QStringLiteral("%1 — click to open in Equity Research").arg(name)));
+    it->setToolTip(ui::tooltip_wrap(sym.isEmpty() ? QStringLiteral("%1 — the filing named no ticker").arg(name)
+                                                  : QStringLiteral("%1 — click to open in Equity Research").arg(name)));
     return it;
 }
 
@@ -85,9 +83,9 @@ InsiderBuysPanel::InsiderBuysPanel(QWidget* parent) : QWidget(parent) {
     min_insiders_ = new QSpinBox;
     min_insiders_->setRange(1, 6);
     min_insiders_->setValue(2);
-    min_insiders_->setToolTip(ui::tooltip_wrap(QStringLiteral(
-        "A cluster is a group-by with a floor you set, not a constant. Two distinct buyers is "
-        "OpenInsider's default; Lakonishok & Lee measured three.")));
+    min_insiders_->setToolTip(ui::tooltip_wrap(
+        QStringLiteral("A cluster is a group-by with a floor you set, not a constant. Two distinct buyers is "
+                       "OpenInsider's default; Lakonishok & Lee measured three.")));
     bar->addWidget(min_insiders_);
     bar->addWidget(control_label(QStringLiteral("Min value")));
     min_value_ = new QComboBox;
@@ -99,15 +97,15 @@ InsiderBuysPanel::InsiderBuysPanel(QWidget* parent) : QWidget(parent) {
     bar->addWidget(min_value_);
     exclude_ten_pct_ = new QCheckBox(QStringLiteral("exclude 10% owners"));
     exclude_ten_pct_->setChecked(true);
-    exclude_ten_pct_->setToolTip(ui::tooltip_wrap(QStringLiteral(
-        "A 10% beneficial owner is a holder, not an insider in the sense the evidence is about; "
-        "their purchase ranking inverts (Lakonishok & Lee).")));
+    exclude_ten_pct_->setToolTip(ui::tooltip_wrap(
+        QStringLiteral("A 10% beneficial owner is a holder, not an insider in the sense the evidence is about; "
+                       "their purchase ranking inverts (Lakonishok & Lee).")));
     bar->addWidget(exclude_ten_pct_);
     exclude_plan_ = new QCheckBox(QStringLiteral("exclude 10b5-1 plans"));
     exclude_plan_->setChecked(true);
-    exclude_plan_->setToolTip(ui::tooltip_wrap(QStringLiteral(
-        "A plan trade was decided months before it printed. The flag is on filings since 2023; "
-        "older rows are unknown and are kept.")));
+    exclude_plan_->setToolTip(ui::tooltip_wrap(
+        QStringLiteral("A plan trade was decided months before it printed. The flag is on filings since 2023; "
+                       "older rows are unknown and are kept.")));
     bar->addWidget(exclude_plan_);
     bar->addStretch(1);
     root->addLayout(bar);
@@ -175,13 +173,15 @@ void InsiderBuysPanel::render() {
         table_->setItem(i, 0, ticker_cell(r.symbol, r.issuer));
         table_->setItem(i, 1, cell(r.issuer));
         auto* n = num_cell(QString::number(r.insiders), r.insiders >= 2 ? ui::colors::GREEN() : QString());
-        n->setToolTip(ui::tooltip_wrap(QStringLiteral("%1 distinct buyer%2, %3 trade%4%5")
-                                           .arg(r.insiders).arg(r.insiders == 1 ? QString() : QStringLiteral("s"))
-                                           .arg(r.trades).arg(r.trades == 1 ? QString() : QStringLiteral("s"))
-                                           .arg(r.plan_unknown > 0
-                                                    ? QStringLiteral("\n%1 row(s) read before the 10b5-1 column existed")
-                                                          .arg(r.plan_unknown)
-                                                    : QString())));
+        n->setToolTip(ui::tooltip_wrap(
+            QStringLiteral("%1 distinct buyer%2, %3 trade%4%5")
+                .arg(r.insiders)
+                .arg(r.insiders == 1 ? QString() : QStringLiteral("s"))
+                .arg(r.trades)
+                .arg(r.trades == 1 ? QString() : QStringLiteral("s"))
+                .arg(r.plan_unknown > 0
+                         ? QStringLiteral("\n%1 row(s) read before the 10b5-1 column existed").arg(r.plan_unknown)
+                         : QString())));
         table_->setItem(i, 2, n);
         auto* roles = cell(r.roles.join(QStringLiteral(", ")), ui::colors::TEXT_SECONDARY());
         roles->setToolTip(ui::tooltip_wrap(r.roles.join(QStringLiteral("\n"))));
@@ -195,10 +195,11 @@ void InsiderBuysPanel::render() {
             "How much the largest buy grew the buyer's own holding: shares bought over shares held "
             "before. A $50K buy from someone holding $50M is noise; the same buy doubling a stake is not.")));
         table_->setItem(i, 7, stake);
-        table_->setItem(i, 8, cell(r.first_trade == r.last_trade || !r.first_trade.isValid()
-                                       ? date_or_dash(r.last_trade)
-                                       : QStringLiteral("%1 – %2").arg(r.first_trade.toString(QStringLiteral("d MMM")),
-                                                                       r.last_trade.toString(QStringLiteral("d MMM")))));
+        table_->setItem(i, 8,
+                        cell(r.first_trade == r.last_trade || !r.first_trade.isValid()
+                                 ? date_or_dash(r.last_trade)
+                                 : QStringLiteral("%1 – %2").arg(r.first_trade.toString(QStringLiteral("d MMM")),
+                                                                 r.last_trade.toString(QStringLiteral("d MMM")))));
         table_->setItem(i, 9, cell(date_or_dash(r.last_filed), ui::colors::TEXT_SECONDARY()));
         auto ret = [&](const std::optional<double>& v, const QDate& due) {
             auto* it = num_cell(v ? pct_or_dash(v, 1, true) : fmt::placeholder(), signed_colour(v));
@@ -206,8 +207,8 @@ void InsiderBuysPanel::render() {
                 it->setToolTip(ui::tooltip_wrap(
                     due > QDate::currentDate()
                         ? QStringLiteral("Not yet — the window ends %1.").arg(due.toString(QStringLiteral("d MMM")))
-                        : ib.returns_ok ? QStringLiteral("No close on file for this window.")
-                                        : QStringLiteral("Prices loading.")));
+                    : ib.returns_ok ? QStringLiteral("No close on file for this window.")
+                                    : QStringLiteral("Prices loading.")));
             return it;
         };
         table_->setItem(i, 10, ret(r.ret_1w, r.last_trade.addDays(7)));
@@ -251,16 +252,15 @@ ShortRankPanel::ShortRankPanel(QWidget* parent) : QWidget(parent) {
     root->addLayout(bar);
 
     table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("SI ÷ 13F"),
-                         QStringLiteral("Days to cover"), QStringLiteral("Shares short"),
-                         QStringLiteral("vs prior"), QStringLiteral("13F shares"), QStringLiteral("Holders"),
-                         QStringLiteral("Avg daily vol")});
+                         QStringLiteral("Days to cover"), QStringLiteral("Shares short"), QStringLiteral("vs prior"),
+                         QStringLiteral("13F shares"), QStringLiteral("Holders"), QStringLiteral("Avg daily vol")});
     connect_open(table_, this, [this](const QString& s) { emit stock_activated(s); });
     root->addWidget(table_, 1);
     foot_ = note_label();
     root->addWidget(foot_);
 
-    connect(&services::OwnershipService::instance(), &services::OwnershipService::short_rank_updated,
-            this, [this]() { render(); });
+    connect(&services::OwnershipService::instance(), &services::OwnershipService::short_rank_updated, this,
+            [this]() { render(); });
     render();
 }
 
@@ -274,9 +274,10 @@ void ShortRankPanel::render() {
     const auto& sr = svc.short_rank();
     if (!sr.loaded) {
         table_->setRowCount(0);
-        title_note_->setText(svc.short_rank_loading()
-                                 ? QStringLiteral("fetching the latest FINRA settlement — ~15,000 symbols, three pages…")
-                                 : QString());
+        title_note_->setText(
+            svc.short_rank_loading()
+                ? QStringLiteral("fetching the latest FINRA settlement — ~15,000 symbols, three pages…")
+                : QString());
         foot_->clear();
         return;
     }
@@ -304,17 +305,20 @@ void ShortRankPanel::render() {
         table_->setItem(i, 1, cell(r.name));
         auto* sirio = num_cell(r.sirio ? QString::number(*r.sirio, 'f', 3) : fmt::placeholder(),
                                r.sirio && top_decile > 0 && *r.sirio >= top_decile ? ui::colors::AMBER() : QString());
-        sirio->setToolTip(ui::tooltip_wrap(QStringLiteral(
-            "Shares short over shares held by 13F filers — Drechsler & Drechsler's proxy for the "
-            "borrow fee (1.51%/mo four-factor alpha, 1980–2013). Amber: top decile. A value near or "
-            "above 1 means the short exceeds the institutional book — an ADR or a name whose "
-            "holders are mostly not 13F filers.")));
+        sirio->setToolTip(ui::tooltip_wrap(
+            QStringLiteral("Shares short over shares held by 13F filers — Drechsler & Drechsler's proxy for the "
+                           "borrow fee (1.51%/mo four-factor alpha, 1980–2013). Amber: top decile. A value near or "
+                           "above 1 means the short exceeds the institutional book — an ADR or a name whose "
+                           "holders are mostly not 13F filers.")));
         table_->setItem(i, 2, sirio);
-        table_->setItem(i, 3, num_cell(r.days_to_cover ? QString::number(*r.days_to_cover, 'f', 1) : fmt::placeholder(),
-                                       r.days_to_cover && *r.days_to_cover >= 5.0 ? ui::colors::AMBER() : QString()));
+        table_->setItem(i, 3,
+                        num_cell(r.days_to_cover ? QString::number(*r.days_to_cover, 'f', 1) : fmt::placeholder(),
+                                 r.days_to_cover && *r.days_to_cover >= 5.0 ? ui::colors::AMBER() : QString()));
         table_->setItem(i, 4, num_cell(compact_or_dash(r.shares_short)));
-        table_->setItem(i, 5, num_cell(pct_or_dash(r.change_pct, 0, true),
-                                       r.change_pct ? (*r.change_pct > 0 ? ui::colors::RED() : ui::colors::GREEN()) : QString()));
+        table_->setItem(
+            i, 5,
+            num_cell(pct_or_dash(r.change_pct, 0, true),
+                     r.change_pct ? (*r.change_pct > 0 ? ui::colors::RED() : ui::colors::GREEN()) : QString()));
         table_->setItem(i, 6, num_cell(compact_or_dash(r.inst_shares)));
         table_->setItem(i, 7, num_cell(QString::number(r.holders)));
         table_->setItem(i, 8, num_cell(compact_or_dash(r.avg_daily_volume), ui::colors::TEXT_SECONDARY()));
@@ -327,7 +331,9 @@ void ShortRankPanel::render() {
                                   "%3 funds and ETFs dropped by name · holders ≥ 50 · a risk screen, not a "
                                   "portfolio: the effect is small-cap and value-weighted zero, and squeeze "
                                   "cost at high utilisation eats two-thirds of it (Schultz 2024)")
-                       .arg(sr.symbols).arg(sr.joined).arg(sr.funds_dropped));
+                       .arg(sr.symbols)
+                       .arg(sr.joined)
+                       .arg(sr.funds_dropped));
 }
 
 // ── 13F MOVERS ───────────────────────────────────────────────────────────────
@@ -357,16 +363,15 @@ MoversPanel::MoversPanel(QWidget* parent) : QWidget(parent) {
 
     table_ = make_table({QStringLiteral("Ticker"), QStringLiteral("Company"), QStringLiteral("Holders"),
                          QStringLiteral("Δ holders"), QStringLiteral("New"), QStringLiteral("Closed"),
-                         QStringLiteral("Added"), QStringLiteral("Reduced"),
-                         QStringLiteral("Focused net shares"), QStringLiteral("Top-10 %"),
-                         QStringLiteral("13F value")});
+                         QStringLiteral("Added"), QStringLiteral("Reduced"), QStringLiteral("Focused net shares"),
+                         QStringLiteral("Top-10 %"), QStringLiteral("13F value")});
     connect_open(table_, this, [this](const QString& s) { emit stock_activated(s); });
     root->addWidget(table_, 1);
     foot_ = note_label();
     root->addWidget(foot_);
 
-    connect(&services::OwnershipService::instance(), &services::OwnershipService::movers_updated,
-            this, [this]() { render(); });
+    connect(&services::OwnershipService::instance(), &services::OwnershipService::movers_updated, this,
+            [this]() { render(); });
     render();
 }
 
@@ -394,8 +399,10 @@ void MoversPanel::render() {
         return;
     }
     title_note_->setText(QStringLiteral("Q%1 %2 vs Q%3 %4 · filed by %5 · positions up to 135 days old")
-                             .arg((m.quarter.month() - 1) / 3 + 1).arg(m.quarter.year())
-                             .arg((m.prior_quarter.month() - 1) / 3 + 1).arg(m.prior_quarter.year())
+                             .arg((m.quarter.month() - 1) / 3 + 1)
+                             .arg(m.quarter.year())
+                             .arg((m.prior_quarter.month() - 1) / 3 + 1)
+                             .arg(m.prior_quarter.year())
                              .arg(m.quarter.addDays(45).toString(QStringLiteral("d MMM yyyy"))));
 
     table_->setUpdatesEnabled(false);
@@ -407,12 +414,16 @@ void MoversPanel::render() {
                           r.fund ? ui::colors::TEXT_SECONDARY() : QString());
         table_->setItem(i, 1, name);
         table_->setItem(i, 2, num_cell(QLocale().toString(r.holders)));
-        auto* d = num_cell((r.delta_holders > 0 ? QStringLiteral("+") : QString()) + QLocale().toString(r.delta_holders),
-                           r.delta_holders > 0 ? ui::colors::GREEN() : r.delta_holders < 0 ? ui::colors::RED() : QString());
+        auto* d =
+            num_cell((r.delta_holders > 0 ? QStringLiteral("+") : QString()) + QLocale().toString(r.delta_holders),
+                     r.delta_holders > 0   ? ui::colors::GREEN()
+                     : r.delta_holders < 0 ? ui::colors::RED()
+                                           : QString());
         if (r.holders_prior < r.holders / 10)
-            d->setToolTip(ui::tooltip_wrap(QStringLiteral(
-                "%1 holders a quarter ago — a new listing, a spin-off or a newly mapped CUSIP, not a "
-                "wave of buying.").arg(r.holders_prior)));
+            d->setToolTip(ui::tooltip_wrap(
+                QStringLiteral("%1 holders a quarter ago — a new listing, a spin-off or a newly mapped CUSIP, not a "
+                               "wave of buying.")
+                    .arg(r.holders_prior)));
         table_->setItem(i, 3, d);
         table_->setItem(i, 4, num_cell(QLocale().toString(r.new_holders), ui::colors::GREEN()));
         table_->setItem(i, 5, num_cell(QLocale().toString(r.closed), ui::colors::RED()));
@@ -423,13 +434,15 @@ void MoversPanel::render() {
             net = (*r.focused_net_shares >= 0 ? QStringLiteral("+") : QStringLiteral("−")) +
                   fmt::format_compact(std::fabs(*r.focused_net_shares));
         auto* fn = num_cell(net, signed_colour(r.focused_net_shares));
-        fn->setToolTip(ui::tooltip_wrap(QStringLiteral(
-            "Net shares across books of fewer than a thousand names, among filers present in both "
-            "quarters. Broad and index books rebalance; only a focused book decides. %1 focused holders.")
-                                            .arg(r.focused_holders)));
+        fn->setToolTip(ui::tooltip_wrap(
+            QStringLiteral(
+                "Net shares across books of fewer than a thousand names, among filers present in both "
+                "quarters. Broad and index books rebalance; only a focused book decides. %1 focused holders.")
+                .arg(r.focused_holders)));
         table_->setItem(i, 8, fn);
-        table_->setItem(i, 9, num_cell(pct_or_dash(r.top10_share, 0),
-                                       r.top10_share && *r.top10_share >= 0.6 ? ui::colors::AMBER() : QString()));
+        table_->setItem(i, 9,
+                        num_cell(pct_or_dash(r.top10_share, 0),
+                                 r.top10_share && *r.top10_share >= 0.6 ? ui::colors::AMBER() : QString()));
         table_->setItem(i, 10, num_cell(fmt::format_compact(r.value), ui::colors::TEXT_SECONDARY()));
     }
     table_->setUpdatesEnabled(true);
@@ -442,7 +455,6 @@ void MoversPanel::render() {
                                   "both quarters are compared")
                        .arg(m.rows.size()));
 }
-
 
 // ── LARGEST FUNDS ────────────────────────────────────────────────────────────
 
@@ -457,8 +469,22 @@ QString signed_compact(double v) {
 }
 
 // Column of each field, named once: the click handler and render() both use it.
-enum FundCol { kRank, kManager, kQuarter, kBook, kBookChange, kPositions, kNew, kAdded, kTrimmed, kExited,
-               kNetFlow, kTopBuy, kTopSell, kFundCols };
+enum FundCol {
+    kRank,
+    kManager,
+    kQuarter,
+    kBook,
+    kBookChange,
+    kPositions,
+    kNew,
+    kAdded,
+    kTrimmed,
+    kExited,
+    kNetFlow,
+    kTopBuy,
+    kTopSell,
+    kFundCols
+};
 
 } // namespace
 
@@ -482,20 +508,20 @@ LargestFundsPanel::LargestFundsPanel(QWidget* parent) : QWidget(parent) {
                                      "QPushButton:disabled{color:%4;border-color:%4;}")
                                  .arg(ui::colors::AMBER(), ui::colors::BORDER_DIM(), ui::colors::TEXT_PRIMARY(),
                                       ui::colors::TEXT_TERTIARY()));
-    pull_btn_->setToolTip(ui::tooltip_wrap(QStringLiteral(
-        "The SEC's bulk 13F data sets publish only after a filing window closes, so they run a "
-        "quarter behind. This reads the newest filing straight from EDGAR for the 100 largest "
-        "filers — a few minutes, and the ranking reloads when it is done.")));
+    pull_btn_->setToolTip(ui::tooltip_wrap(
+        QStringLiteral("The SEC's bulk 13F data sets publish only after a filing window closes, so they run a "
+                       "quarter behind. This reads the newest filing straight from EDGAR for the 100 largest "
+                       "filers — a few minutes, and the ranking reloads when it is done.")));
     connect(pull_btn_, &QPushButton::clicked, this,
             []() { services::OwnershipService::instance().pull_latest_filings(100); });
     bar->addWidget(pull_btn_);
     root->addLayout(bar);
 
-    table_ = make_table({QStringLiteral("#"), QStringLiteral("Manager"), QStringLiteral("Filed for"),
-                         QStringLiteral("13F book"), QStringLiteral("Δ book"), QStringLiteral("Names"),
-                         QStringLiteral("New"), QStringLiteral("Added"), QStringLiteral("Trimmed"),
-                         QStringLiteral("Exited"), QStringLiteral("Est. net flow"),
-                         QStringLiteral("Biggest buy"), QStringLiteral("Biggest sell")});
+    table_ =
+        make_table({QStringLiteral("#"), QStringLiteral("Manager"), QStringLiteral("Filed for"),
+                    QStringLiteral("13F book"), QStringLiteral("Δ book"), QStringLiteral("Names"),
+                    QStringLiteral("New"), QStringLiteral("Added"), QStringLiteral("Trimmed"), QStringLiteral("Exited"),
+                    QStringLiteral("Est. net flow"), QStringLiteral("Biggest buy"), QStringLiteral("Biggest sell")});
     // A ticker in the buy/sell columns opens that stock; anywhere else on the
     // row opens the filer's book.
     connect(table_, &QTableWidget::cellClicked, this, [this](int r, int c) {
@@ -596,18 +622,20 @@ void LargestFundsPanel::render() {
         return;
     }
     title_note_->setText(QStringLiteral("top %1 by US-listed stock book · newest filing %2")
-                             .arg(t.firms.size()).arg(quarter_label(t.newest_quarter)));
+                             .arg(t.firms.size())
+                             .arg(quarter_label(t.newest_quarter)));
 
     auto move_cell = [](const std::optional<FirmMoveTop>& m) {
-        if (!m) return cell(fmt::placeholder());
+        if (!m)
+            return cell(fmt::placeholder());
         const QString label = m->ticker.isEmpty() ? m->issuer : m->ticker;
         auto* it = cell(QStringLiteral("%1  %2").arg(label, signed_compact(m->value)),
                         m->ticker.isEmpty() ? ui::colors::TEXT_SECONDARY() : ui::colors::AMBER());
         it->setData(Qt::UserRole, m->ticker);
-        it->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("%1 — %2 estimated%3").arg(m->issuer, signed_compact(m->value),
-                                                      m->ticker.isEmpty() ? QString()
-                                                                          : QStringLiteral(". Click to open it."))));
+        it->setToolTip(
+            ui::tooltip_wrap(QStringLiteral("%1 — %2 estimated%3")
+                                 .arg(m->issuer, signed_compact(m->value),
+                                      m->ticker.isEmpty() ? QString() : QStringLiteral(". Click to open it."))));
         return it;
     };
 
@@ -620,7 +648,8 @@ void LargestFundsPanel::render() {
         name->setData(Qt::UserRole, f.cik);
         name->setData(Qt::UserRole + 1, f.quarter.toString(Qt::ISODate));
         name->setToolTip(ui::tooltip_wrap(QStringLiteral("CIK %1 — click to show the whole book and "
-                                                         "every position's move on the right").arg(f.cik)));
+                                                         "every position's move on the right")
+                                              .arg(f.cik)));
         table_->setItem(i, kManager, name);
         const bool partial = t.partial_quarters.contains(f.quarter.toString(Qt::ISODate));
         auto* q = cell(quarter_label(f.quarter) + (partial ? QStringLiteral(" ·EDGAR") : QString()),
@@ -631,16 +660,17 @@ void LargestFundsPanel::render() {
             const double chg = (f.book_value - *f.prior_book_value) / *f.prior_book_value * 100.0;
             auto* c = num_cell(QStringLiteral("%1%2%").arg(chg >= 0 ? "+" : "").arg(QString::number(chg, 'f', 1)),
                                chg >= 0 ? ui::colors::GREEN() : ui::colors::RED());
-            c->setToolTip(ui::tooltip_wrap(QStringLiteral(
-                "Book value against %1. Mostly the market's move — see Est. net flow for what the "
-                "manager itself bought and sold.").arg(quarter_label(*f.prior_quarter))));
+            c->setToolTip(ui::tooltip_wrap(
+                QStringLiteral("Book value against %1. Mostly the market's move — see Est. net flow for what the "
+                               "manager itself bought and sold.")
+                    .arg(quarter_label(*f.prior_quarter))));
             table_->setItem(i, kBookChange, c);
         } else {
             auto* c = cell(QStringLiteral("first filing"), ui::colors::TEXT_TERTIARY());
-            c->setToolTip(ui::tooltip_wrap(QStringLiteral(
-                "No earlier filing under this CIK — a new or restructured filer (Vanguard moved its "
-                "13F to new entities in Q1 2026). Nothing to compare against, which is not the same "
-                "as no change.")));
+            c->setToolTip(ui::tooltip_wrap(
+                QStringLiteral("No earlier filing under this CIK — a new or restructured filer (Vanguard moved its "
+                               "13F to new entities in Q1 2026). Nothing to compare against, which is not the same "
+                               "as no change.")));
             table_->setItem(i, kBookChange, c);
         }
         table_->setItem(i, kPositions, num_cell(QLocale().toString(f.position_count)));
@@ -650,14 +680,14 @@ void LargestFundsPanel::render() {
             table_->setItem(i, kTrimmed, num_cell(QLocale().toString(f.trimmed)));
             table_->setItem(i, kExited, num_cell(QLocale().toString(f.exited), ui::colors::RED()));
             const double net = f.bought_value - f.sold_value;
-            auto* nf = num_cell((net >= 0 ? QStringLiteral("+$") : QStringLiteral("−$")) +
-                                    fmt::format_compact(std::fabs(net)),
-                                net >= 0 ? ui::colors::GREEN() : ui::colors::RED());
-            nf->setToolTip(ui::tooltip_wrap(QStringLiteral(
-                "Estimated: bought $%1, sold $%2 — shares changed × the price each filing implies. "
-                "13F shows quarter-end snapshots, not trades, so this is the shape of the quarter's "
-                "activity, not an exact figure.").arg(fmt::format_compact(f.bought_value),
-                                                      fmt::format_compact(f.sold_value))));
+            auto* nf =
+                num_cell((net >= 0 ? QStringLiteral("+$") : QStringLiteral("−$")) + fmt::format_compact(std::fabs(net)),
+                         net >= 0 ? ui::colors::GREEN() : ui::colors::RED());
+            nf->setToolTip(ui::tooltip_wrap(
+                QStringLiteral("Estimated: bought $%1, sold $%2 — shares changed × the price each filing implies. "
+                               "13F shows quarter-end snapshots, not trades, so this is the shape of the quarter's "
+                               "activity, not an exact figure.")
+                    .arg(fmt::format_compact(f.bought_value), fmt::format_compact(f.sold_value))));
             table_->setItem(i, kNetFlow, nf);
             table_->setItem(i, kTopBuy, move_cell(f.top_buy));
             table_->setItem(i, kTopSell, move_cell(f.top_sell));
@@ -677,7 +707,10 @@ void LargestFundsPanel::render() {
     if (!selected_cik_.isEmpty()) {
         int found = -1;
         for (int i = 0; i < t.firms.size(); ++i)
-            if (t.firms[i].cik == selected_cik_) { found = i; break; }
+            if (t.firms[i].cik == selected_cik_) {
+                found = i;
+                break;
+            }
         if (found >= 0) {
             table_->selectRow(found);
             detail_->set_firm(selected_cik_, t.firms[found].quarter.toString(Qt::ISODate));
@@ -691,11 +724,11 @@ void LargestFundsPanel::render() {
         }
     }
 
-    foot_->setText(QStringLiteral(
-        "13F covers the US-listed long stock books of managers with $100M+ under SEC filing rules — "
-        "most of the world's largest asset managers and sovereign funds (e.g. Norges Bank), but not "
-        "their bonds, private assets or non-US listings. Moves compare each filer's two newest "
-        "filings; ·EDGAR marks a quarter pulled straight from EDGAR ahead of the bulk index."));
+    foot_->setText(
+        QStringLiteral("13F covers the US-listed long stock books of managers with $100M+ under SEC filing rules — "
+                       "most of the world's largest asset managers and sovereign funds (e.g. Norges Bank), but not "
+                       "their bonds, private assets or non-US listings. Moves compare each filer's two newest "
+                       "filings; ·EDGAR marks a quarter pulled straight from EDGAR ahead of the bulk index."));
 }
 
 } // namespace fincept::screens

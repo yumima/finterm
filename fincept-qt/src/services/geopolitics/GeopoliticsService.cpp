@@ -2,13 +2,12 @@
 #include "services/geopolitics/GeopoliticsService.h"
 
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonRunner.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/DataHubMetaTypes.h"
 
 #include <QFileInfo>
 #include <QJsonArray>
@@ -49,8 +48,10 @@ QString sanitize_token(const QString& in) {
     QString s;
     s.reserve(in.size());
     for (const QChar c : in) {
-        if (c.isLetterOrNumber()) s.append(c.toLower());
-        else                      s.append(QChar('_'));
+        if (c.isLetterOrNumber())
+            s.append(c.toLower());
+        else
+            s.append(QChar('_'));
     }
     return s;
 }
@@ -60,7 +61,8 @@ QString sanitize_token(const QString& in) {
 // QJsonDocument directly.
 QVector<HDXDataset> hdx_from_doc(const QJsonDocument& doc) {
     QVector<HDXDataset> datasets;
-    if (doc.isNull()) return datasets;
+    if (doc.isNull())
+        return datasets;
     QJsonArray arr;
     if (doc.isObject()) {
         const auto root = doc.object();
@@ -93,7 +95,7 @@ QVector<HDXDataset> hdx_from_doc(const QJsonDocument& doc) {
     return datasets;
 }
 
-}  // namespace
+} // namespace
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 GeopoliticsService& GeopoliticsService::instance() {
@@ -112,47 +114,48 @@ GeopoliticsService::GeopoliticsService(QObject* parent) : QObject(parent) {
     // *_loaded signals still go to no listeners (UI wires up later) — that's
     // the intended drop; the live fetch re-emits when a panel subscribes.
     QTimer::singleShot(0, this, [this]() {
-    const QStringList files = disk_cache().files();
-    for (const QString& fname : files) {
-        const QJsonDocument doc = disk_cache().load(fname);
-        if (doc.isNull()) continue;
+        const QStringList files = disk_cache().files();
+        for (const QString& fname : files) {
+            const QJsonDocument doc = disk_cache().load(fname);
+            if (doc.isNull())
+                continue;
 
-        if (fname.startsWith(QStringLiteral("hdx_"))) {
-            // hdx_<context>.json — context is the suffix between "hdx_" and ".json".
-            // For per-query variants ("country_brazil", "topic_food", "search_xxx")
-            // collapse back to the bare category ("country" / "topic" / "search")
-            // so the emit matches the live-fetch path the UI subscribes to.
-            QString context = fname.mid(4);
-            if (context.endsWith(QStringLiteral(".json")))
-                context.chop(5);
-            const int us = context.indexOf(QLatin1Char('_'));
-            if (us > 0) {
-                const QString head = context.left(us);
-                if (head == QStringLiteral("country") || head == QStringLiteral("topic")
-                    || head == QStringLiteral("search"))
-                    context = head;
+            if (fname.startsWith(QStringLiteral("hdx_"))) {
+                // hdx_<context>.json — context is the suffix between "hdx_" and ".json".
+                // For per-query variants ("country_brazil", "topic_food", "search_xxx")
+                // collapse back to the bare category ("country" / "topic" / "search")
+                // so the emit matches the live-fetch path the UI subscribes to.
+                QString context = fname.mid(4);
+                if (context.endsWith(QStringLiteral(".json")))
+                    context.chop(5);
+                const int us = context.indexOf(QLatin1Char('_'));
+                if (us > 0) {
+                    const QString head = context.left(us);
+                    if (head == QStringLiteral("country") || head == QStringLiteral("topic") ||
+                        head == QStringLiteral("search"))
+                        context = head;
+                }
+                const auto datasets = hdx_from_doc(doc);
+                emit hdx_results_loaded(context, datasets);
+            } else if (fname == QStringLiteral("trade_benefits.json")) {
+                if (doc.isObject())
+                    emit trade_result_ready(QStringLiteral("trade_benefits"), doc.object());
+            } else if (fname == QStringLiteral("trade_restrictions.json")) {
+                if (doc.isObject())
+                    emit trade_result_ready(QStringLiteral("trade_restrictions"), doc.object());
+            } else if (fname == QStringLiteral("trade_blocs.json")) {
+                if (doc.isObject())
+                    emit trade_result_ready(QStringLiteral("trade_blocs"), doc.object());
+            } else if (fname == QStringLiteral("trade_barrier_removal.json")) {
+                if (doc.isObject())
+                    emit trade_result_ready(QStringLiteral("trade_barrier_removal"), doc.object());
+            } else if (fname == QStringLiteral("geolocation.json")) {
+                if (doc.isObject())
+                    emit geolocation_ready(doc.object());
             }
-            const auto datasets = hdx_from_doc(doc);
-            emit hdx_results_loaded(context, datasets);
-        } else if (fname == QStringLiteral("trade_benefits.json")) {
-            if (doc.isObject())
-                emit trade_result_ready(QStringLiteral("trade_benefits"), doc.object());
-        } else if (fname == QStringLiteral("trade_restrictions.json")) {
-            if (doc.isObject())
-                emit trade_result_ready(QStringLiteral("trade_restrictions"), doc.object());
-        } else if (fname == QStringLiteral("trade_blocs.json")) {
-            if (doc.isObject())
-                emit trade_result_ready(QStringLiteral("trade_blocs"), doc.object());
-        } else if (fname == QStringLiteral("trade_barrier_removal.json")) {
-            if (doc.isObject())
-                emit trade_result_ready(QStringLiteral("trade_barrier_removal"), doc.object());
-        } else if (fname == QStringLiteral("geolocation.json")) {
-            if (doc.isObject())
-                emit geolocation_ready(doc.object());
+            // events.json reserved for future use when the conflict-monitor
+            // endpoint comes back online (currently kApiBase is empty).
         }
-        // events.json reserved for future use when the conflict-monitor
-        // endpoint comes back online (currently kApiBase is empty).
-    }
     });
 }
 
@@ -186,8 +189,14 @@ void GeopoliticsService::run_python(const QString& script, const QStringList& ar
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void GeopoliticsService::fetch_events(const QString& country, const QString& city, const QString& category, int limit) {
-    Q_UNUSED(country); Q_UNUSED(city); Q_UNUSED(category); Q_UNUSED(limit);
-    if (!conflict_monitor_available()) { emit error_occurred("events", conflict_monitor_unavailable_message()); return; }
+    Q_UNUSED(country);
+    Q_UNUSED(city);
+    Q_UNUSED(category);
+    Q_UNUSED(limit);
+    if (!conflict_monitor_available()) {
+        emit error_occurred("events", conflict_monitor_unavailable_message());
+        return;
+    }
     // Build URL with query params
     QUrl url(kApiBase);
     QUrlQuery q;
@@ -272,7 +281,10 @@ void GeopoliticsService::fetch_events(const QString& country, const QString& cit
 }
 
 void GeopoliticsService::fetch_unique_countries() {
-    if (!conflict_monitor_available()) { emit error_occurred("countries", conflict_monitor_unavailable_message()); return; }
+    if (!conflict_monitor_available()) {
+        emit error_occurred("countries", conflict_monitor_unavailable_message());
+        return;
+    }
     // Cache hit — deserialize and emit, otherwise go to network.
     const QVariant cached = fincept::CacheManager::instance().get("geo:countries");
     if (!cached.isNull()) {
@@ -313,9 +325,8 @@ void GeopoliticsService::fetch_unique_countries() {
                 to_cache.append(entry);
             }
             fincept::CacheManager::instance().put(
-                "geo:countries",
-                QVariant(QString::fromUtf8(QJsonDocument(to_cache).toJson(QJsonDocument::Compact))), kRefDataTtlSec,
-                "geopolitics");
+                "geo:countries", QVariant(QString::fromUtf8(QJsonDocument(to_cache).toJson(QJsonDocument::Compact))),
+                kRefDataTtlSec, "geopolitics");
             emit self->countries_loaded(countries);
             if (self->hub_registered_)
                 publish_to_hub(QStringLiteral("geopolitics:countries"), QVariant::fromValue(countries));
@@ -323,7 +334,10 @@ void GeopoliticsService::fetch_unique_countries() {
 }
 
 void GeopoliticsService::fetch_unique_categories() {
-    if (!conflict_monitor_available()) { emit error_occurred("categories", conflict_monitor_unavailable_message()); return; }
+    if (!conflict_monitor_available()) {
+        emit error_occurred("categories", conflict_monitor_unavailable_message());
+        return;
+    }
     const QVariant cached = fincept::CacheManager::instance().get("geo:categories");
     if (!cached.isNull()) {
         const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
@@ -362,9 +376,8 @@ void GeopoliticsService::fetch_unique_categories() {
             to_cache.append(entry);
         }
         fincept::CacheManager::instance().put(
-            "geo:categories",
-            QVariant(QString::fromUtf8(QJsonDocument(to_cache).toJson(QJsonDocument::Compact))), kRefDataTtlSec,
-            "geopolitics");
+            "geo:categories", QVariant(QString::fromUtf8(QJsonDocument(to_cache).toJson(QJsonDocument::Compact))),
+            kRefDataTtlSec, "geopolitics");
         emit self->categories_loaded(cats);
         if (self->hub_registered_)
             publish_to_hub(QStringLiteral("geopolitics:categories"), QVariant::fromValue(cats));
@@ -372,7 +385,10 @@ void GeopoliticsService::fetch_unique_categories() {
 }
 
 void GeopoliticsService::fetch_unique_cities() {
-    if (!conflict_monitor_available()) { emit error_occurred("cities", conflict_monitor_unavailable_message()); return; }
+    if (!conflict_monitor_available()) {
+        emit error_occurred("cities", conflict_monitor_unavailable_message());
+        return;
+    }
     QPointer<GeopoliticsService> self = this;
     HttpClient::instance().get(QString(kApiBase) + "?get_unique_cities=true", [self](Result<QJsonDocument> result) {
         if (!self)
@@ -450,7 +466,8 @@ static QVector<HDXDataset> parse_hdx_results(const QString& output) {
 static void persist_hdx_response(const QString& context, const QString& out) {
     const QString json_str = python::extract_json(out);
     const auto doc = QJsonDocument::fromJson(json_str.toUtf8());
-    if (doc.isNull()) return;
+    if (doc.isNull())
+        return;
     disk_cache().save(QStringLiteral("hdx_") + context + QStringLiteral(".json"), doc);
 }
 
@@ -482,18 +499,19 @@ void GeopoliticsService::search_hdx_humanitarian() {
 }
 
 void GeopoliticsService::search_hdx_by_country(const QString& country) {
-    run_python("hdx_data.py", {"search_by_country", country}, "hdx_country", [this, country](bool ok, const QString& out) {
-        if (!ok) {
-            emit error_occurred("hdx_country", out);
-            return;
-        }
-        // Country queries share a single file keyed by the country slug so the
-        // last-viewed country survives a restart without ballooning the dir.
-        persist_hdx_response(QStringLiteral("country_") + sanitize_token(country), out);
-        const auto datasets = parse_hdx_results(out);
-        emit hdx_results_loaded("country", datasets);
-        publish_hdx_result(QStringLiteral("country:") + country, datasets);
-    });
+    run_python("hdx_data.py", {"search_by_country", country}, "hdx_country",
+               [this, country](bool ok, const QString& out) {
+                   if (!ok) {
+                       emit error_occurred("hdx_country", out);
+                       return;
+                   }
+                   // Country queries share a single file keyed by the country slug so the
+                   // last-viewed country survives a restart without ballooning the dir.
+                   persist_hdx_response(QStringLiteral("country_") + sanitize_token(country), out);
+                   const auto datasets = parse_hdx_results(out);
+                   emit hdx_results_loaded("country", datasets);
+                   publish_hdx_result(QStringLiteral("country:") + country, datasets);
+               });
 }
 
 void GeopoliticsService::search_hdx_by_topic(const QString& topic) {
@@ -528,8 +546,8 @@ void GeopoliticsService::search_hdx_advanced(const QString& query) {
 // TRADE ANALYSIS — Python
 // ═══════════════════════════════════════════════════════════════════════════════
 
-void GeopoliticsService::run_trade_analysis(const QString& command, const QJsonObject& params,
-                                            const QString& context, const QString& topic) {
+void GeopoliticsService::run_trade_analysis(const QString& command, const QJsonObject& params, const QString& context,
+                                            const QString& topic) {
     const auto json_str = QString::fromUtf8(QJsonDocument(params).toJson(QJsonDocument::Compact));
     run_python("Analytics/economics/trade_geopolitics.py", {command, json_str}, context,
                [this, context, topic](bool ok, const QString& out) {
@@ -545,7 +563,7 @@ void GeopoliticsService::run_trade_analysis(const QString& command, const QJsonO
                    const auto obj = doc.object();
                    if (obj.value("error").isString() && !obj.value("error").toString().isEmpty()) {
                        emit error_occurred(context, obj.value("error").toString());
-                       return;  // never persist an error payload as a result
+                       return; // never persist an error payload as a result
                    }
                    disk_cache().save(context + QStringLiteral(".json"), doc);
                    emit trade_result_ready(context, obj);
@@ -597,7 +615,8 @@ void GeopoliticsService::extract_geolocations(const QStringList& headlines) {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 void GeopoliticsService::publish_hdx_result(const QString& context, const QVector<HDXDataset>& datasets) {
-    if (!hub_registered_) return;
+    if (!hub_registered_)
+        return;
     publish_to_hub(QStringLiteral("geopolitics:hdx:") + context, QVariant::fromValue(datasets));
 }
 
@@ -623,11 +642,12 @@ void GeopoliticsService::refresh(const QStringList& topics) {
 }
 
 int GeopoliticsService::max_requests_per_sec() const {
-    return 2;  // Fincept research API + HDX Python — conservative
+    return 2; // Fincept research API + HDX Python — conservative
 }
 
 void GeopoliticsService::ensure_registered_with_hub() {
-    if (hub_registered_) return;
+    if (hub_registered_)
+        return;
     auto& hub = fincept::datahub::DataHub::instance();
     hub.register_producer(this);
 

@@ -33,15 +33,14 @@ constexpr const char* kAgentId = "quant_critic";
 
 static QString build_config_json() {
     QJsonObject cfg;
-    cfg["system_prompt"] = QStringLiteral(
-        "You are quant_critic, finterm's reviewer of quantitative work.  "
-        "Your audience is the user looking at their own strategy.  Be "
-        "specific with magnitudes — cite Sharpe, drawdown, hit rate, "
-        "turnover, regime sensitivity wherever the data supports it.  "
-        "Prefer the narrate_backtest_result / propose_param_sweep / "
-        "narrate_live_trade tools for commentary tasks; pull underlying "
-        "numbers from the existing quant lab + paper trading + portfolio "
-        "tools.  Avoid hedging language unless the data justifies it.");
+    cfg["system_prompt"] = QStringLiteral("You are quant_critic, finterm's reviewer of quantitative work.  "
+                                          "Your audience is the user looking at their own strategy.  Be "
+                                          "specific with magnitudes — cite Sharpe, drawdown, hit rate, "
+                                          "turnover, regime sensitivity wherever the data supports it.  "
+                                          "Prefer the narrate_backtest_result / propose_param_sweep / "
+                                          "narrate_live_trade tools for commentary tasks; pull underlying "
+                                          "numbers from the existing quant lab + paper trading + portfolio "
+                                          "tools.  Avoid hedging language unless the data justifies it.");
 
     QJsonArray skills;
     skills.append(QStringLiteral("earnings-analysis"));
@@ -63,7 +62,7 @@ static QString build_config_json() {
     allow.append(QStringLiteral("int__get_holdings"));
     allow.append(QStringLiteral("int__get_portfolios"));
     allow.append(QStringLiteral("int__get_paper_*"));
-    allow.append(QStringLiteral("int__fd_*"));  // financial-datasets reads
+    allow.append(QStringLiteral("int__fd_*")); // financial-datasets reads
     cfg["allow_tools"] = allow;
 
     return QString::fromUtf8(QJsonDocument(cfg).toJson(QJsonDocument::Compact));
@@ -71,8 +70,7 @@ static QString build_config_json() {
 
 static Result<void> apply_v026(QSqlDatabase& db) {
     QSqlQuery exists(db);
-    if (!exists.exec(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='agent_configs'")) {
+    if (!exists.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='agent_configs'")) {
         return Result<void>::err(exists.lastError().text().toStdString());
     }
     if (!exists.next()) {
@@ -88,10 +86,9 @@ static Result<void> apply_v026(QSqlDatabase& db) {
               "VALUES (?, ?, ?, ?, ?, 0, 0)");
     q.bindValue(0, QString::fromUtf8(kAgentId));
     q.bindValue(1, QStringLiteral("Quant Critic"));
-    q.bindValue(2, QStringLiteral(
-                       "Reviews backtests, proposes parameter sweeps, "
-                       "narrates live trades.  Read-side only — no "
-                       "destructive tools allowed."));
+    q.bindValue(2, QStringLiteral("Reviews backtests, proposes parameter sweeps, "
+                                  "narrates live trades.  Read-side only — no "
+                                  "destructive tools allowed."));
     q.bindValue(3, config_json);
     q.bindValue(4, QStringLiteral("quant"));
     // is_default=0, is_active=0 — quant_critic doesn't auto-activate.

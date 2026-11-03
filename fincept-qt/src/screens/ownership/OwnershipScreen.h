@@ -1,7 +1,7 @@
 #pragma once
-#include <QWidget>
-
 #include "screens/IStatefulScreen.h"
+
+#include <QWidget>
 
 class QLabel;
 class QLineEdit;
@@ -54,20 +54,19 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     /// Open a fund (from the filer search) in the LARGEST FUNDS side pane.
     void show_filer(const QString& cik);
 
-    QLabel*      index_lbl_ = nullptr;
+    QLabel* index_lbl_ = nullptr;
     QPushButton* index_btn_ = nullptr;
-    QLineEdit*   filer_search_ = nullptr;
+    QLineEdit* filer_search_ = nullptr;
     QListWidget* filer_results_ = nullptr;
-    QTimer*      filer_debounce_ = nullptr;
+    QTimer* filer_debounce_ = nullptr;
 
     QStackedWidget* stack_ = nullptr;
-    QTabWidget*     tabs_ = nullptr;
+    QTabWidget* tabs_ = nullptr;
     InsiderBuysPanel* insider_buys_ = nullptr;
-    ShortRankPanel*   short_rank_ = nullptr;
-    MoversPanel*      movers_ = nullptr;
+    ShortRankPanel* short_rank_ = nullptr;
+    MoversPanel* movers_ = nullptr;
     LargestFundsPanel* largest_funds_ = nullptr;
-    QWidget*          empty_page_ = nullptr;
-
+    QWidget* empty_page_ = nullptr;
 
     bool loaded_[4] = {false, false, false, false};
     bool shown_once_ = false;

@@ -29,12 +29,12 @@ class IpoPipelinePanel : public QWidget {
     QTableWidget* pipeline_table_ = nullptr;
 
     // ── Form D feed ───────────────────────────────────────────────────────────
-    QScrollArea*  feed_scroll_     = nullptr;
-    QWidget*      feed_container_  = nullptr;
-    QVBoxLayout*  feed_layout_     = nullptr;
+    QScrollArea* feed_scroll_ = nullptr;
+    QWidget* feed_container_ = nullptr;
+    QVBoxLayout* feed_layout_ = nullptr;
 
     // ── State ─────────────────────────────────────────────────────────────────
-    QVector<pre_ipo::S1Filing>    pipeline_;
+    QVector<pre_ipo::S1Filing> pipeline_;
     QVector<pre_ipo::FormDFiling> form_d_;
 };
 

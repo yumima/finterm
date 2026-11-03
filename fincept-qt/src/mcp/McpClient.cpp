@@ -305,8 +305,7 @@ Result<std::vector<ExternalPrompt>> McpClient::list_prompts() {
     return Result<std::vector<ExternalPrompt>>::ok(std::move(out));
 }
 
-Result<PromptResult> McpClient::get_prompt(const QString& name,
-                                           const QHash<QString, QString>& args) {
+Result<PromptResult> McpClient::get_prompt(const QString& name, const QHash<QString, QString>& args) {
     QJsonObject params;
     params["name"] = name;
     if (!args.isEmpty()) {
@@ -474,13 +473,13 @@ void McpClient::handle_line(const QByteArray& line) {
                 response["result"] = r.value();
             } else {
                 QJsonObject err;
-                err["code"] = -32603;  // Internal error
+                err["code"] = -32603; // Internal error
                 err["message"] = QString::fromStdString(r.error());
                 response["error"] = err;
             }
         } else {
             QJsonObject err;
-            err["code"] = -32601;  // Method not found
+            err["code"] = -32601; // Method not found
             err["message"] = QString("no server-request handler registered for %1").arg(method);
             response["error"] = err;
         }

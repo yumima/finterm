@@ -162,9 +162,9 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     // 20-second refresh tick re-fires fetch_correlation (spawns a Python
     // process) + two fetch_benchmark_history calls + fetch_risk_free_rate
     // every cycle, even when nothing changed.
-    QStringList last_correlation_syms_;       // symbol set last sent to fetch_correlation
-    QSet<QString> fetched_benchmarks_;        // benchmarks already pulled this session
-    bool risk_free_fetched_ = false;          // DGS10 — server caches 24h, once per session is enough
+    QStringList last_correlation_syms_; // symbol set last sent to fetch_correlation
+    QSet<QString> fetched_benchmarks_;  // benchmarks already pulled this session
+    bool risk_free_fetched_ = false;    // DGS10 — server caches 24h, once per session is enough
 
     // Refresh timer (P3)
     QTimer* refresh_timer_ = nullptr;

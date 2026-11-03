@@ -1214,7 +1214,8 @@ void DataSourcesScreen::show_config_dialog(const ConnectorConfig& config, const 
                 "QCheckBox { color:%2; font-size:13px; font-family:'Consolas','Courier New',monospace; }"
                 "QPushButton { padding:7px 18px; font-size:12px; font-weight:700;"
                 "  font-family:'Consolas','Courier New',monospace; }")
-            .arg(col::BG_SURFACE(), col::TEXT_PRIMARY(), col::TEXT_SECONDARY(), col::BG_BASE(), col::BORDER_DIM(), col::AMBER()));
+            .arg(col::BG_SURFACE(), col::TEXT_PRIMARY(), col::TEXT_SECONDARY(), col::BG_BASE(), col::BORDER_DIM(),
+                 col::AMBER()));
 
     auto* root_vl = new QVBoxLayout(&dlg);
     root_vl->setContentsMargins(0, 0, 0, 0);
@@ -1223,7 +1224,8 @@ void DataSourcesScreen::show_config_dialog(const ConnectorConfig& config, const 
     // Dialog header
     auto* dlg_hdr = new QWidget(this);
     dlg_hdr->setFixedHeight(56);
-    dlg_hdr->setStyleSheet(QString("background:%1;border-bottom:1px solid %2;").arg(col::BG_RAISED(), col::BORDER_DIM()));
+    dlg_hdr->setStyleSheet(
+        QString("background:%1;border-bottom:1px solid %2;").arg(col::BG_RAISED(), col::BORDER_DIM()));
     auto* dlg_hdr_hl = new QHBoxLayout(dlg_hdr);
     dlg_hdr_hl->setContentsMargins(16, 0, 16, 0);
     dlg_hdr_hl->setSpacing(12);

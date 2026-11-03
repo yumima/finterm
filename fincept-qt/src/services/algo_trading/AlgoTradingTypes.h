@@ -201,14 +201,12 @@ inline QVector<ScannerPreset> scanner_presets() {
 // ── Large-cap watchlists (US / China / Europe) ──────────────────────────────
 
 inline QStringList megacap_symbols() {
-    return {"AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA",
-            "JPM",  "V",    "WMT",   "XOM",  "BABA", "PDD",  "ASML",
-            "SAP",  "NVO",  "SHEL",  "TTE",  "NVS",  "UL"};
+    return {"AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "JPM", "V",   "WMT",
+            "XOM",  "BABA", "PDD",   "ASML", "SAP",  "NVO",  "SHEL", "TTE", "NVS", "UL"};
 }
 
 inline QStringList bank_symbols() {
-    return {"JPM", "BAC", "WFC", "C",  "GS",  "MS",
-            "USB", "PNC", "HSBC", "BCS", "DB", "UBS"};
+    return {"JPM", "BAC", "WFC", "C", "GS", "MS", "USB", "PNC", "HSBC", "BCS", "DB", "UBS"};
 }
 
 } // namespace fincept::services::algo

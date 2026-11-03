@@ -9,15 +9,13 @@
 namespace fincept::services::video {
 
 LiveHlsProxy::LiveHlsProxy(QObject* parent) : QObject(parent) {
-    server_        = new QTcpServer(this);
-    netman_        = new QNetworkAccessManager(this);
+    server_ = new QTcpServer(this);
+    netman_ = new QNetworkAccessManager(this);
     refresh_timer_ = new QTimer(this);
     refresh_timer_->setInterval(kRefreshIntervalMs);
 
-    connect(server_, &QTcpServer::newConnection,
-            this, &LiveHlsProxy::on_new_connection);
-    connect(refresh_timer_, &QTimer::timeout,
-            this, &LiveHlsProxy::on_refresh_timer);
+    connect(server_, &QTcpServer::newConnection, this, &LiveHlsProxy::on_new_connection);
+    connect(refresh_timer_, &QTimer::timeout, this, &LiveHlsProxy::on_refresh_timer);
 }
 
 LiveHlsProxy::~LiveHlsProxy() {
@@ -29,7 +27,7 @@ bool LiveHlsProxy::start(const QUrl& upstream) {
         last_error_ = QStringLiteral("upstream URL is not valid");
         return false;
     }
-    stop();  // idempotent reset
+    stop(); // idempotent reset
 
     upstream_url_ = upstream;
     session_age_.start();
@@ -47,12 +45,10 @@ bool LiveHlsProxy::start(const QUrl& upstream) {
         last_error_ = QStringLiteral("could not bind localhost port: ") + server_->errorString();
         return false;
     }
-    local_url_ = QUrl(QStringLiteral("http://127.0.0.1:%1/play.m3u8")
-                          .arg(server_->serverPort()));
+    local_url_ = QUrl(QStringLiteral("http://127.0.0.1:%1/play.m3u8").arg(server_->serverPort()));
 
-    LOG_DEBUG("LiveHlsProxy",
-              "started: upstream=" + upstream_url_.toString(QUrl::RemoveQuery).left(80) +
-              " local=" + local_url_.toString());
+    LOG_DEBUG("LiveHlsProxy", "started: upstream=" + upstream_url_.toString(QUrl::RemoveQuery).left(80) +
+                                  " local=" + local_url_.toString());
 
     // Kick off the first upstream fetch immediately so the ready signal
     // can fire ASAP — caller typically waits for ready before calling
@@ -79,8 +75,7 @@ void LiveHlsProxy::set_upstream(const QUrl& upstream) {
         in_flight_->deleteLater();
         in_flight_ = nullptr;
     }
-    LOG_INFO("LiveHlsProxy", "upstream session replaced — playback continues on " +
-                                 local_url_.toString());
+    LOG_INFO("LiveHlsProxy", "upstream session replaced — playback continues on " + local_url_.toString());
     // Pull the new session's playlist at once. The cached one is still served
     // until it lands, so there is no gap: its segments are seconds old and the
     // player is not reading the newest one yet.
@@ -105,9 +100,7 @@ void LiveHlsProxy::stop() {
 }
 
 bool LiveHlsProxy::cache_is_fresh() const {
-    return !trimmed_cache_.isEmpty()
-        && cache_age_.isValid()
-        && cache_age_.elapsed() < kMaxCacheAgeMs;
+    return !trimmed_cache_.isEmpty() && cache_age_.isValid() && cache_age_.elapsed() < kMaxCacheAgeMs;
 }
 
 void LiveHlsProxy::on_new_connection() {
@@ -143,22 +136,20 @@ void LiveHlsProxy::serve_request(QTcpSocket* client) {
         if (!trimmed_cache_.isEmpty() && !stale_error_emitted_) {
             stale_error_emitted_ = true;
             LOG_WARN("LiveHlsProxy",
-                     "cache aged out (>"
-                     + QString::number(kMaxCacheAgeMs / 1000) + "s without successful refresh)");
+                     "cache aged out (>" + QString::number(kMaxCacheAgeMs / 1000) + "s without successful refresh)");
             // Drop the now-untrustworthy cache so future requests get a
             // clean 503 instead of risking 6-hour-old segment URLs.
             trimmed_cache_.clear();
             cache_age_.invalidate();
-            emit upstream_error(QStringLiteral("Live stream lost — upstream unreachable for over %1s")
-                                    .arg(kMaxCacheAgeMs / 1000));
+            emit upstream_error(
+                QStringLiteral("Live stream lost — upstream unreachable for over %1s").arg(kMaxCacheAgeMs / 1000));
         }
-        const QByteArray msg =
-            "HTTP/1.1 503 Service Unavailable\r\n"
-            "Content-Type: text/plain\r\n"
-            "Retry-After: 1\r\n"
-            "Content-Length: 14\r\n"
-            "Connection: close\r\n\r\n"
-            "not ready yet";
+        const QByteArray msg = "HTTP/1.1 503 Service Unavailable\r\n"
+                               "Content-Type: text/plain\r\n"
+                               "Retry-After: 1\r\n"
+                               "Content-Length: 14\r\n"
+                               "Connection: close\r\n\r\n"
+                               "not ready yet";
         client->write(msg);
         client->flush();
         client->disconnectFromHost();
@@ -202,16 +193,17 @@ void LiveHlsProxy::on_refresh_timer() {
     req.setRawHeader("Accept", "*/*");
 
     in_flight_ = netman_->get(req);
-    connect(in_flight_, &QNetworkReply::finished,
-            this, &LiveHlsProxy::on_upstream_finished);
+    connect(in_flight_, &QNetworkReply::finished, this, &LiveHlsProxy::on_upstream_finished);
 }
 
 void LiveHlsProxy::on_upstream_finished() {
     auto* reply = qobject_cast<QNetworkReply*>(sender());
-    if (!reply) return;
+    if (!reply)
+        return;
     // The in_flight_ guard pairs with this — release it before doing any
     // work so the next refresh tick can spawn a new fetch if needed.
-    if (reply == in_flight_) in_flight_ = nullptr;
+    if (reply == in_flight_)
+        in_flight_ = nullptr;
 
     // A reply for an upstream we have since rotated away from carries the old
     // session's segment URLs, which are about to stop working. Belt to
@@ -252,9 +244,8 @@ void LiveHlsProxy::on_upstream_finished() {
 
     if (!first_ready_emitted_) {
         first_ready_emitted_ = true;
-        LOG_DEBUG("LiveHlsProxy",
-                  "ready: upstream=" + QString::number(raw.size()) +
-                  "B trimmed=" + QString::number(trimmed.size()) + "B");
+        LOG_DEBUG("LiveHlsProxy", "ready: upstream=" + QString::number(raw.size()) +
+                                      "B trimmed=" + QString::number(trimmed.size()) + "B");
         emit ready();
     }
 }
@@ -287,9 +278,9 @@ QByteArray LiveHlsProxy::trim_playlist(const QByteArray& upstream, int keep_segm
     // tag lines into `pending_tags` until we see #EXTINF, then take the
     // next non-comment non-empty line as the URI.
     struct Segment {
-        QByteArrayList tags;     ///< zero or more #EXT-X-* lines before #EXTINF
-        QByteArray extinf;       ///< the #EXTINF:... line itself
-        QByteArray uri;          ///< the URL for this segment
+        QByteArrayList tags; ///< zero or more #EXT-X-* lines before #EXTINF
+        QByteArray extinf;   ///< the #EXTINF:... line itself
+        QByteArray uri;      ///< the URL for this segment
     };
     QList<Segment> segments;
     QByteArrayList pending_tags;
@@ -299,8 +290,10 @@ QByteArray LiveHlsProxy::trim_playlist(const QByteArray& upstream, int keep_segm
     for (const QByteArray& raw_line : lines) {
         QByteArray line = raw_line;
         // Strip trailing CR (Windows line endings).
-        if (line.endsWith('\r')) line.chop(1);
-        if (line.isEmpty()) continue;
+        if (line.endsWith('\r'))
+            line.chop(1);
+        if (line.isEmpty())
+            continue;
 
         if (line.startsWith("#EXTINF:")) {
             seen_first_extinf = true;
@@ -334,8 +327,8 @@ QByteArray LiveHlsProxy::trim_playlist(const QByteArray& upstream, int keep_segm
     }
 
     const int total = segments.size();
-    const int keep  = qMin(keep_segments, total);
-    const int drop  = total - keep;
+    const int keep = qMin(keep_segments, total);
+    const int drop = total - keep;
 
     // Rewrite #EXT-X-MEDIA-SEQUENCE so the first kept segment carries the
     // sequence number it actually had in the upstream. libavformat tracks
@@ -360,15 +353,19 @@ QByteArray LiveHlsProxy::trim_playlist(const QByteArray& upstream, int keep_segm
     QByteArray out;
     out.reserve(upstream.size() / total * keep + 256);
     for (const QByteArray& h : header) {
-        out += h; out += '\n';
+        out += h;
+        out += '\n';
     }
     for (int i = drop; i < total; ++i) {
         const Segment& s = segments[i];
         for (const QByteArray& t : s.tags) {
-            out += t; out += '\n';
+            out += t;
+            out += '\n';
         }
-        out += s.extinf; out += '\n';
-        out += s.uri;    out += '\n';
+        out += s.extinf;
+        out += '\n';
+        out += s.uri;
+        out += '\n';
     }
     return out;
 }

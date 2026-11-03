@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e758c429e`](https://github.com/yumima/finterm/commit/e758c429e) lint: fix cppcheck findings, make D1/D4 checks see split calls
 - [`f8b031bf9`](https://github.com/yumima/finterm/commit/f8b031bf9) read-aloud review fixes: session ids, dead-engine probe, gapless chunks
 - [`a31f8744b`](https://github.com/yumima/finterm/commit/a31f8744b) news TL;DR read-aloud: speaker/cross icon, instant start, shared toggle
 

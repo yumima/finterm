@@ -45,8 +45,7 @@ static Result<void> add_column_if_missing(QSqlDatabase& db, const char* ddl) {
     if (q.exec(ddl))
         return Result<void>::ok();
     const std::string err = q.lastError().text().toStdString();
-    if (err.find("duplicate column") != std::string::npos ||
-        err.find("already exists") != std::string::npos) {
+    if (err.find("duplicate column") != std::string::npos || err.find("already exists") != std::string::npos) {
         return Result<void>::ok();
     }
     return Result<void>::err(err);
@@ -67,15 +66,13 @@ static Result<void> apply_v025(QSqlDatabase& db) {
             db, "ALTER TABLE mcp_servers ADD COLUMN transport_type TEXT NOT NULL DEFAULT 'stdio'");
         r.is_err())
         return r;
-    if (auto r = add_column_if_missing(db, "ALTER TABLE mcp_servers ADD COLUMN base_url TEXT");
+    if (auto r = add_column_if_missing(db, "ALTER TABLE mcp_servers ADD COLUMN base_url TEXT"); r.is_err())
+        return r;
+    if (auto r =
+            add_column_if_missing(db, "ALTER TABLE mcp_servers ADD COLUMN auth_scheme TEXT NOT NULL DEFAULT 'none'");
         r.is_err())
         return r;
-    if (auto r = add_column_if_missing(
-            db, "ALTER TABLE mcp_servers ADD COLUMN auth_scheme TEXT NOT NULL DEFAULT 'none'");
-        r.is_err())
-        return r;
-    if (auto r = add_column_if_missing(db, "ALTER TABLE mcp_servers ADD COLUMN auth_header TEXT");
-        r.is_err())
+    if (auto r = add_column_if_missing(db, "ALTER TABLE mcp_servers ADD COLUMN auth_header TEXT"); r.is_err())
         return r;
 
     return Result<void>::ok();

@@ -10,15 +10,13 @@
 #include "ai_chat/HearthService.h"
 #include "ai_chat/LlmUrl.h"
 #include "ai_chat/ModelCatalog.h"
-
 #include "core/logging/Logger.h"
+#include "datahub/DataHub.h"
+#include "datahub/TopicPolicy.h"
 #include "mcp/McpService.h"
 #include "services/app_context/AppContextService.h"
 #include "storage/repositories/LlmConfigRepository.h"
 #include "storage/repositories/SettingsRepository.h"
-
-#    include "datahub/DataHub.h"
-#    include "datahub/TopicPolicy.h"
 
 #include <QEventLoop>
 #include <QJsonDocument>
@@ -123,7 +121,8 @@ static QString no_answer_error(const QString& finish) {
     const QString f = finish.toLower();
     if (f == QLatin1String("length") || f == QLatin1String("max_tokens"))
         return QStringLiteral("The model returned no answer: it hit the output limit before finishing "
-                              "(stop reason: %1).").arg(finish);
+                              "(stop reason: %1).")
+            .arg(finish);
     return QStringLiteral("The model returned no answer%1.")
         .arg(finish.isEmpty() ? QString() : QStringLiteral(" (stop reason: %1)").arg(finish));
 }
@@ -246,7 +245,9 @@ void LlmService::ensure_config() const {
     LOG_INFO(TAG, QString("LLM config loaded: provider=%1 model=%2 tools_enabled=%3 "
                           "max_tokens(user=%4 catalog=%5 resolved=%6)")
                       .arg(provider_, model_, tools_enabled_ ? "TRUE" : "FALSE")
-                      .arg(max_tokens_).arg(catalog_cap).arg(resolved));
+                      .arg(max_tokens_)
+                      .arg(catalog_cap)
+                      .arg(resolved));
 }
 
 // ============================================================================
@@ -322,14 +323,22 @@ namespace {
 QString api_root(const QString& p, const QString& cfg_base) {
     if (!cfg_base.trimmed().isEmpty())
         return normalize_llm_base(cfg_base) + QStringLiteral("/v1");
-    if (p == "openai")     return QStringLiteral("https://api.openai.com/v1");
-    if (p == "anthropic")  return QStringLiteral("https://api.anthropic.com/v1");
-    if (p == "groq")       return QStringLiteral("https://api.groq.com/openai/v1");
-    if (p == "deepseek")   return QStringLiteral("https://api.deepseek.com/v1");
-    if (p == "openrouter") return QStringLiteral("https://openrouter.ai/api/v1");
-    if (p == "minimax")    return QStringLiteral("https://api.minimax.io/v1");
-    if (p == "kimi")       return QStringLiteral("https://api.moonshot.ai/v1");
-    if (p == "xai")        return QStringLiteral("https://api.x.ai/v1");
+    if (p == "openai")
+        return QStringLiteral("https://api.openai.com/v1");
+    if (p == "anthropic")
+        return QStringLiteral("https://api.anthropic.com/v1");
+    if (p == "groq")
+        return QStringLiteral("https://api.groq.com/openai/v1");
+    if (p == "deepseek")
+        return QStringLiteral("https://api.deepseek.com/v1");
+    if (p == "openrouter")
+        return QStringLiteral("https://openrouter.ai/api/v1");
+    if (p == "minimax")
+        return QStringLiteral("https://api.minimax.io/v1");
+    if (p == "kimi")
+        return QStringLiteral("https://api.moonshot.ai/v1");
+    if (p == "xai")
+        return QStringLiteral("https://api.x.ai/v1");
     if (is_hearth_provider(p))
         return QStringLiteral("http://localhost:11434/v1");
     return {};
@@ -344,20 +353,19 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     if (is_hearth_provider(p)) {
         // The chat route falls back to Ollama's :11434 when no base is stored,
         // but Ollama has no speech route — only hearth's gateway does.
-        const QString root = api_root(p, base_url_.trimmed().isEmpty()
-                                             ? HearthService::instance().engine_base_url()
-                                             : base_url_);
+        const QString root =
+            api_root(p, base_url_.trimmed().isEmpty() ? HearthService::instance().engine_base_url() : base_url_);
         // "ollama" is a legacy alias of this provider, and a base on Ollama's
         // own port is bare Ollama, which has no speech route — a guaranteed 404.
         if (QUrl(root).port() == 11434)
             return std::nullopt;
         ep.url = root + QStringLiteral("/audio/speech");
-        ep.max_input = 8000;  // hearth truncates there itself
+        ep.max_input = 8000; // hearth truncates there itself
         // hearth picks its own default (English) Piper voice when none is named.
         ep.body = QJsonObject{{"model", "piper"}, {"response_format", "wav"}};
     } else if (p == "openai") {
         ep.url = api_root(p, base_url_) + QStringLiteral("/audio/speech");
-        ep.max_input = 4096;  // OpenAI rejects longer input with a 400
+        ep.max_input = 4096; // OpenAI rejects longer input with a 400
         ep.body = QJsonObject{{"model", "gpt-4o-mini-tts"}, {"voice", "alloy"}, {"response_format", "wav"}};
     } else {
         return std::nullopt;
@@ -498,8 +506,7 @@ QString LlmService::ollama_native_url(const PersonaScope& persona) const {
     // Called with mutex_ held. Mirrors get_endpoint_url's base resolution so a
     // custom base_url reaches both routes.
     const QString cfg_base = eff_base_url(persona);
-    const QString base =
-        cfg_base.isEmpty() ? QStringLiteral("http://localhost:11434") : normalize_llm_base(cfg_base);
+    const QString base = cfg_base.isEmpty() ? QStringLiteral("http://localhost:11434") : normalize_llm_base(cfg_base);
     return base + QStringLiteral("/api/chat");
 }
 
@@ -801,8 +808,8 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
     const bool is_ds_reasoner = (eff_provider(persona) == "deepseek" && model_lower.contains("reasoner"));
 
     // Groq's whisper-* (audio) and llama-guard-* (safety classifier) do not accept tools.
-    const bool groq_no_tools =
-        (eff_provider(persona) == "groq" && (model_lower.startsWith("whisper-") || model_lower.contains("llama-guard")));
+    const bool groq_no_tools = (eff_provider(persona) == "groq" &&
+                                (model_lower.startsWith("whisper-") || model_lower.contains("llama-guard")));
 
     QJsonArray messages;
     // Persona + ambient context steer the AGENTIC chat. A tool-less one-shot
@@ -915,8 +922,7 @@ QJsonObject LlmService::build_openai_request(const QString& user_message,
         if (!tools.isEmpty())
             req["tools"] = tools;
         LOG_INFO(TAG, QString("OpenAI request: stream=%1 provider=%2 tools=%3 (count=%4)")
-                          .arg(stream ? "true" : "false", eff_provider(persona),
-                               tools.isEmpty() ? "none" : "attached")
+                          .arg(stream ? "true" : "false", eff_provider(persona), tools.isEmpty() ? "none" : "attached")
                           .arg(tools.size()));
     } else {
         LOG_WARN(TAG, QString("OpenAI request: stream=%1 provider=%2 NO TOOLS — "
@@ -998,8 +1004,8 @@ PersonaScope LlmService::next_quota_fallback(const PersonaScope& current) const 
     // current entry, so a ladder position is never revisited.
     static const QMap<QString, QStringList> kLadders = {
         {QStringLiteral("gemini"),
-         {QStringLiteral("gemini-3.7-flash"), QStringLiteral("gemini-3.6-flash"),
-          QStringLiteral("gemini-3.5-flash"), QStringLiteral("gemini-3.5-flash-lite")}},
+         {QStringLiteral("gemini-3.7-flash"), QStringLiteral("gemini-3.6-flash"), QStringLiteral("gemini-3.5-flash"),
+          QStringLiteral("gemini-3.5-flash-lite")}},
     };
     const QStringList ladder = kLadders.value(provider.toLower());
     const int at = ladder.indexOf(model);
@@ -1020,7 +1026,7 @@ PersonaScope LlmService::next_quota_fallback(const PersonaScope& current) const 
             if (provider_requires_api_key(p.provider) || p.model.isEmpty())
                 continue;
             if (p.provider.compare(provider, Qt::CaseInsensitive) == 0)
-                continue;  // already there
+                continue; // already there
             // Carry the caller's REQUEST settings across the hop, not just
             // its identity. This used to copy think/prompt/tool_globs/valid
             // and drop the rest, so a news brief that fell back here was
@@ -1195,62 +1201,62 @@ LlmService::HttpResult LlmService::eventloop_request(const QString& method, cons
     constexpr int kBackoffMs = 600;
 
     auto attempt_once = [&]() -> HttpResult {
-    HttpResult result;
-    QNetworkAccessManager nam;
-    QNetworkRequest req{QUrl(url)};
-    req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
-    for (auto it = headers.constBegin(); it != headers.constEnd(); ++it)
-        req.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
+        HttpResult result;
+        QNetworkAccessManager nam;
+        QNetworkRequest req{QUrl(url)};
+        req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+        for (auto it = headers.constBegin(); it != headers.constEnd(); ++it)
+            req.setRawHeader(it.key().toUtf8(), it.value().toUtf8());
 
-    QNetworkReply* reply = (method == "GET") ? nam.get(req) : nam.post(req, body);
+        QNetworkReply* reply = (method == "GET") ? nam.get(req) : nam.post(req, body);
 
-    QEventLoop loop;
-    QTimer timer;
-    timer.setSingleShot(true);
-    timer.start(timeout_ms);
-    QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
-    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
-    loop.exec();
+        QEventLoop loop;
+        QTimer timer;
+        timer.setSingleShot(true);
+        timer.start(timeout_ms);
+        QObject::connect(&timer, &QTimer::timeout, &loop, &QEventLoop::quit);
+        QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+        loop.exec();
 
-    if (!reply->isFinished()) {
-        reply->abort();
-        reply->deleteLater();
-        result.error = "Request timed out";
-        return result;
-    }
+        if (!reply->isFinished()) {
+            reply->abort();
+            reply->deleteLater();
+            result.error = "Request timed out";
+            return result;
+        }
 
-    result.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-    result.body = reply->readAll();
-    result.success = (result.status >= 200 && result.status < 300);
-    if (!result.success) {
-        QString server_msg;
-        auto err_doc = QJsonDocument::fromJson(result.body);
-        if (!err_doc.isNull() && err_doc.isObject()) {
-            QJsonObject ej = err_doc.object();
-            // Top-level {"message": ...} (OpenAI/Anthropic legacy shape)
-            if (ej.contains("message") && ej["message"].isString())
-                server_msg = ej["message"].toString();
-            // Nested {"error": {"message": ..., "metadata": {"raw": ...}}}
-            // (OpenAI current, OpenRouter, DeepSeek, Groq all use this shape)
-            if (server_msg.isEmpty() && ej.contains("error") && ej["error"].isObject()) {
-                QJsonObject eo = ej["error"].toObject();
-                if (eo.contains("message") && eo["message"].isString())
-                    server_msg = eo["message"].toString();
-                // OpenRouter surfaces upstream errors in metadata.raw
-                if (eo.contains("metadata") && eo["metadata"].isObject()) {
-                    QJsonObject md = eo["metadata"].toObject();
-                    QString raw = md["raw"].toString();
-                    QString provider_name = md["provider_name"].toString();
-                    if (!raw.isEmpty())
-                        server_msg += " (upstream " + provider_name + ": " + raw + ")";
+        result.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        result.body = reply->readAll();
+        result.success = (result.status >= 200 && result.status < 300);
+        if (!result.success) {
+            QString server_msg;
+            auto err_doc = QJsonDocument::fromJson(result.body);
+            if (!err_doc.isNull() && err_doc.isObject()) {
+                QJsonObject ej = err_doc.object();
+                // Top-level {"message": ...} (OpenAI/Anthropic legacy shape)
+                if (ej.contains("message") && ej["message"].isString())
+                    server_msg = ej["message"].toString();
+                // Nested {"error": {"message": ..., "metadata": {"raw": ...}}}
+                // (OpenAI current, OpenRouter, DeepSeek, Groq all use this shape)
+                if (server_msg.isEmpty() && ej.contains("error") && ej["error"].isObject()) {
+                    QJsonObject eo = ej["error"].toObject();
+                    if (eo.contains("message") && eo["message"].isString())
+                        server_msg = eo["message"].toString();
+                    // OpenRouter surfaces upstream errors in metadata.raw
+                    if (eo.contains("metadata") && eo["metadata"].isObject()) {
+                        QJsonObject md = eo["metadata"].toObject();
+                        QString raw = md["raw"].toString();
+                        QString provider_name = md["provider_name"].toString();
+                        if (!raw.isEmpty())
+                            server_msg += " (upstream " + provider_name + ": " + raw + ")";
+                    }
                 }
             }
+            result.error = server_msg.isEmpty() ? QString("HTTP %1: %2").arg(result.status).arg(reply->errorString())
+                                                : QString("HTTP %1: %2").arg(result.status).arg(server_msg);
         }
-        result.error = server_msg.isEmpty() ? QString("HTTP %1: %2").arg(result.status).arg(reply->errorString())
-                                            : QString("HTTP %1: %2").arg(result.status).arg(server_msg);
-    }
-    reply->deleteLater();
-    return result;
+        reply->deleteLater();
+        return result;
     };
 
     HttpResult result;
@@ -1263,7 +1269,10 @@ LlmService::HttpResult LlmService::eventloop_request(const QString& method, cons
         if (!transient || attempt == kRetries)
             break;
         LOG_INFO(TAG, QString("HTTP %1 from %2 — retrying (attempt %3/%4)")
-                          .arg(s).arg(QUrl(url).host()).arg(attempt + 2).arg(kRetries + 1));
+                          .arg(s)
+                          .arg(QUrl(url).host())
+                          .arg(attempt + 2)
+                          .arg(kRetries + 1));
         // Timer-driven wait, not a thread sleep: this runs on a thread whose
         // event loop QNetworkAccessManager still needs to service.
         QEventLoop backoff;
@@ -1441,7 +1450,7 @@ LlmResponse LlmService::fincept_async_request(const QString& user_message,
                 QString followup_url = get_endpoint_url();
                 auto followup_hdr = get_headers();
                 auto tool_result =
-try_extract_and_execute_text_tool_calls(resp.content, user_message, followup_url, followup_hdr);
+                    try_extract_and_execute_text_tool_calls(resp.content, user_message, followup_url, followup_hdr);
                 if (tool_result.has_value()) {
                     LOG_INFO(TAG, "finterm: text tool calls detected and executed");
                     return tool_result.value();
@@ -1468,7 +1477,7 @@ try_extract_and_execute_text_tool_calls(resp.content, user_message, followup_url
 // ============================================================================
 
 LlmResponse LlmService::do_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                  bool use_tools, const PersonaScope& persona) {
+                                   bool use_tools, const PersonaScope& persona) {
     LlmResponse resp;
 
     QString url = get_endpoint_url(persona);
@@ -1492,8 +1501,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     // the base remembered so the miss is paid once. Getting this wrong the
     // other way would have broken TL;DR, DIGEST and article analysis on a
     // default install.
-    const QString native_url = use_ollama_native(persona, use_tools) ? ollama_native_url(persona)
-                                                                     : QString();
+    const QString native_url = use_ollama_native(persona, use_tools) ? ollama_native_url(persona) : QString();
     bool native = false;
     if (!native_url.isEmpty()) {
         QMutexLocker route_lock(&no_native_route_mutex_);
@@ -1542,9 +1550,9 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     if (native && !http.success) {
         const bool permanent = http.status >= 400 && http.status < 500;
         LOG_INFO(TAG, QString("Native route at %1 failed (HTTP %2: %3) — falling back to /v1%4")
-                          .arg(url).arg(http.status)
-                          .arg(http.error.left(120),
-                               permanent ? QStringLiteral(" and not retrying it") : QString()));
+                          .arg(url)
+                          .arg(http.status)
+                          .arg(http.error.left(120), permanent ? QStringLiteral(" and not retrying it") : QString()));
         if (permanent) {
             QMutexLocker route_lock(&no_native_route_mutex_);
             no_native_route_.insert(native_url);
@@ -1588,7 +1596,8 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
             const QString why = rj["done_reason"].toString();
             resp.error = why == QLatin1String("length")
                              ? QStringLiteral("model hit the output limit before answering "
-                                              "(%1 tokens)").arg(resp.completion_tokens)
+                                              "(%1 tokens)")
+                                   .arg(resp.completion_tokens)
                              : QStringLiteral("model returned an empty message (done_reason=%1)")
                                    .arg(why.isEmpty() ? QStringLiteral("none") : why);
             LOG_WARN(TAG, "Ollama native: " + resp.error);
@@ -1701,9 +1710,8 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                     else
                         response_obj = tr.to_json();
 
-                    fn_response_parts.append(QJsonObject{
-                        {"functionResponse",
-                         QJsonObject{{"name", fn_name}, {"response", response_obj}}}});
+                    fn_response_parts.append(
+                        QJsonObject{{"functionResponse", QJsonObject{{"name", fn_name}, {"response", response_obj}}}});
                 }
 
                 if (!fn_response_parts.isEmpty()) {
@@ -1713,19 +1721,14 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                         if (m.role == "system")
                             continue;
                         QString role = (m.role == "assistant") ? "model" : "user";
-                        fu_contents.append(QJsonObject{
-                            {"role", role},
-                            {"parts", QJsonArray{QJsonObject{{"text", m.content}}}}});
+                        fu_contents.append(
+                            QJsonObject{{"role", role}, {"parts", QJsonArray{QJsonObject{{"text", m.content}}}}});
                     }
-                    fu_contents.append(QJsonObject{
-                        {"role", "user"},
-                        {"parts", QJsonArray{QJsonObject{{"text", user_message}}}}});
-                    fu_contents.append(QJsonObject{
-                        {"role", "model"},
-                        {"parts", parts}}); // echo the functionCall parts verbatim
-                    fu_contents.append(QJsonObject{
-                        {"role", "user"},
-                        {"parts", fn_response_parts}});
+                    fu_contents.append(
+                        QJsonObject{{"role", "user"}, {"parts", QJsonArray{QJsonObject{{"text", user_message}}}}});
+                    fu_contents.append(
+                        QJsonObject{{"role", "model"}, {"parts", parts}}); // echo the functionCall parts verbatim
+                    fu_contents.append(QJsonObject{{"role", "user"}, {"parts", fn_response_parts}});
 
                     QJsonObject fu_body;
                     fu_body["contents"] = fu_contents;
@@ -1814,12 +1817,15 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                         QJsonDocument::fromJson(tc["function"].toObject()["arguments"].toString("{}").toUtf8())
                             .object();
 
-                    LOG_INFO(TAG, QString("Executing tool: %1 args=%2").arg(fn_name,
-                                  QString::fromUtf8(QJsonDocument(fn_args).toJson(QJsonDocument::Compact)).left(200)));
+                    LOG_INFO(
+                        TAG,
+                        QString("Executing tool: %1 args=%2")
+                            .arg(fn_name,
+                                 QString::fromUtf8(QJsonDocument(fn_args).toJson(QJsonDocument::Compact)).left(200)));
                     auto tr = mcp::McpService::instance().execute_openai_function(fn_name, fn_args);
-                    LOG_INFO(TAG, QString("Tool %1 -> %2 (msg=%3 err=%4)")
-                                      .arg(fn_name, tr.success ? "OK" : "FAIL",
-                                           tr.message.left(120), tr.error.left(120)));
+                    LOG_INFO(TAG,
+                             QString("Tool %1 -> %2 (msg=%3 err=%4)")
+                                 .arg(fn_name, tr.success ? "OK" : "FAIL", tr.message.left(120), tr.error.left(120)));
                     loop_msgs.append(QJsonObject{
                         {"role", "tool"},
                         {"tool_call_id", call_id},
@@ -1846,8 +1852,7 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
     // execute the tools, then ask the LLM to summarize the results.
     if (!resp.content.isEmpty()) {
         LOG_INFO(TAG, "Checking response for text-based tool calls, content starts with: " + resp.content.left(120));
-        auto text_tool_result =
-            try_extract_and_execute_text_tool_calls(resp.content, user_message, url, hdr, persona);
+        auto text_tool_result = try_extract_and_execute_text_tool_calls(resp.content, user_message, url, hdr, persona);
         if (text_tool_result.has_value()) {
             resp = text_tool_result.value();
             if (resp.success)
@@ -1921,12 +1926,14 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
                 QJsonObject fa =
                     QJsonDocument::fromJson(tc["function"].toObject()["arguments"].toString("{}").toUtf8()).object();
 
-                LOG_INFO(TAG, QString("TOOL LOOP r%1: executing %2 args=%3").arg(round).arg(fname,
-                              QString::fromUtf8(QJsonDocument(fa).toJson(QJsonDocument::Compact)).left(200)));
+                LOG_INFO(TAG, QString("TOOL LOOP r%1: executing %2 args=%3")
+                                  .arg(round)
+                                  .arg(fname,
+                                       QString::fromUtf8(QJsonDocument(fa).toJson(QJsonDocument::Compact)).left(200)));
                 auto tr = mcp::McpService::instance().execute_openai_function(fname, fa);
                 LOG_INFO(TAG, QString("TOOL LOOP r%1: %2 -> %3 (msg=%4 err=%5)")
-                                  .arg(round).arg(fname,
-                                       tr.success ? "OK" : "FAIL", tr.message.left(120), tr.error.left(120)));
+                                  .arg(round)
+                                  .arg(fname, tr.success ? "OK" : "FAIL", tr.message.left(120), tr.error.left(120)));
                 loop_messages.append(QJsonObject{
                     {"role", "tool"},
                     {"tool_call_id", cid},
@@ -1942,7 +1949,8 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
         if (!resp.success)
             resp.error = no_answer_error(choices[0].toObject()["finish_reason"].toString());
         LOG_INFO(TAG, QString("TOOL LOOP: finished after %1 round(s) — %2 chars of text")
-                          .arg(round + 1).arg(resp.content.length()));
+                          .arg(round + 1)
+                          .arg(resp.content.length()));
         return resp;
     }
 
@@ -1952,11 +1960,11 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
     LOG_WARN(TAG, "TOOL LOOP: exceeded max rounds — forcing summary turn (no tools)");
     {
         // Append a synthetic system nudge instructing the model to wrap up.
-        loop_messages.append(QJsonObject{
-            {"role", "system"},
-            {"content", "You have used your tool-call budget. Reply now with a final answer to the user "
-                        "summarizing what you accomplished and what (if anything) is incomplete. Do not "
-                        "request any more tools."}});
+        loop_messages.append(
+            QJsonObject{{"role", "system"},
+                        {"content", "You have used your tool-call budget. Reply now with a final answer to the user "
+                                    "summarizing what you accomplished and what (if anything) is incomplete. Do not "
+                                    "request any more tools."}});
 
         QJsonObject fu;
         fu["model"] = eff_model(persona);
@@ -1975,8 +1983,7 @@ LlmResponse LlmService::do_tool_loop(QJsonArray loop_messages, const QString& ur
                     resp.content = extract_openai_message_text(msg);
                     parse_usage(resp, rj, eff_provider(persona));
                     resp.success = !resp.content.isEmpty();
-                    LOG_INFO(TAG, QString("TOOL LOOP: summary fallback produced %1 chars")
-                                      .arg(resp.content.length()));
+                    LOG_INFO(TAG, QString("TOOL LOOP: summary fallback produced %1 chars").arg(resp.content.length()));
                     if (resp.success)
                         return resp;
                 }
@@ -2694,9 +2701,7 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
     }();
     // Guard on_chunk: if LlmService is destroyed before a chunk arrives,
     // skip the callback entirely rather than invoking into a dead context.
-    StreamCallback guarded_chunk = [self, on_chunk
-        , stream_id, stream_topic
-    ](const QString& chunk, bool done) {
+    StreamCallback guarded_chunk = [self, on_chunk, stream_id, stream_topic](const QString& chunk, bool done) {
         if (!self)
             return;
         on_chunk(chunk, done);
@@ -2713,34 +2718,33 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
             hub.retire_topic(stream_topic);
         }
     };
-    (void)QtConcurrent::run(
-        [self, user_message, history_copy, guarded_chunk, use_tools, persona, on_done]() {
-            if (!self)
-                return;
+    (void)QtConcurrent::run([self, user_message, history_copy, guarded_chunk, use_tools, persona, on_done]() {
+        if (!self)
+            return;
 
-            // use_tools rides the call, not the shared config. The old code
-            // flipped tools_enabled_ off and back around this request, so a
-            // concurrent tool-using chat built during a no-tools call (the
-            // bubble, a one-shot) silently lost its tools.
-            auto resp = self->do_streaming_request(user_message, history_copy, guarded_chunk, use_tools, persona);
+        // use_tools rides the call, not the shared config. The old code
+        // flipped tools_enabled_ off and back around this request, so a
+        // concurrent tool-using chat built during a no-tools call (the
+        // bubble, a one-shot) silently lost its tools.
+        auto resp = self->do_streaming_request(user_message, history_copy, guarded_chunk, use_tools, persona);
 
-            if (self) {
-                QMetaObject::invokeMethod(
-                    self,
-                    [self, resp, on_done]() {
-                        if (!self)
-                            return;
-                        // Deliver to the originating caller only (no cross-pane
-                        // broadcast) when it supplied a completion callback;
-                        // otherwise fall back to the legacy global signal.
-                        if (on_done)
-                            on_done(resp);
-                        else
-                            emit self->finished_streaming(resp);
-                    },
-                    Qt::QueuedConnection);
-            }
-        });
+        if (self) {
+            QMetaObject::invokeMethod(
+                self,
+                [self, resp, on_done]() {
+                    if (!self)
+                        return;
+                    // Deliver to the originating caller only (no cross-pane
+                    // broadcast) when it supplied a completion callback;
+                    // otherwise fall back to the legacy global signal.
+                    if (on_done)
+                        on_done(resp);
+                    else
+                        emit self->finished_streaming(resp);
+                },
+                Qt::QueuedConnection);
+        }
+    });
 }
 
 } // namespace fincept::ai_chat

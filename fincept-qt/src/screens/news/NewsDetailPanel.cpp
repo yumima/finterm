@@ -8,11 +8,11 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
+#include <QAbstractTextDocumentLayout>
 #include <QApplication>
 #include <QClipboard>
 #include <QDateTime>
 #include <QDesktopServices>
-#include <QAbstractTextDocumentLayout>
 #include <QFile>
 #include <QFileInfo>
 #include <QPointer>
@@ -52,8 +52,7 @@ namespace {
 //     emits single \n inside one paragraph for byline / dateline blocks).
 QString format_article_html(const QString& plain) {
     QString escaped = plain.toHtmlEscaped();
-    const QStringList paras = escaped.split(QStringLiteral("\n\n"),
-                                            Qt::SkipEmptyParts);
+    const QStringList paras = escaped.split(QStringLiteral("\n\n"), Qt::SkipEmptyParts);
     QString html;
     html.reserve(escaped.size() + paras.size() * 64);
 
@@ -69,12 +68,12 @@ QString format_article_html(const QString& plain) {
     bool first = true;
     for (QString p : paras) {
         p = p.trimmed();
-        if (p.isEmpty()) continue;
+        if (p.isEmpty())
+            continue;
         p.replace(QStringLiteral("\n"), QStringLiteral("<br>"));
         const int indent_px = first ? 0 : 30;
-        html += QStringLiteral(
-                    "<p style=\"text-indent:%1px; line-height:170%; "
-                    "margin-bottom:14px;\">")
+        html += QStringLiteral("<p style=\"text-indent:%1px; line-height:170%; "
+                               "margin-bottom:14px;\">")
                     .arg(indent_px);
         html += p;
         html += QStringLiteral("</p>");
@@ -135,8 +134,7 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     connect(tldr_listen_btn_, &QPushButton::clicked, this, [this]() {
         if (tldr_text_.trimmed().isEmpty() && !tldr_listen_->active())
             return;
-        tldr_listen_->toggle(
-            [this]() { return services::TtsService::instance().speak_via_engine(tldr_plain_text()); });
+        tldr_listen_->toggle([this]() { return services::TtsService::instance().speak_via_engine(tldr_plain_text()); });
     });
 
     stack_ = new QStackedWidget(this);
@@ -201,7 +199,7 @@ QWidget* NewsDetailPanel::build_content_view() {
     tldr_label_ = new QLabel(tldr_section_);
     tldr_label_->setObjectName("newsTldrBody");
     tldr_label_->setWordWrap(true);
-    tldr_label_->setTextFormat(Qt::MarkdownText);  // the LLM brief is markdown — render it
+    tldr_label_->setTextFormat(Qt::MarkdownText); // the LLM brief is markdown — render it
     tldr_layout->addWidget(tldr_label_);
 
     layout->addWidget(tldr_section_);
@@ -221,7 +219,7 @@ QWidget* NewsDetailPanel::build_content_view() {
     headline_label_->setWordWrap(true);
     headline_label_->setTextFormat(Qt::RichText);
     headline_label_->setTextInteractionFlags(Qt::TextBrowserInteraction);
-    headline_label_->setOpenExternalLinks(false);  // route via QDesktopServices below
+    headline_label_->setOpenExternalLinks(false); // route via QDesktopServices below
     headline_label_->setCursor(Qt::PointingHandCursor);
     {
         QPalette pal = headline_label_->palette();
@@ -534,11 +532,8 @@ QWidget* NewsDetailPanel::build_content_view() {
     // overflow when the panel is shorter than the article. documentLayout's
     // documentSizeChanged fires after every reflow (content + resize), so
     // the widget tracks the document's natural height across rewraps.
-    connect(body_label_->document()->documentLayout(),
-            &QAbstractTextDocumentLayout::documentSizeChanged,
-            body_label_, [this](const QSizeF& size) {
-                body_label_->setFixedHeight(static_cast<int>(size.height()) + 4);
-            });
+    connect(body_label_->document()->documentLayout(), &QAbstractTextDocumentLayout::documentSizeChanged, body_label_,
+            [this](const QSizeF& size) { body_label_->setFixedHeight(static_cast<int>(size.height()) + 4); });
     body_layout->addWidget(body_label_);
     layout->addWidget(body_section_);
 
@@ -564,7 +559,7 @@ QWidget* NewsDetailPanel::build_content_view() {
     ai_summary_ = new QLabel(analysis_section_);
     ai_summary_->setObjectName("newsDetailAiSummary");
     ai_summary_->setWordWrap(true);
-    ai_summary_->setTextFormat(Qt::MarkdownText);  // LLM analysis is markdown — render it
+    ai_summary_->setTextFormat(Qt::MarkdownText); // LLM analysis is markdown — render it
     analysis_layout->addWidget(ai_summary_);
 
     auto* ai_row = new QWidget(analysis_section_);
@@ -700,8 +695,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     // Every per-story section belongs to the story that populated it.
     // ENTITIES and INFRASTRUCTURE were never reset here, so a late callback
     // for the previous article could leave its findings under this headline.
-    for (QWidget* section : {analysis_section_, related_section_, monitor_section_,
-                             entities_section_, infra_section_})
+    for (QWidget* section : {analysis_section_, related_section_, monitor_section_, entities_section_, infra_section_})
         if (section)
             section->hide();
     stack_->setCurrentIndex(1);
@@ -715,9 +709,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     headline_label_->setText(
         QString("<a href=\"%1\" style=\"text-decoration:none;\">"
                 "<span style=\"color:%2;\">%3</span></a>")
-            .arg(article.link.toHtmlEscaped(),
-                 ui::colors::TEXT_PRIMARY(),
-                 article.headline.toHtmlEscaped()));
+            .arg(article.link.toHtmlEscaped(), ui::colors::TEXT_PRIMARY(), article.headline.toHtmlEscaped()));
     headline_label_->setToolTip(article.link);
 
     // Priority badge
@@ -823,14 +815,14 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
     body_title_->show();
     QPointer<NewsDetailPanel> self = this;
     services::NewsService::instance().extract_article_body(
-        article.link,
-        [self, my_gen](bool ok, QString /*title*/, QString text) {
-            if (!self) return;
-            if (my_gen != self->body_gen_) return; // stale — user opened a different article
+        article.link, [self, my_gen](bool ok, QString /*title*/, QString text) {
+            if (!self)
+                return;
+            if (my_gen != self->body_gen_)
+                return; // stale — user opened a different article
             if (!ok || text.trimmed().isEmpty()) {
-                self->body_status_->setText(
-                    "Could not extract body (paywall, blocked, or unsupported page). "
-                    "Use OPEN to read in browser.");
+                self->body_status_->setText("Could not extract body (paywall, blocked, or unsupported page). "
+                                            "Use OPEN to read in browser.");
                 self->body_label_->clear();
                 return;
             }
@@ -1165,11 +1157,16 @@ void NewsDetailPanel::reveal_article_section(QWidget* section) {
 void NewsDetailPanel::set_article_visible(bool visible) {
     // Whether the story was ALREADY put away, read before anything moves.
     const bool already_hidden = headline_label_ && headline_label_->isHidden();
-    if (headline_label_)      headline_label_->setVisible(visible);
-    if (article_meta_row_)    article_meta_row_->setVisible(visible);
-    if (summary_label_)       summary_label_->setVisible(visible);
-    if (article_actions_)     article_actions_->setVisible(visible);
-    if (article_separator_)   article_separator_->setVisible(visible);
+    if (headline_label_)
+        headline_label_->setVisible(visible);
+    if (article_meta_row_)
+        article_meta_row_->setVisible(visible);
+    if (summary_label_)
+        summary_label_->setVisible(visible);
+    if (article_actions_)
+        article_actions_->setVisible(visible);
+    if (article_separator_)
+        article_separator_->setVisible(visible);
     sync_article_block();
 
     if (visible) {
@@ -1193,8 +1190,8 @@ void NewsDetailPanel::set_article_visible(bool visible) {
     if (already_hidden)
         return;
     sections_hidden_by_brief_.clear();
-    for (QWidget* section : {analysis_section_, related_section_, monitor_section_,
-                             entities_section_, infra_section_}) {
+    for (QWidget* section :
+         {analysis_section_, related_section_, monitor_section_, entities_section_, infra_section_}) {
         // isHidden(), not isVisible(): the panel may itself be off-screen
         // (another dock tab in front), and that must not be mistaken for a
         // section the story had closed.
@@ -1281,8 +1278,8 @@ void NewsDetailPanel::prewarm_brief(const QString& partial) {
 void NewsDetailPanel::sync_tldr_listen() {
     // No voice anywhere (e.g. Anthropic engine, no Piper, or voice switched
     // off) → no button, rather than one that can only ever say NO VOICE.
-    const bool show = brief_owns_pane_ && !tldr_text_.trimmed().isEmpty()
-                      && services::TtsService::instance().engine_or_local_available();
+    const bool show = brief_owns_pane_ && !tldr_text_.trimmed().isEmpty() &&
+                      services::TtsService::instance().engine_or_local_available();
     // A brief that leaves the pane (new brief, article opened) takes its
     // reading with it — the button that could stop it is about to vanish.
     if (!show)
@@ -1293,7 +1290,7 @@ void NewsDetailPanel::sync_tldr_listen() {
 
 void NewsDetailPanel::hide_tldr() {
     brief_owns_pane_ = false;
-    brief_pending_   = false;
+    brief_pending_ = false;
     tldr_text_.clear();
     sync_tldr_listen();
     // Give the pane back to the open story. Today's only caller follows this

@@ -20,12 +20,12 @@ class TickerBar : public QWidget {
 
     struct Entry {
         QString symbol;
-        double  price  = 0;
-        double  change = 0;  // percent change; NaN when unknown → "—"
+        double price = 0;
+        double change = 0; // percent change; NaN when unknown → "—"
     };
 
     void set_data(const QVector<Entry>& entries);
-    void pause()  { scroll_timer_.stop(); }
+    void pause() { scroll_timer_.stop(); }
     void resume() {
         if (total_width_ > 0) {
             // Drop the stored delta so the first tick after resume doesn't
@@ -66,22 +66,22 @@ class TickerBar : public QWidget {
     // smooth even when the tick rate is irregular. The previous frame-rate-
     // coupled `offset_ += 1.0` produced visible stutter under load.
     QVector<Entry> entries_;
-    QTimer         scroll_timer_;
-    QElapsedTimer  scroll_clock_;            ///< last_tick wall-clock for delta
-    double         offset_      = 0;
-    int            total_width_ = 0;
+    QTimer scroll_timer_;
+    QElapsedTimer scroll_clock_; ///< last_tick wall-clock for delta
+    double offset_ = 0;
+    int total_width_ = 0;
     /// Width of each entry as painted (symbol, price, change and the trailing
     /// spacing), in entries_ order — the hit test walks the same layout.
-    QVector<int>   entry_widths_;
-    static constexpr double kScrollPixelsPerSec = 20.0;  ///< matches prior visual speed
+    QVector<int> entry_widths_;
+    static constexpr double kScrollPixelsPerSec = 20.0; ///< matches prior visual speed
 
     // ── Symbol list ──
     QStringList symbols_;
 
     // ── Inline edit overlay ──
-    QWidget*     edit_bar_   = nullptr;
-    QLineEdit*   edit_input_ = nullptr;
-    QPushButton* edit_ok_    = nullptr;
+    QWidget* edit_bar_ = nullptr;
+    QLineEdit* edit_input_ = nullptr;
+    QPushButton* edit_ok_ = nullptr;
     QPushButton* edit_cancel_ = nullptr;
 };
 

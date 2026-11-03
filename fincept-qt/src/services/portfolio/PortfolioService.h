@@ -1,18 +1,18 @@
 // src/services/portfolio/PortfolioService.h
 #pragma once
+#include "core/result/Result.h"
 #include "python/PythonRunner.h"
 #include "screens/portfolio/PortfolioTypes.h"
 #include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioFx.h"
-#include "core/result/Result.h"
 #include "services/portfolio/PortfolioLedger.h"
 
 #include <QDateTime>
 #include <QHash>
 #include <QMutex>
-#include <QSet>
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QTimer>
 
 #include <limits>
@@ -130,8 +130,7 @@ class PortfolioService : public QObject {
     /// resolution. Pass e.g. ("5d", "30m") to drive the 1W focused-symbol
     /// chart at half-hour granularity over the trading week.
     /// Emits symbol_intraday_loaded() on success.
-    void fetch_symbol_intraday(const QString& symbol,
-                               const QString& period = QStringLiteral("1d"),
+    void fetch_symbol_intraday(const QString& symbol, const QString& period = QStringLiteral("1d"),
                                const QString& interval = QStringLiteral("1m"));
 
     /// Build today's aggregate portfolio-NAV curve by fetching 1-minute bars
@@ -150,8 +149,7 @@ class PortfolioService : public QObject {
     /// cache it. Symbols with a fresh cache entry are skipped, so the common
     /// 20 s refresh tick issues no requests at all. Emits
     /// position_peaks_loaded() once the fan-out completes with any new peaks.
-    void fetch_position_peaks(const QString& portfolio_id,
-                              const QVector<portfolio::PortfolioAsset>& assets);
+    void fetch_position_peaks(const QString& portfolio_id, const QVector<portfolio::PortfolioAsset>& assets);
 
     // ── Risk-free rate ────────────────────────────────────────────────────────
     /// Fetch the current 10-year Treasury yield (^TNX via the quote daemon).
@@ -217,8 +215,7 @@ class PortfolioService : public QObject {
     /// `summary`'s current rates so a symbol without a captured series still
     /// converts. The perf chart and the metrics engine share this, so a
     /// period return and a volatility can never disagree about a rate.
-    portfolio::FxRates fx_rates_for(const QString& portfolio_id,
-                                    const portfolio::PortfolioSummary& summary) const;
+    portfolio::FxRates fx_rates_for(const QString& portfolio_id, const portfolio::PortfolioSummary& summary) const;
 
     /// Reload persisted FX pair series from the cache. Called once at
     /// startup: an established user never re-runs a backfill, so without
@@ -290,19 +287,17 @@ class PortfolioService : public QObject {
     /// 1-minute intraday close series for a single symbol. Timestamps are
     /// epoch-ms (so the chart's QDateTimeAxis can plot sub-day resolution
     /// without lossy date-only string conversion).
-    void symbol_intraday_loaded(QString symbol, QVector<qint64> timestamps_ms,
-                                QVector<double> closes);
+    void symbol_intraday_loaded(QString symbol, QVector<qint64> timestamps_ms, QVector<double> closes);
     /// 1-minute aggregate-NAV intraday series for a portfolio. Built by
     /// summing (qty × close × FX) across all holdings at each shared
     /// timestamp. Empty when unavailable; `unavailable_reason` then says why
     /// (a holding without bars, an unknown currency/FX rate) — empty when the
     /// series is complete or there is simply nothing to fetch.
-    void portfolio_intraday_loaded(QString portfolio_id, QVector<qint64> timestamps_ms,
-                                   QVector<double> navs, QString unavailable_reason);
+    void portfolio_intraday_loaded(QString portfolio_id, QVector<qint64> timestamps_ms, QVector<double> navs,
+                                   QString unavailable_reason);
 
     /// MV-weighted analyst fundamentals for the whole portfolio.
-    void portfolio_fundamentals_loaded(QString portfolio_id,
-                                       portfolio::PortfolioFundamentals fundamentals);
+    void portfolio_fundamentals_loaded(QString portfolio_id, portfolio::PortfolioFundamentals fundamentals);
 
     /// Every in-flight currency lookup finished. The summary is rebuilt on
     /// this so a face-value valuation converts as soon as the rates are known
@@ -403,7 +398,7 @@ class PortfolioService : public QObject {
     // that cadence would hammer yfinance for a number that moves at most once
     // a day. Guarded by cache_mutex_.
     struct PeakEntry {
-        double high = 0;      // 0 = fetched but no data (or never fetched)
+        double high = 0;       // 0 = fetched but no data (or never fetched)
         qint64 fetched_at = 0; // epoch secs of the last completed attempt
     };
     QHash<QString, PeakEntry> peak_cache_;
@@ -484,9 +479,9 @@ class PortfolioService : public QObject {
     // captured epoch no longer matches and the callback drops silently
     // instead of emitting stale data over a newer request. Per-stream so a
     // symbol fetch can't cancel a portfolio fetch and vice versa.
-    qint64 symbol_intraday_epoch_    = 0;
+    qint64 symbol_intraday_epoch_ = 0;
     qint64 portfolio_intraday_epoch_ = 0;
-    qint64 correlation_epoch_        = 0; // newest fetch_correlation request
+    qint64 correlation_epoch_ = 0; // newest fetch_correlation request
 };
 
 } // namespace fincept::services

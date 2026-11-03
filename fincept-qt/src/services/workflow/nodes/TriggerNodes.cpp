@@ -129,48 +129,48 @@ void register_trigger_nodes(NodeRegistry& registry) {
                 const qint64 cutoff =
                     QDateTime::currentSecsSinceEpoch() - static_cast<qint64>(std::max(0.0, lookback_h) * 3600.0);
 
-                services::NewsService::instance().fetch_all_news(
-                    false, [keywords, cutoff, cb](bool ok, QVector<services::NewsArticle> articles) {
-                        if (!ok) {
-                            cb(false, {}, "News Event: news feed unavailable");
-                            return;
-                        }
-                        QJsonArray matches;
-                        QStringList hit_keywords;
-                        for (const auto& a : articles) {
-                            if (a.sort_ts <= 0 || a.sort_ts < cutoff)
-                                continue; // unknown or too old publish time
-                            const QString text = a.headline + ' ' + a.summary;
-                            QStringList found;
-                            for (const QString& k : keywords)
-                                if (text.contains(k, Qt::CaseInsensitive))
-                                    found << k;
-                            if (found.isEmpty())
-                                continue;
-                            for (const QString& k : found)
-                                if (!hit_keywords.contains(k, Qt::CaseInsensitive))
-                                    hit_keywords << k;
-                            matches.append(QJsonObject{{"headline", a.headline},
-                                                       {"source", a.source},
-                                                       {"link", a.link},
-                                                       {"time", a.time},
-                                                       {"published_ts", static_cast<double>(a.sort_ts)},
-                                                       {"matched", QJsonArray::fromStringList(found)}});
-                        }
-                        if (matches.isEmpty()) {
-                            cb(false, {},
-                               QString("News Event not triggered: no recent articles match %1")
-                                   .arg(keywords.join(", ")));
-                            return;
-                        }
-                        QJsonObject out;
-                        out["keywords"] = QJsonArray::fromStringList(keywords);
-                        out["matched_keywords"] = QJsonArray::fromStringList(hit_keywords);
-                        out["match_count"] = matches.size();
-                        out["articles"] = matches;
-                        out["triggered"] = true;
-                        cb(true, out, {});
-                    });
+                services::NewsService::instance().fetch_all_news(false, [keywords, cutoff,
+                                                                         cb](bool ok,
+                                                                             QVector<services::NewsArticle> articles) {
+                    if (!ok) {
+                        cb(false, {}, "News Event: news feed unavailable");
+                        return;
+                    }
+                    QJsonArray matches;
+                    QStringList hit_keywords;
+                    for (const auto& a : articles) {
+                        if (a.sort_ts <= 0 || a.sort_ts < cutoff)
+                            continue; // unknown or too old publish time
+                        const QString text = a.headline + ' ' + a.summary;
+                        QStringList found;
+                        for (const QString& k : keywords)
+                            if (text.contains(k, Qt::CaseInsensitive))
+                                found << k;
+                        if (found.isEmpty())
+                            continue;
+                        for (const QString& k : found)
+                            if (!hit_keywords.contains(k, Qt::CaseInsensitive))
+                                hit_keywords << k;
+                        matches.append(QJsonObject{{"headline", a.headline},
+                                                   {"source", a.source},
+                                                   {"link", a.link},
+                                                   {"time", a.time},
+                                                   {"published_ts", static_cast<double>(a.sort_ts)},
+                                                   {"matched", QJsonArray::fromStringList(found)}});
+                    }
+                    if (matches.isEmpty()) {
+                        cb(false, {},
+                           QString("News Event not triggered: no recent articles match %1").arg(keywords.join(", ")));
+                        return;
+                    }
+                    QJsonObject out;
+                    out["keywords"] = QJsonArray::fromStringList(keywords);
+                    out["matched_keywords"] = QJsonArray::fromStringList(hit_keywords);
+                    out["match_count"] = matches.size();
+                    out["articles"] = matches;
+                    out["triggered"] = true;
+                    cb(true, out, {});
+                });
             },
     });
 

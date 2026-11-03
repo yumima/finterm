@@ -43,8 +43,8 @@ static QString btn_primary() {
                    "}"
                    "QPushButton:hover { background: %1; color: %3; }"
                    "QPushButton:disabled { color: %4; background: %5; border-color: %6; }")
-        .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
-             ui::colors::BORDER_DIM());
+        .arg(ui::colors::AMBER(), ui::colors::AMBER_DIM(), ui::colors::BG_BASE(), ui::colors::TEXT_SECONDARY(),
+             ui::colors::BG_RAISED(), ui::colors::BORDER_DIM());
 }
 
 static QString btn_danger() {
@@ -85,13 +85,13 @@ static QString error_style() {
 // paste-based brute-force scripts. Called on every PIN entry field in this
 // screen.
 static void harden_pin_input(QLineEdit* edit) {
-    if (!edit) return;
+    if (!edit)
+        return;
 
     // Tell IMEs / on-screen keyboards this is a 6-digit secret — no prediction,
     // no suggestions, no clipboard history surfacing.
-    edit->setInputMethodHints(Qt::ImhDigitsOnly | Qt::ImhSensitiveData |
-                              Qt::ImhNoPredictiveText | Qt::ImhNoAutoUppercase |
-                              Qt::ImhHiddenText);
+    edit->setInputMethodHints(Qt::ImhDigitsOnly | Qt::ImhSensitiveData | Qt::ImhNoPredictiveText |
+                              Qt::ImhNoAutoUppercase | Qt::ImhHiddenText);
 
     // Validator rejects non-digits at the keypress level so only 0-9 can be
     // typed even if the paste block below is ever circumvented.
@@ -111,7 +111,9 @@ static void harden_pin_input(QLineEdit* edit) {
         // Belt-and-braces: if anything non-digit somehow lands here, strip it.
         QString cleaned;
         cleaned.reserve(txt.size());
-        for (const QChar& c : txt) if (c.isDigit()) cleaned.append(c);
+        for (const QChar& c : txt)
+            if (c.isDigit())
+                cleaned.append(c);
         if (cleaned != txt) {
             QSignalBlocker b(edit);
             edit->setText(cleaned);
@@ -193,9 +195,12 @@ void LockScreen::hideEvent(QHideEvent* e) {
     if (lockout_timer_)
         lockout_timer_->stop();
     // Wipe PIN inputs so a resumed unlock attempt never starts pre-filled.
-    if (setup_pin_input_) setup_pin_input_->clear();
-    if (setup_confirm_input_) setup_confirm_input_->clear();
-    if (unlock_pin_input_) unlock_pin_input_->clear();
+    if (setup_pin_input_)
+        setup_pin_input_->clear();
+    if (setup_confirm_input_)
+        setup_confirm_input_->clear();
+    if (unlock_pin_input_)
+        unlock_pin_input_->clear();
 }
 
 // ── PIN Setup Page ──────────────────────────────────────────────────────────

@@ -32,18 +32,18 @@ class IpoCalendarWidget : public BaseWidget {
     struct IpoEntry {
         QString company;
         QString ticker;
-        QString exchange;  // listing exchange (tooltip on ticker)
+        QString exchange; // listing exchange (tooltip on ticker)
         QString date_str;
-        QDate   date;
+        QDate date;
         QString price_range;
         QString status; // "upcoming" | "priced"
     };
 
-    QWidget*     header_widget_ = nullptr;
-    QFrame*      header_sep_    = nullptr;
-    QScrollArea* scroll_area_   = nullptr;
-    QVBoxLayout* list_layout_   = nullptr;
-    QLabel*      status_label_  = nullptr;
+    QWidget* header_widget_ = nullptr;
+    QFrame* header_sep_ = nullptr;
+    QScrollArea* scroll_area_ = nullptr;
+    QVBoxLayout* list_layout_ = nullptr;
+    QLabel* status_label_ = nullptr;
     QVector<QLabel*> header_labels_;
 
     QVector<IpoEntry> entries_;

@@ -1,6 +1,7 @@
 // src/services/equity/EquityResearchModels.h
 #pragma once
 #include "core/util/BarTime.h"
+
 #include <QJsonObject>
 #include <QString>
 #include <QVector>
@@ -12,7 +13,6 @@ namespace fincept::services::equity {
 
 /// "The vendor did not supply this number." Distinct from a real 0.0.
 inline constexpr double kUnknown = std::numeric_limits<double>::quiet_NaN();
-
 
 // ── Symbol search ─────────────────────────────────────────────────────────────
 struct SearchResult {
@@ -282,13 +282,13 @@ struct NewsArticle {
 // Single earnings announcement — used to draw markers on the price chart.
 // Surprise percentage is signed: positive = beat, negative = miss.
 struct EarningsEvent {
-    qint64 timestamp = 0;          // unix seconds at announcement
-    double eps_estimate = 0.0;     // analyst consensus
-    double eps_actual = 0.0;       // reported (0 for upcoming)
-    double surprise_pct = 0.0;     // (actual - estimate) / |estimate| × 100
-    bool   has_estimate = false;
-    bool   has_actual = false;
-    bool   has_surprise = false;
+    qint64 timestamp = 0;      // unix seconds at announcement
+    double eps_estimate = 0.0; // analyst consensus
+    double eps_actual = 0.0;   // reported (0 for upcoming)
+    double surprise_pct = 0.0; // (actual - estimate) / |estimate| × 100
+    bool has_estimate = false;
+    bool has_actual = false;
+    bool has_surprise = false;
 };
 
 // ── Earnings analysis (ER "Earnings" tab) ───────────────────────────────────
@@ -301,7 +301,7 @@ struct EarningsEvent {
 /// One reported quarter: what was expected, what landed, and how the stock
 /// actually traded on the print.
 struct EarningsPoint {
-    qint64 timestamp = 0;                 // unix seconds at announcement
+    qint64 timestamp = 0; // unix seconds at announcement
     // The coming quarter, carried in the same shape with consensus standing
     // in for the actual, so a week before the print the row is already there
     // with its expected QoQ/YoY. Never scored — a forecast is not a track
@@ -309,7 +309,7 @@ struct EarningsPoint {
     bool is_estimate = false;
     std::optional<double> eps_estimate;
     std::optional<double> eps_actual;
-    std::optional<double> surprise_pct;   // signed: + = beat
+    std::optional<double> surprise_pct; // signed: + = beat
     /// True when the surprise is an accounting artefact rather than a beat.
     ///
     /// Yahoo's reported EPS is GAAP; the estimate it is subtracted from is the
@@ -330,7 +330,7 @@ struct EarningsPoint {
     // correlation so the reader can see which one tracks for this name.
     std::optional<double> eps_qoq_pct;
     std::optional<double> eps_yoy_pct;
-    std::optional<double> reaction_pct;   // close-to-close move over the print
+    std::optional<double> reaction_pct; // close-to-close move over the print
     /// The same move while the reaction session is still trading, in the slot
     /// nothing scores. yfinance publishes a bar for the open session with a
     /// running close, so the day after a print `reaction_pct` would otherwise
@@ -339,7 +339,7 @@ struct EarningsPoint {
     /// the separation `move_since_last_pct` uses below. Displayed, marked as
     /// live, and invisible to every average, correlation and predictor.
     std::optional<double> reaction_live_pct;
-    std::optional<double> runup_pct;      // 5 sessions into the print
+    std::optional<double> runup_pct; // 5 sessions into the print
     // 20 sessions into the print — the window the crowding leg is calibrated
     // for. The historical reconstruction needs it per-row; feeding runup_pct
     // (5 sessions) into that slot quietly rescaled the leg by ~2x.
@@ -412,8 +412,8 @@ struct EarningsGrowthRow {
 struct EarningsImpliedMove {
     QString expiry;
     int days_after_print = 0;
-    std::optional<double> total_move_pct;  // ATM straddle ÷ spot
-    std::optional<double> event_move_pct;  // total minus ordinary days, in quadrature
+    std::optional<double> total_move_pct; // ATM straddle ÷ spot
+    std::optional<double> event_move_pct; // total minus ordinary days, in quadrature
     std::optional<double> straddle, spot, strike;
 };
 
@@ -440,11 +440,11 @@ struct EarningsValuation {
 struct EarningsAnalysis {
     QString symbol;
     QString currency;
-    qint64  as_of = 0;
-    bool    valid = false;
+    qint64 as_of = 0;
+    bool valid = false;
     EarningsNext next;
     EarningsValuation valuation;
-    QVector<EarningsPoint> history;        // newest first
+    QVector<EarningsPoint> history; // newest first
     QVector<EarningsEstimateRow> estimates;
     QVector<EarningsTrendRow> trend;
     QVector<EarningsRevisionRow> revisions;
@@ -470,9 +470,7 @@ struct EarningsAnalysis {
     std::optional<double> pre_vol_pct;
 
     /// True when there is nothing earnings-shaped to show (ETF, index, fund).
-    bool has_content() const {
-        return !history.isEmpty() || !estimates.isEmpty() || next.timestamp.has_value();
-    }
+    bool has_content() const { return !history.isEmpty() || !estimates.isEmpty() || next.timestamp.has_value(); }
 };
 
 } // namespace fincept::services::equity

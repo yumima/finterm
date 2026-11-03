@@ -8,9 +8,8 @@
 #include "screens/dashboard/widgets/EarningsCalendarWidget.h"
 #include "screens/dashboard/widgets/EconomicCalendarWidget.h"
 #include "screens/dashboard/widgets/ForexWidget.h"
-#include "screens/dashboard/widgets/IpoCalendarWidget.h"
-#include "screens/dashboard/widgets/OwnershipCalendarWidget.h"
 #include "screens/dashboard/widgets/IndicesWidget.h"
+#include "screens/dashboard/widgets/IpoCalendarWidget.h"
 #include "screens/dashboard/widgets/MarginUsageWidget.h"
 #include "screens/dashboard/widgets/MarketQuoteStripWidget.h"
 #include "screens/dashboard/widgets/MarketSentimentWidget.h"
@@ -18,6 +17,7 @@
 #include "screens/dashboard/widgets/NewsWidget.h"
 #include "screens/dashboard/widgets/OpenPositionsWidget.h"
 #include "screens/dashboard/widgets/OrderBookMiniWidget.h"
+#include "screens/dashboard/widgets/OwnershipCalendarWidget.h"
 #include "screens/dashboard/widgets/PerformanceWidget.h"
 #include "screens/dashboard/widgets/PolymarketPriceWidget.h"
 #include "screens/dashboard/widgets/PortfolioSummaryWidget.h"
@@ -53,8 +53,8 @@ WidgetRegistry::WidgetRegistry() {
     // Existing widgets ignore it until they opt into configurable behaviour.
 
     // ── Markets ───────────────────────────────────────────────────────────────
-    register_widget({"indices", "Market Indices", "Markets", "Major global indices, with their index futures live", 4, 5, 3, 1,
-                     [](const QJsonObject&) { return widgets::create_indices_widget(); }});
+    register_widget({"indices", "Market Indices", "Markets", "Major global indices, with their index futures live", 4,
+                     5, 3, 1, [](const QJsonObject&) { return widgets::create_indices_widget(); }});
 
     register_widget({"forex", "Forex Pairs", "Markets", "Major FX pairs — EURUSD, GBPUSD, USDJPY", 4, 4, 2, 1,
                      [](const QJsonObject&) { return widgets::create_forex_widget(); }});
@@ -136,9 +136,8 @@ WidgetRegistry::WidgetRegistry() {
                      "Aggregate broker account P&L — total, day, realized, open positions", 3, 4, 2, 1,
                      [](const QJsonObject& cfg) { return new widgets::TodayPnLWidget(cfg); }});
 
-    register_widget({"holdings", "Holdings", "Portfolio",
-                     "Long-term broker holdings — avg cost, LTP, P&L %", 6, 5, 3, 1,
-                     [](const QJsonObject& cfg) { return new widgets::BrokerHoldingsWidget(cfg); }});
+    register_widget({"holdings", "Holdings", "Portfolio", "Long-term broker holdings — avg cost, LTP, P&L %", 6, 5, 3,
+                     1, [](const QJsonObject& cfg) { return new widgets::BrokerHoldingsWidget(cfg); }});
 
     // ── Tools ────────────────────────────────────────────────────────────────
     register_widget({"video_player", "Live TV / Streams", "Tools",
@@ -178,8 +177,8 @@ WidgetRegistry::WidgetRegistry() {
                      [](const QJsonObject& cfg) { return new widgets::NewsCategoryWidget(cfg); }});
 
     register_widget({"web_scraper", "Web Scraper", "Tools",
-                     "Scrape tables from any URL — auto-detects HTML, JSON, CSV, XML/RSS", 6, 5, 3,
-                     1, [](const QJsonObject& cfg) { return new widgets::WebScraperWidget(cfg); }});
+                     "Scrape tables from any URL — auto-detects HTML, JSON, CSV, XML/RSS", 6, 5, 3, 1,
+                     [](const QJsonObject& cfg) { return new widgets::WebScraperWidget(cfg); }});
 }
 
 void WidgetRegistry::register_widget(WidgetMeta meta) {

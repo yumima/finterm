@@ -137,8 +137,7 @@ void AgentScheduler::on_tick() {
 int AgentScheduler::tick_now() {
     auto entries = list_entries();
     if (entries.is_err()) {
-        LOG_WARN(TAG, QString("tick: failed to load schedule: %1")
-                          .arg(QString::fromStdString(entries.error())));
+        LOG_WARN(TAG, QString("tick: failed to load schedule: %1").arg(QString::fromStdString(entries.error())));
         return 0;
     }
     const QDateTime now = QDateTime::currentDateTime();
@@ -151,9 +150,8 @@ int AgentScheduler::tick_now() {
             LOG_WARN(TAG, QString("entry %1: invalid cron '%2'").arg(e.id, e.cron));
             continue;
         }
-        const QDateTime last = e.last_run_at.isEmpty()
-                                   ? QDateTime{}
-                                   : QDateTime::fromString(e.last_run_at, Qt::ISODate);
+        const QDateTime last =
+            e.last_run_at.isEmpty() ? QDateTime{} : QDateTime::fromString(e.last_run_at, Qt::ISODate);
         if (!is_due(*spec, last, now))
             continue;
         run_entry(e);
@@ -163,8 +161,7 @@ int AgentScheduler::tick_now() {
 }
 
 void AgentScheduler::run_entry(ScheduleEntry& e) {
-    LOG_INFO(TAG, QString("firing entry %1 (agent=%2, skill=%3)")
-                      .arg(e.id, e.agent_id, e.skill));
+    LOG_INFO(TAG, QString("firing entry %1 (agent=%2, skill=%3)").arg(e.id, e.agent_id, e.skill));
 
     QJsonObject config;
     if (!e.agent_id.isEmpty())
@@ -193,15 +190,14 @@ void AgentScheduler::run_entry(ScheduleEntry& e) {
     // Persist the new last_run / last_status.  Failures here are
     // logged but not fatal — the next tick will see the same entry
     // due again and retry.
-    const QString sql = QStringLiteral(
-        "UPDATE agent_schedule "
-        "SET last_run_at = datetime('now'), last_status = ?, "
-        "    updated_at = datetime('now') "
-        "WHERE id = ?");
+    const QString sql = QStringLiteral("UPDATE agent_schedule "
+                                       "SET last_run_at = datetime('now'), last_status = ?, "
+                                       "    updated_at = datetime('now') "
+                                       "WHERE id = ?");
     auto r = Database::instance().execute(sql, {status, e.id});
     if (r.is_err()) {
-        LOG_WARN(TAG, QString("failed to write last_run for entry %1: %2")
-                          .arg(e.id, QString::fromStdString(r.error())));
+        LOG_WARN(TAG,
+                 QString("failed to write last_run for entry %1: %2").arg(e.id, QString::fromStdString(r.error())));
     }
 }
 
@@ -226,9 +222,8 @@ ScheduleEntry map_row(QSqlQuery& q) {
     return e;
 }
 
-constexpr const char* kCols =
-    "id, agent_id, skill, args_json, cron, enabled, "
-    "last_run_at, last_status, created_at, updated_at";
+constexpr const char* kCols = "id, agent_id, skill, args_json, cron, enabled, "
+                              "last_run_at, last_status, created_at, updated_at";
 
 } // anonymous namespace
 
@@ -246,29 +241,25 @@ Result<QVector<ScheduleEntry>> AgentScheduler::list_entries() {
 
 Result<void> AgentScheduler::save_entry(const ScheduleEntry& e) {
     if (!parse_cron(e.cron)) {
-        return Result<void>::err(
-            "invalid cron expression: '" + e.cron.toStdString() +
-            "' (expected '@daily HH:MM' or '@every Nm' / '@every Nh')");
+        return Result<void>::err("invalid cron expression: '" + e.cron.toStdString() +
+                                 "' (expected '@daily HH:MM' or '@every Nm' / '@every Nh')");
     }
     // last_run_at / last_status are preserved across edits — callers
     // pass empty strings unless they explicitly want to overwrite (e.g.
     // an admin "reset history" action).  created_at is preserved by the
     // same COALESCE pattern.
-    const QString sql = QStringLiteral(
-        "INSERT OR REPLACE INTO agent_schedule "
-        "(id, agent_id, skill, args_json, cron, enabled, "
-        " last_run_at, last_status, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, "
-        "  COALESCE(NULLIF(?, ''), (SELECT last_run_at FROM agent_schedule WHERE id = ?)), "
-        "  COALESCE(NULLIF(?, ''), (SELECT last_status FROM agent_schedule WHERE id = ?)), "
-        "  COALESCE((SELECT created_at FROM agent_schedule WHERE id = ?), datetime('now')), "
-        "  datetime('now'))");
+    const QString sql =
+        QStringLiteral("INSERT OR REPLACE INTO agent_schedule "
+                       "(id, agent_id, skill, args_json, cron, enabled, "
+                       " last_run_at, last_status, created_at, updated_at) "
+                       "VALUES (?, ?, ?, ?, ?, ?, "
+                       "  COALESCE(NULLIF(?, ''), (SELECT last_run_at FROM agent_schedule WHERE id = ?)), "
+                       "  COALESCE(NULLIF(?, ''), (SELECT last_status FROM agent_schedule WHERE id = ?)), "
+                       "  COALESCE((SELECT created_at FROM agent_schedule WHERE id = ?), datetime('now')), "
+                       "  datetime('now'))");
     const QString id = e.id.isEmpty() ? QUuid::createUuid().toString(QUuid::WithoutBraces) : e.id;
     const QVariantList params = {
-        id, e.agent_id, e.skill, e.args_json, e.cron, e.enabled ? 1 : 0,
-        e.last_run_at, id,
-        e.last_status, id,
-        id,
+        id, e.agent_id, e.skill, e.args_json, e.cron, e.enabled ? 1 : 0, e.last_run_at, id, e.last_status, id, id,
     };
     auto r = Database::instance().execute(sql, params);
     if (r.is_err())
@@ -277,8 +268,7 @@ Result<void> AgentScheduler::save_entry(const ScheduleEntry& e) {
 }
 
 Result<void> AgentScheduler::remove_entry(const QString& id) {
-    auto r = Database::instance().execute(
-        QStringLiteral("DELETE FROM agent_schedule WHERE id = ?"), {id});
+    auto r = Database::instance().execute(QStringLiteral("DELETE FROM agent_schedule WHERE id = ?"), {id});
     if (r.is_err())
         return Result<void>::err(r.error());
     return Result<void>::ok();

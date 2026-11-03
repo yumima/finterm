@@ -224,7 +224,8 @@ void FileManagerScreen::build_filter_bar(QVBoxLayout* root) {
     r1l->addWidget(search_input_, 1);
 
     auto* sort_lbl = new QLabel("Sort:");
-    sort_lbl->setStyleSheet(QString("color:%1;font-size:12px;background:transparent;%2").arg(colors::TEXT_SECONDARY(), MF));
+    sort_lbl->setStyleSheet(
+        QString("color:%1;font-size:12px;background:transparent;%2").arg(colors::TEXT_SECONDARY(), MF));
     r1l->addWidget(sort_lbl);
 
     sort_combo_ = new QComboBox;

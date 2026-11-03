@@ -35,9 +35,8 @@ void IpoPipelinePanel::set_form_d(const QVector<FormDFiling>& filings) {
 
 void IpoPipelinePanel::build_ui() {
     setObjectName("ipoPipelinePanel");
-    setStyleSheet(
-        QString("#ipoPipelinePanel { background:%1; border-left:1px solid %2; }")
-            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+    setStyleSheet(QString("#ipoPipelinePanel { background:%1; border-left:1px solid %2; }")
+                      .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -47,8 +46,7 @@ void IpoPipelinePanel::build_ui() {
     auto* pipeline_header = new QWidget;
     pipeline_header->setFixedHeight(36);
     pipeline_header->setStyleSheet(
-        QString("background:%1; border-bottom:1px solid %2;")
-            .arg(colors::BG_RAISED(), colors::BORDER_DIM()));
+        QString("background:%1; border-bottom:1px solid %2;").arg(colors::BG_RAISED(), colors::BORDER_DIM()));
     auto* ph_layout = new QHBoxLayout(pipeline_header);
     ph_layout->setContentsMargins(10, 0, 10, 0);
     auto* ph_lbl = new QLabel("IPO PIPELINE");
@@ -74,26 +72,26 @@ void IpoPipelinePanel::build_ui() {
 
     auto* hdr = pipeline_table_->horizontalHeader();
     hdr->setStretchLastSection(true);
-    hdr->setSectionResizeMode(0, QHeaderView::Interactive); hdr->resizeSection(0, 180); hdr->setStretchLastSection(true);
+    hdr->setSectionResizeMode(0, QHeaderView::Interactive);
+    hdr->resizeSection(0, 180);
+    hdr->setStretchLastSection(true);
     hdr->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     hdr->setSectionResizeMode(2, QHeaderView::ResizeToContents);
     hdr->setMinimumSectionSize(30);
 
-    pipeline_table_->setStyleSheet(
-        QString("QTableWidget { background:%1; color:%2; border:none;"
-                "  font-size:12px; gridline-color:transparent; }"
-                "QTableWidget::item { padding:5px 8px; border-bottom:1px solid %3; }"
-                "QTableWidget::item:selected { background:rgba(217,119,6,0.12); color:%2; }"
-                "QScrollBar:vertical { width:3px; background:%1; }"
-                "QScrollBar::handle:vertical { background:%3; }")
-            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
+    pipeline_table_->setStyleSheet(QString("QTableWidget { background:%1; color:%2; border:none;"
+                                           "  font-size:12px; gridline-color:transparent; }"
+                                           "QTableWidget::item { padding:5px 8px; border-bottom:1px solid %3; }"
+                                           "QTableWidget::item:selected { background:rgba(217,119,6,0.12); color:%2; }"
+                                           "QScrollBar:vertical { width:3px; background:%1; }"
+                                           "QScrollBar::handle:vertical { background:%3; }")
+                                       .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM()));
 
-    hdr->setStyleSheet(
-        QString("QHeaderView::section { background:%1; color:%2; border:none;"
-                "  border-bottom:2px solid %3; padding:3px 6px; font-size:12px; font-weight:700; }")
-            .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
+    hdr->setStyleSheet(QString("QHeaderView::section { background:%1; color:%2; border:none;"
+                               "  border-bottom:2px solid %3; padding:3px 6px; font-size:12px; font-weight:700; }")
+                           .arg(colors::BG_RAISED(), colors::TEXT_SECONDARY(), colors::AMBER()));
 
-    root->addWidget(pipeline_table_, 1);  // stretch=1: fills all available height
+    root->addWidget(pipeline_table_, 1); // stretch=1: fills all available height
 
     // ── Divider ───────────────────────────────────────────────────────────────
     auto* divider = new QWidget;
@@ -105,8 +103,7 @@ void IpoPipelinePanel::build_ui() {
     auto* feed_header = new QWidget;
     feed_header->setFixedHeight(36);
     feed_header->setStyleSheet(
-        QString("background:%1; border-bottom:1px solid %2;")
-            .arg(colors::BG_RAISED(), colors::BORDER_DIM()));
+        QString("background:%1; border-bottom:1px solid %2;").arg(colors::BG_RAISED(), colors::BORDER_DIM()));
     auto* fh_layout = new QHBoxLayout(feed_header);
     fh_layout->setContentsMargins(10, 0, 10, 0);
     auto* fh_lbl = new QLabel("DEAL FLOW FEED");
@@ -117,10 +114,9 @@ void IpoPipelinePanel::build_ui() {
     fh_layout->addStretch();
 
     auto* form_d_badge = new QLabel("Form D");
-    form_d_badge->setStyleSheet(
-        QString("color:%1; font-size:12px; background:rgba(6,182,212,0.18);"
-                "  border:1px solid rgba(6,182,212,0.3); border-radius:3px; padding:1px 5px;")
-            .arg(colors::CYAN()));
+    form_d_badge->setStyleSheet(QString("color:%1; font-size:12px; background:rgba(6,182,212,0.18);"
+                                        "  border:1px solid rgba(6,182,212,0.3); border-radius:3px; padding:1px 5px;")
+                                    .arg(colors::CYAN()));
     fh_layout->addWidget(form_d_badge);
     root->addWidget(feed_header);
 
@@ -136,16 +132,15 @@ void IpoPipelinePanel::build_ui() {
             .arg(colors::BG_SURFACE(), colors::BORDER_MED()));
 
     feed_container_ = new QWidget;
-    feed_container_->setStyleSheet(
-        QString("background:%1;").arg(colors::BG_SURFACE()));
+    feed_container_->setStyleSheet(QString("background:%1;").arg(colors::BG_SURFACE()));
     feed_layout_ = new QVBoxLayout(feed_container_);
     feed_layout_->setContentsMargins(6, 6, 6, 6);
     feed_layout_->setSpacing(4);
     feed_layout_->addStretch();
 
     feed_scroll_->setWidget(feed_container_);
-    feed_scroll_->setMaximumHeight(180);   // pinned compact at bottom
-    root->addWidget(feed_scroll_);         // no stretch — pipeline above gets all space
+    feed_scroll_->setMaximumHeight(180); // pinned compact at bottom
+    root->addWidget(feed_scroll_);       // no stretch — pipeline above gets all space
 }
 
 // ── Rebuild pipeline table ─────────────────────────────────────────────────
@@ -193,7 +188,8 @@ void IpoPipelinePanel::rebuild_pipeline() {
 void IpoPipelinePanel::rebuild_form_d() {
     while (feed_layout_->count() > 1) {
         auto* item = feed_layout_->takeAt(0);
-        if (item->widget()) item->widget()->deleteLater();
+        if (item->widget())
+            item->widget()->deleteLater();
         delete item;
     }
 
@@ -206,10 +202,9 @@ void IpoPipelinePanel::rebuild_form_d() {
 
 QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
     auto* card = new QWidget;
-    card->setStyleSheet(
-        QString("QWidget { background:%1; border:1px solid %2; border-radius:3px; }"
-                "QWidget:hover { background:%3; }")
-            .arg(colors::BG_RAISED(), colors::BORDER_DIM(), colors::BG_BASE()));
+    card->setStyleSheet(QString("QWidget { background:%1; border:1px solid %2; border-radius:3px; }"
+                                "QWidget:hover { background:%3; }")
+                            .arg(colors::BG_RAISED(), colors::BORDER_DIM(), colors::BG_BASE()));
     card->setFixedHeight(68);
 
     auto* vl = new QVBoxLayout(card);
@@ -222,15 +217,13 @@ QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
 
     auto* name_lbl = new QLabel(f.company_name);
     name_lbl->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:600; background:transparent;")
-            .arg(colors::TEXT_PRIMARY()));
+        QString("color:%1; font-size:12px; font-weight:600; background:transparent;").arg(colors::TEXT_PRIMARY()));
     row1->addWidget(name_lbl, 1);
 
     auto* exempt_lbl = new QLabel(f.exemption);
-    exempt_lbl->setStyleSheet(
-        QString("color:%1; font-size:12px; background:rgba(6,182,212,0.15);"
-                "  border-radius:2px; padding:1px 4px;")
-            .arg(colors::CYAN()));
+    exempt_lbl->setStyleSheet(QString("color:%1; font-size:12px; background:rgba(6,182,212,0.15);"
+                                      "  border-radius:2px; padding:1px 4px;")
+                                  .arg(colors::CYAN()));
     row1->addWidget(exempt_lbl);
     vl->addLayout(row1);
 
@@ -239,27 +232,22 @@ QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
     row2->setSpacing(4);
 
     auto* date_lbl = new QLabel(f.filed_date.toString("MMM d, yyyy"));
-    date_lbl->setStyleSheet(
-        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
+    date_lbl->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
     row2->addWidget(date_lbl, 1);
 
-    const QString amt = f.amount_raised > 0
-        ? "$" + QString::number(qRound(f.amount_raised)) + "M"
-        : "—";
+    const QString amt = f.amount_raised > 0 ? "$" + QString::number(qRound(f.amount_raised)) + "M" : "—";
     auto* amt_lbl = new QLabel(amt);
     amt_lbl->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:600; background:transparent;")
-            .arg(colors::POSITIVE()));
+        QString("color:%1; font-size:12px; font-weight:600; background:transparent;").arg(colors::POSITIVE()));
     row2->addWidget(amt_lbl);
     vl->addLayout(row2);
 
     // Row 3: state + offering type
     auto* row3 = new QHBoxLayout;
     row3->setSpacing(4);
-    auto* type_lbl = new QLabel((f.offering_type.isEmpty() ? QStringLiteral("—") : f.offering_type) + " · "
-                                + (f.state.isEmpty() ? QStringLiteral("—") : f.state));
-    type_lbl->setStyleSheet(
-        QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
+    auto* type_lbl = new QLabel((f.offering_type.isEmpty() ? QStringLiteral("—") : f.offering_type) + " · " +
+                                (f.state.isEmpty() ? QStringLiteral("—") : f.state));
+    type_lbl->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;").arg(colors::TEXT_SECONDARY()));
     row3->addWidget(type_lbl);
     vl->addLayout(row3);
 

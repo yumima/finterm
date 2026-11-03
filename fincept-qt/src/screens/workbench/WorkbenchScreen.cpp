@@ -12,18 +12,17 @@
 #include "storage/repositories/WorkflowRepository.h"
 
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QFormLayout>
-#include <QLineEdit>
-#include <QListWidget>
-#include <QMessageBox>
-
-#include <QColor>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QMessageBox>
 #include <QScrollArea>
 #include <QSet>
 #include <QTableWidget>
@@ -53,16 +52,14 @@ constexpr int kIdxProfiles = 6;
 constexpr int kIdxSystem = 7;
 
 QString nav_btn_style() {
-    return QStringLiteral(
-        "QPushButton {"
-        "  text-align: left; padding: 8px 12px; border: none;"
-        "  background: transparent; color: #ccc;"
-        "}"
-        "QPushButton:checked {"
-        "  background: #2a4a6a; color: white;"
-        "}"
-        "QPushButton:hover { background: #1f3650; color: white; }"
-    );
+    return QStringLiteral("QPushButton {"
+                          "  text-align: left; padding: 8px 12px; border: none;"
+                          "  background: transparent; color: #ccc;"
+                          "}"
+                          "QPushButton:checked {"
+                          "  background: #2a4a6a; color: white;"
+                          "}"
+                          "QPushButton:hover { background: #1f3650; color: white; }");
 }
 
 } // anonymous namespace
@@ -95,7 +92,7 @@ void WorkbenchScreen::build_ui() {
     sections_->addWidget(build_workflows_section()); // kIdxWorkflows
     sections_->addWidget(build_tools_section());     // kIdxTools
     sections_->addWidget(build_servers_section());   // kIdxServers
-    sections_->addWidget(build_profiles_section()); // kIdxProfiles
+    sections_->addWidget(build_profiles_section());  // kIdxProfiles
     sections_->addWidget(build_system_section());    // kIdxSystem
 
     auto make_btn = [&](const QString& text, int idx) {
@@ -142,10 +139,8 @@ namespace {
 /// Workflows, Servers, Profiles).  Caller provides headers, a
 /// stretch-target column index, and a reload functor; this returns a
 /// fully-wired QWidget with title / description / Refresh / table.
-QWidget* build_table_section(const QString& title_text,
-                             const QString& description_html,
-                             const QStringList& column_headers,
-                             int stretch_col,
+QWidget* build_table_section(const QString& title_text, const QString& description_html,
+                             const QStringList& column_headers, int stretch_col,
                              std::function<void(QTableWidget*)> reload) {
     auto* w = new QWidget;
     auto* layout = new QVBoxLayout(w);
@@ -174,16 +169,14 @@ QWidget* build_table_section(const QString& title_text,
     layout->addWidget(table, 1);
 
     auto reload_fn = std::move(reload);
-    QObject::connect(refresh_btn, &QPushButton::clicked, table,
-                     [table, reload_fn]() { reload_fn(table); });
+    QObject::connect(refresh_btn, &QPushButton::clicked, table, [table, reload_fn]() { reload_fn(table); });
     reload_fn(table);
     return w;
 }
 
 } // anonymous namespace
 
-QWidget* WorkbenchScreen::build_section_placeholder(const QString& name,
-                                                    const QString& description,
+QWidget* WorkbenchScreen::build_section_placeholder(const QString& name, const QString& description,
                                                     const QString& cta_text) {
     // Placeholder for sections whose underlying widget hasn't been
     // ported into the Workbench yet.  Tells the user where to find
@@ -223,23 +216,19 @@ QWidget* WorkbenchScreen::build_chat_section() {
         table->setRowCount(sessions.size());
         for (int i = 0; i < sessions.size(); ++i) {
             const auto& s = sessions[i];
-            table->setItem(i, 0, new QTableWidgetItem(s.title.isEmpty()
-                                                         ? QStringLiteral("(untitled)")
-                                                         : s.title));
-            table->setItem(i, 1, new QTableWidgetItem(
-                                     QStringLiteral("%1 / %2").arg(s.provider, s.model)));
+            table->setItem(i, 0, new QTableWidgetItem(s.title.isEmpty() ? QStringLiteral("(untitled)") : s.title));
+            table->setItem(i, 1, new QTableWidgetItem(QStringLiteral("%1 / %2").arg(s.provider, s.model)));
             table->setItem(i, 2, new QTableWidgetItem(QString::number(s.message_count)));
             table->setItem(i, 3, new QTableWidgetItem(s.updated_at));
         }
     };
-    return build_table_section(
-        QStringLiteral("Chat"),
-        QStringLiteral("Recent chat sessions across all profiles.  "
-                       "Open or resume from the dedicated Chat screen — "
-                       "this view is read-only."),
-        {QStringLiteral("Title"), QStringLiteral("Provider / Model"),
-         QStringLiteral("Msgs"), QStringLiteral("Updated")},
-        /*stretch_col=*/0, std::move(reload));
+    return build_table_section(QStringLiteral("Chat"),
+                               QStringLiteral("Recent chat sessions across all profiles.  "
+                                              "Open or resume from the dedicated Chat screen — "
+                                              "this view is read-only."),
+                               {QStringLiteral("Title"), QStringLiteral("Provider / Model"), QStringLiteral("Msgs"),
+                                QStringLiteral("Updated")},
+                               /*stretch_col=*/0, std::move(reload));
 }
 
 QWidget* WorkbenchScreen::build_agents_section() {
@@ -254,15 +243,15 @@ QWidget* WorkbenchScreen::build_agents_section() {
         for (int i = 0; i < agents.size(); ++i) {
             const auto& a = agents[i];
             table->setItem(i, 0, new QTableWidgetItem(a.name));
-            table->setItem(i, 1, new QTableWidgetItem(a.category.isEmpty()
-                                                         ? QStringLiteral("—")
-                                                         : a.category));
+            table->setItem(i, 1, new QTableWidgetItem(a.category.isEmpty() ? QStringLiteral("—") : a.category));
             auto* d = new QTableWidgetItem(a.description);
             d->setToolTip(a.description);
             table->setItem(i, 2, d);
             QStringList flags;
-            if (a.is_default) flags << QStringLiteral("default");
-            if (a.is_active)  flags << QStringLiteral("active");
+            if (a.is_default)
+                flags << QStringLiteral("default");
+            if (a.is_active)
+                flags << QStringLiteral("active");
             table->setItem(i, 3, new QTableWidgetItem(flags.join(QStringLiteral(", "))));
         }
     };
@@ -271,8 +260,7 @@ QWidget* WorkbenchScreen::build_agents_section() {
         QStringLiteral("Named agent identities — each carries a system "
                        "prompt, skill list, and per-agent tool allowlist.  "
                        "Edit via <b>Settings → Profiles</b>."),
-        {QStringLiteral("Name"), QStringLiteral("Category"),
-         QStringLiteral("Description"), QStringLiteral("Flags")},
+        {QStringLiteral("Name"), QStringLiteral("Category"), QStringLiteral("Description"), QStringLiteral("Flags")},
         /*stretch_col=*/2, std::move(reload));
 }
 
@@ -295,7 +283,7 @@ bool show_team_edit_dialog(QWidget* parent, TeamRow& draft, bool is_new) {
     auto* id_edit = new QLineEdit(draft.id);
     id_edit->setPlaceholderText(QStringLiteral("kebab-case-id"));
     if (!is_new)
-        id_edit->setReadOnly(true);   // primary key — immutable post-create
+        id_edit->setReadOnly(true); // primary key — immutable post-create
     auto* name_edit = new QLineEdit(draft.name);
     auto* desc_edit = new QLineEdit(draft.description);
     desc_edit->setPlaceholderText(QStringLiteral("Optional one-line description"));
@@ -310,7 +298,8 @@ bool show_team_edit_dialog(QWidget* parent, TeamRow& draft, bool is_new) {
     auto* mode_combo = new QComboBox;
     mode_combo->addItem(QStringLiteral("coordinate — leader routes work, synthesises a single answer"), "coordinate");
     mode_combo->addItem(QStringLiteral("route — leader picks the best member, returns its answer"), "route");
-    mode_combo->addItem(QStringLiteral("collaborate — members work the problem together, leader merges"), "collaborate");
+    mode_combo->addItem(QStringLiteral("collaborate — members work the problem together, leader merges"),
+                        "collaborate");
     for (int i = 0; i < mode_combo->count(); ++i) {
         if (mode_combo->itemData(i).toString() == draft.mode) {
             mode_combo->setCurrentIndex(i);
@@ -325,7 +314,8 @@ bool show_team_edit_dialog(QWidget* parent, TeamRow& draft, bool is_new) {
     form->addRow(QStringLiteral("Mode"), mode_combo);
     root->addLayout(form);
 
-    auto* members_lbl = new QLabel(QStringLiteral("<b>Members</b> (checked agents weigh in; the coordinator synthesises):"));
+    auto* members_lbl =
+        new QLabel(QStringLiteral("<b>Members</b> (checked agents weigh in; the coordinator synthesises):"));
     members_lbl->setWordWrap(true);
     root->addWidget(members_lbl);
     auto* members_list = new QListWidget;
@@ -350,7 +340,7 @@ bool show_team_edit_dialog(QWidget* parent, TeamRow& draft, bool is_new) {
     const QString name = name_edit->text().trimmed();
     if (id.isEmpty() || name.isEmpty() || coordinator_combo->currentData().toString().isEmpty()) {
         QMessageBox::warning(parent, QStringLiteral("Save team"),
-            QStringLiteral("ID, name, and coordinator are required."));
+                             QStringLiteral("ID, name, and coordinator are required."));
         return false;
     }
     draft.id = id;
@@ -380,11 +370,10 @@ QWidget* WorkbenchScreen::build_teams_section() {
     layout->setSpacing(12);
 
     auto* title = new QLabel(QStringLiteral("<h2>Teams</h2>"));
-    auto* desc = new QLabel(QStringLiteral(
-        "Multi-agent teams: one <b>coordinator</b> plus N <b>members</b>.  "
-        "Members each weigh in (their lens — sector, quant, macro, …); the "
-        "coordinator synthesises a unified answer.  Dispatch via "
-        "<code>/team &lt;name&gt; &lt;query&gt;</code> in chat."));
+    auto* desc = new QLabel(QStringLiteral("Multi-agent teams: one <b>coordinator</b> plus N <b>members</b>.  "
+                                           "Members each weigh in (their lens — sector, quant, macro, …); the "
+                                           "coordinator synthesises a unified answer.  Dispatch via "
+                                           "<code>/team &lt;name&gt; &lt;query&gt;</code> in chat."));
     desc->setWordWrap(true);
     desc->setStyleSheet(QStringLiteral("color: #aaa;"));
     layout->addWidget(title);
@@ -404,10 +393,8 @@ QWidget* WorkbenchScreen::build_teams_section() {
 
     auto* table = new QTableWidget;
     table->setColumnCount(5);
-    table->setHorizontalHeaderLabels(
-        {QStringLiteral("ID"), QStringLiteral("Name"),
-         QStringLiteral("Coordinator"), QStringLiteral("Members"),
-         QStringLiteral("Mode")});
+    table->setHorizontalHeaderLabels({QStringLiteral("ID"), QStringLiteral("Name"), QStringLiteral("Coordinator"),
+                                      QStringLiteral("Members"), QStringLiteral("Mode")});
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
     table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -458,8 +445,7 @@ QWidget* WorkbenchScreen::build_teams_section() {
         c.member_agent_ids = draft.member_agent_ids;
         auto r = TeamRepository::instance().create(c);
         if (r.is_err()) {
-            QMessageBox::warning(w, QStringLiteral("Create team"),
-                                 QString::fromStdString(r.error()));
+            QMessageBox::warning(w, QStringLiteral("Create team"), QString::fromStdString(r.error()));
             return;
         }
         reload();
@@ -483,8 +469,7 @@ QWidget* WorkbenchScreen::build_teams_section() {
         c.member_agent_ids = draft.member_agent_ids;
         auto ur = TeamRepository::instance().update(c);
         if (ur.is_err()) {
-            QMessageBox::warning(w, QStringLiteral("Update team"),
-                                 QString::fromStdString(ur.error()));
+            QMessageBox::warning(w, QStringLiteral("Update team"), QString::fromStdString(ur.error()));
             return;
         }
         reload();
@@ -493,17 +478,17 @@ QWidget* WorkbenchScreen::build_teams_section() {
         const QString id = selected_id();
         if (id.isEmpty())
             return;
-        const auto choice = QMessageBox::question(
-            w, QStringLiteral("Delete team"),
-            QStringLiteral("Delete team <b>%1</b>?\nMembership rows are cascade-deleted; "
-                           "agents themselves are untouched.").arg(id),
-            QMessageBox::Yes | QMessageBox::No);
+        const auto choice =
+            QMessageBox::question(w, QStringLiteral("Delete team"),
+                                  QStringLiteral("Delete team <b>%1</b>?\nMembership rows are cascade-deleted; "
+                                                 "agents themselves are untouched.")
+                                      .arg(id),
+                                  QMessageBox::Yes | QMessageBox::No);
         if (choice != QMessageBox::Yes)
             return;
         auto r = TeamRepository::instance().delete_(id);
         if (r.is_err()) {
-            QMessageBox::warning(w, QStringLiteral("Delete team"),
-                                 QString::fromStdString(r.error()));
+            QMessageBox::warning(w, QStringLiteral("Delete team"), QString::fromStdString(r.error()));
             return;
         }
         reload();
@@ -524,9 +509,7 @@ QWidget* WorkbenchScreen::build_workflows_section() {
         for (int i = 0; i < wfs.size(); ++i) {
             const auto& w = wfs[i];
             table->setItem(i, 0, new QTableWidgetItem(w.name));
-            table->setItem(i, 1, new QTableWidgetItem(w.status.isEmpty()
-                                                         ? QStringLiteral("—")
-                                                         : w.status));
+            table->setItem(i, 1, new QTableWidgetItem(w.status.isEmpty() ? QStringLiteral("—") : w.status));
             auto* d = new QTableWidgetItem(w.description);
             d->setToolTip(w.description);
             table->setItem(i, 2, d);
@@ -539,8 +522,7 @@ QWidget* WorkbenchScreen::build_workflows_section() {
                        "steps.  Powers scheduled runs and "
                        "<code>/morning-note</code>.  Edit via the "
                        "dedicated Workflows screen."),
-        {QStringLiteral("Name"), QStringLiteral("Status"),
-         QStringLiteral("Description"), QStringLiteral("Updated")},
+        {QStringLiteral("Name"), QStringLiteral("Status"), QStringLiteral("Description"), QStringLiteral("Updated")},
         /*stretch_col=*/2, std::move(reload));
 }
 
@@ -556,12 +538,11 @@ QWidget* WorkbenchScreen::build_tools_section() {
     layout->setSpacing(12);
 
     auto* title = new QLabel(QStringLiteral("<h2>Tools</h2>"));
-    auto* desc = new QLabel(QStringLiteral(
-        "Every MCP tool the active runtime can call.  Internal tools "
-        "(prefixed <code>int__</code>) ship with finterm; external "
-        "tools come from MCP servers you've enabled in <b>Settings → "
-        "MCP Servers</b>.  Disable / re-enable any tool from "
-        "<b>Settings → AI System</b>."));
+    auto* desc = new QLabel(QStringLiteral("Every MCP tool the active runtime can call.  Internal tools "
+                                           "(prefixed <code>int__</code>) ship with finterm; external "
+                                           "tools come from MCP servers you've enabled in <b>Settings → "
+                                           "MCP Servers</b>.  Disable / re-enable any tool from "
+                                           "<b>Settings → AI System</b>."));
     desc->setWordWrap(true);
     desc->setStyleSheet(QStringLiteral("color: #aaa;"));
     layout->addWidget(title);
@@ -572,9 +553,8 @@ QWidget* WorkbenchScreen::build_tools_section() {
 
     auto* table = new QTableWidget;
     table->setColumnCount(4);
-    table->setHorizontalHeaderLabels(
-        {QStringLiteral("Tool"), QStringLiteral("Category"),
-         QStringLiteral("Description"), QStringLiteral("Kill-switch")});
+    table->setHorizontalHeaderLabels({QStringLiteral("Tool"), QStringLiteral("Category"), QStringLiteral("Description"),
+                                      QStringLiteral("Kill-switch")});
     table->horizontalHeader()->setSectionResizeMode(QHeaderView::Stretch);
     table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
     table->setEditTriggers(QAbstractItemView::NoEditTriggers);
@@ -594,14 +574,12 @@ QWidget* WorkbenchScreen::build_tools_section() {
             const QString wire = t.server_id + QStringLiteral("__") + t.name;
             const int row = static_cast<int>(i);
             table->setItem(row, 0, new QTableWidgetItem(wire));
-            table->setItem(row, 1, new QTableWidgetItem(t.category.isEmpty()
-                                                            ? QStringLiteral("—")
-                                                            : t.category));
+            table->setItem(row, 1, new QTableWidgetItem(t.category.isEmpty() ? QStringLiteral("—") : t.category));
             auto* desc_item = new QTableWidgetItem(t.description);
             desc_item->setToolTip(t.description);
             table->setItem(row, 2, desc_item);
-            auto* ks_item = new QTableWidgetItem(
-                disabled.contains(wire) ? QStringLiteral("disabled") : QStringLiteral("active"));
+            auto* ks_item =
+                new QTableWidgetItem(disabled.contains(wire) ? QStringLiteral("disabled") : QStringLiteral("active"));
             if (disabled.contains(wire))
                 ks_item->setForeground(QColor("#c33"));
             table->setItem(row, 3, ks_item);
@@ -625,25 +603,21 @@ QWidget* WorkbenchScreen::build_servers_section() {
             const auto& s = servers[i];
             table->setItem(i, 0, new QTableWidgetItem(s.name));
             table->setItem(i, 1, new QTableWidgetItem(s.transport_type));
-            auto* st = new QTableWidgetItem(s.status.isEmpty()
-                                                ? QStringLiteral("stopped")
-                                                : s.status);
+            auto* st = new QTableWidgetItem(s.status.isEmpty() ? QStringLiteral("stopped") : s.status);
             if (s.status == QStringLiteral("error"))
                 st->setForeground(QColor("#c33"));
             else if (s.status == QStringLiteral("running"))
                 st->setForeground(QColor("#3a3"));
             table->setItem(i, 2, st);
-            table->setItem(i, 3, new QTableWidgetItem(s.enabled
-                                                         ? QStringLiteral("enabled")
-                                                         : QStringLiteral("disabled")));
+            table->setItem(i, 3,
+                           new QTableWidgetItem(s.enabled ? QStringLiteral("enabled") : QStringLiteral("disabled")));
         }
     };
     return build_table_section(
         QStringLiteral("Servers"),
         QStringLiteral("External MCP servers (stdio + HTTP).  Enable / "
                        "configure via <b>Settings → MCP Servers</b>."),
-        {QStringLiteral("Name"), QStringLiteral("Transport"),
-         QStringLiteral("Status"), QStringLiteral("Enabled")},
+        {QStringLiteral("Name"), QStringLiteral("Transport"), QStringLiteral("Status"), QStringLiteral("Enabled")},
         /*stretch_col=*/0, std::move(reload));
 }
 
@@ -661,23 +635,17 @@ QWidget* WorkbenchScreen::build_profiles_section() {
             table->setItem(i, 0, new QTableWidgetItem(p.name));
             table->setItem(i, 1, new QTableWidgetItem(p.provider));
             table->setItem(i, 2, new QTableWidgetItem(p.model_id));
-            table->setItem(i, 3, new QTableWidgetItem(p.runtime.isEmpty()
-                                                         ? QStringLiteral("—")
-                                                         : p.runtime));
-            table->setItem(i, 4, new QTableWidgetItem(p.is_default
-                                                         ? QStringLiteral("default")
-                                                         : QString()));
+            table->setItem(i, 3, new QTableWidgetItem(p.runtime.isEmpty() ? QStringLiteral("—") : p.runtime));
+            table->setItem(i, 4, new QTableWidgetItem(p.is_default ? QStringLiteral("default") : QString()));
         }
     };
-    return build_table_section(
-        QStringLiteral("Profiles"),
-        QStringLiteral("LLM profiles (Anthropic / local / external).  "
-                       "Profile selection drives every agent dispatch.  "
-                       "Edit via <b>Settings → LLM Config</b>."),
-        {QStringLiteral("Name"), QStringLiteral("Provider"),
-         QStringLiteral("Model"), QStringLiteral("Runtime"),
-         QStringLiteral("Default")},
-        /*stretch_col=*/0, std::move(reload));
+    return build_table_section(QStringLiteral("Profiles"),
+                               QStringLiteral("LLM profiles (Anthropic / local / external).  "
+                                              "Profile selection drives every agent dispatch.  "
+                                              "Edit via <b>Settings → LLM Config</b>."),
+                               {QStringLiteral("Name"), QStringLiteral("Provider"), QStringLiteral("Model"),
+                                QStringLiteral("Runtime"), QStringLiteral("Default")},
+                               /*stretch_col=*/0, std::move(reload));
 }
 
 QWidget* WorkbenchScreen::build_system_section() {

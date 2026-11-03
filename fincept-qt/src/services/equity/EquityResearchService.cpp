@@ -2,9 +2,9 @@
 #include "services/equity/EquityResearchService.h"
 
 #include "core/logging/Logger.h"
-#include "services/equity/TechnicalRating.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
+#include "services/equity/TechnicalRating.h"
 #include "services/util/DiskCache.h"
 #include "storage/cache/CacheManager.h"
 
@@ -12,18 +12,17 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QTimer>
-
-#include <functional>
-#include <memory>
 #include <QJsonObject>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QTemporaryFile>
+#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <limits>
+#include <memory>
 
 namespace fincept::services::equity {
 
@@ -50,8 +49,7 @@ namespace {
 bool row_has_prices(const QJsonObject& o) {
     static const char* kFields[] = {"open", "high", "low", "close"};
     for (const char* f : kFields) {
-        const double v = o.value(QLatin1String(f))
-                             .toDouble(std::numeric_limits<double>::quiet_NaN());
+        const double v = o.value(QLatin1String(f)).toDouble(std::numeric_limits<double>::quiet_NaN());
         if (!std::isfinite(v))
             return false;
     }
@@ -91,9 +89,8 @@ double num(const QJsonObject& o, const char* key) {
 }
 
 QJsonArray priced_rows(const QJsonArray& arr, const QString& what) {
-    const bool all_priced = std::all_of(arr.begin(), arr.end(), [](const QJsonValue& v) {
-        return row_has_prices(v.toObject());
-    });
+    const bool all_priced =
+        std::all_of(arr.begin(), arr.end(), [](const QJsonValue& v) { return row_has_prices(v.toObject()); });
     if (all_priced)
         return arr;
     QJsonArray out;
@@ -101,9 +98,10 @@ QJsonArray priced_rows(const QJsonArray& arr, const QString& what) {
         if (row_has_prices(v.toObject()))
             out.append(v);
     }
-    LOG_WARN("EquityResearch",
-             QString("%1: dropped %2 price-less bar(s) of %3 — vendor sent null/NaN OHLC")
-                 .arg(what).arg(arr.size() - out.size()).arg(arr.size()));
+    LOG_WARN("EquityResearch", QString("%1: dropped %2 price-less bar(s) of %3 — vendor sent null/NaN OHLC")
+                                   .arg(what)
+                                   .arg(arr.size() - out.size())
+                                   .arg(arr.size()));
     return out;
 }
 
@@ -127,7 +125,6 @@ QString history_error_text(const QJsonObject& result) {
     return QString("Historical fetch returned no data: %1")
         .arg(result.value("error").toString(QStringLiteral("empty history")));
 }
-
 
 // Persistent on-disk cache so the equity research panels can paint the
 // most-recently-viewed symbol immediately on next launch. One file per
@@ -155,9 +152,9 @@ QString symbol_filename(const QString& symbol) {
 // then save back. We do this rather than keep a process-wide in-memory
 // mirror because each fetch path can complete independently and we want
 // the on-disk file to always reflect the latest of every category.
-void update_symbol_cache(const QString& symbol, const QString& key,
-                          const QJsonValue& value) {
-    if (symbol.isEmpty()) return;
+void update_symbol_cache(const QString& symbol, const QString& key, const QJsonValue& value) {
+    if (symbol.isEmpty())
+        return;
     const QString fname = symbol_filename(symbol);
     QJsonObject root = disk_cache().load(fname).object();
     root.insert(key, value);
@@ -188,15 +185,13 @@ void update_symbol_cache(const QString& symbol, const QString& key,
 bool cache_history_series(const QJsonObject& result, const QJsonArray& arr, const QString& symbol,
                           const QString& candles_key, const QString& disk_sub, int ttl_sec) {
     if (!series_is_cacheable(result, arr)) {
-        LOG_WARN("EquityResearch",
-                 QString("Not caching empty/failed history for %1 (%2) — a transient "
-                         "failure must not outlive the request").arg(symbol, disk_sub));
+        LOG_WARN("EquityResearch", QString("Not caching empty/failed history for %1 (%2) — a transient "
+                                           "failure must not outlive the request")
+                                       .arg(symbol, disk_sub));
         return false;
     }
     fincept::CacheManager::instance().put(
-        candles_key,
-        QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-        ttl_sec, "equity");
+        candles_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), ttl_sec, "equity");
     const QString fname = symbol_filename(symbol);
     QJsonObject root = disk_cache().load(fname).object();
     root.insert("symbol", symbol);
@@ -235,33 +230,31 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
     const QStringList files = disk_cache().files();
     for (const QString& fname : files) {
         const QJsonDocument doc = disk_cache().load(fname);
-        if (!doc.isObject()) continue;
+        if (!doc.isObject())
+            continue;
         const QJsonObject root = doc.object();
         const QString symbol = root.value("symbol").toString();
-        if (symbol.isEmpty()) continue;
+        if (symbol.isEmpty())
+            continue;
         const QFileInfo fi(disk_cache().path(fname));
-        const int age_sec = fi.exists()
-            ? std::max(1, int(fi.lastModified().secsTo(QDateTime::currentDateTime())))
-            : 1;
+        const int age_sec = fi.exists() ? std::max(1, int(fi.lastModified().secsTo(QDateTime::currentDateTime()))) : 1;
 
         auto repopulate = [&](const QString& sub, const QString& cache_prefix, int ttl_sec) {
-            if (!root.contains(sub)) return;
+            if (!root.contains(sub))
+                return;
             // Refuse to repopulate CacheManager entries that would already
             // be expired against their normal TTL. The disk copy survives
             // for the parser hydration path, but we don't want a stale
             // quote masquerading as fresh.
-            if (age_sec >= ttl_sec) return;
+            if (age_sec >= ttl_sec)
+                return;
             const QJsonValue v = root.value(sub);
-            const QJsonDocument doc_for_blob = v.isArray()
-                ? QJsonDocument(v.toArray())
-                : QJsonDocument(v.toObject());
-            const QString blob = QString::fromUtf8(
-                doc_for_blob.toJson(QJsonDocument::Compact));
+            const QJsonDocument doc_for_blob = v.isArray() ? QJsonDocument(v.toArray()) : QJsonDocument(v.toObject());
+            const QString blob = QString::fromUtf8(doc_for_blob.toJson(QJsonDocument::Compact));
             // Full TTL + explicit age: the entry expires on the original
             // schedule and try_get_aged reports the original write time
             // instead of claiming the blob was fetched at app launch.
-            fincept::CacheManager::instance().put(
-                cache_prefix + symbol, QVariant(blob), ttl_sec, "equity", age_sec);
+            fincept::CacheManager::instance().put(cache_prefix + symbol, QVariant(blob), ttl_sec, "equity", age_sec);
         };
         // quote / info / financials / news live in the root, peers as array
         if (root.contains("quote"))
@@ -285,36 +278,31 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
         if (root.contains("peers") && root.contains("peers_key")) {
             const QJsonValue v = root.value("peers");
             if (v.isArray() && age_sec < kPeersTtlSec) {
-                const QString blob = QString::fromUtf8(
-                    QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
-                fincept::CacheManager::instance().put(
-                    root.value("peers_key").toString(),
-                    QVariant(blob), kPeersTtlSec, "equity", age_sec);
+                const QString blob = QString::fromUtf8(QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
+                fincept::CacheManager::instance().put(root.value("peers_key").toString(), QVariant(blob), kPeersTtlSec,
+                                                      "equity", age_sec);
             }
         }
         // candles + technicals are nested per-period objects
-        const auto repopulate_periodic =
-            [&](const QString& sub, const QString& cache_prefix, int ttl_sec) {
-                const QJsonObject by_period = root.value(sub).toObject();
-                for (auto it = by_period.constBegin(); it != by_period.constEnd(); ++it) {
-                    if (age_sec >= ttl_sec) continue;
-                    const QJsonValue v = it.value();
-                    if (!v.isArray()) continue;
-                    const QString blob = QString::fromUtf8(
-                        QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
-                    fincept::CacheManager::instance().put(
-                        cache_prefix + symbol + ":" + it.key(),
-                        QVariant(blob), ttl_sec, "equity", age_sec);
-                }
-            };
+        const auto repopulate_periodic = [&](const QString& sub, const QString& cache_prefix, int ttl_sec) {
+            const QJsonObject by_period = root.value(sub).toObject();
+            for (auto it = by_period.constBegin(); it != by_period.constEnd(); ++it) {
+                if (age_sec >= ttl_sec)
+                    continue;
+                const QJsonValue v = it.value();
+                if (!v.isArray())
+                    continue;
+                const QString blob = QString::fromUtf8(QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
+                fincept::CacheManager::instance().put(cache_prefix + symbol + ":" + it.key(), QVariant(blob), ttl_sec,
+                                                      "equity", age_sec);
+            }
+        };
         repopulate_periodic("candles", "equity:candles:", kHistoricalTtlSec);
-        repopulate_periodic("technicals",
-                            "equity:technicals:" + QString(kTechnicalsSchemaTag) + ":",
+        repopulate_periodic("technicals", "equity:technicals:" + QString(kTechnicalsSchemaTag) + ":",
                             kTechnicalsTtlSec);
     }
     if (!files.isEmpty())
-        LOG_INFO("EquityResearch",
-                 QString("Hydrated %1 symbol caches from disk").arg(files.size()));
+        LOG_INFO("EquityResearch", QString("Hydrated %1 symbol caches from disk").arg(files.size()));
 }
 
 // ── Python helper ─────────────────────────────────────────────────────────────
@@ -344,13 +332,13 @@ void EquityResearchService::release_inflight(const QString& key) {
 }
 
 void EquityResearchService::run_daemon(const QString& action, const QJsonObject& payload,
-                                       std::function<void(bool, QJsonObject, QString)> cb,
-                                       int timeout_ms) {
+                                       std::function<void(bool, QJsonObject, QString)> cb, int timeout_ms) {
     QPointer<EquityResearchService> self = this;
     python::PythonWorker::instance().submit(
         action, payload,
         [self, cb = std::move(cb)](bool ok, QJsonObject result, QString err) {
-            if (!self) return;
+            if (!self)
+                return;
             cb(ok, std::move(result), std::move(err));
         },
         timeout_ms);
@@ -419,12 +407,11 @@ void EquityResearchService::search_symbols(const QString& query) {
 // in-flight dedup is keyed by category+symbol — only one daemon spawn per
 // concurrent subscribe wave.
 
-void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbol,
-                                            query::QueryStore::Callback cb) {
-    if (symbol.isEmpty()) return;
+void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbol, query::QueryStore::Callback cb) {
+    if (symbol.isEmpty())
+        return;
     const QString key = "equity:quote:" + symbol;
-    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
-                                   query::QueryStore::Rejecter reject) {
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         // Cache check inside the fetcher so we participate in QueryStore's
         // in-flight dedup. If multiple subscribers attach concurrently, only
         // one daemon spawn happens; everyone else waits on the same fetch.
@@ -442,40 +429,39 @@ void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbo
         }
         QJsonObject payload;
         payload["symbol"] = symbol;
-        run_daemon("quote", payload,
-            [this, symbol, resolve, reject](bool ok, QJsonObject obj, QString err) {
-                if (!ok || obj.contains("error")) {
-                    const QString msg = !ok ? err : obj["error"].toString();
-                    emit error_occurred(symbol, "Quote", msg);
-                    QuoteData failed; failed.symbol = symbol; failed.valid = false;
-                    emit quote_loaded(failed);
-                    reject(msg);
-                    return;
-                }
-                fincept::CacheManager::instance().put(
-                    "equity:quote:" + symbol,
-                    QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
-                    kQuoteTtlSec, "equity");
-                update_symbol_cache(symbol, "quote", obj);
-                update_symbol_cache(symbol, "symbol", symbol);
-                QuoteData parsed = parse_quote(obj);
-                emit quote_loaded(parsed);
-                resolve(QVariant::fromValue(parsed));
-            });
+        run_daemon("quote", payload, [this, symbol, resolve, reject](bool ok, QJsonObject obj, QString err) {
+            if (!ok || obj.contains("error")) {
+                const QString msg = !ok ? err : obj["error"].toString();
+                emit error_occurred(symbol, "Quote", msg);
+                QuoteData failed;
+                failed.symbol = symbol;
+                failed.valid = false;
+                emit quote_loaded(failed);
+                reject(msg);
+                return;
+            }
+            fincept::CacheManager::instance().put(
+                "equity:quote:" + symbol,
+                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kQuoteTtlSec, "equity");
+            update_symbol_cache(symbol, "quote", obj);
+            update_symbol_cache(symbol, "symbol", symbol);
+            QuoteData parsed = parse_quote(obj);
+            emit quote_loaded(parsed);
+            resolve(QVariant::fromValue(parsed));
+        });
     };
     // SWR window: 5 × TTL. A quote 5 minutes past its 60s TTL is still
     // useful for "show last-known + refresh indicator" UX. Beyond that we
     // discard — a 30-minute-old quote during market hours is misleading.
-    query::QueryStore::instance().subscribe(owner, key, kQuoteTtlSec, kQuoteTtlSec * 5,
-                                            std::move(cb), std::move(fetcher));
+    query::QueryStore::instance().subscribe(owner, key, kQuoteTtlSec, kQuoteTtlSec * 5, std::move(cb),
+                                            std::move(fetcher));
 }
 
-void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol,
-                                           query::QueryStore::Callback cb) {
-    if (symbol.isEmpty()) return;
+void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol, query::QueryStore::Callback cb) {
+    if (symbol.isEmpty())
+        return;
     const QString key = "equity:info:v3:" + symbol;
-    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
-                                   query::QueryStore::Rejecter reject) {
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:v3:" + symbol);
         const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
         if (!icv.isNull()) {
@@ -489,51 +475,49 @@ void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol
         }
         QJsonObject payload;
         payload["symbol"] = symbol;
-        run_daemon("info", payload,
-            [this, symbol, resolve, reject](bool ok, QJsonObject obj, QString err) {
-                if (!ok || obj.contains("error")) {
-                    const QString msg = !ok ? err : obj["error"].toString();
-                    emit error_occurred(symbol, "Info", msg);
-                    StockInfo failed; failed.symbol = symbol; failed.valid = false;
-                    emit info_loaded(failed);
-                    // A daemon that never answered (no body) is as transient as a
-                    // refusal; a vendor {"error"} body (ok:false since the daemon
-                    // sends errors as failed replies) says which it was.
-                    const bool transient = python::PythonWorker::reply_is_transient(ok, obj);
-                    reject(transient ? mark_transient_error(msg) : msg);
-                    return;
-                }
-                fincept::CacheManager::instance().put(
-                    "equity:info:v3:" + symbol,
-                    QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
-                    kInfoTtlSec, "equity");
-                update_symbol_cache(symbol, "info_v3", obj);
-                update_symbol_cache(symbol, "symbol", symbol);
-                StockInfo parsed = parse_info(obj);
-                emit info_loaded(parsed);
-                resolve(QVariant::fromValue(parsed));
-            });
+        run_daemon("info", payload, [this, symbol, resolve, reject](bool ok, QJsonObject obj, QString err) {
+            if (!ok || obj.contains("error")) {
+                const QString msg = !ok ? err : obj["error"].toString();
+                emit error_occurred(symbol, "Info", msg);
+                StockInfo failed;
+                failed.symbol = symbol;
+                failed.valid = false;
+                emit info_loaded(failed);
+                // A daemon that never answered (no body) is as transient as a
+                // refusal; a vendor {"error"} body (ok:false since the daemon
+                // sends errors as failed replies) says which it was.
+                const bool transient = python::PythonWorker::reply_is_transient(ok, obj);
+                reject(transient ? mark_transient_error(msg) : msg);
+                return;
+            }
+            fincept::CacheManager::instance().put(
+                "equity:info:v3:" + symbol,
+                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec, "equity");
+            update_symbol_cache(symbol, "info_v3", obj);
+            update_symbol_cache(symbol, "symbol", symbol);
+            StockInfo parsed = parse_info(obj);
+            emit info_loaded(parsed);
+            resolve(QVariant::fromValue(parsed));
+        });
     };
     // Info is the slowest yfinance call (~1-3s) and changes slowly. Generous
     // SWR window — 8 × TTL ≈ 4 hours — keeps repeat views instant for a
     // working session. After that, treat as cold.
-    query::QueryStore::instance().subscribe(owner, key, kInfoTtlSec, kInfoTtlSec * 8,
-                                            std::move(cb), std::move(fetcher));
+    query::QueryStore::instance().subscribe(owner, key, kInfoTtlSec, kInfoTtlSec * 8, std::move(cb),
+                                            std::move(fetcher));
 }
 
-void EquityResearchService::subscribe_historical(QObject* owner, const QString& symbol,
-                                                  const QString& period,
-                                                  query::QueryStore::Callback cb) {
-    if (symbol.isEmpty()) return;
+void EquityResearchService::subscribe_historical(QObject* owner, const QString& symbol, const QString& period,
+                                                 query::QueryStore::Callback cb) {
+    if (symbol.isEmpty())
+        return;
     const QString key = "equity:candles:" + symbol + ":" + period;
-    auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve,
-                                           query::QueryStore::Rejecter reject) {
+    auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const QString candles_key = "equity:candles:" + symbol + ":" + period;
         const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
         const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
-            QVector<Candle> parsed = parse_candles(
-                QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
+            QVector<Candle> parsed = parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
             emit historical_loaded(symbol, period, parsed);
             // Resolve with the cache entry\'s WRITE time: a hit answers
             // instantly, and stamping "now" would present a value hydrated
@@ -546,33 +530,31 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
         payload["period"] = period;
         payload["interval"] = "1d";
         run_daemon("historical_period", payload,
-            [this, symbol, period, candles_key, resolve, reject](bool ok, QJsonObject result, QString err) {
-                if (!ok) {
-                    const QString msg = "Failed to fetch historical for " + symbol + ": " + err;
-                    emit error_occurred(symbol, "Historical", msg);
-                    emit historical_loaded(symbol, period, {});
-                    reject(msg);
-                    return;
-                }
-                const auto arr = result.contains("_value")
-                                     ? result.value("_value").toArray()
-                                     : result.value("history").toArray();
-                cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
-                QVector<Candle> parsed = parse_candles(arr);
-                emit historical_loaded(symbol, period, parsed);
-                resolve(QVariant::fromValue(parsed));
-            });
+                   [this, symbol, period, candles_key, resolve, reject](bool ok, QJsonObject result, QString err) {
+                       if (!ok) {
+                           const QString msg = "Failed to fetch historical for " + symbol + ": " + err;
+                           emit error_occurred(symbol, "Historical", msg);
+                           emit historical_loaded(symbol, period, {});
+                           reject(msg);
+                           return;
+                       }
+                       const auto arr = result.contains("_value") ? result.value("_value").toArray()
+                                                                  : result.value("history").toArray();
+                       cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
+                       QVector<Candle> parsed = parse_candles(arr);
+                       emit historical_loaded(symbol, period, parsed);
+                       resolve(QVariant::fromValue(parsed));
+                   });
     };
     // Daily candles barely change intraday — generous SWR window so period
     // switches feel instant for the rest of the session. Beyond 24h the
     // most-recent candle could be a day stale during market hours, which is
     // genuinely misleading; cap there.
-    query::QueryStore::instance().subscribe(owner, key, kHistoricalTtlSec, /*stale_max*/86400,
-                                            std::move(cb), std::move(fetcher));
+    query::QueryStore::instance().subscribe(owner, key, kHistoricalTtlSec, /*stale_max*/ 86400, std::move(cb),
+                                            std::move(fetcher));
 }
 
-QString EquityResearchService::technicals_history_period(const QString& requested,
-                                                          const QString& interval) {
+QString EquityResearchService::technicals_history_period(const QString& requested, const QString& interval) {
     // Weekly bars need far more calendar time for the same warm-up: a
     // 200-period average of weekly closes is four years of history by itself.
     if (interval == QLatin1String("1wk"))
@@ -582,30 +564,28 @@ QString EquityResearchService::technicals_history_period(const QString& requeste
     // rating requires. Longer selections are honoured as-is — they cost nothing
     // extra beyond the fetch, since every reading is taken off the last bar.
     static const QSet<QString> kBelowFloor = {
-        QStringLiteral("1d"),  QStringLiteral("5d"),  QStringLiteral("1mo"),
-        QStringLiteral("3mo"), QStringLiteral("6mo"), QStringLiteral("ytd"),
-        QStringLiteral("1y"),
+        QStringLiteral("1d"),  QStringLiteral("5d"),  QStringLiteral("1mo"), QStringLiteral("3mo"),
+        QStringLiteral("6mo"), QStringLiteral("ytd"), QStringLiteral("1y"),
     };
     return kBelowFloor.contains(requested) ? QStringLiteral("2y") : requested;
 }
 
 QString EquityResearchService::technicals_key(const QString& symbol, const QString& requested,
                                               const QString& interval) {
-    return "equity:technicals:" + QLatin1String(kTechnicalsSchemaTag) + ":" + symbol + ":" +
-           interval + ":" + technicals_history_period(requested, interval);
+    return "equity:technicals:" + QLatin1String(kTechnicalsSchemaTag) + ":" + symbol + ":" + interval + ":" +
+           technicals_history_period(requested, interval);
 }
 
-void EquityResearchService::subscribe_technicals(QObject* owner, const QString& symbol,
-                                                  const QString& requested_period,
-                                                  const QString& interval,
-                                                  query::QueryStore::Callback cb) {
-    if (symbol.isEmpty()) return;
+void EquityResearchService::subscribe_technicals(QObject* owner, const QString& symbol, const QString& requested_period,
+                                                 const QString& interval, query::QueryStore::Callback cb) {
+    if (symbol.isEmpty())
+        return;
     // Everything below works in the floored period, so the cache entry, the
     // QueryStore key and the `d.period` the watcher matches on all agree.
     const QString period = technicals_history_period(requested_period, interval);
     const QString key = technicals_key(symbol, requested_period, interval);
     auto fetcher = [this, symbol, period, interval, key](query::QueryStore::Resolver resolve,
-                                                          query::QueryStore::Rejecter reject) {
+                                                         query::QueryStore::Rejecter reject) {
         // Cache check first — fetch_technicals also checks but it emits the
         // broadcast synchronously without going through resolve, which would
         // skip the QueryStore delivery path. So we do an inline check that
@@ -634,27 +614,31 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
         auto* watcher = new QObject(this);
         QPointer<QObject> watcher_guard(watcher);
         connect(this, &EquityResearchService::technicals_loaded, watcher,
-            [symbol, period, interval, resolve, watcher_guard](TechnicalsData d) {
-                // Interval is part of the identity: daily and weekly requests
-                // share the same floored period ("10y") and would otherwise
-                // resolve each other and poison the QueryStore entry.
-                if (d.symbol != symbol || d.period != period || d.interval != interval) return;
-                if (watcher_guard) watcher_guard->deleteLater();
-                resolve(QVariant::fromValue(d));
-            });
+                [symbol, period, interval, resolve, watcher_guard](TechnicalsData d) {
+                    // Interval is part of the identity: daily and weekly requests
+                    // share the same floored period ("10y") and would otherwise
+                    // resolve each other and poison the QueryStore entry.
+                    if (d.symbol != symbol || d.period != period || d.interval != interval)
+                        return;
+                    if (watcher_guard)
+                        watcher_guard->deleteLater();
+                    resolve(QVariant::fromValue(d));
+                });
         connect(this, &EquityResearchService::error_occurred, watcher,
-            [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
-                if (sym != symbol || ctx != "Technicals") return;
-                if (watcher_guard) watcher_guard->deleteLater();
-                reject(msg);
-            });
+                [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
+                    if (sym != symbol || ctx != "Technicals")
+                        return;
+                    if (watcher_guard)
+                        watcher_guard->deleteLater();
+                    reject(msg);
+                });
         fetch_technicals(symbol, period, interval);
     };
     // SWR window — technicals are derived from daily candles and barely
     // change intraday. Same 24h cap as historical: beyond that the most-
     // recent indicator values could be a day stale during market hours.
-    query::QueryStore::instance().subscribe(owner, key, kTechnicalsTtlSec, /*stale_max*/86400,
-                                            std::move(cb), std::move(fetcher));
+    query::QueryStore::instance().subscribe(owner, key, kTechnicalsTtlSec, /*stale_max*/ 86400, std::move(cb),
+                                            std::move(fetcher));
 }
 
 // All three of these (financials, news, peers) bridge to existing broadcast
@@ -664,11 +648,11 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
 // The watcher's QObject scope auto-disconnects on first matching event.
 
 void EquityResearchService::subscribe_financials(QObject* owner, const QString& symbol,
-                                                  query::QueryStore::Callback cb) {
-    if (symbol.isEmpty()) return;
+                                                 query::QueryStore::Callback cb) {
+    if (symbol.isEmpty())
+        return;
     const QString key = "equity:financials:" + symbol;
-    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
-                                   query::QueryStore::Rejecter reject) {
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const auto fcv_aged = fincept::CacheManager::instance().try_get_aged("equity:financials:" + symbol);
         const QVariant fcv = fcv_aged ? QVariant(fcv_aged->value) : QVariant();
         if (!fcv.isNull()) {
@@ -686,29 +670,32 @@ void EquityResearchService::subscribe_financials(QObject* owner, const QString& 
         auto* watcher = new QObject(this);
         QPointer<QObject> watcher_guard(watcher);
         connect(this, &EquityResearchService::financials_loaded, watcher,
-            [symbol, resolve, watcher_guard](FinancialsData d) {
-                if (d.symbol != symbol) return;
-                if (watcher_guard) watcher_guard->deleteLater();
-                resolve(QVariant::fromValue(d));
-            });
+                [symbol, resolve, watcher_guard](FinancialsData d) {
+                    if (d.symbol != symbol)
+                        return;
+                    if (watcher_guard)
+                        watcher_guard->deleteLater();
+                    resolve(QVariant::fromValue(d));
+                });
         connect(this, &EquityResearchService::error_occurred, watcher,
-            [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
-                if (sym != symbol || ctx != "Financials") return;
-                if (watcher_guard) watcher_guard->deleteLater();
-                reject(msg);
-            });
+                [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
+                    if (sym != symbol || ctx != "Financials")
+                        return;
+                    if (watcher_guard)
+                        watcher_guard->deleteLater();
+                    reject(msg);
+                });
         fetch_financials(symbol);
     };
-    query::QueryStore::instance().subscribe(owner, key, kFinancialsTtlSec, kFinancialsTtlSec * 4,
-                                            std::move(cb), std::move(fetcher));
+    query::QueryStore::instance().subscribe(owner, key, kFinancialsTtlSec, kFinancialsTtlSec * 4, std::move(cb),
+                                            std::move(fetcher));
 }
 
-void EquityResearchService::subscribe_news(QObject* owner, const QString& symbol,
-                                            query::QueryStore::Callback cb) {
-    if (symbol.isEmpty()) return;
+void EquityResearchService::subscribe_news(QObject* owner, const QString& symbol, query::QueryStore::Callback cb) {
+    if (symbol.isEmpty())
+        return;
     const QString key = "equity:news:" + symbol;
-    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
-                                   query::QueryStore::Rejecter reject) {
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const auto ncv_aged = fincept::CacheManager::instance().try_get_aged("equity:news:" + symbol);
         const QVariant ncv = ncv_aged ? QVariant(ncv_aged->value) : QVariant();
         if (!ncv.isNull()) {
@@ -726,27 +713,31 @@ void EquityResearchService::subscribe_news(QObject* owner, const QString& symbol
         auto* watcher = new QObject(this);
         QPointer<QObject> watcher_guard(watcher);
         connect(this, &EquityResearchService::news_loaded, watcher,
-            [symbol, resolve, watcher_guard](QString sym, QVector<NewsArticle> articles) {
-                if (sym != symbol) return;
-                if (watcher_guard) watcher_guard->deleteLater();
-                resolve(QVariant::fromValue(articles));
-            });
+                [symbol, resolve, watcher_guard](QString sym, QVector<NewsArticle> articles) {
+                    if (sym != symbol)
+                        return;
+                    if (watcher_guard)
+                        watcher_guard->deleteLater();
+                    resolve(QVariant::fromValue(articles));
+                });
         connect(this, &EquityResearchService::error_occurred, watcher,
-            [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
-                if (sym != symbol || ctx != "News") return;
-                if (watcher_guard) watcher_guard->deleteLater();
-                reject(msg);
-            });
+                [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
+                    if (sym != symbol || ctx != "News")
+                        return;
+                    if (watcher_guard)
+                        watcher_guard->deleteLater();
+                    reject(msg);
+                });
         fetch_news(symbol);
     };
-    query::QueryStore::instance().subscribe(owner, key, kNewsTtlSec, kNewsTtlSec * 5,
-                                            std::move(cb), std::move(fetcher));
+    query::QueryStore::instance().subscribe(owner, key, kNewsTtlSec, kNewsTtlSec * 5, std::move(cb),
+                                            std::move(fetcher));
 }
 
-void EquityResearchService::subscribe_peers(QObject* owner, const QString& symbol,
-                                             const QStringList& peer_symbols,
-                                             query::QueryStore::Callback cb) {
-    if (symbol.isEmpty()) return;
+void EquityResearchService::subscribe_peers(QObject* owner, const QString& symbol, const QStringList& peer_symbols,
+                                            query::QueryStore::Callback cb) {
+    if (symbol.isEmpty())
+        return;
     // Basket-aware key: same symbol with different peer baskets is a
     // different query and shouldn't share cache or in-flight slot.
     QStringList sorted_peers = peer_symbols;
@@ -754,36 +745,39 @@ void EquityResearchService::subscribe_peers(QObject* owner, const QString& symbo
     const QString basket = sorted_peers.join(",");
     const QString key = "equity:peers:v4:" + symbol + ":" + basket;
     auto fetcher = [this, symbol, peer_symbols](query::QueryStore::Resolver resolve,
-                                                 query::QueryStore::Rejecter reject) {
+                                                query::QueryStore::Rejecter reject) {
         // No cache short-circuit at this layer — fetch_peers's own cache
         // path keys on the same basket and emits peers_loaded synchronously
         // on hit. We just attach the bridge and call.
         auto* watcher = new QObject(this);
         QPointer<QObject> watcher_guard(watcher);
         connect(this, &EquityResearchService::peers_loaded, watcher,
-            [symbol, resolve, watcher_guard](QString sym, QVector<PeerData> peers) {
-                if (sym != symbol) return;
-                if (watcher_guard) watcher_guard->deleteLater();
-                resolve(QVariant::fromValue(peers));
-            });
+                [symbol, resolve, watcher_guard](QString sym, QVector<PeerData> peers) {
+                    if (sym != symbol)
+                        return;
+                    if (watcher_guard)
+                        watcher_guard->deleteLater();
+                    resolve(QVariant::fromValue(peers));
+                });
         connect(this, &EquityResearchService::error_occurred, watcher,
-            [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
-                if (sym != symbol || ctx != "Peers") return;
-                if (watcher_guard) watcher_guard->deleteLater();
-                reject(msg);
-            });
+                [symbol, reject, watcher_guard](const QString& sym, const QString& ctx, const QString& msg) {
+                    if (sym != symbol || ctx != "Peers")
+                        return;
+                    if (watcher_guard)
+                        watcher_guard->deleteLater();
+                    reject(msg);
+                });
         fetch_peers(symbol, peer_symbols);
     };
-    query::QueryStore::instance().subscribe(owner, key, kPeersTtlSec, kPeersTtlSec * 2,
-                                            std::move(cb), std::move(fetcher));
+    query::QueryStore::instance().subscribe(owner, key, kPeersTtlSec, kPeersTtlSec * 2, std::move(cb),
+                                            std::move(fetcher));
 }
 
-void EquityResearchService::subscribe_earnings(QObject* owner, const QString& symbol,
-                                                query::QueryStore::Callback cb) {
-    if (symbol.isEmpty()) return;
+void EquityResearchService::subscribe_earnings(QObject* owner, const QString& symbol, query::QueryStore::Callback cb) {
+    if (symbol.isEmpty())
+        return;
     const QString key = "equity:earnings:" + symbol;
-    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve,
-                                   query::QueryStore::Rejecter reject) {
+    auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const auto ecv_aged = fincept::CacheManager::instance().try_get_aged("equity:earnings:" + symbol);
         const QVariant ecv = ecv_aged ? QVariant(ecv_aged->value) : QVariant();
         if (!ecv.isNull()) {
@@ -798,8 +792,8 @@ void EquityResearchService::subscribe_earnings(QObject* owner, const QString& sy
         }
         QJsonObject payload;
         payload["symbol"] = symbol;
-        run_daemon("earnings_dates", payload,
-            [this, symbol, resolve, reject](bool ok, QJsonObject result, QString err) {
+        run_daemon(
+            "earnings_dates", payload, [this, symbol, resolve, reject](bool ok, QJsonObject result, QString err) {
                 // A refusal or no answer at all is not "no earnings" — don't
                 // hold an empty answer for the TTL.
                 if (python::PythonWorker::reply_is_transient(ok, result)) {
@@ -816,28 +810,27 @@ void EquityResearchService::subscribe_earnings(QObject* owner, const QString& sy
                 const QJsonArray arr = result.value("dates").toArray();
                 fincept::CacheManager::instance().put(
                     "equity:earnings:" + symbol,
-                    QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-                    kEarningsTtlSec, "equity");
+                    QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), kEarningsTtlSec,
+                    "equity");
                 update_symbol_cache(symbol, "earnings", arr);
                 resolve(QVariant::fromValue(parse_earnings(arr)));
             });
     };
     // Earnings dates are session-stable. Generous SWR window.
-    query::QueryStore::instance().subscribe(owner, key, kEarningsTtlSec, kEarningsTtlSec * 6,
-                                            std::move(cb), std::move(fetcher));
+    query::QueryStore::instance().subscribe(owner, key, kEarningsTtlSec, kEarningsTtlSec * 6, std::move(cb),
+                                            std::move(fetcher));
 }
 
 void EquityResearchService::prefetch_historical(const QString& symbol, const QString& period) {
-    if (symbol.isEmpty() || period.isEmpty()) return;
+    if (symbol.isEmpty() || period.isEmpty())
+        return;
     const QString key = "equity:candles:" + symbol + ":" + period;
-    auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve,
-                                           query::QueryStore::Rejecter reject) {
+    auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const QString candles_key = "equity:candles:" + symbol + ":" + period;
         const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
         const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
-            QVector<Candle> parsed = parse_candles(
-                QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
+            QVector<Candle> parsed = parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
             // No legacy broadcast emission on prefetch — nobody is waiting,
             // and broadcasting would mislead any subscribed tab into
             // thinking the user actively switched to this period.
@@ -849,14 +842,16 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
         payload["period"] = period;
         payload["interval"] = "1d";
         run_daemon("historical_period", payload,
-            [this, symbol, period, candles_key, resolve, reject](bool ok, QJsonObject result, QString err) {
-                if (!ok) { reject(err); return; }
-                const auto arr = result.contains("_value")
-                                     ? result.value("_value").toArray()
-                                     : result.value("history").toArray();
-                cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
-                resolve(QVariant::fromValue(parse_candles(arr)));
-            });
+                   [this, symbol, period, candles_key, resolve, reject](bool ok, QJsonObject result, QString err) {
+                       if (!ok) {
+                           reject(err);
+                           return;
+                       }
+                       const auto arr = result.contains("_value") ? result.value("_value").toArray()
+                                                                  : result.value("history").toArray();
+                       cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
+                       resolve(QVariant::fromValue(parse_candles(arr)));
+                   });
     };
     query::QueryStore::instance().prefetch(key, kHistoricalTtlSec, std::move(fetcher));
 }
@@ -880,14 +875,15 @@ void EquityResearchService::fetch_quote(const QString& symbol) {
         release_inflight(inflight_key);
         if (!ok || obj.contains("error")) {
             emit error_occurred(symbol, "Quote", !ok ? err : obj["error"].toString());
-            QuoteData failed; failed.symbol = symbol; failed.valid = false;
+            QuoteData failed;
+            failed.symbol = symbol;
+            failed.valid = false;
             emit quote_loaded(failed);
             return;
         }
         fincept::CacheManager::instance().put(
-            "equity:quote:" + symbol,
-            QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kQuoteTtlSec,
-            "equity");
+            "equity:quote:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
+            kQuoteTtlSec, "equity");
         update_symbol_cache(symbol, "quote", obj);
         update_symbol_cache(symbol, "symbol", symbol);
         emit quote_loaded(parse_quote(obj));
@@ -895,8 +891,8 @@ void EquityResearchService::fetch_quote(const QString& symbol) {
 }
 
 // ── Load symbol (quote + info + historical in parallel) ───────────────────────
-void EquityResearchService::search_symbols_for(
-    const QString& query, std::function<void(QString, QVector<SearchResult>, QString)> cb) {
+void EquityResearchService::search_symbols_for(const QString& query,
+                                               std::function<void(QString, QVector<SearchResult>, QString)> cb) {
     const QString q = query.trimmed();
     if (q.isEmpty() || !cb)
         return;
@@ -912,9 +908,10 @@ void EquityResearchService::search_symbols_for(
             // Whether a retry can help, said in the text (the one string
             // this callback carries): the MCP tool's agent decides on it.
             const QString why = err.isEmpty() ? QStringLiteral("search failed") : err;
-            cb(q, {}, python::PythonWorker::reply_is_transient(ok, result)
-                          ? QStringLiteral("no answer from Yahoo (retry may help): ") + why
-                          : why);
+            cb(q, {},
+               python::PythonWorker::reply_is_transient(ok, result)
+                   ? QStringLiteral("no answer from Yahoo (retry may help): ") + why
+                   : why);
             return;
         }
         cb(q, parse_search_results(result), QString());
@@ -954,30 +951,35 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                 // ({"error": …}) is a fact about the symbol and is not retried.
                 auto attempt = std::make_shared<std::function<void(int)>>();
                 *attempt = [this, symbol, inflight_key, payload, attempt](int tries_left) {
-                    run_daemon("info", payload, [this, symbol, inflight_key, attempt, tries_left](bool ok, QJsonObject obj, QString err) {
-                        // A timeout of the daemon call itself — no body; a vendor
-                        // error's text can say "timed out" too and is not retried.
-                        if (!ok && !obj.contains("error") && tries_left > 0 &&
-                            err.contains(QLatin1String("timeout"), Qt::CaseInsensitive)) {
-                            LOG_WARN("EquityResearch", QString("info timed out for %1 — retrying once").arg(symbol));
-                            QTimer::singleShot(4000, this, [attempt, tries_left]() { (*attempt)(tries_left - 1); });
-                            return;
-                        }
-                        release_inflight(inflight_key);
-                        if (!ok || obj.contains("error")) {
-                            emit error_occurred(symbol, "Info", !ok ? err : obj["error"].toString());
-                            StockInfo failed; failed.symbol = symbol; failed.valid = false;
-                            emit info_loaded(failed);
-                            return;
-                        }
-                        fincept::CacheManager::instance().put(
-                            "equity:info:v3:" + symbol,
-                            QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec,
-                            "equity");
-                        update_symbol_cache(symbol, "info_v3", obj);
-                        update_symbol_cache(symbol, "symbol", symbol);
-                        emit info_loaded(parse_info(obj));
-                    });
+                    run_daemon(
+                        "info", payload,
+                        [this, symbol, inflight_key, attempt, tries_left](bool ok, QJsonObject obj, QString err) {
+                            // A timeout of the daemon call itself — no body; a vendor
+                            // error's text can say "timed out" too and is not retried.
+                            if (!ok && !obj.contains("error") && tries_left > 0 &&
+                                err.contains(QLatin1String("timeout"), Qt::CaseInsensitive)) {
+                                LOG_WARN("EquityResearch",
+                                         QString("info timed out for %1 — retrying once").arg(symbol));
+                                QTimer::singleShot(4000, this, [attempt, tries_left]() { (*attempt)(tries_left - 1); });
+                                return;
+                            }
+                            release_inflight(inflight_key);
+                            if (!ok || obj.contains("error")) {
+                                emit error_occurred(symbol, "Info", !ok ? err : obj["error"].toString());
+                                StockInfo failed;
+                                failed.symbol = symbol;
+                                failed.valid = false;
+                                emit info_loaded(failed);
+                                return;
+                            }
+                            fincept::CacheManager::instance().put(
+                                "equity:info:v3:" + symbol,
+                                QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
+                                kInfoTtlSec, "equity");
+                            update_symbol_cache(symbol, "info_v3", obj);
+                            update_symbol_cache(symbol, "symbol", symbol);
+                            emit info_loaded(parse_info(obj));
+                        });
                 };
                 (*attempt)(1);
             }
@@ -993,7 +995,8 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
         const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
         const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
-            emit historical_loaded(symbol, period, parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
+            emit historical_loaded(symbol, period,
+                                   parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array()));
         } else {
             const QString inflight_key = "historical:" + symbol + ":" + period;
             if (acquire_inflight(inflight_key)) {
@@ -1005,17 +1008,16 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                            [this, symbol, period, candles_key, inflight_key](bool ok, QJsonObject result, QString err) {
                                release_inflight(inflight_key);
                                if (!ok) {
-                                   emit error_occurred(symbol, "Historical", "Failed to fetch historical for " + symbol + ": " + err);
+                                   emit error_occurred(symbol, "Historical",
+                                                       "Failed to fetch historical for " + symbol + ": " + err);
                                    // Empty candles signals failure; overlay gate still closes via on_historical_loaded.
                                    emit historical_loaded(symbol, period, {});
                                    return;
                                }
                                // Daemon returns a flat list; PythonWorker wraps under "_value".
-                               const auto arr = result.contains("_value")
-                                                    ? result.value("_value").toArray()
-                                                    : result.value("history").toArray();
-                               cache_history_series(result, arr, symbol, candles_key, period,
-                                                    kHistoricalTtlSec);
+                               const auto arr = result.contains("_value") ? result.value("_value").toArray()
+                                                                          : result.value("history").toArray();
+                               cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec);
                                emit historical_loaded(symbol, period, parse_candles(arr));
                            });
             }
@@ -1038,7 +1040,8 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
     }
 
     const QString inflight_key = "financials:" + symbol;
-    if (!acquire_inflight(inflight_key)) return;
+    if (!acquire_inflight(inflight_key))
+        return;
     QJsonObject payload;
     payload["symbol"] = symbol;
     run_daemon("financials", payload, [this, symbol, inflight_key](bool ok, QJsonObject obj, QString err) {
@@ -1053,8 +1056,8 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
         }
         fincept::CacheManager::instance().put(
             "equity:financials:" + symbol,
-            QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
-            kFinancialsTtlSec, "equity");
+            QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kFinancialsTtlSec,
+            "equity");
         update_symbol_cache(symbol, "financials", obj);
         update_symbol_cache(symbol, "symbol", symbol);
         emit financials_loaded(parse_financials(obj));
@@ -1093,13 +1096,16 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     // Dedup: a (symbol, period) request already in flight will fan out via
     // technicals_loaded — duplicate caller drops here.
     const QString inflight_key = "technicals:" + symbol + ":" + interval + ":" + period;
-    if (!acquire_inflight(inflight_key)) return;
+    if (!acquire_inflight(inflight_key))
+        return;
 
     QPointer<EquityResearchService> self = this;
 
     // ── Stage 2: compute via daemon, given a candles array ───────────────────
     auto run_compute = [self, symbol, period, interval, tech_key, inflight_key](const QJsonArray& raw) {
-        if (!self) { return; }  // (key remains held — process is exiting anyway)
+        if (!self) {
+            return;
+        } // (key remains held — process is exiting anyway)
         // This path never builds Candles, so parse_candles' guard does not
         // apply: the array goes straight back to Python. Note what does and
         // does not already protect it there — compute_technicals_from_candles
@@ -1111,10 +1117,11 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
         const QJsonArray candles = priced_rows(raw, "technicals " + symbol);
         QJsonObject payload;
         payload["candles"] = candles;
-        python::PythonWorker::instance().submit("compute_technicals", payload,
-            [self, symbol, period, interval, tech_key, inflight_key](bool ok, QJsonObject result,
-                                                                        QString err) {
-                if (!self) return;
+        python::PythonWorker::instance().submit(
+            "compute_technicals", payload,
+            [self, symbol, period, interval, tech_key, inflight_key](bool ok, QJsonObject result, QString err) {
+                if (!self)
+                    return;
                 self->release_inflight(inflight_key);
                 if (!ok || !result.value("success").toBool(false)) {
                     emit self->error_occurred(
@@ -1134,8 +1141,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 }
                 // Cache the computed series so re-opens are <100ms.
                 const QString blob = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
-                fincept::CacheManager::instance().put(tech_key, QVariant(blob),
-                                                      kTechnicalsTtlSec, "equity");
+                fincept::CacheManager::instance().put(tech_key, QVariant(blob), kTechnicalsTtlSec, "equity");
                 {
                     const QString fname = symbol_filename(symbol);
                     QJsonObject root = disk_cache().load(fname).object();
@@ -1156,19 +1162,18 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     // splitting them meant the same 5y daily series was fetched twice and the
     // "<100ms re-open" path went cold. Only non-daily intervals get their own
     // segment.
-    const QString candles_key =
-        interval == QLatin1String("1d")
-            ? "equity:candles:" + symbol + ":" + period
-            : "equity:candles:" + symbol + ":" + interval + ":" + period;
-    const QString candles_disk_sub =
-        interval == QLatin1String("1d") ? period : interval + ":" + period;
+    const QString candles_key = interval == QLatin1String("1d")
+                                    ? "equity:candles:" + symbol + ":" + period
+                                    : "equity:candles:" + symbol + ":" + interval + ":" + period;
+    const QString candles_disk_sub = interval == QLatin1String("1d") ? period : interval + ":" + period;
     QJsonArray candles_from_cache;
     {
         const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
         const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(hcv.toString().toUtf8());
-            if (doc.isArray()) candles_from_cache = doc.array();
+            if (doc.isArray())
+                candles_from_cache = doc.array();
         }
     }
     if (!candles_from_cache.isEmpty()) {
@@ -1180,10 +1185,12 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     hist_payload["symbol"] = symbol;
     hist_payload["period"] = period;
     hist_payload["interval"] = interval;
-    python::PythonWorker::instance().submit("historical_period", hist_payload,
+    python::PythonWorker::instance().submit(
+        "historical_period", hist_payload,
         [self, symbol, candles_key, candles_disk_sub, run_compute, inflight_key](bool ok, QJsonObject result,
-                                                                                  QString err) {
-            if (!self) return;
+                                                                                 QString err) {
+            if (!self)
+                return;
             if (!ok) {
                 // Stage 1 failed — release the dedup key here since stage 2
                 // will never run to release it for us.
@@ -1194,17 +1201,15 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 return;
             }
             // Daemon returns a flat array; PythonWorker wraps under _value.
-            const QJsonArray candles = result.contains("_value")
-                                            ? result.value("_value").toArray()
-                                            : result.value("history").toArray();
+            const QJsonArray candles =
+                result.contains("_value") ? result.value("_value").toArray() : result.value("history").toArray();
             // Same guard as every other history path: an {"error":…} result
             // or empty series arrives with ok == true, and putting it under
             // the SHARED daily candles key pinned a blank chart, technicals
             // and TALIpp for the full TTL from one rate-limit blip. (The
             // disk sub-key is interval-qualified for weekly so 10y of weekly
             // bars does not land on top of 10y of daily bars.)
-            if (!cache_history_series(result, candles, symbol, candles_key, candles_disk_sub,
-                                      kHistoricalTtlSec)) {
+            if (!cache_history_series(result, candles, symbol, candles_key, candles_disk_sub, kHistoricalTtlSec)) {
                 self->release_inflight(inflight_key);
                 emit self->error_occurred(symbol, "Technicals", history_error_text(result));
                 return;
@@ -1236,11 +1241,13 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
 
     // Reuse the cache key as the dedup key — if a fetch for this exact
     // peer set is already pending, drop the second caller.
-    if (!acquire_inflight(cache_key)) return;
+    if (!acquire_inflight(cache_key))
+        return;
 
     QJsonArray syms_arr;
     syms_arr.append(symbol);
-    for (const auto& s : peer_symbols) syms_arr.append(s);
+    for (const auto& s : peer_symbols)
+        syms_arr.append(s);
     QJsonObject payload;
     payload["symbols"] = syms_arr;
 
@@ -1251,13 +1258,11 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
             return;
         }
         // multiple_ratios returns a list; PythonWorker wraps under "_value".
-        const auto arr = result.contains("_value")
-                             ? result.value("_value").toArray()
-                             : result.value("ratios").toArray();
+        const auto arr =
+            result.contains("_value") ? result.value("_value").toArray() : result.value("ratios").toArray();
         fincept::CacheManager::instance().put(
-            cache_key,
-            QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
-            kPeersTtlSec, "equity");
+            cache_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), kPeersTtlSec,
+            "equity");
         update_symbol_cache(symbol, "peers", arr);
         update_symbol_cache(symbol, "peers_key", cache_key);
         update_symbol_cache(symbol, "symbol", symbol);
@@ -1279,7 +1284,8 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
     }
 
     const QString inflight_key = "news:" + symbol;
-    if (!acquire_inflight(inflight_key)) return;
+    if (!acquire_inflight(inflight_key))
+        return;
     QJsonObject payload;
     payload["symbol"] = symbol;
     payload["count"] = count;
@@ -1298,8 +1304,7 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
         }
         const QJsonArray arr = obj.value("articles").toArray();
         fincept::CacheManager::instance().put(
-            "equity:news:" + symbol,
-            QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
+            "equity:news:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
             kNewsTtlSec, "equity");
         update_symbol_cache(symbol, "news", arr);
         update_symbol_cache(symbol, "symbol", symbol);
@@ -1316,8 +1321,7 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
     // zero price would corrupt every downstream value — so the rows must be
     // filtered to fully-priced bars BEFORE they reach it.
     auto run_talipp = [this, symbol, indicator, params](const QJsonArray& raw) {
-        const QByteArray hist_json =
-            QJsonDocument(priced_rows(raw, "talipp " + symbol)).toJson(QJsonDocument::Compact);
+        const QByteArray hist_json = QJsonDocument(priced_rows(raw, "talipp " + symbol)).toJson(QJsonDocument::Compact);
         QJsonObject p_obj;
         for (auto it = params.constBegin(); it != params.constEnd(); ++it)
             p_obj[it.key()] = QJsonValue::fromVariant(it.value());
@@ -1330,18 +1334,16 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
         // The shim reads an argument of the form "@<path>"; the shared_ptr
         // keeps the QTemporaryFile (and so the file) alive until the
         // callback has run, after which both are destroyed together.
-        auto hist_file = std::make_shared<QTemporaryFile>(
-            QDir::temp().filePath(QStringLiteral("finterm_talipp_XXXXXX.json")));
+        auto hist_file =
+            std::make_shared<QTemporaryFile>(QDir::temp().filePath(QStringLiteral("finterm_talipp_XXXXXX.json")));
         if (!hist_file->open()) {
-            emit error_occurred(symbol, "TALIpp",
-                                "could not stage history: " + hist_file->errorString());
+            emit error_occurred(symbol, "TALIpp", "could not stage history: " + hist_file->errorString());
             return;
         }
         hist_file->write(hist_json);
-        hist_file->close();  // release the handle so the child can open it on every platform
+        hist_file->close(); // release the handle so the child can open it on every platform
 
-        run_python("equity_talipp.py",
-                   {indicator, QStringLiteral("@") + hist_file->fileName(), params_json},
+        run_python("equity_talipp.py", {indicator, QStringLiteral("@") + hist_file->fileName(), params_json},
                    [this, symbol, indicator, hist_file](bool ok, const QString& out) {
                        if (!ok) {
                            emit error_occurred(symbol, "TALIpp", out);
@@ -1363,9 +1365,8 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
     const QString candles_key = "equity:candles:" + symbol + ":" + period;
     const auto cached_candles_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
     const QVariant cached_candles = cached_candles_aged ? QVariant(cached_candles_aged->value) : QVariant();
-    const auto cached_doc = cached_candles.isNull()
-                                ? QJsonDocument()
-                                : QJsonDocument::fromJson(cached_candles.toString().toUtf8());
+    const auto cached_doc =
+        cached_candles.isNull() ? QJsonDocument() : QJsonDocument::fromJson(cached_candles.toString().toUtf8());
     // A cached blob that no longer parses as an array is not a cache hit.
     // .array() would hand back an empty array, which equity_talipp.py does
     // reject ("OHLCV data must be a non-empty JSON array") — so the user saw
@@ -1380,30 +1381,30 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
         // same candles. The first request's outcome reaches the tab via the
         // talipp_result / error_occurred broadcasts either way.
         const QString inflight_key = "talipp-hist:" + symbol + ":" + period;
-        if (!acquire_inflight(inflight_key)) return;
+        if (!acquire_inflight(inflight_key))
+            return;
         QJsonObject payload;
         payload["symbol"] = symbol;
         payload["period"] = period;
         payload["interval"] = "1d";
-        run_daemon("historical_period", payload,
-                   [this, symbol, period, candles_key, run_talipp, inflight_key](bool ok, QJsonObject result, QString err) {
-                       release_inflight(inflight_key);
-                       if (!ok) {
-                           emit error_occurred(symbol, "TALIpp", "Historical fetch failed: " + err);
-                           return;
-                       }
-                       const auto arr = result.contains("_value")
-                                            ? result.value("_value").toArray()
-                                            : result.value("history").toArray();
-                       // Same shared-key poisoning guard as fetch_technicals
-                       // stage 1 — an error/empty series must not be pinned.
-                       if (!cache_history_series(result, arr, symbol, candles_key, period,
-                                                 kHistoricalTtlSec)) {
-                           emit error_occurred(symbol, "TALIpp", history_error_text(result));
-                           return;
-                       }
-                       run_talipp(arr);
-                   });
+        run_daemon(
+            "historical_period", payload,
+            [this, symbol, period, candles_key, run_talipp, inflight_key](bool ok, QJsonObject result, QString err) {
+                release_inflight(inflight_key);
+                if (!ok) {
+                    emit error_occurred(symbol, "TALIpp", "Historical fetch failed: " + err);
+                    return;
+                }
+                const auto arr =
+                    result.contains("_value") ? result.value("_value").toArray() : result.value("history").toArray();
+                // Same shared-key poisoning guard as fetch_technicals
+                // stage 1 — an error/empty series must not be pinned.
+                if (!cache_history_series(result, arr, symbol, candles_key, period, kHistoricalTtlSec)) {
+                    emit error_occurred(symbol, "TALIpp", history_error_text(result));
+                    return;
+                }
+                run_talipp(arr);
+            });
     }
 }
 
@@ -1559,8 +1560,7 @@ void fill_row(fincept::services::equity::IndicatorRow& row, const QJsonObject& s
 } // namespace
 
 TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, const QString& period,
-                                                        const QString& interval,
-                                                        const QJsonArray& rows) const {
+                                                       const QString& interval, const QJsonArray& rows) const {
     TechnicalsData td;
     td.symbol = symbol;
     td.period = period;
@@ -1603,10 +1603,11 @@ TechnicalsData EquityResearchService::parse_technicals(const QString& symbol, co
     // tools/technicals_series/score_series.cpp carry copies that must match,
     // or the tests and the measurement tool score a different panel than ships.
     static const QList<QPair<QString, QString>> kTrend = {
-        {"SMA 10", "sma_10"},     {"SMA 20", "sma_20"},   {"SMA 30", "sma_30"},
-        {"SMA 50", "sma_50"},     {"SMA 100", "sma_100"}, {"SMA 200", "sma_200"},
-        {"EMA 12", "ema_12"},     {"EMA 26", "ema_26"},   {"WMA 9", "wma_9"},
-        {"Ichimoku Base", "ichimoku_base"},
+        {"SMA 10", "sma_10"},     {"SMA 20", "sma_20"},
+        {"SMA 30", "sma_30"},     {"SMA 50", "sma_50"},
+        {"SMA 100", "sma_100"},   {"SMA 200", "sma_200"},
+        {"EMA 12", "ema_12"},     {"EMA 26", "ema_26"},
+        {"WMA 9", "wma_9"},       {"Ichimoku Base", "ichimoku_base"},
         {"MACD", "macd"},         {"MACD Signal", "macd_signal"},
         {"CCI", "cci"},           {"ADX", "adx"},
         {"Aroon Up", "aroon_up"}, {"Aroon Down", "aroon_down"},
@@ -1729,11 +1730,20 @@ QVector<EarningsEvent> EquityResearchService::parse_earnings(const QJsonArray& a
         if (e.timestamp <= 0)
             continue;
         const auto est_v = o.value("eps_estimate");
-        if (!est_v.isNull()) { e.eps_estimate = est_v.toDouble(); e.has_estimate = true; }
+        if (!est_v.isNull()) {
+            e.eps_estimate = est_v.toDouble();
+            e.has_estimate = true;
+        }
         const auto act_v = o.value("eps_actual");
-        if (!act_v.isNull()) { e.eps_actual = act_v.toDouble(); e.has_actual = true; }
+        if (!act_v.isNull()) {
+            e.eps_actual = act_v.toDouble();
+            e.has_actual = true;
+        }
         const auto sur_v = o.value("surprise_pct");
-        if (!sur_v.isNull()) { e.surprise_pct = sur_v.toDouble(); e.has_surprise = true; }
+        if (!sur_v.isNull()) {
+            e.surprise_pct = sur_v.toDouble();
+            e.has_surprise = true;
+        }
         events.append(e);
     }
     return events;
@@ -1753,7 +1763,7 @@ std::optional<double> opt_num(const QJsonObject& o, const char* key) {
 
 void read_period_label(const QJsonObject& o, QString& period, QString& label) {
     period = o.value("period").toString();
-    label  = o.value("label").toString();
+    label = o.value("label").toString();
     if (label.isEmpty())
         label = period;
 }
@@ -1762,13 +1772,13 @@ void read_period_label(const QJsonObject& o, QString& period, QString& label) {
 
 EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObject& obj) const {
     EarningsAnalysis a;
-    a.symbol   = obj.value("symbol").toString();
+    a.symbol = obj.value("symbol").toString();
     a.currency = obj.value("currency").toString();
-    a.as_of    = obj.value("as_of").toVariant().toLongLong();
+    a.as_of = obj.value("as_of").toVariant().toLongLong();
     // `valid` means "the daemon answered", not "this symbol has earnings" —
     // ETFs and funds legitimately come back with every section empty, which
     // the tab reports as a clean empty state rather than an error.
-    a.valid    = !obj.contains("error");
+    a.valid = !obj.contains("error");
 
     const auto nx = obj.value("next").toObject();
     if (!nx.isEmpty()) {
@@ -1776,49 +1786,49 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         if (!ts.isNull() && !ts.isUndefined())
             a.next.timestamp = ts.toVariant().toLongLong();
         a.next.is_estimated = nx.value("is_estimated").toBool(true);
-        a.next.eps_avg      = opt_num(nx, "eps_avg");
-        a.next.eps_low      = opt_num(nx, "eps_low");
-        a.next.eps_high     = opt_num(nx, "eps_high");
-        a.next.analysts     = opt_num(nx, "analysts");
-        a.next.rev_avg      = opt_num(nx, "rev_avg");
-        a.next.rev_low      = opt_num(nx, "rev_low");
-        a.next.rev_high     = opt_num(nx, "rev_high");
+        a.next.eps_avg = opt_num(nx, "eps_avg");
+        a.next.eps_low = opt_num(nx, "eps_low");
+        a.next.eps_high = opt_num(nx, "eps_high");
+        a.next.analysts = opt_num(nx, "analysts");
+        a.next.rev_avg = opt_num(nx, "rev_avg");
+        a.next.rev_low = opt_num(nx, "rev_low");
+        a.next.rev_high = opt_num(nx, "rev_high");
         a.next.year_ago_eps = opt_num(nx, "year_ago_eps");
         a.next.year_ago_rev = opt_num(nx, "year_ago_rev");
-        a.next.eps_growth   = opt_num(nx, "eps_growth");
-        a.next.rev_growth   = opt_num(nx, "rev_growth");
+        a.next.eps_growth = opt_num(nx, "eps_growth");
+        a.next.rev_growth = opt_num(nx, "rev_growth");
 
         // Absent whenever the daemon could not compute it honestly (no listed
         // options, or no expiry within ten days of the print) — see the model.
         const auto imp = nx.value("implied").toObject();
         if (!imp.isEmpty()) {
             EarningsImpliedMove m;
-            m.expiry           = imp.value("expiry").toString();
+            m.expiry = imp.value("expiry").toString();
             m.days_after_print = imp.value("days_after_print").toInt();
-            m.total_move_pct   = opt_num(imp, "total_move_pct");
-            m.event_move_pct   = opt_num(imp, "event_move_pct");
-            m.straddle         = opt_num(imp, "straddle");
-            m.spot             = opt_num(imp, "spot");
-            m.strike           = opt_num(imp, "strike");
+            m.total_move_pct = opt_num(imp, "total_move_pct");
+            m.event_move_pct = opt_num(imp, "event_move_pct");
+            m.straddle = opt_num(imp, "straddle");
+            m.spot = opt_num(imp, "spot");
+            m.strike = opt_num(imp, "strike");
             if (m.total_move_pct.has_value())
                 a.next.implied = m;
         }
     }
 
     const auto val = obj.value("valuation").toObject();
-    a.valuation.price               = opt_num(val, "price");
-    a.valuation.trailing_eps        = opt_num(val, "trailing_eps");
-    a.valuation.forward_eps         = opt_num(val, "forward_eps");
-    a.valuation.trailing_pe         = opt_num(val, "trailing_pe");
-    a.valuation.forward_pe          = opt_num(val, "forward_pe");
-    a.valuation.target_mean         = opt_num(val, "target_mean");
-    a.valuation.target_high         = opt_num(val, "target_high");
-    a.valuation.target_low          = opt_num(val, "target_low");
+    a.valuation.price = opt_num(val, "price");
+    a.valuation.trailing_eps = opt_num(val, "trailing_eps");
+    a.valuation.forward_eps = opt_num(val, "forward_eps");
+    a.valuation.trailing_pe = opt_num(val, "trailing_pe");
+    a.valuation.forward_pe = opt_num(val, "forward_pe");
+    a.valuation.target_mean = opt_num(val, "target_mean");
+    a.valuation.target_high = opt_num(val, "target_high");
+    a.valuation.target_low = opt_num(val, "target_low");
     a.valuation.recommendation_mean = opt_num(val, "recommendation_mean");
-    a.valuation.analyst_count       = opt_num(val, "analyst_count");
-    a.valuation.earnings_growth     = opt_num(val, "earnings_growth");
-    a.valuation.revenue_growth      = opt_num(val, "revenue_growth");
-    a.valuation.recommendation      = val.value("recommendation").toString();
+    a.valuation.analyst_count = opt_num(val, "analyst_count");
+    a.valuation.earnings_growth = opt_num(val, "earnings_growth");
+    a.valuation.revenue_growth = opt_num(val, "revenue_growth");
+    a.valuation.recommendation = val.value("recommendation").toString();
 
     for (const auto& v : obj.value("history").toArray()) {
         const auto o = v.toObject();
@@ -1827,21 +1837,21 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         if (p.timestamp <= 0)
             continue;
         p.eps_estimate = opt_num(o, "eps_estimate");
-        p.eps_actual   = opt_num(o, "eps_actual");
+        p.eps_actual = opt_num(o, "eps_actual");
         p.surprise_pct = opt_num(o, "surprise_pct");
         p.surprise_suspect = o.value("surprise_suspect").toBool(false);
-        p.eps_qoq_pct  = opt_num(o, "eps_qoq_pct");
-        p.eps_yoy_pct  = opt_num(o, "eps_yoy_pct");
+        p.eps_qoq_pct = opt_num(o, "eps_qoq_pct");
+        p.eps_yoy_pct = opt_num(o, "eps_yoy_pct");
         p.reaction_pct = opt_num(o, "reaction_pct");
         p.reaction_live_pct = opt_num(o, "reaction_live_pct");
-        p.runup_pct    = opt_num(o, "runup_pct");
+        p.runup_pct = opt_num(o, "runup_pct");
         p.runup_20d_pct = opt_num(o, "runup_20d_pct");
-        p.pre_vol_pct  = opt_num(o, "pre_vol_pct");
+        p.pre_vol_pct = opt_num(o, "pre_vol_pct");
         p.price_before = opt_num(o, "price_before");
-        p.price_after  = opt_num(o, "price_after");
-        p.is_estimate  = o.value("is_estimate").toBool(false);
+        p.price_after = opt_num(o, "price_after");
+        p.is_estimate = o.value("is_estimate").toBool(false);
         p.move_since_last_pct = opt_num(o, "move_since_last_pct");
-        p.price_now           = opt_num(o, "price_now");
+        p.price_now = opt_num(o, "price_now");
         p.has_forward_estimate = o.value("has_forward_estimate").toBool(false);
         a.history.append(p);
     }
@@ -1850,17 +1860,17 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         const auto o = v.toObject();
         EarningsEstimateRow r;
         read_period_label(o, r.period, r.label);
-        r.eps_avg      = opt_num(o, "eps_avg");
-        r.eps_low      = opt_num(o, "eps_low");
-        r.eps_high     = opt_num(o, "eps_high");
-        r.analysts     = opt_num(o, "analysts");
+        r.eps_avg = opt_num(o, "eps_avg");
+        r.eps_low = opt_num(o, "eps_low");
+        r.eps_high = opt_num(o, "eps_high");
+        r.analysts = opt_num(o, "analysts");
         r.year_ago_eps = opt_num(o, "year_ago_eps");
-        r.eps_growth   = opt_num(o, "eps_growth");
-        r.rev_avg      = opt_num(o, "rev_avg");
-        r.rev_low      = opt_num(o, "rev_low");
-        r.rev_high     = opt_num(o, "rev_high");
+        r.eps_growth = opt_num(o, "eps_growth");
+        r.rev_avg = opt_num(o, "rev_avg");
+        r.rev_low = opt_num(o, "rev_low");
+        r.rev_high = opt_num(o, "rev_high");
         r.year_ago_rev = opt_num(o, "year_ago_rev");
-        r.rev_growth   = opt_num(o, "rev_growth");
+        r.rev_growth = opt_num(o, "rev_growth");
         a.estimates.append(r);
     }
 
@@ -1869,10 +1879,10 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         EarningsTrendRow r;
         read_period_label(o, r.period, r.label);
         r.current = opt_num(o, "current");
-        r.d7      = opt_num(o, "d7");
-        r.d30     = opt_num(o, "d30");
-        r.d60     = opt_num(o, "d60");
-        r.d90     = opt_num(o, "d90");
+        r.d7 = opt_num(o, "d7");
+        r.d30 = opt_num(o, "d30");
+        r.d60 = opt_num(o, "d60");
+        r.d90 = opt_num(o, "d90");
         a.trend.append(r);
     }
 
@@ -1880,9 +1890,9 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
         const auto o = v.toObject();
         EarningsRevisionRow r;
         read_period_label(o, r.period, r.label);
-        r.up_7d    = opt_num(o, "up_7d");
-        r.up_30d   = opt_num(o, "up_30d");
-        r.down_7d  = opt_num(o, "down_7d");
+        r.up_7d = opt_num(o, "up_7d");
+        r.up_30d = opt_num(o, "up_30d");
+        r.down_7d = opt_num(o, "down_7d");
         r.down_30d = opt_num(o, "down_30d");
         a.revisions.append(r);
     }
@@ -1897,19 +1907,20 @@ EarningsAnalysis EquityResearchService::parse_earnings_analysis(const QJsonObjec
     }
 
     const auto recent = obj.value("recent").toObject();
-    a.runup_5d_pct        = opt_num(recent, "runup_5d");
-    a.runup_20d_pct       = opt_num(recent, "runup_20d");
-    a.runup_90d_pct       = opt_num(recent, "runup_90d");
-    a.rel_runup_20d_pct   = opt_num(recent, "rel_runup_20d");
-    a.pct_from_52w_high   = opt_num(recent, "pct_from_52w_high");
-    a.pre_vol_pct         = opt_num(recent, "pre_vol_pct");
+    a.runup_5d_pct = opt_num(recent, "runup_5d");
+    a.runup_20d_pct = opt_num(recent, "runup_20d");
+    a.runup_90d_pct = opt_num(recent, "runup_90d");
+    a.rel_runup_20d_pct = opt_num(recent, "rel_runup_20d");
+    a.pct_from_52w_high = opt_num(recent, "pct_from_52w_high");
+    a.pre_vol_pct = opt_num(recent, "pre_vol_pct");
 
     return a;
 }
 
 void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QString& symbol,
                                                         query::QueryStore::Callback cb) {
-    if (symbol.isEmpty()) return;
+    if (symbol.isEmpty())
+        return;
     // Version segment for the same reason as kTechnicalsSchemaTag: the payload
     // shape changes with the engine, and although the 180s TTL makes stale
     // shapes self-heal in minutes, this project has been bitten by unversioned
@@ -1925,8 +1936,7 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
     // record_and_resolve would settle that print into earnings_signal_records
     // — a write resolve() never revisits. The bump makes that window zero.
     const QString key = "equity:earnings_analysis:v3:" + symbol;
-    auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve,
-                                       query::QueryStore::Rejecter reject) {
+    auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const auto cached_aged = fincept::CacheManager::instance().try_get_aged(key);
         const QVariant cached = cached_aged ? QVariant(cached_aged->value) : QVariant();
         if (!cached.isNull()) {
@@ -1944,9 +1954,13 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
         // 25 s, not the 10 s default: the daemon fans this out into six
         // upstream Yahoo calls (info, three estimate frames, earnings dates,
         // 3 y of daily bars) and any one of them can stall.
-        run_daemon("earnings_analysis", payload,
+        run_daemon(
+            "earnings_analysis", payload,
             [this, key, resolve, reject](bool ok, QJsonObject result, QString err) {
-                if (!ok) { reject(err); return; }
+                if (!ok) {
+                    reject(err);
+                    return;
+                }
                 if (result.contains("error")) {
                     reject(result.value("error").toString());
                     return;
@@ -1958,10 +1972,8 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
             },
             25'000);
     };
-    query::QueryStore::instance().subscribe(owner, key, kEarningsAnalysisTtlSec,
-                                            kEarningsAnalysisTtlSec * 8,
+    query::QueryStore::instance().subscribe(owner, key, kEarningsAnalysisTtlSec, kEarningsAnalysisTtlSec * 8,
                                             std::move(cb), std::move(fetcher));
 }
 
 } // namespace fincept::services::equity
-

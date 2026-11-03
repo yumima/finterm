@@ -34,17 +34,17 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 }
 
 static Result<void> apply_v032(QSqlDatabase& db) {
-    if (auto r = sql(db,
-            "CREATE TABLE IF NOT EXISTS memory_entries ("
-            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "  scope TEXT NOT NULL,"
-            "  key TEXT NOT NULL,"
-            "  content TEXT NOT NULL,"
-            "  metadata_json TEXT,"
-            "  created_at TEXT NOT NULL DEFAULT (datetime('now')),"
-            "  updated_at TEXT NOT NULL DEFAULT (datetime('now')),"
-            "  UNIQUE(scope, key)"
-            ")"); r.is_err()) {
+    if (auto r = sql(db, "CREATE TABLE IF NOT EXISTS memory_entries ("
+                         "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                         "  scope TEXT NOT NULL,"
+                         "  key TEXT NOT NULL,"
+                         "  content TEXT NOT NULL,"
+                         "  metadata_json TEXT,"
+                         "  created_at TEXT NOT NULL DEFAULT (datetime('now')),"
+                         "  updated_at TEXT NOT NULL DEFAULT (datetime('now')),"
+                         "  UNIQUE(scope, key)"
+                         ")");
+        r.is_err()) {
         return r;
     }
     sql(db, "CREATE INDEX IF NOT EXISTS idx_memory_entries_scope ON memory_entries(scope)");

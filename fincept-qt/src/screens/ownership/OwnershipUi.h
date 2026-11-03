@@ -26,8 +26,8 @@ namespace fmt = fincept::ui::formatting;
 /// because it is part of the number.
 struct SectionTitle {
     QWidget* widget = nullptr;
-    QLabel*  left = nullptr;
-    QLabel*  right = nullptr;
+    QLabel* left = nullptr;
+    QLabel* right = nullptr;
 };
 
 inline SectionTitle section_title(const QString& text) {
@@ -37,8 +37,8 @@ inline SectionTitle section_title(const QString& text) {
     h->setContentsMargins(0, 0, 0, 0);
     h->setSpacing(10);
     t.left = new QLabel(text);
-    t.left->setStyleSheet(QString("color:%1;font-weight:700;font-size:12px;letter-spacing:1px;")
-                              .arg(ui::colors::AMBER()));
+    t.left->setStyleSheet(
+        QString("color:%1;font-weight:700;font-size:12px;letter-spacing:1px;").arg(ui::colors::AMBER()));
     t.right = new QLabel;
     t.right->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     t.right->setWordWrap(true);
@@ -114,8 +114,8 @@ inline QString table_stylesheet() {
                    "QTableWidget::item{padding:1px 4px;}"
                    "QHeaderView::section{background:%4;color:%5;padding:4px;border:0;}"
                    "QToolTip{color:%2;background:%4;border:1px solid %3;}")
-        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
-             ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE());
+        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), ui::colors::BG_RAISED(),
+             ui::colors::TEXT_SECONDARY(), ui::colors::BG_SURFACE());
 }
 
 /// A dim, wrapping note under a table: coverage, exclusions, what was left out.

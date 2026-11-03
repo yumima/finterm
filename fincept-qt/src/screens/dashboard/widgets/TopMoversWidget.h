@@ -70,9 +70,9 @@ class TopMoversWidget : public BaseWidget {
     QVector<ui::InlineSparkline*> spark_widgets_;
 
     services::MarketDataService::TopMovers cached_movers_;
-    QHash<QString, QVector<double>>        sparkline_cache_;
-    QStringList                            subscribed_symbols_;
-    bool                                   hub_active_ = false;
+    QHash<QString, QVector<double>> sparkline_cache_;
+    QStringList subscribed_symbols_;
+    bool hub_active_ = false;
 
     // Collapse the burst of per-symbol sparkline callbacks into one re-render.
     QTimer* coalesce_ = nullptr;

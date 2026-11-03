@@ -211,7 +211,8 @@ void DashboardCanvas::set_row_height(int px) {
 
 void DashboardCanvas::fit_rows_to_viewport(int vp_h) {
     const int rows = max_row(layout_.items);
-    if (rows <= 0 || vp_h <= 0) return;
+    if (rows <= 0 || vp_h <= 0)
+        return;
 
     // Ideal row_h so all tile rows fill vp_h without a scrollbar:
     //   vp_h = margin + rows*(row_h+margin)  →  row_h = (vp_h - margin*(rows+1)) / rows
@@ -221,7 +222,8 @@ void DashboardCanvas::fit_rows_to_viewport(int vp_h) {
     // made tiles taller) and never below 36px (tiles become unreadable).
     // Cap at 240px to avoid absurdly tall tiles on very large monitors.
     const int new_rh = qBound(qMax(36, layout_.row_h), ideal, 240);
-    if (new_rh == layout_.row_h) return;
+    if (new_rh == layout_.row_h)
+        return;
 
     layout_.row_h = new_rh;
     reflow_tiles(false); // no animation for viewport-driven reflow
@@ -607,13 +609,12 @@ void DashboardCanvas::connect_tile(WidgetTile* tile) {
     // and emit layout_changed so the DashboardScreen writes it through to sqlite.
     if (auto* content = tile->content_widget()) {
         const QString instance_id = tile->instance_id();
-        connect(content, &widgets::BaseWidget::config_changed, this,
-                [this, instance_id](const QJsonObject& cfg) {
-                    if (auto* item = item_for_id(instance_id)) {
-                        item->config = cfg;
-                        emit layout_changed(layout_);
-                    }
-                });
+        connect(content, &widgets::BaseWidget::config_changed, this, [this, instance_id](const QJsonObject& cfg) {
+            if (auto* item = item_for_id(instance_id)) {
+                item->config = cfg;
+                emit layout_changed(layout_);
+            }
+        });
     }
 }
 

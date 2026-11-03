@@ -61,8 +61,7 @@ QJsonObject row_to_json(QSqlQuery& q) {
 // Stored as a packed little-endian float32 BLOB; dim lives in embedding_dim.
 
 QByteArray embedding_to_blob(const QVector<float>& v) {
-    return QByteArray(reinterpret_cast<const char*>(v.constData()),
-                      static_cast<int>(v.size() * sizeof(float)));
+    return QByteArray(reinterpret_cast<const char*>(v.constData()), static_cast<int>(v.size() * sizeof(float)));
 }
 
 double cosine(const QVector<float>& a, const float* b, int n) {
@@ -79,11 +78,10 @@ double cosine(const QVector<float>& a, const float* b, int n) {
 
 // ── LIKE fallback (the pre-embeddings behaviour) ──────────────────────────
 ToolResult like_search(const QString& scope, const QString& query, int limit) {
-    const QString sql = QStringLiteral(
-        "SELECT id, scope, key, content, metadata_json, created_at, updated_at "
-        "FROM memory_entries "
-        "WHERE scope = ? AND (content LIKE ? OR key LIKE ?) "
-        "ORDER BY updated_at DESC LIMIT ?");
+    const QString sql = QStringLiteral("SELECT id, scope, key, content, metadata_json, created_at, updated_at "
+                                       "FROM memory_entries "
+                                       "WHERE scope = ? AND (content LIKE ? OR key LIKE ?) "
+                                       "ORDER BY updated_at DESC LIMIT ?");
     const QString like = QStringLiteral("%%%1%%").arg(query);
     auto r = Database::instance().execute(sql, {scope, like, like, limit});
     if (r.is_err())
@@ -104,13 +102,11 @@ ToolResult like_search(const QString& scope, const QString& query, int limit) {
 // ── semantic search over stored embeddings ────────────────────────────────
 // Brute-force cosine over the scope's embedded rows. Returns nullopt when no
 // row in the scope has an embedding (caller then falls back to LIKE).
-std::optional<ToolResult> semantic_search(const QString& scope,
-                                          const QVector<float>& qvec, int limit) {
+std::optional<ToolResult> semantic_search(const QString& scope, const QVector<float>& qvec, int limit) {
     auto r = Database::instance().execute(
-        QStringLiteral(
-            "SELECT id, scope, key, content, metadata_json, created_at, updated_at, "
-            "       embedding, embedding_dim "
-            "FROM memory_entries WHERE scope = ? AND embedding IS NOT NULL"),
+        QStringLiteral("SELECT id, scope, key, content, metadata_json, created_at, updated_at, "
+                       "       embedding, embedding_dim "
+                       "FROM memory_entries WHERE scope = ? AND embedding IS NOT NULL"),
         {scope});
     if (r.is_err())
         return std::nullopt; // treat as "no semantic path"; caller does LIKE
@@ -143,8 +139,7 @@ std::optional<ToolResult> semantic_search(const QString& scope,
     if (scored.empty())
         return std::nullopt;
 
-    std::stable_sort(scored.begin(), scored.end(),
-                     [](const Scored& a, const Scored& b) { return a.score > b.score; });
+    std::stable_sort(scored.begin(), scored.end(), [](const Scored& a, const Scored& b) { return a.score > b.score; });
     if (static_cast<int>(scored.size()) > limit)
         scored.resize(limit);
 
@@ -165,8 +160,7 @@ std::optional<ToolResult> semantic_search(const QString& scope,
 // lives on the app thread (cross-thread use of it corrupts QObject parentage —
 // see NewsTools), and `resolve` is idempotent so it can't double-finish against
 // the provider's timeout watchdog.
-void async_upsert(const QJsonObject& args, ToolContext ctx,
-                  std::shared_ptr<QPromise<ToolResult>> promise) {
+void async_upsert(const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
     AsyncDispatch::callback_to_promise(qApp, ctx, promise, [args](auto resolve) {
         const QString scope = req_string(args, "scope");
         const QString key = req_string(args, "key");
@@ -179,21 +173,19 @@ void async_upsert(const QJsonObject& args, ToolContext ctx,
         QString metadata_json;
         const auto meta_v = args.value("metadata");
         if (meta_v.isObject())
-            metadata_json = QString::fromUtf8(
-                QJsonDocument(meta_v.toObject()).toJson(QJsonDocument::Compact));
+            metadata_json = QString::fromUtf8(QJsonDocument(meta_v.toObject()).toJson(QJsonDocument::Compact));
 
         // Storing content nulls any stale embedding; we recompute it below. This
         // keeps search correct even if the embedding step then fails (the row
         // simply falls back to keyword matching until the next successful upsert).
-        const QString sql = QStringLiteral(
-            "INSERT INTO memory_entries (scope, key, content, metadata_json, "
-            "                            embedding, embedding_dim, embedding_model) "
-            "VALUES (?, ?, ?, ?, NULL, NULL, NULL) "
-            "ON CONFLICT(scope, key) DO UPDATE SET "
-            "  content = excluded.content, "
-            "  metadata_json = excluded.metadata_json, "
-            "  embedding = NULL, embedding_dim = NULL, embedding_model = NULL, "
-            "  updated_at = datetime('now')");
+        const QString sql = QStringLiteral("INSERT INTO memory_entries (scope, key, content, metadata_json, "
+                                           "                            embedding, embedding_dim, embedding_model) "
+                                           "VALUES (?, ?, ?, ?, NULL, NULL, NULL) "
+                                           "ON CONFLICT(scope, key) DO UPDATE SET "
+                                           "  content = excluded.content, "
+                                           "  metadata_json = excluded.metadata_json, "
+                                           "  embedding = NULL, embedding_dim = NULL, embedding_model = NULL, "
+                                           "  updated_at = datetime('now')");
         auto r = Database::instance().execute(sql, {scope, key, content, metadata_json});
         if (r.is_err()) {
             resolve(ToolResult::fail(QString::fromStdString(r.error())));
@@ -210,27 +202,24 @@ void async_upsert(const QJsonObject& args, ToolContext ctx,
         // Best-effort embedding; never blocks the upsert's success. The UPDATE
         // is guarded by `content = ?` so a late embedding callback can't bind a
         // stale vector to content a newer upsert has already changed.
-        EmbeddingsClient::embed(
-            content, [scope, key, content, finish_ok](std::optional<QVector<float>> emb) {
-                if (emb && !emb->isEmpty()) {
-                    auto ur = Database::instance().execute(
-                        QStringLiteral("UPDATE memory_entries SET embedding = ?, "
-                                       "embedding_dim = ?, embedding_model = ? "
-                                       "WHERE scope = ? AND key = ? AND content = ?"),
-                        {embedding_to_blob(*emb), static_cast<int>(emb->size()),
-                         QStringLiteral("embedding"), scope, key, content});
-                    (void)ur;
-                    finish_ok(QString());
-                } else {
-                    finish_ok(QStringLiteral(" (keyword-only; embedding unavailable)"));
-                }
-            });
+        EmbeddingsClient::embed(content, [scope, key, content, finish_ok](std::optional<QVector<float>> emb) {
+            if (emb && !emb->isEmpty()) {
+                auto ur = Database::instance().execute(QStringLiteral("UPDATE memory_entries SET embedding = ?, "
+                                                                      "embedding_dim = ?, embedding_model = ? "
+                                                                      "WHERE scope = ? AND key = ? AND content = ?"),
+                                                       {embedding_to_blob(*emb), static_cast<int>(emb->size()),
+                                                        QStringLiteral("embedding"), scope, key, content});
+                (void)ur;
+                finish_ok(QString());
+            } else {
+                finish_ok(QStringLiteral(" (keyword-only; embedding unavailable)"));
+            }
+        });
     });
 }
 
 // ── search (async — embeds query, semantic with LIKE fallback) ────────────
-void async_search(const QJsonObject& args, ToolContext ctx,
-                  std::shared_ptr<QPromise<ToolResult>> promise) {
+void async_search(const QJsonObject& args, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
     AsyncDispatch::callback_to_promise(qApp, ctx, promise, [args](auto resolve) {
         const QString scope = req_string(args, "scope");
         const QString query = req_string(args, "query");
@@ -240,18 +229,17 @@ void async_search(const QJsonObject& args, ToolContext ctx,
         }
         const int limit = opt_int(args, "limit", kDefaultSearchLimit);
 
-        EmbeddingsClient::embed(
-            query, [scope, query, limit, resolve](std::optional<QVector<float>> qemb) {
-                if (qemb && !qemb->isEmpty()) {
-                    if (auto sem = semantic_search(scope, *qemb, limit)) {
-                        resolve(*sem);
-                        return;
-                    }
+        EmbeddingsClient::embed(query, [scope, query, limit, resolve](std::optional<QVector<float>> qemb) {
+            if (qemb && !qemb->isEmpty()) {
+                if (auto sem = semantic_search(scope, *qemb, limit)) {
+                    resolve(*sem);
+                    return;
                 }
-                // No embedding (engine down), no embedded rows, or nothing
-                // cleared the relevance floor → keyword fallback.
-                resolve(like_search(scope, query, limit));
-            });
+            }
+            // No embedding (engine down), no embedded rows, or nothing
+            // cleared the relevance floor → keyword fallback.
+            resolve(like_search(scope, query, limit));
+        });
     });
 }
 
@@ -262,9 +250,8 @@ ToolResult tool_delete(const QJsonObject& args) {
     if (scope.isEmpty() || key.isEmpty())
         return ToolResult::fail("memory_delete requires non-empty `scope` and `key`");
 
-    auto r = Database::instance().execute(
-        QStringLiteral("DELETE FROM memory_entries WHERE scope = ? AND key = ?"),
-        {scope, key});
+    auto r = Database::instance().execute(QStringLiteral("DELETE FROM memory_entries WHERE scope = ? AND key = ?"),
+                                          {scope, key});
     if (r.is_err())
         return ToolResult::fail(QString::fromStdString(r.error()));
 
@@ -273,11 +260,9 @@ ToolResult tool_delete(const QJsonObject& args) {
     data["scope"] = scope;
     data["key"] = key;
     data["deleted"] = affected;
-    return ToolResult::ok(
-        affected > 0
-            ? QStringLiteral("Deleted memory entry (%1, %2)").arg(scope, key)
-            : QStringLiteral("No entry matched (%1, %2)").arg(scope, key),
-        data);
+    return ToolResult::ok(affected > 0 ? QStringLiteral("Deleted memory entry (%1, %2)").arg(scope, key)
+                                       : QStringLiteral("No entry matched (%1, %2)").arg(scope, key),
+                          data);
 }
 
 ToolResult tool_list(const QJsonObject& args) {
@@ -286,10 +271,9 @@ ToolResult tool_list(const QJsonObject& args) {
         return ToolResult::fail("memory_list requires non-empty `scope`");
     const int limit = opt_int(args, "limit", kDefaultListLimit);
 
-    const QString sql = QStringLiteral(
-        "SELECT id, scope, key, content, metadata_json, created_at, updated_at "
-        "FROM memory_entries WHERE scope = ? "
-        "ORDER BY updated_at DESC LIMIT ?");
+    const QString sql = QStringLiteral("SELECT id, scope, key, content, metadata_json, created_at, updated_at "
+                                       "FROM memory_entries WHERE scope = ? "
+                                       "ORDER BY updated_at DESC LIMIT ?");
     auto r = Database::instance().execute(sql, {scope, limit});
     if (r.is_err())
         return ToolResult::fail(QString::fromStdString(r.error()));
@@ -305,15 +289,12 @@ ToolResult tool_list(const QJsonObject& args) {
     return ToolResult::ok(QStringLiteral("Listed %1 entry(ies)").arg(rows.size()), data);
 }
 
-ToolSchema schema_with_scope(const QJsonObject& extra_props,
-                             const QStringList& extra_required) {
+ToolSchema schema_with_scope(const QJsonObject& extra_props, const QStringList& extra_required) {
     ToolSchema s;
     QJsonObject props{
-        {"scope", QJsonObject{
-                      {"type", "string"},
-                      {"description",
-                       "Memory scope — `thesis` (per open thesis), "
-                       "`workspace` (per account), `global` (cross-thesis)."}}},
+        {"scope", QJsonObject{{"type", "string"},
+                              {"description", "Memory scope — `thesis` (per open thesis), "
+                                              "`workspace` (per account), `global` (cross-thesis)."}}},
     };
     for (auto it = extra_props.constBegin(); it != extra_props.constEnd(); ++it)
         props.insert(it.key(), it.value());
@@ -331,21 +312,18 @@ std::vector<ToolDef> get_memory_tools() {
     {
         ToolDef t;
         t.name = "memory_upsert";
-        t.description =
-            "Store or update an entry in the agent's persistent memory. "
-            "Idempotent on (scope, key) — calling with the same scope + key "
-            "overwrites the existing content and bumps updated_at. The content "
-            "is embedded (via the local engine) so memory_search can find it "
-            "by meaning, not just keywords.";
+        t.description = "Store or update an entry in the agent's persistent memory. "
+                        "Idempotent on (scope, key) — calling with the same scope + key "
+                        "overwrites the existing content and bumps updated_at. The content "
+                        "is embedded (via the local engine) so memory_search can find it "
+                        "by meaning, not just keywords.";
         t.category = "memory";
         t.input_schema = schema_with_scope(
             QJsonObject{
-                {"key", QJsonObject{{"type", "string"},
-                                    {"description", "Stable identifier for this entry"}}},
-                {"content", QJsonObject{{"type", "string"},
-                                        {"description", "Text content to remember"}}},
-                {"metadata", QJsonObject{{"type", "object"},
-                                         {"description", "Optional structured metadata (JSON object)"}}},
+                {"key", QJsonObject{{"type", "string"}, {"description", "Stable identifier for this entry"}}},
+                {"content", QJsonObject{{"type", "string"}, {"description", "Text content to remember"}}},
+                {"metadata",
+                 QJsonObject{{"type", "object"}, {"description", "Optional structured metadata (JSON object)"}}},
             },
             {"key", "content"});
         t.async_handler = async_upsert;
@@ -355,19 +333,16 @@ std::vector<ToolDef> get_memory_tools() {
     {
         ToolDef t;
         t.name = "memory_search";
-        t.description =
-            "Search memory entries within a scope. Uses semantic (cosine) "
-            "similarity over embeddings when the local engine is available, "
-            "falling back to a substring keyword match otherwise. The response "
-            "`mode` field reports which path ran (`semantic` or `keyword`).";
+        t.description = "Search memory entries within a scope. Uses semantic (cosine) "
+                        "similarity over embeddings when the local engine is available, "
+                        "falling back to a substring keyword match otherwise. The response "
+                        "`mode` field reports which path ran (`semantic` or `keyword`).";
         t.category = "memory";
         t.async_handler = async_search;
         t.input_schema = schema_with_scope(
             QJsonObject{
-                {"query", QJsonObject{{"type", "string"},
-                                      {"description", "Search query"}}},
-                {"limit", QJsonObject{{"type", "integer"},
-                                      {"description", "Max results (default 10, max 200)"}}},
+                {"query", QJsonObject{{"type", "string"}, {"description", "Search query"}}},
+                {"limit", QJsonObject{{"type", "integer"}, {"description", "Max results (default 10, max 200)"}}},
             },
             {"query"});
         tools.push_back(std::move(t));
@@ -376,15 +351,13 @@ std::vector<ToolDef> get_memory_tools() {
     {
         ToolDef t;
         t.name = "memory_list";
-        t.description =
-            "List recent memory entries in a scope, newest first.  Useful "
-            "for surfacing context the agent has accumulated without a "
-            "specific query in mind.";
+        t.description = "List recent memory entries in a scope, newest first.  Useful "
+                        "for surfacing context the agent has accumulated without a "
+                        "specific query in mind.";
         t.category = "memory";
         t.input_schema = schema_with_scope(
             QJsonObject{
-                {"limit", QJsonObject{{"type", "integer"},
-                                      {"description", "Max results (default 50, max 200)"}}},
+                {"limit", QJsonObject{{"type", "integer"}, {"description", "Max results (default 50, max 200)"}}},
             },
             {});
         t.handler = tool_list;
@@ -394,16 +367,14 @@ std::vector<ToolDef> get_memory_tools() {
     {
         ToolDef t;
         t.name = "memory_delete";
-        t.description =
-            "Remove an entry from the agent's persistent memory.  No-op "
-            "(returns deleted=0) when no entry matches — caller can treat "
-            "that as success.  Destructive, so the auth gate fires.";
+        t.description = "Remove an entry from the agent's persistent memory.  No-op "
+                        "(returns deleted=0) when no entry matches — caller can treat "
+                        "that as success.  Destructive, so the auth gate fires.";
         t.category = "memory";
         t.is_destructive = true;
         t.input_schema = schema_with_scope(
             QJsonObject{
-                {"key", QJsonObject{{"type", "string"},
-                                    {"description", "Stable identifier of the entry to delete"}}},
+                {"key", QJsonObject{{"type", "string"}, {"description", "Stable identifier of the entry to delete"}}},
             },
             {"key"});
         t.handler = tool_delete;

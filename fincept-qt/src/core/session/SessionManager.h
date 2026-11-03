@@ -1,12 +1,12 @@
 #pragma once
+#include "core/config/AppIdentity.h"
+
 #include <QElapsedTimer>
 #include <QList>
 #include <QObject>
 #include <QSettings>
 #include <QString>
 #include <QVariantMap>
-
-#include "core/config/AppIdentity.h"
 
 namespace fincept {
 

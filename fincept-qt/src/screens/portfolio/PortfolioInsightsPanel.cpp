@@ -4,8 +4,8 @@
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "services/agents/AgentService.h"
-#include "ui/markdown/MarkdownRenderer.h"
 #include "ui/formatting/NumberFormat.h"
+#include "ui/markdown/MarkdownRenderer.h"
 #include "ui/theme/Theme.h"
 
 #include <QComboBox>
@@ -39,10 +39,10 @@ QString fmt_now() {
 // by AgentChatPanel and AI Chat so portfolio responses look consistent.
 
 // Resizable insights dock — drag-strip width + width bounds (persisted).
-constexpr int kPiGripW = 6;       // px — drag strip on the dock's left edge
-constexpr int kPiMinW = 380;      // px — narrowest the dock can get
-constexpr int kPiMaxW = 1100;     // px — widest (also capped at 90% of the screen)
-constexpr int kPiDefaultW = 560;  // px — default / first-run width
+constexpr int kPiGripW = 6;      // px — drag strip on the dock's left edge
+constexpr int kPiMinW = 380;     // px — narrowest the dock can get
+constexpr int kPiMaxW = 1100;    // px — widest (also capped at 90% of the screen)
+constexpr int kPiDefaultW = 560; // px — default / first-run width
 
 } // namespace
 
@@ -63,10 +63,9 @@ PortfolioInsightsPanel::PortfolioInsightsPanel(QWidget* parent) : QWidget(parent
     resize_grip_->setCursor(Qt::SizeHorCursor);
     resize_grip_->setToolTip("Drag to resize");
     resize_grip_->setAttribute(Qt::WA_StyledBackground, true);
-    resize_grip_->setStyleSheet(
-        QString("#PortfolioInsightsResizeGrip { background:transparent; }"
-                "#PortfolioInsightsResizeGrip:hover { background:%1; }")
-            .arg(ui::colors::AMBER()));
+    resize_grip_->setStyleSheet(QString("#PortfolioInsightsResizeGrip { background:transparent; }"
+                                        "#PortfolioInsightsResizeGrip:hover { background:%1; }")
+                                    .arg(ui::colors::AMBER()));
     resize_grip_->installEventFilter(this);
     resize_grip_->raise();
 
@@ -123,43 +122,41 @@ PortfolioInsightsPanel::PortfolioInsightsPanel(QWidget* parent) : QWidget(parent
                 }
             });
 
-    connect(&svc, &services::AgentService::agent_stream_done, this,
-            [this](services::AgentExecutionResult r) {
-                if (r.request_id != agent_pending_req_id_)
-                    return;
-                const QString agent_id = agent_pending_id_;
-                agent_pending_req_id_.clear();
-                agent_pending_id_.clear();
-                agent_busy_ = false;
-                agent_run_->setEnabled(true);
-                header_status_->clear();
+    connect(&svc, &services::AgentService::agent_stream_done, this, [this](services::AgentExecutionResult r) {
+        if (r.request_id != agent_pending_req_id_)
+            return;
+        const QString agent_id = agent_pending_id_;
+        agent_pending_req_id_.clear();
+        agent_pending_id_.clear();
+        agent_busy_ = false;
+        agent_run_->setEnabled(true);
+        header_status_->clear();
 
-                // finagent_core emits some agents via the final JSON line
-                // (r.response populated) and others via streamed tokens (where
-                // r.response may come back empty). Mirror AgentChatPanel's
-                // logic: prefer r.response, fall back to accumulated tokens.
-                QString final_text = r.response.trimmed();
-                if (final_text.isEmpty())
-                    final_text = agent_streaming_text_.trimmed();
-                agent_streaming_text_.clear();
+        // finagent_core emits some agents via the final JSON line
+        // (r.response populated) and others via streamed tokens (where
+        // r.response may come back empty). Mirror AgentChatPanel's
+        // logic: prefer r.response, fall back to accumulated tokens.
+        QString final_text = r.response.trimmed();
+        if (final_text.isEmpty())
+            final_text = agent_streaming_text_.trimmed();
+        agent_streaming_text_.clear();
 
-                if (r.success && !final_text.isEmpty()) {
-                    agent_cache_.insert(agent_id, final_text);
-                    agent_meta_->setText(QString("Last run %1  •  %2ms").arg(fmt_now()).arg(r.execution_time_ms));
-                    render_result(agent_content_, final_text);
-                    agent_run_->setText("RE-RUN AGENT");
-                } else if (r.success) {
-                    // Agent reported success but produced no text — likely a
-                    // config issue (no LLM key in the agent's profile, etc.).
-                    render_error(agent_content_,
-                                 "Agent completed but returned no content.\n\n"
-                                 "Check the agent's LLM profile in Agent Config → Agents, "
-                                 "and make sure an API key is set in Settings → LLM Configuration.");
-                } else {
-                    const QString msg = r.error.isEmpty() ? QStringLiteral("No response received.") : r.error;
-                    render_error(agent_content_, "Agent run failed.\n\n" + msg);
-                }
-            });
+        if (r.success && !final_text.isEmpty()) {
+            agent_cache_.insert(agent_id, final_text);
+            agent_meta_->setText(QString("Last run %1  •  %2ms").arg(fmt_now()).arg(r.execution_time_ms));
+            render_result(agent_content_, final_text);
+            agent_run_->setText("RE-RUN AGENT");
+        } else if (r.success) {
+            // Agent reported success but produced no text — likely a
+            // config issue (no LLM key in the agent's profile, etc.).
+            render_error(agent_content_, "Agent completed but returned no content.\n\n"
+                                         "Check the agent's LLM profile in Agent Config → Agents, "
+                                         "and make sure an API key is set in Settings → LLM Configuration.");
+        } else {
+            const QString msg = r.error.isEmpty() ? QStringLiteral("No response received.") : r.error;
+            render_error(agent_content_, "Agent run failed.\n\n" + msg);
+        }
+    });
 
     // Refresh the agent dropdown whenever finagent_core discovers agents.
     // This matches the AgentChatPanel wiring so both lists stay in sync.
@@ -200,8 +197,7 @@ void PortfolioInsightsPanel::build_ui() {
     const QString text3 = ui::colors::TEXT_SECONDARY();
 
     // Opaque background — this is the whole fix for the previous overlap bug.
-    setStyleSheet(QString("#PortfolioInsightsPanel { background:%1; border-left:1px solid %2; }")
-                      .arg(bg, border));
+    setStyleSheet(QString("#PortfolioInsightsPanel { background:%1; border-left:1px solid %2; }").arg(bg, border));
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -232,7 +228,10 @@ void PortfolioInsightsPanel::build_ui() {
                                      "  font-size:20px; font-weight:300; }"
                                      "QPushButton:hover { color:%2; background:%3; }")
                                  .arg(text2, text1, hover));
-    connect(close_btn, &QPushButton::clicked, this, [this]() { hide(); emit close_requested(); });
+    connect(close_btn, &QPushButton::clicked, this, [this]() {
+        hide();
+        emit close_requested();
+    });
     hl->addWidget(close_btn);
     root->addWidget(header);
 
@@ -382,10 +381,10 @@ QWidget* PortfolioInsightsPanel::build_ai_page() {
                                    .arg(bg, text1));
     lay->addWidget(ai_content_, 1);
     render_empty(ai_content_, "Select an analysis type and press RUN.\n\n"
-                             "FULL — broad review of holdings and allocation.\n"
-                             "RISK — concentration, correlation, downside scenarios.\n"
-                             "REBALANCE — target weights with rationale.\n"
-                             "OPPS — undervalued positions and gaps.");
+                              "FULL — broad review of holdings and allocation.\n"
+                              "RISK — concentration, correlation, downside scenarios.\n"
+                              "REBALANCE — target weights with rationale.\n"
+                              "OPPS — undervalued positions and gaps.");
     return page;
 }
 
@@ -478,8 +477,7 @@ void PortfolioInsightsPanel::set_summary(const portfolio::PortfolioSummary& summ
         // Re-scope the chat to the new portfolio — its thread persists per id.
         if (chat_pane_)
             chat_pane_->set_context(
-                summary.portfolio.id.isEmpty() ? QString()
-                                               : QStringLiteral("portfolio:") + summary.portfolio.id,
+                summary.portfolio.id.isEmpty() ? QString() : QStringLiteral("portfolio:") + summary.portfolio.id,
                 QStringLiteral("Portfolio: %1").arg(summary.portfolio.name),
                 QStringLiteral("<div style='color:%1'>Ask anything about <b>%2</b> — allocation, "
                                "risk, P&amp;L, what to trim or add. I read the real holdings "
@@ -530,42 +528,42 @@ void PortfolioInsightsPanel::clamp_width(int available_px) {
 bool PortfolioInsightsPanel::eventFilter(QObject* obj, QEvent* e) {
     if (obj == resize_grip_) {
         switch (e->type()) {
-        case QEvent::MouseButtonPress: {
-            auto* me = static_cast<QMouseEvent*>(e);
-            if (me->button() == Qt::LeftButton) {
-                resizing_ = true;
-                drag_start_x_ = me->globalPosition().toPoint().x();
-                drag_start_w_ = width();
-                return true;
-            }
-            break;
-        }
-        case QEvent::MouseMove:
-            if (resizing_) {
+            case QEvent::MouseButtonPress: {
                 auto* me = static_cast<QMouseEvent*>(e);
-                // Drag the left edge leftward → wider (right edge stays anchored).
-                const int dx = drag_start_x_ - me->globalPosition().toPoint().x();
-                int cap = kPiMaxW;
-                if (parentWidget())
-                    cap = qMin(cap, static_cast<int>(parentWidget()->width() * 0.9));
-                const int neww = qBound(kPiMinW, drag_start_w_ + dx, qMax(kPiMinW, cap));
-                if (neww != width()) {
-                    setFixedWidth(neww);
-                    if (parentWidget())
-                        move(parentWidget()->width() - neww, y());
+                if (me->button() == Qt::LeftButton) {
+                    resizing_ = true;
+                    drag_start_x_ = me->globalPosition().toPoint().x();
+                    drag_start_w_ = width();
+                    return true;
                 }
-                return true;
+                break;
             }
-            break;
-        case QEvent::MouseButtonRelease:
-            if (resizing_) {
-                resizing_ = false;
-                QSettings().setValue("portfolio/insights_panel_width", width());
-                return true;
-            }
-            break;
-        default:
-            break;
+            case QEvent::MouseMove:
+                if (resizing_) {
+                    auto* me = static_cast<QMouseEvent*>(e);
+                    // Drag the left edge leftward → wider (right edge stays anchored).
+                    const int dx = drag_start_x_ - me->globalPosition().toPoint().x();
+                    int cap = kPiMaxW;
+                    if (parentWidget())
+                        cap = qMin(cap, static_cast<int>(parentWidget()->width() * 0.9));
+                    const int neww = qBound(kPiMinW, drag_start_w_ + dx, qMax(kPiMinW, cap));
+                    if (neww != width()) {
+                        setFixedWidth(neww);
+                        if (parentWidget())
+                            move(parentWidget()->width() - neww, y());
+                    }
+                    return true;
+                }
+                break;
+            case QEvent::MouseButtonRelease:
+                if (resizing_) {
+                    resizing_ = false;
+                    QSettings().setValue("portfolio/insights_panel_width", width());
+                    return true;
+                }
+                break;
+            default:
+                break;
         }
     }
     return QWidget::eventFilter(obj, e);
@@ -614,9 +612,7 @@ void PortfolioInsightsPanel::reload_agents() {
     const auto cached = services::AgentService::instance().cached_agents();
     if (!cached.isEmpty()) {
         for (const auto& a : cached) {
-            const QString label = a.category.isEmpty()
-                                      ? a.name
-                                      : QString("[%1] %2").arg(a.category, a.name);
+            const QString label = a.category.isEmpty() ? a.name : QString("[%1] %2").arg(a.category, a.name);
             agent_cb_->addItem(label, a.id);
             agent_cb_->setItemData(agent_cb_->count() - 1, a.description, Qt::UserRole + 1);
         }
@@ -624,8 +620,9 @@ void PortfolioInsightsPanel::reload_agents() {
         // Cache cold — show a disabled "discovering" placeholder and kick
         // off discovery. agents_discovered will repopulate us when it lands.
         agent_cb_->addItem("Discovering agents…", "");
-        agent_cb_->setItemData(0, "Loading agents from finagent_core. If this persists, make sure "
-                                  "Python is installed and open Agent Config for more details.",
+        agent_cb_->setItemData(0,
+                               "Loading agents from finagent_core. If this persists, make sure "
+                               "Python is installed and open Agent Config for more details.",
                                Qt::UserRole + 1);
         services::AgentService::instance().discover_agents();
     }
@@ -653,8 +650,7 @@ QString PortfolioInsightsPanel::build_portfolio_context() const {
                            : QString::number(summary_.total_unrealized_pnl_percent, 'f', 2) + "%" + note)
                  .arg(none ? QStringLiteral("unknown")
                            : QString::number(summary_.total_day_change_percent, 'f', 2) + "%" +
-                                 (summary_.day_note().isEmpty() ? QString()
-                                                                : " (" + summary_.day_note() + ")"))
+                                 (summary_.day_note().isEmpty() ? QString() : " (" + summary_.day_note() + ")"))
                  .arg(summary_.total_positions);
     lines << "";
     lines << "Holdings:";
@@ -664,14 +660,12 @@ QString PortfolioInsightsPanel::build_portfolio_context() const {
                      .arg(QString::number(h.quantity, 'f', 2))
                      .arg(h.price_known ? QString::number(h.current_price, 'f', 2)
                                         : QStringLiteral("no price (excluded from NAV)"))
-                     .arg(std::isfinite(h.unrealized_pnl_percent)
-                              ? QString::number(h.unrealized_pnl_percent, 'f', 2)
-                              : ui::formatting::placeholder())
+                     .arg(std::isfinite(h.unrealized_pnl_percent) ? QString::number(h.unrealized_pnl_percent, 'f', 2)
+                                                                  : ui::formatting::placeholder())
                      .arg(QString::number(h.weight, 'f', 1));
     }
     if (!summary_.unpriced_symbols.isEmpty())
-        lines << QString("Note: NAV and P&L exclude unpriced holdings: %1")
-                     .arg(summary_.unpriced_symbols.join(", "));
+        lines << QString("Note: NAV and P&L exclude unpriced holdings: %1").arg(summary_.unpriced_symbols.join(", "));
     if (!summary_.fx_unknown_symbols.isEmpty())
         lines << QString("Note: NAV and P&L exclude holdings with no FX rate: %1")
                      .arg(summary_.fx_unknown_symbols.join(", "));
@@ -776,8 +770,7 @@ void PortfolioInsightsPanel::run_agent(bool force) {
     // Compose the query that finagent_core will run through the configured
     // agent: portfolio context first, then a task prompt. The agent's own
     // system prompt (configured in Agent Config) shapes the style.
-    const QString query = build_portfolio_context() +
-                          "\n\nTask: Analyze this portfolio as " + agent_name +
+    const QString query = build_portfolio_context() + "\n\nTask: Analyze this portfolio as " + agent_name +
                           ". Provide clear sections, concrete recommendations, and quantify exposures "
                           "where data allows.";
 

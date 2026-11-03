@@ -3,12 +3,12 @@
 #include "core/config/AppPaths.h"
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
-#include "services/notifications/NotificationService.h"
-#include "storage/repositories/SettingsRepository.h"
-#include "storage/repositories/PortfolioRepository.h"
-#include "storage/repositories/WatchlistRepository.h"
 #include "python/PythonWorker.h"
 #include "screens/ownership/OwnershipFlags.h"
+#include "services/notifications/NotificationService.h"
+#include "storage/repositories/PortfolioRepository.h"
+#include "storage/repositories/SettingsRepository.h"
+#include "storage/repositories/WatchlistRepository.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -17,8 +17,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QPointer>
-#include <QTimer>
 #include <QTimeZone>
+#include <QTimer>
 
 #include <algorithm>
 #include <cmath>
@@ -58,13 +58,13 @@ constexpr int kScanRecheckMs = 6 * 60 * 60 * 1000;
 constexpr int kScanRetryMs = 15 * 60 * 1000;
 constexpr int kScanMaxPasses = 12;
 
-const QString kSrcEdgar    = QStringLiteral("edgar");
-const QString kSrcMarket   = QStringLiteral("market");
-const QString kSrcHolders  = QStringLiteral("holders");
-const QString kSrcShort    = QStringLiteral("short");
+const QString kSrcEdgar = QStringLiteral("edgar");
+const QString kSrcMarket = QStringLiteral("market");
+const QString kSrcHolders = QStringLiteral("holders");
+const QString kSrcShort = QStringLiteral("short");
 const QString kSrcShortVol = QStringLiteral("shortvol");
-const QString kSrcSirio    = QStringLiteral("sirio");
-const QString kSrcReturns  = QStringLiteral("returns");
+const QString kSrcSirio = QStringLiteral("sirio");
+const QString kSrcReturns = QStringLiteral("returns");
 
 std::optional<double> opt_num(const QJsonObject& o, const char* key) {
     const auto v = o.value(QLatin1String(key));
@@ -87,8 +87,10 @@ QDate epoch_date(const QJsonObject& o, const char* key) {
 }
 
 Pattern pattern_from(const QString& s) {
-    if (s == QLatin1String("routine"))       return Pattern::Routine;
-    if (s == QLatin1String("opportunistic")) return Pattern::Opportunistic;
+    if (s == QLatin1String("routine"))
+        return Pattern::Routine;
+    if (s == QLatin1String("opportunistic"))
+        return Pattern::Opportunistic;
     return Pattern::Unclassified;
 }
 
@@ -121,15 +123,14 @@ QString edgar_error_in(const QJsonObject& root) {
 }
 
 void parse_edgar_into(const QJsonObject& root, OwnershipSnapshot& snap) {
-    const QJsonObject ins = root.value(QStringLiteral("insiders")).isObject()
-                                ? root.value(QStringLiteral("insiders")).toObject()
-                                : root;
+    const QJsonObject ins =
+        root.value(QStringLiteral("insiders")).isObject() ? root.value(QStringLiteral("insiders")).toObject() : root;
     if (snap.company.isEmpty())
         snap.company = ins.value(QStringLiteral("company")).toString();
     if (snap.cik.isEmpty())
         snap.cik = ins.value(QStringLiteral("cik")).toString();
-    snap.filings_found     = ins.value(QStringLiteral("filings_found")).toInt();
-    snap.filings_parsed    = ins.value(QStringLiteral("filings_parsed")).toInt();
+    snap.filings_found = ins.value(QStringLiteral("filings_found")).toInt();
+    snap.filings_parsed = ins.value(QStringLiteral("filings_parsed")).toInt();
     snap.filings_truncated = ins.value(QStringLiteral("filings_truncated")).toInt();
     snap.insider_rows_filed_as_owner = ins.value(QStringLiteral("rows_filed_as_owner")).toInt();
     snap.insider_other_issuers.clear();
@@ -141,25 +142,25 @@ void parse_edgar_into(const QJsonObject& root, OwnershipSnapshot& snap) {
     for (const auto& v : ins.value(QStringLiteral("transactions")).toArray()) {
         const QJsonObject o = v.toObject();
         InsiderTransaction t;
-        t.insider     = o.value(QStringLiteral("insider")).toString();
-        t.date        = iso_date(o, "date");
-        t.filed_date  = iso_date(o, "filed_date");
-        t.code        = o.value(QStringLiteral("code")).toString();
-        t.code_label  = o.value(QStringLiteral("code_label")).toString();
-        t.security    = o.value(QStringLiteral("security")).toString();
-        t.derivative  = o.value(QStringLiteral("derivative")).toBool();
+        t.insider = o.value(QStringLiteral("insider")).toString();
+        t.date = iso_date(o, "date");
+        t.filed_date = iso_date(o, "filed_date");
+        t.code = o.value(QStringLiteral("code")).toString();
+        t.code_label = o.value(QStringLiteral("code_label")).toString();
+        t.security = o.value(QStringLiteral("security")).toString();
+        t.derivative = o.value(QStringLiteral("derivative")).toBool();
         t.open_market = o.value(QStringLiteral("open_market")).toBool();
-        t.acquired    = o.value(QStringLiteral("direction")).toString() == QLatin1String("acquired");
+        t.acquired = o.value(QStringLiteral("direction")).toString() == QLatin1String("acquired");
         t.ten_percent_owner = o.value(QStringLiteral("ten_percent_owner")).toBool();
         const auto plan = o.value(QStringLiteral("plan_10b5_1"));
         if (plan.isBool())
             t.plan_10b5_1 = plan.toBool();
-        t.source_url  = o.value(QStringLiteral("source_url")).toString();
+        t.source_url = o.value(QStringLiteral("source_url")).toString();
         for (const auto& r : o.value(QStringLiteral("roles")).toArray())
             t.roles << r.toString();
-        t.shares            = opt_num(o, "shares");
-        t.price             = opt_num(o, "price");
-        t.value             = opt_num(o, "value");
+        t.shares = opt_num(o, "shares");
+        t.price = opt_num(o, "price");
+        t.value = opt_num(o, "value");
         t.shares_held_after = opt_num(o, "shares_held_after");
         if (t.date.isValid())
             snap.transactions.push_back(t);
@@ -169,13 +170,13 @@ void parse_edgar_into(const QJsonObject& root, OwnershipSnapshot& snap) {
     for (const auto& v : ins.value(QStringLiteral("insiders")).toArray()) {
         const QJsonObject o = v.toObject();
         InsiderProfile p;
-        p.insider          = o.value(QStringLiteral("insider")).toString();
-        p.pattern          = pattern_from(o.value(QStringLiteral("pattern")).toString());
-        p.trades           = o.value(QStringLiteral("trades")).toInt();
+        p.insider = o.value(QStringLiteral("insider")).toString();
+        p.pattern = pattern_from(o.value(QStringLiteral("pattern")).toString());
+        p.trades = o.value(QStringLiteral("trades")).toInt();
         p.trades_in_window = o.value(QStringLiteral("trades_in_window")).toInt();
-        p.years_observed   = o.value(QStringLiteral("years_observed")).toInt();
-        p.routine_month    = o.value(QStringLiteral("routine_month")).toInt();
-        p.reason           = o.value(QStringLiteral("reason")).toString();
+        p.years_observed = o.value(QStringLiteral("years_observed")).toInt();
+        p.routine_month = o.value(QStringLiteral("routine_month")).toInt();
+        p.reason = o.value(QStringLiteral("reason")).toString();
         if (!p.insider.isEmpty())
             snap.insiders.push_back(p);
     }
@@ -183,20 +184,20 @@ void parse_edgar_into(const QJsonObject& root, OwnershipSnapshot& snap) {
     const QJsonObject stk = root.value(QStringLiteral("stakes")).isObject()
                                 ? root.value(QStringLiteral("stakes")).toObject()
                                 : QJsonObject{};
-    snap.stakes_truncated         = stk.value(QStringLiteral("filings_truncated")).toInt();
+    snap.stakes_truncated = stk.value(QStringLiteral("filings_truncated")).toInt();
     snap.stakes_filed_by_this_cik = stk.value(QStringLiteral("filed_by_this_cik")).toInt();
-    snap.stakes_unverified        = stk.value(QStringLiteral("filings_unverified")).toInt();
+    snap.stakes_unverified = stk.value(QStringLiteral("filings_unverified")).toInt();
     snap.stakes.clear();
     for (const auto& v : stk.value(QStringLiteral("stakes")).toArray()) {
         const QJsonObject o = v.toObject();
         BeneficialStake b;
-        b.form       = o.value(QStringLiteral("form")).toString();
-        b.activist   = o.value(QStringLiteral("activist")).toBool();
-        b.amendment  = o.value(QStringLiteral("amendment")).toBool();
+        b.form = o.value(QStringLiteral("form")).toString();
+        b.activist = o.value(QStringLiteral("activist")).toBool();
+        b.amendment = o.value(QStringLiteral("amendment")).toBool();
         b.filed_date = iso_date(o, "filed_date");
-        b.filer      = o.value(QStringLiteral("filer")).toString();
+        b.filer = o.value(QStringLiteral("filer")).toString();
         b.subject_verified = o.value(QStringLiteral("subject_verified")).toBool(true);
-        b.url        = o.value(QStringLiteral("url")).toString();
+        b.url = o.value(QStringLiteral("url")).toString();
         if (!b.form.isEmpty())
             snap.stakes.push_back(b);
     }
@@ -205,39 +206,39 @@ void parse_edgar_into(const QJsonObject& root, OwnershipSnapshot& snap) {
 void parse_market_into(const QJsonObject& o, OwnershipSnapshot& snap) {
     const QJsonObject s = o.value(QStringLiteral("short_interest")).toObject();
     VendorFloat v;
-    v.shares_outstanding    = opt_num(s, "shares_outstanding");
-    v.float_shares          = opt_num(s, "float_shares");
-    v.held_pct_insiders     = opt_num(s, "held_pct_insiders");
+    v.shares_outstanding = opt_num(s, "shares_outstanding");
+    v.float_shares = opt_num(s, "float_shares");
+    v.held_pct_insiders = opt_num(s, "held_pct_insiders");
     v.held_pct_institutions = opt_num(s, "held_pct_institutions");
-    v.shares_short          = opt_num(s, "shares_short");
-    v.short_pct_float       = opt_num(s, "short_pct_float");
-    v.short_ratio           = opt_num(s, "short_ratio");
-    v.short_as_of           = epoch_date(s, "date_short_interest");
+    v.shares_short = opt_num(s, "shares_short");
+    v.short_pct_float = opt_num(s, "short_pct_float");
+    v.short_ratio = opt_num(s, "short_ratio");
+    v.short_as_of = epoch_date(s, "date_short_interest");
     snap.vendor = v;
 }
 
 void parse_holders_into(const QJsonObject& root, OwnershipSnapshot& snap) {
     HoldersSummary sum;
-    sum.quarter        = QDate::fromString(root.value(QStringLiteral("quarter")).toString(), Qt::ISODate);
-    sum.prior_quarter  = QDate::fromString(root.value(QStringLiteral("prior_quarter")).toString(), Qt::ISODate);
-    sum.holder_count   = root.value(QStringLiteral("holder_count")).toInt();
+    sum.quarter = QDate::fromString(root.value(QStringLiteral("quarter")).toString(), Qt::ISODate);
+    sum.prior_quarter = QDate::fromString(root.value(QStringLiteral("prior_quarter")).toString(), Qt::ISODate);
+    sum.holder_count = root.value(QStringLiteral("holder_count")).toInt();
     sum.option_holders = root.value(QStringLiteral("option_holder_count")).toInt();
-    sum.total_shares   = root.value(QStringLiteral("total_shares_held")).toDouble();
-    sum.total_value    = root.value(QStringLiteral("total_value_held")).toDouble();
-    sum.buyers         = root.value(QStringLiteral("buyers")).toInt();
-    sum.new_holders    = root.value(QStringLiteral("new")).toInt();
-    sum.sellers        = root.value(QStringLiteral("sellers")).toInt();
-    sum.exited         = root.value(QStringLiteral("exited")).toInt();
-    sum.exited_shares  = root.value(QStringLiteral("exited_shares")).toDouble();
-    sum.top10_share    = opt_num(root, "top10_share");
-    sum.broad_share    = opt_num(root, "broad_share");
-    sum.sort           = root.value(QStringLiteral("sort")).toString();
+    sum.total_shares = root.value(QStringLiteral("total_shares_held")).toDouble();
+    sum.total_value = root.value(QStringLiteral("total_value_held")).toDouble();
+    sum.buyers = root.value(QStringLiteral("buyers")).toInt();
+    sum.new_holders = root.value(QStringLiteral("new")).toInt();
+    sum.sellers = root.value(QStringLiteral("sellers")).toInt();
+    sum.exited = root.value(QStringLiteral("exited")).toInt();
+    sum.exited_shares = root.value(QStringLiteral("exited_shares")).toDouble();
+    sum.top10_share = opt_num(root, "top10_share");
+    sum.broad_share = opt_num(root, "broad_share");
+    sum.sort = root.value(QStringLiteral("sort")).toString();
     sum.min_book_value = root.value(QStringLiteral("min_book_value")).toDouble();
     sum.min_book_positions = root.value(QStringLiteral("min_book_positions")).toInt();
     const auto np = root.value(QStringLiteral("newer_partial")).toObject();
     if (!np.isEmpty()) {
         sum.partial_quarter = QDate::fromString(np.value(QStringLiteral("quarter")).toString(), Qt::ISODate);
-        sum.partial_filers  = np.value(QStringLiteral("filers")).toInt();
+        sum.partial_filers = np.value(QStringLiteral("filers")).toInt();
     }
     if (snap.company.isEmpty())
         snap.company = root.value(QStringLiteral("company")).toString();
@@ -247,20 +248,20 @@ void parse_holders_into(const QJsonObject& root, OwnershipSnapshot& snap) {
     for (const auto& v : root.value(QStringLiteral("holders")).toArray()) {
         const auto o = v.toObject();
         Holder h;
-        h.manager        = o.value(QStringLiteral("manager")).toString();
-        h.cik            = o.value(QStringLiteral("cik")).toString();
-        h.tier           = o.value(QStringLiteral("tier")).toString();
-        h.shares         = opt_num(o, "shares");
-        h.value          = opt_num(o, "value");
-        h.weight         = opt_num(o, "weight");
-        h.book_total     = opt_num(o, "book_total");
+        h.manager = o.value(QStringLiteral("manager")).toString();
+        h.cik = o.value(QStringLiteral("cik")).toString();
+        h.tier = o.value(QStringLiteral("tier")).toString();
+        h.shares = opt_num(o, "shares");
+        h.value = opt_num(o, "value");
+        h.weight = opt_num(o, "weight");
+        h.book_total = opt_num(o, "book_total");
         h.position_count = o.value(QStringLiteral("position_count")).toInt();
-        h.action         = o.value(QStringLiteral("action")).toString();
-        h.shares_delta   = opt_num(o, "shares_delta");
-        h.pct_change     = opt_num(o, "pct_change");
-        h.put_call       = o.value(QStringLiteral("put_call")).toString();
-        h.is_derivative  = o.value(QStringLiteral("is_derivative")).toBool();
-        h.note           = o.value(QStringLiteral("note")).toString();
+        h.action = o.value(QStringLiteral("action")).toString();
+        h.shares_delta = opt_num(o, "shares_delta");
+        h.pct_change = opt_num(o, "pct_change");
+        h.put_call = o.value(QStringLiteral("put_call")).toString();
+        h.is_derivative = o.value(QStringLiteral("is_derivative")).toBool();
+        h.note = o.value(QStringLiteral("note")).toString();
         if (!h.manager.isEmpty() && !h.is_derivative)
             snap.holders.push_back(h);
     }
@@ -268,21 +269,21 @@ void parse_holders_into(const QJsonObject& root, OwnershipSnapshot& snap) {
 
 ShortReading parse_reading(const QJsonObject& o) {
     ShortReading r;
-    r.settlement       = iso_date(o, "settlement");
-    r.published_after  = iso_date(o, "published_after");
-    r.shares_short     = opt_num(o, "short");
-    r.prior            = opt_num(o, "prior");
+    r.settlement = iso_date(o, "settlement");
+    r.published_after = iso_date(o, "published_after");
+    r.shares_short = opt_num(o, "short");
+    r.prior = opt_num(o, "prior");
     r.avg_daily_volume = opt_num(o, "adv");
-    r.days_to_cover    = opt_num(o, "dtc");
-    r.change_pct       = opt_num(o, "change_pct");
+    r.days_to_cover = opt_num(o, "dtc");
+    r.change_pct = opt_num(o, "change_pct");
     return r;
 }
 
 void parse_book_into(const QJsonObject& root, ManagerBook& b) {
-    b.manager      = root.value(QStringLiteral("manager")).toString();
-    b.period       = iso_date(root, "quarter");
+    b.manager = root.value(QStringLiteral("manager")).toString();
+    b.period = iso_date(root, "quarter");
     b.prior_period = iso_date(root, "prior_quarter");
-    b.total_value  = root.value(QStringLiteral("total_value")).toDouble();
+    b.total_value = root.value(QStringLiteral("total_value")).toDouble();
     b.position_count = root.value(QStringLiteral("position_count")).toInt();
 
     auto read = [](const QJsonObject& o) {
@@ -413,8 +414,7 @@ void OwnershipService::note_source_done(const QString& symbol, const QString& so
 
 void OwnershipService::fetch_edgar(const QString& sym) {
     QPointer<OwnershipService> self = this;
-    const QString payload = payload_of(
-        {{"symbol", sym}, {"months", kWindowMonths}, {"max_filings", kMaxFilings}});
+    const QString payload = payload_of({{"symbol", sym}, {"months", kWindowMonths}, {"max_filings", kMaxFilings}});
     python::PythonRunner::instance().run(
         QStringLiteral("sec_ownership_data.py"), {QStringLiteral("all"), payload},
         [self, sym](python::PythonResult result) {
@@ -422,8 +422,8 @@ void OwnershipService::fetch_edgar(const QString& sym) {
                 return;
             auto snap = self->cache_.value(sym);
             if (!result.success) {
-                snap.edgar_error = result.error.isEmpty() ? QStringLiteral("EDGAR fetch failed")
-                                                          : result.error.left(200);
+                snap.edgar_error =
+                    result.error.isEmpty() ? QStringLiteral("EDGAR fetch failed") : result.error.left(200);
                 LOG_WARN(TAG, "sec_ownership_data failed for " + sym + ": " + snap.edgar_error);
             } else {
                 const QJsonObject root = parse_object(result);
@@ -452,8 +452,7 @@ void OwnershipService::fetch_market(const QString& sym) {
                 return;
             auto snap = self->cache_.value(sym);
             if (!ok || result.contains(QStringLiteral("error"))) {
-                snap.market_error =
-                    err.isEmpty() ? result.value(QStringLiteral("error")).toString() : err;
+                snap.market_error = err.isEmpty() ? result.value(QStringLiteral("error")).toString() : err;
                 if (snap.market_error.isEmpty())
                     snap.market_error = QStringLiteral("share data unavailable");
                 LOG_WARN(TAG, "ownership_extras failed for " + sym + ": " + snap.market_error);
@@ -472,9 +471,10 @@ void OwnershipService::fetch_market(const QString& sym) {
 
 void OwnershipService::fetch_holders(const QString& sym, HolderSort sort) {
     QPointer<OwnershipService> self = this;
-    const QString payload = payload_of(
-        {{"ticker", sym}, {"limit", kHolderRows},
-         {"sort", sort == HolderSort::ByWeight ? QStringLiteral("weight") : QStringLiteral("value")}});
+    const QString payload =
+        payload_of({{"ticker", sym},
+                    {"limit", kHolderRows},
+                    {"sort", sort == HolderSort::ByWeight ? QStringLiteral("weight") : QStringLiteral("value")}});
     python::PythonRunner::instance().run(
         QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("holders"), payload},
         [self, sym](python::PythonResult result) {
@@ -484,8 +484,8 @@ void OwnershipService::fetch_holders(const QString& sym, HolderSort sort) {
             snap.holders.clear();
             snap.holders_ok = false;
             if (!result.success) {
-                snap.holders_error = result.error.isEmpty() ? QStringLiteral("13F index query failed")
-                                                            : result.error.left(200);
+                snap.holders_error =
+                    result.error.isEmpty() ? QStringLiteral("13F index query failed") : result.error.left(200);
             } else {
                 const auto root = parse_object(result);
                 const QString err = root.value(QStringLiteral("error")).toString();
@@ -525,8 +525,7 @@ void OwnershipService::fetch_short_history(const QString& sym) {
             auto snap = self->cache_.value(sym);
             ShortHistory h;
             if (!result.success) {
-                h.error = result.error.isEmpty() ? QStringLiteral("FINRA fetch failed")
-                                                 : result.error.left(200);
+                h.error = result.error.isEmpty() ? QStringLiteral("FINRA fetch failed") : result.error.left(200);
             } else {
                 const auto o = parse_object(result);
                 const QString err = o.value(QStringLiteral("error")).toString();
@@ -546,8 +545,7 @@ void OwnershipService::fetch_short_history(const QString& sym) {
             self->note_source_done(sym, kSrcShort);
             // Where this reading sits across the market needs the 13F
             // denominator for every stock, which only the index can supply.
-            if (h.has_data() && self->index_ready() &&
-                !self->pending_.value(sym).contains(kSrcSirio)) {
+            if (h.has_data() && self->index_ready() && !self->pending_.value(sym).contains(kSrcSirio)) {
                 self->pending_[sym].insert(kSrcSirio);
                 QPointer<OwnershipService> self2 = self;
                 python::PythonRunner::instance().run(
@@ -582,18 +580,18 @@ void OwnershipService::fetch_short_volume(const QString& sym) {
             auto snap = self->cache_.value(sym);
             ShortVolume sv;
             if (!result.success) {
-                sv.error = result.error.isEmpty() ? QStringLiteral("short-volume fetch failed")
-                                                  : result.error.left(200);
+                sv.error =
+                    result.error.isEmpty() ? QStringLiteral("short-volume fetch failed") : result.error.left(200);
             } else {
                 const auto o = parse_object(result);
                 const QString err = o.value(QStringLiteral("error")).toString();
                 if (!err.isEmpty()) {
                     sv.error = err;
                 } else {
-                    sv.as_of  = iso_date(o, "as_of");
+                    sv.as_of = iso_date(o, "as_of");
                     sv.latest = o.value(QStringLiteral("latest_ratio")).toDouble();
                     sv.avg_20 = o.value(QStringLiteral("avg_20")).toDouble();
-                    sv.days   = o.value(QStringLiteral("days")).toInt();
+                    sv.days = o.value(QStringLiteral("days")).toInt();
                 }
             }
             snap.short_volume = sv;
@@ -626,8 +624,7 @@ void OwnershipService::price_transactions(const QString& sym) {
                 return;
             auto s = self->cache_.value(sym);
             if (ok) {
-                const auto closes = result.value(QStringLiteral("closes")).toObject()
-                                        .value(sym).toArray();
+                const auto closes = result.value(QStringLiteral("closes")).toObject().value(sym).toArray();
                 for (auto& t : s.transactions) {
                     if (!t.open_market || t.derivative)
                         continue;
@@ -670,31 +667,31 @@ void OwnershipService::load_insider_buys(const ownership::InsiderBuyQuery& q) {
             ib.query = self->insider_buys_.query;
             ib.loaded = true;
             if (!result.success) {
-                ib.error = result.error.isEmpty() ? QStringLiteral("Form 4 store query failed")
-                                                  : result.error.left(200);
+                ib.error =
+                    result.error.isEmpty() ? QStringLiteral("Form 4 store query failed") : result.error.left(200);
             } else {
                 const auto o = parse_object(result);
                 ib.error = o.value(QStringLiteral("error")).toString();
                 ib.days_scanned = o.value(QStringLiteral("days_scanned")).toInt();
-                ib.days_wanted  = o.value(QStringLiteral("days_wanted")).toInt();
+                ib.days_wanted = o.value(QStringLiteral("days_wanted")).toInt();
                 ib.last_scanned = iso_date(o, "last_scanned");
                 for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
                     const auto r = v.toObject();
                     InsiderBuyRow row;
-                    row.symbol   = r.value(QStringLiteral("symbol")).toString();
-                    row.issuer   = r.value(QStringLiteral("issuer")).toString();
+                    row.symbol = r.value(QStringLiteral("symbol")).toString();
+                    row.issuer = r.value(QStringLiteral("issuer")).toString();
                     row.insiders = r.value(QStringLiteral("insiders")).toInt();
-                    row.trades   = r.value(QStringLiteral("trades")).toInt();
-                    row.value    = r.value(QStringLiteral("value")).toDouble();
-                    row.shares   = r.value(QStringLiteral("shares")).toDouble();
+                    row.trades = r.value(QStringLiteral("trades")).toInt();
+                    row.value = r.value(QStringLiteral("value")).toDouble();
+                    row.shares = r.value(QStringLiteral("shares")).toDouble();
                     row.avg_price = opt_num(r, "avg_price");
                     row.first_trade = iso_date(r, "first_trade");
-                    row.last_trade  = iso_date(r, "last_trade");
-                    row.last_filed  = iso_date(r, "last_filed");
+                    row.last_trade = iso_date(r, "last_trade");
+                    row.last_filed = iso_date(r, "last_filed");
                     for (const auto& rr : r.value(QStringLiteral("roles")).toArray())
                         row.roles << rr.toString();
                     row.stake_increase = opt_num(r, "stake_increase");
-                    row.any_plan    = r.value(QStringLiteral("any_plan")).toBool();
+                    row.any_plan = r.value(QStringLiteral("any_plan")).toBool();
                     row.any_ten_pct = r.value(QStringLiteral("any_ten_pct")).toBool();
                     row.plan_unknown = r.value(QStringLiteral("plan_unknown")).toInt();
                     ib.rows.push_back(row);
@@ -766,33 +763,32 @@ void OwnershipService::load_short_rank(const QString& sort) {
             ShortRank sr;
             sr.loaded = true;
             if (!result.success) {
-                sr.error = result.error.isEmpty() ? QStringLiteral("FINRA ranking failed")
-                                                  : result.error.left(200);
+                sr.error = result.error.isEmpty() ? QStringLiteral("FINRA ranking failed") : result.error.left(200);
             } else {
                 const auto o = parse_object(result);
                 sr.error = o.value(QStringLiteral("error")).toString();
-                sr.settlement      = iso_date(o, "settlement");
+                sr.settlement = iso_date(o, "settlement");
                 sr.published_after = iso_date(o, "published_after");
-                sr.quarter         = iso_date(o, "quarter");
-                sr.symbols         = o.value(QStringLiteral("symbols")).toInt();
-                sr.joined          = o.value(QStringLiteral("joined")).toInt();
-                sr.funds_dropped   = o.value(QStringLiteral("funds_dropped")).toInt();
-                sr.sort            = o.value(QStringLiteral("sort")).toString();
+                sr.quarter = iso_date(o, "quarter");
+                sr.symbols = o.value(QStringLiteral("symbols")).toInt();
+                sr.joined = o.value(QStringLiteral("joined")).toInt();
+                sr.funds_dropped = o.value(QStringLiteral("funds_dropped")).toInt();
+                sr.sort = o.value(QStringLiteral("sort")).toString();
                 for (const auto& v : o.value(QStringLiteral("sirio_deciles")).toArray())
                     sr.sirio_deciles.push_back(v.toDouble());
                 for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
                     const auto r = v.toObject();
                     ShortRankRow row;
                     row.symbol = r.value(QStringLiteral("symbol")).toString();
-                    row.name   = r.value(QStringLiteral("name")).toString();
-                    row.shares_short     = opt_num(r, "short");
-                    row.prior            = opt_num(r, "prior");
+                    row.name = r.value(QStringLiteral("name")).toString();
+                    row.shares_short = opt_num(r, "short");
+                    row.prior = opt_num(r, "prior");
                     row.avg_daily_volume = opt_num(r, "adv");
-                    row.days_to_cover    = opt_num(r, "dtc");
-                    row.change_pct       = opt_num(r, "change_pct");
-                    row.inst_shares      = opt_num(r, "inst_shares");
-                    row.holders          = r.value(QStringLiteral("holders")).toInt();
-                    row.sirio            = opt_num(r, "sirio");
+                    row.days_to_cover = opt_num(r, "dtc");
+                    row.change_pct = opt_num(r, "change_pct");
+                    row.inst_shares = opt_num(r, "inst_shares");
+                    row.holders = r.value(QStringLiteral("holders")).toInt();
+                    row.sirio = opt_num(r, "sirio");
                     sr.rows.push_back(row);
                 }
             }
@@ -817,32 +813,31 @@ void OwnershipService::load_movers(const QString& sort) {
             Movers m;
             m.loaded = true;
             if (!result.success) {
-                m.error = result.error.isEmpty() ? QStringLiteral("13F breadth query failed")
-                                                 : result.error.left(200);
+                m.error = result.error.isEmpty() ? QStringLiteral("13F breadth query failed") : result.error.left(200);
             } else {
                 const auto o = parse_object(result);
-                m.error         = o.value(QStringLiteral("error")).toString();
-                m.quarter       = iso_date(o, "quarter");
+                m.error = o.value(QStringLiteral("error")).toString();
+                m.quarter = iso_date(o, "quarter");
                 m.prior_quarter = iso_date(o, "prior_quarter");
-                m.sort          = o.value(QStringLiteral("sort")).toString();
+                m.sort = o.value(QStringLiteral("sort")).toString();
                 for (const auto& v : o.value(QStringLiteral("rows")).toArray()) {
                     const auto r = v.toObject();
                     MoverRow row;
-                    row.ticker        = r.value(QStringLiteral("ticker")).toString();
-                    row.name          = r.value(QStringLiteral("name")).toString();
-                    row.fund          = r.value(QStringLiteral("fund")).toBool();
-                    row.holders       = r.value(QStringLiteral("holders")).toInt();
+                    row.ticker = r.value(QStringLiteral("ticker")).toString();
+                    row.name = r.value(QStringLiteral("name")).toString();
+                    row.fund = r.value(QStringLiteral("fund")).toBool();
+                    row.holders = r.value(QStringLiteral("holders")).toInt();
                     row.holders_prior = r.value(QStringLiteral("holders_prior")).toInt();
                     row.delta_holders = r.value(QStringLiteral("delta_holders")).toInt();
-                    row.new_holders   = r.value(QStringLiteral("new")).toInt();
-                    row.closed        = r.value(QStringLiteral("closed")).toInt();
-                    row.added         = r.value(QStringLiteral("added")).toInt();
-                    row.reduced       = r.value(QStringLiteral("reduced")).toInt();
-                    row.shares        = r.value(QStringLiteral("shares")).toDouble();
-                    row.value         = r.value(QStringLiteral("value")).toDouble();
-                    row.focused_holders    = r.value(QStringLiteral("focused_holders")).toInt();
+                    row.new_holders = r.value(QStringLiteral("new")).toInt();
+                    row.closed = r.value(QStringLiteral("closed")).toInt();
+                    row.added = r.value(QStringLiteral("added")).toInt();
+                    row.reduced = r.value(QStringLiteral("reduced")).toInt();
+                    row.shares = r.value(QStringLiteral("shares")).toDouble();
+                    row.value = r.value(QStringLiteral("value")).toDouble();
+                    row.focused_holders = r.value(QStringLiteral("focused_holders")).toInt();
                     row.focused_net_shares = opt_num(r, "focused_net_shares");
-                    row.top10_share        = opt_num(r, "top10_share");
+                    row.top10_share = opt_num(r, "top10_share");
                     if (!row.ticker.isEmpty())
                         m.rows.push_back(row);
                 }
@@ -884,8 +879,9 @@ void OwnershipService::run_form4_scan() {
                 // warnings on stderr; keep the tail, which is the part that
                 // says what happened.
                 const QString err = !soft_error.isEmpty() ? soft_error
-                                    : result.error.isEmpty() ? QStringLiteral("the reader did not finish")
-                                                             : result.error.trimmed().section(QLatin1Char('\n'), -1).left(160);
+                                    : result.error.isEmpty()
+                                        ? QStringLiteral("the reader did not finish")
+                                        : result.error.trimmed().section(QLatin1Char('\n'), -1).left(160);
                 self->form4_status_ = QStringLiteral("Form 4 scan paused: %1 — retrying in 15 minutes").arg(err);
                 self->form4_timer_->start(kScanRetryMs);
             } else {
@@ -893,7 +889,8 @@ void OwnershipService::run_form4_scan() {
                 const int read = o.value(QStringLiteral("days_read")).toInt();
                 if (remaining > 0 && self->form4_passes_ < kScanMaxPasses) {
                     self->form4_status_ = QStringLiteral("Read %1 filings · %2 more business day%3 to go")
-                                              .arg(fetched).arg(remaining)
+                                              .arg(fetched)
+                                              .arg(remaining)
                                               .arg(remaining == 1 ? QString() : QStringLiteral("s"));
                     // Straight on to the next slice; the store commits per day
                     // so the scan tab can already show what has landed.
@@ -903,14 +900,15 @@ void OwnershipService::run_form4_scan() {
                     // than calling the store current, and come back sooner.
                     self->form4_status_ = QStringLiteral("%1 business day%2 of the window still unread — "
                                                          "continues in 15 minutes")
-                                              .arg(remaining).arg(remaining == 1 ? QString() : QStringLiteral("s"));
+                                              .arg(remaining)
+                                              .arg(remaining == 1 ? QString() : QStringLiteral("s"));
                     self->form4_passes_ = 0;
                     self->form4_timer_->start(kScanRetryMs);
                 } else {
                     self->form4_status_ = read > 0 || fetched > 0
-                        ? QStringLiteral("Form 4 store current to %1")
-                              .arg(QDate::currentDate().toString(QStringLiteral("d MMM")))
-                        : QStringLiteral("Form 4 store current");
+                                              ? QStringLiteral("Form 4 store current to %1")
+                                                    .arg(QDate::currentDate().toString(QStringLiteral("d MMM")))
+                                              : QStringLiteral("Form 4 store current");
                     self->form4_passes_ = 0;
                     self->form4_timer_->start(kScanRecheckMs);
                 }
@@ -958,8 +956,8 @@ void OwnershipService::load_watch(const QStringList& symbols) {
             } else {
                 const auto o = parse_object(result);
                 w.error = o.value(QStringLiteral("error")).toString();
-                w.quarter         = iso_date(o, "quarter");
-                w.settlement      = iso_date(o, "settlement");
+                w.quarter = iso_date(o, "quarter");
+                w.settlement = iso_date(o, "settlement");
                 w.published_after = iso_date(o, "published_after");
                 w.form4_scanned_to = iso_date(o, "form4_scanned_to");
                 w.days = o.value(QStringLiteral("days")).toInt(30);
@@ -971,11 +969,11 @@ void OwnershipService::load_watch(const QStringList& symbols) {
                         row.holders = r.value(QStringLiteral("holders")).toInt();
                     if (r.value(QStringLiteral("delta_holders")).isDouble())
                         row.delta_holders = r.value(QStringLiteral("delta_holders")).toInt();
-                    row.top10_share   = opt_num(r, "top10_share");
-                    row.shares_short  = opt_num(r, "short");
+                    row.top10_share = opt_num(r, "top10_share");
+                    row.shares_short = opt_num(r, "short");
                     row.days_to_cover = opt_num(r, "dtc");
                     row.si_change_pct = opt_num(r, "si_change_pct");
-                    row.sirio         = opt_num(r, "sirio");
+                    row.sirio = opt_num(r, "sirio");
                     if (r.contains(QStringLiteral("insider_buys")))
                         row.insider_buys = r.value(QStringLiteral("insider_buys")).toInt();
                     row.insider_buyers = r.value(QStringLiteral("insider_buyers")).toInt();
@@ -1001,8 +999,7 @@ void OwnershipService::load_calendar(int days) {
     calendar_loading_ = true;
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run(
-        QStringLiteral("ownership_watch.py"),
-        {QStringLiteral("calendar"), payload_of({{"days", days}})},
+        QStringLiteral("ownership_watch.py"), {QStringLiteral("calendar"), payload_of({{"days", days}})},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -1141,22 +1138,22 @@ void OwnershipService::check_holdings_alerts() {
                 stamps.insert(sym, QJsonObject{{QStringLiteral("filed"), filed}, {QStringLiteral("trades"), trades}});
                 changed = true;
                 const double value = r.value(QStringLiteral("value")).toDouble();
-                const QString who = insiders >= 2 ? QStringLiteral("%1 insiders").arg(insiders)
-                                                  : QStringLiteral("an insider");
+                const QString who =
+                    insiders >= 2 ? QStringLiteral("%1 insiders").arg(insiders) : QStringLiteral("an insider");
                 // A filing, stated as one. The evidence line is what the
                 // twelve-month check found for THIS category, anchored on the
                 // filing date — the day a reader could act — with clusters
                 // marked point in time (plans/research/form4_forward_returns).
                 // It is not a call. One delivery, through the notification
                 // service, which owns the in-app toast and the user's switches.
-                const QString msg = QStringLiteral(
-                    "%1: %2 bought on the open market (Form 4 filed %3, $%4 in total). "
-                    "On this universe a %5 was followed by a median %6 over the index in a "
-                    "month, %7 of the time (Jul 2025 – Jun 2026).")
-                    .arg(sym, who, filed, QString::number(value / 1000.0, 'f', 0) + QStringLiteral("K"),
-                         insiders >= 2 ? QStringLiteral("cluster buy") : QStringLiteral("single insider buy"),
-                         insiders >= 2 ? QStringLiteral("+1.8%") : QStringLiteral("+1.2%"),
-                         insiders >= 2 ? QStringLiteral("59%") : QStringLiteral("55%"));
+                const QString msg =
+                    QStringLiteral("%1: %2 bought on the open market (Form 4 filed %3, $%4 in total). "
+                                   "On this universe a %5 was followed by a median %6 over the index in a "
+                                   "month, %7 of the time (Jul 2025 – Jun 2026).")
+                        .arg(sym, who, filed, QString::number(value / 1000.0, 'f', 0) + QStringLiteral("K"),
+                             insiders >= 2 ? QStringLiteral("cluster buy") : QStringLiteral("single insider buy"),
+                             insiders >= 2 ? QStringLiteral("+1.8%") : QStringLiteral("+1.2%"),
+                             insiders >= 2 ? QStringLiteral("59%") : QStringLiteral("55%"));
                 notifications::NotificationRequest req;
                 req.title = QStringLiteral("Insider buy — %1").arg(sym);
                 req.message = msg;
@@ -1178,8 +1175,7 @@ void OwnershipService::load_top_firms(bool force) {
     top_firms_loading_ = true;
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run_interactive(
-        QStringLiteral("sec_13f_bulk.py"),
-        {QStringLiteral("top_firms"), payload_of({{"limit", 50}})},
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("top_firms"), payload_of({{"limit", 50}})},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -1187,8 +1183,7 @@ void OwnershipService::load_top_firms(bool force) {
             TopFirms t;
             t.loaded = true;
             if (!result.success) {
-                t.error = result.error.isEmpty() ? QStringLiteral("13F filer query failed")
-                                                 : result.error.left(200);
+                t.error = result.error.isEmpty() ? QStringLiteral("13F filer query failed") : result.error.left(200);
             } else {
                 const auto o = parse_object(result);
                 t.error = o.value(QStringLiteral("error")).toString();
@@ -1196,7 +1191,8 @@ void OwnershipService::load_top_firms(bool force) {
                 for (const auto& v : o.value(QStringLiteral("partial_quarters")).toArray())
                     t.partial_quarters << v.toString();
                 auto top_move = [](const QJsonValue& v) -> std::optional<FirmMoveTop> {
-                    if (!v.isObject()) return std::nullopt;
+                    if (!v.isObject())
+                        return std::nullopt;
                     const auto m = v.toObject();
                     return FirmMoveTop{m.value(QStringLiteral("issuer")).toString(),
                                        m.value(QStringLiteral("ticker")).toString(),
@@ -1235,7 +1231,7 @@ void OwnershipService::load_top_firms(bool force) {
             emit self->top_firms_updated();
         },
         120'000);
-    emit top_firms_updated();   // so the panel can show "loading"
+    emit top_firms_updated(); // so the panel can show "loading"
 }
 
 void OwnershipService::pull_latest_filings(int top) {
@@ -1243,11 +1239,11 @@ void OwnershipService::pull_latest_filings(int top) {
         return;
     pulling_latest_ = true;
     emit latest_pull_status(QStringLiteral("Pulling the newest 13F filings from EDGAR for the %1 "
-                                           "largest filers — a few minutes…").arg(top));
+                                           "largest filers — a few minutes…")
+                                .arg(top));
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run(
-        QStringLiteral("sec_13f_bulk.py"),
-        {QStringLiteral("ingest_current"), payload_of({{"top", top}})},
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("ingest_current"), payload_of({{"top", top}})},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -1283,8 +1279,7 @@ void OwnershipService::search_firms(const QString& query) {
     QPointer<OwnershipService> self = this;
     const QString q = query.trimmed();
     python::PythonRunner::instance().run_interactive(
-        QStringLiteral("sec_13f_bulk.py"),
-        {QStringLiteral("firms"), payload_of({{"query", q}, {"limit", 40}})},
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("firms"), payload_of({{"query", q}, {"limit", 40}})},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -1294,9 +1289,9 @@ void OwnershipService::search_firms(const QString& query) {
                 for (const auto& v : root.value(QStringLiteral("firms")).toArray()) {
                     const auto o = v.toObject();
                     Manager m;
-                    m.cik  = o.value(QStringLiteral("cik")).toString();
+                    m.cik = o.value(QStringLiteral("cik")).toString();
                     m.name = o.value(QStringLiteral("manager")).toString();
-                    m.book_value     = o.value(QStringLiteral("book_value")).toDouble();
+                    m.book_value = o.value(QStringLiteral("book_value")).toDouble();
                     m.position_count = o.value(QStringLiteral("position_count")).toInt();
                     if (!m.cik.isEmpty())
                         self->firm_results_.push_back(m);
@@ -1328,17 +1323,15 @@ void OwnershipService::load_book(const QString& cik, const QString& quarter) {
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run_interactive(
         QStringLiteral("sec_13f_bulk.py"),
-        {QStringLiteral("book"), quarter.isEmpty()
-                                      ? payload_of({{"cik", cik}, {"limit", 250}})
-                                      : payload_of({{"cik", cik}, {"quarter", quarter}, {"limit", 250}})},
+        {QStringLiteral("book"), quarter.isEmpty() ? payload_of({{"cik", cik}, {"limit", 250}})
+                                                   : payload_of({{"cik", cik}, {"quarter", quarter}, {"limit", 250}})},
         [self, cik, key](python::PythonResult result) {
             if (!self)
                 return;
             ManagerBook b;
             b.cik = cik;
             if (!result.success) {
-                b.error = result.error.isEmpty() ? QStringLiteral("13F index query failed")
-                                                 : result.error.left(200);
+                b.error = result.error.isEmpty() ? QStringLiteral("13F index query failed") : result.error.left(200);
             } else {
                 const auto root = parse_object(result);
                 const QString err = root.value(QStringLiteral("error")).toString();
@@ -1356,7 +1349,7 @@ void OwnershipService::load_book(const QString& cik, const QString& quarter) {
         60'000);
 }
 
-void OwnershipService::price_book(const QString& cik) {   // `cik` is the book_key()
+void OwnershipService::price_book(const QString& cik) { // `cik` is the book_key()
     auto b = books_.value(cik);
     if (b.positions.isEmpty() || !b.period.isValid() || pricing_in_flight_.contains(cik))
         return;
@@ -1467,8 +1460,8 @@ void OwnershipService::probe_index() {
                 parts << QStringLiteral("%1 (%2 filers%3)")
                              .arg(q.value(QStringLiteral("quarter")).toString())
                              .arg(q.value(QStringLiteral("filers")).toInt())
-                             .arg(q.value(QStringLiteral("partial")).toBool()
-                                      ? QStringLiteral(", partial") : QString());
+                             .arg(q.value(QStringLiteral("partial")).toBool() ? QStringLiteral(", partial")
+                                                                              : QString());
             }
             if (!parts.isEmpty()) {
                 self->index_status_ = QStringLiteral("13F index: ") + parts.join(QStringLiteral(", "));
@@ -1479,10 +1472,9 @@ void OwnershipService::probe_index() {
 }
 
 QString OwnershipService::index_status_text() const {
-    return index_status_.isEmpty()
-               ? QStringLiteral("No 13F index built yet — the holder list, the 13F movers and "
-                                "the short-interest ranking need one.")
-               : index_status_;
+    return index_status_.isEmpty() ? QStringLiteral("No 13F index built yet — the holder list, the 13F movers and "
+                                                    "the short-interest ranking need one.")
+                                   : index_status_;
 }
 
 void OwnershipService::check_for_newer_quarter() {
@@ -1497,11 +1489,11 @@ void OwnershipService::check_for_newer_quarter() {
             const auto o = parse_object(result);
             const int unseen = o.value(QStringLiteral("unseen_datasets")).toInt();
             if (unseen > 0) {
-                emit self->index_changed(
-                    QStringLiteral("%1 · %2 newer SEC data set%3 not yet ingested — rebuild to "
-                                   "bring the holder data forward.")
-                        .arg(self->index_status_).arg(unseen)
-                        .arg(unseen == 1 ? QString() : QStringLiteral("s")));
+                emit self->index_changed(QStringLiteral("%1 · %2 newer SEC data set%3 not yet ingested — rebuild to "
+                                                        "bring the holder data forward.")
+                                             .arg(self->index_status_)
+                                             .arg(unseen)
+                                             .arg(unseen == 1 ? QString() : QStringLiteral("s")));
             }
         },
         /*on_line=*/{}, 60'000);
@@ -1516,8 +1508,7 @@ void OwnershipService::build_index() {
     python::PythonRunner::instance().run(
         // Two quarters: a single quarter is a photograph, and every change
         // count on the screen needs the frame before it.
-        QStringLiteral("sec_13f_bulk.py"),
-        {QStringLiteral("ingest_recent"), QStringLiteral("{\"quarters\":2}")},
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("ingest_recent"), QStringLiteral("{\"quarters\":2}")},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -1560,8 +1551,7 @@ void OwnershipService::resolve_symbols(int /*limit*/) {
                                       "minutes, finishes in the background."));
     QPointer<OwnershipService> self = this;
     python::PythonRunner::instance().run(
-        QStringLiteral("sec_13f_bulk.py"),
-        {QStringLiteral("resolve_all"), QStringLiteral("{\"chunk\":500}")},
+        QStringLiteral("sec_13f_bulk.py"), {QStringLiteral("resolve_all"), QStringLiteral("{\"chunk\":500}")},
         [self](python::PythonResult result) {
             if (!self)
                 return;
@@ -1569,11 +1559,11 @@ void OwnershipService::resolve_symbols(int /*limit*/) {
             const auto o = result.success ? parse_object(result) : QJsonObject{};
             const int left = o.value(QStringLiteral("remaining")).toInt();
             self->index_probed_ = false;
-            self->index_status_ =
-                left > 0 ? QStringLiteral("Mapped %1 symbols · %2 still unmapped")
-                               .arg(o.value(QStringLiteral("resolved")).toInt()).arg(left)
-                         : QStringLiteral("Symbol map complete · %1 mapped")
-                               .arg(o.value(QStringLiteral("resolved")).toInt());
+            self->index_status_ = left > 0 ? QStringLiteral("Mapped %1 symbols · %2 still unmapped")
+                                                 .arg(o.value(QStringLiteral("resolved")).toInt())
+                                                 .arg(left)
+                                           : QStringLiteral("Symbol map complete · %1 mapped")
+                                                 .arg(o.value(QStringLiteral("resolved")).toInt());
             emit self->index_changed(self->index_status_);
         },
         /*on_line=*/{}, kIndexBuildTimeoutMs);

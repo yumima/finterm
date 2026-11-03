@@ -34,8 +34,7 @@ static QString label_ss() {
     return QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY());
 }
 static QString title_ss() {
-    return QString("color:%1;font-weight:bold;letter-spacing:0.5px;background:transparent;")
-        .arg(ui::colors::AMBER());
+    return QString("color:%1;font-weight:bold;letter-spacing:0.5px;background:transparent;").arg(ui::colors::AMBER());
 }
 static QString input_ss() {
     return QString("QLineEdit{background:%1;color:%2;border:1px solid %3;padding:6px;}"
@@ -88,11 +87,10 @@ void VoiceConfigSection::build_ui() {
     title->setStyleSheet(title_ss());
     vl->addWidget(title);
 
-    auto* blurb = new QLabel(
-        "Configure the speech recognition engine used by the AI chat mic button.\n"
-        "Whisper runs locally with no outbound calls — model weights cache on first use. "
-        "Deepgram offers higher accuracy and supports financial keyword boosting, "
-        "but requires an API key and sends audio off-box.");
+    auto* blurb = new QLabel("Configure the speech recognition engine used by the AI chat mic button.\n"
+                             "Whisper runs locally with no outbound calls — model weights cache on first use. "
+                             "Deepgram offers higher accuracy and supports financial keyword boosting, "
+                             "but requires an API key and sends audio off-box.");
     blurb->setStyleSheet(label_ss());
     blurb->setWordWrap(true);
     vl->addWidget(blurb);
@@ -228,8 +226,8 @@ void VoiceConfigSection::build_ui() {
     outer->addWidget(scroll);
 
     // ── Wiring ──────────────────────────────────────────────────────────────
-    connect(provider_combo_, qOverload<int>(&QComboBox::currentIndexChanged),
-            this, &VoiceConfigSection::on_provider_changed);
+    connect(provider_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            &VoiceConfigSection::on_provider_changed);
     connect(show_key_btn_, &QPushButton::clicked, this, &VoiceConfigSection::on_show_hide_key);
     connect(save_btn_, &QPushButton::clicked, this, &VoiceConfigSection::on_save);
     connect(test_btn_, &QPushButton::clicked, this, &VoiceConfigSection::on_test);
@@ -360,8 +358,8 @@ void VoiceConfigSection::set_status(const QString& msg, bool error) {
         return;
     }
     status_lbl_->setText(msg);
-    status_lbl_->setStyleSheet(QString("color:%1;background:transparent;")
-                                   .arg(error ? ui::colors::NEGATIVE() : ui::colors::POSITIVE()));
+    status_lbl_->setStyleSheet(
+        QString("color:%1;background:transparent;").arg(error ? ui::colors::NEGATIVE() : ui::colors::POSITIVE()));
 }
 
 // ── TTS (output) ────────────────────────────────────────────────────────────
@@ -371,22 +369,19 @@ void VoiceConfigSection::build_tts_ui(QVBoxLayout* parent_layout) {
     // widget — the existing scroll area handles the full column.
     auto* divider = new QFrame;
     divider->setFrameShape(QFrame::HLine);
-    divider->setStyleSheet(QString("color:%1;background:%1;max-height:1px;")
-                               .arg(ui::colors::BORDER_DIM()));
+    divider->setStyleSheet(QString("color:%1;background:%1;max-height:1px;").arg(ui::colors::BORDER_DIM()));
     parent_layout->addSpacing(16);
     parent_layout->addWidget(divider);
     parent_layout->addSpacing(8);
 
-    auto* hdr = new QLabel(QStringLiteral(
-        "<b>Text-to-speech</b> (output) — read agent replies aloud.  "
-        "Install <code>piper-tts</code> via pip, download a voice .onnx "
-        "from <a href=\"https://github.com/rhasspy/piper#voices\">rhasspy/piper</a>, "
-        "point Model below at it."));
+    auto* hdr = new QLabel(QStringLiteral("<b>Text-to-speech</b> (output) — read agent replies aloud.  "
+                                          "Install <code>piper-tts</code> via pip, download a voice .onnx "
+                                          "from <a href=\"https://github.com/rhasspy/piper#voices\">rhasspy/piper</a>, "
+                                          "point Model below at it."));
     hdr->setTextFormat(Qt::RichText);
     hdr->setOpenExternalLinks(true);
     hdr->setWordWrap(true);
-    hdr->setStyleSheet(QString("color:%1;background:transparent;")
-                           .arg(ui::colors::TEXT_SECONDARY()));
+    hdr->setStyleSheet(QString("color:%1;background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     parent_layout->addWidget(hdr);
 
     auto* form = new QFormLayout;
@@ -432,17 +427,14 @@ void VoiceConfigSection::build_tts_ui(QVBoxLayout* parent_layout) {
     parent_layout->addWidget(tts_status_lbl_);
 
     connect(tts_browse_btn_, &QPushButton::clicked, this, [this]() {
-        const QString path = QFileDialog::getOpenFileName(
-            this, QStringLiteral("Pick a Piper voice"),
-            tts_model_edit_->text(),
-            QStringLiteral("Piper voices (*.onnx);;All files (*)"));
+        const QString path =
+            QFileDialog::getOpenFileName(this, QStringLiteral("Pick a Piper voice"), tts_model_edit_->text(),
+                                         QStringLiteral("Piper voices (*.onnx);;All files (*)"));
         if (!path.isEmpty())
             tts_model_edit_->setText(path);
     });
-    connect(tts_save_btn_, &QPushButton::clicked, this,
-            &VoiceConfigSection::save_tts_settings);
-    connect(tts_test_btn_, &QPushButton::clicked, this,
-            &VoiceConfigSection::test_tts);
+    connect(tts_save_btn_, &QPushButton::clicked, this, &VoiceConfigSection::save_tts_settings);
+    connect(tts_test_btn_, &QPushButton::clicked, this, &VoiceConfigSection::test_tts);
 
     load_tts_settings();
 }
@@ -465,8 +457,7 @@ void VoiceConfigSection::save_tts_settings() {
     auto set = [&first_error](const char* key, const QString& val) {
         auto r = SettingsRepository::instance().set(QString::fromUtf8(key), val, "voice");
         if (r.is_err() && first_error.isEmpty())
-            first_error = QString("%1: %2").arg(QString::fromUtf8(key),
-                                                QString::fromStdString(r.error()));
+            first_error = QString("%1: %2").arg(QString::fromUtf8(key), QString::fromStdString(r.error()));
     };
     set("tts.provider", tts_provider_combo_->currentData().toString());
     set("tts.model_path", tts_model_edit_->text().trimmed());
@@ -478,7 +469,8 @@ void VoiceConfigSection::save_tts_settings() {
         tts_status_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::NEGATIVE()));
         return;
     }
-    tts_status_lbl_->setText(QStringLiteral("Saved.  Chat 🔊 button appears when provider != none + model file exists."));
+    tts_status_lbl_->setText(
+        QStringLiteral("Saved.  Chat 🔊 button appears when provider != none + model file exists."));
     tts_status_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::POSITIVE()));
 }
 
@@ -486,8 +478,8 @@ void VoiceConfigSection::test_tts() {
     save_tts_settings();
     auto& tts = services::TtsService::instance();
     if (!tts.is_available()) {
-        tts_status_lbl_->setText(QStringLiteral(
-            "TTS not available — check `pip install piper-tts` + that the model path exists."));
+        tts_status_lbl_->setText(
+            QStringLiteral("TTS not available — check `pip install piper-tts` + that the model path exists."));
         tts_status_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::NEGATIVE()));
         return;
     }

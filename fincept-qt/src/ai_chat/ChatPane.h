@@ -95,12 +95,12 @@ class ChatPane : public QWidget {
     ChatPaneConfig cfg_;
     QString context_tag_;
     QString session_title_;
-    QString session_id_;      // lazily created on first send
+    QString session_id_; // lazily created on first send
     QString welcome_html_;
 
     std::vector<ConversationMessage> history_;
     bool streaming_ = false;
-    quint64 epoch_ = 0;       // strands stale async deliveries on re-scope
+    quint64 epoch_ = 0; // strands stale async deliveries on re-scope
 
     // UI
     QScrollArea* scroll_area_ = nullptr;

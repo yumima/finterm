@@ -35,35 +35,35 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 
 Result<void> apply_v046(QSqlDatabase& db) {
     auto r = sql(db,
-        "CREATE TABLE IF NOT EXISTS earnings_signal_records ("
-        "  id               INTEGER PRIMARY KEY AUTOINCREMENT,"
-        "  symbol           TEXT    NOT NULL,"
-        "  report_ts        INTEGER NOT NULL,"   // the print this is about
-        "  observed_on      TEXT    NOT NULL,"   // YYYY-MM-DD, market time
-        "  captured_at      TEXT    NOT NULL,"   // ISO-8601 UTC
-        "  days_to_report   INTEGER NOT NULL,"
-        // ── what the scorecard said, write-once ─────────────────────────────
-        "  verdict          TEXT    NOT NULL,"   // BUY | HOLD | SELL
-        "  score            REAL    NOT NULL,"   // -100 … +100
-        "  confidence       REAL    NOT NULL,"   // 0 … 1
-        "  setup_score      REAL,"               // NULL when that axis had no data
-        "  bar_score        REAL,"
-        // The scorecard does not forecast a move. What it offers is a
-        // direction lean (verdict) and an expected MAGNITUDE from history —
-        // both stored, and neither dressed up as a price target.
-        "  expected_move_pct REAL,"              // mean |1-day move| over past prints
-        "  consensus_eps    REAL,"
-        "  dispersion_pct   REAL,"
-        "  runup_5d_pct     REAL,"
-        "  price_at_capture REAL,"
-        // ── what happened, filled once ──────────────────────────────────────
-        "  resolved         INTEGER NOT NULL DEFAULT 0,"
-        "  actual_eps       REAL,"
-        "  surprise_pct     REAL,"
-        "  actual_move_pct  REAL,"               // realised close-to-close reaction
-        "  direction_hit    INTEGER,"            // 1 when the lean matched the move
-        "  resolved_at      TEXT"
-        ")");
+                 "CREATE TABLE IF NOT EXISTS earnings_signal_records ("
+                 "  id               INTEGER PRIMARY KEY AUTOINCREMENT,"
+                 "  symbol           TEXT    NOT NULL,"
+                 "  report_ts        INTEGER NOT NULL," // the print this is about
+                 "  observed_on      TEXT    NOT NULL," // YYYY-MM-DD, market time
+                 "  captured_at      TEXT    NOT NULL," // ISO-8601 UTC
+                 "  days_to_report   INTEGER NOT NULL,"
+                 // ── what the scorecard said, write-once ─────────────────────────────
+                 "  verdict          TEXT    NOT NULL," // BUY | HOLD | SELL
+                 "  score            REAL    NOT NULL," // -100 … +100
+                 "  confidence       REAL    NOT NULL," // 0 … 1
+                 "  setup_score      REAL,"             // NULL when that axis had no data
+                 "  bar_score        REAL,"
+                 // The scorecard does not forecast a move. What it offers is a
+                 // direction lean (verdict) and an expected MAGNITUDE from history —
+                 // both stored, and neither dressed up as a price target.
+                 "  expected_move_pct REAL," // mean |1-day move| over past prints
+                 "  consensus_eps    REAL,"
+                 "  dispersion_pct   REAL,"
+                 "  runup_5d_pct     REAL,"
+                 "  price_at_capture REAL,"
+                 // ── what happened, filled once ──────────────────────────────────────
+                 "  resolved         INTEGER NOT NULL DEFAULT 0,"
+                 "  actual_eps       REAL,"
+                 "  surprise_pct     REAL,"
+                 "  actual_move_pct  REAL,"    // realised close-to-close reaction
+                 "  direction_hit    INTEGER," // 1 when the lean matched the move
+                 "  resolved_at      TEXT"
+                 ")");
     if (r.is_err())
         return r;
 

@@ -21,10 +21,10 @@ namespace {
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 
 struct Criterion {
-    QString metric;       ///< pe_ratio, beta, dividend_yield, etc.
-    QString op;           ///< ">" "<" ">=" "<="
-    double  threshold = 0.0;
-    bool    valid = false;
+    QString metric; ///< pe_ratio, beta, dividend_yield, etc.
+    QString op;     ///< ">" "<" ">=" "<="
+    double threshold = 0.0;
+    bool valid = false;
 };
 
 /// Parse "P/E > 30" / "beta > 1.5" / "yield > 4%" into a structured filter.
@@ -43,44 +43,65 @@ Criterion parse_criterion(const QString& text) {
     c.threshold = m.captured(3).toDouble();
 
     // Map the human-readable name to the InfoData field name.
-    if (name == "p/e" || name == "pe" || name == "pe ratio") c.metric = "pe_ratio";
-    else if (name == "fwd p/e" || name == "forward pe") c.metric = "forward_pe";
-    else if (name == "p/b" || name == "pb")          c.metric = "price_to_book";
+    if (name == "p/e" || name == "pe" || name == "pe ratio")
+        c.metric = "pe_ratio";
+    else if (name == "fwd p/e" || name == "forward pe")
+        c.metric = "forward_pe";
+    else if (name == "p/b" || name == "pb")
+        c.metric = "price_to_book";
     else if (name == "yield" || name == "dividend yield") {
         c.metric = "dividend_yield";
         // yfinance returns yield as a decimal (0.025) but criteria use percent (2.5%)
         c.threshold /= 100.0;
-    } else if (name == "beta")                       c.metric = "beta";
+    } else if (name == "beta")
+        c.metric = "beta";
     else if (name == "roe" || name == "return on equity") {
         c.metric = "roe";
         c.threshold /= 100.0;
-    } else if (name == "market cap" || name == "mcap") c.metric = "market_cap";
-    else if (name == "eps")                          c.metric = "eps";
-    else if (name == "debt to equity" || name == "d/e") c.metric = "debt_to_equity";
-    else c.metric = name;
+    } else if (name == "market cap" || name == "mcap")
+        c.metric = "market_cap";
+    else if (name == "eps")
+        c.metric = "eps";
+    else if (name == "debt to equity" || name == "d/e")
+        c.metric = "debt_to_equity";
+    else
+        c.metric = name;
 
     c.valid = !c.metric.isEmpty();
     return c;
 }
 
 bool compare(double v, const QString& op, double t) {
-    if (op == ">") return v > t;
-    if (op == "<") return v < t;
-    if (op == ">=") return v >= t;
-    if (op == "<=") return v <= t;
+    if (op == ">")
+        return v > t;
+    if (op == "<")
+        return v < t;
+    if (op == ">=")
+        return v >= t;
+    if (op == "<=")
+        return v <= t;
     return false;
 }
 
 double pluck_metric(const services::InfoData& info, const QString& metric) {
-    if (metric == "pe_ratio") return info.pe_ratio;
-    if (metric == "forward_pe") return info.forward_pe;
-    if (metric == "price_to_book") return info.price_to_book;
-    if (metric == "dividend_yield") return info.dividend_yield;
-    if (metric == "beta") return info.beta;
-    if (metric == "market_cap") return info.market_cap;
-    if (metric == "eps") return info.eps;
-    if (metric == "roe") return info.roe;
-    if (metric == "debt_to_equity") return info.debt_to_equity;
+    if (metric == "pe_ratio")
+        return info.pe_ratio;
+    if (metric == "forward_pe")
+        return info.forward_pe;
+    if (metric == "price_to_book")
+        return info.price_to_book;
+    if (metric == "dividend_yield")
+        return info.dividend_yield;
+    if (metric == "beta")
+        return info.beta;
+    if (metric == "market_cap")
+        return info.market_cap;
+    if (metric == "eps")
+        return info.eps;
+    if (metric == "roe")
+        return info.roe;
+    if (metric == "debt_to_equity")
+        return info.debt_to_equity;
     // NaN, not 0.0. parse_criterion passes an unmapped metric name straight
     // through, and 0.0 is a value that compares: a "payout ratio < 60%"
     // criterion on a name this function does not know would have reported
@@ -97,8 +118,8 @@ ExposurePanel::ExposurePanel(const KnowledgeEntry& entry, QWidget* parent) : QWi
     root_->setSpacing(4);
 
     status_ = new QLabel(QString("Checking your portfolio…"), this);
-    status_->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
-                               .arg(ui::colors::TEXT_SECONDARY(), MONO));
+    status_->setStyleSheet(
+        QString("color: %1; background: transparent; font-size: 11px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO));
     status_->setWordWrap(true);
     root_->addWidget(status_);
 
@@ -153,11 +174,12 @@ void ExposurePanel::load_holdings_and_evaluate() {
             }
         }
         if (entry_.exposure_tickers.isEmpty()) {
-            status_->setText(QString("You hold %1 position%2.").arg(holdings.size()).arg(holdings.size() == 1 ? "" : "s"));
+            status_->setText(
+                QString("You hold %1 position%2.").arg(holdings.size()).arg(holdings.size() == 1 ? "" : "s"));
         } else {
-            status_->setText(in_portfolio.isEmpty()
-                ? QString("None of the example tickers (%1) are in your portfolio.").arg(entry_.exposure_tickers.join(", "))
-                : QString("In your portfolio: %1").arg(in_portfolio.join(", ")));
+            status_->setText(in_portfolio.isEmpty() ? QString("None of the example tickers (%1) are in your portfolio.")
+                                                          .arg(entry_.exposure_tickers.join(", "))
+                                                    : QString("In your portfolio: %1").arg(in_portfolio.join(", ")));
         }
         return;
     }
@@ -174,47 +196,46 @@ void ExposurePanel::load_holdings_and_evaluate() {
     const int total = holdings.size();
     for (const auto& h : holdings) {
         const QString sym = h.symbol;
-        services::MarketDataService::instance().fetch_info(
-            sym, [guard, sym, crit, shared_count, shared_matches, shared_unknown, total](bool ok, const services::InfoData& info) {
-                ++*shared_count;
-                const double v = ok ? pluck_metric(info, crit.metric) : std::numeric_limits<double>::quiet_NaN();
-                // isfinite, not `!= 0`: NaN passes a `!= 0` test, and a
-                // real 0.0 is a legitimate value to match on (a
-                // "yield < 1%" screen should find the non-payers).
-                if (!std::isfinite(v))
-                    shared_unknown->push_back(sym.toUpper());
-                else if (compare(v, crit.op, crit.threshold))
-                    shared_matches->push_back(sym.toUpper());
-                if (*shared_count >= total) {
-                    if (guard) {
-                        QStringList m = *shared_matches;
-                        std::sort(m.begin(), m.end());
-                        QStringList u = *shared_unknown;
-                        std::sort(u.begin(), u.end());
-                        guard->render_results(total, m, u, guard->entry_.exposure_criterion);
-                    }
-                    delete shared_count;
-                    delete shared_matches;
-                    delete shared_unknown;
+        services::MarketDataService::instance().fetch_info(sym, [guard, sym, crit, shared_count, shared_matches,
+                                                                 shared_unknown,
+                                                                 total](bool ok, const services::InfoData& info) {
+            ++*shared_count;
+            const double v = ok ? pluck_metric(info, crit.metric) : std::numeric_limits<double>::quiet_NaN();
+            // isfinite, not `!= 0`: NaN passes a `!= 0` test, and a
+            // real 0.0 is a legitimate value to match on (a
+            // "yield < 1%" screen should find the non-payers).
+            if (!std::isfinite(v))
+                shared_unknown->push_back(sym.toUpper());
+            else if (compare(v, crit.op, crit.threshold))
+                shared_matches->push_back(sym.toUpper());
+            if (*shared_count >= total) {
+                if (guard) {
+                    QStringList m = *shared_matches;
+                    std::sort(m.begin(), m.end());
+                    QStringList u = *shared_unknown;
+                    std::sort(u.begin(), u.end());
+                    guard->render_results(total, m, u, guard->entry_.exposure_criterion);
                 }
-            });
+                delete shared_count;
+                delete shared_matches;
+                delete shared_unknown;
+            }
+        });
     }
 }
 
 void ExposurePanel::render_results(int total, const QStringList& matching, const QStringList& unavailable,
                                    const QString& criterion) {
-    const QString unknown_note =
-        unavailable.isEmpty()
-            ? QString()
-            : QString("\nData unavailable for %1 holding%2 (not evaluated): %3")
-                  .arg(unavailable.size())
-                  .arg(unavailable.size() == 1 ? "" : "s")
-                  .arg(unavailable.join(", "));
+    const QString unknown_note = unavailable.isEmpty()
+                                     ? QString()
+                                     : QString("\nData unavailable for %1 holding%2 (not evaluated): %3")
+                                           .arg(unavailable.size())
+                                           .arg(unavailable.size() == 1 ? "" : "s")
+                                           .arg(unavailable.join(", "));
     const int evaluated = total - unavailable.size();
     if (evaluated == 0) {
-        status_->setText(QString("Could not evaluate \"%1\": data unavailable for all %2 holdings.")
-                             .arg(criterion)
-                             .arg(total));
+        status_->setText(
+            QString("Could not evaluate \"%1\": data unavailable for all %2 holdings.").arg(criterion).arg(total));
         return;
     }
     if (matching.isEmpty()) {

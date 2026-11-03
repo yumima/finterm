@@ -8,14 +8,14 @@
 #include <QDesktopServices>
 #include <QFont>
 #include <QFrame>
-#include <QPalette>
-#include <QTextBlock>
-#include <QTextCursor>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QPalette>
 #include <QRegularExpression>
 #include <QScrollArea>
+#include <QTextBlock>
 #include <QTextBrowser>
+#include <QTextCursor>
 #include <QTextDocument>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -31,17 +31,17 @@ namespace {
 // is consistent rather than silently falling back to Qt defaults.
 constexpr const char* MONO =
     "font-family: 'DejaVu Sans Mono','Liberation Mono','Menlo','Consolas','Courier New',monospace;";
-constexpr const char* SANS =
-    "font-family: 'Noto Sans','Cantarell','DejaVu Sans','Liberation Sans','Segoe UI','Inter','Helvetica Neue',Arial,sans-serif;";
-constexpr const char* BODY_BG       = "#1f1d1b"; ///< warm dark, subtle brown undertone
-constexpr const char* BODY_TEXT     = "#f0e8d0"; ///< match HEAD_TEXT — uniform reading brightness
-constexpr const char* HEAD_TEXT     = "#f0e8d0"; ///< brighter cream — title, headings, bold, body
-constexpr const char* MUTED_TEXT    = "#a89878"; ///< muted warm tan (subtitles, blockquote, captions)
-constexpr const char* CODE_TEXT     = "#d4a878"; ///< warm tan for inline code
-constexpr const char* CODE_BG       = "#2a221a"; ///< warm-dark chip background
-constexpr const char* PRE_BG        = "#15110d"; ///< slightly darker than body for code blocks
-constexpr const char* LINK_COLOR    = "#6dc1c9"; ///< muted cyan link
-constexpr const char* RULE_COLOR    = "#3a2e22"; ///< warm border / hr / h2 separator
+constexpr const char* SANS = "font-family: 'Noto Sans','Cantarell','DejaVu Sans','Liberation Sans','Segoe "
+                             "UI','Inter','Helvetica Neue',Arial,sans-serif;";
+constexpr const char* BODY_BG = "#1f1d1b";    ///< warm dark, subtle brown undertone
+constexpr const char* BODY_TEXT = "#f0e8d0";  ///< match HEAD_TEXT — uniform reading brightness
+constexpr const char* HEAD_TEXT = "#f0e8d0";  ///< brighter cream — title, headings, bold, body
+constexpr const char* MUTED_TEXT = "#a89878"; ///< muted warm tan (subtitles, blockquote, captions)
+constexpr const char* CODE_TEXT = "#d4a878";  ///< warm tan for inline code
+constexpr const char* CODE_BG = "#2a221a";    ///< warm-dark chip background
+constexpr const char* PRE_BG = "#15110d";     ///< slightly darker than body for code blocks
+constexpr const char* LINK_COLOR = "#6dc1c9"; ///< muted cyan link
+constexpr const char* RULE_COLOR = "#3a2e22"; ///< warm border / hr / h2 separator
 
 struct DiffStyle {
     const char* label;
@@ -49,16 +49,24 @@ struct DiffStyle {
     QString bg;
 };
 DiffStyle difficulty_style(const QString& d) {
-    if (d == Difficulty::INTERMEDIATE) return {"INTERMEDIATE", ui::colors::BG_BASE(), ui::colors::INFO()};
-    if (d == Difficulty::ADVANCED)     return {"ADVANCED",     ui::colors::BG_BASE(), ui::colors::AMBER()};
-    if (d == Difficulty::PRO)          return {"PRO",          ui::colors::BG_BASE(), ui::colors::NEGATIVE()};
+    if (d == Difficulty::INTERMEDIATE)
+        return {"INTERMEDIATE", ui::colors::BG_BASE(), ui::colors::INFO()};
+    if (d == Difficulty::ADVANCED)
+        return {"ADVANCED", ui::colors::BG_BASE(), ui::colors::AMBER()};
+    if (d == Difficulty::PRO)
+        return {"PRO", ui::colors::BG_BASE(), ui::colors::NEGATIVE()};
     return {"BEGINNER", ui::colors::BG_BASE(), ui::colors::POSITIVE()};
 }
 
-struct WarnStyle { QString border; QString tag; };
+struct WarnStyle {
+    QString border;
+    QString tag;
+};
 WarnStyle warning_style(const QString& severity) {
-    if (severity == "high") return {ui::colors::NEGATIVE(), "RISK"};
-    if (severity == "low")  return {ui::colors::INFO(),     "NOTE"};
+    if (severity == "high")
+        return {ui::colors::NEGATIVE(), "RISK"};
+    if (severity == "low")
+        return {ui::colors::INFO(), "NOTE"};
     return {ui::colors::AMBER(), "CAUTION"};
 }
 
@@ -74,13 +82,9 @@ WarnStyle warning_style(const QString& severity) {
 // the layout (the "NVDA $400 is 4× larger than body" bug). Inline elements
 // inherit size from defaultFont, which is correct.
 QString markdown_default_css() {
-    return QString(
-               "code { background: %1; color: %2; %3 }"
-               "a { color: %4; text-decoration: none; }")
-        .arg(QString(CODE_BG),
-             QString(CODE_TEXT),
-             QString(MONO),
-             QString(LINK_COLOR));
+    return QString("code { background: %1; color: %2; %3 }"
+                   "a { color: %4; text-decoration: none; }")
+        .arg(QString(CODE_BG), QString(CODE_TEXT), QString(MONO), QString(LINK_COLOR));
 }
 
 QString text_browser_ss() {
@@ -94,8 +98,7 @@ QString text_browser_ss() {
                    "QScrollBar::handle:vertical { background: %3; }"
                    "QScrollBar::handle:vertical:hover { background: %4; }"
                    "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
-        .arg(QString(BODY_BG), ui::colors::ACCENT_BG(),
-             ui::colors::BORDER_MED(), ui::colors::BORDER_BRIGHT(),
+        .arg(QString(BODY_BG), ui::colors::ACCENT_BG(), ui::colors::BORDER_MED(), ui::colors::BORDER_BRIGHT(),
              QString(HEAD_TEXT));
 }
 
@@ -166,8 +169,8 @@ void EntryBodyView::rebuild() {
     auto* page = new QWidget(scroll);
     page->setStyleSheet(QString("background: %1;").arg(QString(BODY_BG)));
     auto* vl = new QVBoxLayout(page);
-    vl->setContentsMargins(40, 32, 40, 48);  // VS Code-preview-style gutters
-    vl->setSpacing(16);                       // breathing between header / warnings / body
+    vl->setContentsMargins(40, 32, 40, 48); // VS Code-preview-style gutters
+    vl->setSpacing(16);                     // breathing between header / warnings / body
 
     if (!current_) {
         auto* lbl = new QLabel("(No entry selected.)", page);
@@ -315,20 +318,40 @@ void EntryBodyView::rebuild() {
             int top = 0, bottom = 12;
             int lh_pct = 125;
             switch (level) {
-                case 1: top = 20; bottom = 12; lh_pct = 115; break;
-                case 2: top = 20; bottom = 12; lh_pct = 115; break;
-                case 3: top = 20; bottom = 10; lh_pct = 115; break;
-                case 4: top = 16; bottom =  6; lh_pct = 115; break;
+                case 1:
+                    top = 20;
+                    bottom = 12;
+                    lh_pct = 115;
+                    break;
+                case 2:
+                    top = 20;
+                    bottom = 12;
+                    lh_pct = 115;
+                    break;
+                case 3:
+                    top = 20;
+                    bottom = 10;
+                    lh_pct = 115;
+                    break;
+                case 4:
+                    top = 16;
+                    bottom = 6;
+                    lh_pct = 115;
+                    break;
                 default:
                     if (blk.textList() != nullptr) {
-                        top = 0; bottom = 3; lh_pct = 125;   // adjacent list items
+                        top = 0;
+                        bottom = 3;
+                        lh_pct = 125; // adjacent list items
                     } else {
-                        top = 0; bottom = 12; lh_pct = 125;  // p, pre, table, blockquote
+                        top = 0;
+                        bottom = 12;
+                        lh_pct = 125; // p, pre, table, blockquote
                     }
                     break;
             }
             if (first_block) {
-                top = 0;  // never push the first block down
+                top = 0; // never push the first block down
                 first_block = false;
             }
             fmt.setTopMargin(top);
@@ -343,7 +366,7 @@ void EntryBodyView::rebuild() {
             // left intact. FontFamilies is set everywhere to unify the typeface
             // — Qt's heading parser otherwise injects the system heading font.
             {
-                constexpr int kHeadPx[] = {22, 20, 18, 18, 17, 17};  // H1–H6
+                constexpr int kHeadPx[] = {22, 20, 18, 18, 17, 17}; // H1–H6
                 const int px = (level >= 1 && level <= 6) ? kHeadPx[level - 1] : 17;
                 QTextCharFormat cfmt;
                 cfmt.setFontFamilies(base_font.families());

@@ -32,19 +32,20 @@ class MarketPanelEditor : public QDialog {
   private:
     void build_ui();
     void fire_search(const QString& query);
-    void on_search_results(const QJsonArray& results, const QString& failure = {});  // failure: shown instead of "No results"
+    void on_search_results(const QJsonArray& results,
+                           const QString& failure = {}); // failure: shown instead of "No results"
     void refresh_ticker_list();
     void reposition_dropdown();
     void hide_dropdown();
 
     MarketPanelConfig config_;
 
-    QLineEdit*   title_edit_      = nullptr;
-    QLineEdit*   search_edit_     = nullptr;
-    QListWidget* ticker_list_     = nullptr;
-    QListWidget* dropdown_        = nullptr;
-    QTimer*      search_debounce_ = nullptr;
-    QString      pending_query_;
+    QLineEdit* title_edit_ = nullptr;
+    QLineEdit* search_edit_ = nullptr;
+    QListWidget* ticker_list_ = nullptr;
+    QListWidget* dropdown_ = nullptr;
+    QTimer* search_debounce_ = nullptr;
+    QString pending_query_;
 };
 
 } // namespace fincept::screens

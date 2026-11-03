@@ -1,9 +1,9 @@
 // src/screens/gov_data/GovDataFrancePanel.cpp
 // France data.gouv.fr panel — Data Services | Datasets (search) | Geo Search
 #include "screens/gov_data/GovDataFrancePanel.h"
-#include "screens/gov_data/GovDataProviderPanel.h"
 
 #include "core/logging/Logger.h"
+#include "screens/gov_data/GovDataProviderPanel.h"
 #include "services/gov_data/GovDataService.h"
 #include "ui/theme/Theme.h"
 

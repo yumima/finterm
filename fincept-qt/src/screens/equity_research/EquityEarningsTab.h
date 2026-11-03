@@ -52,17 +52,13 @@ class EquityEarningsTab : public QWidget {
     QWidget* build_current_panel();
     QWidget* build_future_panel();
 
-    void fill_next_report(const services::equity::EarningsAnalysis& a,
-                          const services::equity::EarningsOutlook& o);
+    void fill_next_report(const services::equity::EarningsAnalysis& a, const services::equity::EarningsOutlook& o);
     void fill_beat(const services::equity::EarningsOutlook& o);
-    void fill_size(const services::equity::EarningsAnalysis& a,
-                   const services::equity::EarningsOutlook& o);
+    void fill_size(const services::equity::EarningsAnalysis& a, const services::equity::EarningsOutlook& o);
     void fill_direction(const services::equity::EarningsOutlook& o);
-    void fill_history(const services::equity::EarningsAnalysis& a,
-                      const services::equity::EarningsOutlook& o,
+    void fill_history(const services::equity::EarningsAnalysis& a, const services::equity::EarningsOutlook& o,
                       const services::equity::ForecastRecord& r);
-    void fill_record(const services::equity::EarningsAnalysis& a,
-                     const services::equity::ForecastRecord& r);
+    void fill_record(const services::equity::EarningsAnalysis& a, const services::equity::ForecastRecord& r);
     void fill_trend(const services::equity::EarningsAnalysis& a);
     void fill_revisions(const services::equity::EarningsAnalysis& a);
     void fill_estimates(const services::equity::EarningsAnalysis& a);
@@ -70,8 +66,7 @@ class EquityEarningsTab : public QWidget {
     /// whose print has since happened. The ledger is what lets the beat
     /// probability and the options-implied move be checked on prints that
     /// were genuinely in the future when they were written down.
-    void record_and_resolve(const services::equity::EarningsAnalysis& a,
-                            const services::equity::EarningsOutlook& o);
+    void record_and_resolve(const services::equity::EarningsAnalysis& a, const services::equity::EarningsOutlook& o);
 
     QString current_symbol_;
     QDateTime data_fetched_at_;
@@ -91,7 +86,7 @@ class EquityEarningsTab : public QWidget {
     // 1 · Will they beat?
     QLabel* beat_value_ = nullptr;
     QLabel* beat_sub_ = nullptr;
-    QWidget* beat_strip_ = nullptr;      // stacked bar of the four outcomes
+    QWidget* beat_strip_ = nullptr; // stacked bar of the four outcomes
     QLabel* beat_strip_legend_ = nullptr;
     QLabel* beat_drift_ = nullptr;
 

@@ -77,8 +77,8 @@ inline void report_qss_fill(const char* what, const QssSlotFill& fill) {
         m << QString::number(n);
     for (int n : fill.unused)
         u << QString::number(n);
-    qWarning("QSS template %s: slots without a value [%s], values without a slot [%s]", what,
-             qPrintable(m.join(',')), qPrintable(u.join(',')));
+    qWarning("QSS template %s: slots without a value [%s], values without a slot [%s]", what, qPrintable(m.join(',')),
+             qPrintable(u.join(',')));
     Q_ASSERT_X(false, what, "QSS template slots and values don't match");
 }
 

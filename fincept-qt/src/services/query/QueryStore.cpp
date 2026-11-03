@@ -1,10 +1,10 @@
 // src/services/query/QueryStore.cpp
 #include "services/query/QueryStore.h"
 
-#include <algorithm>
-
 #include <QMetaObject>
 #include <QThread>
+
+#include <algorithm>
 
 namespace fincept::services::query {
 
@@ -15,8 +15,8 @@ QueryStore& QueryStore::instance() {
 
 QueryStore::QueryStore(QObject* parent) : QObject(parent) {}
 
-void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int stale_max_sec,
-                            Callback callback, Fetcher fetcher) {
+void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int stale_max_sec, Callback callback,
+                           Fetcher fetcher) {
     if (!owner || key.isEmpty() || !callback || !fetcher)
         return;
 
@@ -24,9 +24,10 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
     auto& entry = entries_[key];
     entry.ttl_sec = ttl_sec;
     entry.stale_max_sec = stale_max_sec;
-    entry.pending_fetcher = fetcher;  // remembered for invalidate()-driven re-fetch
+    entry.pending_fetcher = fetcher; // remembered for invalidate()-driven re-fetch
     entry.last_accessed = QDateTime::currentDateTime();
-    if (is_new_key) evict_if_full();
+    if (is_new_key)
+        evict_if_full();
 
     // Idempotent re-subscribe: if this owner is already subscribed to this
     // key, just update the callback. Avoids duplicate deliveries when a
@@ -44,8 +45,7 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
             // the same key must not receive a populated value that claims to
             // have no fetch time.
             current.fetched_at = entry.fetched_at;
-            current.is_stale = !entry.cached_value.isNull() && entry.ttl_sec > 0 &&
-                               entry.fetched_at.isValid() &&
+            current.is_stale = !entry.cached_value.isNull() && entry.ttl_sec > 0 && entry.fetched_at.isValid() &&
                                entry.fetched_at.secsTo(QDateTime::currentDateTime()) >= entry.ttl_sec;
             sub.callback(current);
             return;
@@ -57,9 +57,9 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
     // and key by value; on owner destruction we remove subscriptions for
     // that owner across every key (cheap because owners typically only
     // subscribe to a handful of keys).
-    connect(owner, &QObject::destroyed, this, [this, owner_ptr = owner](QObject*) {
-        prune_owner(owner_ptr);
-    }, Qt::DirectConnection);
+    connect(
+        owner, &QObject::destroyed, this, [this, owner_ptr = owner](QObject*) { prune_owner(owner_ptr); },
+        Qt::DirectConnection);
 
     entry.subscribers.append({QPointer<QObject>(owner), std::move(callback)});
 
@@ -72,12 +72,10 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
         //      core — the consumer can render last-known data immediately
         //      (instant view) while a fresh fetch runs in the background.
         //   3. Beyond stale_max: discard, treat as cold miss.
-        const qint64 age = entry.fetched_at.isValid()
-                               ? entry.fetched_at.secsTo(QDateTime::currentDateTime())
-                               : INT64_MAX;
+        const qint64 age =
+            entry.fetched_at.isValid() ? entry.fetched_at.secsTo(QDateTime::currentDateTime()) : INT64_MAX;
         const bool fresh = (ttl_sec <= 0) || (age < ttl_sec);
-        const bool acceptable_stale =
-            !fresh && stale_max_sec > 0 && age < stale_max_sec;
+        const bool acceptable_stale = !fresh && stale_max_sec > 0 && age < stale_max_sec;
 
         if (fresh) {
             State s;
@@ -93,7 +91,7 @@ void QueryStore::subscribe(QObject* owner, const QString& key, int ttl_sec, int 
             State s;
             s.data = entry.cached_value;
             s.is_stale = true;
-            s.loading = true;  // background revalidate is in flight
+            s.loading = true; // background revalidate is in flight
             s.fetched_at = entry.fetched_at;
             entry.subscribers.last().callback(s);
             if (!entry.inflight)
@@ -148,8 +146,7 @@ void QueryStore::revalidate(const QString& key, bool force) {
     // have wildly different refresh economics (quote 60s, candles 10min,
     // fundamentals 30min).
     const auto& e = it.value();
-    if (!force && !e.cached_value.isNull() &&
-        !revalidate_due(e.fetched_at, e.ttl_sec, QDateTime::currentDateTime())) {
+    if (!force && !e.cached_value.isNull() && !revalidate_due(e.fetched_at, e.ttl_sec, QDateTime::currentDateTime())) {
         return;
     }
     // Failure backoff. The TTL gate above never engages for a key with no
@@ -223,8 +220,10 @@ void QueryStore::prefetch(const QString& key, int ttl_sec, Fetcher fetcher) {
     entry.ttl_sec = ttl_sec;
     entry.pending_fetcher = fetcher;
     entry.last_accessed = QDateTime::currentDateTime();
-    if (is_new_key) evict_if_full();
-    if (entry.inflight) return;
+    if (is_new_key)
+        evict_if_full();
+    if (entry.inflight)
+        return;
     // Fresh-cache short-circuit — don't burn a fetch when a recent value
     // exists.
     if (!entry.cached_value.isNull() && ttl_sec > 0 && entry.fetched_at.isValid() &&
@@ -235,9 +234,11 @@ void QueryStore::prefetch(const QString& key, int ttl_sec, Fetcher fetcher) {
 }
 
 void QueryStore::unsubscribe(QObject* owner, const QString& key) {
-    if (!owner) return;
+    if (!owner)
+        return;
     auto it = entries_.find(key);
-    if (it == entries_.end()) return;
+    if (it == entries_.end())
+        return;
     auto& subs = it.value().subscribers;
     for (int i = subs.size() - 1; i >= 0; --i) {
         if (subs[i].owner == owner)
@@ -250,7 +251,8 @@ void QueryStore::unsubscribe(QObject* owner, const QString& key) {
 }
 
 void QueryStore::unsubscribe_all(QObject* owner) {
-    if (!owner) return;
+    if (!owner)
+        return;
     for (auto it = entries_.begin(); it != entries_.end(); ++it) {
         auto& subs = it.value().subscribers;
         for (int i = subs.size() - 1; i >= 0; --i) {
@@ -267,9 +269,8 @@ QVariant QueryStore::peek(const QString& key) const {
     const auto& e = it.value();
     if (e.cached_value.isNull())
         return {};
-    if (e.ttl_sec > 0 && e.fetched_at.isValid() &&
-        e.fetched_at.secsTo(QDateTime::currentDateTime()) >= e.ttl_sec) {
-        return {};  // expired
+    if (e.ttl_sec > 0 && e.fetched_at.isValid() && e.fetched_at.secsTo(QDateTime::currentDateTime()) >= e.ttl_sec) {
+        return {}; // expired
     }
     // Cast-away const for the access timestamp — peek is logically
     // const but it touches the LRU watermark so a frequently-peeked
@@ -280,7 +281,8 @@ QVariant QueryStore::peek(const QString& key) const {
 
 void QueryStore::kick_fetch(const QString& key, Fetcher fetcher) {
     auto& entry = entries_[key];
-    if (entry.inflight) return;
+    if (entry.inflight)
+        return;
     entry.inflight = true;
 
     // Capture key by value — entries_[key] could rehash under us if the
@@ -289,45 +291,53 @@ void QueryStore::kick_fetch(const QString& key, Fetcher fetcher) {
         // Marshal to the store's thread to keep entries_ access serialized.
         // Qt::QueuedConnection ensures execution happens on the store's
         // event-loop thread regardless of which thread invokes resolver.
-        QMetaObject::invokeMethod(this, [this, key, value, fetched_at]() {
-            auto it = entries_.find(key);
-            if (it == entries_.end()) return;
-            it.value().inflight = false;
-            it.value().cached_value = value;
-            it.value().fetched_at = fetched_at;
-            it.value().last_failed_at = QDateTime();  // success clears the backoff
-            State s;
-            s.data = value;
-            s.loading = false;
-            s.fetched_at = it.value().fetched_at;
-            // Data older than its own TTL was served from a cache; say so.
-            s.is_stale = it.value().ttl_sec > 0 &&
-                         fetched_at.secsTo(QDateTime::currentDateTime()) >= it.value().ttl_sec;
-            deliver(key, s);
-        }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(
+            this,
+            [this, key, value, fetched_at]() {
+                auto it = entries_.find(key);
+                if (it == entries_.end())
+                    return;
+                it.value().inflight = false;
+                it.value().cached_value = value;
+                it.value().fetched_at = fetched_at;
+                it.value().last_failed_at = QDateTime(); // success clears the backoff
+                State s;
+                s.data = value;
+                s.loading = false;
+                s.fetched_at = it.value().fetched_at;
+                // Data older than its own TTL was served from a cache; say so.
+                s.is_stale =
+                    it.value().ttl_sec > 0 && fetched_at.secsTo(QDateTime::currentDateTime()) >= it.value().ttl_sec;
+                deliver(key, s);
+            },
+            Qt::QueuedConnection);
     }};
 
     auto rejecter = [this, key](QString err) {
-        QMetaObject::invokeMethod(this, [this, key, err]() {
-            auto it = entries_.find(key);
-            if (it == entries_.end()) return;
-            it.value().inflight = false;
-            it.value().last_failed_at = QDateTime::currentDateTime();
-            // Preserve any prior cached_value — the failed fetch shouldn't
-            // erase a previously good cache. Subscribers get an error
-            // alongside the (possibly null) data they had.
-            State s;
-            s.data = it.value().cached_value;
-            s.loading = false;
-            s.error = err;
-            // The surviving value is as old as it ever was — the failed
-            // fetch must not make it look refreshed. is_stale means
-            // "showing cached data past its TTL", so it only applies when
-            // there IS data to show; a cold-start failure has none.
-            s.fetched_at = it.value().fetched_at;
-            s.is_stale = !it.value().cached_value.isNull();
-            deliver(key, s);
-        }, Qt::QueuedConnection);
+        QMetaObject::invokeMethod(
+            this,
+            [this, key, err]() {
+                auto it = entries_.find(key);
+                if (it == entries_.end())
+                    return;
+                it.value().inflight = false;
+                it.value().last_failed_at = QDateTime::currentDateTime();
+                // Preserve any prior cached_value — the failed fetch shouldn't
+                // erase a previously good cache. Subscribers get an error
+                // alongside the (possibly null) data they had.
+                State s;
+                s.data = it.value().cached_value;
+                s.loading = false;
+                s.error = err;
+                // The surviving value is as old as it ever was — the failed
+                // fetch must not make it look refreshed. is_stale means
+                // "showing cached data past its TTL", so it only applies when
+                // there IS data to show; a cold-start failure has none.
+                s.fetched_at = it.value().fetched_at;
+                s.is_stale = !it.value().cached_value.isNull();
+                deliver(key, s);
+            },
+            Qt::QueuedConnection);
     };
 
     // Run the fetcher immediately (its body decides sync vs async). It may
@@ -338,7 +348,8 @@ void QueryStore::kick_fetch(const QString& key, Fetcher fetcher) {
 
 void QueryStore::deliver(const QString& key, const State& state) {
     auto it = entries_.find(key);
-    if (it == entries_.end()) return;
+    if (it == entries_.end())
+        return;
     it.value().last_accessed = QDateTime::currentDateTime();
     auto& subs = it.value().subscribers;
     // Walk in reverse for cheap erase-during-iteration on dead QPointers.
@@ -356,7 +367,8 @@ void QueryStore::deliver(const QString& key, const State& state) {
 }
 
 void QueryStore::evict_if_full() {
-    if (entries_.size() <= kMaxEntries) return;
+    if (entries_.size() <= kMaxEntries)
+        return;
 
     // Find the oldest entry (by last_accessed) that's safe to drop:
     //   • no live subscribers — otherwise we'd silently stop delivering
@@ -376,10 +388,13 @@ void QueryStore::evict_if_full() {
         // doesn't have to.
         auto& subs = it.value().subscribers;
         for (int i = subs.size() - 1; i >= 0; --i) {
-            if (!subs[i].owner) subs.removeAt(i);
+            if (!subs[i].owner)
+                subs.removeAt(i);
         }
-        if (!subs.isEmpty()) continue;
-        if (it.value().inflight) continue;
+        if (!subs.isEmpty())
+            continue;
+        if (it.value().inflight)
+            continue;
         if (!oldest.isValid() || it.value().last_accessed < oldest) {
             oldest = it.value().last_accessed;
             candidate = it;

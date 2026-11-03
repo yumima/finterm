@@ -62,13 +62,13 @@ struct HeadlineKeys {
 
 inline bool is_cjk(QChar c) {
     switch (c.script()) {
-    case QChar::Script_Han:
-    case QChar::Script_Hiragana:
-    case QChar::Script_Katakana:
-    case QChar::Script_Hangul:
-        return true;
-    default:
-        return false;
+        case QChar::Script_Han:
+        case QChar::Script_Hiragana:
+        case QChar::Script_Katakana:
+        case QChar::Script_Hangul:
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -98,9 +98,9 @@ inline HeadlineKeys headline_keys(const QString& headline) {
         if (c.isDigit()) {
             // One number: digits with inner '.'/',' ("2,055", "0.0959").
             qsizetype j = i;
-            while (j + 1 < n && (h.at(j + 1).isDigit() ||
-                                 ((h.at(j + 1) == QLatin1Char('.') || h.at(j + 1) == QLatin1Char(',')) && j + 2 < n &&
-                                  h.at(j + 2).isDigit())))
+            while (j + 1 < n &&
+                   (h.at(j + 1).isDigit() || ((h.at(j + 1) == QLatin1Char('.') || h.at(j + 1) == QLatin1Char(',')) &&
+                                              j + 2 < n && h.at(j + 2).isDigit())))
                 ++j;
             for (qsizetype m = i; m <= j; ++m)
                 if (h.at(m) != QLatin1Char(',')) // "2,055" and "2055" are one number
@@ -162,7 +162,7 @@ inline void fold_into(QVector<services::NewsArticle>& all, FeedMergeIndex& idx, 
             outlets << s;
     const int similar = kept.similar + a.similar + extra_similar;
     // The row is as urgent, as threatening and as flagged as its loudest copy.
-    const auto priority = std::min(kept.priority, a.priority); // enum: FLASH first
+    const auto priority = std::min(kept.priority, a.priority);                       // enum: FLASH first
     const auto threat = a.threat.level < kept.threat.level ? a.threat : kept.threat; // CRITICAL first
     const auto flag = kept.source_flag != services::SourceFlag::NONE ? kept.source_flag : a.source_flag;
     if (better_copy(a, kept, extra_similar > 0)) {

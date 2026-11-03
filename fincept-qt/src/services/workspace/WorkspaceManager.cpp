@@ -379,8 +379,7 @@ void WorkspaceManager::apply_to_ui() {
     // PIN-unlock where the user is returning to exactly where they left off).
     // Calling navigate() unnecessarily triggers ADS layout reconfiguration
     // which causes a Wayland configure round-trip visible as a brief window flash.
-    if (!routers_.isEmpty() && !ws.active_screen.isEmpty()
-            && routers_.first()->current_screen_id() != ws.active_screen)
+    if (!routers_.isEmpty() && !ws.active_screen.isEmpty() && routers_.first()->current_screen_id() != ws.active_screen)
         routers_.first()->navigate(ws.active_screen);
 
     // Restore symbol group context last so every subscriber has been

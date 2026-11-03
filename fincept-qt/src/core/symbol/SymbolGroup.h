@@ -38,10 +38,9 @@ enum class SymbolGroup : char {
 /// disabled slots — callers that only want active groups should consult
 /// SymbolGroupRegistry::enabled_groups() instead.
 inline const QList<SymbolGroup>& all_symbol_groups() {
-    static const QList<SymbolGroup> k = {SymbolGroup::A, SymbolGroup::B, SymbolGroup::C,
-                                         SymbolGroup::D, SymbolGroup::E, SymbolGroup::F,
-                                         SymbolGroup::G, SymbolGroup::H, SymbolGroup::I,
-                                         SymbolGroup::J};
+    static const QList<SymbolGroup> k = {SymbolGroup::A, SymbolGroup::B, SymbolGroup::C, SymbolGroup::D,
+                                         SymbolGroup::E, SymbolGroup::F, SymbolGroup::G, SymbolGroup::H,
+                                         SymbolGroup::I, SymbolGroup::J};
     return k;
 }
 
@@ -52,17 +51,28 @@ inline QChar symbol_group_letter(SymbolGroup g) {
 inline SymbolGroup symbol_group_from_char(QChar c) {
     const char ch = c.toLatin1();
     switch (ch) {
-        case 'A': return SymbolGroup::A;
-        case 'B': return SymbolGroup::B;
-        case 'C': return SymbolGroup::C;
-        case 'D': return SymbolGroup::D;
-        case 'E': return SymbolGroup::E;
-        case 'F': return SymbolGroup::F;
-        case 'G': return SymbolGroup::G;
-        case 'H': return SymbolGroup::H;
-        case 'I': return SymbolGroup::I;
-        case 'J': return SymbolGroup::J;
-        default:  return SymbolGroup::None;
+        case 'A':
+            return SymbolGroup::A;
+        case 'B':
+            return SymbolGroup::B;
+        case 'C':
+            return SymbolGroup::C;
+        case 'D':
+            return SymbolGroup::D;
+        case 'E':
+            return SymbolGroup::E;
+        case 'F':
+            return SymbolGroup::F;
+        case 'G':
+            return SymbolGroup::G;
+        case 'H':
+            return SymbolGroup::H;
+        case 'I':
+            return SymbolGroup::I;
+        case 'J':
+            return SymbolGroup::J;
+        default:
+            return SymbolGroup::None;
     }
 }
 
@@ -72,17 +82,28 @@ inline SymbolGroup symbol_group_from_char(QChar c) {
 /// total ordering (tests, deterministic enumeration).
 inline SymbolGroup next_symbol_group(SymbolGroup g) {
     switch (g) {
-        case SymbolGroup::None: return SymbolGroup::A;
-        case SymbolGroup::A:    return SymbolGroup::B;
-        case SymbolGroup::B:    return SymbolGroup::C;
-        case SymbolGroup::C:    return SymbolGroup::D;
-        case SymbolGroup::D:    return SymbolGroup::E;
-        case SymbolGroup::E:    return SymbolGroup::F;
-        case SymbolGroup::F:    return SymbolGroup::G;
-        case SymbolGroup::G:    return SymbolGroup::H;
-        case SymbolGroup::H:    return SymbolGroup::I;
-        case SymbolGroup::I:    return SymbolGroup::J;
-        case SymbolGroup::J:    return SymbolGroup::None;
+        case SymbolGroup::None:
+            return SymbolGroup::A;
+        case SymbolGroup::A:
+            return SymbolGroup::B;
+        case SymbolGroup::B:
+            return SymbolGroup::C;
+        case SymbolGroup::C:
+            return SymbolGroup::D;
+        case SymbolGroup::D:
+            return SymbolGroup::E;
+        case SymbolGroup::E:
+            return SymbolGroup::F;
+        case SymbolGroup::F:
+            return SymbolGroup::G;
+        case SymbolGroup::G:
+            return SymbolGroup::H;
+        case SymbolGroup::H:
+            return SymbolGroup::I;
+        case SymbolGroup::I:
+            return SymbolGroup::J;
+        case SymbolGroup::J:
+            return SymbolGroup::None;
     }
     return SymbolGroup::None;
 }

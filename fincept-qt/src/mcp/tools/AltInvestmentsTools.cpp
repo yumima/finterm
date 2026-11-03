@@ -48,53 +48,52 @@ static ToolResult run_alt_sync(const QStringList& cli_args) {
     // would never be woken by main-thread QProcess::finished signals.
     auto* runner = &python::PythonRunner::instance();
     detail::run_async_wait(runner, [&](auto signal_done) {
-        runner->run("Analytics/alternateInvestment/cli.py", cli_args,
-                    [&, signal_done](const python::PythonResult& result) {
-                        if (!result.success) {
-                            // cli.py prints {"success":false,"error":...} and exits 1.
-                            QString err = extract_error(result.output);
-                            if (err.isEmpty())
-                                err = result.error.isEmpty() ? "Analysis failed" : result.error;
-                            tool_result = ToolResult::fail(err);
-                            signal_done();
-                            return;
-                        }
-                        // Extract JSON from stdout
-                        QString out = result.output;
-                        int start = out.indexOf('{');
-                        int end = out.lastIndexOf('}');
-                        if (start < 0 || end < 0 || end <= start) {
-                            tool_result = ToolResult::fail("No JSON in output");
-                            signal_done();
-                            return;
-                        }
-                        QJsonParseError err;
-                        auto doc = QJsonDocument::fromJson(out.mid(start, end - start + 1).toUtf8(), &err);
-                        if (doc.isNull() || !doc.isObject()) {
-                            tool_result = ToolResult::fail("Invalid JSON: " + err.errorString());
-                            signal_done();
-                            return;
-                        }
-                        auto obj = doc.object();
-                        if (obj.contains("error") || (obj.contains("success") && !obj["success"].toBool(true))) {
-                            tool_result = ToolResult::fail(obj["error"].toString("Analysis failed"));
-                            signal_done();
-                            return;
-                        }
-                        auto metrics = obj.contains("metrics") ? obj["metrics"].toObject() : obj;
-                        // Analyzers report insufficient input inside metrics.
-                        if (metrics.contains("error")) {
-                            tool_result = ToolResult::fail(metrics["error"].toString("Analysis failed"));
-                            signal_done();
-                            return;
-                        }
-                        fincept::CacheManager::instance().put(
-                            cache_key,
-                            QVariant(QString::fromUtf8(QJsonDocument(metrics).toJson(QJsonDocument::Compact))),
-                            kAltTtlSec, "alt_investments");
-                        tool_result = ToolResult::ok_data(metrics);
-                        signal_done();
-                    });
+        runner->run(
+            "Analytics/alternateInvestment/cli.py", cli_args, [&, signal_done](const python::PythonResult& result) {
+                if (!result.success) {
+                    // cli.py prints {"success":false,"error":...} and exits 1.
+                    QString err = extract_error(result.output);
+                    if (err.isEmpty())
+                        err = result.error.isEmpty() ? "Analysis failed" : result.error;
+                    tool_result = ToolResult::fail(err);
+                    signal_done();
+                    return;
+                }
+                // Extract JSON from stdout
+                QString out = result.output;
+                int start = out.indexOf('{');
+                int end = out.lastIndexOf('}');
+                if (start < 0 || end < 0 || end <= start) {
+                    tool_result = ToolResult::fail("No JSON in output");
+                    signal_done();
+                    return;
+                }
+                QJsonParseError err;
+                auto doc = QJsonDocument::fromJson(out.mid(start, end - start + 1).toUtf8(), &err);
+                if (doc.isNull() || !doc.isObject()) {
+                    tool_result = ToolResult::fail("Invalid JSON: " + err.errorString());
+                    signal_done();
+                    return;
+                }
+                auto obj = doc.object();
+                if (obj.contains("error") || (obj.contains("success") && !obj["success"].toBool(true))) {
+                    tool_result = ToolResult::fail(obj["error"].toString("Analysis failed"));
+                    signal_done();
+                    return;
+                }
+                auto metrics = obj.contains("metrics") ? obj["metrics"].toObject() : obj;
+                // Analyzers report insufficient input inside metrics.
+                if (metrics.contains("error")) {
+                    tool_result = ToolResult::fail(metrics["error"].toString("Analysis failed"));
+                    signal_done();
+                    return;
+                }
+                fincept::CacheManager::instance().put(
+                    cache_key, QVariant(QString::fromUtf8(QJsonDocument(metrics).toJson(QJsonDocument::Compact))),
+                    kAltTtlSec, "alt_investments");
+                tool_result = ToolResult::ok_data(metrics);
+                signal_done();
+            });
     });
 
     return tool_result;
@@ -189,7 +188,8 @@ static ToolDef make_tool(const AltSpec& spec) {
 std::vector<ToolDef> get_alt_investments_tools() {
     const std::vector<AltSpec> specs = {
         // ── Bonds & Fixed Income ─────────────────────────────────────────────
-        {"alt_high_yield_bond", "high-yield",
+        {"alt_high_yield_bond",
+         "high-yield",
          "Analyze a high-yield (junk) bond: yield to maturity, spread over a caller-supplied Treasury yield, "
          "default probability, equity-like behavior.",
          "credit_analysis, default_prob, equity_behavior",
@@ -200,7 +200,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"treasury_yield", "number", "Benchmark Treasury yield (decimal) — required for credit_analysis", false},
           {"credit_rating", "string", "Credit rating, e.g. BB, B, CCC", false},
           {"equity_returns", "array", "Equity returns (decimals) for equity_behavior", false}}},
-        {"alt_emerging_market_bond", "em-bonds",
+        {"alt_emerging_market_bond",
+         "em-bonds",
          "Analyze an emerging-market bond: yield metrics, sovereign default risk, currency risk.",
          "yield_spread, default_risk, currency_risk",
          {{"face_value", "number", "Face value ($)", true},
@@ -214,7 +215,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"recovery_rate", "number", "Recovery rate (decimal) for default_risk", false},
           {"local_currency_volatility", "number", "FX volatility (decimal) for currency_risk", false},
           {"fx_correlation", "number", "FX correlation for currency_risk", false}}},
-        {"alt_convertible_bond", "convertible-bonds",
+        {"alt_convertible_bond",
+         "convertible-bonds",
          "Analyze a convertible bond: conversion premium, bond floor, upside participation.",
          "conversion_premium, bond_floor, upside_participation",
          {{"face_value", "number", "Face value ($)", true},
@@ -226,7 +228,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"credit_spread", "number", "Issuer credit spread (decimal)", false},
           {"market_yield", "number", "Straight-bond market yield (decimal) for bond_floor", false},
           {"stock_price_scenarios", "array", "Stock price scenarios for upside_participation", false}}},
-        {"alt_preferred_stock", "preferred-stocks",
+        {"alt_preferred_stock",
+         "preferred-stocks",
          "Analyze preferred stock: current yield, yield to call, call risk, dividend safety.",
          "yield_analysis, call_risk, dividend_safety",
          {{"par_value", "number", "Par value ($)", true},
@@ -236,7 +239,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"years_to_call", "number", "Years to first call", false}}},
 
         // ── Real Estate ──────────────────────────────────────────────────────
-        {"alt_real_estate", "real-estate",
+        {"alt_real_estate",
+         "real-estate",
          "Analyze a direct real-estate investment: NOI, cap rate, DCF valuation.",
          "noi, caprate, dcf",
          {{"acquisition_price", "number", "Purchase price ($)", true},
@@ -247,7 +251,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"projection_years", "number", "DCF projection years", false},
           {"terminal_cap_rate", "number", "DCF terminal cap rate (decimal)", false},
           {"discount_rate", "number", "DCF discount rate (decimal)", false}}},
-        {"alt_reit", "intl-reit",
+        {"alt_reit",
+         "intl-reit",
          "Analyze an international REIT: diversification, currency effect, expense drag, regional view.",
          "diversification, currency, expense, regional",
          {{"region", "string", "Region (Europe, Asia-Pacific, Emerging)", true},
@@ -258,7 +263,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"correlation_us", "number", "Correlation with US REITs", true}}},
 
         // ── Hedge Funds ──────────────────────────────────────────────────────
-        {"alt_long_short_equity", "hedge-funds",
+        {"alt_long_short_equity",
+         "hedge-funds",
          "Analyze a hedge fund from its own price history: strategy metrics, performance, fee impact.",
          "metrics, performance, fees",
          {{"market_data", "array", "Fund price history: [{timestamp, price}, ...]", true},
@@ -267,7 +273,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"performance_fee", "number", "Performance fee (decimal) for fees", false},
           {"hurdle_rate", "number", "Hurdle rate (decimal)", false},
           {"months", "number", "Months for fee impact", false}}},
-        {"alt_managed_futures", "managed-futures",
+        {"alt_managed_futures",
+         "managed-futures",
          "Analyze a managed futures / CTA fund: trend-following on a supplied price series, crisis alpha, "
          "fee impact on a supplied gross return.",
          "trend_following, crisis_alpha, fee_impact",
@@ -279,7 +286,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
            false},
           {"gross_return", "number", "Gross annual return (decimal) for fee_impact", false},
           {"years", "number", "Horizon years for fee_impact", false}}},
-        {"alt_market_neutral", "market-neutral",
+        {"alt_market_neutral",
+         "market-neutral",
          "Analyze a market-neutral fund from supplied returns: beta, factor exposure, leverage risk.",
          "beta_analysis, factor_exposure, leverage_risk",
          {{"returns", "array", "Fund periodic returns (decimals)", true},
@@ -293,14 +301,16 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"momentum_returns", "array", "Momentum factor returns", false}}},
 
         // ── Commodities ──────────────────────────────────────────────────────
-        {"alt_precious_metals", "pme",
+        {"alt_precious_metals",
+         "pme",
          "Analyze precious-metals equities from supplied return series: inflation correlation, drawdowns, "
          "crisis performance.",
          "correlation, drawdowns, crisis_performance",
          {{"stock_returns", "array", "PME periodic returns (decimals)", true},
           {"inflation_rates", "array", "Matching inflation rates (decimals)", true},
           {"market_data", "array", "Price history [{timestamp, price}] for drawdowns", false}}},
-        {"alt_natural_resources", "natural-resources",
+        {"alt_natural_resources",
+         "natural-resources",
          "Analyze a commodity futures curve point: basis, contango/backwardation.",
          "basis, contango, futures",
          {{"spot_price", "number", "Spot price", true},
@@ -309,7 +319,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"commodity_sector", "string", "energy, metals, agriculture, livestock", false}}},
 
         // ── Private Capital ──────────────────────────────────────────────────
-        {"alt_private_equity", "private-capital",
+        {"alt_private_equity",
+         "private-capital",
          "Analyze a private equity / VC fund from its cash flows: IRR, MOIC, DPI, RVPI.",
          "metrics, irr, moic",
          {{"cash_flows", "array", "Cash flows [{date, amount}] (calls negative, distributions positive)", true},
@@ -317,7 +328,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"nav_date", "string", "NAV date (YYYY-MM-DD) — required with current_nav", false}}},
 
         // ── Annuities ────────────────────────────────────────────────────────
-        {"alt_fixed_annuity", "annuities",
+        {"alt_fixed_annuity",
+         "annuities",
          "Analyze a fixed annuity: total payouts, inflation erosion, self-insurance comparison.",
          "payouts, inflation_erosion, self_insurance",
          {{"acquisition_price", "number", "Premium ($)", true},
@@ -326,7 +338,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"inflation_rate", "number", "Inflation rate (decimal) for inflation_erosion", false},
           {"alternative_return", "number", "Alternative return (decimal) for self_insurance", false},
           {"withdrawal_rate", "number", "Withdrawal rate (decimal) for self_insurance", false}}},
-        {"alt_variable_annuity", "variable-annuities",
+        {"alt_variable_annuity",
+         "variable-annuities",
          "Analyze a variable annuity: total fee drag, tax-deferral value, alternatives.",
          "fees, tax, alternatives, verdict",
          {{"premium", "number", "Premium ($)", true},
@@ -336,7 +349,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"surrender_period", "number", "Surrender period (years)", false},
           {"years", "number", "Horizon years for tax", false},
           {"gross_return", "number", "Gross return (decimal) for tax", false}}},
-        {"alt_equity_indexed_annuity", "eia",
+        {"alt_equity_indexed_annuity",
+         "eia",
          "Analyze an equity-indexed annuity: credited return, upside limitation, surrender charges.",
          "crediting, upside_limitation, surrender_charges",
          {{"index_return", "number", "Index return (decimal) for crediting", true},
@@ -345,7 +359,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"floor_rate", "number", "Floor rate (decimal)", true},
           {"acquisition_price", "number", "Premium ($)", false},
           {"market_scenarios", "array", "Index return scenarios for upside_limitation", false}}},
-        {"alt_inflation_annuity", "inflation-annuity",
+        {"alt_inflation_annuity",
+         "inflation-annuity",
          "Analyze an inflation-indexed annuity vs a fixed annuity or TIPS ladder.",
          "compare_fixed, compare_tips, longevity, inflation_value",
          {{"real_payout_rate", "number", "Real payout rate (decimal)", true},
@@ -355,21 +370,24 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"tips_real_yield", "number", "TIPS real yield (decimal) for compare_tips", false}}},
 
         // ── Structured Products ──────────────────────────────────────────────
-        {"alt_structured_note", "structured-products",
+        {"alt_structured_note",
+         "structured-products",
          "Analyze a structured note: complexity, embedded cost, verdict.",
          "complexity, costs, verdict",
          {{"principal", "number", "Principal ($)", true},
           {"participation_rate", "number", "Participation rate (decimal)", true},
           {"cap_rate", "number", "Upside cap (decimal)", true},
           {"maturity_years", "number", "Term (years)", true}}},
-        {"alt_leveraged_fund", "leveraged-funds",
+        {"alt_leveraged_fund",
+         "leveraged-funds",
          "Analyze a leveraged ETF: volatility decay and long-hold suitability.",
          "decay, volatility, verdict",
          {{"leverage_ratio", "number", "Leverage multiple (e.g. 2, 3)", true},
           {"expense_ratio", "number", "Expense ratio (decimal)", false}}},
 
         // ── Inflation Protected ──────────────────────────────────────────────
-        {"alt_tips", "tips",
+        {"alt_tips",
+         "tips",
          "Analyze a TIPS position: real yield, inflation scenarios, tax efficiency.",
          "real_yield, inflation_scenarios, tax_efficiency",
          {{"face_value", "number", "Face (principal) value ($)", true},
@@ -379,7 +397,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"inflation_scenarios", "array", "Inflation scenarios (decimals) for inflation_scenarios", false},
           {"tax_rate_ordinary", "number", "Ordinary tax rate (decimal) for tax_efficiency", false},
           {"tax_rate_capital_gains", "number", "Capital-gains tax rate (decimal) for tax_efficiency", false}}},
-        {"alt_ibond", "ibonds",
+        {"alt_ibond",
+         "ibonds",
          "Analyze a Series I savings bond: composite rate, early-redemption penalty, vs TIPS.",
          "composite_rate, penalty, compare_tips, tax_efficiency",
          {{"purchase_price", "number", "Purchase amount ($)", true},
@@ -387,7 +406,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"inflation_rate", "number", "Semiannual CPI-U inflation rate (decimal), from TreasuryDirect", true},
           {"years_held", "number", "Years held", false},
           {"tips_yield", "number", "TIPS real yield (decimal) for compare_tips", false}}},
-        {"alt_stable_value_fund", "stable-value",
+        {"alt_stable_value_fund",
+         "stable-value",
          "Analyze a stable value fund: market-to-book, crediting rate, suitability.",
          "market_to_book, crediting_rate, suitability",
          {{"acquisition_price", "number", "Book value ($)", true},
@@ -397,7 +417,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"credit_spread", "number", "Credit spread (decimal) for crediting_rate", false}}},
 
         // ── Strategies ───────────────────────────────────────────────────────
-        {"alt_covered_call", "covered-calls",
+        {"alt_covered_call",
+         "covered-calls",
          "Analyze a covered call position: tax consequences, opportunity cost, alternatives.",
          "tax, opportunity_cost, alternative, verdict",
          {{"stock_price", "number", "Current stock price ($)", true},
@@ -408,7 +429,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"days_to_expiration", "number", "Days to option expiration", false},
           {"ordinary_tax_rate", "number", "Ordinary tax rate (decimal)", false},
           {"ltcg_rate", "number", "Long-term capital gains rate (decimal)", false}}},
-        {"alt_sri_fund", "sri",
+        {"alt_sri_fund",
+         "sri",
          "Analyze an SRI / ESG fund vs its benchmark: performance gap, screening, expenses.",
          "performance, screening, expenses, approaches, verdict",
          {{"fund_return", "number", "Fund annual return (decimal)", true},
@@ -416,7 +438,8 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"expense_ratio", "number", "Fund expense ratio (decimal)", true},
           {"time_period_years", "number", "Comparison horizon (years)", false},
           {"benchmark_expense", "number", "Benchmark expense ratio (decimal)", false}}},
-        {"alt_asset_location", "asset-location",
+        {"alt_asset_location",
+         "asset-location",
          "Tax-efficient asset location: optimal account type for an asset class at a given tax bracket.",
          "optimal, value_added, portfolio, muni_bond",
          {{"asset_class", "string", "reits, high_yield_bonds, stocks, municipal_bonds, tips, commodities, cash", true},
@@ -425,19 +448,24 @@ std::vector<ToolDef> get_alt_investments_tools() {
           {"years", "number", "Horizon (years) for value_added", false},
           {"municipal_yield", "number", "Muni yield (decimal) for muni_bond", false},
           {"taxable_yield", "number", "Taxable yield (decimal) for muni_bond", false}}},
-        {"alt_performance_metrics", "performance",
-         "Performance analysis of a supplied return series: TWR, MWR, Sharpe.", "twr, mwr, sharpe",
+        {"alt_performance_metrics",
+         "performance",
+         "Performance analysis of a supplied return series: TWR, MWR, Sharpe.",
+         "twr, mwr, sharpe",
          {{"returns", "array", "Periodic returns (decimals)", true},
           {"benchmark", "array", "Benchmark returns (decimals)", false}},
          true},
-        {"alt_risk_analysis", "risk",
-         "Risk analysis of a supplied return series: VaR, CVaR, stress.", "var, cvar, stress",
+        {"alt_risk_analysis",
+         "risk",
+         "Risk analysis of a supplied return series: VaR, CVaR, stress.",
+         "var, cvar, stress",
          {{"returns", "array", "Periodic returns (decimals)", true},
           {"confidence_level", "number", "VaR confidence level (e.g. 0.95)", false}},
          true},
 
         // ── Digital Assets ───────────────────────────────────────────────────
-        {"alt_digital_asset", "digital-assets",
+        {"alt_digital_asset",
+         "digital-assets",
          "Analyze a digital asset from caller-supplied supply/market-cap figures (fundamental) or price "
          "history (volatility).",
          "fundamental, volatility, onchain",

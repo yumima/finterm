@@ -1,16 +1,16 @@
 // src/services/portfolio/PortfolioService.cpp
 #include "services/portfolio/PortfolioService.h"
-#include "services/portfolio/PortfolioReturns.h"
-#include "services/portfolio/PortfolioDates.h"
 
 #include "core/logging/Logger.h"
 #include "python/PythonRunner.h"
 #include "python/PythonWorker.h"
+#include "services/portfolio/PortfolioDates.h"
 #include "services/portfolio/PortfolioLedger.h"
+#include "services/portfolio/PortfolioReturns.h"
 #include "services/sectors/SectorResolver.h"
 #include "services/util/DiskCache.h"
-#include "storage/cache/CacheManager.h"
 #include "storage/StorageManager.h"
+#include "storage/cache/CacheManager.h"
 #include "storage/repositories/PortfolioRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 
@@ -52,7 +52,8 @@ fincept::services::util::DiskCache& portfolio_disk_cache() {
 QString summary_filename(const QString& portfolio_id) {
     QString safe = portfolio_id;
     for (auto& ch : safe) {
-        if (!ch.isLetterOrNumber()) ch = QChar('_');
+        if (!ch.isLetterOrNumber())
+            ch = QChar('_');
     }
     // v2: flows_fx_incomplete — a v1 file reads it as false and would drop
     // the "≈" off a realized/dividend total that left a flow out.
@@ -67,103 +68,103 @@ QString summary_filename(const QString& portfolio_id) {
 
 QJsonObject portfolio_to_json(const portfolio::Portfolio& p) {
     QJsonObject o;
-    o[QStringLiteral("id")]          = p.id;
-    o[QStringLiteral("name")]        = p.name;
-    o[QStringLiteral("owner")]       = p.owner;
-    o[QStringLiteral("currency")]    = p.currency;
+    o[QStringLiteral("id")] = p.id;
+    o[QStringLiteral("name")] = p.name;
+    o[QStringLiteral("owner")] = p.owner;
+    o[QStringLiteral("currency")] = p.currency;
     o[QStringLiteral("description")] = p.description;
-    o[QStringLiteral("created_at")]  = p.created_at;
-    o[QStringLiteral("updated_at")]  = p.updated_at;
+    o[QStringLiteral("created_at")] = p.created_at;
+    o[QStringLiteral("updated_at")] = p.updated_at;
     return o;
 }
 
 portfolio::Portfolio portfolio_from_json(const QJsonObject& o) {
     portfolio::Portfolio p;
-    p.id          = o[QStringLiteral("id")].toString();
-    p.name        = o[QStringLiteral("name")].toString();
-    p.owner       = o[QStringLiteral("owner")].toString();
-    p.currency    = o[QStringLiteral("currency")].toString(QStringLiteral("USD"));
+    p.id = o[QStringLiteral("id")].toString();
+    p.name = o[QStringLiteral("name")].toString();
+    p.owner = o[QStringLiteral("owner")].toString();
+    p.currency = o[QStringLiteral("currency")].toString(QStringLiteral("USD"));
     p.description = o[QStringLiteral("description")].toString();
-    p.created_at  = o[QStringLiteral("created_at")].toString();
-    p.updated_at  = o[QStringLiteral("updated_at")].toString();
+    p.created_at = o[QStringLiteral("created_at")].toString();
+    p.updated_at = o[QStringLiteral("updated_at")].toString();
     return p;
 }
 
 QJsonObject holding_to_json(const portfolio::HoldingWithQuote& h) {
     QJsonObject o;
-    o[QStringLiteral("symbol")]              = h.symbol;
-    o[QStringLiteral("quantity")]            = h.quantity;
-    o[QStringLiteral("avg_buy_price")]       = h.avg_buy_price;
-    o[QStringLiteral("sector")]              = h.sector;
-    o[QStringLiteral("current_price")]       = h.current_price;
-    o[QStringLiteral("market_value")]        = h.market_value;
-    o[QStringLiteral("cost_basis")]          = h.cost_basis;
-    o[QStringLiteral("unrealized_pnl")]      = h.unrealized_pnl;
+    o[QStringLiteral("symbol")] = h.symbol;
+    o[QStringLiteral("quantity")] = h.quantity;
+    o[QStringLiteral("avg_buy_price")] = h.avg_buy_price;
+    o[QStringLiteral("sector")] = h.sector;
+    o[QStringLiteral("current_price")] = h.current_price;
+    o[QStringLiteral("market_value")] = h.market_value;
+    o[QStringLiteral("cost_basis")] = h.cost_basis;
+    o[QStringLiteral("unrealized_pnl")] = h.unrealized_pnl;
     o[QStringLiteral("unrealized_pnl_percent")] = h.unrealized_pnl_percent;
-    o[QStringLiteral("day_change")]          = h.day_change;
-    o[QStringLiteral("day_change_percent")]  = h.day_change_percent;
-    o[QStringLiteral("weight")]              = h.weight;
-    o[QStringLiteral("day_high")]            = h.day_high;
-    o[QStringLiteral("day_low")]             = h.day_low;
-    o[QStringLiteral("day_volume")]          = h.day_volume;
-    o[QStringLiteral("bid")]                 = h.bid;
-    o[QStringLiteral("ask")]                 = h.ask;
-    o[QStringLiteral("bid_size")]            = h.bid_size;
-    o[QStringLiteral("ask_size")]            = h.ask_size;
+    o[QStringLiteral("day_change")] = h.day_change;
+    o[QStringLiteral("day_change_percent")] = h.day_change_percent;
+    o[QStringLiteral("weight")] = h.weight;
+    o[QStringLiteral("day_high")] = h.day_high;
+    o[QStringLiteral("day_low")] = h.day_low;
+    o[QStringLiteral("day_volume")] = h.day_volume;
+    o[QStringLiteral("bid")] = h.bid;
+    o[QStringLiteral("ask")] = h.ask;
+    o[QStringLiteral("bid_size")] = h.bid_size;
+    o[QStringLiteral("ask_size")] = h.ask_size;
     o[QStringLiteral("first_purchase_date")] = h.first_purchase_date;
-    o[QStringLiteral("peak_price")]          = h.peak_price;
-    o[QStringLiteral("realized_pnl")]        = h.realized_pnl;
-    o[QStringLiteral("dividend_income")]     = h.dividend_income;
-    o[QStringLiteral("currency")]            = h.currency;
-    o[QStringLiteral("fx_rate")]             = h.fx_rate;
-    o[QStringLiteral("price_known")]         = h.price_known;
-    o[QStringLiteral("price_stale")]         = h.price_stale;
-    o[QStringLiteral("fx_known")]            = h.fx_known;
+    o[QStringLiteral("peak_price")] = h.peak_price;
+    o[QStringLiteral("realized_pnl")] = h.realized_pnl;
+    o[QStringLiteral("dividend_income")] = h.dividend_income;
+    o[QStringLiteral("currency")] = h.currency;
+    o[QStringLiteral("fx_rate")] = h.fx_rate;
+    o[QStringLiteral("price_known")] = h.price_known;
+    o[QStringLiteral("price_stale")] = h.price_stale;
+    o[QStringLiteral("fx_known")] = h.fx_known;
     return o;
 }
 
 portfolio::HoldingWithQuote holding_from_json(const QJsonObject& o) {
     portfolio::HoldingWithQuote h;
-    h.symbol               = o[QStringLiteral("symbol")].toString();
-    h.quantity             = o[QStringLiteral("quantity")].toDouble();
-    h.avg_buy_price        = o[QStringLiteral("avg_buy_price")].toDouble();
-    h.sector               = o[QStringLiteral("sector")].toString();
-    h.price_known          = o[QStringLiteral("price_known")].toBool(true);
-    h.price_stale          = o[QStringLiteral("price_stale")].toBool(false);
+    h.symbol = o[QStringLiteral("symbol")].toString();
+    h.quantity = o[QStringLiteral("quantity")].toDouble();
+    h.avg_buy_price = o[QStringLiteral("avg_buy_price")].toDouble();
+    h.sector = o[QStringLiteral("sector")].toString();
+    h.price_known = o[QStringLiteral("price_known")].toBool(true);
+    h.price_stale = o[QStringLiteral("price_stale")].toBool(false);
     // Absent in caches written before fx_known existed: those stored an
     // assumed 1.0 for unknown conversions, so the rate is NOT trusted here.
     // summary_from_json re-admits same-currency holdings (no conversion).
-    h.fx_known             = o[QStringLiteral("fx_known")].toBool(false);
-    h.current_price        = json_num_or_nan(o[QStringLiteral("current_price")]);
-    h.market_value         = o[QStringLiteral("market_value")].toDouble();
-    h.cost_basis           = json_num_or_nan(o[QStringLiteral("cost_basis")]);
-    h.unrealized_pnl       = json_num_or_nan(o[QStringLiteral("unrealized_pnl")]);
+    h.fx_known = o[QStringLiteral("fx_known")].toBool(false);
+    h.current_price = json_num_or_nan(o[QStringLiteral("current_price")]);
+    h.market_value = o[QStringLiteral("market_value")].toDouble();
+    h.cost_basis = json_num_or_nan(o[QStringLiteral("cost_basis")]);
+    h.unrealized_pnl = json_num_or_nan(o[QStringLiteral("unrealized_pnl")]);
     h.unrealized_pnl_percent = json_num_or_nan(o[QStringLiteral("unrealized_pnl_percent")]);
-    h.day_change           = json_num_or_nan(o[QStringLiteral("day_change")]);
-    h.day_change_percent   = json_num_or_nan(o[QStringLiteral("day_change_percent")]);
-    h.weight               = o[QStringLiteral("weight")].toDouble();
-    h.day_high             = o[QStringLiteral("day_high")].toDouble();
-    h.day_low              = o[QStringLiteral("day_low")].toDouble();
-    h.day_volume           = o[QStringLiteral("day_volume")].toDouble();
+    h.day_change = json_num_or_nan(o[QStringLiteral("day_change")]);
+    h.day_change_percent = json_num_or_nan(o[QStringLiteral("day_change_percent")]);
+    h.weight = o[QStringLiteral("weight")].toDouble();
+    h.day_high = o[QStringLiteral("day_high")].toDouble();
+    h.day_low = o[QStringLiteral("day_low")].toDouble();
+    h.day_volume = o[QStringLiteral("day_volume")].toDouble();
     // bid/ask are order-book fields that go stale within seconds. The cached
     // summary on disk can be hours old; rendering its bid/ask as if live
     // would mislead the user. Leave them zeroed (the live live_row_ renders
     // em-dashes for 0); the live batch_quotes refresh will repopulate them
     // within the first second after this hydrate fires.
-    h.bid                  = 0;
-    h.ask                  = 0;
-    h.bid_size             = 0;
-    h.ask_size             = 0;
-    h.first_purchase_date  = o[QStringLiteral("first_purchase_date")].toString();
+    h.bid = 0;
+    h.ask = 0;
+    h.bid_size = 0;
+    h.ask_size = 0;
+    h.first_purchase_date = o[QStringLiteral("first_purchase_date")].toString();
     // Peak survives across launches so the L% column paints on the cache emit
     // instead of dashing until the history fan-out lands. The drawdown itself
     // is derived, never stored — re-derive it against the cached price.
-    h.peak_price           = o[QStringLiteral("peak_price")].toDouble();
+    h.peak_price = o[QStringLiteral("peak_price")].toDouble();
     portfolio::refresh_drawdown(h);
-    h.realized_pnl         = json_num_or_nan(o[QStringLiteral("realized_pnl")]);
-    h.dividend_income      = json_num_or_nan(o[QStringLiteral("dividend_income")]);
-    h.currency             = o[QStringLiteral("currency")].toString();
-    h.fx_rate              = json_num_or_nan(o[QStringLiteral("fx_rate")]);
+    h.realized_pnl = json_num_or_nan(o[QStringLiteral("realized_pnl")]);
+    h.dividend_income = json_num_or_nan(o[QStringLiteral("dividend_income")]);
+    h.currency = o[QStringLiteral("currency")].toString();
+    h.fx_rate = json_num_or_nan(o[QStringLiteral("fx_rate")]);
     return h;
 }
 
@@ -171,30 +172,31 @@ QJsonObject summary_to_json(const portfolio::PortfolioSummary& s) {
     QJsonObject o;
     o[QStringLiteral("portfolio")] = portfolio_to_json(s.portfolio);
     QJsonArray hs;
-    for (const auto& h : s.holdings) hs.append(holding_to_json(h));
-    o[QStringLiteral("holdings")]            = hs;
-    o[QStringLiteral("total_market_value")]  = s.total_market_value;
-    o[QStringLiteral("total_cost_basis")]    = s.total_cost_basis;
+    for (const auto& h : s.holdings)
+        hs.append(holding_to_json(h));
+    o[QStringLiteral("holdings")] = hs;
+    o[QStringLiteral("total_market_value")] = s.total_market_value;
+    o[QStringLiteral("total_cost_basis")] = s.total_cost_basis;
     o[QStringLiteral("total_unrealized_pnl")] = s.total_unrealized_pnl;
     o[QStringLiteral("total_unrealized_pnl_percent")] = s.total_unrealized_pnl_percent;
-    o[QStringLiteral("total_day_change")]    = s.total_day_change;
+    o[QStringLiteral("total_day_change")] = s.total_day_change;
     o[QStringLiteral("total_day_change_percent")] = s.total_day_change_percent;
-    o[QStringLiteral("total_realized_pnl")]  = s.total_realized_pnl;
-    o[QStringLiteral("fx_incomplete")]       = s.fx_incomplete;
+    o[QStringLiteral("total_realized_pnl")] = s.total_realized_pnl;
+    o[QStringLiteral("fx_incomplete")] = s.fx_incomplete;
     o[QStringLiteral("flows_fx_incomplete")] = s.flows_fx_incomplete;
     QJsonObject rates;
     for (auto it = s.fx_rates.cbegin(); it != s.fx_rates.cend(); ++it)
         rates[it.key()] = it.value();
-    o[QStringLiteral("fx_rates")]            = rates;
+    o[QStringLiteral("fx_rates")] = rates;
     o[QStringLiteral("total_dividend_income")] = s.total_dividend_income;
-    o[QStringLiteral("total_positions")]     = s.total_positions;
-    o[QStringLiteral("gainers")]             = s.gainers;
-    o[QStringLiteral("losers")]              = s.losers;
-    o[QStringLiteral("last_updated")]        = s.last_updated;
-    o[QStringLiteral("unpriced_symbols")]    = QJsonArray::fromStringList(s.unpriced_symbols);
-    o[QStringLiteral("stale_symbols")]       = QJsonArray::fromStringList(s.stale_symbols);
+    o[QStringLiteral("total_positions")] = s.total_positions;
+    o[QStringLiteral("gainers")] = s.gainers;
+    o[QStringLiteral("losers")] = s.losers;
+    o[QStringLiteral("last_updated")] = s.last_updated;
+    o[QStringLiteral("unpriced_symbols")] = QJsonArray::fromStringList(s.unpriced_symbols);
+    o[QStringLiteral("stale_symbols")] = QJsonArray::fromStringList(s.stale_symbols);
     o[QStringLiteral("day_change_unknown_symbols")] = QJsonArray::fromStringList(s.day_change_unknown_symbols);
-    o[QStringLiteral("fx_unknown_symbols")]  = QJsonArray::fromStringList(s.fx_unknown_symbols);
+    o[QStringLiteral("fx_unknown_symbols")] = QJsonArray::fromStringList(s.fx_unknown_symbols);
     return o;
 }
 
@@ -216,33 +218,33 @@ portfolio::PortfolioSummary summary_from_json(const QJsonObject& o) {
         }
         s.holdings.append(h);
     }
-    s.total_market_value         = o[QStringLiteral("total_market_value")].toDouble();
-    s.total_cost_basis           = o[QStringLiteral("total_cost_basis")].toDouble();
-    s.total_unrealized_pnl       = o[QStringLiteral("total_unrealized_pnl")].toDouble();
+    s.total_market_value = o[QStringLiteral("total_market_value")].toDouble();
+    s.total_cost_basis = o[QStringLiteral("total_cost_basis")].toDouble();
+    s.total_unrealized_pnl = o[QStringLiteral("total_unrealized_pnl")].toDouble();
     s.total_unrealized_pnl_percent = o[QStringLiteral("total_unrealized_pnl_percent")].toDouble();
-    s.total_day_change           = o[QStringLiteral("total_day_change")].toDouble();
-    s.total_day_change_percent   = o[QStringLiteral("total_day_change_percent")].toDouble();
-    s.total_realized_pnl         = o[QStringLiteral("total_realized_pnl")].toDouble();
-    s.fx_incomplete              = o[QStringLiteral("fx_incomplete")].toBool();
-    s.flows_fx_incomplete        = o[QStringLiteral("flows_fx_incomplete")].toBool();
+    s.total_day_change = o[QStringLiteral("total_day_change")].toDouble();
+    s.total_day_change_percent = o[QStringLiteral("total_day_change_percent")].toDouble();
+    s.total_realized_pnl = o[QStringLiteral("total_realized_pnl")].toDouble();
+    s.fx_incomplete = o[QStringLiteral("fx_incomplete")].toBool();
+    s.flows_fx_incomplete = o[QStringLiteral("flows_fx_incomplete")].toBool();
     const QJsonObject rates = o[QStringLiteral("fx_rates")].toObject();
     for (auto it = rates.constBegin(); it != rates.constEnd(); ++it)
         s.fx_rates.insert(it.key(), it.value().toDouble(1.0));
-    s.total_dividend_income      = o[QStringLiteral("total_dividend_income")].toDouble();
-    s.total_positions            = o[QStringLiteral("total_positions")].toInt();
-    s.gainers                    = o[QStringLiteral("gainers")].toInt();
-    s.losers                     = o[QStringLiteral("losers")].toInt();
-    s.last_updated               = o[QStringLiteral("last_updated")].toString();
+    s.total_dividend_income = o[QStringLiteral("total_dividend_income")].toDouble();
+    s.total_positions = o[QStringLiteral("total_positions")].toInt();
+    s.gainers = o[QStringLiteral("gainers")].toInt();
+    s.losers = o[QStringLiteral("losers")].toInt();
+    s.last_updated = o[QStringLiteral("last_updated")].toString();
     const auto to_list = [](const QJsonValue& v) {
         QStringList out;
         for (const auto& e : v.toArray())
             out.append(e.toString());
         return out;
     };
-    s.unpriced_symbols           = to_list(o[QStringLiteral("unpriced_symbols")]);
-    s.stale_symbols              = to_list(o[QStringLiteral("stale_symbols")]);
+    s.unpriced_symbols = to_list(o[QStringLiteral("unpriced_symbols")]);
+    s.stale_symbols = to_list(o[QStringLiteral("stale_symbols")]);
     s.day_change_unknown_symbols = to_list(o[QStringLiteral("day_change_unknown_symbols")]);
-    s.fx_unknown_symbols         = to_list(o[QStringLiteral("fx_unknown_symbols")]);
+    s.fx_unknown_symbols = to_list(o[QStringLiteral("fx_unknown_symbols")]);
     return s;
 }
 
@@ -260,13 +262,12 @@ PortfolioService::PortfolioService() : QObject(nullptr) {
     // every write path this class knows about. The memo's TTL bounds that to
     // a minute; this clears it at once, so a user who just wiped their
     // transactions doesn't watch the deleted rows keep reporting.
-    connect(&StorageManager::instance(), &StorageManager::category_cleared, this,
-            [this](const QString& category) {
-                if (category.contains(QLatin1String("transaction"), Qt::CaseInsensitive) ||
-                    category.contains(QLatin1String("portfolio"), Qt::CaseInsensitive)) {
-                    invalidate_all_transactions();
-                }
-            });
+    connect(&StorageManager::instance(), &StorageManager::category_cleared, this, [this](const QString& category) {
+        if (category.contains(QLatin1String("transaction"), Qt::CaseInsensitive) ||
+            category.contains(QLatin1String("portfolio"), Qt::CaseInsensitive)) {
+            invalidate_all_transactions();
+        }
+    });
     // When the SectorResolver lands a fresh sector for a symbol, persist it
     // onto whichever portfolios hold it and invalidate their summary caches
     // so the Sectors tab refreshes on next refresh.
@@ -365,7 +366,7 @@ void PortfolioService::delete_portfolio(const QString& id) {
 // ── Summary ──────────────────────────────────────────────────────────────────
 
 void PortfolioService::update_portfolio(const QString& id, const QString& name, const QString& owner,
-                                       const QString& currency) {
+                                        const QString& currency) {
     if (id.isEmpty() || name.trimmed().isEmpty()) {
         return;
     }
@@ -495,8 +496,7 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
     // (possibly older) price, so suppressing a merely-old entry can leave a
     // MUCH older one on screen. Fresher-wins is the invariant that holds in
     // both directions. The summary is badged CACHED throughout either way.
-    const qint64 snapshot_at =
-        QDateTime::fromString(summary.last_updated, Qt::ISODate).toSecsSinceEpoch();
+    const qint64 snapshot_at = QDateTime::fromString(summary.last_updated, Qt::ISODate).toSecsSinceEpoch();
 
     const QString port_ccy = portfolio::fx_price_factor(summary.portfolio.currency).first;
     QStringList keys;
@@ -521,8 +521,7 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
         if (it == hits.constEnd())
             return {};
         if (snapshot_at > 0 &&
-            (!it.value().written_at.isValid() ||
-             it.value().written_at.toSecsSinceEpoch() <= snapshot_at)) {
+            (!it.value().written_at.isValid() || it.value().written_at.toSecsSinceEpoch() <= snapshot_at)) {
             return {};
         }
         return QJsonDocument::fromJson(it.value().value.toUtf8()).object();
@@ -532,12 +531,12 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
         return fresher_than_snapshot(symbol).value("price").toDouble();
     };
 
-    double total_mv   = 0;
+    double total_mv = 0;
     double total_cost = 0;
-    double total_day  = 0;
-    double day_base   = 0;
-    int    gainers    = 0;
-    int    losers     = 0;
+    double total_day = 0;
+    double day_base = 0;
+    int gainers = 0;
+    int losers = 0;
     summary.unpriced_symbols.clear();
     summary.day_change_unknown_symbols.clear();
     summary.fx_unknown_symbols.clear();
@@ -561,8 +560,8 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
             // comment). Read price-derived fields only; bid/ask/sizes
             // stay at whatever the disk-cache had so consumers don't
             // suddenly lose them across emits.
-            h.current_price      = o.value("price").toDouble();
-            h.price_known        = true;
+            h.current_price = o.value("price").toDouble();
+            h.price_known = true;
             // The change belongs to the session the entry was written in;
             // an entry from before today does not describe today's move.
             const auto ait = hits.constFind(QStringLiteral("market_last:") + h.symbol);
@@ -572,13 +571,13 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
             // last known price — an estimate (≈).
             h.price_stale = !(ait != hits.constEnd() && portfolio::is_current_print(ait.value().written_at));
             if (written_today) {
-                h.day_change         = o.value("change").toDouble(h.day_change);
+                h.day_change = o.value("change").toDouble(h.day_change);
                 h.day_change_percent = o.value("change_pct").toDouble(h.day_change_percent);
-                h.day_high           = o.value("high").toDouble(h.day_high);
-                h.day_low            = o.value("low").toDouble(h.day_low);
-                h.day_volume         = o.value("volume").toDouble(h.day_volume);
+                h.day_high = o.value("high").toDouble(h.day_high);
+                h.day_low = o.value("low").toDouble(h.day_low);
+                h.day_volume = o.value("volume").toDouble(h.day_volume);
             } else {
-                h.day_change         = kNaN;
+                h.day_change = kNaN;
                 h.day_change_percent = kNaN;
             }
         }
@@ -633,48 +632,47 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
                 summary.stale_symbols.append(h.symbol);
             h.market_value = 0;
             h.unrealized_pnl = kNaN;
-            h.unrealized_pnl_percent =
-                h.avg_buy_price > 0 ? (h.current_price / h.avg_buy_price - 1.0) * 100.0 : 0;
+            h.unrealized_pnl_percent = h.avg_buy_price > 0 ? (h.current_price / h.avg_buy_price - 1.0) * 100.0 : 0;
             summary.fx_unknown_symbols.append(h.symbol);
             summary.day_change_unknown_symbols.append(h.symbol);
             continue;
         }
         if (h.price_stale)
             summary.stale_symbols.append(h.symbol);
-        h.market_value        = h.quantity * h.current_price * h.fx_rate;
-        h.unrealized_pnl      = h.market_value - h.cost_basis;
-        h.unrealized_pnl_percent =
-            (h.cost_basis > 0) ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
+        h.market_value = h.quantity * h.current_price * h.fx_rate;
+        h.unrealized_pnl = h.market_value - h.cost_basis;
+        h.unrealized_pnl_percent = (h.cost_basis > 0) ? (h.unrealized_pnl / h.cost_basis) * 100.0 : 0;
 
-        total_mv   += h.market_value;
+        total_mv += h.market_value;
         total_cost += h.cost_basis;
         if (portfolio::has_value(h.day_change)) {
             total_day += h.day_change * h.quantity * h.fx_rate;
-            day_base  += h.market_value;
+            day_base += h.market_value;
         } else {
             summary.day_change_unknown_symbols.append(h.symbol);
         }
-        if (h.unrealized_pnl >= 0) ++gainers; else ++losers;
+        if (h.unrealized_pnl >= 0)
+            ++gainers;
+        else
+            ++losers;
     }
 
     for (auto& h : summary.holdings)
         h.weight = (total_mv > 0) ? (h.market_value / total_mv) * 100.0 : 0;
 
-    summary.total_market_value          = total_mv;
-    summary.total_cost_basis            = total_cost;
-    summary.total_unrealized_pnl        = total_mv - total_cost;
-    summary.total_unrealized_pnl_percent =
-        (total_cost > 0) ? ((total_mv - total_cost) / total_cost) * 100.0 : 0;
-    summary.total_day_change            = total_day;
-    summary.total_day_change_percent    =
-        (day_base - total_day > 0) ? (total_day / (day_base - total_day)) * 100.0 : 0;
-    summary.gainers                     = gainers;
-    summary.losers                      = losers;
+    summary.total_market_value = total_mv;
+    summary.total_cost_basis = total_cost;
+    summary.total_unrealized_pnl = total_mv - total_cost;
+    summary.total_unrealized_pnl_percent = (total_cost > 0) ? ((total_mv - total_cost) / total_cost) * 100.0 : 0;
+    summary.total_day_change = total_day;
+    summary.total_day_change_percent = (day_base - total_day > 0) ? (total_day / (day_base - total_day)) * 100.0 : 0;
+    summary.gainers = gainers;
+    summary.losers = losers;
     // Defensive: total_positions is normally serialised by summary_from_json,
     // but if a future change ever drops the field, the POSITIONS hero card
     // would render "0 ▲0 ▼0" on the cache emit. Keep it in sync with the
     // actual holdings count we just iterated.
-    summary.total_positions             = summary.holdings.size();
+    summary.total_positions = summary.holdings.size();
     // last_updated stays at the disk-cache value — the data here is a hybrid
     // of disk-cache holdings + market_last prices, both potentially stale.
     // Stamping "now" would lie to consumers (and to the stale-badge UI we
@@ -765,22 +763,20 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                     const QString sym = it.key().mid(sizeof("market_last:") - 1);
                     if (sym.isEmpty())
                         continue;
-                    const QJsonObject o =
-                        QJsonDocument::fromJson(it.value().value.toUtf8()).object();
+                    const QJsonObject o = QJsonDocument::fromJson(it.value().value.toUtf8()).object();
                     if (o.isEmpty())
                         continue;
-                    if (!it.value().written_at.isValid() ||
-                        it.value().written_at.toLocalTime().date() != today_local)
+                    if (!it.value().written_at.isValid() || it.value().written_at.toLocalTime().date() != today_local)
                         last_known_change_stale.insert(sym);
                     if (portfolio::is_current_print(it.value().written_at))
                         last_known_current.insert(sym);
                     QuoteData qd{};
-                    qd.price      = o.value("price").toDouble();
-                    qd.change     = o.value("change").toDouble();
+                    qd.price = o.value("price").toDouble();
+                    qd.change = o.value("change").toDouble();
                     qd.change_pct = o.value("change_pct").toDouble();
-                    qd.high       = o.value("high").toDouble();
-                    qd.low        = o.value("low").toDouble();
-                    qd.volume     = o.value("volume").toDouble();
+                    qd.high = o.value("high").toDouble();
+                    qd.low = o.value("low").toDouble();
+                    qd.volume = o.value("volume").toDouble();
                     last_known[sym] = qd;
                 }
             }
@@ -850,15 +846,14 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 // Copy through the live order-book snapshot for the perf
                 // chart's focus-mode info bar to render bid/ask + day range.
                 // Zeros pass through unchanged; consumers treat 0 as "unavailable".
-                h.day_high  = it->high;
-                h.day_low   = it->low;
+                h.day_high = it->high;
+                h.day_low = it->low;
                 h.day_volume = it->volume;
-                h.bid       = it->bid;
-                h.ask       = it->ask;
-                h.bid_size  = it->bid_size;
-                h.ask_size  = it->ask_size;
-            } else if (auto lk = last_known.constFind(asset.symbol);
-                       lk != last_known.constEnd() && lk->price > 0) {
+                h.bid = it->bid;
+                h.ask = it->ask;
+                h.bid_size = it->bid_size;
+                h.ask_size = it->ask_size;
+            } else if (auto lk = last_known.constFind(asset.symbol); lk != last_known.constEnd() && lk->price > 0) {
                 // No fresh quote — hold the last-known price so the ribbon/
                 // blotter keep showing a real (if stale) print instead of
                 // collapsing P&L to zero. It can be up to 7 days old — then
@@ -882,8 +877,8 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 } else {
                     h.day_change = lk->change;
                     h.day_change_percent = lk->change_pct;
-                    h.day_high  = lk->high;
-                    h.day_low   = lk->low;
+                    h.day_high = lk->high;
+                    h.day_low = lk->low;
                     h.day_volume = lk->volume;
                 }
             } else {
@@ -1076,8 +1071,7 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
 
         // Persist to disk so the next app launch hydrates instantly without
         // waiting for the quote round-trip.
-        portfolio_disk_cache().save(summary_filename(portfolio_id),
-                                    QJsonDocument(summary_to_json(summary)));
+        portfolio_disk_cache().save(summary_filename(portfolio_id), QJsonDocument(summary_to_json(summary)));
 
         // Save snapshot for performance history. Provenance depends on what
         // actually priced the holdings: quotes and `market_last:` fallbacks are
@@ -1094,9 +1088,9 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
             // A NAV missing whole positions is not a valuation of the book —
             // recording it (even as a correctable backfill) would draw a
             // fabricated dip into the history. Skip today's row instead.
-            LOG_WARN("PortfolioSvc", QString("No snapshot: holdings excluded — unpriced [%1], no FX [%2]")
-                                         .arg(summary.unpriced_symbols.join(", "),
-                                              summary.fx_unknown_symbols.join(", ")));
+            LOG_WARN("PortfolioSvc",
+                     QString("No snapshot: holdings excluded — unpriced [%1], no FX [%2]")
+                         .arg(summary.unpriced_symbols.join(", "), summary.fx_unknown_symbols.join(", ")));
         } else if (valuation_estimated || summary.fx_incomplete) {
             PortfolioRepository::instance().save_backfill_snapshot(
                 portfolio_id, summary.total_market_value, summary.total_cost_basis, summary.total_unrealized_pnl,
@@ -1179,15 +1173,12 @@ void PortfolioService::sell_asset(const QString& portfolio_id, const QString& sy
 
     // Validate against the ledger, not the asset row — the row is a cache.
     auto txns = repo.get_symbol_transactions(portfolio_id, symbol);
-    const double held = txns.is_ok() && !txns.value().isEmpty()
-                            ? portfolio::replay_transactions(txns.value()).quantity
-                            : 0.0;
+    const double held =
+        txns.is_ok() && !txns.value().isEmpty() ? portfolio::replay_transactions(txns.value()).quantity : 0.0;
     if (qty <= 0 || qty > held + 1e-6) {
         // Surface the rejection — a silently ignored sell looks like data loss.
-        const QString reason = tr("Cannot sell %1 %2 — the transaction log shows %3 held.")
-                                   .arg(qty)
-                                   .arg(symbol)
-                                   .arg(held);
+        const QString reason =
+            tr("Cannot sell %1 %2 — the transaction log shows %3 held.").arg(qty).arg(symbol).arg(held);
         LOG_ERROR("PortfolioSvc", reason);
         emit position_edit_rejected(portfolio_id, symbol, reason);
         return;
@@ -1265,11 +1256,11 @@ void PortfolioService::invalidate_all_transactions() {
 }
 
 QVector<portfolio::Transaction> PortfolioService::symbol_transactions(const QString& portfolio_id,
-                                                                     const QString& symbol) {
+                                                                      const QString& symbol) {
     auto r = PortfolioRepository::instance().get_symbol_transactions(portfolio_id, symbol);
     if (r.is_err()) {
-        LOG_ERROR("PortfolioSvc", "Failed to load transactions for " + symbol + ": " +
-                                      QString::fromStdString(r.error()));
+        LOG_ERROR("PortfolioSvc",
+                  "Failed to load transactions for " + symbol + ": " + QString::fromStdString(r.error()));
         return {};
     }
     return r.value();
@@ -1511,8 +1502,8 @@ struct CurrencyBenchmark {
     const char* symbol;
 };
 constexpr CurrencyBenchmark kCurrencyBenchmarks[] = {
-    {"USD", "SPY"},      {"CAD", "^GSPTSE"}, {"GBP", "^FTSE"}, {"EUR", "^STOXX50E"},
-    {"AUD", "^AXJO"},    {"JPY", "^N225"},   {"HKD", "^HSI"},
+    {"USD", "SPY"},   {"CAD", "^GSPTSE"}, {"GBP", "^FTSE"}, {"EUR", "^STOXX50E"},
+    {"AUD", "^AXJO"}, {"JPY", "^N225"},   {"HKD", "^HSI"},
 };
 constexpr const char* kFallbackBenchmark = "SPY"; // unknown currencies
 
@@ -1547,24 +1538,24 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
     // already has yfinance/pandas imported, reducing latency from ~2-4s to
     // ~200-500ms (or near-instant on a cache hit from EquityResearchService).
     QJsonObject payload;
-    payload["symbol"]   = sym;
-    payload["period"]   = period;
+    payload["symbol"] = sym;
+    payload["period"] = period;
     payload["interval"] = QStringLiteral("1d");
 
     QPointer<PortfolioService> self = this;
     python::PythonWorker::instance().submit(
         "historical_period", payload,
         [self, sym, period](bool ok, QJsonObject result, QString err) {
-            if (!self) return;
+            if (!self)
+                return;
 
             QStringList dates;
             QVector<double> closes;
 
             if (ok) {
                 // Daemon wraps a flat array under "_value".
-                const QJsonArray arr = result.contains("_value")
-                    ? result["_value"].toArray()
-                    : result["history"].toArray();
+                const QJsonArray arr =
+                    result.contains("_value") ? result["_value"].toArray() : result["history"].toArray();
 
                 dates.reserve(arr.size());
                 closes.reserve(arr.size());
@@ -1582,8 +1573,7 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
                     closes.append(o["close"].toDouble());
                 }
             } else {
-                LOG_WARN("PortfolioSvc",
-                         QString("Benchmark %1 fetch failed: %2").arg(sym, err.left(200)));
+                LOG_WARN("PortfolioSvc", QString("Benchmark %1 fetch failed: %2").arg(sym, err.left(200)));
             }
 
             // No bars (unknown symbol, failed fetch) → an EMPTY series, which
@@ -1593,8 +1583,7 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
             // can positively identify a money-market fund (assets carry no
             // asset type), so there is no case where inventing $1 is honest.
             if (dates.isEmpty())
-                LOG_WARN("PortfolioSvc", QString("No %1 history for %2 — reporting unavailable")
-                                             .arg(period, sym));
+                LOG_WARN("PortfolioSvc", QString("No %1 history for %2 — reporting unavailable").arg(period, sym));
 
             // Beta regresses against the book's base-currency benchmark (or
             // SPY), so every currency-default benchmark is kept — not focus
@@ -1628,17 +1617,15 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
 // (Path 3) is just N parallel single-symbol fetches; we union the returned
 // timestamps and sum (qty × close × FX) at each point.
 
-void PortfolioService::fetch_symbol_intraday(const QString& symbol,
-                                              const QString& period,
-                                              const QString& interval) {
+void PortfolioService::fetch_symbol_intraday(const QString& symbol, const QString& period, const QString& interval) {
     const QString sym = symbol.trimmed();
     if (sym.isEmpty()) {
         emit symbol_intraday_loaded(sym, {}, {});
         return;
     }
     QJsonObject payload;
-    payload["symbol"]   = sym;
-    payload["period"]   = period;
+    payload["symbol"] = sym;
+    payload["period"] = period;
     payload["interval"] = interval;
 
     const qint64 epoch = ++symbol_intraday_epoch_;
@@ -1646,7 +1633,8 @@ void PortfolioService::fetch_symbol_intraday(const QString& symbol,
     python::PythonWorker::instance().submit(
         "historical_period", payload,
         [self, sym, epoch](bool ok, QJsonObject result, QString err) {
-            if (!self) return;
+            if (!self)
+                return;
             if (self->symbol_intraday_epoch_ != epoch) {
                 // Superseded by a newer fetch (user switched ticker/period).
                 // Drop silently — emitting would overwrite fresher results.
@@ -1655,20 +1643,20 @@ void PortfolioService::fetch_symbol_intraday(const QString& symbol,
             QVector<qint64> ts_ms;
             QVector<double> closes;
             if (ok) {
-                const QJsonArray arr = result.contains("_value")
-                    ? result["_value"].toArray() : result["history"].toArray();
+                const QJsonArray arr =
+                    result.contains("_value") ? result["_value"].toArray() : result["history"].toArray();
                 ts_ms.reserve(arr.size());
                 closes.reserve(arr.size());
                 for (const auto& v : arr) {
                     const auto o = v.toObject();
                     const qint64 sec = static_cast<qint64>(o["timestamp"].toDouble());
-                    if (sec <= 0) continue;
+                    if (sec <= 0)
+                        continue;
                     ts_ms.append(sec * 1000);
                     closes.append(o["close"].toDouble());
                 }
             } else {
-                LOG_WARN("PortfolioSvc",
-                         QString("Intraday %1 fetch failed: %2").arg(sym, err.left(200)));
+                LOG_WARN("PortfolioSvc", QString("Intraday %1 fetch failed: %2").arg(sym, err.left(200)));
             }
 
             // No bars → empty; the chart says "unavailable". (A flat $1.00
@@ -1692,7 +1680,8 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
     QStringList unique_symbols;
     for (const auto& a : assets) {
         const QString up = a.symbol.toUpper();
-        if (!qty_by_symbol.contains(up)) unique_symbols.append(up);
+        if (!qty_by_symbol.contains(up))
+            unique_symbols.append(up);
         qty_by_symbol[up] += a.quantity;
     }
 
@@ -1746,42 +1735,44 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
     };
     auto state = std::make_shared<Accum>();
     state->pending = unique_symbols.size();
-    state->epoch   = ++portfolio_intraday_epoch_;
+    state->epoch = ++portfolio_intraday_epoch_;
 
     QPointer<PortfolioService> self = this;
     for (const QString& sym : unique_symbols) {
         QJsonObject payload;
-        payload["symbol"]   = sym;
-        payload["period"]   = QStringLiteral("1d");
+        payload["symbol"] = sym;
+        payload["period"] = QStringLiteral("1d");
         payload["interval"] = QStringLiteral("1m");
         python::PythonWorker::instance().submit(
             "historical_period", payload,
-            [self, portfolio_id, sym, state, qty_by_symbol, fx_by_symbol](
-                bool ok, QJsonObject result, QString err) {
-                if (!self) return;
+            [self, portfolio_id, sym, state, qty_by_symbol, fx_by_symbol](bool ok, QJsonObject result, QString err) {
+                if (!self)
+                    return;
                 QHash<qint64, double>& bars = state->by_symbol[sym];
                 if (ok) {
-                    const QJsonArray arr = result.contains("_value")
-                        ? result["_value"].toArray() : result["history"].toArray();
+                    const QJsonArray arr =
+                        result.contains("_value") ? result["_value"].toArray() : result["history"].toArray();
                     for (const auto& v : arr) {
                         const auto o = v.toObject();
                         const qint64 sec = static_cast<qint64>(o["timestamp"].toDouble());
                         const double close = o["close"].toDouble();
-                        if (sec <= 0 || !(close > 0)) continue;
+                        if (sec <= 0 || !(close > 0))
+                            continue;
                         bars.insert(sec * 1000, close);
                     }
                 } else {
-                    LOG_WARN("PortfolioSvc",
-                             QString("Aggregate intraday %1 failed: %2").arg(sym, err.left(200)));
+                    LOG_WARN("PortfolioSvc", QString("Aggregate intraday %1 failed: %2").arg(sym, err.left(200)));
                 }
 
-                if (--state->pending > 0) return;
+                if (--state->pending > 0)
+                    return;
 
                 // All symbols reported — but the user may have moved on
                 // (clicked a different period, switched portfolio) while the
                 // fan-out was running. Drop the accumulator silently in that
                 // case so a fresher fetch's result isn't overwritten.
-                if (self->portfolio_intraday_epoch_ != state->epoch) return;
+                if (self->portfolio_intraday_epoch_ != state->epoch)
+                    return;
 
                 // A holding with no intraday bars has no intraday value. The
                 // old code painted it flat at a cached price or its average
@@ -1793,8 +1784,7 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                         missing.append(it.key());
                 if (!missing.isEmpty()) {
                     missing.sort();
-                    const QString reason =
-                        QStringLiteral("no intraday bars for %1").arg(missing.join(", "));
+                    const QString reason = QStringLiteral("no intraday bars for %1").arg(missing.join(", "));
                     LOG_INFO("PortfolioSvc",
                              QString("Aggregate intraday %1 unavailable: %2").arg(portfolio_id, reason));
                     emit self->portfolio_intraday_loaded(portfolio_id, {}, {}, reason);
@@ -1807,10 +1797,8 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                 // carried BACKWARD: the curve starts only once every holding
                 // has printed, so no position is valued before its first bar.
                 QSet<qint64> all_ts_set;
-                for (auto it = state->by_symbol.cbegin();
-                     it != state->by_symbol.cend(); ++it) {
-                    for (auto bit = it.value().cbegin();
-                         bit != it.value().cend(); ++bit) {
+                for (auto it = state->by_symbol.cbegin(); it != state->by_symbol.cend(); ++it) {
+                    for (auto bit = it.value().cbegin(); bit != it.value().cend(); ++bit) {
                         all_ts_set.insert(bit.key());
                     }
                 }
@@ -1818,16 +1806,13 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                 std::sort(all_ts.begin(), all_ts.end());
 
                 QHash<QString, QVector<QPair<qint64, double>>> sorted_bars;
-                for (auto it = state->by_symbol.cbegin();
-                     it != state->by_symbol.cend(); ++it) {
+                for (auto it = state->by_symbol.cbegin(); it != state->by_symbol.cend(); ++it) {
                     QVector<QPair<qint64, double>> v;
                     v.reserve(it.value().size());
-                    for (auto bit = it.value().cbegin();
-                         bit != it.value().cend(); ++bit) {
+                    for (auto bit = it.value().cbegin(); bit != it.value().cend(); ++bit) {
                         v.append({bit.key(), bit.value()});
                     }
-                    std::sort(v.begin(), v.end(),
-                              [](const auto& a, const auto& b) { return a.first < b.first; });
+                    std::sort(v.begin(), v.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
                     sorted_bars[it.key()] = std::move(v);
                 }
 
@@ -1861,9 +1846,10 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
                     navs.append(nav);
                 }
 
-                LOG_INFO("PortfolioSvc",
-                         QString("Aggregate intraday %1: %2 points across %3 symbols")
-                             .arg(portfolio_id).arg(ts_ms.size()).arg(sorted_bars.size()));
+                LOG_INFO("PortfolioSvc", QString("Aggregate intraday %1: %2 points across %3 symbols")
+                                             .arg(portfolio_id)
+                                             .arg(ts_ms.size())
+                                             .arg(sorted_bars.size()));
                 emit self->portfolio_intraday_loaded(portfolio_id, ts_ms, navs, QString());
             },
             python::PythonWorker::kNetworkActionTimeoutMs);
@@ -1906,9 +1892,10 @@ void PortfolioService::fetch_risk_free_rate() {
         }
     }
     if (std::isnan(rf_rate_)) {
-        rf_rate_ = persisted; // older real value beats none while the fetch runs
-        rf_as_of_ = persisted_ts > 0  // EVENT-STAMP: persisted fetch instant (UTC)
-                        ? QDateTime::fromSecsSinceEpoch(persisted_ts, QTimeZone::UTC) : QDateTime();
+        rf_rate_ = persisted;        // older real value beats none while the fetch runs
+        rf_as_of_ = persisted_ts > 0 // EVENT-STAMP: persisted fetch instant (UTC)
+                        ? QDateTime::fromSecsSinceEpoch(persisted_ts, QTimeZone::UTC)
+                        : QDateTime();
     }
 
     QJsonObject payload;
@@ -1935,12 +1922,12 @@ void PortfolioService::fetch_risk_free_rate() {
                 // EVENT-STAMP: this fetch's own instant (UTC)
                 self->rf_as_of_ = QDateTime::fromSecsSinceEpoch(now_secs, QTimeZone::UTC);
             } else {
-                LOG_WARN("PortfolioSvc", QString("^TNX risk-free fetch unusable (px=%1): %2 — %3")
-                                             .arg(px)
-                                             .arg(err.left(120))
-                                             .arg(std::isnan(rate) ? QStringLiteral("no rate available")
-                                                                   : QStringLiteral("keeping last fetched %1")
-                                                                         .arg(rate, 0, 'f', 4)));
+                LOG_WARN("PortfolioSvc",
+                         QString("^TNX risk-free fetch unusable (px=%1): %2 — %3")
+                             .arg(px)
+                             .arg(err.left(120))
+                             .arg(std::isnan(rate) ? QStringLiteral("no rate available")
+                                                   : QStringLiteral("keeping last fetched %1").arg(rate, 0, 'f', 4)));
             }
             self->rf_rate_ = rate;
             emit self->risk_free_rate_loaded(rate);
@@ -2010,9 +1997,13 @@ void PortfolioService::compute_metrics(const portfolio::PortfolioSummary& summar
             backfill_attempted_.insert(summary.portfolio.id);
             QPointer<PortfolioService> self = this;
             const QString pid = summary.portfolio.id;
-            QMetaObject::invokeMethod(this, [self, pid]() {
-                if (self) self->backfill_history(pid, "1y");
-            }, Qt::QueuedConnection);
+            QMetaObject::invokeMethod(
+                this,
+                [self, pid]() {
+                    if (self)
+                        self->backfill_history(pid, "1y");
+                },
+                Qt::QueuedConnection);
         }
         // No return series → no series metrics. The old fallback annualised
         // the dispersion of the holdings' day-changes ACROSS the portfolio —
@@ -2615,10 +2606,9 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
             if (self_retry)
                 self_retry->backfill_history(pid, per);
         });
-        LOG_INFO("PortfolioSvc",
-                 QString("backfill_history: waiting on currency discovery for %1 symbol(s) in %2")
-                     .arg(unknown_ccy.size())
-                     .arg(portfolio_id));
+        LOG_INFO("PortfolioSvc", QString("backfill_history: waiting on currency discovery for %1 symbol(s) in %2")
+                                     .arg(unknown_ccy.size())
+                                     .arg(portfolio_id));
         return;
     }
     backfill_awaiting_fx_.remove(portfolio_id);
@@ -2633,214 +2623,216 @@ void PortfolioService::backfill_history(const QString& portfolio_id, const QStri
     payload["period"] = period;
 
     QPointer<PortfolioService> self = this;
-    python::PythonWorker::instance().submit("portfolio_closes_history", payload,
-        [self, portfolio_id, period, txns_by_symbol, fx_of_symbol, fabricated_cutoff](bool ok, QJsonObject obj, QString err) {
-        if (!self)
-            return;
-        if (!ok || obj.contains("error")) {
-            LOG_WARN("PortfolioSvc", QString("backfill_history failed for %1: %2")
-                                         .arg(portfolio_id,
-                                              ok ? obj["error"].toString().left(200) : err.left(200)));
-            emit self->history_backfilled(portfolio_id, 0);
-            return;
-        }
-
-        // Per-symbol close calendars (raw closes, YYYY-MM-DD keys) plus a
-        // union calendar to walk. Symbols yfinance has no data for (money
-        // market funds, delisted names) simply contribute nothing dated —
-        // same behaviour the live valuation has for them.
-        const QJsonObject closes_obj = obj["closes"].toObject();
-        const auto parse_series = [&closes_obj](const QString& key, QSet<QString>* dates_out) {
-            QVector<QPair<QString, double>> out;
-            const QJsonArray series = closes_obj[key].toArray();
-            out.reserve(series.size());
-            for (const auto& v : series) {
-                const QJsonArray pair = v.toArray();
-                if (pair.size() != 2)
-                    continue;
-                const QString d = pair[0].toString();
-                const double close = pair[1].toDouble();
-                if (d.size() == 10 && close > 0) {
-                    out.append({d, close});
-                    if (dates_out)
-                        dates_out->insert(d);
-                }
-            }
-            std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
-            return out;
-        };
-
-        // FX pair calendars: cursor state shared by every symbol on the pair.
-        // Pair closes do NOT extend the union calendar — an FX-only date has
-        // no equity close to value.
-        struct PairState {
-            QVector<QPair<QString, double>> closes;
-            int next = 0;
-            double last = 0;
-        };
-        QHash<QString, PairState> pair_states;
-        for (auto it = fx_of_symbol.cbegin(); it != fx_of_symbol.cend(); ++it) {
-            const QString& pair = it.value().pair;
-            if (pair.isEmpty() || pair_states.contains(pair))
-                continue;
-            PairState ps{.closes = parse_series(pair, nullptr)};
-            if (ps.closes.isEmpty())
+    python::PythonWorker::instance().submit(
+        "portfolio_closes_history", payload,
+        [self, portfolio_id, period, txns_by_symbol, fx_of_symbol, fabricated_cutoff](bool ok, QJsonObject obj,
+                                                                                      QString err) {
+            if (!self)
+                return;
+            if (!ok || obj.contains("error")) {
                 LOG_WARN("PortfolioSvc",
-                         QString("backfill_history: no FX history for %1 — holdings in that "
-                                 "currency are missing from backfilled NAV").arg(pair));
-            pair_states.insert(pair, std::move(ps));
-        }
-
-        struct SymbolState {
-            QString symbol;
-            portfolio::LedgerCursor cursor;
-            QVector<QPair<QString, double>> closes; // sorted by date
-            int next = 0;
-            double last_close = 0;
-            QString fx_pair;    // empty = portfolio currency
-            double fx_factor = 1.0; // sub-unit normalisation (GBp → GBP)
-            bool fx_unknown = false; // trading currency unknown: no conversion exists
-        };
-        std::vector<SymbolState> states;
-        QSet<QString> date_set;
-        for (auto it = txns_by_symbol.cbegin(); it != txns_by_symbol.cend(); ++it) {
-            const FxBinding fx = fx_of_symbol.value(it.key());
-            SymbolState st{.symbol = it.key(),
-                           .cursor = portfolio::LedgerCursor(it.value()),
-                           .closes = parse_series(it.key(), &date_set),
-                           .fx_pair = fx.pair,
-                           .fx_factor = fx.factor,
-                           .fx_unknown = fx.unknown};
-            if (st.closes.isEmpty()) {
-                LOG_WARN("PortfolioSvc",
-                         QString("backfill_history: no close history for %1 — its value is "
-                                 "missing from backfilled NAV").arg(it.key()));
-                continue;
+                         QString("backfill_history failed for %1: %2")
+                             .arg(portfolio_id, ok ? obj["error"].toString().left(200) : err.left(200)));
+                emit self->history_backfilled(portfolio_id, 0);
+                return;
             }
-            if (fx.unknown)
-                LOG_WARN("PortfolioSvc",
-                         QString("backfill_history: trading currency of %1 unknown — the dates it "
-                                 "is held are left out of the backfilled NAV").arg(it.key()));
-            states.push_back(std::move(st));
-        }
 
-        QStringList dates(date_set.cbegin(), date_set.cend());
-        std::sort(dates.begin(), dates.end());
-        const QString today = QDate::currentDate().toString(Qt::ISODate);
-
-        auto& repo = PortfolioRepository::instance();
-        int written = 0;
-        int skipped_live = 0;
-        int skipped_partial = 0;
-        QStringList skipped_for_currency; // open holdings whose currency is unknown
-        for (const QString& d : dates) {
-            // Today's row belongs to the live path — build_summary values it
-            // from actual quotes and writes it as 'live'.
-            if (d >= today)
-                continue;
-            // Before a migration-dated opening BUY the book's composition is
-            // unknown (see fabricated_cutoff above).
-            if (!fabricated_cutoff.isEmpty() && d < fabricated_cutoff)
-                continue;
-            // Advance FX pair cursors first so every symbol on a pair sees
-            // this date's (or the last known) rate.
-            for (auto pit = pair_states.begin(); pit != pair_states.end(); ++pit) {
-                auto& ps = pit.value();
-                while (ps.next < ps.closes.size() && ps.closes[ps.next].first <= d) {
-                    ps.last = ps.closes[ps.next].second;
-                    ++ps.next;
-                }
-            }
-            double nav = 0;
-            double cost = 0;
-            bool any_open = false;
-            bool complete = true; // every open position priced AND converted
-            for (auto& st : states) {
-                while (st.next < st.closes.size() && st.closes[st.next].first <= d) {
-                    st.last_close = st.closes[st.next].second;
-                    ++st.next;
-                }
-                st.cursor.advance_to(d);
-                const auto& pos = st.cursor.position();
-                if (pos.quantity > 1e-9 && st.last_close > 0) {
-                    if (st.fx_unknown) {
-                        // Face value in the portfolio currency would be an
-                        // assumption written down as history.
-                        complete = false;
-                        if (!skipped_for_currency.contains(st.symbol))
-                            skipped_for_currency.append(st.symbol);
+            // Per-symbol close calendars (raw closes, YYYY-MM-DD keys) plus a
+            // union calendar to walk. Symbols yfinance has no data for (money
+            // market funds, delisted names) simply contribute nothing dated —
+            // same behaviour the live valuation has for them.
+            const QJsonObject closes_obj = obj["closes"].toObject();
+            const auto parse_series = [&closes_obj](const QString& key, QSet<QString>* dates_out) {
+                QVector<QPair<QString, double>> out;
+                const QJsonArray series = closes_obj[key].toArray();
+                out.reserve(series.size());
+                for (const auto& v : series) {
+                    const QJsonArray pair = v.toArray();
+                    if (pair.size() != 2)
                         continue;
+                    const QString d = pair[0].toString();
+                    const double close = pair[1].toDouble();
+                    if (d.size() == 10 && close > 0) {
+                        out.append({d, close});
+                        if (dates_out)
+                            dates_out->insert(d);
                     }
-                    double rate = st.fx_factor;
-                    if (!st.fx_pair.isEmpty()) {
-                        const double fx = pair_states.value(st.fx_pair).last;
-                        if (fx <= 0) {
-                            // No rate at this date. Writing the row anyway
-                            // would persist a NAV missing this holding —
-                            // half a portfolio recorded as history.
+                }
+                std::sort(out.begin(), out.end(), [](const auto& a, const auto& b) { return a.first < b.first; });
+                return out;
+            };
+
+            // FX pair calendars: cursor state shared by every symbol on the pair.
+            // Pair closes do NOT extend the union calendar — an FX-only date has
+            // no equity close to value.
+            struct PairState {
+                QVector<QPair<QString, double>> closes;
+                int next = 0;
+                double last = 0;
+            };
+            QHash<QString, PairState> pair_states;
+            for (auto it = fx_of_symbol.cbegin(); it != fx_of_symbol.cend(); ++it) {
+                const QString& pair = it.value().pair;
+                if (pair.isEmpty() || pair_states.contains(pair))
+                    continue;
+                PairState ps{.closes = parse_series(pair, nullptr)};
+                if (ps.closes.isEmpty())
+                    LOG_WARN("PortfolioSvc", QString("backfill_history: no FX history for %1 — holdings in that "
+                                                     "currency are missing from backfilled NAV")
+                                                 .arg(pair));
+                pair_states.insert(pair, std::move(ps));
+            }
+
+            struct SymbolState {
+                QString symbol;
+                portfolio::LedgerCursor cursor;
+                QVector<QPair<QString, double>> closes; // sorted by date
+                int next = 0;
+                double last_close = 0;
+                QString fx_pair;         // empty = portfolio currency
+                double fx_factor = 1.0;  // sub-unit normalisation (GBp → GBP)
+                bool fx_unknown = false; // trading currency unknown: no conversion exists
+            };
+            std::vector<SymbolState> states;
+            QSet<QString> date_set;
+            for (auto it = txns_by_symbol.cbegin(); it != txns_by_symbol.cend(); ++it) {
+                const FxBinding fx = fx_of_symbol.value(it.key());
+                SymbolState st{.symbol = it.key(),
+                               .cursor = portfolio::LedgerCursor(it.value()),
+                               .closes = parse_series(it.key(), &date_set),
+                               .fx_pair = fx.pair,
+                               .fx_factor = fx.factor,
+                               .fx_unknown = fx.unknown};
+                if (st.closes.isEmpty()) {
+                    LOG_WARN("PortfolioSvc", QString("backfill_history: no close history for %1 — its value is "
+                                                     "missing from backfilled NAV")
+                                                 .arg(it.key()));
+                    continue;
+                }
+                if (fx.unknown)
+                    LOG_WARN("PortfolioSvc", QString("backfill_history: trading currency of %1 unknown — the dates it "
+                                                     "is held are left out of the backfilled NAV")
+                                                 .arg(it.key()));
+                states.push_back(std::move(st));
+            }
+
+            QStringList dates(date_set.cbegin(), date_set.cend());
+            std::sort(dates.begin(), dates.end());
+            const QString today = QDate::currentDate().toString(Qt::ISODate);
+
+            auto& repo = PortfolioRepository::instance();
+            int written = 0;
+            int skipped_live = 0;
+            int skipped_partial = 0;
+            QStringList skipped_for_currency; // open holdings whose currency is unknown
+            for (const QString& d : dates) {
+                // Today's row belongs to the live path — build_summary values it
+                // from actual quotes and writes it as 'live'.
+                if (d >= today)
+                    continue;
+                // Before a migration-dated opening BUY the book's composition is
+                // unknown (see fabricated_cutoff above).
+                if (!fabricated_cutoff.isEmpty() && d < fabricated_cutoff)
+                    continue;
+                // Advance FX pair cursors first so every symbol on a pair sees
+                // this date's (or the last known) rate.
+                for (auto pit = pair_states.begin(); pit != pair_states.end(); ++pit) {
+                    auto& ps = pit.value();
+                    while (ps.next < ps.closes.size() && ps.closes[ps.next].first <= d) {
+                        ps.last = ps.closes[ps.next].second;
+                        ++ps.next;
+                    }
+                }
+                double nav = 0;
+                double cost = 0;
+                bool any_open = false;
+                bool complete = true; // every open position priced AND converted
+                for (auto& st : states) {
+                    while (st.next < st.closes.size() && st.closes[st.next].first <= d) {
+                        st.last_close = st.closes[st.next].second;
+                        ++st.next;
+                    }
+                    st.cursor.advance_to(d);
+                    const auto& pos = st.cursor.position();
+                    if (pos.quantity > 1e-9 && st.last_close > 0) {
+                        if (st.fx_unknown) {
+                            // Face value in the portfolio currency would be an
+                            // assumption written down as history.
                             complete = false;
+                            if (!skipped_for_currency.contains(st.symbol))
+                                skipped_for_currency.append(st.symbol);
                             continue;
                         }
-                        rate *= fx;
+                        double rate = st.fx_factor;
+                        if (!st.fx_pair.isEmpty()) {
+                            const double fx = pair_states.value(st.fx_pair).last;
+                            if (fx <= 0) {
+                                // No rate at this date. Writing the row anyway
+                                // would persist a NAV missing this holding —
+                                // half a portfolio recorded as history.
+                                complete = false;
+                                continue;
+                            }
+                            rate *= fx;
+                        }
+                        nav += pos.quantity * st.last_close * rate;
+                        cost += pos.quantity * pos.avg_cost * rate;
+                        any_open = true;
                     }
-                    nav += pos.quantity * st.last_close * rate;
-                    cost += pos.quantity * pos.avg_cost * rate;
-                    any_open = true;
+                }
+                if (!any_open)
+                    continue; // before the first buy — a NAV of zero is not history
+                if (!complete) {
+                    ++skipped_partial;
+                    continue; // a partial valuation is not this portfolio's history
+                }
+                const double pnl = nav - cost;
+                const double pnl_pct = cost > 0 ? (pnl / cost) * 100.0 : 0.0;
+                auto wr = repo.save_backfill_snapshot(portfolio_id, nav, cost, pnl, pnl_pct, d);
+                if (wr.is_ok()) {
+                    if (wr.value() > 0)
+                        ++written;
+                    else
+                        ++skipped_live; // live row held its ground — by design
                 }
             }
-            if (!any_open)
-                continue; // before the first buy — a NAV of zero is not history
-            if (!complete) {
-                ++skipped_partial;
-                continue; // a partial valuation is not this portfolio's history
-            }
-            const double pnl = nav - cost;
-            const double pnl_pct = cost > 0 ? (pnl / cost) * 100.0 : 0.0;
-            auto wr = repo.save_backfill_snapshot(portfolio_id, nav, cost, pnl, pnl_pct, d);
-            if (wr.is_ok()) {
-                if (wr.value() > 0)
-                    ++written;
-                else
-                    ++skipped_live; // live row held its ground — by design
-            }
-        }
 
-        // Keep the per-date closes we just used, so the return math can convert
-        // each cash flow at its own trade date rather than today's. Stored per
-        // PAIR and MERGED, never wholesale-replaced: a later, shorter backfill
-        // — or one where a single pair came back empty — must not discard
-        // series already known to be good. Sixty holdings on CADUSD=X also
-        // share one map instead of sixty copies of it.
-        for (auto ps = pair_states.cbegin(); ps != pair_states.cend(); ++ps) {
-            if (ps.value().closes.isEmpty())
-                continue;
-            QMap<QString, double>& series = self->fx_pair_series_[ps.key()];
-            for (const auto& c : ps.value().closes) {
-                if (c.second > 0.0)
-                    series.insert(c.first, c.second);
+            // Keep the per-date closes we just used, so the return math can convert
+            // each cash flow at its own trade date rather than today's. Stored per
+            // PAIR and MERGED, never wholesale-replaced: a later, shorter backfill
+            // — or one where a single pair came back empty — must not discard
+            // series already known to be good. Sixty holdings on CADUSD=X also
+            // share one map instead of sixty copies of it.
+            for (auto ps = pair_states.cbegin(); ps != pair_states.cend(); ++ps) {
+                if (ps.value().closes.isEmpty())
+                    continue;
+                QMap<QString, double>& series = self->fx_pair_series_[ps.key()];
+                for (const auto& c : ps.value().closes) {
+                    if (c.second > 0.0)
+                        series.insert(c.first, c.second);
+                }
+                self->persist_fx_pair_series(ps.key(), series);
             }
-            self->persist_fx_pair_series(ps.key(), series);
-        }
 
-        LOG_INFO("PortfolioSvc",
-                 QString("Backfilled %1 snapshots for %2 (%3 live rows preserved, %4 dates skipped "
-                         "for an incomplete valuation)")
-                     .arg(written)
-                     .arg(portfolio_id)
-                     .arg(skipped_live)
-                     .arg(skipped_partial));
-        if (!skipped_for_currency.isEmpty())
-            self->backfill_needs_fx_.insert(portfolio_id, {period, skipped_for_currency});
-        self->invalidate_cache(portfolio_id);
-        emit self->history_backfilled(portfolio_id, written);
-    },
-    python::PythonWorker::kComputeActionTimeoutMs);
+            LOG_INFO("PortfolioSvc", QString("Backfilled %1 snapshots for %2 (%3 live rows preserved, %4 dates skipped "
+                                             "for an incomplete valuation)")
+                                         .arg(written)
+                                         .arg(portfolio_id)
+                                         .arg(skipped_live)
+                                         .arg(skipped_partial));
+            if (!skipped_for_currency.isEmpty())
+                self->backfill_needs_fx_.insert(portfolio_id, {period, skipped_for_currency});
+            self->invalidate_cache(portfolio_id);
+            emit self->history_backfilled(portfolio_id, written);
+        },
+        python::PythonWorker::kComputeActionTimeoutMs);
 }
 
 // ── Portfolio analyst fundamentals ───────────────────────────────────────────
 
 void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id) {
-    if (portfolio_id.isEmpty()) return;
+    if (portfolio_id.isEmpty())
+        return;
     // Guard: analyst data changes at most daily — skip if we already fetched
     // for this portfolio since the last holding change. Cleared by
     // invalidate_cache() so an add/sell re-fetches on the next summary load.
@@ -2883,24 +2875,25 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
         if (cit != summary_cache_.cend()) {
             for (const auto& h : cit.value().summary.holdings) {
                 const QString up = h.symbol.toUpper();
-                mv_by_symbol[up]    = h.market_value;
+                mv_by_symbol[up] = h.market_value;
                 price_by_symbol[up] = h.current_price;
                 total_mv += h.market_value;
             }
         }
     }
     // Only commit the guard once we know the fan-out will actually launch.
-    if (mv_by_symbol.isEmpty() || total_mv <= 0) return;
+    if (mv_by_symbol.isEmpty() || total_mv <= 0)
+        return;
     fundamentals_fetched_.insert(portfolio_id);
 
     // Per-symbol accumulator, shared across all callbacks.
     struct SymResult {
-        double tgt_low   = 0;
-        double tgt_mean  = 0;
-        double tgt_high  = 0;
-        double pe        = 0;
-        double yield     = 0;
-        double rec_score = 0;  // 1=strong_buy … 5=strong_sell, 0=missing
+        double tgt_low = 0;
+        double tgt_mean = 0;
+        double tgt_high = 0;
+        double pe = 0;
+        double yield = 0;
+        double rec_score = 0; // 1=strong_buy … 5=strong_sell, 0=missing
     };
     struct Accum {
         int pending = 0;
@@ -2916,31 +2909,37 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
         payload["symbol"] = sym;
         python::PythonWorker::instance().submit(
             "info", payload,
-            [self, portfolio_id, sym, state, mv_by_symbol, price_by_symbol, total_mv](
-                bool ok, QJsonObject obj, QString /*err*/) {
-                if (!self) return;
+            [self, portfolio_id, sym, state, mv_by_symbol, price_by_symbol, total_mv](bool ok, QJsonObject obj,
+                                                                                      QString /*err*/) {
+                if (!self)
+                    return;
 
                 SymResult& r = state->results[sym];
                 if (ok && !obj.contains("error")) {
-                    r.tgt_low   = obj["target_low_price"].toDouble();
-                    r.tgt_mean  = obj["target_mean_price"].toDouble();
-                    r.tgt_high  = obj["target_high_price"].toDouble();
+                    r.tgt_low = obj["target_low_price"].toDouble();
+                    r.tgt_mean = obj["target_mean_price"].toDouble();
+                    r.tgt_high = obj["target_high_price"].toDouble();
                     // Python "info" action uses key "pe_ratio" (mapped from trailingPE).
-                    r.pe        = obj["pe_ratio"].toDouble();
+                    r.pe = obj["pe_ratio"].toDouble();
                     // yfinance returns dividendYield as a fraction (e.g. 0.014)
-                    r.yield     = obj["dividend_yield"].toDouble();
+                    r.yield = obj["dividend_yield"].toDouble();
 
                     // Map recommendation_key to a 1-5 score (lower = more bullish).
                     const QString rec = obj["recommendation_key"].toString().toLower();
-                    if      (rec == "strong_buy"  || rec == "strongbuy")    r.rec_score = 1;
-                    else if (rec == "buy")                                   r.rec_score = 2;
-                    else if (rec == "hold"        || rec == "neutral")      r.rec_score = 3;
-                    else if (rec == "sell"        || rec == "underperform") r.rec_score = 4;
-                    else if (rec == "strong_sell" || rec == "strongsell")   r.rec_score = 5;
-
+                    if (rec == "strong_buy" || rec == "strongbuy")
+                        r.rec_score = 1;
+                    else if (rec == "buy")
+                        r.rec_score = 2;
+                    else if (rec == "hold" || rec == "neutral")
+                        r.rec_score = 3;
+                    else if (rec == "sell" || rec == "underperform")
+                        r.rec_score = 4;
+                    else if (rec == "strong_sell" || rec == "strongsell")
+                        r.rec_score = 5;
                 }
 
-                if (--state->pending > 0) return;
+                if (--state->pending > 0)
+                    return;
 
                 // All callbacks done — aggregate into portfolio-level fundamentals.
                 //
@@ -2955,53 +2954,69 @@ void PortfolioService::fetch_portfolio_fundamentals(const QString& portfolio_id)
                 // PE / YIELD / CONSENSUS use plain MV-weighted averages (dimensionless).
                 portfolio::PortfolioFundamentals f;
                 double tgt_low_sum = 0, tgt_mean_sum = 0, tgt_high_sum = 0;
-                double covered_mv  = 0;
+                double covered_mv = 0;
                 double w_pe = 0, w_yield = 0, w_rec = 0;
                 double cov_pe = 0, cov_yield = 0, cov_rec = 0;
 
                 for (auto jt = state->results.cbegin(); jt != state->results.cend(); ++jt) {
-                    const QString& s    = jt.key();
+                    const QString& s = jt.key();
                     const SymResult& sr = jt.value();
-                    const double mv     = mv_by_symbol.value(s, 0);
-                    const double price  = price_by_symbol.value(s, 0);
-                    const double w      = total_mv > 0 ? mv / total_mv : 0;
+                    const double mv = mv_by_symbol.value(s, 0);
+                    const double price = price_by_symbol.value(s, 0);
+                    const double w = total_mv > 0 ? mv / total_mv : 0;
 
                     // Require all three target fields to be positive: some
                     // symbols return only tgt_mean with tgt_low/high = 0,
                     // which would push f.tgt_low below f.tgt_mean.
                     if (sr.tgt_low > 0 && sr.tgt_mean > 0 && sr.tgt_high > 0 && price > 0) {
-                        tgt_low_sum  += mv * sr.tgt_low  / price;
+                        tgt_low_sum += mv * sr.tgt_low / price;
                         tgt_mean_sum += mv * sr.tgt_mean / price;
                         tgt_high_sum += mv * sr.tgt_high / price;
-                        covered_mv   += mv;
+                        covered_mv += mv;
                     }
                     // Portfolio P/E is Σ market value ÷ Σ earnings, i.e. the
                     // MV-weighted HARMONIC mean — not the arithmetic mean of
                     // the individual multiples, where one 300× name in a small
                     // position drags the whole figure. Accumulate each
                     // holding's earnings (mv / pe) and divide at the end.
-                    if (sr.pe    > 0) { w_pe    += mv / sr.pe;       cov_pe    += mv; }
-                    if (sr.yield > 0) { w_yield += w * sr.yield;     cov_yield += w; }
-                    if (sr.rec_score > 0) { w_rec += w * sr.rec_score; cov_rec   += w; }
+                    if (sr.pe > 0) {
+                        w_pe += mv / sr.pe;
+                        cov_pe += mv;
+                    }
+                    if (sr.yield > 0) {
+                        w_yield += w * sr.yield;
+                        cov_yield += w;
+                    }
+                    if (sr.rec_score > 0) {
+                        w_rec += w * sr.rec_score;
+                        cov_rec += w;
+                    }
                 }
 
                 if (covered_mv > 0) {
                     // Covered holdings at analyst target + uncovered at current value.
                     const double uncovered_mv = total_mv - covered_mv;
-                    f.tgt_low  = tgt_low_sum  + uncovered_mv;
+                    f.tgt_low = tgt_low_sum + uncovered_mv;
                     f.tgt_mean = tgt_mean_sum + uncovered_mv;
                     f.tgt_high = tgt_high_sum + uncovered_mv;
                     f.has_analyst_data = true;
                 }
-                if (cov_pe > 0 && w_pe > 0) f.pe_ratio = cov_pe / w_pe; // Σ MV / Σ earnings
-                if (cov_yield > 0) f.div_yield = w_yield / cov_yield;
-                if (cov_rec   > 0) {
+                if (cov_pe > 0 && w_pe > 0)
+                    f.pe_ratio = cov_pe / w_pe; // Σ MV / Σ earnings
+                if (cov_yield > 0)
+                    f.div_yield = w_yield / cov_yield;
+                if (cov_rec > 0) {
                     const double s = w_rec / cov_rec;
-                    if      (s < 1.5) f.consensus = QStringLiteral("Strong Buy");
-                    else if (s < 2.5) f.consensus = QStringLiteral("Buy");
-                    else if (s < 3.5) f.consensus = QStringLiteral("Hold");
-                    else if (s < 4.5) f.consensus = QStringLiteral("Sell");
-                    else              f.consensus = QStringLiteral("Strong Sell");
+                    if (s < 1.5)
+                        f.consensus = QStringLiteral("Strong Buy");
+                    else if (s < 2.5)
+                        f.consensus = QStringLiteral("Buy");
+                    else if (s < 3.5)
+                        f.consensus = QStringLiteral("Hold");
+                    else if (s < 4.5)
+                        f.consensus = QStringLiteral("Sell");
+                    else
+                        f.consensus = QStringLiteral("Strong Sell");
                 }
 
                 {
@@ -3070,7 +3085,7 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
     struct Req {
         QString symbol;
         QString key;
-        QString entry;  // YYYY-MM-DD, empty when unparseable
+        QString entry; // YYYY-MM-DD, empty when unparseable
     };
 
     const qint64 now = QDateTime::currentSecsSinceEpoch();
@@ -3081,7 +3096,7 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
             if (a.symbol.isEmpty())
                 continue;
             const QString entry = entry_date_of(a.first_purchase_date);
-            const QString key   = peak_key(a.symbol, entry);
+            const QString key = peak_key(a.symbol, entry);
             if (peak_inflight_.contains(key))
                 continue;
             const auto it = peak_cache_.constFind(key);
@@ -3112,9 +3127,8 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
         // Unparseable entry date → bounded 1y window rather than "max": an
         // unbounded peak from a decade ago would render an L% that has nothing
         // to do with the user's position.
-        payload["period"] = req.entry.isEmpty()
-                                ? QStringLiteral("1y")
-                                : QStringLiteral("range:") + req.entry + QLatin1Char(':') + end;
+        payload["period"] =
+            req.entry.isEmpty() ? QStringLiteral("1y") : QStringLiteral("range:") + req.entry + QLatin1Char(':') + end;
         payload["interval"] = QStringLiteral("1d");
         // RAW prices: the peak is compared against a raw live price to give a
         // trailing-stop distance. Adjusted highs are pushed DOWN by every
@@ -3131,9 +3145,8 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
                 double peak = 0;
                 if (ok) {
                     // The daemon wraps a flat array under "_value".
-                    const QJsonArray arr = result.contains("_value")
-                                               ? result["_value"].toArray()
-                                               : result["history"].toArray();
+                    const QJsonArray arr =
+                        result.contains("_value") ? result["_value"].toArray() : result["history"].toArray();
                     for (const auto& v : arr) {
                         const double high = v.toObject()["high"].toDouble();
                         if (high > peak)
@@ -3189,9 +3202,9 @@ void PortfolioService::fetch_position_peaks(const QString& portfolio_id,
 // ── FX ───────────────────────────────────────────────────────────────────────
 
 namespace {
-constexpr qint64 kSymbolCurrencyTtlSec = 30LL * 86400;    // listings don't change currency
-constexpr qint64 kCurrencyUnknownTtlSec = 6LL * 3600;     // Yahoo answered without one: retry in 6h, not 20s
-constexpr qint64 kCurrencyRetryTtlSec = 120;              // Yahoo refused / did not answer: says nothing
+constexpr qint64 kSymbolCurrencyTtlSec = 30LL * 86400; // listings don't change currency
+constexpr qint64 kCurrencyUnknownTtlSec = 6LL * 3600;  // Yahoo answered without one: retry in 6h, not 20s
+constexpr qint64 kCurrencyRetryTtlSec = 120;           // Yahoo refused / did not answer: says nothing
 constexpr const char* kCurrencyUnknown = "?";
 QString symbol_currency_key(const QString& symbol) {
     return QStringLiteral("symbol_currency:") + symbol.toUpper();
@@ -3237,10 +3250,9 @@ void PortfolioService::persist_fx_pair_series(const QString& pair, const QMap<QS
     QJsonObject o;
     for (auto it = series.cbegin(); it != series.cend(); ++it)
         o.insert(it.key(), it.value());
-    fincept::CacheManager::instance().put(
-        fx_series_key(pair),
-        QVariant(QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact))),
-        kFxSeriesTtlSec, "portfolio");
+    fincept::CacheManager::instance().put(fx_series_key(pair),
+                                          QVariant(QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact))),
+                                          kFxSeriesTtlSec, "portfolio");
 }
 
 void PortfolioService::hydrate_fx_pair_series() {
@@ -3338,8 +3350,7 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                 }
                 const QString ccy = obj.value("currency").toString();
                 if (ok && !ccy.isEmpty()) {
-                    fincept::CacheManager::instance().put(symbol_currency_key(sym), ccy,
-                                                          kSymbolCurrencyTtlSec);
+                    fincept::CacheManager::instance().put(symbol_currency_key(sym), ccy, kSymbolCurrencyTtlSec);
                     QMutexLocker lock(&self->cache_mutex_);
                     self->currency_memo_.insert(sym, ccy);
                 } else if (QMutexLocker lock(&self->cache_mutex_); !self->currency_memo_.contains(sym)) {
@@ -3362,10 +3373,9 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                     // fill them. Still-unknown ones wait for their own answer.
                     QList<QPair<QString, QString>> rerun;
                     for (auto it = self->backfill_needs_fx_.begin(); it != self->backfill_needs_fx_.end();) {
-                        const bool resolved = std::any_of(it->second.cbegin(), it->second.cend(),
-                                                          [](const QString& sym) {
-                                                              return !cached_symbol_currency(sym).isEmpty();
-                                                          });
+                        const bool resolved =
+                            std::any_of(it->second.cbegin(), it->second.cend(),
+                                        [](const QString& sym) { return !cached_symbol_currency(sym).isEmpty(); });
                         if (resolved) {
                             rerun.append({it.key(), it->first});
                             it = self->backfill_needs_fx_.erase(it);

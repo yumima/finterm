@@ -29,7 +29,7 @@ static const QList<QPair<QString, QString>> kOecdDatasets = {
 static const QList<QPair<QString, QString>> kOecdCountries = {
     {"United States", "US"},  {"Germany", "DE"}, {"Japan", "JP"},     {"France", "FR"},
     {"United Kingdom", "GB"}, {"Canada", "CA"},  {"Australia", "AU"}, {"South Korea", "KR"},
-    {"Italy", "IT"},          {"Spain", "ES"},   {"G7", "G7"},       {"OECD Total", "OECD"},
+    {"Italy", "IT"},          {"Spain", "ES"},   {"G7", "G7"},        {"OECD Total", "OECD"},
 };
 
 } // namespace
@@ -105,8 +105,8 @@ void OecdPanel::on_result(const QString& request_id, const services::EconomicsRe
         const QJsonArray arr = result.data["data"].toArray();
         // The script's description names the measure and unit of what was fetched.
         const QString desc = result.data["description"].toString();
-        const QString title = (desc.isEmpty() ? dataset_combo_->currentText() : desc) + " — " +
-                              country_combo_->currentText();
+        const QString title =
+            (desc.isEmpty() ? dataset_combo_->currentText() : desc) + " — " + country_combo_->currentText();
         display(arr, title, QStringLiteral("value"), QStringLiteral("date"));
         LOG_INFO("OecdPanel", QString("Displayed %1 rows").arg(arr.size()));
     }

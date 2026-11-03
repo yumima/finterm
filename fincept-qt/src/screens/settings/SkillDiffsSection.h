@@ -38,16 +38,16 @@ class SkillDiffsSection : public QWidget {
     void on_diff_finished(int exit_code);
 
   private:
-    QLineEdit* upstream_edit_      = nullptr;
-    QPushButton* browse_btn_        = nullptr;
-    QPushButton* run_btn_           = nullptr;
-    QPushButton* view_diff_btn_     = nullptr;
-    QPushButton* accept_btn_        = nullptr;
-    QTableWidget* table_            = nullptr;
-    QLabel* status_lbl_             = nullptr;
-    QLabel* hint_lbl_               = nullptr;
-    QJsonObject last_report_;       // raw output of vendor_skills_diff.py
-    class QProcess* diff_proc_     = nullptr;   // null when no diff is running
+    QLineEdit* upstream_edit_ = nullptr;
+    QPushButton* browse_btn_ = nullptr;
+    QPushButton* run_btn_ = nullptr;
+    QPushButton* view_diff_btn_ = nullptr;
+    QPushButton* accept_btn_ = nullptr;
+    QTableWidget* table_ = nullptr;
+    QLabel* status_lbl_ = nullptr;
+    QLabel* hint_lbl_ = nullptr;
+    QJsonObject last_report_;             // raw output of vendor_skills_diff.py
+    class QProcess* diff_proc_ = nullptr; // null when no diff is running
 
     void build_ui();
     void load_upstream_path();
@@ -60,7 +60,11 @@ class SkillDiffsSection : public QWidget {
     /// canonicalised and required to live under an allow-list root
     /// (local: the vendored skills tree; upstream: the configured
     /// upstream clone) to defeat path-traversal via tampered JSON.
-    struct Paths { QString local; QString upstream; QString name; };
+    struct Paths {
+        QString local;
+        QString upstream;
+        QString name;
+    };
     Paths paths_for_row(int row);
 };
 

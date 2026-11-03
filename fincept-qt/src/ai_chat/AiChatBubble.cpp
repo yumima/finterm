@@ -168,7 +168,8 @@ void AiChatBubble::reposition() {
     int py = by - PANEL_H - 10;
     // Clamp so the panel stays on-screen even when the bubble is near an edge.
     px = std::clamp(px, 4, std::max(4, pr.width() - PANEL_W - 4));
-    if (py < 4) py = 4;
+    if (py < 4)
+        py = 4;
     if (chat_panel_->parentWidget() != parentWidget())
         chat_panel_->setParent(parentWidget());
     chat_panel_->setGeometry(px, py, PANEL_W, PANEL_H);
@@ -555,13 +556,13 @@ void AiChatBubble::on_send() {
                 },
                 Qt::QueuedConnection);
         },
-        /*use_tools=*/true,
-        persona,
+        /*use_tools=*/true, persona,
         // Finalize via a per-call callback, not the global finished_streaming
         // broadcast: that signal fans out to every consumer, so news/tutor
         // streams could otherwise surface in this bubble (and the bubble's
         // replies in chat panes). Already on the UI thread when invoked.
-        /*on_done=*/[self](ai_chat::LlmResponse resp) {
+        /*on_done=*/
+        [self](ai_chat::LlmResponse resp) {
             if (self)
                 self->on_streaming_done(resp);
         });
@@ -625,11 +626,10 @@ void AiChatBubble::on_streaming_done(ai_chat::LlmResponse response) {
         if (!final_text.isEmpty()) {
             // Name the model that actually answered when a quota fallback
             // switched it (display only — not part of the stored history).
-            const QString used_note =
-                response.fell_back && !response.model_used.isEmpty()
-                    ? QStringLiteral("\n\n*Answered by %1 (%2) — fell back after a quota limit.*")
-                          .arg(response.model_used, response.provider_used)
-                    : QString();
+            const QString used_note = response.fell_back && !response.model_used.isEmpty()
+                                          ? QStringLiteral("\n\n*Answered by %1 (%2) — fell back after a quota limit.*")
+                                                .arg(response.model_used, response.provider_used)
+                                          : QString();
             streaming_bubble_->document()->setDefaultStyleSheet(bubble_panel_md_css(col::TEXT_PRIMARY()));
             streaming_bubble_->setMarkdown(final_text + used_note);
         }
@@ -755,7 +755,8 @@ QTextEdit* AiChatBubble::add_streaming_bubble() {
 
     // Dynamic height as content streams in — recalc at viewport width, no fudge factor
     connect(body->document(), &QTextDocument::contentsChanged, body, [body, col_w, row]() {
-        const int vw = body->viewport()->width() > 0 ? body->viewport()->width() : (static_cast<int>(PANEL_W * 0.82) - 16);
+        const int vw =
+            body->viewport()->width() > 0 ? body->viewport()->width() : (static_cast<int>(PANEL_W * 0.82) - 16);
         body->document()->setTextWidth(vw);
         const int h = qMax(static_cast<int>(body->document()->size().height()), 20);
         body->setFixedHeight(h);
@@ -857,8 +858,8 @@ void AiChatBubble::on_toggle_voice_mode() {
         if (!is_open_)
             open_panel();
 
-        // Warn once if TTS is unavailable — voice input still works,
-        // but AI responses will not be spoken aloud.
+            // Warn once if TTS is unavailable — voice input still works,
+            // but AI responses will not be spoken aloud.
 #ifndef HAS_QT_TTS
         if (voice_status_lbl_)
             voice_status_lbl_->setText("⚠ Voice responses unavailable — Qt TextToSpeech not installed. "
@@ -1007,8 +1008,7 @@ bool AiChatBubble::eventFilter(QObject* obj, QEvent* e) {
             auto* me = static_cast<QMouseEvent*>(e);
             if (me->buttons() & Qt::LeftButton) {
                 const QPoint delta = me->globalPosition().toPoint() - drag_press_pos_;
-                if (!dragging_ &&
-                    (std::abs(delta.x()) > DRAG_THRESHOLD || std::abs(delta.y()) > DRAG_THRESHOLD)) {
+                if (!dragging_ && (std::abs(delta.x()) > DRAG_THRESHOLD || std::abs(delta.y()) > DRAG_THRESHOLD)) {
                     dragging_ = true;
                     setCursor(Qt::ClosedHandCursor);
                 }
@@ -1022,7 +1022,8 @@ bool AiChatBubble::eventFilter(QObject* obj, QEvent* e) {
                     move(target);
                     custom_pos_ = target;
                     has_custom_pos_ = true;
-                    if (chat_panel_ && is_open_) reposition();  // re-anchor panel
+                    if (chat_panel_ && is_open_)
+                        reposition(); // re-anchor panel
                 }
                 return true;
             }
@@ -1034,7 +1035,7 @@ bool AiChatBubble::eventFilter(QObject* obj, QEvent* e) {
                 // Persist position so it survives launches.
                 SettingsRepository::instance().set("ui.chat_bubble.x", QString::number(custom_pos_.x()));
                 SettingsRepository::instance().set("ui.chat_bubble.y", QString::number(custom_pos_.y()));
-                return true;  // suppress click — this was a drag
+                return true; // suppress click — this was a drag
             }
             if (me->button() == Qt::LeftButton) {
                 on_toggle_open();

@@ -41,9 +41,8 @@ QString read_frontmatter_name(const QString& path) {
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
         return {};
     const QString content = QString::fromUtf8(f.readAll());
-    static const QRegularExpression re(
-        QStringLiteral("\\A---\\s*\\n(.*?)\\n---\\s*\\n"),
-        QRegularExpression::DotMatchesEverythingOption);
+    static const QRegularExpression re(QStringLiteral("\\A---\\s*\\n(.*?)\\n---\\s*\\n"),
+                                       QRegularExpression::DotMatchesEverythingOption);
     const auto m = re.match(content);
     if (!m.hasMatch())
         return {};
@@ -53,31 +52,27 @@ QString read_frontmatter_name(const QString& path) {
     return nm.hasMatch() ? nm.captured(1) : QString();
 }
 
-QString build_prompt(const QString& skill_md,
-                     const QString& query,
-                     const QString& response,
-                     const QString& user_note) {
+QString build_prompt(const QString& skill_md, const QString& query, const QString& response, const QString& user_note) {
     // We instruct the model to return JSON with two top-level keys
     // ("rationale" + "skill_md") so the caller can split rationale
     // (shown above the textbox) from the new SKILL.md (shown in
     // the textbox).  Plain markdown would conflate the two and
     // require regex-splitting on a fence boundary.
-    return QStringLiteral(
-        "You are revising a finterm agent skill spec based on user feedback.\n\n"
-        "Current SKILL.md:\n```markdown\n%1\n```\n\n"
-        "A user dispatched this skill with the query:\n%2\n\n"
-        "The agent's response was:\n%3\n\n"
-        "The user marked this turn WRONG with note:\n%4\n\n"
-        "Propose a minimal revision to SKILL.md that would prevent this "
-        "failure mode next time.  Keep the YAML front-matter intact.  "
-        "Make the SMALLEST change needed — usually a clarifying sentence "
-        "or an explicit don't-do-X bullet.  Preserve existing workflow "
-        "steps unless they directly caused the failure.\n\n"
-        "Return a JSON object with two keys:\n"
-        "  \"rationale\": one short paragraph (≤80 words) explaining what changed and why.\n"
-        "  \"skill_md\": the complete revised SKILL.md content as a single string.\n"
-        "Return only the JSON object, no surrounding prose."
-    ).arg(skill_md, query, response, user_note);
+    return QStringLiteral("You are revising a finterm agent skill spec based on user feedback.\n\n"
+                          "Current SKILL.md:\n```markdown\n%1\n```\n\n"
+                          "A user dispatched this skill with the query:\n%2\n\n"
+                          "The agent's response was:\n%3\n\n"
+                          "The user marked this turn WRONG with note:\n%4\n\n"
+                          "Propose a minimal revision to SKILL.md that would prevent this "
+                          "failure mode next time.  Keep the YAML front-matter intact.  "
+                          "Make the SMALLEST change needed — usually a clarifying sentence "
+                          "or an explicit don't-do-X bullet.  Preserve existing workflow "
+                          "steps unless they directly caused the failure.\n\n"
+                          "Return a JSON object with two keys:\n"
+                          "  \"rationale\": one short paragraph (≤80 words) explaining what changed and why.\n"
+                          "  \"skill_md\": the complete revised SKILL.md content as a single string.\n"
+                          "Return only the JSON object, no surrounding prose.")
+        .arg(skill_md, query, response, user_note);
 }
 
 } // anonymous namespace
@@ -108,8 +103,7 @@ QString SkillProposalService::resolve_skill_path(const QString& skill_name) cons
         return !c.isEmpty() && c.startsWith(root_prefix);
     };
 
-    QDirIterator it(root, {QStringLiteral("SKILL.md")},
-                    QDir::Files, QDirIterator::Subdirectories);
+    QDirIterator it(root, {QStringLiteral("SKILL.md")}, QDir::Files, QDirIterator::Subdirectories);
     QString fallback;
     while (it.hasNext()) {
         const QString path = it.next();
@@ -128,8 +122,7 @@ QString SkillProposalService::resolve_skill_path(const QString& skill_name) cons
     return fallback;
 }
 
-Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace,
-                                                    const QString& user_note) const {
+Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace, const QString& user_note) const {
     // Pull the skill name out of config_json — written by the slash
     // dispatcher as config["skill"].
     const QJsonDocument doc = QJsonDocument::fromJson(trace.config_json.toUtf8());
@@ -137,17 +130,16 @@ Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace,
         return Result<SkillProposal>::err("trace.config_json is not an object — no skill name to resolve");
     const QString skill_name = doc.object().value(QStringLiteral("skill")).toString();
     if (skill_name.isEmpty())
-        return Result<SkillProposal>::err("trace.config_json has no \"skill\" key — propose-fix needs a slash-dispatched turn");
+        return Result<SkillProposal>::err(
+            "trace.config_json has no \"skill\" key — propose-fix needs a slash-dispatched turn");
 
     const QString path = resolve_skill_path(skill_name);
     if (path.isEmpty())
-        return Result<SkillProposal>::err(
-            std::string("no SKILL.md found for skill: ") + skill_name.toStdString());
+        return Result<SkillProposal>::err(std::string("no SKILL.md found for skill: ") + skill_name.toStdString());
 
     QFile f(path);
     if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
-        return Result<SkillProposal>::err(
-            std::string("failed to read SKILL.md: ") + f.errorString().toStdString());
+        return Result<SkillProposal>::err(std::string("failed to read SKILL.md: ") + f.errorString().toStdString());
     const QString skill_md = QString::fromUtf8(f.readAll());
     f.close();
 
@@ -156,14 +148,12 @@ Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace,
 
     const QString prompt = build_prompt(skill_md, trace.query, trace.response, user_note);
 
-    LOG_INFO(kSkillTag, QString("proposing fix for skill %1 (trace %2)")
-                       .arg(skill_name, trace.request_id.left(8)));
+    LOG_INFO(kSkillTag, QString("proposing fix for skill %1 (trace %2)").arg(skill_name, trace.request_id.left(8)));
 
-    auto resp = ai_chat::LlmService::instance().chat(
-        prompt, std::vector<ai_chat::ConversationMessage>{}, /*use_tools=*/false);
+    auto resp =
+        ai_chat::LlmService::instance().chat(prompt, std::vector<ai_chat::ConversationMessage>{}, /*use_tools=*/false);
     if (!resp.success)
-        return Result<SkillProposal>::err(
-            std::string("LLM error: ") + resp.error.toStdString());
+        return Result<SkillProposal>::err(std::string("LLM error: ") + resp.error.toStdString());
 
     // Parse the JSON envelope.  Models sometimes wrap their output
     // in a ```json fence — strip that if present before parsing.
@@ -181,8 +171,7 @@ Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace,
 
     const QJsonDocument env = QJsonDocument::fromJson(raw.toUtf8());
     if (!env.isObject())
-        return Result<SkillProposal>::err(
-            std::string("LLM returned non-JSON: ") + raw.left(200).toStdString());
+        return Result<SkillProposal>::err(std::string("LLM returned non-JSON: ") + raw.left(200).toStdString());
 
     const QJsonObject obj = env.object();
     SkillProposal out;

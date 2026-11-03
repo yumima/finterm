@@ -14,8 +14,7 @@ AlphaArenaService& AlphaArenaService::instance() {
 }
 
 void AlphaArenaService::run_action(const QJsonObject& payload, ActionCallback cb) {
-    const QString json_arg =
-        QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
+    const QString json_arg = QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
     const QString action = payload.value("action").toString();
 
     fincept::python::PythonRunner::instance().run(
@@ -23,19 +22,18 @@ void AlphaArenaService::run_action(const QJsonObject& payload, ActionCallback cb
         [cb = std::move(cb), action](const fincept::python::PythonResult& result) {
             ActionResult out;
             if (!result.success) {
-                out.error = result.error.isEmpty()
-                                ? QStringLiteral("Engine call failed")
-                                : result.error;
-                LOG_ERROR("AlphaArenaService",
-                          QStringLiteral("%1 failed: %2").arg(action, out.error.left(300)));
-                if (cb) cb(out);
+                out.error = result.error.isEmpty() ? QStringLiteral("Engine call failed") : result.error;
+                LOG_ERROR("AlphaArenaService", QStringLiteral("%1 failed: %2").arg(action, out.error.left(300)));
+                if (cb)
+                    cb(out);
                 return;
             }
 
             const QString json_str = fincept::python::extract_json(result.output);
             if (json_str.isEmpty()) {
                 out.error = QStringLiteral("No response from engine");
-                if (cb) cb(out);
+                if (cb)
+                    cb(out);
                 return;
             }
 
@@ -43,20 +41,23 @@ void AlphaArenaService::run_action(const QJsonObject& payload, ActionCallback cb
             const auto doc = QJsonDocument::fromJson(json_str.toUtf8(), &err);
             if (doc.isNull() || !doc.isObject()) {
                 out.error = QStringLiteral("Invalid response: %1").arg(err.errorString());
-                if (cb) cb(out);
+                if (cb)
+                    cb(out);
                 return;
             }
 
             const QJsonObject obj = doc.object();
             if (!obj.value("success").toBool(false)) {
                 out.error = obj.value("error").toString(QStringLiteral("Engine reported failure"));
-                if (cb) cb(out);
+                if (cb)
+                    cb(out);
                 return;
             }
 
             out.success = true;
             out.data = obj;
-            if (cb) cb(out);
+            if (cb)
+                cb(out);
         });
 }
 

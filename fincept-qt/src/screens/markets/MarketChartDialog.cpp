@@ -13,8 +13,8 @@
 #include <QDateTime>
 #include <QHBoxLayout>
 #include <QKeyEvent>
-#include <QMouseEvent>
 #include <QLabel>
+#include <QMouseEvent>
 #include <QPushButton>
 #include <QScreen>
 #include <QTimeZone>
@@ -29,23 +29,24 @@ namespace {
 
 struct PeriodDef {
     const char* label;
-    const char* period;     // yfinance period
-    const char* interval;   // bar size
+    const char* period;   // yfinance period
+    const char* interval; // bar size
     bool intraday;
 };
 // Bar sizes keep every window inside the canvas's 1,500-bar budget: 5Y daily
 // is ~1,260 bars, and MAX goes monthly because an index like the Dow has more
 // than 1,500 weeks of history.
 constexpr PeriodDef kPeriods[] = {
-    {"1D", "1d", "5m", true},    {"5D", "5d", "15m", true},  {"1M", "1mo", "1d", false},
-    {"3M", "3mo", "1d", false},  {"6M", "6mo", "1d", false}, {"YTD", "ytd", "1d", false},
-    {"1Y", "1y", "1d", false},   {"5Y", "5y", "1d", false},  {"MAX", "max", "1mo", false},
+    {"1D", "1d", "5m", true},   {"5D", "5d", "15m", true},  {"1M", "1mo", "1d", false},
+    {"3M", "3mo", "1d", false}, {"6M", "6mo", "1d", false}, {"YTD", "ytd", "1d", false},
+    {"1Y", "1y", "1d", false},  {"5Y", "5y", "1d", false},  {"MAX", "max", "1mo", false},
 };
 
 const PeriodDef& period_def(const QString& label) {
     for (const auto& p : kPeriods)
-        if (label == QLatin1String(p.label)) return p;
-    return kPeriods[6];   // 1Y
+        if (label == QLatin1String(p.label))
+            return p;
+    return kPeriods[6]; // 1Y
 }
 
 // The reader's choices, kept for the session so every chart opens the way
@@ -136,13 +137,15 @@ ChartClickFilter* click_filter() {
 } // namespace
 
 void MarketChartDialog::make_clickable(QWidget* w) {
-    if (!w) return;
+    if (!w)
+        return;
     w->installEventFilter(click_filter());
     w->setCursor(Qt::PointingHandCursor);
 }
 
 void MarketChartDialog::set_target(QWidget* w, const QString& symbol, const QString& label) {
-    if (!w) return;
+    if (!w)
+        return;
     w->setProperty(kTargetProp, symbol);
     w->setProperty(kLabelProp, label);
 }
@@ -221,8 +224,8 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
     }
     ctl->addSpacing(16);
     using Style = ResearchCandleCanvas::SeriesStyle;
-    for (const auto& [style, text] : {std::pair{Style::Area, "AREA"}, std::pair{Style::Line, "LINE"},
-                                      std::pair{Style::Candles, "CANDLES"}}) {
+    for (const auto& [style, text] :
+         {std::pair{Style::Area, "AREA"}, std::pair{Style::Line, "LINE"}, std::pair{Style::Candles, "CANDLES"}}) {
         auto* b = make_button(QString::fromLatin1(text), ui::colors::CYAN());
         const int s = static_cast<int>(style);
         connect(b, &QPushButton::clicked, this, [this, s]() {
@@ -234,7 +237,12 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
         ctl->addWidget(b);
     }
     ctl->addSpacing(16);
-    struct Toggle { const char* key; const char* text; const char* color; const char* tip; };
+    struct Toggle {
+        const char* key;
+        const char* text;
+        const char* color;
+        const char* tip;
+    };
     const Toggle toggles[] = {
         {"log", "LOG", "#94a3b8", "Logarithmic price scale — equal heights are equal percentage moves."},
         {"vol", "VOL", "#94a3b8", "Volume beneath the price. Indices and FX often report none."},
@@ -251,12 +259,25 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
         b->setToolTip(QString::fromLatin1(t.tip));
         connect(b, &QPushButton::toggled, this, [this, key](bool on) {
             auto& pr = prefs();
-            if (key == "log") { pr.log = on; canvas_->set_log_scale(on); }
-            else if (key == "vol") { pr.vol = on; canvas_->set_show_volume(on); }
-            else if (key == "sma20") { pr.sma20 = on; canvas_->set_show_sma(20, on); }
-            else if (key == "sma50") { pr.sma50 = on; canvas_->set_show_sma(50, on); }
-            else if (key == "sma200") { pr.sma200 = on; canvas_->set_show_sma(200, on); }
-            else if (key == "fut") { pr.fut = on; update_fut_visibility(); }
+            if (key == "log") {
+                pr.log = on;
+                canvas_->set_log_scale(on);
+            } else if (key == "vol") {
+                pr.vol = on;
+                canvas_->set_show_volume(on);
+            } else if (key == "sma20") {
+                pr.sma20 = on;
+                canvas_->set_show_sma(20, on);
+            } else if (key == "sma50") {
+                pr.sma50 = on;
+                canvas_->set_show_sma(50, on);
+            } else if (key == "sma200") {
+                pr.sma200 = on;
+                canvas_->set_show_sma(200, on);
+            } else if (key == "fut") {
+                pr.fut = on;
+                update_fut_visibility();
+            }
         });
         toggle_btns_.insert(key, b);
         ctl->addWidget(b);
@@ -297,7 +318,7 @@ void MarketChartDialog::update_fut_visibility() {
     const bool on = has_future && prefs().fut;
     if (!on) {
         fut_timer_->stop();
-        ++fut_seq_;   // drop any reply still in flight
+        ++fut_seq_; // drop any reply still in flight
         fut_->clear();
         fut_->hide();
         return;
@@ -325,7 +346,7 @@ void MarketChartDialog::fetch_futures() {
     services::fetch_index_futures(
         {sym}, this, [this, seq, sym, paint](bool ok, QHash<QString, services::IndexFutureQuote> rows, QString err) {
             if (seq != fut_seq_ || sym != symbol_)
-                return;   // superseded by another symbol or toggle
+                return; // superseded by another symbol or toggle
             const auto it = rows.constFind(sym);
             if (!ok) {
                 // Keep a good quote on screen through a failed refresh.
@@ -356,10 +377,10 @@ void MarketChartDialog::sync_buttons() {
         it.value()->setChecked(it.key() == pr.period);
     for (auto it = style_btns_.begin(); it != style_btns_.end(); ++it)
         it.value()->setChecked(it.key() == pr.style);
-    const QHash<QString, bool> on{{"log", pr.log},       {"vol", pr.vol},       {"sma20", pr.sma20},
-                                  {"sma50", pr.sma50},   {"sma200", pr.sma200}, {"fut", pr.fut}};
+    const QHash<QString, bool> on{{"log", pr.log},     {"vol", pr.vol},       {"sma20", pr.sma20},
+                                  {"sma50", pr.sma50}, {"sma200", pr.sma200}, {"fut", pr.fut}};
     for (auto it = toggle_btns_.begin(); it != toggle_btns_.end(); ++it) {
-        const QSignalBlocker block(it.value());   // state only; the canvas already agrees
+        const QSignalBlocker block(it.value()); // state only; the canvas already agrees
         it.value()->setChecked(on.value(it.key()));
     }
 }
@@ -369,9 +390,10 @@ void MarketChartDialog::set_symbol(const QString& symbol, const QString& label) 
     symbol_ = symbol;
     label_ = label.isEmpty() ? symbol : label;
     setWindowTitle(QStringLiteral("%1 — chart").arg(label_));
-    title_->setText(label_ == symbol_ ? symbol_ : QStringLiteral("%1  <span style='color:%2;font-size:13px'>%3</span>")
-                                                      .arg(label_.toHtmlEscaped(), ui::colors::TEXT_TERTIARY(),
-                                                           symbol_.toHtmlEscaped()));
+    title_->setText(label_ == symbol_
+                        ? symbol_
+                        : QStringLiteral("%1  <span style='color:%2;font-size:13px'>%3</span>")
+                              .arg(label_.toHtmlEscaped(), ui::colors::TEXT_TERTIARY(), symbol_.toHtmlEscaped()));
     if (auto* er = findChild<QPushButton*>(QStringLiteral("er")))
         er->setVisible(has_research_page(symbol_));
     if (changed) {
@@ -398,34 +420,35 @@ void MarketChartDialog::load() {
     readout_->clear();
     QPointer<MarketChartDialog> self = this;
     const QString sym = symbol_;
-    services::MarketDataService::instance().fetch_history( // D4-exempt: needs ok flag for the error state + request_seq_ supersession
-        sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
-        [self, seq, key](bool ok, QVector<services::HistoryPoint> pts) {
-            // A later click (another period or symbol) supersedes this one.
-            if (!self || seq != self->request_seq_)
-                return;
-            self->overlay_->hide_loading();
-            if (!ok) {
-                self->canvas_->clear();
-                self->canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
-                return;
-            }
-            QVector<services::equity::Candle> candles;
-            candles.reserve(pts.size());
-            for (const auto& p : pts) {
-                services::equity::Candle c;
-                c.timestamp = p.timestamp;
-                c.open = p.open;
-                c.high = p.high;
-                c.low = p.low;
-                c.close = p.close;
-                c.volume = p.volume;
-                candles.append(c);
-            }
-            if (!candles.isEmpty())
-                self->cache_.insert(key, candles);
-            self->apply(candles);
-        });
+    services::MarketDataService::instance()
+        .fetch_history( // D4-exempt: needs ok flag for the error state + request_seq_ supersession
+            sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
+            [self, seq, key](bool ok, QVector<services::HistoryPoint> pts) {
+                // A later click (another period or symbol) supersedes this one.
+                if (!self || seq != self->request_seq_)
+                    return;
+                self->overlay_->hide_loading();
+                if (!ok) {
+                    self->canvas_->clear();
+                    self->canvas_->set_placeholder_state(ResearchCandleCanvas::PlaceholderState::Error);
+                    return;
+                }
+                QVector<services::equity::Candle> candles;
+                candles.reserve(pts.size());
+                for (const auto& p : pts) {
+                    services::equity::Candle c;
+                    c.timestamp = p.timestamp;
+                    c.open = p.open;
+                    c.high = p.high;
+                    c.low = p.low;
+                    c.close = p.close;
+                    c.volume = p.volume;
+                    candles.append(c);
+                }
+                if (!candles.isEmpty())
+                    self->cache_.insert(key, candles);
+                self->apply(candles);
+            });
 }
 
 void MarketChartDialog::apply(const QVector<services::equity::Candle>& candles) {

@@ -55,7 +55,7 @@ class WatchlistWidget : public BaseWidget {
     QHash<QString, ui::InlineSparkline*> spark_widgets_;
 
     QHash<QString, fincept::services::QuoteData> row_cache_;
-    QHash<QString, QVector<double>>              sparkline_cache_;
+    QHash<QString, QVector<double>> sparkline_cache_;
     bool hub_active_ = false;
 
     // Coalesce quote + sparkline callbacks (2N/cycle) into one in-place update.

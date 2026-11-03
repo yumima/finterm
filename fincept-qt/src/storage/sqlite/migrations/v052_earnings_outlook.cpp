@@ -31,9 +31,8 @@ Result<void> add_column(QSqlDatabase& db, const char* column, const char* type) 
 }
 
 Result<void> apply_v052(QSqlDatabase& db) {
-    for (const auto& [column, type] : {std::pair{"model_version", "INTEGER"},
-                                       std::pair{"p_beat", "REAL"},
-                                       std::pair{"implied_move_pct", "REAL"}}) {
+    for (const auto& [column, type] :
+         {std::pair{"model_version", "INTEGER"}, std::pair{"p_beat", "REAL"}, std::pair{"implied_move_pct", "REAL"}}) {
         auto r = add_column(db, column, type);
         if (r.is_err())
             return r;

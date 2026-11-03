@@ -75,10 +75,8 @@ class EquityTradingScreen : public QWidget, public IWorkspaceParticipant, public
     void on_stream_orders_updated(const QString& account_id, const QVector<trading::BrokerOrderInfo>& orders);
     void on_stream_funds_updated(const QString& account_id, const trading::BrokerFunds& funds);
     void on_stream_candles_fetched(const QString& account_id, const QVector<trading::BrokerCandle>& candles);
-    void on_stream_orderbook_fetched(const QString& account_id,
-                                     const QVector<QPair<double, double>>& bids,
-                                     const QVector<QPair<double, double>>& asks,
-                                     double spread, double spread_pct);
+    void on_stream_orderbook_fetched(const QString& account_id, const QVector<QPair<double, double>>& bids,
+                                     const QVector<QPair<double, double>>& asks, double spread, double spread_pct);
     void on_stream_time_sales_fetched(const QString& account_id, const QVector<trading::BrokerTrade>& trades);
     void on_stream_latest_trade_fetched(const QString& account_id, const trading::BrokerTrade& trade);
     void on_stream_calendar_fetched(const QString& account_id, const QVector<trading::MarketCalendarDay>& days);
@@ -95,14 +93,14 @@ class EquityTradingScreen : public QWidget, public IWorkspaceParticipant, public
     void async_modify_order(const QString& order_id, double qty, double price);
 
     // ── Command bar widgets ──
-    QPushButton* account_btn_ = nullptr;  // shows focused account name
-    QMenu* account_menu_ = nullptr;       // lists all active accounts
+    QPushButton* account_btn_ = nullptr; // shows focused account name
+    QMenu* account_menu_ = nullptr;      // lists all active accounts
     QLineEdit* symbol_input_ = nullptr;
     QPushButton* mode_btn_ = nullptr;
     QPushButton* accounts_btn_ = nullptr; // opens AccountManagementDialog
     QLabel* exchange_label_ = nullptr;
     QLabel* clock_label_ = nullptr;
-    QLabel* conn_label_ = nullptr;        // aggregate connection status
+    QLabel* conn_label_ = nullptr; // aggregate connection status
 
     // ── Sub-widgets ──
     equity::EquityTickerBar* ticker_bar_ = nullptr;
@@ -117,7 +115,7 @@ class EquityTradingScreen : public QWidget, public IWorkspaceParticipant, public
     QTimer* market_clock_timer_ = nullptr;
 
     // ── Multi-account state ──
-    QString focused_account_id_;          // the account targeted by order entry + chart
+    QString focused_account_id_; // the account targeted by order entry + chart
     QString selected_symbol_ = "AAPL";
     QString selected_exchange_ = "NASDAQ";
 

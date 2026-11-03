@@ -14,8 +14,8 @@ namespace fincept::services {
 
 namespace {
 
-constexpr qint64 kRetryTransientSec = 120;  // refused / unanswered: says nothing about the symbol
-constexpr qint64 kRetryErrorSec = 3600;     // failed some other way: still not an answer
+constexpr qint64 kRetryTransientSec = 120; // refused / unanswered: says nothing about the symbol
+constexpr qint64 kRetryErrorSec = 3600;    // failed some other way: still not an answer
 
 // Symbols that look like TSX bare tickers (letters only, 1–4 chars, no dot).
 // We try a `.TO` suffix first before giving up, since many Canadian holdings
@@ -199,18 +199,17 @@ void SectorResolver::resolve_async(const QString& symbol) {
         // Try 2: TSX suffix fallback for bare Canadian tickers.
         if (looks_like_canadian_bare(symbol)) {
             QString tsx_symbol = symbol + ".TO";
-            MarketDataService::instance().fetch_info(
-                tsx_symbol, [self, symbol, finish](bool ok2, InfoData info2) {
-                    if (!self)
-                        return;
-                    // .TO is a guess: refused -> ask again later; failed for
-                    // good (no such listing) -> the answer try 1 already gave.
-                    if (!info2.info_answered && info2.info_transient) {
-                        self->defer(symbol, kRetryTransientSec);
-                        return;
-                    }
-                    finish(info2.info_answered ? info2.sector : QString{}, info2.industry, {});
-                });
+            MarketDataService::instance().fetch_info(tsx_symbol, [self, symbol, finish](bool ok2, InfoData info2) {
+                if (!self)
+                    return;
+                // .TO is a guess: refused -> ask again later; failed for
+                // good (no such listing) -> the answer try 1 already gave.
+                if (!info2.info_answered && info2.info_transient) {
+                    self->defer(symbol, kRetryTransientSec);
+                    return;
+                }
+                finish(info2.info_answered ? info2.sector : QString{}, info2.industry, {});
+            });
             return;
         }
         finish({}, info.industry, {});

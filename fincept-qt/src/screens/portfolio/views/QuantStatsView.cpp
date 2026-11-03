@@ -248,12 +248,12 @@ void QuantStatsView::build_ui() {
         mc_run_btn_ = new QPushButton("\u25B6 RUN MONTE CARLO (1000 paths)");
         mc_run_btn_->setFixedHeight(28);
         mc_run_btn_->setCursor(Qt::PointingHandCursor);
-        mc_run_btn_->setStyleSheet(
-            QString("QPushButton { background:%1; color:#000; border:none;"
-                    "  padding:0 16px; font-size:12px; font-weight:700; }"
-                    "QPushButton:hover { background:%2; }"
-                    "QPushButton:disabled { background:%3; color:%4; }")
-                .arg(ui::colors::AMBER(), ui::colors::WARNING(), ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY()));
+        mc_run_btn_->setStyleSheet(QString("QPushButton { background:%1; color:#000; border:none;"
+                                           "  padding:0 16px; font-size:12px; font-weight:700; }"
+                                           "QPushButton:hover { background:%2; }"
+                                           "QPushButton:disabled { background:%3; color:%4; }")
+                                       .arg(ui::colors::AMBER(), ui::colors::WARNING(), ui::colors::BG_RAISED(),
+                                            ui::colors::TEXT_SECONDARY()));
         connect(mc_run_btn_, &QPushButton::clicked, this, &QuantStatsView::run_monte_carlo);
         mc_btn_row->addWidget(mc_run_btn_);
 
@@ -482,9 +482,8 @@ void QuantStatsView::update_metrics() {
             r, 2, make_item(row.benchmark, Qt::AlignRight | Qt::AlignVCenter, QColor(ui::colors::TEXT_SECONDARY())));
     }
 
-    QTimer::singleShot(0, metrics_table_, [this, prev_scroll]() {
-        metrics_table_->verticalScrollBar()->setValue(prev_scroll);
-    });
+    QTimer::singleShot(0, metrics_table_,
+                       [this, prev_scroll]() { metrics_table_->verticalScrollBar()->setValue(prev_scroll); });
 }
 
 // ── update_returns ────────────────────────────────────────────────────────────
@@ -555,8 +554,8 @@ void QuantStatsView::update_returns() {
         card_l->setSpacing(4);
 
         auto* lbl = new QLabel(c.label);
-        lbl->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
         card_l->addWidget(lbl);
 
         auto* val_lbl = new QLabel(c.value);
@@ -837,9 +836,12 @@ void QuantStatsView::update_monte_carlo_chart() {
         // null from the script → NaN → "—" in a neutral colour
         {"MEDIAN RETURN", pct_str(median_ret),
          std::isnan(median_ret) ? ui::colors::TEXT_SECONDARY()
-                                : median_ret >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()},
+         : median_ret >= 0      ? ui::colors::POSITIVE()
+                                : ui::colors::NEGATIVE()},
         {"5TH PERCENTILE", pct_str(pct5),
-         std::isnan(pct5) ? ui::colors::TEXT_SECONDARY() : pct5 >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()},
+         std::isnan(pct5) ? ui::colors::TEXT_SECONDARY()
+         : pct5 >= 0      ? ui::colors::POSITIVE()
+                          : ui::colors::NEGATIVE()},
         {"95TH PERCENTILE", pct_str(pct95), ui::colors::POSITIVE()},
         {"PROB OF LOSS", pct_str(prob_loss), ui::colors::WARNING()},
         {"EXP MAX DRAWDOWN", pct_str(exp_max_dd), ui::colors::NEGATIVE()},
@@ -851,8 +853,8 @@ void QuantStatsView::update_monte_carlo_chart() {
         col_l->setContentsMargins(0, 0, 0, 0);
         col_l->setSpacing(2);
         auto* lbl = new QLabel(s.label);
-        lbl->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
         col_l->addWidget(lbl);
         auto* val = new QLabel(s.value);
         val->setStyleSheet(QString("color:%1; font-size:14px; font-weight:700;").arg(s.color));
@@ -1027,16 +1029,15 @@ void QuantStatsView::run_quantstats() {
     if (symbols.isEmpty()) {
         qs_running_ = false;
         qs_run_btn_->setEnabled(true);
-        qs_status_->setText(QString("QuantStats unavailable — no valued holdings (excluded: %1)")
-                                .arg(excluded.join(", ")));
+        qs_status_->setText(
+            QString("QuantStats unavailable — no valued holdings (excluded: %1)").arg(excluded.join(", ")));
         qs_status_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
         return;
     }
 
     QPointer<QuantStatsView> self = this;
     PortfolioAnalyticsService::instance().run_quantstats(
-        symbols, weights_by_symbol,
-        services::PortfolioService::instance().risk_free_rate(),
+        symbols, weights_by_symbol, services::PortfolioService::instance().risk_free_rate(),
         [self, excluded](const AnalyticsResult& r) {
             if (!self)
                 return;
@@ -1121,8 +1122,8 @@ void QuantStatsView::run_monte_carlo() {
     if (symbols.isEmpty()) {
         mc_running_ = false;
         mc_run_btn_->setEnabled(true);
-        mc_status_->setText(QString("Monte Carlo unavailable — no valued holdings (excluded: %1)")
-                                .arg(excluded.join(", ")));
+        mc_status_->setText(
+            QString("Monte Carlo unavailable — no valued holdings (excluded: %1)").arg(excluded.join(", ")));
         mc_status_->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::NEGATIVE()));
         return;
     }
@@ -1148,15 +1149,15 @@ void QuantStatsView::run_monte_carlo() {
                     }
 
                     self->mc_data_ = r.data;
-                    const QString done = QString("%1 paths simulated")
-                                             .arg(r.data["num_paths_shown"].toInt() > 0 ? "1000" : "0");
+                    const QString done =
+                        QString("%1 paths simulated").arg(r.data["num_paths_shown"].toInt() > 0 ? "1000" : "0");
                     if (excluded.isEmpty()) {
                         self->mc_status_->setText(QString("Complete — %1").arg(done));
                         self->mc_status_->setStyleSheet(
                             QString("color:%1; font-size:12px;").arg(ui::colors::POSITIVE()));
                     } else {
-                        self->mc_status_->setText(QString("Partial: %1; excluded (no price/FX): %2")
-                                                      .arg(done, excluded.join(", ")));
+                        self->mc_status_->setText(
+                            QString("Partial: %1; excluded (no price/FX): %2").arg(done, excluded.join(", ")));
                         self->mc_status_->setStyleSheet(
                             QString("color:%1; font-size:12px;").arg(ui::colors::WARNING()));
                     }

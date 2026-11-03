@@ -34,8 +34,9 @@ static QString SIDEBAR_SS() {
                    "QScrollBar::handle:vertical { background: %7; }"
                    "QScrollBar::handle:vertical:hover { background: %8; }"
                    "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
-        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(),
-             ui::colors::BG_HOVER(), ui::colors::AMBER(), ui::colors::BORDER_MED(), ui::colors::BORDER_BRIGHT());
+        .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
+             ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER(), ui::colors::AMBER(), ui::colors::BORDER_MED(),
+             ui::colors::BORDER_BRIGHT());
 }
 
 static QString SCROLL_SS() {
@@ -137,7 +138,8 @@ QWidget* DocsScreen::make_skill_panel(const QString& beginner, const QString& in
 
     for (const auto& lvl : levels) {
         auto* row = new QWidget(this);
-        row->setStyleSheet(QString("background: transparent; border-bottom: 1px solid %1;").arg(ui::colors::BG_RAISED()));
+        row->setStyleSheet(
+            QString("background: transparent; border-bottom: 1px solid %1;").arg(ui::colors::BG_RAISED()));
         auto* rl = new QHBoxLayout(row);
         rl->setContentsMargins(12, 8, 12, 8);
         rl->setSpacing(10);
@@ -1538,8 +1540,8 @@ DocsScreen::DocsScreen(QWidget* parent) : QWidget(parent) {
 
     // ── Command bar ──────────────────────────────────────────────────────────
     auto* cmd = new QWidget(this);
-    cmd->setStyleSheet(
-        QString("background: %1; border-bottom: 1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    cmd->setStyleSheet(QString("background: %1; border-bottom: 1px solid %2;")
+                           .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     cmd->setFixedHeight(32);
     auto* cmd_hl = new QHBoxLayout(cmd);
     cmd_hl->setContentsMargins(10, 0, 10, 0);

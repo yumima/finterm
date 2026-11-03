@@ -29,23 +29,23 @@ class LoginScreen : public QWidget {
     void showEvent(QShowEvent* event) override;
 
   private:
-    QStackedWidget* pages_         = nullptr;
+    QStackedWidget* pages_ = nullptr;
 
     // ── Picker page ───────────────────────────────────────────────────────
-    QWidget*      picker_page_     = nullptr;
-    QListWidget*  user_list_       = nullptr;
-    QPushButton*  create_btn_      = nullptr;
-    QLabel*       picker_empty_    = nullptr;
+    QWidget* picker_page_ = nullptr;
+    QListWidget* user_list_ = nullptr;
+    QPushButton* create_btn_ = nullptr;
+    QLabel* picker_empty_ = nullptr;
 
     // ── PIN page ──────────────────────────────────────────────────────────
-    QWidget*      pin_page_        = nullptr;
-    QLabel*       pin_username_lbl_ = nullptr;
-    QLineEdit*    pin_input_       = nullptr;
-    QPushButton*  pin_unlock_btn_  = nullptr;
-    QPushButton*  pin_back_btn_    = nullptr;
-    QPushButton*  pin_delete_btn_  = nullptr;
-    QLabel*       pin_error_       = nullptr;
-    QString       active_username_;
+    QWidget* pin_page_ = nullptr;
+    QLabel* pin_username_lbl_ = nullptr;
+    QLineEdit* pin_input_ = nullptr;
+    QPushButton* pin_unlock_btn_ = nullptr;
+    QPushButton* pin_back_btn_ = nullptr;
+    QPushButton* pin_delete_btn_ = nullptr;
+    QLabel* pin_error_ = nullptr;
+    QString active_username_;
 
     void build_picker_page();
     void build_pin_page();

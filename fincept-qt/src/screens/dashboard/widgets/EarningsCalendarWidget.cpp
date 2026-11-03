@@ -1,13 +1,11 @@
 // src/screens/dashboard/widgets/EarningsCalendarWidget.cpp
 #include "screens/dashboard/widgets/EarningsCalendarWidget.h"
 
-#include "core/util/BarTime.h"
-
-#include "screens/dashboard/widgets/EarningsMath.h"
-
 #include "core/logging/Logger.h"
+#include "core/util/BarTime.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonWorker.h"
+#include "screens/dashboard/widgets/EarningsMath.h"
 #include "services/portfolio/PortfolioService.h"
 #include "ui/theme/Theme.h"
 
@@ -39,10 +37,11 @@ namespace {
 /// Tokyo at 01:00 JST has a local date a day ahead of ET, so an evening ET
 /// print still eight hours away was filed as past, dropped out of `future`,
 /// and vanished from the dashboard for exactly the hours before it mattered.
-QDate market_today() { return core::bartime::market_today_et(); }
+QDate market_today() {
+    return core::bartime::market_today_et();
+}
 
 } // namespace
-
 
 using earnings::fmt_eps;
 using earnings::Growth;
@@ -52,7 +51,6 @@ using earnings::parse_money;
 // Default portfolio for a fresh tile — the same key PortfolioSummaryWidget
 // persists, so a new tile opens on the book the user already picked.
 static constexpr auto kSelectedPortfolioKey = "dashboard/portfolio_id";
-
 
 EarningsCalendarWidget::EarningsCalendarWidget(const QJsonObject& cfg, QWidget* parent)
     : BaseWidget("EARNINGS CALENDAR", parent, ui::colors::AMBER()) {
@@ -73,20 +71,17 @@ EarningsCalendarWidget::EarningsCalendarWidget(const QJsonObject& cfg, QWidget* 
         selected_ids_ = {default_id};
 
     auto& svc = services::PortfolioService::instance();
-    connect(&svc, &services::PortfolioService::portfolios_loaded, this,
-            &EarningsCalendarWidget::on_portfolios_loaded);
-    connect(&svc, &services::PortfolioService::summary_loaded, this,
-            &EarningsCalendarWidget::on_summary_loaded);
+    connect(&svc, &services::PortfolioService::portfolios_loaded, this, &EarningsCalendarWidget::on_portfolios_loaded);
+    connect(&svc, &services::PortfolioService::summary_loaded, this, &EarningsCalendarWidget::on_summary_loaded);
     // Without this a failed summary load leaves the tile on "Loading…" forever
     // — the work that clears it only starts from summary_loaded.
-    connect(&svc, &services::PortfolioService::summary_error, this,
-            [this](QString portfolio_id, QString error) {
-                if (!awaiting_summaries_.remove(portfolio_id))
-                    return;
-                LOG_WARN("EarningsCal", QString("summary failed for %1: %2").arg(portfolio_id, error.left(120)));
-                if (awaiting_summaries_.isEmpty())
-                    on_holdings_ready();
-            });
+    connect(&svc, &services::PortfolioService::summary_error, this, [this](QString portfolio_id, QString error) {
+        if (!awaiting_summaries_.remove(portfolio_id))
+            return;
+        LOG_WARN("EarningsCal", QString("summary failed for %1: %2").arg(portfolio_id, error.left(120)));
+        if (awaiting_summaries_.isEmpty())
+            on_holdings_ready();
+    });
 
     connect(this, &BaseWidget::refresh_requested, this, [this] { refresh_data(); });
 
@@ -135,21 +130,19 @@ void EarningsCalendarWidget::build_body() {
     // header while the number sat somewhere else in the cell is what made the
     // column look out of line.
     auto* eps_hdr = make_hdr("EPS EST", 3, Qt::AlignHCenter);
-    eps_hdr->setToolTip(
-        QStringLiteral("Consensus EPS estimate for the quarter being reported.\n"
-                       "▲ green / ▼ red compares it with the same quarter a year ago —\n"
-                       "i.e. whether analysts expect growth, not a beat or a miss."));
+    eps_hdr->setToolTip(QStringLiteral("Consensus EPS estimate for the quarter being reported.\n"
+                                       "▲ green / ▼ red compares it with the same quarter a year ago —\n"
+                                       "i.e. whether analysts expect growth, not a beat or a miss."));
     // Sequential: the estimate in the column to the left, measured against what
     // the last quarter actually printed. Numerator is the current figure,
     // denominator the previous one.
     surprise_header_ = make_hdr("vs PREV Q", 3, Qt::AlignHCenter);
-    surprise_header_->setToolTip(
-        QStringLiteral("The coming quarter's consensus against what the last reported\n"
-                       "quarter actually printed:\n"
-                       "   (this estimate − last quarter's actual) ÷ last quarter's actual\n"
-                       "Sequential, so it reflects seasonality — a retailer's Q1 will read\n"
-                       "badly against Q4 every year. The ▲▼ on the estimate itself is the\n"
-                       "year-on-year comparison, which is the seasonally honest one."));
+    surprise_header_->setToolTip(QStringLiteral("The coming quarter's consensus against what the last reported\n"
+                                                "quarter actually printed:\n"
+                                                "   (this estimate − last quarter's actual) ÷ last quarter's actual\n"
+                                                "Sequential, so it reflects seasonality — a retailer's Q1 will read\n"
+                                                "badly against Q4 every year. The ▲▼ on the estimate itself is the\n"
+                                                "year-on-year comparison, which is the seasonally honest one."));
     weight_header_ = make_hdr("WT%", 2, Qt::AlignRight);
     vl->addWidget(header_widget_);
 
@@ -207,8 +200,7 @@ void EarningsCalendarWidget::build_portfolio_selector() {
     // Clicking a row moves the current index, and an editable combo mirrors
     // that row's text into the line edit — which would replace our summary
     // ("3 portfolios") with whatever was clicked last. Put it back.
-    connect(portfolio_combo_, &QComboBox::currentIndexChanged, this,
-            [this](int) { update_selector_text(); });
+    connect(portfolio_combo_, &QComboBox::currentIndexChanged, this, [this](int) { update_selector_text(); });
 
     add_title_bar_control(portfolio_combo_);
     portfolio_combo_->setVisible(false);
@@ -627,18 +619,14 @@ void EarningsCalendarWidget::on_holdings_ready() {
 
     if (symbols.isEmpty()) {
         set_loading(false);
-        show_status(effective_portfolio_ids().isEmpty()
-                        ? QStringLiteral("No portfolio selected.")
-                        : QStringLiteral("The selected portfolios have no holdings."));
+        show_status(effective_portfolio_ids().isEmpty() ? QStringLiteral("No portfolio selected.")
+                                                        : QStringLiteral("The selected portfolios have no holdings."));
         return;
     }
     if (symbols.size() > kMaxSymbolFetches) {
-        note_ = QStringLiteral("Checked the first %1 of %2 holdings.")
-                    .arg(kMaxSymbolFetches)
-                    .arg(symbols.size());
-        LOG_INFO("EarningsCal", QString("capping earnings lookup at %1 of %2 holdings")
-                                    .arg(kMaxSymbolFetches)
-                                    .arg(symbols.size()));
+        note_ = QStringLiteral("Checked the first %1 of %2 holdings.").arg(kMaxSymbolFetches).arg(symbols.size());
+        LOG_INFO("EarningsCal",
+                 QString("capping earnings lookup at %1 of %2 holdings").arg(kMaxSymbolFetches).arg(symbols.size()));
         symbols = symbols.mid(0, kMaxSymbolFetches);
     }
     fetch_symbol_earnings(symbols, epoch_, /*portfolio_view=*/true);
@@ -674,14 +662,12 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
                     // (ok:false since the daemon sends errors as failed
                     // replies) is the ETF/index "no earnings" case — skipped
                     // quietly, as before.
-                    LOG_WARN("EarningsCal",
-                             QString("earnings_dates failed for %1: %2").arg(sym, err.left(120)));
+                    LOG_WARN("EarningsCal", QString("earnings_dates failed for %1: %2").arg(sym, err.left(120)));
                     self->refused_symbols_.append(sym);
                 } else {
                     // Not a refusal: usually an ETF/index with no earnings —
                     // logged quietly so a real parse bug is still findable.
-                    LOG_DEBUG("EarningsCal",
-                              QString("earnings_dates: no data for %1: %2").arg(sym, err.left(120)));
+                    LOG_DEBUG("EarningsCal", QString("earnings_dates: no data for %1: %2").arg(sym, err.left(120)));
                 }
 
                 if (--self->pending_symbols_ > 0)
@@ -702,15 +688,17 @@ void EarningsCalendarWidget::fetch_symbol_earnings(const QStringList& symbols, q
                 // shown, so the calendar stays.
                 // At most five names, so a burst on a big book can't flood the tile.
                 const auto& rs = self->refused_symbols_;
-                self->refused_note_ = rs.isEmpty() ? QString()
-                    : rs.size() <= 5 ? QStringLiteral("No answer from Yahoo for: %1.").arg(rs.join(QStringLiteral(", ")))
-                                     : QStringLiteral("No answer from Yahoo for %1 symbols (%2, …).")
-                                           .arg(rs.size()).arg(rs.mid(0, 5).join(QStringLiteral(", ")));
+                self->refused_note_ =
+                    rs.isEmpty() ? QString()
+                    : rs.size() <= 5
+                        ? QStringLiteral("No answer from Yahoo for: %1.").arg(rs.join(QStringLiteral(", ")))
+                        : QStringLiteral("No answer from Yahoo for %1 symbols (%2, …).")
+                              .arg(rs.size())
+                              .arg(rs.mid(0, 5).join(QStringLiteral(", ")));
                 if (portfolio_view) {
-                    std::sort(self->entries_.begin(), self->entries_.end(),
-                              [](const Entry& a, const Entry& b) {
-                                  return a.date != b.date ? a.date < b.date : a.symbol < b.symbol;
-                              });
+                    std::sort(self->entries_.begin(), self->entries_.end(), [](const Entry& a, const Entry& b) {
+                        return a.date != b.date ? a.date < b.date : a.symbol < b.symbol;
+                    });
                 }
                 self->populate();
             },
@@ -928,9 +916,9 @@ void EarningsCalendarWidget::populate() {
             tip << QStringLiteral("Fiscal quarter ending %1").arg(e.fiscal_quarter);
         if (e.has_ly)
             tip << QStringLiteral("Year-ago EPS %1%2")
-                       .arg(fmt_eps(e.eps_ly),
-                            e.ly_report_date.isEmpty() ? QString()
-                                                       : QStringLiteral(" (reported %1)").arg(e.ly_report_date));
+                       .arg(fmt_eps(e.eps_ly), e.ly_report_date.isEmpty()
+                                                   ? QString()
+                                                   : QStringLiteral(" (reported %1)").arg(e.ly_report_date));
         if (e.num_ests > 0)
             tip << QStringLiteral("%1 analyst estimates").arg(e.num_ests);
         if (e.rank > 0)
@@ -949,8 +937,7 @@ void EarningsCalendarWidget::populate() {
         QString eps_tip = QStringLiteral("No consensus estimate published for this print.");
         if (e.has_est) {
             eps_text = fmt_eps(e.eps_est);
-            const QString source = e.est_from_yf ? QStringLiteral("Yahoo Finance")
-                                                 : QStringLiteral("Nasdaq");
+            const QString source = e.est_from_yf ? QStringLiteral("Yahoo Finance") : QStringLiteral("Nasdaq");
             const Growth g = e.has_ly ? growth_verdict(e.eps_est, e.eps_ly) : Growth::Unknown;
             switch (g) {
                 case Growth::Up:
@@ -997,9 +984,8 @@ void EarningsCalendarWidget::populate() {
         double seq_pct = 0;
         const bool same_panel = e.est_from_yf && e.has_prev_values;
         if (same_panel && e.has_est && earnings::sequential_pct(e.eps_est, e.prev_actual, &seq_pct)) {
-            seq_text = QStringLiteral("%1%2%")
-                           .arg(seq_pct >= 0 ? QStringLiteral("+") : QString())
-                           .arg(seq_pct, 0, 'f', 1);
+            seq_text =
+                QStringLiteral("%1%2%").arg(seq_pct >= 0 ? QStringLiteral("+") : QString()).arg(seq_pct, 0, 'f', 1);
             switch (growth_verdict(e.eps_est, e.prev_actual)) {
                 case Growth::Up:
                     seq_colour = ui::colors::POSITIVE();
@@ -1042,8 +1028,9 @@ void EarningsCalendarWidget::populate() {
     }
     list_layout_->addStretch();
 
-    const QString note = note_.isEmpty() ? refused_note_
-                       : refused_note_.isEmpty() ? note_ : note_ + QLatin1Char(' ') + refused_note_;
+    const QString note = note_.isEmpty()           ? refused_note_
+                         : refused_note_.isEmpty() ? note_
+                                                   : note_ + QLatin1Char(' ') + refused_note_;
     status_label_->setVisible(!note.isEmpty());
     if (!note.isEmpty())
         status_label_->setText(note);
@@ -1053,10 +1040,9 @@ void EarningsCalendarWidget::populate() {
 // ── Styling ──────────────────────────────────────────────────────────────────
 
 void EarningsCalendarWidget::apply_styles() {
-    const QString active =
-        QString("QPushButton { background:%1; color:%2; border:none; font-weight:bold;"
-                "  font-size:%3; padding:2px; }")
-            .arg(ui::colors::AMBER_DIM(), ui::colors::AMBER(), ui::fonts::ui_px());
+    const QString active = QString("QPushButton { background:%1; color:%2; border:none; font-weight:bold;"
+                                   "  font-size:%3; padding:2px; }")
+                               .arg(ui::colors::AMBER_DIM(), ui::colors::AMBER(), ui::fonts::ui_px());
     const QString idle =
         QString("QPushButton { background:transparent; color:%1; border:none; font-size:%2; padding:2px; }"
                 "QPushButton:hover { color:%3; }")
@@ -1102,8 +1088,8 @@ void EarningsCalendarWidget::apply_styles() {
                     "QComboBox::drop-down { border:none; width:14px; }"
                     "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3;"
                     "  selection-background-color:%6; selection-color:%2; outline:none; }")
-                .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(),
-                     ui::fonts::ui_px(), ui::colors::AMBER(), ui::colors::BG_HOVER()));
+                .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::fonts::ui_px(),
+                     ui::colors::AMBER(), ui::colors::BG_HOVER()));
 }
 
 void EarningsCalendarWidget::on_theme_changed() {

@@ -14,9 +14,9 @@
 #include <QUrl>
 #include <QUrlQuery>
 
-static constexpr int kCategoriesTtlSec  = 5 * 60;
-static constexpr int kStatsTtlSec       = 2 * 60;
-static constexpr int kTrendingTtlSec    = 2 * 60;
+static constexpr int kCategoriesTtlSec = 5 * 60;
+static constexpr int kStatsTtlSec = 2 * 60;
+static constexpr int kTrendingTtlSec = 2 * 60;
 static constexpr int kTransferTimeoutMs = 10000; // 10s per API request
 
 namespace fincept::services {
@@ -48,7 +48,10 @@ QString ForumService::base_url() {
 
 void ForumService::get(const QString& path, std::function<void(bool, QJsonObject)> cb) {
     const QString base = base_url();
-    if (base.isEmpty()) { cb(false, {}); return; }  // forum disabled (no URL configured)
+    if (base.isEmpty()) {
+        cb(false, {});
+        return;
+    } // forum disabled (no URL configured)
     QNetworkRequest req(QUrl(base + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setRawHeader("Accept", "application/json");
@@ -75,7 +78,10 @@ void ForumService::get(const QString& path, std::function<void(bool, QJsonObject
 
 void ForumService::post_req(const QString& path, const QJsonObject& body, std::function<void(bool, QJsonObject)> cb) {
     const QString base = base_url();
-    if (base.isEmpty()) { cb(false, {}); return; }
+    if (base.isEmpty()) {
+        cb(false, {});
+        return;
+    }
     QNetworkRequest req(QUrl(base + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
@@ -97,7 +103,10 @@ void ForumService::post_req(const QString& path, const QJsonObject& body, std::f
 
 void ForumService::put_req(const QString& path, const QJsonObject& body, std::function<void(bool, QJsonObject)> cb) {
     const QString base = base_url();
-    if (base.isEmpty()) { cb(false, {}); return; }
+    if (base.isEmpty()) {
+        cb(false, {});
+        return;
+    }
     QNetworkRequest req(QUrl(base + path));
     req.setRawHeader("X-API-KEY", api_key().toUtf8());
     req.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
@@ -418,4 +427,3 @@ void ForumService::update_profile(const QString& display_name, const QString& bi
 }
 
 } // namespace fincept::services
-

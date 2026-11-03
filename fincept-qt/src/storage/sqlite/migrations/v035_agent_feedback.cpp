@@ -36,14 +36,14 @@ static Result<void> sql(QSqlDatabase& db, const char* stmt) {
 }
 
 static Result<void> apply_v035(QSqlDatabase& db) {
-    if (auto r = sql(db,
-            "CREATE TABLE IF NOT EXISTS agent_feedback ("
-            "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
-            "  request_id TEXT NOT NULL,"
-            "  verdict TEXT NOT NULL,"
-            "  note TEXT,"
-            "  created_at TEXT NOT NULL DEFAULT (datetime('now'))"
-            ")"); r.is_err()) {
+    if (auto r = sql(db, "CREATE TABLE IF NOT EXISTS agent_feedback ("
+                         "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+                         "  request_id TEXT NOT NULL,"
+                         "  verdict TEXT NOT NULL,"
+                         "  note TEXT,"
+                         "  created_at TEXT NOT NULL DEFAULT (datetime('now'))"
+                         ")");
+        r.is_err()) {
         return r;
     }
     // Indexes are nice-to-have, not load-bearing — but a silent skip

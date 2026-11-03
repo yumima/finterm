@@ -101,7 +101,7 @@ void CapabilityRegistry::load() {
         Capability c;
         c.id = obj.value("id").toString();
         if (c.id.isEmpty())
-            continue;  // Malformed; skip.
+            continue; // Malformed; skip.
         c.label = obj.value("label").toString();
         c.description = obj.value("description").toString();
         for (const auto& rt : runtimes_) {

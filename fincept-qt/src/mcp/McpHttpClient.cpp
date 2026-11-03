@@ -1,8 +1,7 @@
 #include "mcp/McpHttpClient.h"
 
-#include "mcp/McpOAuth.h"
-
 #include "core/logging/Logger.h"
+#include "mcp/McpOAuth.h"
 #include "storage/secure/SecureStorage.h"
 
 #include <QDateTime>
@@ -21,8 +20,7 @@ namespace {
 constexpr const char* TAG = "McpHttpClient";
 }
 
-McpHttpClient::McpHttpClient(const McpServerConfig& config, QObject* parent)
-    : McpClientBase(parent), config_(config) {}
+McpHttpClient::McpHttpClient(const McpServerConfig& config, QObject* parent) : McpClientBase(parent), config_(config) {}
 
 McpHttpClient::~McpHttpClient() {
     stop();
@@ -41,22 +39,17 @@ Result<void> McpHttpClient::start() {
     }
     QUrl url(config_.base_url);
     if (!url.isValid() || url.scheme().isEmpty()) {
-        return Result<void>::err("HTTP MCP server has an invalid base_url: " +
-                                 config_.base_url.toStdString());
+        return Result<void>::err("HTTP MCP server has an invalid base_url: " + config_.base_url.toStdString());
     }
-    if (config_.auth_scheme == QStringLiteral("oauth")
-        && config_.auth_token_url.isEmpty()) {
-        return Result<void>::err(
-            "auth_scheme='oauth' requires auth_token_url to be configured");
+    if (config_.auth_scheme == QStringLiteral("oauth") && config_.auth_token_url.isEmpty()) {
+        return Result<void>::err("auth_scheme='oauth' requires auth_token_url to be configured");
     }
 
     if (!nam_)
         nam_ = new QNetworkAccessManager(this);
     running_.store(true);
-    append_log(QStringLiteral("started (base_url=%1, auth=%2)")
-                   .arg(config_.base_url, config_.auth_scheme));
-    LOG_INFO(TAG, QString("HTTP MCP client started: %1 (%2)")
-                      .arg(config_.name, config_.base_url));
+    append_log(QStringLiteral("started (base_url=%1, auth=%2)").arg(config_.base_url, config_.auth_scheme));
+    LOG_INFO(TAG, QString("HTTP MCP client started: %1 (%2)").arg(config_.name, config_.base_url));
     return Result<void>::ok();
 }
 
@@ -207,8 +200,7 @@ Result<std::vector<ExternalPrompt>> McpHttpClient::list_prompts() {
     return Result<std::vector<ExternalPrompt>>::ok(std::move(out));
 }
 
-Result<PromptResult> McpHttpClient::get_prompt(const QString& name,
-                                               const QHash<QString, QString>& args) {
+Result<PromptResult> McpHttpClient::get_prompt(const QString& name, const QHash<QString, QString>& args) {
     QJsonObject params;
     params["name"] = name;
     if (!args.isEmpty()) {
@@ -260,9 +252,7 @@ Result<void> McpHttpClient::ping() {
 // HTTP plumbing
 // ─────────────────────────────────────────────────────────────────────
 
-Result<QJsonObject> McpHttpClient::send_request(const QString& method,
-                                                const QJsonObject& params,
-                                                int timeout_ms) {
+Result<QJsonObject> McpHttpClient::send_request(const QString& method, const QJsonObject& params, int timeout_ms) {
     if (!running_.load() || !nam_) {
         return Result<QJsonObject>::err("HTTP MCP client not started");
     }
@@ -343,16 +333,12 @@ Result<QJsonObject> McpHttpClient::send_request(const QString& method,
             return Result<QJsonObject>::err(msg.toStdString());
         }
         const QJsonObject obj = doc.object();
-        append_log(QStringLiteral("← %1 (status=%2, %3 bytes)")
-                       .arg(method)
-                       .arg(status)
-                       .arg(response_body.size()));
+        append_log(QStringLiteral("← %1 (status=%2, %3 bytes)").arg(method).arg(status).arg(response_body.size()));
 
         if (obj.contains("error")) {
             const QJsonObject ej = obj.value("error").toObject();
-            const QString msg = QStringLiteral("server error %1: %2")
-                                    .arg(ej.value("code").toInt())
-                                    .arg(ej.value("message").toString());
+            const QString msg =
+                QStringLiteral("server error %1: %2").arg(ej.value("code").toInt()).arg(ej.value("message").toString());
             return Result<QJsonObject>::err(msg.toStdString());
         }
         return Result<QJsonObject>::ok(obj.value("result").toObject());
@@ -360,8 +346,7 @@ Result<QJsonObject> McpHttpClient::send_request(const QString& method,
 }
 
 bool McpHttpClient::apply_auth(QNetworkRequest& req) {
-    const QString scheme = config_.auth_scheme.isEmpty() ? QStringLiteral("none")
-                                                         : config_.auth_scheme;
+    const QString scheme = config_.auth_scheme.isEmpty() ? QStringLiteral("none") : config_.auth_scheme;
     if (scheme == QStringLiteral("none"))
         return true;
 
@@ -374,8 +359,7 @@ bool McpHttpClient::apply_auth(QNetworkRequest& req) {
         oc.grant_type = config_.oauth_grant_type;
         auto token_r = McpOAuth::ensure_access_token(oc);
         if (token_r.is_err()) {
-            append_log(QStringLiteral("oauth: %1")
-                           .arg(QString::fromStdString(token_r.error())));
+            append_log(QStringLiteral("oauth: %1").arg(QString::fromStdString(token_r.error())));
             return false;
         }
         req.setRawHeader("Authorization", ("Bearer " + token_r.value()).toUtf8());
@@ -396,9 +380,7 @@ bool McpHttpClient::apply_auth(QNetworkRequest& req) {
         return true;
     }
     if (scheme == QStringLiteral("api_key")) {
-        const QString header_name = config_.auth_header.isEmpty()
-                                        ? QStringLiteral("X-API-Key")
-                                        : config_.auth_header;
+        const QString header_name = config_.auth_header.isEmpty() ? QStringLiteral("X-API-Key") : config_.auth_header;
         req.setRawHeader(header_name.toUtf8(), value.toUtf8());
         return true;
     }

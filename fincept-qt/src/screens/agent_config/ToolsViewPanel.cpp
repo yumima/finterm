@@ -65,7 +65,8 @@ static QString btn_primary_style() {
                    "font-size:12px;font-weight:700;letter-spacing:1px;}"
                    "QPushButton:hover{background:%3;}"
                    "QPushButton:disabled{background:%4;color:%5;}")
-        .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE(), ui::colors::BG_RAISED(), ui::colors::TEXT_SECONDARY());
+        .arg(ui::colors::AMBER(), ui::colors::BG_BASE(), ui::colors::ORANGE(), ui::colors::BG_RAISED(),
+             ui::colors::TEXT_SECONDARY());
 }
 
 static QString btn_secondary_style() {

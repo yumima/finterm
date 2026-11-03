@@ -38,9 +38,8 @@ void CompanyListPanel::set_selected_id(const QString& id) {
 
 void CompanyListPanel::build_ui() {
     setObjectName("companyListPanel");
-    setStyleSheet(
-        QString("#companyListPanel { background:%1; border-right:1px solid %2; }")
-            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+    setStyleSheet(QString("#companyListPanel { background:%1; border-right:1px solid %2; }")
+                      .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -50,8 +49,7 @@ void CompanyListPanel::build_ui() {
     auto* title_bar = new QWidget;
     title_bar->setFixedHeight(38);
     title_bar->setStyleSheet(
-        QString("background:%1; border-bottom:1px solid %2;")
-            .arg(colors::BG_RAISED(), colors::BORDER_DIM()));
+        QString("background:%1; border-bottom:1px solid %2;").arg(colors::BG_RAISED(), colors::BORDER_DIM()));
     auto* tb_layout = new QHBoxLayout(title_bar);
     tb_layout->setContentsMargins(12, 0, 12, 0);
     auto* title_lbl = new QLabel("COMPANIES");
@@ -66,8 +64,7 @@ void CompanyListPanel::build_ui() {
     auto* search_wrapper = new QWidget;
     search_wrapper->setFixedHeight(38);
     search_wrapper->setStyleSheet(
-        QString("background:%1; border-bottom:1px solid %2;")
-            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+        QString("background:%1; border-bottom:1px solid %2;").arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
     auto* sw_layout = new QHBoxLayout(search_wrapper);
     sw_layout->setContentsMargins(8, 6, 8, 6);
 
@@ -78,8 +75,7 @@ void CompanyListPanel::build_ui() {
         QString("QLineEdit { background:%1; color:%2; border:1px solid %3;"
                 "  border-radius:3px; padding:3px 8px; font-size:12px; }"
                 "QLineEdit:focus { border-color:%4; }")
-            .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY(),
-                 colors::BORDER_DIM(), colors::BORDER_MED()));
+            .arg(colors::BG_RAISED(), colors::TEXT_PRIMARY(), colors::BORDER_DIM(), colors::BORDER_MED()));
     sw_layout->addWidget(search_edit_);
     root->addWidget(search_wrapper);
 
@@ -92,8 +88,7 @@ void CompanyListPanel::build_ui() {
     filter_bar_ = new QWidget;
     filter_bar_->setFixedHeight(36);
     filter_bar_->setStyleSheet(
-        QString("background:%1; border-bottom:1px solid %2;")
-            .arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
+        QString("background:%1; border-bottom:1px solid %2;").arg(colors::BG_SURFACE(), colors::BORDER_DIM()));
 
     auto* filter_scroll = new QScrollArea(filter_bar_);
     filter_scroll->setWidgetResizable(true);
@@ -115,12 +110,8 @@ void CompanyListPanel::build_ui() {
     filter_scroll->setWidget(chips_host);
 
     const QVector<QPair<QString, QString>> chips = {
-        {"All", "all"},
-        {"Watched", "watched"},
-        {"Filed", "filed"},
-        {"AI", "ai"},
-        {"Fintech", "fintech"},
-        {"Defense", "defense"},
+        {"All", "all"}, {"Watched", "watched"}, {"Filed", "filed"},
+        {"AI", "ai"},   {"Fintech", "fintech"}, {"Defense", "defense"},
     };
 
     for (const auto& [label, tag] : chips) {
@@ -128,18 +119,15 @@ void CompanyListPanel::build_ui() {
         btn->setCheckable(true);
         btn->setCursor(Qt::PointingHandCursor);
         btn->setFixedHeight(22);
-        btn->setStyleSheet(
-            QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
-                    "  border-radius:11px; padding:0 8px; font-size:12px; font-weight:600; }"
-                    "QPushButton:checked { background:%3; color:%4; border-color:%3; }"
-                    "QPushButton:hover:!checked { color:%5; border-color:%5; }")
-                .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(),
-                     colors::AMBER(), colors::BG_BASE(), colors::TEXT_PRIMARY()));
+        btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
+                                   "  border-radius:11px; padding:0 8px; font-size:12px; font-weight:600; }"
+                                   "QPushButton:checked { background:%3; color:%4; border-color:%3; }"
+                                   "QPushButton:hover:!checked { color:%5; border-color:%5; }")
+                               .arg(colors::TEXT_SECONDARY(), colors::BORDER_DIM(), colors::AMBER(), colors::BG_BASE(),
+                                    colors::TEXT_PRIMARY()));
 
         const QString t = tag;
-        connect(btn, &QPushButton::clicked, this, [this, t]() {
-            set_active_filter(t);
-        });
+        connect(btn, &QPushButton::clicked, this, [this, t]() { set_active_filter(t); });
 
         filter_btns_.append(btn);
         filter_layout_->addWidget(btn);
@@ -157,16 +145,14 @@ void CompanyListPanel::build_ui() {
     scroll_ = new QScrollArea;
     scroll_->setWidgetResizable(true);
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-    scroll_->setStyleSheet(
-        QString("QScrollArea { border:none; background:%1; }"
-                "QScrollBar:vertical { width:4px; background:transparent; }"
-                "QScrollBar::handle:vertical { background:%2; border-radius:2px; min-height:20px; }"
-                "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
-            .arg(colors::BG_SURFACE(), colors::BORDER_MED()));
+    scroll_->setStyleSheet(QString("QScrollArea { border:none; background:%1; }"
+                                   "QScrollBar:vertical { width:4px; background:transparent; }"
+                                   "QScrollBar::handle:vertical { background:%2; border-radius:2px; min-height:20px; }"
+                                   "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0; }")
+                               .arg(colors::BG_SURFACE(), colors::BORDER_MED()));
 
     list_container_ = new QWidget;
-    list_container_->setStyleSheet(
-        QString("background:%1;").arg(colors::BG_SURFACE()));
+    list_container_->setStyleSheet(QString("background:%1;").arg(colors::BG_SURFACE()));
     list_layout_ = new QVBoxLayout(list_container_);
     list_layout_->setContentsMargins(6, 6, 6, 6);
     list_layout_->setSpacing(4);
@@ -204,10 +190,8 @@ void CompanyListPanel::apply_filter() {
         // Search filter
         if (!search_text_.isEmpty()) {
             const QString lo = search_text_.toLower();
-            if (!c.name.toLower().contains(lo) &&
-                !c.sector.toLower().contains(lo) &&
-                !c.hq_city.toLower().contains(lo) &&
-                !c.hq_state.toLower().contains(lo))
+            if (!c.name.toLower().contains(lo) && !c.sector.toLower().contains(lo) &&
+                !c.hq_city.toLower().contains(lo) && !c.hq_state.toLower().contains(lo))
                 continue;
         }
 
@@ -230,8 +214,7 @@ void CompanyListPanel::apply_filter() {
 
     if (inserted == 0) {
         auto* empty = new QLabel("No companies match");
-        empty->setStyleSheet(
-            QString("color:%1; font-size:12px; padding:20px;").arg(colors::TEXT_SECONDARY()));
+        empty->setStyleSheet(QString("color:%1; font-size:12px; padding:20px;").arg(colors::TEXT_SECONDARY()));
         empty->setAlignment(Qt::AlignCenter);
         list_layout_->insertWidget(0, empty);
     }
@@ -240,7 +223,7 @@ void CompanyListPanel::apply_filter() {
 void CompanyListPanel::set_active_filter(const QString& tag) {
     active_filter_ = tag;
     for (int i = 0; i < filter_btns_.size(); ++i) {
-        const QVector<QString> tags = {"all","watched","filed","ai","fintech","defense"};
+        const QVector<QString> tags = {"all", "watched", "filed", "ai", "fintech", "defense"};
         filter_btns_[i]->setChecked(i < tags.size() && tags[i] == tag);
     }
     apply_filter();
@@ -269,13 +252,12 @@ QWidget* CompanyListPanel::make_card(const PrivateCompany& c) const {
     card->setCursor(Qt::PointingHandCursor);
     card->setFixedHeight(62);
 
-    const QString bg  = is_selected ? "rgba(217,119,6,0.12)" : colors::BG_RAISED();
+    const QString bg = is_selected ? "rgba(217,119,6,0.12)" : colors::BG_RAISED();
     const QString border = is_selected ? colors::AMBER() : colors::BORDER_DIM();
 
-    card->setStyleSheet(
-        QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }"
-                "QWidget:hover { background:rgba(255,255,255,0.04); border-color:%3; }")
-            .arg(bg, border, colors::BORDER_MED()));
+    card->setStyleSheet(QString("QWidget { background:%1; border:1px solid %2; border-radius:4px; }"
+                                "QWidget:hover { background:rgba(255,255,255,0.04); border-color:%3; }")
+                            .arg(bg, border, colors::BORDER_MED()));
 
     auto* card_layout = new QVBoxLayout(card);
     card_layout->setContentsMargins(10, 7, 10, 7);
@@ -287,18 +269,16 @@ QWidget* CompanyListPanel::make_card(const PrivateCompany& c) const {
 
     auto* name_lbl = new QLabel(c.name);
     name_lbl->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; background:transparent;")
-            .arg(colors::CYAN()));
+        QString("color:%1; font-size:12px; font-weight:700; background:transparent;").arg(colors::CYAN()));
     row1->addWidget(name_lbl, 1);
 
     // Valuation badge
     if (c.last_valuation_usd > 0) {
         auto* val_badge = new QLabel(valuation_label(c.last_valuation_usd));
-        val_badge->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:700;"
-                    "  background:rgba(217,119,6,0.15); border:1px solid rgba(217,119,6,0.3);"
-                    "  border-radius:3px; padding:1px 5px;")
-                .arg(colors::AMBER()));
+        val_badge->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700;"
+                                         "  background:rgba(217,119,6,0.15); border:1px solid rgba(217,119,6,0.3);"
+                                         "  border-radius:3px; padding:1px 5px;")
+                                     .arg(colors::AMBER()));
         val_badge->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         row1->addWidget(val_badge);
     }
@@ -334,9 +314,8 @@ QWidget* CompanyListPanel::make_card(const PrivateCompany& c) const {
     // Store the overlay pointer in the card's dynamic property so the event filter can find it
     card->setProperty("overlay_btn", QVariant::fromValue(static_cast<QObject*>(overlay)));
 
-    QObject::connect(overlay, &QPushButton::clicked, signal_sender, [signal_sender, cid]() {
-        emit signal_sender->company_selected(cid);
-    });
+    QObject::connect(overlay, &QPushButton::clicked, signal_sender,
+                     [signal_sender, cid]() { emit signal_sender->company_selected(cid); });
 
     return card;
 }
@@ -348,29 +327,38 @@ QWidget* CompanyListPanel::make_status_badge(IpoStatus status, QWidget* parent) 
 
     switch (status) {
         case IpoStatus::Filed:
-            label = "Filed"; bg = "rgba(217,119,6,0.2)"; fg = colors::AMBER();
+            label = "Filed";
+            bg = "rgba(217,119,6,0.2)";
+            fg = colors::AMBER();
             break;
         case IpoStatus::Rumored:
-            label = "Rumored"; bg = "rgba(107,114,128,0.2)"; fg = colors::TEXT_SECONDARY();
+            label = "Rumored";
+            bg = "rgba(107,114,128,0.2)";
+            fg = colors::TEXT_SECONDARY();
             break;
         case IpoStatus::Priced:
-            label = "Priced"; bg = "rgba(22,163,74,0.2)"; fg = colors::POSITIVE();
+            label = "Priced";
+            bg = "rgba(22,163,74,0.2)";
+            fg = colors::POSITIVE();
             break;
         case IpoStatus::Listed:
-            label = "Listed"; bg = "rgba(22,163,74,0.2)"; fg = colors::POSITIVE();
+            label = "Listed";
+            bg = "rgba(22,163,74,0.2)";
+            fg = colors::POSITIVE();
             break;
         case IpoStatus::Acquired:
-            label = "Acquired"; bg = "rgba(139,92,246,0.2)"; fg = "#a78bfa";
+            label = "Acquired";
+            bg = "rgba(139,92,246,0.2)";
+            fg = "#a78bfa";
             break;
         default:
             return new QWidget(parent); // invisible placeholder
     }
 
     auto* badge = new QLabel(label, parent);
-    badge->setStyleSheet(
-        QString("color:%1; font-size:12px; font-weight:700; background:%2;"
-                "  border-radius:3px; padding:1px 5px;")
-            .arg(fg, bg));
+    badge->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; background:%2;"
+                                 "  border-radius:3px; padding:1px 5px;")
+                             .arg(fg, bg));
     badge->setAlignment(Qt::AlignCenter);
     return badge;
 }

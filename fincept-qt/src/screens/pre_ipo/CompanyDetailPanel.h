@@ -35,8 +35,7 @@ class CompanyDetailPanel : public QWidget {
     // Rounds get the company's fund marks too, so the $/Share column can show
     // a derived mark (labelled "~") when Form D — which never discloses PPS —
     // has no price of its own.
-    void rebuild_rounds_table(const QVector<pre_ipo::PrimaryRound>& rounds,
-                              const QVector<pre_ipo::FundMark>& marks);
+    void rebuild_rounds_table(const QVector<pre_ipo::PrimaryRound>& rounds, const QVector<pre_ipo::FundMark>& marks);
     void rebuild_comps_chips(const QStringList& tickers);
     void rebuild_investors(const QStringList& investors);
     void rebuild_tags(const QStringList& tags);
@@ -49,14 +48,14 @@ class CompanyDetailPanel : public QWidget {
     // The dossier is sized so a populated company fits in the typical center
     // pane without a page-level scrollbar; data-heavy tiles (rounds table,
     // fund-mark table, investors list, about) get internal scroll instead.
-    QStackedWidget* stack_     = nullptr;
-    QWidget*        placeholder_ = nullptr;
-    QWidget*        detail_view_ = nullptr;
+    QStackedWidget* stack_ = nullptr;
+    QWidget* placeholder_ = nullptr;
+    QWidget* detail_view_ = nullptr;
 
     // ── Header fields ─────────────────────────────────────────────────────────
-    QLabel* name_lbl_       = nullptr;
-    QLabel* sector_lbl_     = nullptr;
-    QLabel* meta_lbl_       = nullptr;   // founded · HQ
+    QLabel* name_lbl_ = nullptr;
+    QLabel* sector_lbl_ = nullptr;
+    QLabel* meta_lbl_ = nullptr; // founded · HQ
 
     // ── Key metrics (compact label:value — no tile boxes) ────────────────────
     // Each metric has both a *label* and *value* pointer because the labels
@@ -65,26 +64,26 @@ class CompanyDetailPanel : public QWidget {
     // Last Filing}; for N-PORT-only companies (OpenAI/Anthropic/etc.) we
     // show {Consensus Mark, Mark As Of, Funds Tracking, Mark Drift} —
     // populated unconditionally so the dossier is never "two empty boxes".
-    QLabel* val_lbl_label_  = nullptr;
-    QLabel* val_lbl_       = nullptr;
+    QLabel* val_lbl_label_ = nullptr;
+    QLabel* val_lbl_ = nullptr;
     QLabel* round_lbl_label_ = nullptr;
-    QLabel* round_lbl_     = nullptr;
-    QLabel* rev_lbl_label_  = nullptr;
-    QLabel* rev_lbl_       = nullptr;
-    QLabel* emp_lbl_label_  = nullptr;
-    QLabel* emp_lbl_       = nullptr;
+    QLabel* round_lbl_ = nullptr;
+    QLabel* rev_lbl_label_ = nullptr;
+    QLabel* rev_lbl_ = nullptr;
+    QLabel* emp_lbl_label_ = nullptr;
+    QLabel* emp_lbl_ = nullptr;
 
     // ── IPO status ────────────────────────────────────────────────────────────
-    QLabel* status_badge_  = nullptr;
-    QLabel* window_lbl_    = nullptr;
-    QLabel* s1_date_lbl_   = nullptr;
+    QLabel* status_badge_ = nullptr;
+    QLabel* window_lbl_ = nullptr;
+    QLabel* s1_date_lbl_ = nullptr;
 
     // ── Share price section ───────────────────────────────────────────────────
-    QWidget* price_section_     = nullptr;
-    QLabel*  sec_price_lbl_     = nullptr;  // secondary market $/share
-    QLabel*  implied_price_lbl_ = nullptr;  // from last round valuation
-    QLabel*  formd_price_lbl_   = nullptr;  // Form D implied
-    QLabel*  price_delta_lbl_   = nullptr;  // % change from last round
+    QWidget* price_section_ = nullptr;
+    QLabel* sec_price_lbl_ = nullptr;     // secondary market $/share
+    QLabel* implied_price_lbl_ = nullptr; // from last round valuation
+    QLabel* formd_price_lbl_ = nullptr;   // Form D implied
+    QLabel* price_delta_lbl_ = nullptr;   // % change from last round
 
     // ── Rounds table ──────────────────────────────────────────────────────────
     QTableWidget* rounds_table_ = nullptr;
@@ -92,48 +91,48 @@ class CompanyDetailPanel : public QWidget {
     // ── Investors ─────────────────────────────────────────────────────────────
     // investors_card_ is the surrounding tile (hidden when investor list is
     // empty so a sparse company doesn't waste a half-row of vertical space).
-    QWidget*     investors_card_      = nullptr;
-    QLabel*      investors_title_lbl_ = nullptr;  // relabelled per provenance
-    QWidget*     investors_container_ = nullptr;
-    QVBoxLayout* investors_layout_    = nullptr;
-    QScrollArea* investors_scroll_    = nullptr;
+    QWidget* investors_card_ = nullptr;
+    QLabel* investors_title_lbl_ = nullptr; // relabelled per provenance
+    QWidget* investors_container_ = nullptr;
+    QVBoxLayout* investors_layout_ = nullptr;
+    QScrollArea* investors_scroll_ = nullptr;
 
     // ── Secondary-interest SPV filings ─────────────────────────────────────────
-    QWidget*      spv_section_ = nullptr;  // hidden when no SPVs target the name
-    QTableWidget* spv_table_   = nullptr;
+    QWidget* spv_section_ = nullptr; // hidden when no SPVs target the name
+    QTableWidget* spv_table_ = nullptr;
 
     // ── Public comps ──────────────────────────────────────────────────────────
-    QWidget*     comps_section_   = nullptr;  // header + chip row; hidden when empty
-    QWidget*     comps_container_ = nullptr;
-    QHBoxLayout* comps_layout_    = nullptr;
+    QWidget* comps_section_ = nullptr; // header + chip row; hidden when empty
+    QWidget* comps_container_ = nullptr;
+    QHBoxLayout* comps_layout_ = nullptr;
 
     // ── Tags ──────────────────────────────────────────────────────────────────
-    QWidget*     tags_section_   = nullptr;  // header + chip row; hidden when empty
-    QWidget*     tags_container_ = nullptr;
-    QHBoxLayout* tags_layout_    = nullptr;
+    QWidget* tags_section_ = nullptr; // header + chip row; hidden when empty
+    QWidget* tags_container_ = nullptr;
+    QHBoxLayout* tags_layout_ = nullptr;
 
     // ── Description ───────────────────────────────────────────────────────────
-    QWidget* desc_section_ = nullptr;  // header + scroll-wrapped label; hidden when empty
-    QLabel*  desc_lbl_     = nullptr;
+    QWidget* desc_section_ = nullptr; // header + scroll-wrapped label; hidden when empty
+    QLabel* desc_lbl_ = nullptr;
 
     // ── Fund marks (consensus + per-fund rows) ────────────────────────────────
-    QWidget*      marks_section_   = nullptr;
-    QLabel*       consensus_lbl_   = nullptr;
-    QLabel*       dispersion_lbl_  = nullptr;
-    QLabel*       smart_money_lbl_ = nullptr;
+    QWidget* marks_section_ = nullptr;
+    QLabel* consensus_lbl_ = nullptr;
+    QLabel* dispersion_lbl_ = nullptr;
+    QLabel* smart_money_lbl_ = nullptr;
     // Valuation/mark history: a shaded cross-fund dispersion band + consensus
     // line. Typed QWidget* because the concrete MarkTimeline class is local to
     // the .cpp (no MOC); the .cpp static_casts it back to call set_series().
-    QWidget*      marks_timeline_  = nullptr;
-    QTableWidget* marks_table_     = nullptr;
+    QWidget* marks_timeline_ = nullptr;
+    QTableWidget* marks_table_ = nullptr;
 
     // ── Analytics KPI band ────────────────────────────────────────────────────
-    QWidget* kpi_section_       = nullptr;
-    QLabel*  kpi_readiness_lbl_ = nullptr;
-    QLabel*  kpi_drift_lbl_     = nullptr;
-    QLabel*  kpi_premium_lbl_   = nullptr;
-    QLabel*  kpi_days_lbl_      = nullptr;
-    QLabel*  kpi_raised_lbl_    = nullptr;
+    QWidget* kpi_section_ = nullptr;
+    QLabel* kpi_readiness_lbl_ = nullptr;
+    QLabel* kpi_drift_lbl_ = nullptr;
+    QLabel* kpi_premium_lbl_ = nullptr;
+    QLabel* kpi_days_lbl_ = nullptr;
+    QLabel* kpi_raised_lbl_ = nullptr;
 };
 
 } // namespace fincept::screens

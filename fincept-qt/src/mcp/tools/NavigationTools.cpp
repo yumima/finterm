@@ -2,16 +2,15 @@
 
 #include "mcp/tools/NavigationTools.h"
 
+#include "app/DockScreenRouter.h"
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
-#include "app/DockScreenRouter.h"
 #include "mcp/AsyncDispatch.h"
 
 #include <QApplication>
 #include <QPromise>
-#include <QWidget>
-
 #include <QVariantMap>
+#include <QWidget>
 
 #include <algorithm>
 
@@ -153,8 +152,7 @@ std::vector<ToolDef> get_navigation_tools() {
         // Used to publish an event nothing answered and return "query sent" —
         // a success with no tab in it. Now reads the dock router's current
         // screen on the GUI thread (window that has focus, else the first).
-        t.async_handler = [](const QJsonObject&, ToolContext ctx,
-                             std::shared_ptr<QPromise<ToolResult>> promise) {
+        t.async_handler = [](const QJsonObject&, ToolContext ctx, std::shared_ptr<QPromise<ToolResult>> promise) {
             AsyncDispatch::callback_to_promise(qApp, std::move(ctx), promise, [](auto resolve) {
                 QWidget* preferred = QApplication::activeWindow();
                 QString screen_id;

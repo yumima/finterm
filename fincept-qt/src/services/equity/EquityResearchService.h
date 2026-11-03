@@ -15,8 +15,12 @@ namespace fincept::services::equity {
 /// QueryStore errors are plain strings; an info fetch the vendor REFUSED
 /// (the daemon's {"transient": true} — a 401 burst, a timeout) is marked so a
 /// panel can say "try again" rather than "this symbol has no profile".
-inline QString mark_transient_error(const QString& e) { return QStringLiteral("transient:") + e; }
-inline bool is_transient_error(const QString& e) { return e.startsWith(QLatin1String("transient:")); }
+inline QString mark_transient_error(const QString& e) {
+    return QStringLiteral("transient:") + e;
+}
+inline bool is_transient_error(const QString& e) {
+    return e.startsWith(QLatin1String("transient:"));
+}
 
 class EquityResearchService : public QObject {
     Q_OBJECT
@@ -62,11 +66,9 @@ class EquityResearchService : public QObject {
 
     /// Subscribe to the quote stream for `symbol`. State carries a
     /// QuoteData via `state.data.value<QuoteData>()` once available.
-    void subscribe_quote(QObject* owner, const QString& symbol,
-                         query::QueryStore::Callback cb);
+    void subscribe_quote(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
     /// Subscribe to the info stream for `symbol`. State carries StockInfo.
-    void subscribe_info(QObject* owner, const QString& symbol,
-                        query::QueryStore::Callback cb);
+    void subscribe_info(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
     /// Subscribe to the historical-candles stream for (`symbol`, `period`).
     /// State carries QVector<Candle>.
     void subscribe_historical(QObject* owner, const QString& symbol, const QString& period,
@@ -101,27 +103,24 @@ class EquityResearchService : public QObject {
     /// floored period and the interval, so the buttons that resolve to the same
     /// window share one computed series instead of several copies of it, while
     /// daily and weekly stay independent.
-    static QString technicals_key(const QString& symbol, const QString& requested,
-                                  const QString& interval);
+    static QString technicals_key(const QString& symbol, const QString& requested, const QString& interval);
 
     /// Subscribe to the computed technicals stream for (`symbol`, `period`).
     /// State carries TechnicalsData. Internally delegates to fetch_technicals
     /// for the actual two-stage candles→compute chain; the QueryStore layer
     /// just routes the result back to the right subscriber.
-    void subscribe_technicals(QObject* owner, const QString& symbol, const QString& period,
-                              const QString& interval, query::QueryStore::Callback cb);
+    void subscribe_technicals(QObject* owner, const QString& symbol, const QString& period, const QString& interval,
+                              query::QueryStore::Callback cb);
 
     /// Subscribe to the ANNUAL financial-statements stream for `symbol`.
     /// State carries FinancialsData, whose statement vectors are fiscal
     /// YEARS — `Ticker.financials`, not `quarterly_financials`. This was
     /// documented as quarterly for a long time, and the tab labelled its
     /// columns accordingly, presenting fiscal-year figures as quarters.
-    void subscribe_financials(QObject* owner, const QString& symbol,
-                              query::QueryStore::Callback cb);
+    void subscribe_financials(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
     /// Subscribe to the news-articles stream for `symbol`.
     /// State carries QVector<NewsArticle>.
-    void subscribe_news(QObject* owner, const QString& symbol,
-                        query::QueryStore::Callback cb);
+    void subscribe_news(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
     /// Subscribe to the peer-comparison stream for (`symbol`, peer basket).
     /// State carries QVector<PeerData>. `peer_symbols` is hashed into the
     /// QueryStore key so different baskets stay independent.
@@ -131,19 +130,16 @@ class EquityResearchService : public QObject {
     /// Subscribe to the earnings-dates stream for `symbol`. State carries
     /// QVector<EarningsEvent>. Backed by yfinance's ticker.earnings_dates;
     /// fetch is a single daemon call (~200-500ms).
-    void subscribe_earnings(QObject* owner, const QString& symbol,
-                            query::QueryStore::Callback cb);
+    void subscribe_earnings(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
 
     /// Subscribe to the full earnings picture for `symbol` — surprise +
     /// price-reaction history, live consensus, revision trend and forward
     /// estimates. State carries EarningsAnalysis. One daemon call (~1-2 s);
     /// backs the ER Earnings tab.
-    void subscribe_earnings_analysis(QObject* owner, const QString& symbol,
-                                     query::QueryStore::Callback cb);
+    void subscribe_earnings_analysis(QObject* owner, const QString& symbol, query::QueryStore::Callback cb);
 
     void fetch_financials(const QString& symbol);
-    void fetch_technicals(const QString& symbol, const QString& period = "1y",
-                          const QString& interval = "1d");
+    void fetch_technicals(const QString& symbol, const QString& period = "1y", const QString& interval = "1d");
     void fetch_peers(const QString& symbol, const QStringList& peer_symbols);
     void fetch_news(const QString& symbol, int count = 20);
 
@@ -202,8 +198,8 @@ class EquityResearchService : public QObject {
     QVector<Candle> parse_candles(const QJsonArray& arr) const;
     FinancialsData parse_financials(const QJsonObject& obj) const;
     /// Builds the display rows and delegates the verdict to TechnicalRating.
-    TechnicalsData parse_technicals(const QString& symbol, const QString& period,
-                                    const QString& interval, const QJsonArray& rows) const;
+    TechnicalsData parse_technicals(const QString& symbol, const QString& period, const QString& interval,
+                                    const QJsonArray& rows) const;
     QVector<PeerData> parse_peers(const QJsonArray& arr) const;
     QVector<NewsArticle> parse_news(const QJsonArray& arr) const;
     QVector<EarningsEvent> parse_earnings(const QJsonArray& arr) const;
@@ -211,8 +207,8 @@ class EquityResearchService : public QObject {
 
     // ── Cache TTLs — delegated to CacheManager ───────────────────────────────
     static constexpr int kQuoteTtlSec = 60;
-    static constexpr int kInfoTtlSec = 1800;       // fundamentals barely change minute-to-minute
-    static constexpr int kHistoricalTtlSec = 600;  // daily candles stable within 10 min
+    static constexpr int kInfoTtlSec = 1800;      // fundamentals barely change minute-to-minute
+    static constexpr int kHistoricalTtlSec = 600; // daily candles stable within 10 min
     static constexpr int kTechnicalsTtlSec = 600; // computed — more expensive than raw candles
 
     /// Bump whenever the computed indicator set changes shape.

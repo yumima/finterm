@@ -54,8 +54,7 @@ class SelectableTextFilter : public QObject {
         // OR-ing also preserves whatever the owner did set: a rich-text label
         // with links keeps LinksAccessibleByMouse and gains selection, instead
         // of trading one for the other.
-        label->setTextInteractionFlags(have | Qt::TextSelectableByMouse |
-                                       Qt::TextSelectableByKeyboard);
+        label->setTextInteractionFlags(have | Qt::TextSelectableByMouse | Qt::TextSelectableByKeyboard);
         return QObject::eventFilter(obj, ev);
     }
 };

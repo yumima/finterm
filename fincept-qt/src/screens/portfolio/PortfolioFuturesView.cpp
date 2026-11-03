@@ -1,6 +1,6 @@
 #include "screens/portfolio/PortfolioFuturesView.h"
-#include "core/config/AppPaths.h"
 
+#include "core/config/AppPaths.h"
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "python/PythonWorker.h"
@@ -33,38 +33,45 @@ QString lbl_ss(const QString& color, bool bold = false, int px = -1) {
     using namespace ui;
     const int sz = (px > 0) ? px : fonts::font_px(-2);
     return QString("color:%1;background:transparent;font-size:%2px;font-family:'%3';%4")
-        .arg(color).arg(sz).arg(fonts::DATA_FAMILY()).arg(bold ? "font-weight:bold;" : "");
+        .arg(color)
+        .arg(sz)
+        .arg(fonts::DATA_FAMILY())
+        .arg(bold ? "font-weight:bold;" : "");
 }
 
 QString fmt_num(double v, int decimals = 2) {
-    if (!std::isfinite(v)) return "—";
+    if (!std::isfinite(v))
+        return "—";
     return QString::number(v, 'f', decimals);
 }
 
 QString fmt_signed(double v, int decimals = 2) {
-    if (!std::isfinite(v)) return "—";
+    if (!std::isfinite(v))
+        return "—";
     return (v > 0 ? "+" : "") + QString::number(v, 'f', decimals);
 }
 
 QString fmt_qty(double v) {
-    if (!std::isfinite(v)) return "—";
+    if (!std::isfinite(v))
+        return "—";
     return QString::number(v, 'f', v == std::trunc(v) ? 0 : 4);
 }
 
 QString color_for_change(double v) {
     using namespace ui;
-    if (v > 0) return colors::POSITIVE();
-    if (v < 0) return colors::NEGATIVE();
+    if (v > 0)
+        return colors::POSITIVE();
+    if (v < 0)
+        return colors::NEGATIVE();
     return colors::TEXT_SECONDARY();
 }
 
 QString table_ss() {
     using namespace ui;
-    return QString(
-        "QTableWidget { background:%1; color:%2; gridline-color:%3; border:none;"
-        " font-family:'%4'; font-size:%5px; alternate-background-color:%6; }"
-        "QHeaderView::section { background:%7; color:%2; padding:4px 6px;"
-        " border:none; border-bottom:1px solid %3; font-weight:600; }")
+    return QString("QTableWidget { background:%1; color:%2; gridline-color:%3; border:none;"
+                   " font-family:'%4'; font-size:%5px; alternate-background-color:%6; }"
+                   "QHeaderView::section { background:%7; color:%2; padding:4px 6px;"
+                   " border:none; border-bottom:1px solid %3; font-weight:600; }")
         .arg(colors::BG_BASE())
         .arg(colors::TEXT_PRIMARY())
         .arg(colors::BORDER_DIM())
@@ -80,26 +87,55 @@ QString table_ss() {
 // from CL=F would put crude oil's price on a Colgate position.
 const QHash<QString, QString>& futures_roots() {
     static const QHash<QString, QString> roots = {
-        {"ES", "E-mini S&P 500"},   {"NQ", "E-mini Nasdaq 100"},  {"YM", "E-mini Dow"},
+        {"ES", "E-mini S&P 500"},
+        {"NQ", "E-mini Nasdaq 100"},
+        {"YM", "E-mini Dow"},
         {"RTY", "E-mini Russell 2000"},
-        {"MES", "Micro E-mini S&P 500"}, {"MNQ", "Micro E-mini Nasdaq 100"},
-        {"MYM", "Micro E-mini Dow"}, {"M2K", "Micro E-mini Russell 2000"},
-        {"ZT", "2-Year T-Note"},    {"ZF", "5-Year T-Note"},      {"ZN", "10-Year T-Note"},
-        {"ZB", "30-Year T-Bond"},   {"UB", "Ultra T-Bond"},       {"ZQ", "30-Day Fed Funds"},
+        {"MES", "Micro E-mini S&P 500"},
+        {"MNQ", "Micro E-mini Nasdaq 100"},
+        {"MYM", "Micro E-mini Dow"},
+        {"M2K", "Micro E-mini Russell 2000"},
+        {"ZT", "2-Year T-Note"},
+        {"ZF", "5-Year T-Note"},
+        {"ZN", "10-Year T-Note"},
+        {"ZB", "30-Year T-Bond"},
+        {"UB", "Ultra T-Bond"},
+        {"ZQ", "30-Day Fed Funds"},
         {"SR3", "3-Month SOFR"},
-        {"CL", "WTI Crude Oil"},    {"BZ", "Brent Crude"},        {"NG", "Henry Hub Nat Gas"},
-        {"RB", "RBOB Gasoline"},    {"HO", "Heating Oil"},
-        {"GC", "Gold"},             {"SI", "Silver"},             {"HG", "Copper"},
-        {"PL", "Platinum"},         {"PA", "Palladium"},
-        {"ZC", "Corn"},             {"ZW", "Wheat"},              {"ZS", "Soybeans"},
-        {"ZL", "Soybean Oil"},      {"ZM", "Soybean Meal"},       {"KC", "Coffee"},
-        {"SB", "Sugar #11"},        {"CC", "Cocoa"},              {"CT", "Cotton"},
-        {"LE", "Live Cattle"},      {"HE", "Lean Hogs"},          {"GF", "Feeder Cattle"},
-        {"6E", "Euro FX"},          {"6J", "Japanese Yen"},       {"6B", "British Pound"},
-        {"6A", "Australian Dollar"}, {"6C", "Canadian Dollar"},
-        {"BTC", "Bitcoin Futures"}, {"MBT", "Micro Bitcoin Futures"}, {"MET", "Micro Ether Futures"},
-        {"NIY", "Nikkei 225 (Yen, CME)"}, {"NKD", "Nikkei 225 (USD, CME)"},
-        {"VX", "VIX Futures"},      {"DX", "US Dollar Index"},
+        {"CL", "WTI Crude Oil"},
+        {"BZ", "Brent Crude"},
+        {"NG", "Henry Hub Nat Gas"},
+        {"RB", "RBOB Gasoline"},
+        {"HO", "Heating Oil"},
+        {"GC", "Gold"},
+        {"SI", "Silver"},
+        {"HG", "Copper"},
+        {"PL", "Platinum"},
+        {"PA", "Palladium"},
+        {"ZC", "Corn"},
+        {"ZW", "Wheat"},
+        {"ZS", "Soybeans"},
+        {"ZL", "Soybean Oil"},
+        {"ZM", "Soybean Meal"},
+        {"KC", "Coffee"},
+        {"SB", "Sugar #11"},
+        {"CC", "Cocoa"},
+        {"CT", "Cotton"},
+        {"LE", "Live Cattle"},
+        {"HE", "Lean Hogs"},
+        {"GF", "Feeder Cattle"},
+        {"6E", "Euro FX"},
+        {"6J", "Japanese Yen"},
+        {"6B", "British Pound"},
+        {"6A", "Australian Dollar"},
+        {"6C", "Canadian Dollar"},
+        {"BTC", "Bitcoin Futures"},
+        {"MBT", "Micro Bitcoin Futures"},
+        {"MET", "Micro Ether Futures"},
+        {"NIY", "Nikkei 225 (Yen, CME)"},
+        {"NKD", "Nikkei 225 (USD, CME)"},
+        {"VX", "VIX Futures"},
+        {"DX", "US Dollar Index"},
     };
     return roots;
 }
@@ -109,25 +145,32 @@ const QHash<QString, QString>& futures_roots() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 bool PortfolioFuturesView::looks_like_future(const QString& symbol) {
-    if (symbol.isEmpty()) return false;
+    if (symbol.isEmpty())
+        return false;
     // yfinance continuous future
-    if (symbol.endsWith("=F", Qt::CaseInsensitive)) return true;
+    if (symbol.endsWith("=F", Qt::CaseInsensitive))
+        return true;
     // TradingView style "/ES"
-    if (symbol.startsWith('/')) return true;
+    if (symbol.startsWith('/'))
+        return true;
     // A bare root ("ES", "CL") is deliberately NOT a future — see futures_roots().
     // CME contract month form: 2-3 letters + month code (FGHJKMNQUVXZ) + 1-2 digits.
     static const QRegularExpression re("^[A-Z0-9]{1,3}[FGHJKMNQUVXZ]\\d{1,2}$");
-    if (re.match(symbol.toUpper()).hasMatch()) return true;
+    if (re.match(symbol.toUpper()).hasMatch())
+        return true;
     return false;
 }
 
 QString PortfolioFuturesView::futures_root(const QString& symbol) {
     QString s = symbol.toUpper();
-    if (s.startsWith('/')) s = s.mid(1);
-    if (s.endsWith("=F")) s.chop(2);
+    if (s.startsWith('/'))
+        s = s.mid(1);
+    if (s.endsWith("=F"))
+        s.chop(2);
     static const QRegularExpression re("^([A-Z0-9]{1,3})[FGHJKMNQUVXZ]\\d{1,2}$");
     auto m = re.match(s);
-    if (m.hasMatch()) return m.captured(1);
+    if (m.hasMatch())
+        return m.captured(1);
     return s;
 }
 
@@ -137,8 +180,8 @@ namespace {
 // Failures only land in DEBUG builds (Q_ASSERT is a no-op in release).
 struct SymbolClassificationSelfTest {
     SymbolClassificationSelfTest() {
-        Q_ASSERT(!PortfolioFuturesView::looks_like_future("ES"));   // Eversource
-        Q_ASSERT(!PortfolioFuturesView::looks_like_future("CL"));   // Colgate
+        Q_ASSERT(!PortfolioFuturesView::looks_like_future("ES")); // Eversource
+        Q_ASSERT(!PortfolioFuturesView::looks_like_future("CL")); // Colgate
         Q_ASSERT(PortfolioFuturesView::looks_like_future("ES=F"));
         Q_ASSERT(PortfolioFuturesView::looks_like_future("/ES"));
         Q_ASSERT(PortfolioFuturesView::looks_like_future("ESM6"));
@@ -174,7 +217,8 @@ PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
         // slow yfinance response shouldn't cause request inflation.
         // set_summary's direct refresh bypasses this guard so new
         // holdings still get fresh data immediately on arrival.
-        if (ext_in_flight_) return;
+        if (ext_in_flight_)
+            return;
         refresh_extended_hours();
     });
     // Hydrate ext_quotes_ from the disk snapshot so the table paints
@@ -201,7 +245,8 @@ void PortfolioFuturesView::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
     datahub::DataHub::instance().unsubscribe(this);
     fut_subscribed_.clear();
-    if (ext_refresh_timer_) ext_refresh_timer_->stop();
+    if (ext_refresh_timer_)
+        ext_refresh_timer_->stop();
 }
 
 void PortfolioFuturesView::build_ui() {
@@ -265,7 +310,8 @@ void PortfolioFuturesView::build_ui() {
 
 void PortfolioFuturesView::set_summary(const portfolio::PortfolioSummary& summary, const QString& currency) {
     summary_ = summary;
-    if (!currency.isEmpty()) currency_ = currency;
+    if (!currency.isEmpty())
+        currency_ = currency;
     populate_futures();
     populate_extended();
     refresh_extended_hours();
@@ -309,7 +355,8 @@ void PortfolioFuturesView::populate_futures() {
     // Filter holdings to futures-like symbols.
     QVector<portfolio::HoldingWithQuote> futures_holdings;
     for (const auto& h : summary_.holdings) {
-        if (looks_like_future(h.symbol)) futures_holdings.append(h);
+        if (looks_like_future(h.symbol))
+            futures_holdings.append(h);
     }
 
     if (futures_holdings.isEmpty()) {
@@ -319,8 +366,8 @@ void PortfolioFuturesView::populate_futures() {
     }
 
     futures_status_->setText(fut_last_update_.isValid()
-                                  ? QString("live · %1").arg(fut_last_update_.toString("HH:mm:ss"))
-                                  : "loading quotes…");
+                                 ? QString("live · %1").arg(fut_last_update_.toString("HH:mm:ss"))
+                                 : "loading quotes…");
 
     futures_table_->setRowCount(futures_holdings.size());
     for (int i = 0; i < futures_holdings.size(); ++i) {
@@ -346,8 +393,10 @@ void PortfolioFuturesView::populate_futures() {
 
         auto add = [&](int col, const QString& text, const QString& color = QString()) {
             auto* it = new QTableWidgetItem(text);
-            if (!color.isEmpty()) it->setForeground(QColor(color));
-            if (col >= 2) it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            if (!color.isEmpty())
+                it->setForeground(QColor(color));
+            if (col >= 2)
+                it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             futures_table_->setItem(i, col, it);
         };
         add(0, h.symbol);
@@ -355,7 +404,8 @@ void PortfolioFuturesView::populate_futures() {
         add(2, fmt_qty(h.quantity));
         add(3, fmt_num(h.avg_buy_price, 4));
         add(4, fmt_num(last, 4));
-        add(5, std::isfinite(chg_pct) ? fmt_signed(chg_pct, 2) + "%" : ui::formatting::placeholder(), color_for_change(chg_pct));
+        add(5, std::isfinite(chg_pct) ? fmt_signed(chg_pct, 2) + "%" : ui::formatting::placeholder(),
+            color_for_change(chg_pct));
         // Unified K/M/B/T at one decimal via the shared layer (was M@2dp, K@1dp,
         // and lacked a B tier). 0 renders as "0"; only NaN/inf/negative → "—".
         add(6, ui::formatting::format_compact_volume(volume));
@@ -390,8 +440,10 @@ void PortfolioFuturesView::populate_extended() {
 
         auto add = [&](int col, const QString& text, const QString& color = QString()) {
             auto* widg = new QTableWidgetItem(text);
-            if (!color.isEmpty()) widg->setForeground(QColor(color));
-            if (col >= 1) widg->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            if (!color.isEmpty())
+                widg->setForeground(QColor(color));
+            if (col >= 1)
+                widg->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             extended_table_->setItem(i, col, widg);
         };
         add(0, h.symbol);
@@ -411,7 +463,8 @@ void PortfolioFuturesView::refresh_extended_hours() {
     }
 
     QJsonArray syms;
-    for (const auto& h : summary_.holdings) syms.append(h.symbol);
+    for (const auto& h : summary_.holdings)
+        syms.append(h.symbol);
 
     extended_status_->setText("loading ext hours…");
     const quint64 my_gen = ++ext_gen_;
@@ -425,16 +478,16 @@ void PortfolioFuturesView::refresh_extended_hours() {
     python::PythonWorker::instance().submit(
         "extended_hours", payload,
         [this, my_gen](bool ok, QJsonObject result, QString /*err*/) {
-            ext_in_flight_ = false;  // release first, before any early-return
-            if (my_gen != ext_gen_) return;  // superseded
+            ext_in_flight_ = false; // release first, before any early-return
+            if (my_gen != ext_gen_)
+                return; // superseded
             if (!ok) {
                 extended_status_->setText("ext hours error");
                 return;
             }
             // Daemon returns a flat array; PythonWorker wraps as {_value: [...]}.
-            const QJsonArray rows = result.contains("_value")
-                                         ? result.value("_value").toArray()
-                                         : result.value("data").toArray();
+            const QJsonArray rows =
+                result.contains("_value") ? result.value("_value").toArray() : result.value("data").toArray();
             // Merge (don't clear): if yfinance dropped a symbol from this
             // round, the previous value stays in ext_quotes_ rather than
             // disappearing entirely, and the next save doesn't lose it from
@@ -460,7 +513,8 @@ void PortfolioFuturesView::refresh_extended_hours() {
             // path is rare (only happens if the symbols list was empty
             // or the daemon errored upstream) and would otherwise no-op
             // overwrite a perfectly good prior snapshot.
-            if (!rows.isEmpty()) save_ext_cache();
+            if (!rows.isEmpty())
+                save_ext_cache();
             populate_extended();
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -477,36 +531,39 @@ void PortfolioFuturesView::save_ext_cache() const {
     for (auto it = ext_quotes_.cbegin(); it != ext_quotes_.cend(); ++it) {
         const auto& q = it.value();
         QJsonObject o;
-        o.insert("symbol",         it.key());
-        o.insert("regular",        q.regular);
-        o.insert("has_ext",        q.has_ext);
+        o.insert("symbol", it.key());
+        o.insert("regular", q.regular);
+        o.insert("has_ext", q.has_ext);
         if (q.has_ext) {
-            o.insert("ext_price",      q.ext_price);
-            o.insert("ext_change",     q.ext_change);
+            o.insert("ext_price", q.ext_price);
+            o.insert("ext_change", q.ext_change);
             o.insert("ext_change_pct", q.ext_change_pct);
         }
-        o.insert("session",        q.session);
+        o.insert("session", q.session);
         arr.append(o);
     }
     QJsonObject root;
     root.insert("saved_at", QDateTime::currentDateTime().toString(Qt::ISODate));
-    root.insert("quotes",   arr);
+    root.insert("quotes", arr);
 
     // Atomic write: QSaveFile commits on success, otherwise leaves the
     // previous snapshot intact.
     QSaveFile f(ext_cache_path());
-    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate)) return;
+    if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+        return;
     f.write(QJsonDocument(root).toJson(QJsonDocument::Compact));
     f.commit();
 }
 
 void PortfolioFuturesView::load_ext_cache() {
     QFile f(ext_cache_path());
-    if (!f.open(QIODevice::ReadOnly)) return;
+    if (!f.open(QIODevice::ReadOnly))
+        return;
     const auto bytes = f.readAll();
     f.close();
     const auto doc = QJsonDocument::fromJson(bytes);
-    if (!doc.isObject()) return;
+    if (!doc.isObject())
+        return;
 
     // The snapshot exists to avoid a blank table for the second it takes the
     // fetch to return — not to answer the question when the fetch never runs.
@@ -515,8 +572,7 @@ void PortfolioFuturesView::load_ext_cache() {
     // stale, they are wrong. Twelve hours spans an overnight gap (a 16:30 ET
     // save is still good at the next 04:00 ET pre-open) without ever reaching
     // back past a regular session.
-    const auto saved_at = QDateTime::fromString(
-        doc.object().value("saved_at").toString(), Qt::ISODate);
+    const auto saved_at = QDateTime::fromString(doc.object().value("saved_at").toString(), Qt::ISODate);
     if (!saved_at.isValid() || saved_at.secsTo(QDateTime::currentDateTime()) > 12 * 3600)
         return;
 
@@ -524,14 +580,15 @@ void PortfolioFuturesView::load_ext_cache() {
     for (const auto& v : arr) {
         const auto o = v.toObject();
         const QString sym = o.value("symbol").toString();
-        if (sym.isEmpty()) continue;
+        if (sym.isEmpty())
+            continue;
         ExtQuote q;
-        q.regular         = o.value("regular").toDouble();
-        q.has_ext         = o.value("has_ext").toBool();
-        q.ext_price       = o.value("ext_price").toDouble();
-        q.ext_change      = o.value("ext_change").toDouble();
-        q.ext_change_pct  = o.value("ext_change_pct").toDouble();
-        q.session         = o.value("session").toString();
+        q.regular = o.value("regular").toDouble();
+        q.has_ext = o.value("has_ext").toBool();
+        q.ext_price = o.value("ext_price").toDouble();
+        q.ext_change = o.value("ext_change").toDouble();
+        q.ext_change_pct = o.value("ext_change_pct").toDouble();
+        q.session = o.value("session").toString();
         ext_quotes_.insert(sym, q);
     }
 }

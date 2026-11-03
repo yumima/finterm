@@ -141,7 +141,7 @@ void DashboardStatusBar::refresh_theme() {
                           "#dsMem { color:%7; background:transparent; }"
                           "#dsLatency { color:%4; font-weight:bold; background:transparent; }"
                           "#dsReady { color:%5; font-weight:bold; background:transparent; }")
-                      .arg(ui::colors::BG_BASE())         // %1 — match global status bar
+                      .arg(ui::colors::BG_BASE())        // %1 — match global status bar
                       .arg(ui::colors::BORDER_DIM())     // %2
                       .arg(ui::colors::BORDER_MED())     // %3
                       .arg(ui::colors::TEXT_SECONDARY()) // %4

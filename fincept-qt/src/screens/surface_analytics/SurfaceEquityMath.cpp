@@ -49,7 +49,7 @@ CorrelationResult compute_correlation(const PriceTable& prices) {
         for (size_t j = i + 1; j < n; ++j) {
             const float c = float(correlation(rets[i], rets[j]));
             res.z[i][j] = c;
-            res.z[j][i] = c;   // symmetric by definition, computed once
+            res.z[j][i] = c; // symmetric by definition, computed once
         }
     }
     return res;
@@ -70,16 +70,18 @@ PcaResult compute_pca(const PriceTable& prices, int max_factors) {
         for (size_t j = 0; j < n; ++j) {
             const float v = corr.z[i][j];
             if (std::isnan(v))
-                return res;   // an undefined pair makes the whole decomposition meaningless
+                return res; // an undefined pair makes the whole decomposition meaningless
             a[i][j] = v;
         }
     std::vector<std::vector<double>> v(n, std::vector<double>(n, 0.0));
-    for (size_t i = 0; i < n; ++i) v[i][i] = 1.0;
+    for (size_t i = 0; i < n; ++i)
+        v[i][i] = 1.0;
 
     for (int sweep = 0; sweep < 100; ++sweep) {
         double off = 0.0;
         for (size_t i = 0; i < n; ++i)
-            for (size_t j = i + 1; j < n; ++j) off += a[i][j] * a[i][j];
+            for (size_t j = i + 1; j < n; ++j)
+                off += a[i][j] * a[i][j];
         if (off < 1e-12)
             break;
         for (size_t p = 0; p < n; ++p) {
@@ -87,8 +89,7 @@ PcaResult compute_pca(const PriceTable& prices, int max_factors) {
                 if (std::fabs(a[p][q]) < 1e-15)
                     continue;
                 const double theta = (a[q][q] - a[p][p]) / (2.0 * a[p][q]);
-                const double t = (theta >= 0 ? 1.0 : -1.0) /
-                                 (std::fabs(theta) + std::sqrt(theta * theta + 1.0));
+                const double t = (theta >= 0 ? 1.0 : -1.0) / (std::fabs(theta) + std::sqrt(theta * theta + 1.0));
                 const double c = 1.0 / std::sqrt(t * t + 1.0), s = t * c;
                 for (size_t k = 0; k < n; ++k) {
                     const double akp = a[k][p], akq = a[k][q];
@@ -111,12 +112,13 @@ PcaResult compute_pca(const PriceTable& prices, int max_factors) {
 
     // Order components by eigenvalue, largest first.
     std::vector<size_t> order(n);
-    for (size_t i = 0; i < n; ++i) order[i] = i;
-    std::sort(order.begin(), order.end(),
-              [&](size_t l, size_t r) { return a[l][l] > a[r][r]; });
+    for (size_t i = 0; i < n; ++i)
+        order[i] = i;
+    std::sort(order.begin(), order.end(), [&](size_t l, size_t r) { return a[l][l] > a[r][r]; });
 
     double total = 0.0;
-    for (size_t i = 0; i < n; ++i) total += std::max(0.0, a[i][i]);
+    for (size_t i = 0; i < n; ++i)
+        total += std::max(0.0, a[i][i]);
     if (total <= 0.0)
         return res;
 

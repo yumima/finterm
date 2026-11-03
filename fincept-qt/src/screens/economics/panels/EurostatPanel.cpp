@@ -88,7 +88,8 @@ QJsonArray EurostatPanel::flatten_sdmx(const QJsonObject& response, int* series_
         const QJsonObject index = cat["index"].toObject();
         const QJsonObject label = cat["label"].toObject();
         for (auto it = index.constBegin(); it != index.constEnd(); ++it)
-            labels[d][it.value().toInt()] = (id == QLatin1String("time")) ? it.key() : label.value(it.key()).toString(it.key());
+            labels[d][it.value().toInt()] =
+                (id == QLatin1String("time")) ? it.key() : label.value(it.key()).toString(it.key());
     }
     if (time_dim < 0)
         return {};

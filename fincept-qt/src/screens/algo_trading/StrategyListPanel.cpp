@@ -5,14 +5,14 @@
 #include "services/algo_trading/AlgoTradingService.h"
 #include "ui/theme/Theme.h"
 
-#include <algorithm>
-
-#include <QHeaderView>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
+
+#include <algorithm>
 
 namespace fincept::screens {
 
@@ -46,8 +46,8 @@ void StrategyListPanel::build_ui() {
     // ── Top bar ──────────────────────────────────────────────────────────────
     auto* top_bar = new QWidget(this);
     top_bar->setFixedHeight(44);
-    top_bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
-                               .arg(colors::BG_RAISED(), colors::BORDER_DIM()));
+    top_bar->setStyleSheet(
+        QString("background:%1; border-bottom:1px solid %2;").arg(colors::BG_RAISED(), colors::BORDER_DIM()));
     auto* top_hl = new QHBoxLayout(top_bar);
     top_hl->setContentsMargins(12, 0, 12, 0);
     top_hl->setSpacing(8);
@@ -55,13 +55,12 @@ void StrategyListPanel::build_ui() {
     search_edit_ = new QLineEdit(top_bar);
     search_edit_->setPlaceholderText("Search strategies...");
     search_edit_->setFixedHeight(28);
-    search_edit_->setStyleSheet(
-        QString("QLineEdit { background:%1; border:1px solid %2; color:%3;"
-                " padding:4px 8px; font-size:%4px; font-family:%5; }"
-                "QLineEdit:focus { border-color:%6; }")
-            .arg(colors::BG_SURFACE(), colors::BORDER_DIM(), colors::TEXT_PRIMARY())
-            .arg(fonts::SMALL)
-            .arg(fonts::DATA_FAMILY(), colors::BORDER_BRIGHT()));
+    search_edit_->setStyleSheet(QString("QLineEdit { background:%1; border:1px solid %2; color:%3;"
+                                        " padding:4px 8px; font-size:%4px; font-family:%5; }"
+                                        "QLineEdit:focus { border-color:%6; }")
+                                    .arg(colors::BG_SURFACE(), colors::BORDER_DIM(), colors::TEXT_PRIMARY())
+                                    .arg(fonts::SMALL)
+                                    .arg(fonts::DATA_FAMILY(), colors::BORDER_BRIGHT()));
     top_hl->addWidget(search_edit_, 2);
 
     // Category filter
@@ -69,15 +68,14 @@ void StrategyListPanel::build_ui() {
     cat_combo_->setFixedHeight(28);
     cat_combo_->setFixedWidth(150);
     cat_combo_->addItem("All Categories");
-    const QString combo_style =
-        QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
-                " padding:2px 6px; font-size:%4px; font-family:%5; }"
-                "QComboBox::drop-down { border:none; }"
-                "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3;"
-                " selection-background-color:%6; font-family:%5; }")
-            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM())
-            .arg(fonts::TINY)
-            .arg(fonts::DATA_FAMILY(), colors::BG_HOVER());
+    const QString combo_style = QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
+                                        " padding:2px 6px; font-size:%4px; font-family:%5; }"
+                                        "QComboBox::drop-down { border:none; }"
+                                        "QComboBox QAbstractItemView { background:%1; color:%2; border:1px solid %3;"
+                                        " selection-background-color:%6; font-family:%5; }")
+                                    .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM())
+                                    .arg(fonts::TINY)
+                                    .arg(fonts::DATA_FAMILY(), colors::BG_HOVER());
     cat_combo_->setStyleSheet(combo_style);
     top_hl->addWidget(cat_combo_);
 
@@ -127,37 +125,35 @@ void StrategyListPanel::build_ui() {
     table_->setColumnWidth(2, 180);
     table_->setColumnWidth(3, 120);
     table_->verticalHeader()->setDefaultSectionSize(26);
-    table_->setStyleSheet(
-        QString("QTableWidget { background:%1; alternate-background-color:%2;"
-                " color:%3; border:none; font-size:%4px; font-family:%5; gridline-color:%6; }"
-                "QTableWidget::item { padding:2px 8px; border:none; }"
-                "QTableWidget::item:selected { background:%7; color:%3; }"
-                "QHeaderView::section { background:%8; color:%9; font-size:%4px;"
-                " font-weight:700; font-family:%5; border:none;"
-                " border-bottom:1px solid %6; padding:4px 8px; }")
-            .arg(colors::BG_BASE(), colors::BG_SURFACE(), colors::TEXT_PRIMARY())
-            .arg(fonts::SMALL)
-            .arg(fonts::DATA_FAMILY(), colors::BORDER_DIM(), colors::BG_HOVER(),
-                 colors::BG_RAISED(), colors::TEXT_SECONDARY()));
+    table_->setStyleSheet(QString("QTableWidget { background:%1; alternate-background-color:%2;"
+                                  " color:%3; border:none; font-size:%4px; font-family:%5; gridline-color:%6; }"
+                                  "QTableWidget::item { padding:2px 8px; border:none; }"
+                                  "QTableWidget::item:selected { background:%7; color:%3; }"
+                                  "QHeaderView::section { background:%8; color:%9; font-size:%4px;"
+                                  " font-weight:700; font-family:%5; border:none;"
+                                  " border-bottom:1px solid %6; padding:4px 8px; }")
+                              .arg(colors::BG_BASE(), colors::BG_SURFACE(), colors::TEXT_PRIMARY())
+                              .arg(fonts::SMALL)
+                              .arg(fonts::DATA_FAMILY(), colors::BORDER_DIM(), colors::BG_HOVER(), colors::BG_RAISED(),
+                                   colors::TEXT_SECONDARY()));
     root->addWidget(table_, 1);
 
     // ── Pagination bar ───────────────────────────────────────────────────────
     auto* page_bar = new QWidget(this);
     page_bar->setFixedHeight(36);
-    page_bar->setStyleSheet(QString("background:%1; border-top:1px solid %2;")
-                                .arg(colors::BG_RAISED(), colors::BORDER_DIM()));
+    page_bar->setStyleSheet(
+        QString("background:%1; border-top:1px solid %2;").arg(colors::BG_RAISED(), colors::BORDER_DIM()));
     auto* page_hl = new QHBoxLayout(page_bar);
     page_hl->setContentsMargins(12, 0, 12, 0);
     page_hl->setSpacing(8);
 
-    const QString btn_style =
-        QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
-                " font-size:%4px; font-family:%5; padding:2px 12px; }"
-                "QPushButton:hover { border-color:%6; color:%6; }"
-                "QPushButton:disabled { color:%3; border-color:%3; }")
-            .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM())
-            .arg(fonts::TINY)
-            .arg(fonts::DATA_FAMILY(), colors::CYAN());
+    const QString btn_style = QString("QPushButton { background:%1; color:%2; border:1px solid %3;"
+                                      " font-size:%4px; font-family:%5; padding:2px 12px; }"
+                                      "QPushButton:hover { border-color:%6; color:%6; }"
+                                      "QPushButton:disabled { color:%3; border-color:%3; }")
+                                  .arg(colors::BG_SURFACE(), colors::TEXT_PRIMARY(), colors::BORDER_DIM())
+                                  .arg(fonts::TINY)
+                                  .arg(fonts::DATA_FAMILY(), colors::CYAN());
 
     prev_btn_ = new QPushButton("◀ PREV", page_bar);
     prev_btn_->setFixedHeight(24);
@@ -184,10 +180,10 @@ void StrategyListPanel::build_ui() {
 
     // ── Connections ──────────────────────────────────────────────────────────
     connect(search_edit_, &QLineEdit::textChanged, this, &StrategyListPanel::on_filter_changed);
-    connect(cat_combo_,   QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, [this](int) { on_filter_changed(search_edit_->text()); });
-    connect(sort_combo_,  QOverload<int>::of(&QComboBox::currentIndexChanged),
-            this, &StrategyListPanel::on_sort_changed);
+    connect(cat_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            [this](int) { on_filter_changed(search_edit_->text()); });
+    connect(sort_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+            &StrategyListPanel::on_sort_changed);
     connect(prev_btn_, &QPushButton::clicked, this, [this]() { go_to_page(current_page_ - 1); });
     connect(next_btn_, &QPushButton::clicked, this, [this]() { go_to_page(current_page_ + 1); });
 }
@@ -200,17 +196,17 @@ void StrategyListPanel::render_page() {
     table_->setSortingEnabled(false);
     table_->setRowCount(0);
 
-    const int total    = filtered_.size();
-    const int start    = current_page_ * kPageSize;
-    const int end      = qMin(start + kPageSize, total);
+    const int total = filtered_.size();
+    const int start = current_page_ * kPageSize;
+    const int end = qMin(start + kPageSize, total);
     const int page_num = total > 0 ? current_page_ + 1 : 0;
     const int total_pages = (total + kPageSize - 1) / qMax(kPageSize, 1);
 
     table_->setRowCount(end - start);
 
     for (int i = start; i < end; ++i) {
-        const auto& s   = filtered_[i];
-        const int   row = i - start;
+        const auto& s = filtered_[i];
+        const int row = i - start;
 
         // Col 0: row number
         auto* num_item = new QTableWidgetItem(QString::number(i + 1));
@@ -238,11 +234,10 @@ void StrategyListPanel::render_page() {
     update_pagination_controls();
 
     page_label_->setText(total > 0
-        ? QString("Page %1 of %2  ·  %3 strategies").arg(page_num).arg(total_pages).arg(total)
-        : "No strategies");
+                             ? QString("Page %1 of %2  ·  %3 strategies").arg(page_num).arg(total_pages).arg(total)
+                             : "No strategies");
 
-    count_label_->setText(
-        QString("%1 of %2").arg(total).arg(strategies_.size()));
+    count_label_->setText(QString("%1 of %2").arg(total).arg(strategies_.size()));
 }
 
 void StrategyListPanel::update_pagination_controls() {
@@ -261,15 +256,12 @@ void StrategyListPanel::go_to_page(int page) {
 
 void StrategyListPanel::on_filter_changed(const QString&) {
     const QString text = search_edit_->text().trimmed().toLower();
-    const QString cat  = cat_combo_->currentIndex() == 0
-                           ? QString()
-                           : cat_combo_->currentText();
+    const QString cat = cat_combo_->currentIndex() == 0 ? QString() : cat_combo_->currentText();
 
     filtered_.clear();
     filtered_.reserve(strategies_.size());
     for (const auto& s : strategies_) {
-        if (!text.isEmpty() && !s.name.toLower().contains(text) &&
-            !s.description.toLower().contains(text))
+        if (!text.isEmpty() && !s.name.toLower().contains(text) && !s.description.toLower().contains(text))
             continue;
         if (!cat.isEmpty() && s.description != cat)
             continue;
@@ -288,10 +280,9 @@ void StrategyListPanel::on_sort_changed(int index) {
         std::sort(filtered_.begin(), filtered_.end(),
                   [](const AlgoStrategy& a, const AlgoStrategy& b) { return a.name > b.name; });
     } else if (index == 2) { // Category
-        std::sort(filtered_.begin(), filtered_.end(),
-                  [](const AlgoStrategy& a, const AlgoStrategy& b) {
-                      return a.description < b.description || (a.description == b.description && a.name < b.name);
-                  });
+        std::sort(filtered_.begin(), filtered_.end(), [](const AlgoStrategy& a, const AlgoStrategy& b) {
+            return a.description < b.description || (a.description == b.description && a.name < b.name);
+        });
     }
     current_page_ = 0;
     render_page();
@@ -316,7 +307,8 @@ void StrategyListPanel::on_strategies_loaded(QVector<AlgoStrategy> strategies) {
         cat_combo_->addItem(c);
     if (!prev_cat.isEmpty()) {
         int idx = cat_combo_->findText(prev_cat);
-        if (idx >= 0) cat_combo_->setCurrentIndex(idx);
+        if (idx >= 0)
+            cat_combo_->setCurrentIndex(idx);
     }
     cat_combo_->blockSignals(false);
 

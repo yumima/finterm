@@ -12,6 +12,9 @@
 #include "core/keys/WindowCycler.h"
 #include "core/logging/Logger.h"
 #include "core/session/SessionManager.h"
+#include "core/symbol/SymbolContext.h"
+#include "core/symbol/SymbolGroup.h"
+#include "core/symbol/SymbolRef.h"
 #include "screens/ComingSoonScreen.h"
 #include "screens/about/AboutScreen.h"
 #include "screens/agent_config/AgentConfigScreen.h"
@@ -20,7 +23,6 @@
 #include "screens/algo_trading/AlgoTradingScreen.h"
 #include "screens/alpha_arena/AlphaArenaScreen.h"
 #include "screens/alt_investments/AltInvestmentsScreen.h"
-#include "screens/pre_ipo/PreIpoScreen.h"
 #include "screens/asia_markets/AsiaMarketsScreen.h"
 #include "screens/auth/ForgotPasswordScreen.h"
 #include "screens/auth/LockScreen.h"
@@ -28,7 +30,6 @@
 #include "screens/auth/PricingScreen.h"
 #include "screens/auth/RegisterScreen.h"
 #include "screens/backtesting/BacktestingScreen.h"
-#include "screens/workbench/WorkbenchScreen.h"
 #include "screens/code_editor/CodeEditorScreen.h"
 #include "screens/crypto_trading/CryptoTradingScreen.h"
 #include "screens/dashboard/DashboardScreen.h"
@@ -39,7 +40,6 @@
 #include "screens/docs/DocsScreen.h"
 #include "screens/economics/EconomicsScreen.h"
 #include "screens/equity_research/EquityResearchScreen.h"
-#include "services/portfolio/PortfolioService.h"
 #include "screens/equity_trading/EquityTradingScreen.h"
 #include "screens/excel/ExcelScreen.h"
 #include "screens/file_manager/FileManagerScreen.h"
@@ -48,13 +48,10 @@
 #include "screens/gov_data/GovDataScreen.h"
 #include "screens/info/ContactScreen.h"
 #include "screens/info/HelpScreen.h"
-#include "core/symbol/SymbolContext.h"
-#include "core/symbol/SymbolGroup.h"
-#include "core/symbol/SymbolRef.h"
-#include "screens/knowledge/KnowledgeScreen.h"
 #include "screens/info/PrivacyScreen.h"
 #include "screens/info/TermsScreen.h"
 #include "screens/info/TrademarksScreen.h"
+#include "screens/knowledge/KnowledgeScreen.h"
 #include "screens/ma_analytics/MAAnalyticsScreen.h"
 #include "screens/maritime/MaritimeScreen.h"
 #include "screens/markets/MarketsScreen.h"
@@ -62,26 +59,29 @@
 #include "screens/news/NewsScreen.h"
 #include "screens/node_editor/NodeEditorScreen.h"
 #include "screens/notes/NotesScreen.h"
-#include "screens/polymarket/PolymarketScreen.h"
 #include "screens/ownership/OwnershipScreen.h"
-#include "screens/screener/ScreenerScreen.h"
+#include "screens/polymarket/PolymarketScreen.h"
 #include "screens/portfolio/PortfolioScreen.h"
+#include "screens/pre_ipo/PreIpoScreen.h"
 #include "screens/profile/ProfileScreen.h"
 #include "screens/quantlib/QuantLibScreen.h"
 #include "screens/relationship_map/RelationshipMapScreen.h"
 #include "screens/report_builder/ReportBuilderScreen.h"
+#include "screens/screener/ScreenerScreen.h"
 #include "screens/settings/SettingsScreen.h"
 #include "screens/support/SupportScreen.h"
 #include "screens/surface_analytics/SurfaceAnalyticsScreen.h"
 #include "screens/trade_viz/TradeVizScreen.h"
 #include "screens/watchlist/WatchlistScreen.h"
+#include "screens/workbench/WorkbenchScreen.h"
+#include "services/portfolio/PortfolioService.h"
 #include "services/updater/UpdateService.h"
 #include "services/workspace/WorkspaceManager.h"
 #include "storage/repositories/SettingsRepository.h"
+#include "ui/components/ComponentBrowserDialog.h"
 #include "ui/navigation/DockStatusBar.h"
 #include "ui/navigation/DockToolBar.h"
 #include "ui/navigation/FKeyBar.h"
-#include "ui/components/ComponentBrowserDialog.h"
 #include "ui/navigation/NavigationBar.h"
 #include "ui/navigation/StatusBar.h"
 #include "ui/navigation/ToolBar.h"
@@ -112,7 +112,6 @@
 #include <DockManager.h>
 #include <DockWidget.h>
 #include <FloatingDockContainer.h>
-
 #include <algorithm>
 
 namespace fincept {
@@ -247,9 +246,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     // ── AI Workbench (Track 13) ──────────────────────────────────────────────
     workbench_screen_ = new screens::WorkbenchScreen;
-    master_stack->addWidget(workbench_screen_);             // index 2
-    connect(workbench_screen_, &screens::WorkbenchScreen::exit_requested,
-            this, &MainWindow::toggle_workbench);
+    master_stack->addWidget(workbench_screen_); // index 2
+    connect(workbench_screen_, &screens::WorkbenchScreen::exit_requested, this, &MainWindow::toggle_workbench);
 
     // ── Lock Screen ─────────────────────────────────────────────────────────
     // The lock screen and master_stack share cell (0,0) in a zero-margin
@@ -266,8 +264,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     auto* overlay_layout = new QGridLayout(central);
     overlay_layout->setContentsMargins(0, 0, 0, 0);
     overlay_layout->setSpacing(0);
-    overlay_layout->addWidget(master_stack, 0, 0);  // bottom layer
-    overlay_layout->addWidget(lock_screen_,  0, 0);  // top layer (same cell)
+    overlay_layout->addWidget(master_stack, 0, 0); // bottom layer
+    overlay_layout->addWidget(lock_screen_, 0, 0); // top layer (same cell)
     setCentralWidget(central);
 
     // Lock screen signals
@@ -310,8 +308,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // ── Workspace + signal wiring ───────────────────────────────────────────
     WorkspaceManager::instance().set_main_window(this);
     WindowCycler::instance().register_window(this);
-    connect(this, &QObject::destroyed, this,
-            [this]() { WindowCycler::instance().unregister_window(this); });
+    connect(this, &QObject::destroyed, this, [this]() { WindowCycler::instance().unregister_window(this); });
     connect(&WorkspaceManager::instance(), &WorkspaceManager::workspace_loaded, this,
             [this](const WorkspaceDef&) { update_window_title(); });
     connect(&WorkspaceManager::instance(), &WorkspaceManager::workspace_error, this,
@@ -333,7 +330,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // panels and fills the full area. Each tab is a fresh independent screen,
     // not nested into whatever was previously open.
     connect(tab_bar_, &ui::TabBar::tab_changed, this, [this](const QString& id) {
-        if (!locked_) dock_router_->navigate(id, true);
+        if (!locked_)
+            dock_router_->navigate(id, true);
     });
     connect(dock_router_, &DockScreenRouter::screen_changed, tab_bar_, &ui::TabBar::set_active);
 
@@ -373,7 +371,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     connect(toolbar, &ui::ToolBar::workbench_toggled, this, &MainWindow::toggle_workbench);
     connect(toolbar, &ui::ToolBar::navigate_to, this, [this](const QString& id) {
-        if (locked_) return;
+        if (locked_)
+            return;
         // Smart navigate — preserve any existing split when the target is
         // already in the layout. Critical for the CommandBar /stock <sym>
         // flow: typing "/stock AAPL" while Portfolio + ER are side-by-side
@@ -400,19 +399,20 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         SessionManager::instance().save_dock_layout(window_id_, dock_manager_->saveState());
         if (WorkspaceManager::instance().has_current_workspace())
             // Every stateful screen, not just the hidden ones. save_screen_state is
-    // otherwise driven by visibilityChanged(false), which does not fire for the
-    // screen on top at quit — so the ticker in Equity Research, the portfolio
-    // view, and the active tab were all lost for exactly the screen the user
-    // had open.
-    if (dock_router_)
-        dock_router_->save_all_screen_state();
+            // otherwise driven by visibilityChanged(false), which does not fire for the
+            // screen on top at quit — so the ticker in Equity Research, the portfolio
+            // view, and the active tab were all lost for exactly the screen the user
+            // had open.
+            if (dock_router_)
+                dock_router_->save_all_screen_state();
 
-    WorkspaceManager::instance().save_workspace();
+        WorkspaceManager::instance().save_workspace();
     });
 
     connect(toolbar, &ui::ToolBar::dock_command, this,
             [this](const QString& action, const QString& primary, const QString& secondary) {
-                if (locked_) return;
+                if (locked_)
+                    return;
                 if (action == "add")
                     dock_router_->add_alongside(primary, secondary);
                 else if (action == "remove")
@@ -432,9 +432,12 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         QString screen_id = nav_data["screen_id"].toString();
         if (!screen_id.isEmpty())
             QMetaObject::invokeMethod(
-                dock_router_, [this, screen_id]() {
-                    if (!locked_) dock_router_->navigate(screen_id);
-                }, Qt::QueuedConnection);
+                dock_router_,
+                [this, screen_id]() {
+                    if (!locked_)
+                        dock_router_->navigate(screen_id);
+                },
+                Qt::QueuedConnection);
     });
 
     // Intent-based "open alongside" — used by right-click "Open in X" gestures.
@@ -447,7 +450,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // call order, which is what call sites assume.
     EventBus::instance().subscribe("nav.split_alongside", [this](const QVariantMap& nav_data) {
         const QString screen_id = nav_data.value("screen_id").toString();
-        if (screen_id.isEmpty() || locked_) return;
+        if (screen_id.isEmpty() || locked_)
+            return;
         dock_router_->split_alongside(screen_id);
     });
 
@@ -468,10 +472,12 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     act_focus->setShortcutContext(Qt::WindowShortcut);
     addAction(act_focus);
     connect(act_focus, &QAction::triggered, this, [this]() {
-        if (locked_) return;
+        if (locked_)
+            return;
         // Don't let the focus-mode shortcut toggle shell visibility while
         // the user is on an auth screen — the toolbar must stay hidden.
-        if (stack_ && stack_->currentIndex() == 0) return;
+        if (stack_ && stack_->currentIndex() == 0)
+            return;
         focus_mode_ = !focus_mode_;
         if (dock_toolbar_)
             dock_toolbar_->setVisible(!focus_mode_);
@@ -485,7 +491,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     act_refresh->setShortcutContext(Qt::WindowShortcut);
     addAction(act_refresh);
     connect(act_refresh, &QAction::triggered, this, [this]() {
-        if (locked_) return;
+        if (locked_)
+            return;
         if (dock_manager_) {
             auto* focused = dock_manager_->focusedDockWidget();
             if (focused && focused->widget())
@@ -519,9 +526,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     if (auto* act_lock = km.action(KeyAction::LockNow)) {
         act_lock->setShortcutContext(Qt::ApplicationShortcut);
         addAction(act_lock);
-        connect(act_lock, &QAction::triggered, this, []() {
-            auth::InactivityGuard::instance().trigger_manual_lock();
-        });
+        connect(act_lock, &QAction::triggered, this, []() { auth::InactivityGuard::instance().trigger_manual_lock(); });
     }
 
     // Minimize-to-lock is handled in changeEvent() — see its override. We
@@ -539,7 +544,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         act->setShortcutContext(Qt::WindowShortcut);
         addAction(act);
         connect(act, &QAction::triggered, this, [this, fn]() {
-            if (locked_) return;
+            if (locked_)
+                return;
             fn();
         });
     };
@@ -555,28 +561,21 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     }
 
     // Cycle panels inside the focused window.
-    bind_km(KeyAction::CyclePanelsForward,
-            []() { WindowCycler::instance().cycle_panels_in_current_window(true); });
-    bind_km(KeyAction::CyclePanelsBack,
-            []() { WindowCycler::instance().cycle_panels_in_current_window(false); });
+    bind_km(KeyAction::CyclePanelsForward, []() { WindowCycler::instance().cycle_panels_in_current_window(true); });
+    bind_km(KeyAction::CyclePanelsBack, []() { WindowCycler::instance().cycle_panels_in_current_window(false); });
 
     // Cycle between MainWindow instances.
-    bind_km(KeyAction::CycleWindowsForward,
-            []() { WindowCycler::instance().cycle_windows(true); });
-    bind_km(KeyAction::CycleWindowsBack,
-            []() { WindowCycler::instance().cycle_windows(false); });
+    bind_km(KeyAction::CycleWindowsForward, []() { WindowCycler::instance().cycle_windows(true); });
+    bind_km(KeyAction::CycleWindowsBack, []() { WindowCycler::instance().cycle_windows(false); });
 
     // New window on next monitor.
-    bind_km(KeyAction::NewWindowNextMonitor,
-            []() { WindowCycler::instance().new_window_on_next_monitor(); });
+    bind_km(KeyAction::NewWindowNextMonitor, []() { WindowCycler::instance().new_window_on_next_monitor(); });
 
     // Move current window to monitor N (1-based in the shortcut, 0-based to the API).
     const KeyAction move_keys[] = {
-        KeyAction::MoveWindowToMonitor1, KeyAction::MoveWindowToMonitor2,
-        KeyAction::MoveWindowToMonitor3, KeyAction::MoveWindowToMonitor4,
-        KeyAction::MoveWindowToMonitor5, KeyAction::MoveWindowToMonitor6,
-        KeyAction::MoveWindowToMonitor7, KeyAction::MoveWindowToMonitor8,
-        KeyAction::MoveWindowToMonitor9,
+        KeyAction::MoveWindowToMonitor1, KeyAction::MoveWindowToMonitor2, KeyAction::MoveWindowToMonitor3,
+        KeyAction::MoveWindowToMonitor4, KeyAction::MoveWindowToMonitor5, KeyAction::MoveWindowToMonitor6,
+        KeyAction::MoveWindowToMonitor7, KeyAction::MoveWindowToMonitor8, KeyAction::MoveWindowToMonitor9,
     };
     for (int i = 0; i < 9; ++i) {
         bind_km(move_keys[i], [i]() { WindowCycler::instance().move_current_window_to_monitor(i); });
@@ -599,7 +598,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
 
     // Toolbar actions
     connect(toolbar, &ui::ToolBar::action_triggered, this, [this](const QString& action) {
-        if (locked_) return;
+        if (locked_)
+            return;
         if (action == "browse_components") {
             // Same path as the keyboard shortcut so the behavior stays in one
             // place — the KeyConfigManager action will be triggered directly.
@@ -720,7 +720,8 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 showFullScreen();
         } else if (action == "focus_mode") {
             // Auth screens must never reveal the shell via focus-mode toggle.
-            if (stack_ && stack_->currentIndex() == 0) return;
+            if (stack_ && stack_->currentIndex() == 0)
+                return;
             focus_mode_ = !focus_mode_;
             if (dock_toolbar_)
                 dock_toolbar_->setVisible(!focus_mode_);
@@ -843,8 +844,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
                 // removals we know about; this handles the ones we forget.
                 const int areas = dock_manager_->openedDockAreas().size();
                 if (dock_restored && (areas > 6 || areas == 0)) {
-                    LOG_WARN("MainWindow", QString("Dock layout unusable: %1 open areas — resetting")
-                                               .arg(areas));
+                    LOG_WARN("MainWindow", QString("Dock layout unusable: %1 open areas — resetting").arg(areas));
                     dock_restored = false;
                 }
             }
@@ -1009,19 +1009,19 @@ void MainWindow::setup_auth_screens() {
     info_stack_->addWidget(trademarks); // index 3
     info_stack_->addWidget(help);       // index 4
 
-    auth_stack_->addWidget(login);       // index 0
-    auth_stack_->addWidget(reg);         // index 1
+    auth_stack_->addWidget(login); // index 0
+    auth_stack_->addWidget(reg);   // index 1
     // index 2 / 3 were ForgotPasswordScreen + PricingScreen — removed in
     // the localhost-only flow. Add placeholder widgets so existing
     // setCurrentIndex(...) calls don't go out of range; show_forgot_password
     // / show_pricing now just route back to login.
     auth_stack_->addWidget(new QWidget(this)); // index 2 (was forgot)
     auth_stack_->addWidget(new QWidget(this)); // index 3 (was pricing)
-    auth_stack_->addWidget(info_stack_); // index 4
+    auth_stack_->addWidget(info_stack_);       // index 4
 
     // ── Auth navigation ──────────────────────────────────────────────────────
     connect(login, &screens::LoginScreen::navigate_register, this, &MainWindow::show_register);
-    connect(reg,   &screens::RegisterScreen::navigate_login,  this, &MainWindow::show_login);
+    connect(reg, &screens::RegisterScreen::navigate_login, this, &MainWindow::show_login);
 
     // ── Info screen navigation ───────────────────────────────────────────────
     // Back from info → return to previous auth screen (login by default)
@@ -1044,16 +1044,15 @@ void MainWindow::setup_docking_mode() {
     static bool s_ads_configured = false;
     if (!s_ads_configured) {
         ads::CDockManager::setConfigFlags(
-            ads::CDockManager::DefaultOpaqueConfig |
-            ads::CDockManager::AlwaysShowTabs | ads::CDockManager::DockAreaHasTabsMenuButton |
-            ads::CDockManager::DockAreaDynamicTabsMenuButtonVisibility |
+            ads::CDockManager::DefaultOpaqueConfig | ads::CDockManager::AlwaysShowTabs |
+            ads::CDockManager::DockAreaHasTabsMenuButton | ads::CDockManager::DockAreaDynamicTabsMenuButtonVisibility |
             ads::CDockManager::FloatingContainerHasWidgetTitle | ads::CDockManager::FloatingContainerHasWidgetIcon |
-            ads::CDockManager::EqualSplitOnInsertion       // prevents new panels from spawning tiny slivers
-            | ads::CDockManager::DoubleClickUndocksWidget  // double-click tab to float
-            | ads::CDockManager::FocusHighlighting         // track the focused panel so
-                                                           // focusedDockWidget() works —
-                                                           // Ctrl+K placement and
-                                                           // split_alongside anchor on it
+            ads::CDockManager::EqualSplitOnInsertion      // prevents new panels from spawning tiny slivers
+            | ads::CDockManager::DoubleClickUndocksWidget // double-click tab to float
+            | ads::CDockManager::FocusHighlighting        // track the focused panel so
+                                                          // focusedDockWidget() works —
+                                                          // Ctrl+K placement and
+                                                          // split_alongside anchor on it
         );
         // Disable auto-hide entirely: the pin button converts panels to collapsible
         // sidebars which collapse when another panel is opened beside them.
@@ -1172,8 +1171,7 @@ void MainWindow::setup_dock_screens() {
         connect(screen, &knowledge::KnowledgeScreen::navigate_to_screen, this,
                 [this](const QString& id, const QString& ticker) {
                     if (!ticker.isEmpty()) {
-                        SymbolContext::instance().set_group_symbol(
-                            SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
+                        SymbolContext::instance().set_group_symbol(SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
                     }
                     dock_router_->navigate(id);
                 });
@@ -1185,8 +1183,7 @@ void MainWindow::setup_dock_screens() {
         connect(screen, &screens::OwnershipScreen::navigate_to_screen, this,
                 [this](const QString& id, const QString& ticker) {
                     if (!ticker.isEmpty())
-                        SymbolContext::instance().set_group_symbol(
-                            SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
+                        SymbolContext::instance().set_group_symbol(SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
                     // Equity Research opens BESIDE the scan, as it does from
                     // Portfolio: the reader is working down a list, and
                     // replacing the list with the stock lost their place on
@@ -1200,8 +1197,7 @@ void MainWindow::setup_dock_screens() {
                     // group-A broadcasts when its tab is unlinked, and only
                     // once materialised — so publish AFTER opening it.
                     if (id == QLatin1String("equity_research") && !ticker.isEmpty())
-                        EventBus::instance().publish("equity_research.load_symbol",
-                                                     QVariantMap{{"symbol", ticker}});
+                        EventBus::instance().publish("equity_research.load_symbol", QVariantMap{{"symbol", ticker}});
                 });
         return screen;
     });
@@ -1212,26 +1208,24 @@ void MainWindow::setup_dock_screens() {
         // right of the screener (moved out of the screener's own tab area if
         // it sits there) and loads the stock; arrowing down the list follows
         // in ER only once it is open.
-        connect(screen, &screens::ScreenerScreen::research_requested, this,
-                [this](const QString& ticker, bool open) {
-                    if (ticker.isEmpty() || (!open && !dock_router_->is_open("equity_research")))
-                        return;
-                    if (open) {
-                        dock_router_->show_beside("equity_research", "screener");
-                        // a deliberate pick: linked panels follow it too
-                        SymbolContext::instance().set_group_symbol(SymbolGroup::A, SymbolRef::equity(ticker),
-                                                                   nullptr);
-                    } else {
-                        // a restored, never-shown ER has no subscriber yet
-                        dock_router_->ensure_built("equity_research");
-                    }
-                    // ER listens on the EventBus when its tab is unlinked, and only
-                    // once materialised — so publish AFTER opening it. Browsing
-                    // (!open) retargets ER only: ER must not re-publish it to its
-                    // linked group either.
-                    EventBus::instance().publish("equity_research.load_symbol",
-                                                 QVariantMap{{"symbol", ticker}, {"propagate", open}});
-                });
+        connect(screen, &screens::ScreenerScreen::research_requested, this, [this](const QString& ticker, bool open) {
+            if (ticker.isEmpty() || (!open && !dock_router_->is_open("equity_research")))
+                return;
+            if (open) {
+                dock_router_->show_beside("equity_research", "screener");
+                // a deliberate pick: linked panels follow it too
+                SymbolContext::instance().set_group_symbol(SymbolGroup::A, SymbolRef::equity(ticker), nullptr);
+            } else {
+                // a restored, never-shown ER has no subscriber yet
+                dock_router_->ensure_built("equity_research");
+            }
+            // ER listens on the EventBus when its tab is unlinked, and only
+            // once materialised — so publish AFTER opening it. Browsing
+            // (!open) retargets ER only: ER must not re-publish it to its
+            // linked group either.
+            EventBus::instance().publish("equity_research.load_symbol",
+                                         QVariantMap{{"symbol", ticker}, {"propagate", open}});
+        });
         // a strategy clicked: its write-up takes the right half back
         connect(screen, &screens::ScreenerScreen::details_requested, this, [this, screen]() {
             dock_router_->hide_beside("equity_research", "screener");
@@ -1341,10 +1335,10 @@ void MainWindow::on_auth_state_changed() {
             // still locked or ungated, log a warning so the regression is
             // visible rather than leaking the dashboard for one frame.
             if (locked_ || !pin_gate_cleared_) {
-                LOG_WARN("MainWindow",
-                         QString("on_auth_state_changed: shell would become visible while "
-                                 "locked=%1 gate_cleared=%2 — forcing lock screen")
-                             .arg(locked_).arg(pin_gate_cleared_));
+                LOG_WARN("MainWindow", QString("on_auth_state_changed: shell would become visible while "
+                                               "locked=%1 gate_cleared=%2 — forcing lock screen")
+                                           .arg(locked_)
+                                           .arg(pin_gate_cleared_));
                 if (auth::PinManager::instance().has_pin())
                     lock_screen_->show_unlock();
                 else
@@ -1372,10 +1366,10 @@ void MainWindow::on_auth_state_changed() {
             // can briefly flash the dashboard for users whose PIN setup or
             // unlock hasn't been cleared yet.
             if (locked_ || !pin_gate_cleared_) {
-                LOG_WARN("MainWindow",
-                         QString("on_auth_state_changed (no-plan): shell would become visible while "
-                                 "locked=%1 gate_cleared=%2 — forcing lock screen")
-                             .arg(locked_).arg(pin_gate_cleared_));
+                LOG_WARN("MainWindow", QString("on_auth_state_changed (no-plan): shell would become visible while "
+                                               "locked=%1 gate_cleared=%2 — forcing lock screen")
+                                           .arg(locked_)
+                                           .arg(pin_gate_cleared_));
                 if (auth::PinManager::instance().has_pin())
                     lock_screen_->show_unlock();
                 else
@@ -1473,7 +1467,6 @@ void MainWindow::try_boot_prefetch() {
     portfolio_svc.load_portfolios();
 }
 
-
 void MainWindow::show_lock_screen() {
     auto& auth = auth::AuthManager::instance();
     if (!auth.is_authenticated()) {
@@ -1505,9 +1498,12 @@ void MainWindow::show_lock_screen() {
     // lock screen is shown. Re-enabled in on_terminal_unlocked().
     if (dock_manager_ && dock_manager_->parentWidget())
         dock_manager_->parentWidget()->setEnabled(false);
-    if (dock_toolbar_)    dock_toolbar_->setEnabled(false);
-    if (pushpin_toolbar_) pushpin_toolbar_->setEnabled(false);
-    if (dock_status_bar_) dock_status_bar_->setEnabled(false);
+    if (dock_toolbar_)
+        dock_toolbar_->setEnabled(false);
+    if (pushpin_toolbar_)
+        pushpin_toolbar_->setEnabled(false);
+    if (dock_status_bar_)
+        dock_status_bar_->setEnabled(false);
 
     // Stop the inactivity guard while locked — the user-activity stream on
     // the lock screen itself would otherwise keep firing no-op ticks, and
@@ -1533,11 +1529,10 @@ void MainWindow::hide_lock_overlay() {
 }
 
 void MainWindow::confirm_and_logout() {
-    const auto ans = QMessageBox::question(
-        this, tr("Log out"),
-        tr("Sign out of finterm?\n\nYour device PIN is kept — the next sign-in "
-           "unlocks with it instead of asking you to create a new one."),
-        QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
+    const auto ans = QMessageBox::question(this, tr("Log out"),
+                                           tr("Sign out of finterm?\n\nYour device PIN is kept — the next sign-in "
+                                              "unlocks with it instead of asking you to create a new one."),
+                                           QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
     if (ans == QMessageBox::Yes)
         auth::AuthManager::instance().logout();
 }
@@ -1554,9 +1549,12 @@ void MainWindow::on_terminal_unlocked() {
 
     if (dock_manager_ && dock_manager_->parentWidget())
         dock_manager_->parentWidget()->setEnabled(true);
-    if (dock_toolbar_)    dock_toolbar_->setEnabled(true);
-    if (pushpin_toolbar_) pushpin_toolbar_->setEnabled(true);
-    if (dock_status_bar_) dock_status_bar_->setEnabled(true);
+    if (dock_toolbar_)
+        dock_toolbar_->setEnabled(true);
+    if (pushpin_toolbar_)
+        pushpin_toolbar_->setEnabled(true);
+    if (dock_status_bar_)
+        dock_status_bar_->setEnabled(true);
 
     // Enable/restart inactivity guard. It is disabled in show_lock_screen()
     // and on logout, so it may currently be off even though the filter is
@@ -1653,8 +1651,7 @@ void MainWindow::set_always_on_top(bool on) {
     if (isVisible() || true) // always re-show; isVisible is false after the flag change
         show();
     SessionManager::instance().save_window_flag(window_id_, "always_on_top", on);
-    LOG_INFO("MainWindow",
-             QString("Window %1 always-on-top = %2").arg(window_id_).arg(on ? "on" : "off"));
+    LOG_INFO("MainWindow", QString("Window %1 always-on-top = %2").arg(window_id_).arg(on ? "on" : "off"));
 }
 
 void MainWindow::move_to_screen(QScreen* target) {
@@ -1681,8 +1678,7 @@ void MainWindow::move_to_screen(QScreen* target) {
     else if (was_maximised)
         showMaximized();
 
-    LOG_INFO("MainWindow", QString("Moved window %1 to monitor '%2'")
-                               .arg(window_id_).arg(target->name()));
+    LOG_INFO("MainWindow", QString("Moved window %1 to monitor '%2'").arg(window_id_).arg(target->name()));
 }
 
 void MainWindow::schedule_dock_layout_save() {

@@ -74,16 +74,16 @@ void RiskManagementView::build_ui() {
     // Name the assumption. The shocks below are FIXED editorial numbers,
     // not a model fitted to this portfolio: only the asset-class weights are
     // yours. Presented bare, a "-33.0% LOSS" reads like a calculation.
-    auto* stress_note = new QLabel(
-        "Fixed historical/hypothetical shocks applied to your asset-class weights — "
-        "illustrative, not a fitted model");
+    auto* stress_note = new QLabel("Fixed historical/hypothetical shocks applied to your asset-class weights — "
+                                   "illustrative, not a fitted model");
     stress_note->setWordWrap(true); // or its sizeHint pins the tab's minimum width
     stress_note->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     stress_layout->addWidget(stress_note);
 
     stress_table_ = new QTableWidget;
     stress_table_->setColumnCount(5);
-    stress_table_->setHorizontalHeaderLabels({"SCENARIO", "DESCRIPTION", "EQUITY SHOCK", "PORTFOLIO IMPACT", "P&L IMPACT"});
+    stress_table_->setHorizontalHeaderLabels(
+        {"SCENARIO", "DESCRIPTION", "EQUITY SHOCK", "PORTFOLIO IMPACT", "P&L IMPACT"});
     stress_table_->setSelectionMode(QAbstractItemView::NoSelection);
     stress_table_->setEditTriggers(QAbstractItemView::NoEditTriggers);
     stress_table_->setShowGrid(false);
@@ -131,7 +131,8 @@ void RiskManagementView::build_ui() {
                                           "  border-bottom:2px solid %6; padding:4px 8px; font-size:12px;"
                                           "  font-weight:700; letter-spacing:0.5px; }")
                                       .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(),
-                                           ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(), ui::colors::AMBER()));
+                                           ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(),
+                                           ui::colors::AMBER()));
     contrib_layout->addWidget(contrib_table_, 1);
     tabs_->addTab(contrib_w, "RISK CONTRIBUTION");
 
@@ -161,9 +162,8 @@ void RiskManagementView::set_metrics(const portfolio::ComputedMetrics& metrics) 
     metrics_ = metrics;
     const int stress_scroll = stress_table_->verticalScrollBar()->value();
     update_stress_test(); // rescale with real beta
-    QTimer::singleShot(0, this, [this, stress_scroll]() {
-        stress_table_->verticalScrollBar()->setValue(stress_scroll);
-    });
+    QTimer::singleShot(0, this,
+                       [this, stress_scroll]() { stress_table_->verticalScrollBar()->setValue(stress_scroll); });
 }
 
 void RiskManagementView::update_overview() {
@@ -219,8 +219,8 @@ void RiskManagementView::update_overview() {
         cl->setSpacing(2);
 
         auto* lbl = new QLabel(label);
-        lbl->setStyleSheet(
-            QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_SECONDARY()));
+        lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
+                               .arg(ui::colors::TEXT_SECONDARY()));
         cl->addWidget(lbl);
 
         auto* val = new QLabel(value);
@@ -238,23 +238,19 @@ void RiskManagementView::update_overview() {
 
     auto fmt = [](double v, int dp = 2) { return QString::number(v, 'f', dp); };
     // Why VaR is absent: too few returns to resolve a 95% quantile, or none.
-    const QString var_missing =
-        (metrics_.return_days >= 2 && metrics_.return_days < portfolio::kMinVarSample)
-            ? QStringLiteral("Insufficient history (n=%1)").arg(metrics_.return_days)
-            : QStringLiteral("Needs daily NAV history");
+    const QString var_missing = (metrics_.return_days >= 2 && metrics_.return_days < portfolio::kMinVarSample)
+                                    ? QStringLiteral("Insufficient history (n=%1)").arg(metrics_.return_days)
+                                    : QStringLiteral("Needs daily NAV history");
 
     add_card(0, 0, "PORTFOLIO VALUE", QString("%1 %2").arg(currency_, fmt(total_mv)), ui::colors::WARNING,
              "Total market value");
-    add_card(0, 1, "ANNUALIZED VOLATILITY",
-             have_series ? QString("%1%").arg(fmt(ann_vol, 1)) : QStringLiteral("—"),
+    add_card(0, 1, "ANNUALIZED VOLATILITY", have_series ? QString("%1%").arg(fmt(ann_vol, 1)) : QStringLiteral("—"),
              have_series ? ui::colors::AMBER : ui::colors::TEXT_SECONDARY,
              have_series ? "From daily NAV returns" : "Needs daily NAV history");
-    add_card(0, 2, "VALUE AT RISK (95%)",
-             have_var ? QString("%1 %2").arg(currency_, fmt(var95)) : QStringLiteral("—"),
+    add_card(0, 2, "VALUE AT RISK (95%)", have_var ? QString("%1 %2").arg(currency_, fmt(var95)) : QStringLiteral("—"),
              have_var ? ui::colors::NEGATIVE : ui::colors::TEXT_SECONDARY,
              have_var ? QStringLiteral("1-day historical") : var_missing);
-    add_card(0, 3, "CONDITIONAL VaR",
-             have_var ? QString("%1 %2").arg(currency_, fmt(cvar95)) : QStringLiteral("—"),
+    add_card(0, 3, "CONDITIONAL VaR", have_var ? QString("%1 %2").arg(currency_, fmt(cvar95)) : QStringLiteral("—"),
              have_var ? ui::colors::NEGATIVE : ui::colors::TEXT_SECONDARY,
              have_var ? QStringLiteral("Expected shortfall") : var_missing);
 
@@ -344,9 +340,8 @@ void RiskManagementView::update_stress_test() {
         set_cell(3, QString("%1%2%").arg(impact_pct < 0 ? "" : "+").arg(QString::number(impact_pct, 'f', 1)),
                  impact_pct < 0 ? ui::colors::NEGATIVE : ui::colors::POSITIVE, Qt::AlignRight | Qt::AlignVCenter);
         set_cell(4,
-                 QString("%1%2 %3")
-                     .arg(pnl_impact < 0 ? QStringLiteral("-") : QStringLiteral("+"), currency_,
-                          QString::number(std::abs(pnl_impact), 'f', 0)),
+                 QString("%1%2 %3").arg(pnl_impact < 0 ? QStringLiteral("-") : QStringLiteral("+"), currency_,
+                                        QString::number(std::abs(pnl_impact), 'f', 0)),
                  pnl_impact < 0 ? ui::colors::NEGATIVE : ui::colors::POSITIVE, Qt::AlignRight | Qt::AlignVCenter);
     }
 }
@@ -381,8 +376,9 @@ void RiskManagementView::update_contribution() {
             set_cell(1, QString("%1%").arg(QString::number(h.weight, 'f', 1)));
             for (int col = 2; col <= 4; ++col)
                 set_cell(col, ui::formatting::placeholder(), ui::colors::TEXT_TERTIARY);
-            const char* cc = h.weight > 20 ? ui::colors::NEGATIVE : h.weight > 10 ? ui::colors::WARNING
-                                                                                   : ui::colors::POSITIVE;
+            const char* cc = h.weight > 20   ? ui::colors::NEGATIVE
+                             : h.weight > 10 ? ui::colors::WARNING
+                                             : ui::colors::POSITIVE;
             set_cell(5, h.weight > 20 ? "HIGH" : h.weight > 10 ? "MEDIUM" : "LOW", cc);
             continue;
         }
@@ -393,13 +389,15 @@ void RiskManagementView::update_contribution() {
 
         set_cell(0, h.symbol, ui::colors::CYAN);
         set_cell(1, QString("%1%").arg(QString::number(h.weight, 'f', 1)));
-        set_cell(2, QString("%1%2%").arg(h.day_change_percent >= 0 ? "+" : "")
-                        .arg(QString::number(h.day_change_percent, 'f', 2)),
+        set_cell(2,
+                 QString("%1%2%")
+                     .arg(h.day_change_percent >= 0 ? "+" : "")
+                     .arg(QString::number(h.day_change_percent, 'f', 2)),
                  h.day_change_percent >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
         set_cell(3, QString("%1%").arg(QString::number(move_pct, 'f', 1)),
                  move_pct > 20 ? ui::colors::NEGATIVE : ui::colors::TEXT_PRIMARY);
-        set_cell(4, QString("%1 %2%3").arg(currency_).arg(day_pnl >= 0 ? "+" : "")
-                        .arg(QString::number(day_pnl, 'f', 2)),
+        set_cell(4,
+                 QString("%1 %2%3").arg(currency_).arg(day_pnl >= 0 ? "+" : "").arg(QString::number(day_pnl, 'f', 2)),
                  day_pnl >= 0 ? ui::colors::POSITIVE : ui::colors::NEGATIVE);
 
         // Concentration rating

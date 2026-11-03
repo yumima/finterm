@@ -7,27 +7,27 @@ namespace fincept {
 /// One AI stock forecast. The prediction fields are write-once; only the
 /// resolution fields are filled later (see AiPredictionRepository::resolve).
 struct AiPrediction {
-    qint64  id = 0;
+    qint64 id = 0;
     QString ticker;
-    QString created_at;       // ISO-8601 UTC
+    QString created_at; // ISO-8601 UTC
     QString model;
     QString source = QStringLiteral("quant"); // engine: "quant" | "fingpt"
-    int     horizon_days = 7;
-    QString resolve_date;     // YYYY-MM-DD
-    double  price_at_pred = 0.0;
-    QString direction;        // "up" | "down" | "flat"
-    double  target_price = 0.0;
-    double  predicted_pct = 0.0;
-    int     confidence = 0;   // 0–100
-    QString recommendation;   // buy | accumulate | hold | reduce | sell
+    int horizon_days = 7;
+    QString resolve_date; // YYYY-MM-DD
+    double price_at_pred = 0.0;
+    QString direction; // "up" | "down" | "flat"
+    double target_price = 0.0;
+    double predicted_pct = 0.0;
+    int confidence = 0;     // 0–100
+    QString recommendation; // buy | accumulate | hold | reduce | sell
     QString rationale;
     QString analysis;
 
     // Resolution (filled once when the horizon elapses).
-    bool    resolved = false;
-    double  price_at_resolve = 0.0;
-    double  actual_pct = 0.0;
-    bool    correct = false;
+    bool resolved = false;
+    double price_at_resolve = 0.0;
+    double actual_pct = 0.0;
+    bool correct = false;
     QString resolved_at;
 };
 
@@ -56,8 +56,7 @@ class AiPredictionRepository : public BaseRepository<AiPrediction> {
 
     /// Record the realized outcome of a prediction. This is the ONLY mutation
     /// of an existing row, and it only touches the resolution columns.
-    void resolve(qint64 id, double price_at_resolve, double actual_pct, bool correct,
-                 const QString& resolved_at);
+    void resolve(qint64 id, double price_at_resolve, double actual_pct, bool correct, const QString& resolved_at);
 
   private:
     AiPredictionRepository() = default;

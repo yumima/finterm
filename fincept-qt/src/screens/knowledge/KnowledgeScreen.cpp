@@ -28,7 +28,8 @@ constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 //   BASICS   : definitional reference — Glossary · Concepts · Abbreviations · Regulators
 //   PRACTICE : applied learning       — Formulas · Tracks · Playbooks · Cases · Interviews
 //   CONTEXT  : finterm rail (live tied to last selection)
-//   QUANT    : quant curriculum       — Foundations · Risk & Return · Factors · Execution · Backtesting · Strategies · Practices
+//   QUANT    : quant curriculum       — Foundations · Risk & Return · Factors · Execution · Backtesting · Strategies ·
+//   Practices
 //
 // (REFERENCE pane removed in favour of merging its cats into BASICS / PRACTICE
 //  by what they actually are: Regulators are reference rules → BASICS; Cases
@@ -36,24 +37,20 @@ constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 //  investors — Buffett, Munger, Dalio, Simons, Soros, Graham, Lynch, Marks —
 //  documented from their published letters/biographies, so they live in
 //  PRACTICE alongside the case studies.)
-const QStringList BASICS_CATS    = {"glossary", "concepts", "regulators"};
-const QStringList PRACTICE_CATS  = {"formulas", "tracks", "playbooks", "cases", "interviews"};
-const QStringList QUANT_CATS     = {"quant-foundations", "quant-risk",
-                                     "quant-factors", "quant-execution",
-                                     "quant-backtesting", "quant-strategies",
-                                     "quant-practices"};
+const QStringList BASICS_CATS = {"glossary", "concepts", "regulators"};
+const QStringList PRACTICE_CATS = {"formulas", "tracks", "playbooks", "cases", "interviews"};
+const QStringList QUANT_CATS = {"quant-foundations", "quant-risk",       "quant-factors",  "quant-execution",
+                                "quant-backtesting", "quant-strategies", "quant-practices"};
 
 QString search_ss() {
     return QString("QLineEdit { background: %1; color: %2; border: 1px solid %3;"
                    " padding: 6px 10px; font-size: 12px; %4 }"
                    "QLineEdit:focus { border-color: %5; }")
-        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO,
-             ui::colors::AMBER());
+        .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM(), MONO, ui::colors::AMBER());
 }
 
 QString small_label_ss() {
-    return QString("color: %1; background: transparent; font-size: 11px; %2")
-        .arg(ui::colors::TEXT_SECONDARY(), MONO);
+    return QString("color: %1; background: transparent; font-size: 11px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO);
 }
 
 QString resolve_root() {
@@ -110,8 +107,8 @@ void KnowledgeScreen::build_layout() {
     ch->addWidget(sep);
 
     breadcrumb_ = new QLabel("Cockpit · Basics / Practice / Context", cmd);
-    breadcrumb_->setStyleSheet(QString("color: %1; background: transparent; font-size: 11px; %2")
-                                   .arg(ui::colors::TEXT_SECONDARY(), MONO));
+    breadcrumb_->setStyleSheet(
+        QString("color: %1; background: transparent; font-size: 11px; %2").arg(ui::colors::TEXT_SECONDARY(), MONO));
     ch->addWidget(breadcrumb_);
     ch->addStretch();
 
@@ -130,8 +127,8 @@ void KnowledgeScreen::build_layout() {
     // ── Recently viewed bar ───────────────────────────────────────────────────
     recent_bar_ = new QWidget(this);
     recent_bar_->setFixedHeight(30);
-    recent_bar_->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
-                                   .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    recent_bar_->setStyleSheet(
+        QString("background:%1; border-bottom:1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     recent_hl_ = new QHBoxLayout(recent_bar_);
     recent_hl_->setContentsMargins(14, 4, 14, 4);
     recent_hl_->setSpacing(6);
@@ -235,7 +232,8 @@ void KnowledgeScreen::build_layout() {
     // makes the rail / breadcrumb reflect the user's last-viewed entry.
     basics_pane_->restoreActiveSubTab();
     practice_pane_->restoreActiveSubTab();
-    if (quant_pane_) quant_pane_->restoreActiveSubTab();
+    if (quant_pane_)
+        quant_pane_->restoreActiveSubTab();
 
     // Trigger the rail to follow whichever sub-tab is currently active in BASICS
     // (the leftmost group leads on cold start).
@@ -258,7 +256,7 @@ void KnowledgeScreen::build_layout() {
                 rail_->set_entry(ContentLoader::instance().entry(id));
         }
     };
-    connect(basics_pane_,   &GroupedPane::subPaneActivated, this, refresh_from_subpane);
+    connect(basics_pane_, &GroupedPane::subPaneActivated, this, refresh_from_subpane);
     connect(practice_pane_, &GroupedPane::subPaneActivated, this, refresh_from_subpane);
     if (quant_pane_)
         connect(quant_pane_, &GroupedPane::subPaneActivated, this, refresh_from_subpane);
@@ -278,9 +276,7 @@ void KnowledgeScreen::build_layout() {
         search_->selectAll();
     });
 
-    count_label_->setText(QString("%1 ENTRIES  ·  %2 ABBREV.")
-                              .arg(total_entries)
-                              .arg(loader.abbreviations().size()));
+    count_label_->setText(QString("%1 ENTRIES  ·  %2 ABBREV.").arg(total_entries).arg(loader.abbreviations().size()));
 }
 
 void KnowledgeScreen::open_entry(const QString& entry_id) {
@@ -299,9 +295,12 @@ void KnowledgeScreen::open_entry(const QString& entry_id) {
         return;
 
     auto* col = *it;
-    if (basics_pane_)   basics_pane_->showSubPane(col);
-    if (practice_pane_) practice_pane_->showSubPane(col);
-    if (quant_pane_)    quant_pane_->showSubPane(col);
+    if (basics_pane_)
+        basics_pane_->showSubPane(col);
+    if (practice_pane_)
+        practice_pane_->showSubPane(col);
+    if (quant_pane_)
+        quant_pane_->showSubPane(col);
     col->open_entry(id);
 
     // Track in recently viewed (deduplicated, most recent first)
@@ -314,25 +313,26 @@ void KnowledgeScreen::open_entry(const QString& entry_id) {
 
 void KnowledgeScreen::update_recent_bar() {
     // Remove all chips (keep the "RECENT:" label at index 0)
-    while (recent_hl_->count() > 2)  // label + stretch
+    while (recent_hl_->count() > 2) // label + stretch
         if (auto* item = recent_hl_->takeAt(1)) {
-            if (auto* w = item->widget()) w->deleteLater();
+            if (auto* w = item->widget())
+                w->deleteLater();
             delete item;
         }
 
     const auto& loader = ContentLoader::instance();
     for (const auto& rid : recently_viewed_) {
         const auto* e = loader.entry(rid);
-        if (!e) continue;
+        if (!e)
+            continue;
         auto* chip = new QPushButton(e->title, recent_bar_);
         chip->setFlat(true);
         chip->setCursor(Qt::PointingHandCursor);
-        chip->setStyleSheet(
-            QString("QPushButton{color:%1;font-size:12px;background:%2;border:1px solid %3;"
-                    "border-radius:10px;padding:1px 8px;}"
-                    "QPushButton:hover{border-color:%4;color:%4;}")
-                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
-                     ui::colors::BORDER_DIM(), ui::colors::AMBER()));
+        chip->setStyleSheet(QString("QPushButton{color:%1;font-size:12px;background:%2;border:1px solid %3;"
+                                    "border-radius:10px;padding:1px 8px;}"
+                                    "QPushButton:hover{border-color:%4;color:%4;}")
+                                .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::BORDER_DIM(),
+                                     ui::colors::AMBER()));
         connect(chip, &QPushButton::clicked, this, [this, rid]() { open_entry(rid); });
         recent_hl_->insertWidget(recent_hl_->count() - 1, chip); // before stretch
     }
@@ -347,9 +347,9 @@ void KnowledgeScreen::on_category_active(CategoryColumn* col, const QString& ent
         QString cat = e->category;
         if (auto* c = ContentLoader::instance().category(e->category))
             cat = c->label;
-        const QString group = BASICS_CATS.contains(e->category) ? "BASICS"
-                            : QUANT_CATS.contains(e->category)  ? "QUANT"
-                                                                : "PRACTICE";
+        const QString group = BASICS_CATS.contains(e->category)  ? "BASICS"
+                              : QUANT_CATS.contains(e->category) ? "QUANT"
+                                                                 : "PRACTICE";
         breadcrumb_->setText(QString("Cockpit · %1 / %2 · %3").arg(group, cat, e->title));
     }
     Q_UNUSED(col);

@@ -5,8 +5,8 @@
 #include "services/ai_quant_lab/AIQuantLabService.h"
 #include "services/file_manager/FileManagerService.h"
 #include "storage/repositories/LlmProfileRepository.h"
-#include "ui/theme/Theme.h"
 #include "ui/formatting/NumberFormat.h"
+#include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
 #include <QAreaSeries>
@@ -15,25 +15,25 @@
 #include <QDateTime>
 #include <QDateTimeAxis>
 #include <QDesktopServices>
-#include <QLineSeries>
-#include <QValueAxis>
 #include <QFile>
 #include <QFileInfo>
+#include <QFrame>
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QRegularExpression>
-#include <QFrame>
+#include <QLineSeries>
 #include <QPlainTextEdit>
 #include <QProgressBar>
+#include <QRegularExpression>
 #include <QScrollArea>
 #include <QStackedWidget>
 #include <QTabWidget>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QUrl>
+#include <QValueAxis>
 
 #include <cmath>
 #include <limits>
@@ -53,7 +53,8 @@ static double jnum(const QJsonValue& v) {
     } else if (v.isString()) {
         bool ok = false;
         const double p = v.toString().trimmed().toDouble(&ok);
-        if (ok) d = p;
+        if (ok)
+            d = p;
     }
     return std::isfinite(d) ? d : std::numeric_limits<double>::quiet_NaN();
 }
@@ -79,10 +80,12 @@ static QString jint_txt(const QJsonValue& v) {
 static QString append_csv_numbers(const QString& text, QJsonArray& out) {
     for (const auto& tok : text.split(',')) {
         const QString t = tok.trimmed();
-        if (t.isEmpty()) continue;
+        if (t.isEmpty())
+            continue;
         bool ok = false;
         const double d = t.toDouble(&ok);
-        if (!ok || !std::isfinite(d)) return t;
+        if (!ok || !std::isfinite(d))
+            return t;
         out.append(d);
     }
     return {};
@@ -691,10 +694,10 @@ QWidget* QuantModulePanel::build_cfa_quant_panel() {
     // ── Analysis selector ───────────────────────────────────────────────────
     auto* analysis_type = new QComboBox(w);
     const QStringList analyses = {
-        "trend_analysis", "stationarity_test", "arima_model", "forecasting",
-        "supervised_learning", "unsupervised_learning", "model_evaluation",
-        "resampling_methods", "sampling_techniques", "central_limit_theorem",
-        "sampling_error_analysis", "validate_data",
+        "trend_analysis",        "stationarity_test",       "arima_model",
+        "forecasting",           "supervised_learning",     "unsupervised_learning",
+        "model_evaluation",      "resampling_methods",      "sampling_techniques",
+        "central_limit_theorem", "sampling_error_analysis", "validate_data",
     };
     analysis_type->addItems(analyses);
     analysis_type->setStyleSheet(combo_ss());
@@ -939,8 +942,7 @@ QWidget* QuantModulePanel::build_cfa_quant_panel() {
     vl->addWidget(stack);
 
     // Switch stack page when analysis combo changes
-    connect(analysis_type, qOverload<int>(&QComboBox::currentIndexChanged), stack,
-            &QStackedWidget::setCurrentIndex);
+    connect(analysis_type, qOverload<int>(&QComboBox::currentIndexChanged), stack, &QStackedWidget::setCurrentIndex);
 
     // ── Run button ──────────────────────────────────────────────────────────
     auto* run = make_run_button("RUN ANALYSIS", w);
@@ -955,8 +957,7 @@ QWidget* QuantModulePanel::build_cfa_quant_panel() {
 
         // Sample-error analysis is the only command that doesn't read from "data".
         // Everything else reads from "data" (or "population" for sampling_techniques).
-        const bool needs_data = (cmd != "sampling_error_analysis" &&
-                                 cmd != "central_limit_theorem");
+        const bool needs_data = (cmd != "sampling_error_analysis" && cmd != "central_limit_theorem");
         if (needs_data && raw.isEmpty()) {
             display_error("Please enter a ticker symbol or comma-separated values");
             status_label_->setText("Error");
@@ -978,7 +979,8 @@ QWidget* QuantModulePanel::build_cfa_quant_panel() {
             for (const auto& part : s.split(',', Qt::SkipEmptyParts)) {
                 bool ok = false;
                 int v = part.trimmed().toInt(&ok);
-                if (ok) arr.append(v);
+                if (ok)
+                    arr.append(v);
             }
             return arr;
         };
@@ -1167,7 +1169,8 @@ QWidget* QuantModulePanel::build_rl_trading_panel() {
 
     rl_train_button_ = make_run_button("TRAIN RL AGENT", w);
     connect(rl_train_button_, &QPushButton::clicked, this, [this]() {
-        if (!rl_train_button_ || !rl_log_console_) return;
+        if (!rl_train_button_ || !rl_log_console_)
+            return;
         rl_log_console_->clear();
         rl_progress_bar_->setValue(0);
         rl_progress_bar_->setVisible(true);
@@ -1206,11 +1209,10 @@ QWidget* QuantModulePanel::build_rl_trading_panel() {
     rl_progress_stats_ = new QLabel(w);
     rl_progress_stats_->setText("");
     rl_progress_stats_->setVisible(false);
-    rl_progress_stats_->setStyleSheet(
-        QString("color:%1; background:transparent; font-family:%2; font-size:%3px;")
-            .arg(ui::colors::TEXT_SECONDARY())
-            .arg(ui::fonts::DATA_FAMILY)
-            .arg(ui::fonts::SMALL));
+    rl_progress_stats_->setStyleSheet(QString("color:%1; background:transparent; font-family:%2; font-size:%3px;")
+                                          .arg(ui::colors::TEXT_SECONDARY())
+                                          .arg(ui::fonts::DATA_FAMILY)
+                                          .arg(ui::fonts::SMALL));
     vl->addWidget(rl_progress_stats_);
 
     // Log console — hidden until training starts
@@ -1967,8 +1969,8 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
     }
 
     const QJsonObject metrics = payload["metrics"].toObject();
-    const QJsonArray  curve   = payload["equity_curve"].toArray();
-    const QJsonObject costs   = payload["execution_cost_estimate"].toObject();
+    const QJsonArray curve = payload["equity_curve"].toArray();
+    const QJsonObject costs = payload["execution_cost_estimate"].toObject();
     const QStringList tickers = [&]() {
         QStringList t;
         for (const auto& v : payload["tickers"].toArray())
@@ -1976,24 +1978,24 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
         return t;
     }();
 
-    const QString strategy   = payload["strategy"].toString();
+    const QString strategy = payload["strategy"].toString();
     const QString start_date = payload["start_date"].toString();
-    const QString end_date   = payload["end_date"].toString();
+    const QString end_date = payload["end_date"].toString();
 
-    const QColor  accent      = module_.color;
-    const QString accent_hex  = accent.name();
-    const QString green_hex   = ui::colors::POSITIVE();
-    const QString red_hex     = ui::colors::NEGATIVE();
-    const QString text_p      = ui::colors::TEXT_PRIMARY();
-    const QString text_s      = ui::colors::TEXT_SECONDARY();
-    const QString text_t      = ui::colors::TEXT_SECONDARY();
-    const QString bg_surface  = ui::colors::BG_SURFACE();
-    const QString bg_raised   = ui::colors::BG_RAISED();
-    const QString border_dim  = ui::colors::BORDER_DIM();
-    const QString border_med  = ui::colors::BORDER_MED();
-    const QString font_data   = ui::fonts::DATA_FAMILY;
-    const int     fs_sm       = ui::fonts::SMALL;
-    const int     fs_lg       = ui::fonts::HEADER;
+    const QColor accent = module_.color;
+    const QString accent_hex = accent.name();
+    const QString green_hex = ui::colors::POSITIVE();
+    const QString red_hex = ui::colors::NEGATIVE();
+    const QString text_p = ui::colors::TEXT_PRIMARY();
+    const QString text_s = ui::colors::TEXT_SECONDARY();
+    const QString text_t = ui::colors::TEXT_SECONDARY();
+    const QString bg_surface = ui::colors::BG_SURFACE();
+    const QString bg_raised = ui::colors::BG_RAISED();
+    const QString border_dim = ui::colors::BORDER_DIM();
+    const QString border_med = ui::colors::BORDER_MED();
+    const QString font_data = ui::fonts::DATA_FAMILY;
+    const int fs_sm = ui::fonts::SMALL;
+    const int fs_lg = ui::fonts::HEADER;
 
     // ── 1. Header bar ──────────────────────────────────────────────────────
     auto* header_w = new QWidget;
@@ -2002,30 +2004,30 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
     header_h->setSpacing(8);
 
     auto* title_lbl = new QLabel("BACKTEST RESULTS");
-    title_lbl->setStyleSheet(
-        QString("color:%1; font-size:%2px; font-family:%3; font-weight:800; letter-spacing:2px;")
-            .arg(accent_hex).arg(fs_lg).arg(font_data));
+    title_lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; font-weight:800; letter-spacing:2px;")
+                                 .arg(accent_hex)
+                                 .arg(fs_lg)
+                                 .arg(font_data));
     header_h->addWidget(title_lbl);
 
     header_h->addSpacing(16);
 
     auto make_chip = [&](const QString& text, const QString& fg, const QString& bg_hex) -> QLabel* {
         auto* c = new QLabel(text);
-        c->setStyleSheet(
-            QString("color:%1; background:%2; border-radius:3px; padding:2px 8px;"
-                    "font-size:%3px; font-family:%4; font-weight:600;")
-                .arg(fg, bg_hex).arg(fs_sm).arg(font_data));
+        c->setStyleSheet(QString("color:%1; background:%2; border-radius:3px; padding:2px 8px;"
+                                 "font-size:%3px; font-family:%4; font-weight:600;")
+                             .arg(fg, bg_hex)
+                             .arg(fs_sm)
+                             .arg(font_data));
         return c;
     };
 
     QString strat_display = strategy;
     strat_display.replace('_', ' ');
     strat_display = strat_display.toUpper();
-    header_h->addWidget(make_chip(strat_display, accent_hex,
-                                  QColor(accent).darker(300).name() + "55"));
+    header_h->addWidget(make_chip(strat_display, accent_hex, QColor(accent).darker(300).name() + "55"));
 
-    header_h->addWidget(make_chip(start_date + "  →  " + end_date,
-                                  text_s, bg_raised));
+    header_h->addWidget(make_chip(start_date + "  →  " + end_date, text_s, bg_raised));
 
     for (const auto& t : tickers)
         header_h->addWidget(make_chip(t, text_p, bg_raised));
@@ -2038,46 +2040,52 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
         QString label;
         QString value;
         QString sub;
-        bool    positive = true;
-        bool    neutral  = false;
+        bool positive = true;
+        bool neutral = false;
     };
 
     // Missing metrics are NaN (rendered "—", coloured neutral), never 0.
-    double total_ret  = jnum(metrics["total_return_pct"]);
-    double ann_ret    = jnum(metrics["annualised_return"]);
-    double ann_vol    = jnum(metrics["annualised_vol"]);
-    double sharpe     = jnum(metrics["sharpe_ratio"]);
-    double max_dd     = jnum(metrics["max_drawdown_pct"]);
-    double calmar     = jnum(metrics["calmar_ratio"]);
-    double win_rate   = jnum(metrics["win_rate_pct"]);
-    double final_val  = jnum(metrics["final_value"]);
-    double init_cap   = jnum(metrics["initial_capital"]);
+    double total_ret = jnum(metrics["total_return_pct"]);
+    double ann_ret = jnum(metrics["annualised_return"]);
+    double ann_vol = jnum(metrics["annualised_vol"]);
+    double sharpe = jnum(metrics["sharpe_ratio"]);
+    double max_dd = jnum(metrics["max_drawdown_pct"]);
+    double calmar = jnum(metrics["calmar_ratio"]);
+    double win_rate = jnum(metrics["win_rate_pct"]);
+    double final_val = jnum(metrics["final_value"]);
+    double init_cap = jnum(metrics["initial_capital"]);
     const QString t_days = jint_txt(metrics["trading_days"]);
 
     auto fmt_pct = [](double v) {
-        if (!std::isfinite(v)) return ui::formatting::placeholder();
+        if (!std::isfinite(v))
+            return ui::formatting::placeholder();
         return QString("%1%2%").arg(v >= 0 ? "+" : "").arg(v, 0, 'f', 2);
     };
     auto fmt_usd = [](double v) -> QString {
-        if (!std::isfinite(v)) return ui::formatting::placeholder();
-        if (v >= 1e6) return QString("$%1M").arg(v / 1e6, 0, 'f', 2);
+        if (!std::isfinite(v))
+            return ui::formatting::placeholder();
+        if (v >= 1e6)
+            return QString("$%1M").arg(v / 1e6, 0, 'f', 2);
         return QString("$%1K").arg(v / 1e3, 0, 'f', 0);
     };
 
     const auto known = [](double v) { return std::isfinite(v); };
     QList<KpiCard> kpis = {
-        {"TOTAL RETURN",   fmt_pct(total_ret),  fmt_usd(final_val) + " final",  total_ret >= 0, !known(total_ret)},
-        {"ANN. RETURN",    fmt_pct(ann_ret),     QString("Vol: %1").arg(num_txt(ann_vol, 1, "%")), ann_ret >= 0, !known(ann_ret)},
-        {"SHARPE RATIO",   num_txt(sharpe, 3),
-                           !known(sharpe) ? ui::formatting::placeholder()
-                           : sharpe >= 1 ? "Excellent" : sharpe >= 0.5 ? "Good" : "Weak",
-                           sharpe >= 0.5, !known(sharpe)},
-        {"MAX DRAWDOWN",   fmt_pct(max_dd),      QString("Calmar: %1").arg(num_txt(calmar, 3)), false, !known(max_dd)},
-        {"WIN RATE",       num_txt(win_rate, 1, "%"), QString("%1 days").arg(t_days), win_rate >= 50, !known(win_rate)},
-        {"CAPITAL",        fmt_usd(init_cap),    "Initial capital",  true, true},
+        {"TOTAL RETURN", fmt_pct(total_ret), fmt_usd(final_val) + " final", total_ret >= 0, !known(total_ret)},
+        {"ANN. RETURN", fmt_pct(ann_ret), QString("Vol: %1").arg(num_txt(ann_vol, 1, "%")), ann_ret >= 0,
+         !known(ann_ret)},
+        {"SHARPE RATIO", num_txt(sharpe, 3),
+         !known(sharpe)  ? ui::formatting::placeholder()
+         : sharpe >= 1   ? "Excellent"
+         : sharpe >= 0.5 ? "Good"
+                         : "Weak",
+         sharpe >= 0.5, !known(sharpe)},
+        {"MAX DRAWDOWN", fmt_pct(max_dd), QString("Calmar: %1").arg(num_txt(calmar, 3)), false, !known(max_dd)},
+        {"WIN RATE", num_txt(win_rate, 1, "%"), QString("%1 days").arg(t_days), win_rate >= 50, !known(win_rate)},
+        {"CAPITAL", fmt_usd(init_cap), "Initial capital", true, true},
     };
 
-    auto* cards_w  = new QWidget;
+    auto* cards_w = new QWidget;
     auto* cards_gl = new QGridLayout(cards_w);
     cards_gl->setContentsMargins(0, 0, 0, 0);
     cards_gl->setSpacing(8);
@@ -2086,29 +2094,29 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
         const auto& k = kpis[i];
         auto* card = new QWidget;
         card->setObjectName("btKpiCard");
-        card->setStyleSheet(
-            QString("#btKpiCard { background:%1; border:1px solid %2; border-radius:4px; }")
-                .arg(bg_surface, border_dim));
+        card->setStyleSheet(QString("#btKpiCard { background:%1; border:1px solid %2; border-radius:4px; }")
+                                .arg(bg_surface, border_dim));
 
         auto* cl = new QVBoxLayout(card);
         cl->setContentsMargins(12, 10, 12, 10);
         cl->setSpacing(2);
 
         auto* lbl = new QLabel(k.label);
-        lbl->setStyleSheet(
-            QString("color:%1; font-size:%2px; font-family:%3; font-weight:600; letter-spacing:1px;")
-                .arg(text_t).arg(fs_sm - 1).arg(font_data));
+        lbl->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; font-weight:600; letter-spacing:1px;")
+                               .arg(text_t)
+                               .arg(fs_sm - 1)
+                               .arg(font_data));
 
         QString val_color = k.neutral ? text_s : (k.positive ? green_hex : red_hex);
         auto* val = new QLabel(k.value);
-        val->setStyleSheet(
-            QString("color:%1; font-size:%2px; font-family:%3; font-weight:800;")
-                .arg(val_color).arg(fs_lg + 2).arg(font_data));
+        val->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; font-weight:800;")
+                               .arg(val_color)
+                               .arg(fs_lg + 2)
+                               .arg(font_data));
 
         auto* sub = new QLabel(k.sub);
         sub->setStyleSheet(
-            QString("color:%1; font-size:%2px; font-family:%3;")
-                .arg(text_t).arg(fs_sm - 1).arg(font_data));
+            QString("color:%1; font-size:%2px; font-family:%3;").arg(text_t).arg(fs_sm - 1).arg(font_data));
 
         cl->addWidget(lbl);
         cl->addWidget(val);
@@ -2120,10 +2128,10 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
 
     // ── 3. Equity curve chart ─────────────────────────────────────────────
     if (!curve.isEmpty()) {
-        auto* port_series  = new QLineSeries;
-        auto* bm_series    = new QLineSeries;
-        auto* port_upper   = new QLineSeries;  // for area fill
-        auto* port_base    = new QLineSeries;  // baseline for area
+        auto* port_series = new QLineSeries;
+        auto* bm_series = new QLineSeries;
+        auto* port_upper = new QLineSeries; // for area fill
+        auto* port_base = new QLineSeries;  // baseline for area
 
         port_series->setName("Portfolio");
         bm_series->setName("Benchmark");
@@ -2210,15 +2218,15 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
         chart_view->setRenderHint(QPainter::Antialiasing);
         chart_view->setFixedHeight(280);
         chart_view->setStyleSheet(
-            QString("background:%1; border:1px solid %2; border-radius:4px;")
-                .arg(bg_surface, border_dim));
+            QString("background:%1; border:1px solid %2; border-radius:4px;").arg(bg_surface, border_dim));
 
         // Chart title label above
         auto* chart_title = new QLabel("EQUITY CURVE");
-        chart_title->setStyleSheet(
-            QString("color:%1; font-size:%2px; font-family:%3; font-weight:700;"
-                    "letter-spacing:1px; padding:8px 0 2px 0;")
-                .arg(text_s).arg(fs_sm).arg(font_data));
+        chart_title->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; font-weight:700;"
+                                           "letter-spacing:1px; padding:8px 0 2px 0;")
+                                       .arg(text_s)
+                                       .arg(fs_sm)
+                                       .arg(font_data));
         results_layout_->addWidget(chart_title);
         results_layout_->addWidget(chart_view);
     }
@@ -2226,8 +2234,7 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
     // ── 4. Execution cost strip ────────────────────────────────────────────
     auto* cost_w = new QWidget;
     cost_w->setStyleSheet(
-        QString("background:%1; border:1px solid %2; border-radius:4px;")
-            .arg(bg_surface, border_dim));
+        QString("background:%1; border:1px solid %2; border-radius:4px;").arg(bg_surface, border_dim));
     auto* cost_h = new QHBoxLayout(cost_w);
     cost_h->setContentsMargins(16, 8, 16, 8);
     cost_h->setSpacing(24);
@@ -2238,20 +2245,22 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
         l->setContentsMargins(0, 0, 0, 0);
         l->setSpacing(6);
         auto* k = new QLabel(lbl);
-        k->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;")
-                             .arg(text_t).arg(fs_sm).arg(font_data));
+        k->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3;").arg(text_t).arg(fs_sm).arg(font_data));
         auto* v = new QLabel(val);
         v->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; font-weight:700;")
-                             .arg(text_s).arg(fs_sm).arg(font_data));
+                             .arg(text_s)
+                             .arg(fs_sm)
+                             .arg(font_data));
         l->addWidget(k);
         l->addWidget(v);
         cost_h->addWidget(w);
     };
 
     auto* cost_hdr = new QLabel("EXECUTION COSTS");
-    cost_hdr->setStyleSheet(
-        QString("color:%1; font-size:%2px; font-family:%3; font-weight:700; letter-spacing:1px;")
-            .arg(text_t).arg(fs_sm - 1).arg(font_data));
+    cost_hdr->setStyleSheet(QString("color:%1; font-size:%2px; font-family:%3; font-weight:700; letter-spacing:1px;")
+                                .arg(text_t)
+                                .arg(fs_sm - 1)
+                                .arg(font_data));
     cost_h->addWidget(cost_hdr);
     cost_h->addWidget([&]() {
         auto* sep = new QFrame;
@@ -2260,10 +2269,8 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
         return sep;
     }());
 
-    add_cost_item("Commission",
-                  QString("%1 bps").arg(jnum_txt(costs["commission_bps"], 2)));
-    add_cost_item("Expected Slippage",
-                  QString("%1 bps").arg(jnum_txt(costs["expected_slippage_bps"], 2)));
+    add_cost_item("Commission", QString("%1 bps").arg(jnum_txt(costs["commission_bps"], 2)));
+    add_cost_item("Expected Slippage", QString("%1 bps").arg(jnum_txt(costs["expected_slippage_bps"], 2)));
     cost_h->addStretch();
     results_layout_->addWidget(cost_w);
 
@@ -2271,39 +2278,37 @@ void QuantModulePanel::display_backtest_result(const QJsonObject& payload) {
     auto* export_btn = new QPushButton("EXPORT JSON");
     export_btn->setCursor(Qt::PointingHandCursor);
     export_btn->setFixedHeight(28);
-    export_btn->setStyleSheet(
-        QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
-                "font-size:%3px; font-family:%4; padding:0 14px; border-radius:3px; }"
-                "QPushButton:hover { background:rgba(255,255,255,0.05); }")
-            .arg(accent_hex, border_dim).arg(fs_sm).arg(font_data));
+    export_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
+                                      "font-size:%3px; font-family:%4; padding:0 14px; border-radius:3px; }"
+                                      "QPushButton:hover { background:rgba(255,255,255,0.05); }")
+                                  .arg(accent_hex, border_dim)
+                                  .arg(fs_sm)
+                                  .arg(font_data));
 
     QString json_str = QJsonDocument(payload).toJson(QJsonDocument::Indented);
     connect(export_btn, &QPushButton::clicked, this, [this, json_str]() {
         QString safe = module_.label;
         safe.replace(QRegularExpression("[^a-zA-Z0-9_\\-]"), "_");
         QString fname = safe + "_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".json";
-        QString dest  = services::FileManagerService::instance().storage_dir() + "/" + fname;
+        QString dest = services::FileManagerService::instance().storage_dir() + "/" + fname;
         QFile f(dest);
         if (f.open(QIODevice::WriteOnly | QIODevice::Text)) {
             f.write(json_str.toUtf8());
             f.close();
             services::FileManagerService::instance().register_file(
-                fname, module_.label + "_backtest.json", QFileInfo(dest).size(),
-                "application/json", "ai_quant_lab");
+                fname, module_.label + "_backtest.json", QFileInfo(dest).size(), "application/json", "ai_quant_lab");
             LOG_INFO("AIQuantLab", "Backtest exported: " + fname);
         }
     });
 
     auto* export_row = new QWidget;
-    auto* export_hl  = new QHBoxLayout(export_row);
+    auto* export_hl = new QHBoxLayout(export_row);
     export_hl->setContentsMargins(0, 4, 0, 0);
     export_hl->addStretch();
     export_hl->addWidget(export_btn);
     results_layout_->addWidget(export_row);
 
-    status_label_->setText(QString("Done — %1% return  |  Sharpe %2")
-                               .arg(total_ret, 0, 'f', 2)
-                               .arg(sharpe, 0, 'f', 3));
+    status_label_->setText(QString("Done — %1% return  |  Sharpe %2").arg(total_ret, 0, 'f', 2).arg(sharpe, 0, 'f', 3));
 }
 
 // ── CFA Quant Result Display ───────────────────────────────────────────────
@@ -2327,8 +2332,8 @@ static void cfa_flatten_scalars(const QJsonObject& obj, const QString& prefix, Q
         if (v.isObject()) {
             // Recurse one level deep so nested {slope, intercept} flattens nicely;
             // skip very deep / array-heavy fields (parameters.data, fitted_values).
-            if (key.endsWith(".data") || key.endsWith(".fitted_values") ||
-                key.endsWith(".residuals") || key.endsWith(".model_summary"))
+            if (key.endsWith(".data") || key.endsWith(".fitted_values") || key.endsWith(".residuals") ||
+                key.endsWith(".model_summary"))
                 continue;
             cfa_flatten_scalars(v.toObject(), key, keys, out);
         } else if (!v.isArray()) {
@@ -2352,10 +2357,8 @@ void QuantModulePanel::display_cfa_result(const QString& command, const QJsonObj
     const QString analysis_type = payload.value("analysis_type").toString(command);
 
     // ── Header ──────────────────────────────────────────────────────────────
-    auto* header = new QLabel(QString("%1  •  %2  •  %3 ms")
-                                  .arg(analysis_type.toUpper())
-                                  .arg(method)
-                                  .arg(num_txt(calc_time * 1000.0, 1)));
+    auto* header = new QLabel(
+        QString("%1  •  %2  •  %3 ms").arg(analysis_type.toUpper()).arg(method).arg(num_txt(calc_time * 1000.0, 1)));
     header->setStyleSheet(QString("color:%1; font-weight:700; font-family:%2; letter-spacing:1px;")
                               .arg(module_.color.name())
                               .arg(ui::fonts::DATA_FAMILY));
@@ -2367,9 +2370,9 @@ void QuantModulePanel::display_cfa_result(const QString& command, const QJsonObj
         auto* score_lbl = new QLabel(QString("Quality Score: %1 / 100").arg(num_txt(score, 1)));
         score_lbl->setStyleSheet(QString("color:%1; font-size:16px; font-weight:700;")
                                      .arg(!std::isfinite(score) ? ui::colors::TEXT_PRIMARY()
-                                          : score >= 80 ? ui::colors::POSITIVE()
-                                          : score >= 50 ? ui::colors::WARNING()
-                                                        : ui::colors::NEGATIVE()));
+                                          : score >= 80         ? ui::colors::POSITIVE()
+                                          : score >= 50         ? ui::colors::WARNING()
+                                                                : ui::colors::NEGATIVE()));
         results_layout_->addWidget(score_lbl);
 
         const auto issues = result.value("issues").toArray();
@@ -2380,16 +2383,14 @@ void QuantModulePanel::display_cfa_result(const QString& command, const QJsonObj
             if (items.isEmpty())
                 return;
             auto* lbl = new QLabel(QString("%1 (%2)").arg(title).arg(items.size()));
-            lbl->setStyleSheet(QString("color:%1; font-weight:700; margin-top:6px;")
-                                   .arg(ui::colors::TEXT_PRIMARY()));
+            lbl->setStyleSheet(QString("color:%1; font-weight:700; margin-top:6px;").arg(ui::colors::TEXT_PRIMARY()));
             results_layout_->addWidget(lbl);
             for (const auto& v : items) {
                 QString text;
                 if (issue_shape) {
                     auto o = v.toObject();
                     text = QString("[%1] %2: %3")
-                               .arg(o.value("severity").toString(),
-                                    o.value("type").toString(),
+                               .arg(o.value("severity").toString(), o.value("type").toString(),
                                     o.value("description").toString(o.value("message").toString()));
                 } else {
                     text = "• " + v.toString();
@@ -2655,11 +2656,9 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             else if (status_str == "failed" || status_str == "stopped")
                 status_item->setForeground(QColor("" + QString(ui::colors::NEGATIVE()) + ""));
             rd_task_table_->setItem(row, 2, status_item);
-            rd_task_table_->setItem(
-                row, 3, new QTableWidgetItem(num_txt(jnum(obj["progress"]) * 100, 0, "%")));
+            rd_task_table_->setItem(row, 3, new QTableWidgetItem(num_txt(jnum(obj["progress"]) * 100, 0, "%")));
             auto ic = obj["best_ic"];
-            rd_task_table_->setItem(row, 4,
-                                    new QTableWidgetItem(jnum_txt(ic, 4)));
+            rd_task_table_->setItem(row, 4, new QTableWidgetItem(jnum_txt(ic, 4)));
             rd_task_table_->setItem(row, 5, new QTableWidgetItem(obj["elapsed_time"].toString("-")));
         }
         status_label_->setText(QString("%1 task(s)").arg(tasks.size()));
@@ -2698,9 +2697,8 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         }
         auto factors = payload["factors"].toArray();
         auto best_ic = payload["best_ic"];
-        QString out = QString("Discovered Factors: %1  |  Best IC: %2\n\n")
-                          .arg(factors.size())
-                          .arg(jnum_txt(best_ic, 4));
+        QString out =
+            QString("Discovered Factors: %1  |  Best IC: %2\n\n").arg(factors.size()).arg(jnum_txt(best_ic, 4));
         int idx = 1;
         for (const auto& f : factors) {
             auto obj = f.toObject();
@@ -2983,7 +2981,8 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             // NaN (importance not reported) sorts last; never ranked as 0.
             std::sort(sorted.begin(), sorted.end(), [](const auto& a, const auto& b) {
                 const bool fa = std::isfinite(a.second), fb = std::isfinite(b.second);
-                if (fa != fb) return fa;
+                if (fa != fb)
+                    return fa;
                 return fa && a.second > b.second;
             });
             for (const auto& p : sorted)
@@ -3028,7 +3027,8 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         }
         if (command == "create_model") {
             auto* lbl = new QLabel(
-                QString("Created: %1  [%2]").arg(payload["model_id"].toString(), payload["model_type"].toString()), this);
+                QString("Created: %1  [%2]").arg(payload["model_id"].toString(), payload["model_type"].toString()),
+                this);
             lbl->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
             results_layout_->addWidget(lbl);
             status_label_->setText("Model created");
@@ -3044,7 +3044,8 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                               .arg(samples)
                               .arg(num_txt(mae, 6))
                               .arg(!drift_v.isBool() ? ui::formatting::placeholder()
-                                   : drift ? QStringLiteral("DETECTED") : QStringLiteral("none"));
+                                   : drift           ? QStringLiteral("DETECTED")
+                                                     : QStringLiteral("none"));
             if (!pred.isNull() && !pred.isUndefined())
                 out += QString("\nPrediction: %1  →  Actual: %2  |  Error: %3")
                            .arg(jnum_txt(pred, 6))
@@ -3059,8 +3060,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         }
         if (command == "predict") {
             auto pred = payload["prediction"];
-            auto* lbl = new QLabel(
-                QString("Prediction: %1").arg(jnum_txt(pred, 6)), this);
+            auto* lbl = new QLabel(QString("Prediction: %1").arg(jnum_txt(pred, 6)), this);
             lbl->setStyleSheet(QString("color:%1; font-weight:700;").arg(module_.color.name()));
             results_layout_->addWidget(lbl);
             status_label_->setText("Prediction ready");
@@ -3071,14 +3071,16 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             const QString samples = jint_txt(payload["samples_trained"]);
             const QJsonValue drift_v = payload["drift_detected"];
             const bool drift = drift_v.toBool();
-            auto* lbl = new QLabel(QString("Model: %1  [%2]\nSamples: %3  |  MAE: %4\nDrift: %5\nLast updated: %6")
-                                       .arg(payload["model_id"].toString(), payload["model_type"].toString())
-                                       .arg(samples)
-                                       .arg(num_txt(mae, 6))
-                                       .arg(!drift_v.isBool() ? ui::formatting::placeholder()
-                                            : drift ? QStringLiteral("DETECTED") : QStringLiteral("none"))
-                                       .arg(payload["last_updated"].isNull() ? "never" : payload["last_updated"].toString()),
-                                   this);
+            auto* lbl =
+                new QLabel(QString("Model: %1  [%2]\nSamples: %3  |  MAE: %4\nDrift: %5\nLast updated: %6")
+                               .arg(payload["model_id"].toString(), payload["model_type"].toString())
+                               .arg(samples)
+                               .arg(num_txt(mae, 6))
+                               .arg(!drift_v.isBool() ? ui::formatting::placeholder()
+                                    : drift           ? QStringLiteral("DETECTED")
+                                                      : QStringLiteral("none"))
+                               .arg(payload["last_updated"].isNull() ? "never" : payload["last_updated"].toString()),
+                           this);
             lbl->setWordWrap(true);
             lbl->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
             results_layout_->addWidget(lbl);
@@ -3190,18 +3192,21 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         // Helper: find a named child label in this panel and set its text
         auto set_card = [this](const QString& name, const QString& text, const QString& color = {}) {
             auto* lbl = this->findChild<QLabel*>(name);
-            if (!lbl) return;
+            if (!lbl)
+                return;
             lbl->setText(text);
             if (!color.isEmpty())
                 lbl->setStyleSheet(
-                    QString("color:%1; font-size:13px; font-weight:700; font-family:'Courier New'; background:transparent;")
+                    QString(
+                        "color:%1; font-size:13px; font-weight:700; font-family:'Courier New'; background:transparent;")
                         .arg(color));
         };
 
         // Helper: populate a bid or ask QTableWidget from a JSON array [[price,size],...]
         auto fill_book_table = [this](const QString& name, const QJsonArray& levels, bool is_bid) {
             auto* tbl = this->findChild<QTableWidget*>(name);
-            if (!tbl) return;
+            if (!tbl)
+                return;
             const int n = qMin(levels.size(), 10);
             tbl->setRowCount(n);
             double cumulative = 0.0;
@@ -3211,7 +3216,7 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 // A level missing its price or size shows "—"; once a size is
                 // missing the running total is unknown from there down (NaN).
                 const double price = row.size() > 0 ? jnum(row[0]) : std::nan("");
-                const double size  = row.size() > 1 ? jnum(row[1]) : std::nan("");
+                const double size = row.size() > 1 ? jnum(row[1]) : std::nan("");
                 cumulative += size;
                 const auto g_txt = [](double v, int prec) {
                     return std::isfinite(v) ? QString::number(v, 'g', prec) : ui::formatting::placeholder();
@@ -3231,41 +3236,40 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
 
         // ── fetch_orderbook ────────────────────────────────────────────────
         if (command == "fetch_orderbook") {
-            const auto bids      = payload["bids"].toArray();
-            const auto asks      = payload["asks"].toArray();
-            const double mid     = jnum(payload["mid_price"]);
+            const auto bids = payload["bids"].toArray();
+            const auto asks = payload["asks"].toArray();
+            const double mid = jnum(payload["mid_price"]);
             const double spread_bps = jnum(payload["spread_bps"]);
-            const double obi     = jnum(payload["obi"]);
-            const QString pres   = payload["pressure"].toString();
-            const double wmid    = jnum(payload["weighted_mid"]);
-            const double lat     = jnum(payload["latency_ms"]);
+            const double obi = jnum(payload["obi"]);
+            const QString pres = payload["pressure"].toString();
+            const double wmid = jnum(payload["weighted_mid"]);
+            const double lat = jnum(payload["latency_ms"]);
 
             // Update latency badge
             if (auto* lbl = this->findChild<QLabel*>("hftLatency"))
                 lbl->setText(QString("LATENCY  %1 ms").arg(num_txt(lat, 1)));
 
             // Metric cards
-            set_card("hft_mid_val",      num_txt(mid, 4));
-            set_card("hft_spread_val",   num_txt(spread_bps, 3, " bps"));
-            const QString obi_color = obi > 0.1 ? QString(ui::colors::POSITIVE())
-                                    : obi < -0.1 ? QString(ui::colors::NEGATIVE())
-                                    : QString(ui::colors::TEXT_PRIMARY());
-            set_card("hft_obi_val",      num_txt(obi, 4), obi_color);
-            const QString pres_color = pres == "BUY" ? QString(ui::colors::POSITIVE())
-                                     : pres == "SELL" ? QString(ui::colors::NEGATIVE())
-                                     : QString(ui::colors::TEXT_PRIMARY());
+            set_card("hft_mid_val", num_txt(mid, 4));
+            set_card("hft_spread_val", num_txt(spread_bps, 3, " bps"));
+            const QString obi_color = obi > 0.1    ? QString(ui::colors::POSITIVE())
+                                      : obi < -0.1 ? QString(ui::colors::NEGATIVE())
+                                                   : QString(ui::colors::TEXT_PRIMARY());
+            set_card("hft_obi_val", num_txt(obi, 4), obi_color);
+            const QString pres_color = pres == "BUY"    ? QString(ui::colors::POSITIVE())
+                                       : pres == "SELL" ? QString(ui::colors::NEGATIVE())
+                                                        : QString(ui::colors::TEXT_PRIMARY());
             set_card("hft_pressure_val", jstr_txt(pres), pres_color);
-            set_card("hft_wmid_val",     num_txt(wmid, 4));
+            set_card("hft_wmid_val", num_txt(wmid, 4));
 
             fill_book_table("hft_bid_table", bids, true);
             fill_book_table("hft_ask_table", asks, false);
 
-            status_label_->setText(
-                QString("%1  mid: %2  spread: %3 bps  OBI: %4")
-                    .arg(payload["symbol"].toString())
-                    .arg(num_txt(mid, 4))
-                    .arg(num_txt(spread_bps, 3))
-                    .arg(num_txt(obi, 4)));
+            status_label_->setText(QString("%1  mid: %2  spread: %3 bps  OBI: %4")
+                                       .arg(payload["symbol"].toString())
+                                       .arg(num_txt(mid, 4))
+                                       .arg(num_txt(spread_bps, 3))
+                                       .arg(num_txt(obi, 4)));
             return;
         }
 
@@ -3275,25 +3279,22 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             // Also update book metrics if present
             if (payload.contains("book_metrics")) {
                 const auto bm = payload["book_metrics"].toObject();
-                set_card("hft_mid_val",    jnum_txt(bm["mid_price"], 4));
+                set_card("hft_mid_val", jnum_txt(bm["mid_price"], 4));
                 set_card("hft_spread_val", jnum_txt(bm["spread_bps"], 3, " bps"));
             }
-            set_card("hft_mm_bid",     jnum_txt(mm["bid_price"], 4),
-                     QString(ui::colors::POSITIVE()));
-            set_card("hft_mm_ask",     jnum_txt(mm["ask_price"], 4),
-                     QString(ui::colors::NEGATIVE()));
+            set_card("hft_mm_bid", jnum_txt(mm["bid_price"], 4), QString(ui::colors::POSITIVE()));
+            set_card("hft_mm_ask", jnum_txt(mm["ask_price"], 4), QString(ui::colors::NEGATIVE()));
             set_card("hft_mm_qspread", jnum_txt(mm["quoted_spread_bps"], 3, " bps"));
-            set_card("hft_mm_edge",    jnum_txt(mm["edge_per_side_bps"], 3, " bps"));
-            const QString rec   = mm["recommendation"].toString();
-            const QString r_col = rec == "WIDEN" ? QString(ui::colors::WARNING())
-                                : rec == "TIGHTEN" ? QString(ui::colors::POSITIVE())
-                                : QString(ui::colors::TEXT_PRIMARY());
+            set_card("hft_mm_edge", jnum_txt(mm["edge_per_side_bps"], 3, " bps"));
+            const QString rec = mm["recommendation"].toString();
+            const QString r_col = rec == "WIDEN"     ? QString(ui::colors::WARNING())
+                                  : rec == "TIGHTEN" ? QString(ui::colors::POSITIVE())
+                                                     : QString(ui::colors::TEXT_PRIMARY());
             set_card("hft_mm_rec", jstr_txt(rec), r_col);
-            status_label_->setText(
-                QString("Bid: %1  Ask: %2  Edge: %3 bps/side")
-                    .arg(jnum_txt(mm["bid_price"], 4))
-                    .arg(jnum_txt(mm["ask_price"], 4))
-                    .arg(jnum_txt(mm["edge_per_side_bps"], 3)));
+            status_label_->setText(QString("Bid: %1  Ask: %2  Edge: %3 bps/side")
+                                       .arg(jnum_txt(mm["bid_price"], 4))
+                                       .arg(jnum_txt(mm["ask_price"], 4))
+                                       .arg(jnum_txt(mm["edge_per_side_bps"], 3)));
             return;
         }
 
@@ -3301,57 +3302,59 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         if (command == "toxic_flow") {
             const auto tf = payload["toxic_flow"].toObject();
             const QJsonValue is_toxic_v = tf["is_toxic"];
-            const double score    = jnum(tf["toxicity_score"]);
-            const QString cls     = tf["classification"].toString();
-            const QString action  = tf["action"].toString();
+            const double score = jnum(tf["toxicity_score"]);
+            const QString cls = tf["classification"].toString();
+            const QString action = tf["action"].toString();
 
             const QString score_col = !std::isfinite(score) ? QString(ui::colors::TEXT_PRIMARY())
-                                    : score > 60 ? QString(ui::colors::NEGATIVE())
-                                    : score > 30 ? QString(ui::colors::WARNING())
-                                    : QString(ui::colors::POSITIVE());
-            set_card("hft_tox_pin",    num_txt(score, 1), score_col);
-            set_card("hft_tox_vol",    jnum_txt(tf["vol_imbalance"], 4));
+                                      : score > 60          ? QString(ui::colors::NEGATIVE())
+                                      : score > 30          ? QString(ui::colors::WARNING())
+                                                            : QString(ui::colors::POSITIVE());
+            set_card("hft_tox_pin", num_txt(score, 1), score_col);
+            set_card("hft_tox_vol", jnum_txt(tf["vol_imbalance"], 4));
             set_card("hft_tox_impact", jnum_txt(tf["price_impact_bps"], 2, " bps"));
-            const QString cls_col = cls.isEmpty()      ? QString(ui::colors::TEXT_PRIMARY())
-                                  : cls == "HIGH_RISK" ? QString(ui::colors::NEGATIVE())
-                                  : cls == "ELEVATED"  ? QString(ui::colors::WARNING())
-                                  : QString(ui::colors::POSITIVE());
-            set_card("hft_tox_class",  jstr_txt(cls), cls_col);
+            const QString cls_col = cls.isEmpty()        ? QString(ui::colors::TEXT_PRIMARY())
+                                    : cls == "HIGH_RISK" ? QString(ui::colors::NEGATIVE())
+                                    : cls == "ELEVATED"  ? QString(ui::colors::WARNING())
+                                                         : QString(ui::colors::POSITIVE());
+            set_card("hft_tox_class", jstr_txt(cls), cls_col);
             const QString act_col = action.isEmpty() ? QString(ui::colors::TEXT_PRIMARY())
-                                  : action == "WIDEN_SPREADS" || action == "STEP_BACK"
+                                    : action == "WIDEN_SPREADS" || action == "STEP_BACK"
                                         ? QString(ui::colors::WARNING())
                                         : QString(ui::colors::POSITIVE());
             set_card("hft_tox_action", jstr_txt(QString(action).replace('_', ' ')), act_col);
             // No verdict from the backend -> say so; don't default to "clean".
-            const QString verdict = !is_toxic_v.isBool() ? QStringLiteral("Toxicity verdict unavailable")
-                                  : is_toxic_v.toBool()  ? QStringLiteral("TOXIC FLOW DETECTED")
-                                                         : QStringLiteral("Flow clean");
-            status_label_->setText(QString("%1 — score: %2 — %3")
-                                       .arg(verdict, num_txt(score, 1), jstr_txt(cls)));
+            const QString verdict = !is_toxic_v.isBool()  ? QStringLiteral("Toxicity verdict unavailable")
+                                    : is_toxic_v.toBool() ? QStringLiteral("TOXIC FLOW DETECTED")
+                                                          : QStringLiteral("Flow clean");
+            status_label_->setText(QString("%1 — score: %2 — %3").arg(verdict, num_txt(score, 1), jstr_txt(cls)));
             return;
         }
 
         // ── slippage ──────────────────────────────────────────────────────
         if (command == "slippage") {
-            const auto sl = payload;  // flat: average_price, slippage_bps, fills, etc at top level
-            const double avg_p   = jnum(sl["average_price"]);
-            const double sl_bps  = jnum(sl["slippage_bps"]);
-            const double cost    = jnum(sl["total_cost"]);
+            const auto sl = payload; // flat: average_price, slippage_bps, fills, etc at top level
+            const double avg_p = jnum(sl["average_price"]);
+            const double sl_bps = jnum(sl["slippage_bps"]);
+            const double cost = jnum(sl["total_cost"]);
             const QJsonValue viable_v = sl["viable"];
-            const bool   viable  = viable_v.toBool();
+            const bool viable = viable_v.toBool();
 
-            set_card("hft_slip_avgp",  num_txt(avg_p, 4));
+            set_card("hft_slip_avgp", num_txt(avg_p, 4));
             const QString bps_col = !std::isfinite(sl_bps) ? QString(ui::colors::TEXT_PRIMARY())
-                                  : sl_bps < 5  ? QString(ui::colors::POSITIVE())
-                                  : sl_bps < 20 ? QString(ui::colors::WARNING())
-                                  : QString(ui::colors::NEGATIVE());
-            set_card("hft_slip_bps",   num_txt(sl_bps, 4, " bps"), bps_col);
-            set_card("hft_slip_cost",  num_txt(cost, 4));
+                                    : sl_bps < 5           ? QString(ui::colors::POSITIVE())
+                                    : sl_bps < 20          ? QString(ui::colors::WARNING())
+                                                           : QString(ui::colors::NEGATIVE());
+            set_card("hft_slip_bps", num_txt(sl_bps, 4, " bps"), bps_col);
+            set_card("hft_slip_cost", num_txt(cost, 4));
             set_card("hft_slip_fills", jint_txt(sl["fill_count"]));
             set_card("hft_slip_viable",
-                     !viable_v.isBool() ? ui::formatting::placeholder() : viable ? "VIABLE" : "HIGH SLIP",
+                     !viable_v.isBool() ? ui::formatting::placeholder()
+                     : viable           ? "VIABLE"
+                                        : "HIGH SLIP",
                      !viable_v.isBool() ? QString(ui::colors::TEXT_PRIMARY())
-                     : viable ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE()));
+                     : viable           ? QString(ui::colors::POSITIVE())
+                                        : QString(ui::colors::NEGATIVE()));
 
             // Populate fills table
             if (auto* tbl = this->findChild<QTableWidget*>("hft_slip_table")) {
@@ -3361,18 +3364,19 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                     const auto f = fills[i].toObject();
                     tbl->setItem(i, 0, new QTableWidgetItem(jnum_txt(f["price"], 4)));
                     const double qty = jnum(f["quantity"]);
-                    tbl->setItem(i, 1, new QTableWidgetItem(std::isfinite(qty) ? QString::number(qty, 'g', 6)
-                                                                                 : ui::formatting::placeholder()));
+                    tbl->setItem(i, 1,
+                                 new QTableWidgetItem(std::isfinite(qty) ? QString::number(qty, 'g', 6)
+                                                                         : ui::formatting::placeholder()));
                     tbl->setItem(i, 2, new QTableWidgetItem(jnum_txt(f["cost"], 4)));
                     tbl->setRowHeight(i, 20);
                 }
             }
-            status_label_->setText(
-                QString("Avg fill: %1  |  Slippage: %2 bps  |  %3")
-                    .arg(num_txt(avg_p, 4))
-                    .arg(num_txt(sl_bps, 4))
-                    .arg(!viable_v.isBool() ? QStringLiteral("viability unavailable")
-                         : viable ? QStringLiteral("VIABLE") : QStringLiteral("HIGH SLIPPAGE")));
+            status_label_->setText(QString("Avg fill: %1  |  Slippage: %2 bps  |  %3")
+                                       .arg(num_txt(avg_p, 4))
+                                       .arg(num_txt(sl_bps, 4))
+                                       .arg(!viable_v.isBool() ? QStringLiteral("viability unavailable")
+                                            : viable           ? QStringLiteral("VIABLE")
+                                                               : QStringLiteral("HIGH SLIPPAGE")));
             return;
         }
 
@@ -3387,62 +3391,62 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             }
             if (payload.contains("book_metrics")) {
                 const auto bm = payload["book_metrics"].toObject();
-                set_card("hft_mid_val",    jnum_txt(bm["mid_price"], 4));
+                set_card("hft_mid_val", jnum_txt(bm["mid_price"], 4));
                 set_card("hft_spread_val", jnum_txt(bm["spread_bps"], 3, " bps"));
                 const double obi = jnum(bm["obi"]);
-                const QString obi_col = obi > 0.1 ? QString(ui::colors::POSITIVE())
-                                      : obi < -0.1 ? QString(ui::colors::NEGATIVE())
-                                      : QString(ui::colors::TEXT_PRIMARY());
-                set_card("hft_obi_val",      num_txt(obi, 4), obi_col);
+                const QString obi_col = obi > 0.1    ? QString(ui::colors::POSITIVE())
+                                        : obi < -0.1 ? QString(ui::colors::NEGATIVE())
+                                                     : QString(ui::colors::TEXT_PRIMARY());
+                set_card("hft_obi_val", num_txt(obi, 4), obi_col);
                 const QString pres = bm["pressure"].toString();
-                const QString p_col = pres == "BUY" ? QString(ui::colors::POSITIVE())
-                                    : pres == "SELL" ? QString(ui::colors::NEGATIVE())
-                                    : QString(ui::colors::TEXT_PRIMARY());
+                const QString p_col = pres == "BUY"    ? QString(ui::colors::POSITIVE())
+                                      : pres == "SELL" ? QString(ui::colors::NEGATIVE())
+                                                       : QString(ui::colors::TEXT_PRIMARY());
                 set_card("hft_pressure_val", jstr_txt(pres), p_col);
-                set_card("hft_wmid_val",     jnum_txt(bm["weighted_mid"], 4));
+                set_card("hft_wmid_val", jnum_txt(bm["weighted_mid"], 4));
             }
             if (payload.contains("market_making")) {
                 const auto mm = payload["market_making"].toObject();
-                set_card("hft_mm_bid", jnum_txt(mm["bid_price"], 4),
-                         QString(ui::colors::POSITIVE()));
-                set_card("hft_mm_ask", jnum_txt(mm["ask_price"], 4),
-                         QString(ui::colors::NEGATIVE()));
+                set_card("hft_mm_bid", jnum_txt(mm["bid_price"], 4), QString(ui::colors::POSITIVE()));
+                set_card("hft_mm_ask", jnum_txt(mm["ask_price"], 4), QString(ui::colors::NEGATIVE()));
                 set_card("hft_mm_qspread", jnum_txt(mm["quoted_spread_bps"], 3, " bps"));
-                set_card("hft_mm_edge",    jnum_txt(mm["edge_per_side_bps"], 3, " bps"));
-                set_card("hft_mm_rec",     jstr_txt(mm["recommendation"]));
+                set_card("hft_mm_edge", jnum_txt(mm["edge_per_side_bps"], 3, " bps"));
+                set_card("hft_mm_rec", jstr_txt(mm["recommendation"]));
             }
             if (payload.contains("toxic_flow")) {
-                const auto tf    = payload["toxic_flow"].toObject();
-                const double sc  = jnum(tf["toxicity_score"]);
+                const auto tf = payload["toxic_flow"].toObject();
+                const double sc = jnum(tf["toxicity_score"]);
                 const QString col = !std::isfinite(sc) ? QString(ui::colors::TEXT_PRIMARY())
-                                  : sc > 60 ? QString(ui::colors::NEGATIVE())
-                                  : sc > 30 ? QString(ui::colors::WARNING())
-                                  : QString(ui::colors::POSITIVE());
-                set_card("hft_tox_pin",    num_txt(sc, 1), col);
-                set_card("hft_tox_vol",    jnum_txt(tf["vol_imbalance"], 4));
+                                    : sc > 60          ? QString(ui::colors::NEGATIVE())
+                                    : sc > 30          ? QString(ui::colors::WARNING())
+                                                       : QString(ui::colors::POSITIVE());
+                set_card("hft_tox_pin", num_txt(sc, 1), col);
+                set_card("hft_tox_vol", jnum_txt(tf["vol_imbalance"], 4));
                 set_card("hft_tox_impact", jnum_txt(tf["price_impact_bps"], 2, " bps"));
-                set_card("hft_tox_class",  jstr_txt(tf["classification"]));
+                set_card("hft_tox_class", jstr_txt(tf["classification"]));
                 set_card("hft_tox_action", jstr_txt(QString(tf["action"].toString()).replace('_', ' ')));
             }
             if (payload.contains("slippage")) {
                 const auto sl = payload["slippage"].toObject();
-                set_card("hft_slip_avgp",  jnum_txt(sl["average_price"], 4));
-                set_card("hft_slip_bps",   jnum_txt(sl["slippage_bps"], 4, " bps"));
-                set_card("hft_slip_cost",  jnum_txt(sl["total_cost"], 4));
+                set_card("hft_slip_avgp", jnum_txt(sl["average_price"], 4));
+                set_card("hft_slip_bps", jnum_txt(sl["slippage_bps"], 4, " bps"));
+                set_card("hft_slip_cost", jnum_txt(sl["total_cost"], 4));
                 set_card("hft_slip_fills", jint_txt(sl["fill_count"]));
                 const QJsonValue vv = sl["viable"];
                 const bool v = vv.toBool();
                 set_card("hft_slip_viable",
-                         !vv.isBool() ? ui::formatting::placeholder() : v ? "VIABLE" : "HIGH SLIP",
+                         !vv.isBool() ? ui::formatting::placeholder()
+                         : v          ? "VIABLE"
+                                      : "HIGH SLIP",
                          !vv.isBool() ? QString(ui::colors::TEXT_PRIMARY())
-                         : v ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE()));
+                         : v          ? QString(ui::colors::POSITIVE())
+                                      : QString(ui::colors::NEGATIVE()));
             }
             if (auto* lat_lbl = this->findChild<QLabel*>("hftLatency"))
                 lat_lbl->setText(QString("LATENCY  %1 ms").arg(jnum_txt(payload["latency_ms"], 1)));
 
-            status_label_->setText(
-                QString("Full analysis complete — %1 @ %2")
-                    .arg(payload["symbol"].toString(), payload["timestamp"].toString().left(19)));
+            status_label_->setText(QString("Full analysis complete — %1 @ %2")
+                                       .arg(payload["symbol"].toString(), payload["timestamp"].toString().left(19)));
             return;
         }
 
@@ -3455,42 +3459,60 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
         // ── Streaming events from retrain command ────────────────────────────
         const QString event = payload["event"].toString();
         if (!event.isEmpty()) {
-            auto* pb  = this->findChild<QProgressBar*>("rr_progress");
+            auto* pb = this->findChild<QProgressBar*>("rr_progress");
             auto* log = this->findChild<QTextEdit*>("rr_log");
 
             if (event == "start") {
                 const int total = payload["total_windows"].toInt();
-                if (pb) { pb->setRange(0, total); pb->setValue(0); pb->setFormat("0 / %v windows"); }
-                if (log) log->append(QString("Starting retrain: %1  |  %2 windows")
-                                         .arg(payload["model_id"].toString()).arg(total));
-                status_label_->setText(QString("Retraining %1 — 0/%2 windows")
-                                           .arg(payload["model_id"].toString()).arg(total));
+                if (pb) {
+                    pb->setRange(0, total);
+                    pb->setValue(0);
+                    pb->setFormat("0 / %v windows");
+                }
+                if (log)
+                    log->append(
+                        QString("Starting retrain: %1  |  %2 windows").arg(payload["model_id"].toString()).arg(total));
+                status_label_->setText(
+                    QString("Retraining %1 — 0/%2 windows").arg(payload["model_id"].toString()).arg(total));
             } else if (event == "window") {
-                const int idx   = payload["index"].toInt();
+                const int idx = payload["index"].toInt();
                 const int total = payload["total"].toInt();
-                if (pb) { pb->setValue(idx); pb->setFormat(QString("%1 / %2 windows").arg(idx).arg(total)); }
-                if (log) log->append(QString("  Window %1/%2  train→%3  test %4→%5")
-                                         .arg(idx).arg(total)
-                                         .arg(payload["train_end"].toString().left(10))
-                                         .arg(payload["test_start"].toString().left(10))
-                                         .arg(payload["test_end"].toString().left(10)));
+                if (pb) {
+                    pb->setValue(idx);
+                    pb->setFormat(QString("%1 / %2 windows").arg(idx).arg(total));
+                }
+                if (log)
+                    log->append(QString("  Window %1/%2  train→%3  test %4→%5")
+                                    .arg(idx)
+                                    .arg(total)
+                                    .arg(payload["train_end"].toString().left(10))
+                                    .arg(payload["test_start"].toString().left(10))
+                                    .arg(payload["test_end"].toString().left(10)));
                 status_label_->setText(QString("Window %1/%2").arg(idx).arg(total));
             } else if (event == "ensemble") {
-                if (log) log->append(QString("  %1").arg(payload["message"].toString()));
+                if (log)
+                    log->append(QString("  %1").arg(payload["message"].toString()));
                 status_label_->setText("Combining rolling results...");
             } else if (event == "done") {
                 const int total = payload["windows_trained"].toInt();
-                if (pb) { pb->setValue(total); pb->setFormat("Complete"); }
-                if (log) log->append(QString("\nDone — %1 windows in %2s  |  Experiment: %3")
-                                         .arg(total)
-                                         .arg(jnum_txt(payload["elapsed_sec"], 1))
-                                         .arg(payload["exp_name"].toString()));
+                if (pb) {
+                    pb->setValue(total);
+                    pb->setFormat("Complete");
+                }
+                if (log)
+                    log->append(QString("\nDone — %1 windows in %2s  |  Experiment: %3")
+                                    .arg(total)
+                                    .arg(jnum_txt(payload["elapsed_sec"], 1))
+                                    .arg(payload["exp_name"].toString()));
                 status_label_->setText(QString("Retrain complete — %1 windows in %2s")
                                            .arg(total)
                                            .arg(jnum_txt(payload["elapsed_sec"], 1)));
             } else if (event == "error") {
-                if (pb) { pb->setFormat("Failed"); }
-                if (log) log->append(QString("\nError: %1").arg(payload["error"].toString()));
+                if (pb) {
+                    pb->setFormat("Failed");
+                }
+                if (log)
+                    log->append(QString("\nError: %1").arg(payload["error"].toString()));
                 display_error(payload["error"].toString());
             }
             return;
@@ -3514,11 +3536,11 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                     delete cards_vl->takeAt(0)->widget();
 
                 if (schedules.isEmpty()) {
-                    auto* empty = new QLabel("No schedules configured yet.\nUse the Create Schedule tab to add one.",
-                                             cards_w);
+                    auto* empty =
+                        new QLabel("No schedules configured yet.\nUse the Create Schedule tab to add one.", cards_w);
                     empty->setAlignment(Qt::AlignCenter);
-                    empty->setStyleSheet(QString("color:%1; font-size:12px; padding:24px;")
-                                             .arg(ui::colors::TEXT_SECONDARY()));
+                    empty->setStyleSheet(
+                        QString("color:%1; font-size:12px; padding:24px;").arg(ui::colors::TEXT_SECONDARY()));
                     cards_vl->insertWidget(0, empty);
                 } else {
                     int i = 0;
@@ -3528,11 +3550,10 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
 
                         // Card frame
                         auto* card = new QWidget(cards_w);
-                        card->setStyleSheet(QString(
-                            "QWidget{background:%1;border:1px solid %2;border-radius:6px;}"
-                            "QWidget:hover{border-color:%3;}")
-                            .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(),
-                                 module_.color.name()));
+                        card->setStyleSheet(
+                            QString("QWidget{background:%1;border:1px solid %2;border-radius:6px;}"
+                                    "QWidget:hover{border-color:%3;}")
+                                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(), module_.color.name()));
 
                         auto* cvl = new QVBoxLayout(card);
                         cvl->setContentsMargins(12, 10, 12, 10);
@@ -3546,34 +3567,33 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
 
                         auto* id_lbl = new QLabel(mid, top);
                         id_lbl->setStyleSheet(QString("color:%1;font-weight:700;font-size:13px;"
-                                                       "background:transparent;border:none;")
+                                                      "background:transparent;border:none;")
                                                   .arg(ui::colors::TEXT_PRIMARY()));
                         thl->addWidget(id_lbl);
                         thl->addStretch();
 
                         const QString status = obj["last_status"].toString("pending");
                         const QString badge_color = (status == "completed") ? "#22c55e"
-                                                  : (status == "failed")    ? "#ef4444"
+                                                    : (status == "failed")  ? "#ef4444"
                                                                             : "#f59e0b";
                         auto* badge = new QLabel(status.toUpper(), top);
                         badge->setStyleSheet(QString("color:%1;background:transparent;border:none;"
-                                                      "font-size:12px;font-weight:700;")
+                                                     "font-size:12px;font-weight:700;")
                                                  .arg(badge_color));
                         thl->addWidget(badge);
                         cvl->addWidget(top);
 
                         // Details row
-                        const QString freq   = obj["frequency"].toString(obj["freq"].toString());
+                        const QString freq = obj["frequency"].toString(obj["freq"].toString());
                         const QString window = QString::number(obj["window"].toInt());
-                        const QString next   = obj["next_run"].toString("-").left(16).replace("T", "  ");
-                        const QString last   = obj["last_run"].isNull()
-                                                   ? "Never"
-                                                   : obj["last_run"].toString().left(16).replace("T", "  ");
-                        auto* detail = new QLabel(
-                            QString("Freq: %1  |  Window: %2 days  |  Next: %3  |  Last: %4")
-                                .arg(freq, window, next, last), card);
+                        const QString next = obj["next_run"].toString("-").left(16).replace("T", "  ");
+                        const QString last =
+                            obj["last_run"].isNull() ? "Never" : obj["last_run"].toString().left(16).replace("T", "  ");
+                        auto* detail = new QLabel(QString("Freq: %1  |  Window: %2 days  |  Next: %3  |  Last: %4")
+                                                      .arg(freq, window, next, last),
+                                                  card);
                         detail->setStyleSheet(QString("color:%1;font-size:12px;"
-                                                       "background:transparent;border:none;")
+                                                      "background:transparent;border:none;")
                                                   .arg(ui::colors::TEXT_SECONDARY()));
                         cvl->addWidget(detail);
 
@@ -3585,29 +3605,34 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                         ahl->setSpacing(6);
 
                         auto* run_btn = new QPushButton("Run Now", acts);
-                        run_btn->setStyleSheet(QString(
-                            "QPushButton{background:%1;color:%2;border:1px solid %1;"
-                            "border-radius:3px;font-size:12px;font-weight:700;padding:3px 10px;}"
-                            "QPushButton:hover{background:%3;}")
-                            .arg(module_.color.name(), "#000000", module_.color.lighter(115).name()));
+                        run_btn->setStyleSheet(
+                            QString("QPushButton{background:%1;color:%2;border:1px solid %1;"
+                                    "border-radius:3px;font-size:12px;font-weight:700;padding:3px 10px;}"
+                                    "QPushButton:hover{background:%3;}")
+                                .arg(module_.color.name(), "#000000", module_.color.lighter(115).name()));
                         connect(run_btn, &QPushButton::clicked, this, [this, mid]() {
-                            if (auto* pb = this->findChild<QProgressBar*>("rr_progress"))
-                                { pb->setValue(0); pb->setFormat("Starting..."); }
-                            if (auto* log = this->findChild<QTextEdit*>("rr_log")) log->clear();
+                            if (auto* pb = this->findChild<QProgressBar*>("rr_progress")) {
+                                pb->setValue(0);
+                                pb->setFormat("Starting...");
+                            }
+                            if (auto* log = this->findChild<QTextEdit*>("rr_log"))
+                                log->clear();
                             status_label_->setText(QString("Retraining %1...").arg(mid));
-                            QJsonObject p; p["model_id"] = mid;
+                            QJsonObject p;
+                            p["model_id"] = mid;
                             AIQuantLabService::instance().rolling_execute_retrain(p);
                         });
                         ahl->addWidget(run_btn);
 
                         auto* del_btn = new QPushButton("Delete", acts);
-                        del_btn->setStyleSheet(QString(
-                            "QPushButton{background:transparent;color:#ef4444;border:1px solid #ef4444;"
-                            "border-radius:3px;font-size:12px;font-weight:700;padding:3px 10px;}"
-                            "QPushButton:hover{background:#7f1d1d;}"));
+                        del_btn->setStyleSheet(
+                            QString("QPushButton{background:transparent;color:#ef4444;border:1px solid #ef4444;"
+                                    "border-radius:3px;font-size:12px;font-weight:700;padding:3px 10px;}"
+                                    "QPushButton:hover{background:#7f1d1d;}"));
                         connect(del_btn, &QPushButton::clicked, this, [this, mid]() {
                             status_label_->setText(QString("Deleting %1...").arg(mid));
-                            QJsonObject p; p["model_id"] = mid;
+                            QJsonObject p;
+                            p["model_id"] = mid;
                             AIQuantLabService::instance().rolling_delete_schedule(p);
                         });
                         ahl->addWidget(del_btn);
@@ -3629,14 +3654,11 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                                            .arg(payload["conf_path"].toString())
                                      : "";
             clear_results();
-            auto* lbl = new QLabel(
-                QString("Schedule created: %1\nFreq: %2  |  Window: %3 days  |  Next: %4%5")
-                    .arg(payload["model_id"].toString(),
-                         sched["frequency"].toString(),
-                         QString::number(sched["window"].toInt()),
-                         sched["next_run"].toString().left(16).replace("T", "  "),
-                         tmpl),
-                this);
+            auto* lbl = new QLabel(QString("Schedule created: %1\nFreq: %2  |  Window: %3 days  |  Next: %4%5")
+                                       .arg(payload["model_id"].toString(), sched["frequency"].toString(),
+                                            QString::number(sched["window"].toInt()),
+                                            sched["next_run"].toString().left(16).replace("T", "  "), tmpl),
+                                   this);
             lbl->setWordWrap(true);
             lbl->setStyleSheet(QString("color:%1;").arg(ui::colors::TEXT_PRIMARY()));
             results_layout_->addWidget(lbl);
@@ -3649,12 +3671,12 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
             const int total = payload["total_windows"].toInt();
             auto windows = payload["windows"].toArray();
 
-            auto* hdr = new QLabel(
-                QString("Preview: %1 rolling windows  (step=%2, horizon=%3)")
-                    .arg(total).arg(payload["step"].toInt()).arg(payload["horizon"].toInt()),
-                this);
-            hdr->setStyleSheet(QString("color:%1;font-weight:700;font-size:13px;")
-                                   .arg(ui::colors::TEXT_PRIMARY()));
+            auto* hdr = new QLabel(QString("Preview: %1 rolling windows  (step=%2, horizon=%3)")
+                                       .arg(total)
+                                       .arg(payload["step"].toInt())
+                                       .arg(payload["horizon"].toInt()),
+                                   this);
+            hdr->setStyleSheet(QString("color:%1;font-weight:700;font-size:13px;").arg(ui::colors::TEXT_PRIMARY()));
             results_layout_->addWidget(hdr);
 
             // Table of windows
@@ -3677,9 +3699,9 @@ void QuantModulePanel::on_result(const QString& module_id, const QString& comman
                 tbl->setItem(row, 0, item(QString::number(row + 1)));
                 tbl->setItem(row, 1, item(obj["train_start"].toString()));
                 tbl->setItem(row, 2, item(obj["train_end"].toString()));
-                tbl->setItem(row, 3, item(QString("%1 → %2")
-                    .arg(obj["test_start"].toString().left(10),
-                         obj["test_end"].toString().left(10))));
+                tbl->setItem(row, 3,
+                             item(QString("%1 → %2").arg(obj["test_start"].toString().left(10),
+                                                         obj["test_end"].toString().left(10))));
                 ++row;
             }
             tbl->setMaximumHeight(220);
@@ -3899,7 +3921,8 @@ QWidget* QuantModulePanel::build_portfolio_opt_panel() {
                 params["cov_matrix"] = cov_doc.array();
             if (needs_returns) {
                 QJsonArray ret_arr;
-                if (const QString bad = append_csv_numbers(text_inputs_[method_id + "_returns"]->text(), ret_arr); !bad.isNull()) {
+                if (const QString bad = append_csv_numbers(text_inputs_[method_id + "_returns"]->text(), ret_arr);
+                    !bad.isNull()) {
                     display_error(QString("Not a number: \"%1\"").arg(bad));
                     return;
                 }
@@ -5186,22 +5209,22 @@ QWidget* QuantModulePanel::build_meta_learning_panel() {
 QWidget* QuantModulePanel::build_hft_panel() {
     const QString accent = module_.color.name();
 
-    auto* w  = new QWidget(this);
+    auto* w = new QWidget(this);
     auto* vl = new QVBoxLayout(w);
     vl->setContentsMargins(0, 0, 0, 0);
     vl->setSpacing(0);
 
     // ── Shared exchange/symbol bar ────────────────────────────────────────────
     auto* top_bar = new QWidget(w);
-    top_bar->setStyleSheet(QString("background:%1; border-bottom:1px solid %2;")
-                               .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    top_bar->setStyleSheet(
+        QString("background:%1; border-bottom:1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* top_hl = new QHBoxLayout(top_bar);
     top_hl->setContentsMargins(12, 8, 12, 8);
     top_hl->setSpacing(8);
 
     auto* exch_lbl = new QLabel("EXCHANGE", top_bar);
-    exch_lbl->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;")
-                                .arg(ui::colors::TEXT_SECONDARY()));
+    exch_lbl->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px;").arg(ui::colors::TEXT_SECONDARY()));
     auto* hft_exchange = new QComboBox(top_bar);
     hft_exchange->addItems({"binance", "kraken", "coinbase", "bybit", "okx", "hyperliquid"});
     hft_exchange->setStyleSheet(combo_ss());
@@ -5249,7 +5272,7 @@ QWidget* QuantModulePanel::build_hft_panel() {
     // ════════════════════════════════════════════════════════
     // TAB 1 — LIVE ORDER BOOK
     // ════════════════════════════════════════════════════════
-    auto* ob_tab  = new QWidget(this);
+    auto* ob_tab = new QWidget(this);
     auto* ob_root = new QVBoxLayout(ob_tab);
     ob_root->setContentsMargins(12, 10, 12, 10);
     ob_root->setSpacing(8);
@@ -5262,8 +5285,8 @@ QWidget* QuantModulePanel::build_hft_panel() {
         status_label_->setText("Fetching live order book...");
         QJsonObject p;
         p["exchange"] = combo_inputs_["hft_exchange"]->currentText();
-        p["symbol"]   = text_inputs_["hft_symbol"]->text().trimmed();
-        p["depth"]    = combo_inputs_["hft_depth"]->currentText().toInt();
+        p["symbol"] = text_inputs_["hft_symbol"]->text().trimmed();
+        p["depth"] = combo_inputs_["hft_depth"]->currentText().toInt();
         AIQuantLabService::instance().hft_create_orderbook(p);
     });
     ob_ctrl->addWidget(ob_fetch);
@@ -5282,22 +5305,24 @@ QWidget* QuantModulePanel::build_hft_panel() {
         cvl->setContentsMargins(10, 6, 10, 6);
         cvl->setSpacing(2);
         auto* l = new QLabel(label, card);
-        l->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
-                             .arg(ui::colors::TEXT_SECONDARY()));
+        l->setStyleSheet(
+            QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
+                .arg(ui::colors::TEXT_SECONDARY()));
         auto* v = new QLabel("—", card);
         v->setObjectName("hftCardVal");
-        v->setStyleSheet(QString("color:%1; font-size:13px; font-weight:700; font-family:'Courier New'; background:transparent;")
-                             .arg(ui::colors::TEXT_PRIMARY()));
+        v->setStyleSheet(
+            QString("color:%1; font-size:13px; font-weight:700; font-family:'Courier New'; background:transparent;")
+                .arg(ui::colors::TEXT_PRIMARY()));
         cvl->addWidget(l);
         cvl->addWidget(v);
         return {card, v};
     };
 
-    auto [mid_card, mid_val]         = make_card("MID PRICE", ob_tab);
-    auto [spread_card, spread_val]   = make_card("SPREAD BPS", ob_tab);
-    auto [obi_card, obi_val]         = make_card("ORDER BOOK IMBALANCE", ob_tab);
-    auto [pressure_card, pres_val]   = make_card("PRESSURE", ob_tab);
-    auto [wmid_card, wmid_val]       = make_card("WEIGHTED MID", ob_tab);
+    auto [mid_card, mid_val] = make_card("MID PRICE", ob_tab);
+    auto [spread_card, spread_val] = make_card("SPREAD BPS", ob_tab);
+    auto [obi_card, obi_val] = make_card("ORDER BOOK IMBALANCE", ob_tab);
+    auto [pressure_card, pres_val] = make_card("PRESSURE", ob_tab);
+    auto [wmid_card, wmid_val] = make_card("WEIGHTED MID", ob_tab);
 
     // Store for result update
     mid_val->setObjectName("hft_mid_val");
@@ -5342,8 +5367,8 @@ QWidget* QuantModulePanel::build_hft_panel() {
                 "QHeaderView::section { background:%2; color:%3; font-size:12px; font-weight:700;"
                 "  padding:3px 6px; border:none; border-bottom:1px solid %4; }"
                 "QTableWidget::item { padding:2px 6px; font-family:'Courier New'; font-size:12px; border:none; }")
-            .arg(ui::colors::BG_RAISED(), ui::colors::BG_SURFACE(),
-                 ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_DIM()));
+            .arg(ui::colors::BG_RAISED(), ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY(),
+                 ui::colors::BORDER_DIM()));
     bids_vl->addWidget(bids_hdr);
     bids_vl->addWidget(bid_table, 1);
 
@@ -5378,7 +5403,7 @@ QWidget* QuantModulePanel::build_hft_panel() {
     // ════════════════════════════════════════════════════════
     // TAB 2 — MICROSTRUCTURE (Market Making + Toxic Flow)
     // ════════════════════════════════════════════════════════
-    auto* micro_tab  = new QWidget(this);
+    auto* micro_tab = new QWidget(this);
     auto* micro_root = new QVBoxLayout(micro_tab);
     micro_root->setContentsMargins(12, 10, 12, 10);
     micro_root->setSpacing(10);
@@ -5392,8 +5417,9 @@ QWidget* QuantModulePanel::build_hft_panel() {
     mm_vl->setSpacing(8);
 
     auto* mm_title = new QLabel("MARKET MAKING  —  Avellaneda-Stoikov Model", mm_section);
-    mm_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
-                                .arg(accent));
+    mm_title->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
+            .arg(accent));
     mm_vl->addWidget(mm_title);
 
     auto* mm_params = new QHBoxLayout;
@@ -5414,11 +5440,11 @@ QWidget* QuantModulePanel::build_hft_panel() {
     connect(mm_run, &QPushButton::clicked, this, [this]() {
         status_label_->setText("Fetching live data + computing quotes...");
         QJsonObject p;
-        p["exchange"]         = combo_inputs_["hft_exchange"]->currentText();
-        p["symbol"]           = text_inputs_["hft_symbol"]->text().trimmed();
-        p["inventory"]        = double_inputs_["hft_inventory_d"]->value();
+        p["exchange"] = combo_inputs_["hft_exchange"]->currentText();
+        p["symbol"] = text_inputs_["hft_symbol"]->text().trimmed();
+        p["inventory"] = double_inputs_["hft_inventory_d"]->value();
         p["spread_multiplier"] = double_inputs_["hft_spread_mult"]->value();
-        p["risk_aversion"]    = double_inputs_["hft_risk_aversion"]->value();
+        p["risk_aversion"] = double_inputs_["hft_risk_aversion"]->value();
         AIQuantLabService::instance().hft_market_making_quotes(p);
     });
     mm_vl->addWidget(mm_run);
@@ -5428,9 +5454,9 @@ QWidget* QuantModulePanel::build_hft_panel() {
     mm_results->setSpacing(6);
     auto [bid_card, bid_val2] = make_card("BID QUOTE", mm_section);
     auto [ask_card, ask_val2] = make_card("ASK QUOTE", mm_section);
-    auto [qs_card, qs_val]    = make_card("QUOTED SPREAD BPS", mm_section);
+    auto [qs_card, qs_val] = make_card("QUOTED SPREAD BPS", mm_section);
     auto [edge_card, edge_val] = make_card("EDGE/SIDE BPS", mm_section);
-    auto [rec_card, rec_val]  = make_card("RECOMMENDATION", mm_section);
+    auto [rec_card, rec_val] = make_card("RECOMMENDATION", mm_section);
     bid_val2->setObjectName("hft_mm_bid");
     ask_val2->setObjectName("hft_mm_ask");
     qs_val->setObjectName("hft_mm_qspread");
@@ -5452,8 +5478,9 @@ QWidget* QuantModulePanel::build_hft_panel() {
     tox_vl->setSpacing(8);
 
     auto* tox_title = new QLabel("TOXIC FLOW DETECTION  —  PIN Score Model", tox_section);
-    tox_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
-                                 .arg(accent));
+    tox_title->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
+            .arg(accent));
     tox_vl->addWidget(tox_title);
 
     auto* tox_params = new QHBoxLayout;
@@ -5472,18 +5499,18 @@ QWidget* QuantModulePanel::build_hft_panel() {
         status_label_->setText("Fetching trades + analyzing flow...");
         QJsonObject p;
         p["exchange"] = combo_inputs_["hft_exchange"]->currentText();
-        p["symbol"]   = text_inputs_["hft_symbol"]->text().trimmed();
-        p["limit"]    = combo_inputs_["hft_tox_limit"]->currentText().toInt();
+        p["symbol"] = text_inputs_["hft_symbol"]->text().trimmed();
+        p["limit"] = combo_inputs_["hft_tox_limit"]->currentText().toInt();
         AIQuantLabService::instance().hft_detect_toxic(p);
     });
     tox_vl->addWidget(tox_run);
 
     auto* tox_results = new QHBoxLayout;
     tox_results->setSpacing(6);
-    auto [pin_card, pin_val]      = make_card("PIN SCORE (0-100)", tox_section);
-    auto [vol_card, vol_val]      = make_card("VOLUME IMBALANCE", tox_section);
+    auto [pin_card, pin_val] = make_card("PIN SCORE (0-100)", tox_section);
+    auto [vol_card, vol_val] = make_card("VOLUME IMBALANCE", tox_section);
     auto [impact_card, impact_val] = make_card("PRICE IMPACT BPS", tox_section);
-    auto [class_card, class_val]  = make_card("CLASSIFICATION", tox_section);
+    auto [class_card, class_val] = make_card("CLASSIFICATION", tox_section);
     auto [action_card, action_val] = make_card("RECOMMENDED ACTION", tox_section);
     pin_val->setObjectName("hft_tox_pin");
     vol_val->setObjectName("hft_tox_vol");
@@ -5503,7 +5530,7 @@ QWidget* QuantModulePanel::build_hft_panel() {
     // ════════════════════════════════════════════════════════
     // TAB 3 — SLIPPAGE ESTIMATOR
     // ════════════════════════════════════════════════════════
-    auto* slip_tab  = new QWidget(this);
+    auto* slip_tab = new QWidget(this);
     auto* slip_root = new QVBoxLayout(slip_tab);
     slip_root->setContentsMargins(12, 10, 12, 10);
     slip_root->setSpacing(10);
@@ -5516,14 +5543,17 @@ QWidget* QuantModulePanel::build_hft_panel() {
     slip_vl->setSpacing(8);
 
     auto* slip_title = new QLabel("SLIPPAGE ESTIMATOR  —  Real Order Book Walk", slip_section);
-    slip_title->setStyleSheet(QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
-                                  .arg(accent));
+    slip_title->setStyleSheet(
+        QString("color:%1; font-size:12px; font-weight:700; letter-spacing:0.5px; background:transparent;")
+            .arg(accent));
     slip_vl->addWidget(slip_title);
 
     auto* slip_desc = new QLabel(
-        "Walks the live order book level-by-level to compute actual fill price and slippage for a given order size.", slip_section);
+        "Walks the live order book level-by-level to compute actual fill price and slippage for a given order size.",
+        slip_section);
     slip_desc->setWordWrap(true);
-    slip_desc->setStyleSheet(QString("color:%1; font-size:12px; background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
+    slip_desc->setStyleSheet(
+        QString("color:%1; font-size:12px; background:transparent;").arg(ui::colors::TEXT_SECONDARY()));
     slip_vl->addWidget(slip_desc);
 
     auto* slip_params = new QHBoxLayout;
@@ -5543,8 +5573,8 @@ QWidget* QuantModulePanel::build_hft_panel() {
         status_label_->setText("Walking order book...");
         QJsonObject p;
         p["exchange"] = combo_inputs_["hft_exchange"]->currentText();
-        p["symbol"]   = text_inputs_["hft_symbol"]->text().trimmed();
-        p["side"]     = combo_inputs_["hft_slip_side"]->currentText();
+        p["symbol"] = text_inputs_["hft_symbol"]->text().trimmed();
+        p["side"] = combo_inputs_["hft_slip_side"]->currentText();
         p["quantity"] = double_inputs_["hft_slip_qty"]->value();
         AIQuantLabService::instance().hft_execute_order(p);
     });
@@ -5553,10 +5583,10 @@ QWidget* QuantModulePanel::build_hft_panel() {
     // Slippage result cards
     auto* slip_results = new QHBoxLayout;
     slip_results->setSpacing(6);
-    auto [avgp_card, avgp_val]     = make_card("AVG FILL PRICE", slip_section);
-    auto [slbps_card, slbps_val]   = make_card("SLIPPAGE BPS", slip_section);
-    auto [cost_card, cost_val]     = make_card("TOTAL COST", slip_section);
-    auto [fills_card, fills_val]   = make_card("FILL LEVELS", slip_section);
+    auto [avgp_card, avgp_val] = make_card("AVG FILL PRICE", slip_section);
+    auto [slbps_card, slbps_val] = make_card("SLIPPAGE BPS", slip_section);
+    auto [cost_card, cost_val] = make_card("TOTAL COST", slip_section);
+    auto [fills_card, fills_val] = make_card("FILL LEVELS", slip_section);
     auto [viable_card, viable_val] = make_card("VIABILITY", slip_section);
     avgp_val->setObjectName("hft_slip_avgp");
     slbps_val->setObjectName("hft_slip_bps");
@@ -5585,8 +5615,8 @@ QWidget* QuantModulePanel::build_hft_panel() {
                 "QHeaderView::section { background:%3; color:%4; font-size:12px; font-weight:700;"
                 "  padding:3px 6px; border:none; border-bottom:1px solid %2; }"
                 "QTableWidget::item { padding:2px 6px; font-family:'Courier New'; font-size:12px; }")
-            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM(),
-                 ui::colors::BG_SURFACE(), ui::colors::TEXT_SECONDARY()));
+            .arg(ui::colors::BG_BASE(), ui::colors::BORDER_DIM(), ui::colors::BG_SURFACE(),
+                 ui::colors::TEXT_SECONDARY()));
     slip_vl->addWidget(fills_table);
 
     slip_root->addWidget(slip_section);
@@ -5595,22 +5625,23 @@ QWidget* QuantModulePanel::build_hft_panel() {
 
     // ── Full Analyze button (bottom bar) ─────────────────────────────────────
     auto* bottom_bar = new QWidget(w);
-    bottom_bar->setStyleSheet(QString("background:%1; border-top:1px solid %2;")
-                                  .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    bottom_bar->setStyleSheet(
+        QString("background:%1; border-top:1px solid %2;").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* bot_hl = new QHBoxLayout(bottom_bar);
     bot_hl->setContentsMargins(12, 6, 12, 6);
     auto* analyze_btn = make_run_button("⚡ FULL ANALYSIS — FETCH ALL & COMPUTE", bottom_bar);
-    analyze_btn->setToolTip("Fetches live order book + trades, computes book metrics, market making quotes, toxic flow, and slippage in one call");
+    analyze_btn->setToolTip("Fetches live order book + trades, computes book metrics, market making quotes, toxic "
+                            "flow, and slippage in one call");
     connect(analyze_btn, &QPushButton::clicked, this, [this]() {
         status_label_->setText("Running full microstructure analysis...");
         QJsonObject p;
-        p["exchange"]          = combo_inputs_["hft_exchange"]->currentText();
-        p["symbol"]            = text_inputs_["hft_symbol"]->text().trimmed();
-        p["depth"]             = combo_inputs_["hft_depth"]->currentText().toInt();
-        p["limit"]             = combo_inputs_["hft_tox_limit"]->currentText().toInt();
-        p["inventory"]         = double_inputs_["hft_inventory_d"]->value();
+        p["exchange"] = combo_inputs_["hft_exchange"]->currentText();
+        p["symbol"] = text_inputs_["hft_symbol"]->text().trimmed();
+        p["depth"] = combo_inputs_["hft_depth"]->currentText().toInt();
+        p["limit"] = combo_inputs_["hft_tox_limit"]->currentText().toInt();
+        p["inventory"] = double_inputs_["hft_inventory_d"]->value();
         p["spread_multiplier"] = double_inputs_["hft_spread_mult"]->value();
-        p["quantity"]          = double_inputs_["hft_slip_qty"]->value();
+        p["quantity"] = double_inputs_["hft_slip_qty"]->value();
         AIQuantLabService::instance().hft_snapshot(p);
     });
     bot_hl->addWidget(analyze_btn, 1);
@@ -5642,9 +5673,9 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
     ltvl->setContentsMargins(12, 12, 12, 12);
     ltvl->setSpacing(10);
 
-    auto* lt_info = new QLabel(
-        "Schedules are persisted in ~/.fincept/rolling_schedules.json. "
-        "Click Refresh to load the latest state.", list_tab);
+    auto* lt_info = new QLabel("Schedules are persisted in ~/.fincept/rolling_schedules.json. "
+                               "Click Refresh to load the latest state.",
+                               list_tab);
     lt_info->setWordWrap(true);
     lt_info->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     ltvl->addWidget(lt_info);
@@ -5728,24 +5759,26 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
     btn_hl->setSpacing(8);
 
     auto* rr_preview = make_run_button("PREVIEW WINDOWS", btn_row);
-    rr_preview->setStyleSheet(QString(
-        "QPushButton{background:%1;color:%2;border:1px solid %1;border-radius:4px;"
-        "font-size:12px;font-weight:700;padding:6px 14px;}"
-        "QPushButton:hover{background:%3;}")
-        .arg(ui::colors::BG_RAISED(), accent, ui::colors::BG_HOVER()));
+    rr_preview->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:1px solid %1;border-radius:4px;"
+                                      "font-size:12px;font-weight:700;padding:6px 14px;}"
+                                      "QPushButton:hover{background:%3;}")
+                                  .arg(ui::colors::BG_RAISED(), accent, ui::colors::BG_HOVER()));
     connect(rr_preview, &QPushButton::clicked, this, [this]() {
         const QString mid = text_inputs_["rr_model_id"]->text().trimmed();
-        const QString cp  = text_inputs_["rr_conf_path"]->text().trimmed();
+        const QString cp = text_inputs_["rr_conf_path"]->text().trimmed();
         if (mid.isEmpty() && cp.isEmpty()) {
             status_label_->setText("Enter a Model ID or Config Path to preview.");
             return;
         }
         status_label_->setText("Generating preview...");
         QJsonObject params;
-        if (!mid.isEmpty()) params["model_id"] = mid;
-        if (!cp.isEmpty())  params["conf_path"] = cp;
+        if (!mid.isEmpty())
+            params["model_id"] = mid;
+        if (!cp.isEmpty())
+            params["conf_path"] = cp;
         const QString step = text_inputs_["rr_step"]->text().trimmed();
-        if (!step.isEmpty()) params["step"] = step.toInt();
+        if (!step.isEmpty())
+            params["step"] = step.toInt();
         AIQuantLabService::instance().rolling_preview_tasks(params);
     });
     btn_hl->addWidget(rr_preview, 1);
@@ -5759,15 +5792,18 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
         }
         status_label_->setText("Creating schedule...");
         QJsonObject params;
-        params["model_id"]  = mid;
+        params["model_id"] = mid;
         params["frequency"] = combo_inputs_["rr_frequency"]->currentText();
-        params["region"]    = combo_inputs_["rr_region"]->currentText();
-        const QString cp    = text_inputs_["rr_conf_path"]->text().trimmed();
-        if (!cp.isEmpty()) params["conf_path"] = cp;
-        const QString win   = text_inputs_["rr_window"]->text().trimmed();
-        if (!win.isEmpty()) params["window"] = win.toInt();
-        const QString step  = text_inputs_["rr_step"]->text().trimmed();
-        if (!step.isEmpty()) params["step"] = step.toInt();
+        params["region"] = combo_inputs_["rr_region"]->currentText();
+        const QString cp = text_inputs_["rr_conf_path"]->text().trimmed();
+        if (!cp.isEmpty())
+            params["conf_path"] = cp;
+        const QString win = text_inputs_["rr_window"]->text().trimmed();
+        if (!win.isEmpty())
+            params["window"] = win.toInt();
+        const QString step = text_inputs_["rr_step"]->text().trimmed();
+        if (!step.isEmpty())
+            params["step"] = step.toInt();
         AIQuantLabService::instance().rolling_create_schedule(params);
     });
     btn_hl->addWidget(rr_create, 1);
@@ -5781,9 +5817,9 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
     retrainvl->setContentsMargins(12, 12, 12, 12);
     retrainvl->setSpacing(10);
 
-    auto* rt_info = new QLabel(
-        "Executes a full rolling retrain for a scheduled model. Each window trains "
-        "independently and progress is streamed live below.", retrain_tab);
+    auto* rt_info = new QLabel("Executes a full rolling retrain for a scheduled model. Each window trains "
+                               "independently and progress is streamed live below.",
+                               retrain_tab);
     rt_info->setWordWrap(true);
     rt_info->setStyleSheet(QString("color:%1; font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
     retrainvl->addWidget(rt_info);
@@ -5801,12 +5837,11 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
     rr_progress->setValue(0);
     rr_progress->setTextVisible(true);
     rr_progress->setFormat("Idle");
-    rr_progress->setStyleSheet(QString(
-        "QProgressBar{background:%1;border:1px solid %2;border-radius:4px;"
-        "color:%3;font-size:12px;font-weight:600;text-align:center;height:20px;}"
-        "QProgressBar::chunk{background:%4;border-radius:3px;}")
-        .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(),
-             ui::colors::TEXT_PRIMARY(), accent));
+    rr_progress->setStyleSheet(
+        QString("QProgressBar{background:%1;border:1px solid %2;border-radius:4px;"
+                "color:%3;font-size:12px;font-weight:600;text-align:center;height:20px;}"
+                "QProgressBar::chunk{background:%4;border-radius:3px;}")
+            .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(), ui::colors::TEXT_PRIMARY(), accent));
     retrainvl->addWidget(rr_progress);
 
     // Streaming log output

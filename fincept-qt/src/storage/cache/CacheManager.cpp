@@ -4,6 +4,7 @@
 
 #include <QSqlQuery>
 #include <QTimeZone>
+
 #include <utility>
 
 namespace fincept {
@@ -110,9 +111,9 @@ QHash<QString, QString> CacheManager::multi_get(const QStringList& keys) const {
         placeholders.append(QStringLiteral("?"));
         params.append(k);
     }
-    const QString sql = QStringLiteral(
-        "SELECT key, value FROM unified_cache WHERE key IN (%1) AND expires_at > datetime('now')")
-        .arg(placeholders.join(QStringLiteral(",")));
+    const QString sql =
+        QStringLiteral("SELECT key, value FROM unified_cache WHERE key IN (%1) AND expires_at > datetime('now')")
+            .arg(placeholders.join(QStringLiteral(",")));
 
     auto r = cdb.execute(sql, params);
     if (r.is_err())
@@ -148,9 +149,7 @@ std::optional<CacheManager::Aged> CacheManager::try_get_aged(const QString& key)
     return aged_from_row(q.value(0).toString(), q.value(1).toString(), q.value(2).toInt());
 }
 
-CacheManager::Aged CacheManager::aged_from_row(const QString& value,
-                                               const QString& expires_at,
-                                               int ttl_seconds) {
+CacheManager::Aged CacheManager::aged_from_row(const QString& value, const QString& expires_at, int ttl_seconds) {
     Aged out;
     out.value = value;
     // written_at = expires_at − ttl. `created_at` is preserved across re-puts
@@ -181,10 +180,9 @@ QHash<QString, CacheManager::Aged> CacheManager::multi_get_aged(const QStringLis
         placeholders.append(QStringLiteral("?"));
         params.append(k);
     }
-    const QString sql = QStringLiteral(
-        "SELECT key, value, expires_at, ttl_seconds FROM unified_cache "
-        "WHERE key IN (%1) AND expires_at > datetime('now')")
-        .arg(placeholders.join(QStringLiteral(",")));
+    const QString sql = QStringLiteral("SELECT key, value, expires_at, ttl_seconds FROM unified_cache "
+                                       "WHERE key IN (%1) AND expires_at > datetime('now')")
+                            .arg(placeholders.join(QStringLiteral(",")));
 
     auto r = cdb.execute(sql, params);
     if (r.is_err())
@@ -208,10 +206,9 @@ QHash<QString, CacheManager::Aged> CacheManager::get_prefix_aged(const QString& 
         return out;
 
     const QString upper = prefix_upper_bound(prefix);
-    auto r = cdb.execute(
-        "SELECT key, value, expires_at, ttl_seconds FROM unified_cache "
-        "WHERE key >= ? AND key < ? AND expires_at > datetime('now')",
-        {prefix, upper});
+    auto r = cdb.execute("SELECT key, value, expires_at, ttl_seconds FROM unified_cache "
+                         "WHERE key >= ? AND key < ? AND expires_at > datetime('now')",
+                         {prefix, upper});
     if (r.is_err())
         return out;
 
@@ -232,10 +229,9 @@ QHash<QString, QString> CacheManager::get_prefix(const QString& prefix) const {
         return out;
 
     const QString upper = prefix_upper_bound(prefix);
-    auto r = cdb.execute(
-        "SELECT key, value FROM unified_cache "
-        "WHERE key >= ? AND key < ? AND expires_at > datetime('now')",
-        {prefix, upper});
+    auto r = cdb.execute("SELECT key, value FROM unified_cache "
+                         "WHERE key >= ? AND key < ? AND expires_at > datetime('now')",
+                         {prefix, upper});
     if (r.is_err())
         return out;
 
@@ -286,8 +282,7 @@ void CacheManager::remove_prefix(const QString& prefix) {
     // with (`"market:" + SYM`), so this is not a regression. If a future
     // caller mixes cases in the prefix portion of keys, they'll need to
     // either normalise on write or call remove() per fully-qualified key.
-    cdb.execute("DELETE FROM unified_cache WHERE key >= ? AND key < ?",
-                {prefix, prefix_upper_bound(prefix)});
+    cdb.execute("DELETE FROM unified_cache WHERE key >= ? AND key < ?", {prefix, prefix_upper_bound(prefix)});
 }
 
 void CacheManager::clear() {

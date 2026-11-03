@@ -1,18 +1,17 @@
+#include "ai_chat/HearthSupervisor.h"
 #include "ai_chat/LlmService.h"
-#include "ui/SelectableText.h"
 #include "app/MainWindow.h"
 #include "auth/AuthManager.h"
 #include "auth/AuthService.h"
 #include "auth/InactivityGuard.h"
 #include "auth/PinManager.h"
 #include "auth/SessionGuard.h"
+#include "core/components/ComponentCatalog.h"
 #include "core/config/AppConfig.h"
 #include "core/config/AppIdentity.h"
 #include "core/config/AppPaths.h"
-#include "storage/secure/SecureStorage.h"
 #include "core/config/LayoutMigrations.h"
 #include "core/config/ProfileManager.h"
-#include "core/components/ComponentCatalog.h"
 #include "core/crash/CrashHandler.h"
 #include "core/keys/KeyConfigManager.h"
 #include "core/logging/Logger.h"
@@ -22,7 +21,7 @@
 #include "core/symbol/SymbolRef.h"
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
-#include "storage/cache/CacheManager.h"
+#include "datahub/TopicPolicy.h"
 #include "mcp/McpInit.h"
 #include "network/http/HttpClient.h"
 #include "python/PythonSetupManager.h"
@@ -45,17 +44,17 @@
 #include "services/prediction/polymarket/PolymarketAdapter.h"
 #include "services/relationship_map/RelationshipMapService.h"
 #include "services/report_builder/ReportBuilderService.h"
-#include "datahub/DataHub.h"
-#include "datahub/TopicPolicy.h"
-#include "trading/DataStreamManager.h"
-#include "trading/ExchangeService.h"
-#include "trading/ExchangeSessionManager.h"
+#include "storage/cache/CacheManager.h"
 #include "storage/repositories/NewsArticleRepository.h"
-#include "ai_chat/HearthSupervisor.h"
 #include "storage/repositories/SettingsRepository.h"
+#include "storage/secure/SecureStorage.h"
 #include "storage/sqlite/CacheDatabase.h"
 #include "storage/sqlite/Database.h"
 #include "storage/sqlite/migrations/MigrationRunner.h"
+#include "trading/DataStreamManager.h"
+#include "trading/ExchangeService.h"
+#include "trading/ExchangeSessionManager.h"
+#include "ui/SelectableText.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 #include "ui/theme/Tooltips.h"
@@ -73,7 +72,6 @@
 #include <QUuid>
 
 #include <memory>
-
 #include <singleapplication.h>
 
 #ifdef Q_OS_WIN
@@ -113,8 +111,8 @@ int main(int argc, char* argv[]) {
     // A value the user exported deliberately (e.g. LANGCHAIN_TRACING_V2=true
     // for their own LangSmith runs) is respected; only the unset default is
     // turned off.
-    for (const char* var : {"AGNO_TELEMETRY", "LITELLM_TELEMETRY", "ANONYMIZED_TELEMETRY",
-                            "GRADIO_ANALYTICS_ENABLED", "LANGCHAIN_TRACING_V2"})
+    for (const char* var : {"AGNO_TELEMETRY", "LITELLM_TELEMETRY", "ANONYMIZED_TELEMETRY", "GRADIO_ANALYTICS_ENABLED",
+                            "LANGCHAIN_TRACING_V2"})
         if (!qEnvironmentVariableIsSet(var))
             qputenv(var, "false");
     for (const char* var : {"DO_NOT_TRACK", "DISABLE_TELEMETRY", "HF_HUB_DISABLE_TELEMETRY", "POSTHOG_DISABLED"})
@@ -145,7 +143,8 @@ int main(int argc, char* argv[]) {
     // "finterm --profile work" and "finterm --profile personal"
     // are treated as two separate primary instances and run simultaneously.
     // allowSecondary=true: secondary instances send "--new-window" and exit.
-    const QString profile_key = QString("%1-%2").arg(fincept::AppIdentity::kApp).arg(fincept::ProfileManager::instance().active());
+    const QString profile_key =
+        QString("%1-%2").arg(fincept::AppIdentity::kApp).arg(fincept::ProfileManager::instance().active());
     SingleApplication app(argc, argv, /*allowSecondary=*/true, SingleApplication::Mode::User, 100,
                           profile_key.toUtf8());
 
@@ -228,10 +227,8 @@ int main(int argc, char* argv[]) {
     fincept::services::polymarket::PolymarketWebSocket::instance().ensure_registered_with_hub();
     {
         auto& reg = fincept::services::prediction::PredictionExchangeRegistry::instance();
-        reg.register_adapter(
-            std::make_unique<fincept::services::prediction::polymarket_ns::PolymarketAdapter>());
-        reg.register_adapter(
-            std::make_unique<fincept::services::prediction::kalshi_ns::KalshiAdapter>());
+        reg.register_adapter(std::make_unique<fincept::services::prediction::polymarket_ns::PolymarketAdapter>());
+        reg.register_adapter(std::make_unique<fincept::services::prediction::kalshi_ns::KalshiAdapter>());
 
         // Hydrate credentials from SecureStorage if previously saved. This
         // has to happen after registration so the adapters exist.
@@ -324,14 +321,22 @@ int main(int argc, char* argv[]) {
     qInstallMessageHandler([](QtMsgType type, const QMessageLogContext& ctx, const QString& msg) {
         const char* category = (ctx.category && *ctx.category) ? ctx.category : "Qt";
         switch (type) {
-        case QtDebugMsg:    fincept::Logger::instance().debug(category, msg); break;
-        case QtInfoMsg:     fincept::Logger::instance().info(category, msg); break;
-        case QtWarningMsg:  fincept::Logger::instance().warn(category, msg); break;
-        case QtCriticalMsg: fincept::Logger::instance().error(category, msg); break;
-        case QtFatalMsg:
-            fincept::Logger::instance().error(category, msg);
-            fincept::Logger::instance().flush_and_close();
-            break;
+            case QtDebugMsg:
+                fincept::Logger::instance().debug(category, msg);
+                break;
+            case QtInfoMsg:
+                fincept::Logger::instance().info(category, msg);
+                break;
+            case QtWarningMsg:
+                fincept::Logger::instance().warn(category, msg);
+                break;
+            case QtCriticalMsg:
+                fincept::Logger::instance().error(category, msg);
+                break;
+            case QtFatalMsg:
+                fincept::Logger::instance().error(category, msg);
+                fincept::Logger::instance().flush_and_close();
+                break;
         }
     });
     {
@@ -340,12 +345,10 @@ int main(int argc, char* argv[]) {
 
         // Global level
         const QString gl = cfg.get("log/global_level", "Info").toString();
-        const QHash<QString, fincept::LogLevel> lvl_map = {{"Trace", fincept::LogLevel::Trace},
-                                                           {"Debug", fincept::LogLevel::Debug},
-                                                           {"Info", fincept::LogLevel::Info},
-                                                           {"Warn", fincept::LogLevel::Warn},
-                                                           {"Error", fincept::LogLevel::Error},
-                                                           {"Fatal", fincept::LogLevel::Fatal}};
+        const QHash<QString, fincept::LogLevel> lvl_map = {
+            {"Trace", fincept::LogLevel::Trace}, {"Debug", fincept::LogLevel::Debug},
+            {"Info", fincept::LogLevel::Info},   {"Warn", fincept::LogLevel::Warn},
+            {"Error", fincept::LogLevel::Error}, {"Fatal", fincept::LogLevel::Fatal}};
         log.set_level(lvl_map.value(gl, fincept::LogLevel::Info));
 
         // JSON output mode (persisted in Settings → Logging)
@@ -497,9 +500,9 @@ int main(int argc, char* argv[]) {
     // On the very first launch (no auth.db present), wipe any legacy single-user
     // fincept.db so the multi-user setup starts completely clean.
     {
-        const QString auth_db  = fincept::AppPaths::data() + "/auth.db";
-        const QString main_db  = fincept::AppPaths::data() + "/fincept.db";
-        const QString stub_db  = QDir::homePath() + "/.fincept-localhost/users.db";
+        const QString auth_db = fincept::AppPaths::data() + "/auth.db";
+        const QString main_db = fincept::AppPaths::data() + "/fincept.db";
+        const QString stub_db = QDir::homePath() + "/.fincept-localhost/users.db";
         if (!QFile::exists(auth_db)) {
             if (QFile::exists(main_db)) {
                 QFile::rename(main_db, main_db + ".pre-multiuser.bak");
@@ -528,9 +531,9 @@ int main(int argc, char* argv[]) {
         for (const QString& dir_path :
              {fincept::AppPaths::root(), fincept::AppPaths::user(), fincept::AppPaths::data(),
               fincept::AppPaths::data() + "/users", fincept::AppPaths::features(), fincept::AppPaths::agents(),
-              fincept::AppPaths::market_data(),
-              fincept::AppPaths::logs(), fincept::AppPaths::files(), fincept::AppPaths::cache(),
-              fincept::AppPaths::workspaces(), fincept::AppPaths::crashdumps(), config_dir}) {
+              fincept::AppPaths::market_data(), fincept::AppPaths::logs(), fincept::AppPaths::files(),
+              fincept::AppPaths::cache(), fincept::AppPaths::workspaces(), fincept::AppPaths::crashdumps(),
+              config_dir}) {
             if (QFileInfo(dir_path).isDir())
                 QFile::setPermissions(dir_path, owner_only);
         }
@@ -609,16 +612,17 @@ int main(int argc, char* argv[]) {
     {
         constexpr qint64 kWakeThresholdMs = 5LL * 60LL * 1000LL;
         static qint64 s_last_inactive_ms = 0;
-        QObject::connect(&app, &QApplication::applicationStateChanged, &app,
-                         [](Qt::ApplicationState state) {
+        QObject::connect(&app, &QApplication::applicationStateChanged, &app, [](Qt::ApplicationState state) {
             const qint64 now = QDateTime::currentMSecsSinceEpoch();
             if (state == Qt::ApplicationActive) {
-                if (s_last_inactive_ms == 0) return;     // never went inactive
+                if (s_last_inactive_ms == 0)
+                    return; // never went inactive
                 const qint64 idle_ms = now - s_last_inactive_ms;
                 s_last_inactive_ms = 0;
-                if (idle_ms < kWakeThresholdMs) return;  // brief alt-tab, ignore
-                LOG_INFO("App", QString("Resumed after %1s idle — forcing refresh on subscribed topics")
-                                    .arg(idle_ms / 1000));
+                if (idle_ms < kWakeThresholdMs)
+                    return; // brief alt-tab, ignore
+                LOG_INFO("App",
+                         QString("Resumed after %1s idle — forcing refresh on subscribed topics").arg(idle_ms / 1000));
                 // Drop the per-symbol quote cache so PortfolioService /
                 // MarketDataService::fetch_quotes paths also re-hit the daemon
                 // instead of serving freshly-expired-but-still-30s-fresh data.
@@ -629,7 +633,8 @@ int main(int argc, char* argv[]) {
                 // upstream yfinance isn't hammered.
                 QStringList topics;
                 for (const auto& s : fincept::datahub::DataHub::instance().stats())
-                    if (s.subscriber_count > 0) topics.append(s.topic);
+                    if (s.subscriber_count > 0)
+                        topics.append(s.topic);
                 if (!topics.isEmpty())
                     fincept::datahub::DataHub::instance().request(topics, /*force=*/true);
             } else if (state == Qt::ApplicationInactive || state == Qt::ApplicationSuspended) {
@@ -660,14 +665,13 @@ int main(int argc, char* argv[]) {
         // When setup completes, hide setup screen and launch main window.
         // The connection uses Qt::SingleShotConnection (Qt 6.0+) so the lambda
         // fires exactly once even if setup_complete is somehow emitted twice.
-        QObject::connect(setup_screen, &fincept::screens::SetupScreen::setup_complete,
-                         [&app, screen_guard]() {
+        QObject::connect(setup_screen, &fincept::screens::SetupScreen::setup_complete, [&app, screen_guard]() {
             if (!screen_guard)
                 return; // already cleaned up — ignore
             screen_guard->hide();
             screen_guard->deleteLater();
 
-            fincept::KeyConfigManager::instance(); // init before MainWindow registers shortcuts
+            fincept::KeyConfigManager::instance();     // init before MainWindow registers shortcuts
             auto* window = new fincept::MainWindow(0); // primary window
             window->setAttribute(Qt::WA_DeleteOnClose);
             window->show();
@@ -676,10 +680,10 @@ int main(int argc, char* argv[]) {
             // multi-monitor layouts survive across relaunches. Each window
             // restores its own geometry + dock layout from SessionManager.
             {
-                const QList<int> saved_ids =
-                    fincept::SessionManager::instance().load_window_ids();
+                const QList<int> saved_ids = fincept::SessionManager::instance().load_window_ids();
                 for (int id : saved_ids) {
-                    if (id <= 0) continue; // 0 = primary, already created
+                    if (id <= 0)
+                        continue; // 0 = primary, already created
                     auto* w = new fincept::MainWindow(id);
                     w->setAttribute(Qt::WA_DeleteOnClose);
                     w->show();
@@ -706,9 +710,7 @@ int main(int argc, char* argv[]) {
                          "LLM provider not configured — AI chat will prompt user to configure Settings → LLM Config");
 
             // Warm agent discovery cache (same reason as the main path).
-            QTimer::singleShot(0, &app, []() {
-                fincept::services::AgentService::instance().discover_agents();
-            });
+            QTimer::singleShot(0, &app, []() { fincept::services::AgentService::instance().discover_agents(); });
 
             // Pre-spawn the persistent yfinance daemon so its 1–3 s
             // import cost overlaps with the GUI coming up instead of
@@ -716,9 +718,7 @@ int main(int argc, char* argv[]) {
             // and commodities widgets were observed taking long on
             // initial load — that delay is the daemon import, not the
             // upstream API).
-            QTimer::singleShot(0, &app, []() {
-                fincept::python::PythonWorker::instance().warm_up();
-            });
+            QTimer::singleShot(0, &app, []() { fincept::python::PythonWorker::instance().warm_up(); });
 
             LOG_INFO("App", "Application ready (after setup)");
         });
@@ -737,17 +737,16 @@ int main(int argc, char* argv[]) {
     // primary window on the stack owns its own lifetime; restored secondaries
     // use WA_DeleteOnClose and self-remove from QApplication::topLevelWidgets.
     {
-        const QList<int> saved_ids =
-            fincept::SessionManager::instance().load_window_ids();
+        const QList<int> saved_ids = fincept::SessionManager::instance().load_window_ids();
         for (int id : saved_ids) {
-            if (id <= 0) continue; // 0 = primary, already created
+            if (id <= 0)
+                continue; // 0 = primary, already created
             auto* w = new fincept::MainWindow(id);
             w->setAttribute(Qt::WA_DeleteOnClose);
             w->show();
         }
         if (saved_ids.size() > 1)
-            LOG_INFO("App", QString("Restored %1 secondary window(s) from last session")
-                                .arg(saved_ids.size() - 1));
+            LOG_INFO("App", QString("Restored %1 secondary window(s) from last session").arg(saved_ids.size() - 1));
     }
 
     // ── New-window handler: fires when the user re-launches the exe ──────────
@@ -772,13 +771,15 @@ int main(int argc, char* argv[]) {
     if (setup_status.needs_package_sync) {
         LOG_INFO("App", "Requirements changed — syncing packages in background");
         auto& mgr = fincept::python::PythonSetupManager::instance();
-        QObject::connect(&mgr, &fincept::python::PythonSetupManager::setup_complete,
-                         &mgr, [](bool success, const QString& error) {
-            if (success)
-                LOG_INFO("App", "Background package sync completed successfully");
-            else
-                LOG_WARN("App", "Background package sync failed (non-fatal): " + error);
-        }, Qt::SingleShotConnection);
+        QObject::connect(
+            &mgr, &fincept::python::PythonSetupManager::setup_complete, &mgr,
+            [](bool success, const QString& error) {
+                if (success)
+                    LOG_INFO("App", "Background package sync completed successfully");
+                else
+                    LOG_WARN("App", "Background package sync failed (non-fatal): " + error);
+            },
+            Qt::SingleShotConnection);
         mgr.run_setup();
     }
 
@@ -790,16 +791,12 @@ int main(int argc, char* argv[]) {
     // (Agent Config, Portfolio → Agent Runner, Node Editor) shows the
     // full finagent_core set immediately instead of falling back to the
     // much smaller DB-only list. Run deferred so Python is fully ready.
-    QTimer::singleShot(0, &app, []() {
-        fincept::services::AgentService::instance().discover_agents();
-    });
+    QTimer::singleShot(0, &app, []() { fincept::services::AgentService::instance().discover_agents(); });
 
     // Pre-spawn the persistent yfinance daemon so its 1–3 s import cost
     // overlaps with the GUI coming up instead of stalling the first
     // dashboard refresh.
-    QTimer::singleShot(0, &app, []() {
-        fincept::python::PythonWorker::instance().warm_up();
-    });
+    QTimer::singleShot(0, &app, []() { fincept::python::PythonWorker::instance().warm_up(); });
 
     LOG_INFO("App", "Application ready");
     return app.exec();

@@ -17,23 +17,19 @@ FinnhubLiveTicks& FinnhubLiveTicks::instance() {
 }
 
 FinnhubLiveTicks::FinnhubLiveTicks(QObject* parent) : QObject(parent) {
-    connect(&socket_, &WebSocketClient::connected,
-            this, &FinnhubLiveTicks::on_connected);
-    connect(&socket_, &WebSocketClient::message_received,
-            this, &FinnhubLiveTicks::on_message);
-    connect(&socket_, &WebSocketClient::disconnected,
-            this, &FinnhubLiveTicks::on_disconnected);
-    connect(&socket_, &WebSocketClient::error_occurred,
-            this, [](const QString& err) {
-                LOG_WARN("Finnhub", "WebSocket error: " + err);
-            });
+    connect(&socket_, &WebSocketClient::connected, this, &FinnhubLiveTicks::on_connected);
+    connect(&socket_, &WebSocketClient::message_received, this, &FinnhubLiveTicks::on_message);
+    connect(&socket_, &WebSocketClient::disconnected, this, &FinnhubLiveTicks::on_disconnected);
+    connect(&socket_, &WebSocketClient::error_occurred, this,
+            [](const QString& err) { LOG_WARN("Finnhub", "WebSocket error: " + err); });
 }
 
 void FinnhubLiveTicks::subscribe(const QString& symbol) {
     const QString sym = symbol.trimmed().toUpper();
-    if (sym == current_symbol_) return;
+    if (sym == current_symbol_)
+        return;
 
-    prev_symbol_   = current_symbol_;
+    prev_symbol_ = current_symbol_;
     current_symbol_ = sym;
 
     // Unsubscribe previous symbol if the socket is open (server-side
@@ -54,10 +50,10 @@ void FinnhubLiveTicks::subscribe(const QString& symbol) {
 }
 
 void FinnhubLiveTicks::ensure_connected() {
-    if (want_open_ && socket_.is_connected()) return;
+    if (want_open_ && socket_.is_connected())
+        return;
 
-    auto r = fincept::SecureStorage::instance().retrieve(
-        QStringLiteral("FINNHUB_API_KEY"));
+    auto r = fincept::SecureStorage::instance().retrieve(QStringLiteral("FINNHUB_API_KEY"));
     if (!r.is_ok() || r.value().isEmpty()) {
         // No key configured — silent no-op. ER's REST refresh remains the
         // primary path; this service exists purely to push faster updates
@@ -97,38 +93,43 @@ void FinnhubLiveTicks::on_message(const QString& msg) {
     // check still happens after parsing for safety.
     static qint64 s_last_accept_ms = 0;
     const qint64 now_ms = QDateTime::currentMSecsSinceEpoch();
-    if (now_ms - s_last_accept_ms < 200) return;
+    if (now_ms - s_last_accept_ms < 200)
+        return;
     // Cheap raw-string sniff before paying the JSON parse — ping frames
     // and connection-state messages aren't worth the cost.
-    if (!msg.contains(QLatin1String("\"trade\""))) return;
+    if (!msg.contains(QLatin1String("\"trade\"")))
+        return;
     s_last_accept_ms = now_ms;
 
     // Finnhub free-tier trade message shape:
     //   {"type":"trade", "data":[{"p":<price>, "s":"<sym>", "t":<ms>, "v":<size>}, ...]}
     const auto doc = QJsonDocument::fromJson(msg.toUtf8());
-    if (!doc.isObject()) return;
+    if (!doc.isObject())
+        return;
     const auto root = doc.object();
-    if (root.value("type").toString() != "trade") return;
+    if (root.value("type").toString() != "trade")
+        return;
 
     const auto arr = root.value("data").toArray();
     // Single tick per batch — emit the last (most-recent) trade only. The
     // consumer is a single price display; intermediate prints within the
     // same batch are obsolete by the time the GUI repaints. A factor of
     // 10-50x reduction in signal-emission cost during heavy market.
-    if (arr.isEmpty()) return;
+    if (arr.isEmpty())
+        return;
     const auto o = arr.last().toObject();
     const QString sym = o.value("s").toString();
-    if (sym.isEmpty()) return;
-    emit tick(sym,
-              o.value("p").toDouble(),
-              static_cast<qint64>(o.value("t").toDouble()),
+    if (sym.isEmpty())
+        return;
+    emit tick(sym, o.value("p").toDouble(), static_cast<qint64>(o.value("t").toDouble()),
               static_cast<qint64>(o.value("v").toDouble()));
 }
 
 void FinnhubLiveTicks::send_op(const QString& op, const QString& symbol) {
-    if (!socket_.is_connected()) return;
+    if (!socket_.is_connected())
+        return;
     QJsonObject frame;
-    frame.insert("type",   op);
+    frame.insert("type", op);
     frame.insert("symbol", symbol);
     socket_.send(QString::fromUtf8(QJsonDocument(frame).toJson(QJsonDocument::Compact)));
 }

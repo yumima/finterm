@@ -18,15 +18,17 @@ namespace fincept::services {
 namespace {
 
 constexpr int kIdleDebounceMs = 450;
-constexpr int kMinPrefixChars = 8;     // don't pester the LLM for two-char prefixes
-constexpr int kPromptTailChars = 600;  // how much preceding context we send
+constexpr int kMinPrefixChars = 8;    // don't pester the LLM for two-char prefixes
+constexpr int kPromptTailChars = 600; // how much preceding context we send
 constexpr const char* kIcTag = "InlineCompletion";
 
 /// Cap on how much the model is asked to continue.  Inline completion
 /// should feel like a hint, not a paragraph dump.
 constexpr int kMaxCompletionChars = 200;
 
-QColor ghost_color() { return QColor(140, 140, 140); }
+QColor ghost_color() {
+    return QColor(140, 140, 140);
+}
 
 } // anonymous namespace
 
@@ -47,8 +49,7 @@ InlineCompletionController::InlineCompletionController(QPlainTextEdit* editor, Q
     idle_timer_->setInterval(kIdleDebounceMs);
     connect(idle_timer_, &QTimer::timeout, this, &InlineCompletionController::on_idle_timeout);
 
-    connect(editor_, &QPlainTextEdit::textChanged,
-            this, &InlineCompletionController::on_text_changed);
+    connect(editor_, &QPlainTextEdit::textChanged, this, &InlineCompletionController::on_text_changed);
 
     // Tab / Esc / any non-Tab key are caught via event filter (so we
     // can swallow Tab on accept; the editor's default Tab handler
@@ -66,7 +67,7 @@ bool InlineCompletionController::eventFilter(QObject* watched, QEvent* event) {
     if (pending_len_ > 0) {
         if (key->key() == Qt::Key_Tab) {
             accept_pending();
-            return true;  // swallow — don't let Qt insert a tab
+            return true; // swallow — don't let Qt insert a tab
         }
         // Any other key cancels the suggestion.  We do not swallow
         // here — the editor still processes the keystroke normally,
@@ -92,7 +93,7 @@ void InlineCompletionController::on_text_changed() {
 }
 
 void InlineCompletionController::schedule_idle() {
-    idle_timer_->start();   // restart from now — debounce
+    idle_timer_->start(); // restart from now — debounce
 }
 
 void InlineCompletionController::on_idle_timeout() {
@@ -101,7 +102,7 @@ void InlineCompletionController::on_idle_timeout() {
     if (!ai_chat::LlmService::instance().is_configured())
         return;
     if (pending_len_ > 0)
-        return;  // a suggestion is already visible
+        return; // a suggestion is already visible
 
     const QString prefix = current_prefix_for_completion();
     if (prefix.size() < kMinPrefixChars)
@@ -136,10 +137,9 @@ void InlineCompletionController::on_idle_timeout() {
     connect(watcher_, &QFutureWatcher<ai_chat::LlmResponse>::finished, this,
             &InlineCompletionController::on_completion_arrived);
     auto future = QtConcurrent::run([context_tail]() {
-        const QString prompt = QStringLiteral(
-            "Continue the following text naturally.  Output ONLY the "
-            "continuation — no preface, no quotation marks, no labels.  "
-            "Stop at the end of a sentence or %1 characters.\n\n%2")
+        const QString prompt = QStringLiteral("Continue the following text naturally.  Output ONLY the "
+                                              "continuation — no preface, no quotation marks, no labels.  "
+                                              "Stop at the end of a sentence or %1 characters.\n\n%2")
                                    .arg(kMaxCompletionChars)
                                    .arg(context_tail);
         // Fires as the user types, so this is the role most worth pointing at a
@@ -151,8 +151,8 @@ void InlineCompletionController::on_idle_timeout() {
         persona.model = target.model;
         persona.api_key = target.api_key;
         persona.base_url = target.base_url;
-        return ai_chat::LlmService::instance().chat(
-            prompt, std::vector<ai_chat::ConversationMessage>{}, /*use_tools=*/false, persona);
+        return ai_chat::LlmService::instance().chat(prompt, std::vector<ai_chat::ConversationMessage>{},
+                                                    /*use_tools=*/false, persona);
     });
     watcher_->setFuture(future);
 }
@@ -206,7 +206,7 @@ void InlineCompletionController::show_ghost(const QString& completion) {
     fmt.setForeground(ghost_color());
     fmt.setFontItalic(true);
 
-    ignore_next_change_ = true;  // suppress the textChanged that the insert fires
+    ignore_next_change_ = true; // suppress the textChanged that the insert fires
     cursor.beginEditBlock();
     cursor.insertText(completion, fmt);
     cursor.endEditBlock();

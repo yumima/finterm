@@ -5,9 +5,9 @@
 #include <QComboBox>
 #include <QFrame>
 #include <QHash>
-#include <QList>
 #include <QLabel>
 #include <QLineEdit>
+#include <QList>
 #include <QListWidget>
 #include <QPushButton>
 #include <QStackedWidget>
@@ -64,7 +64,6 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
     // ── Shared layout helper ──────────────────────────────────────────────────
     static QWidget* make_row(const QString& label, QWidget* control, const QString& description = {});
     static QFrame* make_sep();
-
 
     // ── Appearance state ──────────────────────────────────────────────────────
     QComboBox* app_density_ = nullptr;

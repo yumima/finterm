@@ -31,7 +31,10 @@ namespace fincept::screens {
 static QString lbl_ss(const QString& color, bool bold = false, int px = -1) {
     const int sz = (px > 0) ? px : ui::fonts::font_px(-2);
     return QString("color:%1;background:transparent;font-size:%2px;font-family:'%3';%4")
-        .arg(color).arg(sz).arg(ui::fonts::DATA_FAMILY()).arg(bold ? "font-weight:bold;" : "");
+        .arg(color)
+        .arg(sz)
+        .arg(ui::fonts::DATA_FAMILY())
+        .arg(bold ? "font-weight:bold;" : "");
 }
 
 // ---------------------------------------------------------------------------
@@ -59,9 +62,10 @@ MarketsScreen::MarketsScreen(QWidget* parent) : QWidget(parent) {
     refresh_timeout_->setSingleShot(true);
     refresh_timeout_->setInterval(kRefreshTimeoutMs);
     connect(refresh_timeout_, &QTimer::timeout, this, [this]() {
-        if (!refresh_in_progress_) return;
+        if (!refresh_in_progress_)
+            return;
         refresh_in_progress_ = false;
-        pending_refreshes_   = 0;
+        pending_refreshes_ = 0;
         if (status_label_) {
             status_label_->setText("● TIMEOUT");
             status_label_->setStyleSheet(lbl_ss(ui::colors::NEGATIVE(), true));
@@ -123,7 +127,7 @@ void MarketsScreen::build_splitter_layout() {
     for (auto* vs : col_splitters_) {
         const int n = vs->count();
         if (n > 1) {
-            const int equal = 1000;            // arbitrary equal weight
+            const int equal = 1000; // arbitrary equal weight
             QList<int> sizes;
             sizes.reserve(n);
             for (int i = 0; i < n; ++i)
@@ -136,12 +140,11 @@ void MarketsScreen::build_splitter_layout() {
 }
 
 void MarketsScreen::wire_panel(MarketPanel* p) {
-    connect(p, &MarketPanel::edit_requested,   this, &MarketsScreen::open_editor);
+    connect(p, &MarketPanel::edit_requested, this, &MarketsScreen::open_editor);
     connect(p, &MarketPanel::delete_requested, this, &MarketsScreen::on_panel_delete);
-    connect(p, &MarketPanel::config_changed,   this, &MarketsScreen::on_panel_config_changed);
-    connect(p, &MarketPanel::symbol_activated, this, [this](const QString& sym, const QString& name) {
-        MarketChartDialog::show_for(sym, name, this);
-    });
+    connect(p, &MarketPanel::config_changed, this, &MarketsScreen::on_panel_config_changed);
+    connect(p, &MarketPanel::symbol_activated, this,
+            [this](const QString& sym, const QString& name) { MarketChartDialog::show_for(sym, name, this); });
 }
 
 void MarketsScreen::rebuild_splitter_layout() {
@@ -168,13 +171,17 @@ int MarketsScreen::column_with_fewest_panels() const {
             if (qobject_cast<MarketPanel*>(col_splitters_[i]->widget(j)))
                 ++c;
         }
-        if (c < count) { count = c; best = i; }
+        if (c < count) {
+            count = c;
+            best = i;
+        }
     }
     return best;
 }
 
 void MarketsScreen::save_splitter_state() {
-    if (!h_splitter_) return;
+    if (!h_splitter_)
+        return;
     // Save only horizontal splitter state (column widths).
     // Vertical row heights are always equal-distributed on build.
     const QString state = QString::fromLatin1(h_splitter_->saveState().toBase64());
@@ -182,9 +189,11 @@ void MarketsScreen::save_splitter_state() {
 }
 
 void MarketsScreen::restore_splitter_state() {
-    if (!h_splitter_) return;
+    if (!h_splitter_)
+        return;
     auto res = SettingsRepository::instance().get("markets_splitter_state");
-    if (!res.is_ok() || res.value().isEmpty()) return;
+    if (!res.is_ok() || res.value().isEmpty())
+        return;
 
     const QString saved = res.value();
     int sep = saved.indexOf('|');
@@ -207,7 +216,11 @@ void MarketsScreen::open_editor(const QString& panel_id) {
     int target_col = column_with_fewest_panels();
     if (!panel_id.isEmpty()) {
         for (const auto& c : configs_) {
-            if (c.id == panel_id) { cfg = c; target_col = c.column_index; break; }
+            if (c.id == panel_id) {
+                cfg = c;
+                target_col = c.column_index;
+                break;
+            }
         }
     }
 
@@ -224,7 +237,10 @@ void MarketsScreen::open_editor(const QString& panel_id) {
         configs_.append(updated);
     } else {
         for (auto& c : configs_) {
-            if (c.id == panel_id) { c = updated; break; }
+            if (c.id == panel_id) {
+                c = updated;
+                break;
+            }
         }
     }
 
@@ -236,7 +252,10 @@ void MarketsScreen::open_editor(const QString& panel_id) {
 void MarketsScreen::open_editor_for_new_panel(int col_index) {
     MarketPanelConfig cfg;
     auto* dlg = new MarketPanelEditor(cfg, this);
-    if (dlg->exec() != QDialog::Accepted) { dlg->deleteLater(); return; }
+    if (dlg->exec() != QDialog::Accepted) {
+        dlg->deleteLater();
+        return;
+    }
     MarketPanelConfig updated = dlg->result_config();
     dlg->deleteLater();
     updated.column_index = col_index;
@@ -252,20 +271,23 @@ void MarketsScreen::on_panel_delete(const QString& panel_id) {
     mb.setText("Remove this panel?");
     mb.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
     mb.setDefaultButton(QMessageBox::Cancel);
-    mb.setStyleSheet(QString("background:%1;color:%2;")
-                         .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
-    if (mb.exec() != QMessageBox::Yes) return;
+    mb.setStyleSheet(QString("background:%1;color:%2;").arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
+    if (mb.exec() != QMessageBox::Yes)
+        return;
 
-    configs_.erase(std::remove_if(configs_.begin(), configs_.end(),
-                                  [&](const MarketPanelConfig& c) { return c.id == panel_id; }),
-                   configs_.end());
+    configs_.erase(
+        std::remove_if(configs_.begin(), configs_.end(), [&](const MarketPanelConfig& c) { return c.id == panel_id; }),
+        configs_.end());
     MarketPanelStore::instance().save(configs_);
     rebuild_splitter_layout();
 }
 
 void MarketsScreen::on_panel_config_changed(const MarketPanelConfig& cfg) {
     for (auto& c : configs_) {
-        if (c.id == cfg.id) { c = cfg; break; }
+        if (c.id == cfg.id) {
+            c = cfg;
+            break;
+        }
     }
     MarketPanelStore::instance().save(configs_);
 }
@@ -308,7 +330,7 @@ QWidget* MarketsScreen::build_header_bar() {
     add_sep();
 
     // Clocks
-    ny_label_  = new QLabel;
+    ny_label_ = new QLabel;
     lon_label_ = new QLabel;
     tok_label_ = new QLabel;
     for (auto* lbl : {ny_label_, lon_label_, tok_label_})
@@ -332,12 +354,13 @@ QWidget* MarketsScreen::build_header_bar() {
         b->setFixedHeight(24);
         b->setCursor(Qt::PointingHandCursor);
         b->setFlat(true);
-        b->setStyleSheet(
-            QString("QPushButton{background:transparent;color:%1;border:none;"
-                    "font-size:%2px;font-family:'%3';padding:0 6px;}"
-                    "QPushButton:hover{color:%4;}")
-                .arg(ui::colors::TEXT_SECONDARY()).arg(ui::fonts::font_px(-3))
-                .arg(ui::fonts::DATA_FAMILY()).arg(ui::colors::TEXT_PRIMARY()));
+        b->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:none;"
+                                 "font-size:%2px;font-family:'%3';padding:0 6px;}"
+                                 "QPushButton:hover{color:%4;}")
+                             .arg(ui::colors::TEXT_SECONDARY())
+                             .arg(ui::fonts::font_px(-3))
+                             .arg(ui::fonts::DATA_FAMILY())
+                             .arg(ui::colors::TEXT_PRIMARY()));
         return b;
     };
 
@@ -353,8 +376,7 @@ QWidget* MarketsScreen::build_header_bar() {
             QString("QPushButton{background:transparent;color:%1;border:none;"
                     "font-size:%3px;font-family:'%4';padding:0 6px;}"
                     "QPushButton:hover{color:%2;}")
-                .arg(auto_update_ ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY(),
-                     ui::colors::TEXT_PRIMARY())
+                .arg(auto_update_ ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY(), ui::colors::TEXT_PRIMARY())
                 .arg(ui::fonts::font_px(-3))
                 .arg(ui::fonts::DATA_FAMILY()));
     };
@@ -362,9 +384,12 @@ QWidget* MarketsScreen::build_header_bar() {
     connect(auto_btn, &QPushButton::clicked, this, [this, update_auto_style]() {
         auto_update_ = !auto_update_;
         update_auto_style();
-        if (!isVisible()) return;
-        if (auto_update_) auto_refresh_timer_->start();
-        else              auto_refresh_timer_->stop();
+        if (!isVisible())
+            return;
+        if (auto_update_)
+            auto_refresh_timer_->start();
+        else
+            auto_refresh_timer_->stop();
     });
     h->addWidget(auto_btn);
 
@@ -372,24 +397,23 @@ QWidget* MarketsScreen::build_header_bar() {
     auto* iv = new QComboBox;
     iv->setFixedHeight(24);
     iv->setFixedWidth(56);
-    iv->addItem("5M",   300000);
-    iv->addItem("10M",  600000);
-    iv->addItem("15M",  900000);
-    iv->addItem("30M",  1800000);
-    iv->addItem("1H",   3600000);
-    iv->addItem("4H",   14400000);
-    iv->addItem("1D",   86400000);
+    iv->addItem("5M", 300000);
+    iv->addItem("10M", 600000);
+    iv->addItem("15M", 900000);
+    iv->addItem("30M", 1800000);
+    iv->addItem("1H", 3600000);
+    iv->addItem("4H", 14400000);
+    iv->addItem("1D", 86400000);
     iv->setCurrentIndex(1);
-    iv->setStyleSheet(
-        QString("QComboBox{background:transparent;color:%1;border:none;"
-                "font-size:%6px;font-family:'%7';padding:0 4px;}"
-                "QComboBox::drop-down{border:none;width:12px;}"
-                "QComboBox QAbstractItemView{background:%2;color:%3;border:1px solid %4;"
-                "selection-background-color:%5;font-size:%6px;font-family:'%7';}")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(),
-                 ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED(), ui::colors::BG_HOVER())
-            .arg(ui::fonts::font_px(-3))
-            .arg(ui::fonts::DATA_FAMILY()));
+    iv->setStyleSheet(QString("QComboBox{background:transparent;color:%1;border:none;"
+                              "font-size:%6px;font-family:'%7';padding:0 4px;}"
+                              "QComboBox::drop-down{border:none;width:12px;}"
+                              "QComboBox QAbstractItemView{background:%2;color:%3;border:1px solid %4;"
+                              "selection-background-color:%5;font-size:%6px;font-family:'%7';}")
+                          .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(),
+                               ui::colors::BORDER_MED(), ui::colors::BG_HOVER())
+                          .arg(ui::fonts::font_px(-3))
+                          .arg(ui::fonts::DATA_FAMILY()));
     connect(iv, &QComboBox::currentIndexChanged, this, [this, iv](int i) {
         update_interval_ms_ = iv->itemData(i).toInt();
         auto_refresh_timer_->setInterval(update_interval_ms_);
@@ -400,20 +424,17 @@ QWidget* MarketsScreen::build_header_bar() {
     auto* add_btn = make_ctrl_btn("[+] PANEL");
     connect(add_btn, &QPushButton::clicked, this, [this, add_btn]() {
         auto* menu = new QMenu(this);
-        menu->setStyleSheet(
-            QString("QMenu{background:%1;border:1px solid %2;color:%3;"
-                    "font-size:%5px;font-family:'%6';}"
-                    "QMenu::item{padding:4px 16px;}"
-                    "QMenu::item:selected{background:%4;}")
-                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(),
-                     ui::colors::TEXT_PRIMARY(), ui::colors::BG_HOVER())
-                .arg(ui::fonts::font_px(-3))
-                .arg(ui::fonts::DATA_FAMILY()));
+        menu->setStyleSheet(QString("QMenu{background:%1;border:1px solid %2;color:%3;"
+                                    "font-size:%5px;font-family:'%6';}"
+                                    "QMenu::item{padding:4px 16px;}"
+                                    "QMenu::item:selected{background:%4;}")
+                                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_MED(), ui::colors::TEXT_PRIMARY(),
+                                     ui::colors::BG_HOVER())
+                                .arg(ui::fonts::font_px(-3))
+                                .arg(ui::fonts::DATA_FAMILY()));
         for (int i = 0; i < kNumColumns; ++i) {
             auto* act = menu->addAction(QString("ADD TO COL %1").arg(i + 1));
-            connect(act, &QAction::triggered, this, [this, i]() {
-                open_editor_for_new_panel(i);
-            });
+            connect(act, &QAction::triggered, this, [this, i]() { open_editor_for_new_panel(i); });
         }
         menu->exec(add_btn->mapToGlobal(QPoint(0, add_btn->height())));
         menu->deleteLater();
@@ -427,9 +448,9 @@ QWidget* MarketsScreen::build_header_bar() {
         mb.setWindowTitle("Reset Panels");
         mb.setText("Reset all panels to defaults?");
         mb.setStandardButtons(QMessageBox::Yes | QMessageBox::Cancel);
-        mb.setStyleSheet(QString("background:%1;color:%2;")
-                             .arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
-        if (mb.exec() != QMessageBox::Yes) return;
+        mb.setStyleSheet(QString("background:%1;color:%2;").arg(ui::colors::BG_BASE(), ui::colors::TEXT_PRIMARY()));
+        if (mb.exec() != QMessageBox::Yes)
+            return;
         MarketPanelStore::instance().reset_to_defaults();
         configs_ = MarketPanelStore::instance().load();
         rebuild_splitter_layout();
@@ -459,20 +480,24 @@ QWidget* MarketsScreen::build_header_bar() {
 void MarketsScreen::update_session_status() {
     QDateTime utc = QDateTime::currentDateTimeUtc();
     QTimeZone ny_tz("America/New_York");
-    QDateTime et   = utc.toTimeZone(ny_tz);
-    int day  = et.date().dayOfWeek();
+    QDateTime et = utc.toTimeZone(ny_tz);
+    int day = et.date().dayOfWeek();
     int hhmm = et.time().hour() * 100 + et.time().minute();
     bool weekday = (day >= 1 && day <= 5);
 
     QString label, color;
     if (!weekday || hhmm < 400 || hhmm >= 2000) {
-        label = "NYSE: CLOSED";    color = ui::colors::TEXT_SECONDARY();
+        label = "NYSE: CLOSED";
+        color = ui::colors::TEXT_SECONDARY();
     } else if (hhmm < 930) {
-        label = "NYSE: PRE-MKT";   color = ui::colors::AMBER();
+        label = "NYSE: PRE-MKT";
+        color = ui::colors::AMBER();
     } else if (hhmm < 1600) {
-        label = "NYSE: OPEN";      color = ui::colors::POSITIVE();
+        label = "NYSE: OPEN";
+        color = ui::colors::POSITIVE();
     } else {
-        label = "NYSE: AFTER-HRS"; color = ui::colors::AMBER();
+        label = "NYSE: AFTER-HRS";
+        color = ui::colors::AMBER();
     }
 
     if (session_label_) {
@@ -484,14 +509,11 @@ void MarketsScreen::update_session_status() {
 void MarketsScreen::update_clocks() {
     QDateTime utc = QDateTime::currentDateTimeUtc();
     if (ny_label_)
-        ny_label_ ->setText(QString("NY %1").arg(
-            utc.toTimeZone(QTimeZone("America/New_York")).toString("HH:mm:ss")));
+        ny_label_->setText(QString("NY %1").arg(utc.toTimeZone(QTimeZone("America/New_York")).toString("HH:mm:ss")));
     if (lon_label_)
-        lon_label_->setText(QString("LON %1").arg(
-            utc.toTimeZone(QTimeZone("Europe/London")).toString("HH:mm:ss")));
+        lon_label_->setText(QString("LON %1").arg(utc.toTimeZone(QTimeZone("Europe/London")).toString("HH:mm:ss")));
     if (tok_label_)
-        tok_label_->setText(QString("TOK %1").arg(
-            utc.toTimeZone(QTimeZone("Asia/Tokyo")).toString("HH:mm:ss")));
+        tok_label_->setText(QString("TOK %1").arg(utc.toTimeZone(QTimeZone("Asia/Tokyo")).toString("HH:mm:ss")));
 }
 
 // ---------------------------------------------------------------------------
@@ -519,9 +541,12 @@ void MarketsScreen::showEvent(QShowEvent* event) {
         }
     }
 
-    if (auto_update_ && auto_refresh_timer_) auto_refresh_timer_->start();
-    if (session_timer_) session_timer_->start();
-    if (clock_timer_)   clock_timer_->start();
+    if (auto_update_ && auto_refresh_timer_)
+        auto_refresh_timer_->start();
+    if (session_timer_)
+        session_timer_->start();
+    if (clock_timer_)
+        clock_timer_->start();
     // User just brought MARKETS to the front — force-fresh by invalidating
     // ONLY this screen's panel symbols. The old code passed {} which nukes
     // the entire "market:*" cache, including symbols other screens
@@ -544,9 +569,12 @@ void MarketsScreen::showEvent(QShowEvent* event) {
 
 void MarketsScreen::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
-    if (auto_refresh_timer_) auto_refresh_timer_->stop();
-    if (session_timer_)      session_timer_->stop();
-    if (clock_timer_)        clock_timer_->stop();
+    if (auto_refresh_timer_)
+        auto_refresh_timer_->stop();
+    if (session_timer_)
+        session_timer_->stop();
+    if (clock_timer_)
+        clock_timer_->stop();
     save_splitter_state();
 }
 
@@ -555,10 +583,12 @@ void MarketsScreen::hideEvent(QHideEvent* event) {
 // ---------------------------------------------------------------------------
 
 void MarketsScreen::refresh_all() {
-    if (refresh_in_progress_) return;
-    if (panels_.isEmpty()) return;
+    if (refresh_in_progress_)
+        return;
+    if (panels_.isEmpty())
+        return;
     refresh_in_progress_ = true;
-    pending_refreshes_   = panels_.size();
+    pending_refreshes_ = panels_.size();
 
     if (status_label_) {
         status_label_->setText("● LOADING");
@@ -570,23 +600,26 @@ void MarketsScreen::refresh_all() {
     auto* counter = new QObject(this);
     for (auto* p : panels_) {
         p->refresh();
-        connect(p, &MarketPanel::refresh_finished, counter, [this, counter]() {
-            if (--pending_refreshes_ > 0) return;
-            refresh_timeout_->stop();
-            refresh_in_progress_ = false;
-            last_refresh_time_   = QDateTime::currentDateTime();
-            counter->deleteLater();
-            if (status_label_) {
-                status_label_->setText("● READY");
-                status_label_->setStyleSheet(lbl_ss(ui::colors::POSITIVE(), true));
-            }
-            if (last_upd_label_) {
-                last_upd_label_->setText(
-                    QString("LAST UPDATE  %1")
-                        .arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
-                last_upd_label_->setStyleSheet(lbl_ss(ui::colors::TEXT_SECONDARY(), false, 11));
-            }
-        }, Qt::SingleShotConnection);
+        connect(
+            p, &MarketPanel::refresh_finished, counter,
+            [this, counter]() {
+                if (--pending_refreshes_ > 0)
+                    return;
+                refresh_timeout_->stop();
+                refresh_in_progress_ = false;
+                last_refresh_time_ = QDateTime::currentDateTime();
+                counter->deleteLater();
+                if (status_label_) {
+                    status_label_->setText("● READY");
+                    status_label_->setStyleSheet(lbl_ss(ui::colors::POSITIVE(), true));
+                }
+                if (last_upd_label_) {
+                    last_upd_label_->setText(
+                        QString("LAST UPDATE  %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
+                    last_upd_label_->setStyleSheet(lbl_ss(ui::colors::TEXT_SECONDARY(), false, 11));
+                }
+            },
+            Qt::SingleShotConnection);
     }
 }
 
@@ -597,13 +630,11 @@ void MarketsScreen::refresh_all() {
 void MarketsScreen::refresh_theme() {
     setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));
 
-    const QString handle_ss =
-        QString("QSplitter::handle{background:%1;}").arg(ui::colors::BORDER_DIM());
+    const QString handle_ss = QString("QSplitter::handle{background:%1;}").arg(ui::colors::BORDER_DIM());
 
     if (header_bar_)
-        header_bar_->setStyleSheet(
-            QString("background:%1;border-bottom:1px solid %2;")
-                .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
+        header_bar_->setStyleSheet(QString("background:%1;border-bottom:1px solid %2;")
+                                       .arg(ui::colors::BG_RAISED(), ui::colors::BORDER_DIM()));
 
     if (h_splitter_)
         h_splitter_->setStyleSheet(handle_ss);

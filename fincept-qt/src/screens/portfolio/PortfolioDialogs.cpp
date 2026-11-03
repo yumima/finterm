@@ -1,10 +1,10 @@
 // src/screens/portfolio/PortfolioDialogs.cpp
 #include "screens/portfolio/PortfolioDialogs.h"
-#include "ui/SearchFailedText.h"
 
 #include "python/PythonWorker.h"
-#include "services/portfolio/PortfolioDates.h"
 #include "services/file_manager/FileManagerService.h"
+#include "services/portfolio/PortfolioDates.h"
+#include "ui/SearchFailedText.h"
 #include "ui/theme/Theme.h"
 
 #include <QDate>
@@ -46,7 +46,8 @@ CreatePortfolioDialog::CreatePortfolioDialog(QWidget* parent) : QDialog(parent) 
                           "QComboBox QAbstractItemView { background:%4; color:%2;"
                           "  selection-background-color:%7; }")
                       .arg(ui::colors::BG_SURFACE(), ui::colors::TEXT_PRIMARY(), ui::colors::TEXT_SECONDARY(),
-                           ui::colors::BG_BASE(), ui::colors::BORDER_MED(), ui::colors::AMBER(), ui::colors::AMBER_DIM()));
+                           ui::colors::BG_BASE(), ui::colors::BORDER_MED(), ui::colors::AMBER(),
+                           ui::colors::AMBER_DIM()));
 
     auto* layout = new QVBoxLayout(this);
     layout->setSpacing(12);
@@ -91,11 +92,11 @@ CreatePortfolioDialog::CreatePortfolioDialog(QWidget* parent) : QDialog(parent) 
     auto* cancel_btn = new QPushButton("CANCEL");
     cancel_btn->setFixedSize(90, 30);
     cancel_btn->setCursor(Qt::PointingHandCursor);
-    cancel_btn->setStyleSheet(
-        QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
-                "  font-size:12px; font-weight:700; }"
-                "QPushButton:hover { background:%3; color:%4; }")
-            .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::BG_HOVER(), ui::colors::TEXT_PRIMARY()));
+    cancel_btn->setStyleSheet(QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
+                                      "  font-size:12px; font-weight:700; }"
+                                      "QPushButton:hover { background:%3; color:%4; }")
+                                  .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_MED(), ui::colors::BG_HOVER(),
+                                       ui::colors::TEXT_PRIMARY()));
     connect(cancel_btn, &QPushButton::clicked, this, &QDialog::reject);
     btn_layout->addWidget(cancel_btn);
 
@@ -129,8 +130,8 @@ CreatePortfolioDialog* CreatePortfolioDialog::for_edit(const portfolio::Portfoli
     }
     dlg->name_edit_->setText(existing.name);
     dlg->owner_edit_->setText(existing.owner);
-    const int idx = dlg->currency_cb_->findText(existing.currency.isEmpty() ? QStringLiteral("USD")
-                                                                            : existing.currency);
+    const int idx =
+        dlg->currency_cb_->findText(existing.currency.isEmpty() ? QStringLiteral("USD") : existing.currency);
     if (idx >= 0) {
         dlg->currency_cb_->setCurrentIndex(idx);
     }
@@ -530,8 +531,8 @@ static QString kFormDialogStyle(const QString& accent) {
              ui::colors::BORDER_MED(), accent);
 }
 
-SellAssetDialog::SellAssetDialog(const QVector<portfolio::HoldingWithQuote>& holdings,
-                                 const QString& preselect_symbol, QWidget* parent)
+SellAssetDialog::SellAssetDialog(const QVector<portfolio::HoldingWithQuote>& holdings, const QString& preselect_symbol,
+                                 QWidget* parent)
     : QDialog(parent) {
     setWindowTitle("Sell Asset");
     setFixedSize(340, 250);
@@ -757,8 +758,7 @@ QString ImportPortfolioDialog::merge_target_id() const {
 
 // ── EditTransactionDialog ────────────────────────────────────────────────────
 
-EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, double other_net_qty,
-                                             QWidget* parent)
+EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, double other_net_qty, QWidget* parent)
     : QDialog(parent), other_net_qty_(other_net_qty), sign_(txn.transaction_type == "SELL" ? -1 : 1) {
     setWindowTitle("Edit Transaction");
     setFixedSize(380, 330);
@@ -782,10 +782,9 @@ EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, 
     // Say plainly which lot this is. "Edit Transaction" on a holding invites the
     // reading "set what I hold now", but this edits one lot and the position is
     // re-derived from the whole ledger.
-    auto* subtitle = new QLabel(
-        QString("This edits the %1 lot dated %2. Your position is recalculated from every "
-                "transaction for %3, not from this lot alone.")
-            .arg(txn.transaction_type, portfolio::transaction_local_date(txn), txn.symbol));
+    auto* subtitle = new QLabel(QString("This edits the %1 lot dated %2. Your position is recalculated from every "
+                                        "transaction for %3, not from this lot alone.")
+                                    .arg(txn.transaction_type, portfolio::transaction_local_date(txn), txn.symbol));
     subtitle->setWordWrap(true);
     subtitle->setStyleSheet(QString("color:%1; font-size:11px;").arg(ui::colors::TEXT_SECONDARY()));
     layout->addWidget(subtitle);
@@ -828,8 +827,7 @@ EditTransactionDialog::EditTransactionDialog(const portfolio::Transaction& txn, 
     result_label_ = new QLabel;
     result_label_->setWordWrap(true);
     layout->addWidget(result_label_);
-    connect(quantity_edit_, &QLineEdit::textChanged, this,
-            [this](const QString&) { update_resulting_position(); });
+    connect(quantity_edit_, &QLineEdit::textChanged, this, [this](const QString&) { update_resulting_position(); });
     update_resulting_position();
 
     layout->addStretch();
@@ -879,9 +877,7 @@ QString EditTransactionDialog::notes() const {
 
 void EditTransactionDialog::update_resulting_position() {
     const double net = other_net_qty_ + sign_ * quantity();
-    const auto fmt = [](double v) {
-        return QString::number(v, 'f', v == std::floor(v) ? 0 : 2);
-    };
+    const auto fmt = [](double v) { return QString::number(v, 'f', v == std::floor(v) ? 0 : 2); };
 
     if (net < -1e-6) {
         // The case this read-out exists for: other lots sell more than this one
@@ -890,8 +886,7 @@ void EditTransactionDialog::update_resulting_position() {
         result_label_->setText(QString("Position after this edit: %1 shares — other transactions for this "
                                        "symbol sell more than this lot buys, so this edit can't be applied.")
                                    .arg(fmt(net)));
-        result_label_->setStyleSheet(
-            QString("color:%1; font-size:11px; font-weight:700;").arg(ui::colors::NEGATIVE()));
+        result_label_->setStyleSheet(QString("color:%1; font-size:11px; font-weight:700;").arg(ui::colors::NEGATIVE()));
         return;
     }
     result_label_->setText(QString("Position after this edit: %1 shares").arg(fmt(net)));

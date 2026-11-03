@@ -237,8 +237,8 @@ void EquityTalippTab::build_ui() {
 
     // ── Indicator selector + params + run ─────────────────────────────────────
     auto* ctrl_frame = new QFrame;
-    ctrl_frame->setStyleSheet(
-        QString("QFrame { background:%1; border:1px solid %2; }").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    ctrl_frame->setStyleSheet(QString("QFrame { background:%1; border:1px solid %2; }")
+                                  .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* cl = new QHBoxLayout(ctrl_frame);
     cl->setContentsMargins(12, 10, 12, 10);
     cl->setSpacing(12);
@@ -287,8 +287,8 @@ void EquityTalippTab::build_ui() {
 
     // ── Empty state ───────────────────────────────────────────────────────────
     empty_widget_ = new QFrame;
-    empty_widget_->setStyleSheet(
-        QString("QFrame { background:%1; border:1px solid %2; }").arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
+    empty_widget_->setStyleSheet(QString("QFrame { background:%1; border:1px solid %2; }")
+                                     .arg(ui::colors::BG_SURFACE(), ui::colors::BORDER_DIM()));
     auto* ew_vl = new QVBoxLayout(empty_widget_);
     ew_vl->setAlignment(Qt::AlignCenter);
     ew_vl->setSpacing(8);

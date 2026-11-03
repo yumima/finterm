@@ -27,9 +27,12 @@ struct OwIdSeries {
 };
 
 static const QList<OwIdSeries> kOwIdSeries = {
-    {"CO2 Emissions", "co2", "United States"}, {"CO2 Per Capita", "co2_per_capita", "United States"},
-    {"Energy Consumption", "energy", "China"}, {"Life Expectancy", "life_expectancy", "Japan"},
-    {"Extreme Poverty Share ($3/day)", "poverty", "World"}, {"GDP Per Capita", "gdp_per_capita", "Germany"},
+    {"CO2 Emissions", "co2", "United States"},
+    {"CO2 Per Capita", "co2_per_capita", "United States"},
+    {"Energy Consumption", "energy", "China"},
+    {"Life Expectancy", "life_expectancy", "Japan"},
+    {"Extreme Poverty Share ($3/day)", "poverty", "World"},
+    {"GDP Per Capita", "gdp_per_capita", "Germany"},
 };
 
 } // namespace

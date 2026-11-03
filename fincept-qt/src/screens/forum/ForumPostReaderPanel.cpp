@@ -477,9 +477,10 @@ void ForumPostReaderPanel::rebuild_comments() {
 
         bool voted = (c.user_vote == "up");
         auto* likes_lbl = new QLabel(QString("▲ %1").arg(c.likes));
-        likes_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;"
-                                         "background:transparent;%2")
-                                     .arg(voted || c.likes > 0 ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY(), M(10)));
+        likes_lbl->setStyleSheet(
+            QString("color:%1;font-size:12px;font-weight:600;"
+                    "background:transparent;%2")
+                .arg(voted || c.likes > 0 ? ui::colors::AMBER() : ui::colors::TEXT_SECONDARY(), M(10)));
 
         com_hl->addWidget(thread_line);
         com_hl->addWidget(av);

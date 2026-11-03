@@ -48,8 +48,7 @@ namespace fincept::screens {
 class PredictionChart : public QWidget {
   public:
     explicit PredictionChart(QWidget* parent = nullptr);
-    void set_data(const QVector<services::equity::Candle>& candles,
-                  const QVector<AiPrediction>& predictions);
+    void set_data(const QVector<services::equity::Candle>& candles, const QVector<AiPrediction>& predictions);
 
   protected:
     void paintEvent(QPaintEvent*) override;
@@ -58,8 +57,8 @@ class PredictionChart : public QWidget {
 
   private:
     QVector<services::equity::Candle> candles_;
-    QVector<AiPrediction>             preds_;
-    QPoint hover_{-1, -1};   // last mouse position over the plot (-1 = none)
+    QVector<AiPrediction> preds_;
+    QPoint hover_{-1, -1}; // last mouse position over the plot (-1 = none)
 };
 
 class EquityAiTab : public QWidget {
@@ -79,24 +78,24 @@ class EquityAiTab : public QWidget {
     // ── Pipeline: one Run drives quant → news → headline labels ──────────────
     void run_all(bool automatic);
     void on_candles(const QVector<services::equity::Candle>& candles);
-    void run_quant_forecast(bool automatic);     // engine 1 (fundamentals + price)
-    void run_news_forecast(bool automatic);      // engine 2 (FinGPT weekly windows)
-    void begin_classification();                 // per-headline sentiment labels
+    void run_quant_forecast(bool automatic); // engine 1 (fundamentals + price)
+    void run_news_forecast(bool automatic);  // engine 2 (FinGPT weekly windows)
+    void begin_classification();             // per-headline sentiment labels
     void classify_next_row();
     void finish_pipeline(const QString& message);
-    void resolve_due();                          // fill realized outcomes from real closes
-    void refresh_track_record();                 // reload the table + chart + hit-rate
-    void maybe_auto_forecast();                  // at most one auto run per ticker per day
-    void show_idle_analysis();                   // last stored quant thesis, or the idle prompt
+    void resolve_due();          // fill realized outcomes from real closes
+    void refresh_track_record(); // reload the table + chart + hit-rate
+    void maybe_auto_forecast();  // at most one auto run per ticker per day
+    void show_idle_analysis();   // last stored quant thesis, or the idle prompt
 
-    QString build_quant_prompt() const;          // assemble the quant forecast input
+    QString build_quant_prompt() const; // assemble the quant forecast input
     // The real-data context (forecast + chat). The preds overload exists so a
     // caller that already holds the ticker's predictions (chat_context_block)
     // doesn't trigger a second synchronous repo scan per send.
     QString stock_data_block() const;
     QString stock_data_block(const QVector<AiPrediction>& preds) const;
-    QString chat_context_block() const;          // data block + headlines + both engines' reads
-    int     horizon_days() const;                // from the horizon selector
+    QString chat_context_block() const; // data block + headlines + both engines' reads
+    int horizon_days() const;           // from the horizon selector
 
     void record_news_prediction(const fingpt::ForecasterAnswer& a, const QString& model_used);
     void render_news_answer(const QString& raw, const QString& model_used);
@@ -115,49 +114,49 @@ class EquityAiTab : public QWidget {
 
     QString current_symbol_;
     services::equity::StockInfo info_;
-    bool    info_ready_  = false;
+    bool info_ready_ = false;
     QVector<services::equity::Candle> candles_;
-    bool    running_ = false;            // the whole pipeline
-    bool    quant_populated_ = false;    // the quant pane shows real content (not "Loading…")
-    bool    data_unavailable_ = false;   // no tradable price history → can't forecast
-    quint64 epoch_ = 0;                  // strands stale async deliveries on symbol switch / rerun
-    bool    run_automatic_ = false;      // current pipeline is the daily auto-run (skip labels)
-    QTimer*        think_timer_ = nullptr; // ticks the "Thinking… Ns" status
-    QElapsedTimer  think_start_;
+    bool running_ = false;          // the whole pipeline
+    bool quant_populated_ = false;  // the quant pane shows real content (not "Loading…")
+    bool data_unavailable_ = false; // no tradable price history → can't forecast
+    quint64 epoch_ = 0;             // strands stale async deliveries on symbol switch / rerun
+    bool run_automatic_ = false;    // current pipeline is the daily auto-run (skip labels)
+    QTimer* think_timer_ = nullptr; // ticks the "Thinking… Ns" status
+    QElapsedTimer think_start_;
 
     // News feed for the FinGPT engine (one fill per symbol; latch like the
     // historical feed).
     QVector<services::equity::NewsArticle> articles_;
-    QStringList row_labels_;   // "" until classified
-    QString     news_error_;   // feed failure ≠ "a ticker with no news"
-    bool        news_done_ = false;
-    bool        news_run_pending_ = false; // Run clicked before the feed delivered
+    QStringList row_labels_; // "" until classified
+    QString news_error_;     // feed failure ≠ "a ticker with no news"
+    bool news_done_ = false;
+    bool news_run_pending_ = false; // Run clicked before the feed delivered
 
     // UI — controls
-    QComboBox*    horizon_sel_   = nullptr;
-    QCheckBox*    auto_chk_      = nullptr;
-    QPushButton*  run_btn_       = nullptr;
-    QLabel*       status_lbl_    = nullptr;
-    QLabel*       accuracy_lbl_  = nullptr;
+    QComboBox* horizon_sel_ = nullptr;
+    QCheckBox* auto_chk_ = nullptr;
+    QPushButton* run_btn_ = nullptr;
+    QLabel* status_lbl_ = nullptr;
+    QLabel* accuracy_lbl_ = nullptr;
 
     // UI — verdict strip
-    QLabel* quant_chip_     = nullptr;
-    QLabel* news_chip_      = nullptr;
+    QLabel* quant_chip_ = nullptr;
+    QLabel* news_chip_ = nullptr;
     QLabel* sentiment_chip_ = nullptr;
 
     // UI — lensed analysis pane
     QVector<QPushButton*> lens_btns_;
-    QStackedWidget* lens_stack_    = nullptr;
-    QTextEdit*      analysis_view_ = nullptr;  // QUANT: prose + JSON forecast
-    QTextEdit*      news_view_     = nullptr;  // NEWS: FinGPT structured answer
-    QTableWidget*   table_         = nullptr;  // SENTIMENT: label / date / headline
-    QLabel*         summary_lbl_   = nullptr;
-    QTextEdit*      evidence_view_ = nullptr;  // EVIDENCE: the FinGPT prompt verbatim
+    QStackedWidget* lens_stack_ = nullptr;
+    QTextEdit* analysis_view_ = nullptr; // QUANT: prose + JSON forecast
+    QTextEdit* news_view_ = nullptr;     // NEWS: FinGPT structured answer
+    QTableWidget* table_ = nullptr;      // SENTIMENT: label / date / headline
+    QLabel* summary_lbl_ = nullptr;
+    QTextEdit* evidence_view_ = nullptr; // EVIDENCE: the FinGPT prompt verbatim
 
     // UI — chat + record
     ai_chat::ChatPane* chat_pane_ = nullptr;
     QTableWidget* record_table_ = nullptr;
-    PredictionChart* chart_     = nullptr;
+    PredictionChart* chart_ = nullptr;
 };
 
 } // namespace fincept::screens

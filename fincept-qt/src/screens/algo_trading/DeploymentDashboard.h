@@ -28,7 +28,7 @@ class DeploymentDashboard : public QWidget {
 
     // Summary stats
     QLabel* active_count_ = nullptr;
-    QLabel* total_pnl_    = nullptr;
+    QLabel* total_pnl_ = nullptr;
     QLabel* total_trades_ = nullptr;
     QLabel* avg_win_rate_ = nullptr;
 
@@ -36,7 +36,7 @@ class DeploymentDashboard : public QWidget {
     QFrame* equity_placeholder_ = nullptr;
 
     QVBoxLayout* deployments_layout_ = nullptr;
-    QLabel*      status_label_       = nullptr;
+    QLabel* status_label_ = nullptr;
 };
 
 } // namespace fincept::screens

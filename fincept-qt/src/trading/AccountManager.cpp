@@ -99,18 +99,22 @@ void AccountManager::migrate_legacy_credentials() {
             creds.broker_id = broker_id;
             creds.api_key = api_key;
             auto s = secure.retrieve(prefix + "api_secret");
-            if (s.is_ok()) creds.api_secret = s.value();
+            if (s.is_ok())
+                creds.api_secret = s.value();
             s = secure.retrieve(prefix + "access_token");
-            if (s.is_ok()) creds.access_token = s.value();
+            if (s.is_ok())
+                creds.access_token = s.value();
             s = secure.retrieve(prefix + "user_id");
-            if (s.is_ok()) creds.user_id = s.value();
+            if (s.is_ok())
+                creds.user_id = s.value();
             s = secure.retrieve(prefix + "additional_data");
-            if (s.is_ok()) creds.additional_data = s.value();
+            if (s.is_ok())
+                creds.additional_data = s.value();
 
             save_credentials(account.account_id, creds);
             ++migrated;
-            LOG_INFO("AccountManager", QString("Migrated legacy credentials for %1 → account %2")
-                                           .arg(broker_id, account.account_id));
+            LOG_INFO("AccountManager",
+                     QString("Migrated legacy credentials for %1 → account %2").arg(broker_id, account.account_id));
         };
 
         if (prof.has_native_paper) {
@@ -154,14 +158,12 @@ BrokerAccount AccountManager::add_account(const QString& broker_id, const QStrin
     // throw does not propagate across the Qt signal/slot boundary and terminate
     // the app. Account creation proceeds without a paper portfolio on failure.
     try {
-        auto portfolio = pt_create_portfolio(
-            display_name + " Paper", paper_balance, currency,
-            1.0, "cross", 0.001, account.account_id);
+        auto portfolio = pt_create_portfolio(display_name + " Paper", paper_balance, currency, 1.0, "cross", 0.001,
+                                             account.account_id);
         account.paper_portfolio_id = portfolio.id;
     } catch (const std::exception& e) {
         LOG_ERROR("AccountManager",
-                  QString("Failed to create paper portfolio for %1 (%2): %3")
-                      .arg(broker_id, display_name, e.what()));
+                  QString("Failed to create paper portfolio for %1 (%2): %3").arg(broker_id, display_name, e.what()));
         account.paper_portfolio_id.clear();
     }
 
@@ -172,16 +174,14 @@ BrokerAccount AccountManager::add_account(const QString& broker_id, const QStrin
     if (insert_result.is_err()) {
         LOG_ERROR("AccountManager",
                   QString("Failed to persist account %1 (%2) for broker %3: %4")
-                      .arg(account.account_id, display_name, broker_id,
-                           QString::fromStdString(insert_result.error())));
+                      .arg(account.account_id, display_name, broker_id, QString::fromStdString(insert_result.error())));
         // Clean up the orphaned paper portfolio we created above.
         if (!account.paper_portfolio_id.isEmpty()) {
             try {
                 pt_delete_portfolio(account.paper_portfolio_id);
             } catch (const std::exception& e) {
-                LOG_WARN("AccountManager",
-                         QString("Could not clean up orphaned paper portfolio %1: %2")
-                             .arg(account.paper_portfolio_id, e.what()));
+                LOG_WARN("AccountManager", QString("Could not clean up orphaned paper portfolio %1: %2")
+                                               .arg(account.paper_portfolio_id, e.what()));
             }
         }
         return {}; // empty BrokerAccount signals failure to caller
@@ -194,8 +194,8 @@ BrokerAccount AccountManager::add_account(const QString& broker_id, const QStrin
     }
 
     emit account_added(account.account_id);
-    LOG_INFO("AccountManager", QString("Added account: %1 (%2) for broker %3")
-                                   .arg(account.account_id, display_name, broker_id));
+    LOG_INFO("AccountManager",
+             QString("Added account: %1 (%2) for broker %3").arg(account.account_id, display_name, broker_id));
     return account;
 }
 
@@ -221,8 +221,7 @@ void AccountManager::remove_account(const QString& account_id) {
     AccountRepository::instance().remove(account_id);
 
     emit account_removed(account_id);
-    LOG_INFO("AccountManager", QString("Removed account: %1 (%2)")
-                                   .arg(account_id, account.display_name));
+    LOG_INFO("AccountManager", QString("Removed account: %1 (%2)").arg(account_id, account.display_name));
 }
 
 void AccountManager::update_display_name(const QString& account_id, const QString& name) {
@@ -344,15 +343,20 @@ BrokerCredentials AccountManager::load_credentials(const QString& account_id) co
     }
 
     auto r = secure.retrieve(acct_key(account_id, "api_key"));
-    if (r.is_ok()) creds.api_key = r.value();
+    if (r.is_ok())
+        creds.api_key = r.value();
     r = secure.retrieve(acct_key(account_id, "api_secret"));
-    if (r.is_ok()) creds.api_secret = r.value();
+    if (r.is_ok())
+        creds.api_secret = r.value();
     r = secure.retrieve(acct_key(account_id, "access_token"));
-    if (r.is_ok()) creds.access_token = r.value();
+    if (r.is_ok())
+        creds.access_token = r.value();
     r = secure.retrieve(acct_key(account_id, "user_id"));
-    if (r.is_ok()) creds.user_id = r.value();
+    if (r.is_ok())
+        creds.user_id = r.value();
     r = secure.retrieve(acct_key(account_id, "additional_data"));
-    if (r.is_ok()) creds.additional_data = r.value();
+    if (r.is_ok())
+        creds.additional_data = r.value();
 
     return creds;
 }

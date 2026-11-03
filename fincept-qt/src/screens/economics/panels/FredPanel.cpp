@@ -88,8 +88,8 @@ void FredPanel::on_result(const QString& request_id, const services::EconomicsRe
                        "Check FRED_API_KEY — re-issue one at:\n"
                        "fred.stlouisfed.org/docs/api/api_key.html");
         } else if (result.error.startsWith("[RATE_LIMITED]")) {
-            show_error("FRED rate-limit hit. Try again in a moment.\n"
-                       + result.error.mid(QStringLiteral("[RATE_LIMITED] ").size()));
+            show_error("FRED rate-limit hit. Try again in a moment.\n" +
+                       result.error.mid(QStringLiteral("[RATE_LIMITED] ").size()));
         } else if (result.error.startsWith("[TIMEOUT]")) {
             show_error("FRED request timed out — check your network and retry.");
         } else if (result.error.contains("API key") || result.error.contains("api_key")) {
