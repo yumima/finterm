@@ -892,7 +892,7 @@ void IpoWatchView::load_calendar(bool enrich) {
     inflight = true;
     QPointer<IpoWatchView> self = this;
     const quint64 gen = calendar_gen_;
-    python::PythonRunner::instance().run(
+    python::PythonRunner::instance().run( // D1-exempt: one-shot calendar scrape, no producer
         QStringLiteral("ipo_calendar.py"),
         {enrich ? QStringLiteral("enrich") : QStringLiteral("calendar")},
         [self, gen, enrich](python::PythonResult r) {
@@ -1279,7 +1279,7 @@ void IpoWatchView::fetch_history_for_detail(const Entry& e) {
     // Pick a window long enough to span most IPOs we care about. yfinance's
     // 6mo window covers the typical research horizon for a recently priced
     // deal; for older priced rows the curve will just clip to listing date.
-    services::MarketDataService::instance().fetch_history(
+    services::MarketDataService::instance().fetch_history( // D4-exempt: one-shot detail curve, caches per ticker
         sym, "6mo", "1d",
         [self, sym](bool ok, QVector<services::HistoryPoint> points) {
             if (!self) return;
@@ -1499,7 +1499,7 @@ void IpoWatchView::enrich_priced_with_quotes() {
     QPointer<IpoWatchView> self = this;
     run_pump(&quote_pump_, "quote",
         [self](const QStringList& syms, ChunkDone done) {
-            services::MarketDataService::instance().fetch_quotes(
+            services::MarketDataService::instance().fetch_quotes( // D4-exempt: paced ChunkPump needs the ok flag to retry refusals
                 syms, [self, syms, done](bool ok, QVector<services::QuoteData> quotes) {
                     if (!self) return;
                     QHash<QString, double> price_map;

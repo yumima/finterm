@@ -15,6 +15,9 @@
 // the child environment, so a key the user had correctly exported was
 // reported by the panel as "not configured".
 
+// Generated, and --check compares it byte-for-byte: keep the formatter off.
+// clang-format off
+
 #pragma once
 
 #include <QString>
@@ -202,3 +205,5 @@ inline const QStringList& env_names() {
 }
 
 } // namespace fincept::keys
+
+// clang-format on

@@ -47,7 +47,7 @@ HistoryChartPanel::HistoryChartPanel(const QString& ticker, const QString& perio
 
 void HistoryChartPanel::load() {
     QPointer<HistoryChartPanel> guard(this);
-    services::MarketDataService::instance().fetch_history(
+    services::MarketDataService::instance().fetch_history( // D4-exempt: one-shot panel load, needs ok flag
         ticker_, period_, "1d", [guard](bool ok, QVector<services::HistoryPoint> pts) {
             if (!guard)
                 return;

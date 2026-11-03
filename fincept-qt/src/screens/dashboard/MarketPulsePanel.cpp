@@ -953,7 +953,7 @@ void MarketPulsePanel::rebuild_breadth_from_cache() {
 
 void MarketPulsePanel::fetch_movers() {
     QPointer<MarketPulsePanel> self = this;
-    services::MarketDataService::instance().fetch_top_movers(
+    services::MarketDataService::instance().fetch_top_movers( // D4-exempt: polled screener movers, no hub producer yet
         kTopMoversFetchCount, [self](bool ok, services::MarketDataService::TopMovers tm) {
             if (!self)
                 return;

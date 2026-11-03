@@ -79,12 +79,17 @@ jobs:
           echo "clang-tidy complete."
 
   # ── datahub-discipline ───────────────────────────────────────────────────────
-  # Enforces DataHub rules D1 and D4 (see fincept-qt/CLAUDE.md §D):
+  # Enforces DataHub rules D1 and D4 (see fincept-qt/DATAHUB_ARCHITECTURE.md §4):
   #   D1 — screens must not spawn Python directly.
   #   D4 — consumers must not call service fetch_* callbacks.
+  # A call site may opt out with `// D1-exempt: <reason>` / `// D4-exempt:
+  # <reason>` trailing the line that opens the call (the reason is required).
+  # Calls are found across a line break, because clang-format splits
+  # `X::instance()` from `.fetch_y(` once the line passes 120 columns — a
+  # line-based grep never saw those calls at all.
   # If this step fails, route the offending code through DataHub. See
-  # fincept-qt/DATAHUB_ARCHITECTURE.md §4 and docs/DATAHUB_TOPICS.md for the
-  # producer + topic you should be using instead.
+  # fincept-qt/DATAHUB_ARCHITECTURE.md §4 for the producer + topic you should
+  # be using instead.
   datahub-discipline:
     name: datahub-discipline
     runs-on: ubuntu-24.04
@@ -94,8 +99,13 @@ jobs:
       - name: Check screens/ does not call PythonRunner directly
         working-directory: fincept-qt
         run: |
-          if grep -rn --include='*.cpp' --include='*.h' \
-              'PythonRunner::instance()\.run(' src/screens/; then
+          # Prints `file:line: <call>(<rest of that line>)` per call site.
+          violations=$(find src/screens \( -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | \
+            xargs -0 perl -0ne 'while (/PythonRunner::instance\(\)\s*\.\s*run\([^\n]*/g) {
+                my $ln = 1 + (substr($_, 0, $-[0]) =~ tr/\n//); print "$ARGV:$ln: $&\n" }' \
+            | grep -vE '// D1-exempt: *[^ ]' || true)
+          if [ -n "$violations" ]; then
+            echo "$violations"
             echo ""
             echo "::error::D1 violation — screens must not call PythonRunner directly."
             echo "Route through a Producer registered with DataHub."
@@ -107,23 +117,29 @@ jobs:
       - name: Check screens/ does not call deprecated service fetch_* APIs
         working-directory: fincept-qt
         run: |
-          # D4 exempts one-shot catalog/info APIs that have no hub topic:
-          #   MarketDataService::fetch_info, MarketDataService::fetch_news,
+          # D4 exempts one-shot lookups that have no hub topic:
+          #   MarketDataService::fetch_info / fetch_news / fetch_company_profiles /
+          #   fetch_ipo_extras / fetch_sec_filings / fetch_s1_funding /
+          #   fetch_wikipedia_summary,
           #   DBnomicsService::fetch_providers / fetch_datasets / fetch_series /
-          #   fetch_observations. See fincept-qt/CLAUDE.md §D4 for the rule.
-          # Match any streaming fetch_* call, then grep -v the allowed ones.
-          violations=$(grep -rnE --include='*.cpp' --include='*.h' \
-              '(MarketDataService|NewsService|EconomicsService|DBnomicsService|GovDataService)::instance\(\)\.fetch_' \
-              src/screens/ \
-            | grep -vE 'MarketDataService::instance\(\)\.fetch_(info|news)\b' \
+          #   fetch_observations.
+          # Anything else — an API with a topic (quote/sparkline/history) called
+          # one-shot for its ok flag, or a polled API with no producer yet
+          # (top_movers, orderbook) — needs a `// D4-exempt: <reason>`.
+          # Match every fetch_* call, then grep -v the allowed ones.
+          violations=$(find src/screens \( -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | \
+            xargs -0 perl -0ne 'while (/(MarketDataService|NewsService|EconomicsService|DBnomicsService|GovDataService)::instance\(\)\s*\.\s*fetch_[^\n]*/g) {
+                my $ln = 1 + (substr($_, 0, $-[0]) =~ tr/\n//); (my $m = $&) =~ s/\(\)\s*\.\s*/()./; print "$ARGV:$ln: $m\n" }' \
+            | grep -vE 'MarketDataService::instance\(\)\.fetch_(info|news|company_profiles|ipo_extras|sec_filings|s1_funding|wikipedia_summary)\b' \
             | grep -vE 'DBnomicsService::instance\(\)\.fetch_(providers|datasets|series|observations)\b' \
+            | grep -vE '// D4-exempt: *[^ ]' \
             || true)
           if [ -n "$violations" ]; then
             echo "$violations"
             echo ""
             echo "::error::D4 violation — consumers must not call streaming fetch_* APIs."
             echo "Use DataHub::subscribe() for live data, DataHub::peek() for snapshots."
-            echo "See fincept-qt/DATAHUB_ARCHITECTURE.md §4 and docs/DATAHUB_TOPICS.md."
+            echo "See fincept-qt/DATAHUB_ARCHITECTURE.md §4."
             exit 1
           fi
           echo "D4 — screens are clean."

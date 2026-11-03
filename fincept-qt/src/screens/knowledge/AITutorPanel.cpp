@@ -88,12 +88,9 @@ QString real_holdings_summary() {
 
 } // namespace
 
-AITutorPanel::AITutorPanel(const KnowledgeEntry& entry, QWidget* parent) : QWidget(parent) {
-    entry_id_ = entry.id;
-    entry_title_ = entry.title;
-    entry_subtitle_ = entry.subtitle;
-    abbreviation_ = entry.abbreviation;
-    entry_body_ = ContentLoader::instance().load_body(entry.id);
+AITutorPanel::AITutorPanel(const KnowledgeEntry& entry, QWidget* parent)
+    : QWidget(parent), entry_id_(entry.id), entry_title_(entry.title), entry_subtitle_(entry.subtitle),
+      entry_body_(ContentLoader::instance().load_body(entry.id)), abbreviation_(entry.abbreviation) {
 
     setStyleSheet(QString("background: %1;").arg(ui::colors::BG_SURFACE()));
 

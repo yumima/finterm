@@ -64,7 +64,7 @@ void LiveDataPanel::fetch_all() {
         const QString ticker = it.key();
         const QVector<int> rows = it.value();
         services::MarketDataService::instance().fetch_info(
-            ticker, [guard, ticker, rows](bool ok, services::InfoData info) {
+            ticker, [guard, ticker, rows](bool ok, const services::InfoData& info) {
                 if (!guard)
                     return;
                 for (int row : rows) {

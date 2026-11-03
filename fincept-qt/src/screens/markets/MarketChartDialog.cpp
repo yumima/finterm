@@ -398,7 +398,7 @@ void MarketChartDialog::load() {
     readout_->clear();
     QPointer<MarketChartDialog> self = this;
     const QString sym = symbol_;
-    services::MarketDataService::instance().fetch_history(
+    services::MarketDataService::instance().fetch_history( // D4-exempt: needs ok flag for the error state + request_seq_ supersession
         sym, QString::fromLatin1(def.period), QString::fromLatin1(def.interval),
         [self, seq, key](bool ok, QVector<services::HistoryPoint> pts) {
             // A later click (another period or symbol) supersedes this one.

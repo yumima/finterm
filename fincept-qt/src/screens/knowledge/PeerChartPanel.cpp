@@ -78,7 +78,7 @@ void PeerChartPanel::load() {
 
     for (const auto& sym : peers_) {
         services::MarketDataService::instance().fetch_info(
-            sym, [guard, sym, shared_count, shared_values, total](bool ok, services::InfoData info) {
+            sym, [guard, sym, shared_count, shared_values, total](bool ok, const services::InfoData& info) {
                 ++*shared_count;
                 if (ok && guard) {
                     shared_values->insert(sym.toUpper(), pluck(info, guard->metric_));

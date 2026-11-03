@@ -764,7 +764,7 @@ void ScreenerScreen::run_scan() {
     const QString payload = QString::fromUtf8(
         QJsonDocument(QJsonObject{{"min_mcap", mcap}}).toJson(QJsonDocument::Compact));
     QPointer<ScreenerScreen> self = this;
-    python::PythonRunner::instance().run(
+    python::PythonRunner::instance().run( // D1-exempt: user-triggered scan with progress, no producer
         QStringLiteral("screener_data.py"), {QStringLiteral("scan"), payload},
         [self, gen, name](python::PythonResult res) {
             if (!self)

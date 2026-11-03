@@ -180,6 +180,9 @@ def render(keys):
         "// the child environment, so a key the user had correctly exported was",
         "// reported by the panel as \"not configured\".",
         "",
+        "// Generated, and --check compares it byte-for-byte: keep the formatter off.",
+        "// clang-format off",
+        "",
         "#pragma once",
         "",
         "#include <QString>",
@@ -227,6 +230,8 @@ def render(keys):
         "}",
         "",
         "} // namespace fincept::keys",
+        "",
+        "// clang-format on",
         "",
     ]
     return "\n".join(lines)

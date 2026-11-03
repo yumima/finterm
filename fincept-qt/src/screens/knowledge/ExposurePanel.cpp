@@ -23,7 +23,7 @@ constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
 struct Criterion {
     QString metric;       ///< pe_ratio, beta, dividend_yield, etc.
     QString op;           ///< ">" "<" ">=" "<="
-    double  threshold;
+    double  threshold = 0.0;
     bool    valid = false;
 };
 
@@ -175,7 +175,7 @@ void ExposurePanel::load_holdings_and_evaluate() {
     for (const auto& h : holdings) {
         const QString sym = h.symbol;
         services::MarketDataService::instance().fetch_info(
-            sym, [guard, sym, crit, shared_count, shared_matches, shared_unknown, total](bool ok, services::InfoData info) {
+            sym, [guard, sym, crit, shared_count, shared_matches, shared_unknown, total](bool ok, const services::InfoData& info) {
                 ++*shared_count;
                 const double v = ok ? pluck_metric(info, crit.metric) : std::numeric_limits<double>::quiet_NaN();
                 // isfinite, not `!= 0`: NaN passes a `!= 0` test, and a

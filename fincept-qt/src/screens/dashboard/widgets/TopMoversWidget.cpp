@@ -108,7 +108,7 @@ void TopMoversWidget::hideEvent(QHideEvent* e) {
 
 void TopMoversWidget::refresh_data() {
     QPointer<TopMoversWidget> self = this;
-    services::MarketDataService::instance().fetch_top_movers(
+    services::MarketDataService::instance().fetch_top_movers( // D4-exempt: polled screener movers, no hub producer yet
         10, [self](bool ok, services::MarketDataService::TopMovers tm) {
             if (!self)
                 return;
