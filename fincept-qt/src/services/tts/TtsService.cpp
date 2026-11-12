@@ -416,7 +416,8 @@ void TtsService::begin_reading() {
     stop();
     restarting_ = false;
     ++session_;
-    set_reading(true);
+    // reading_ is NOT raised here: a launch that fails synchronously must not
+    // flash every TV mute. Each successful launch calls set_reading(true).
 }
 
 void TtsService::fail(const QString& message) {
@@ -450,27 +451,24 @@ bool TtsService::speak_via_engine(const QString& text) {
         return false;
     begin_reading();
 
-    // A synchronous `return false` emits no state_changed(false), so it must
-    // end the reading itself.
+    // A synchronous `return false` emits no state_changed(false), so it ends
+    // the previous reading's hold itself — BEFORE fail(): an error slot that
+    // starts a new reading must not have it cleared afterwards.
     if (get_setting("tts.provider") == QStringLiteral("none")) {
-        fail(QStringLiteral("Read-aloud is switched off (Settings → Voice)"));
         set_reading(false);
+        fail(QStringLiteral("Read-aloud is switched off (Settings → Voice)"));
         return false;
     }
     const auto ep = ai_chat::LlmService::instance().speech_endpoint();
-    if (!ep || !engine_usable(ep->url)) {
-        // no (working) speech route: Anthropic, Gemini, a dead hearth, …
-        const bool ok = start_piper(text);
-        if (!ok)
-            set_reading(false);
-        return ok;
-    }
+    if (!ep || !engine_usable(ep->url))
+        return start_piper(text); // no (working) speech route: Anthropic, Gemini, a dead hearth, …
 
     eng_chunks_ = split_for_speech(text, *ep);
     if (eng_chunks_.isEmpty()) {
         set_reading(false);
         return false;
     }
+    set_reading(true); // launched: every exit below returns true
     eng_url_ = ep->url;
     eng_headers_ = ep->headers;
     eng_body_ = ep->body;
@@ -587,14 +585,12 @@ bool TtsService::speak(const QString& text) {
     // one.  The user clicking 🔊 twice should mean "just say the new
     // one", not "play both overlapping".
     begin_reading();
-    const bool ok = start_piper(text);
-    if (!ok)
-        set_reading(false); // synchronous failure: no state_changed(false) follows
-    return ok;
+    return start_piper(text);
 }
 
 bool TtsService::start_piper(const QString& text) {
     if (!is_available()) {
+        set_reading(false); // before fail(): see speak_via_engine
         fail(QStringLiteral("TTS not available — configure Piper under Settings → Voice"));
         return false;
     }
@@ -604,6 +600,7 @@ bool TtsService::start_piper(const QString& text) {
     // empty FINCEPT_TTS_MODEL would otherwise launch piper with no model.
     const QString model = resolve_model_path();
     if (model.isEmpty()) {
+        set_reading(false); // before fail(): see speak_via_engine
         fail(QStringLiteral("TTS voice not found — run `hearth voice` to provision one"));
         return false;
     }
@@ -670,6 +667,7 @@ bool TtsService::start_piper(const QString& text) {
                           .arg(model, QString::number(text.size()), stream_mode_ ? "stream" : "buffered"));
     proc_->start();
     if (!proc_->waitForStarted(2000)) {
+        set_reading(false); // before fail(): see speak_via_engine
         fail(QStringLiteral("Failed to start piper_tts.py: %1").arg(proc_->errorString()));
         proc_->deleteLater();
         proc_ = nullptr;
@@ -684,6 +682,7 @@ bool TtsService::start_piper(const QString& text) {
     // (buffered) or from the readyRead handler above on the "streaming" marker
     // (streaming, ~1-2s). Callers show a "preparing" state in between. We return
     // true so the caller can show that without racing the internal stop() above.
+    set_reading(true); // launched — "preparing" counts (no-op on the engine fallback)
     return true;
 }
 

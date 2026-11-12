@@ -472,9 +472,13 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         cl->addWidget(now_playing_);
         // Shown while read-aloud holds the stream muted, so the silence reads
         // as deliberate rather than as a dead stream.
-        tts_muted_label_ = new QLabel(QString(QChar(0x1F507)) + QStringLiteral(" MUTED — READ-ALOUD"));
+        // Short + Fixed: the bar is crowded on a narrow tile and a squeezed
+        // label clips mid-word ("MUTED –"); the tooltip carries the why.
+        tts_muted_label_ = new QLabel(QString::fromUcs4(U"\U0001F507") + QStringLiteral(" MUTED"));
         tts_muted_label_->setFixedHeight(20);
-        tts_muted_label_->setToolTip(QStringLiteral("Stream audio returns when the reading ends"));
+        tts_muted_label_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+        tts_muted_label_->setToolTip(
+            QStringLiteral("Muted while read-aloud plays — stream audio returns when the reading ends"));
         tts_muted_label_->hide();
         cl->addWidget(tts_muted_label_);
         cl->addStretch(1);
@@ -705,8 +709,11 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
     // The user's own volume is untouched — only the mute flag flips. Needs
     // controls_ (the muted cue), so it runs after the controls bar is built.
     auto& tts = fincept::services::TtsService::instance();
-    connect(&tts, &fincept::services::TtsService::reading_changed, this,
-            &VideoPlayerWidget::apply_read_aloud_mute);
+    connect(&tts, &fincept::services::TtsService::reading_changed, this, [this](bool reading) {
+        LOG_INFO("VideoPlayer",
+                 reading ? "read-aloud started — stream muted" : "read-aloud ended — stream unmuted");
+        apply_read_aloud_mute(reading);
+    });
     apply_read_aloud_mute(tts.is_reading());
 }
 
