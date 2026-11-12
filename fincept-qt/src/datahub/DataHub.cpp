@@ -429,7 +429,8 @@ void DataHub::emit_to_subscribers(const QString& topic, const QVariant& value) {
     emit topic_updated(topic, value);
 }
 
-void DataHub::do_publish(const QString& topic, const QVariant& value, std::chrono::milliseconds ttl_override) {
+void DataHub::do_publish(const QString& topic, const QVariant& value, std::chrono::milliseconds ttl_override,
+                         bool live) {
     int coalesce_ms = 0;
     bool defer = false;
     bool unchanged = false;
@@ -446,11 +447,17 @@ void DataHub::do_publish(const QString& topic, const QVariant& value, std::chron
         // certain-equal QVariant comparison — types without operator== compare
         // unequal, so they simply never skip (safe, just not optimized).
         unchanged = st.total_publishes > 0 && value == st.value;
+        if (live && st.total_publishes == 0)
+            return; // a live refinement needs a polled value to refine
         st.value = value;
-        st.last_publish_ms = now_ms();
         st.total_publishes += 1;
-        st.in_flight = false;
-        st.last_error.clear(); // successful publish clears any stored error
+        if (!live) {
+            // A live refinement (publish_live) leaves freshness and the in-flight
+            // refresh alone: the scheduler's poll cadence is unchanged by ticks.
+            st.last_publish_ms = now_ms();
+            st.in_flight = false;
+            st.last_error.clear(); // successful publish clears any stored error
+        }
         if (ttl_override.count() > 0) {
             st.policy.ttl_ms = static_cast<int>(ttl_override.count());
         }
@@ -506,6 +513,16 @@ void DataHub::publish(const QString& topic, const QVariant& value) {
         return;
     }
     do_publish(topic, value, std::chrono::milliseconds(0));
+}
+
+void DataHub::publish_live(const QString& topic, const QVariant& value) {
+    if (QThread::currentThread() != this->thread()) {
+        QMetaObject::invokeMethod(
+            this, [this, topic, value]() { do_publish(topic, value, std::chrono::milliseconds(0), true); },
+            Qt::QueuedConnection);
+        return;
+    }
+    do_publish(topic, value, std::chrono::milliseconds(0), true);
 }
 
 void DataHub::publish(const QString& topic, const QVariant& value, std::chrono::milliseconds ttl) {

@@ -15,6 +15,8 @@ InlineSparkline::InlineSparkline(QWidget* parent) : QWidget(parent) {
 }
 
 void InlineSparkline::set_points(const QVector<double>& pts) {
+    if (pts == pts_)
+        return; // re-fed on every live tick with the same points: no repaint
     pts_ = pts;
     update();
 }

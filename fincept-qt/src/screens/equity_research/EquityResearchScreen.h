@@ -54,6 +54,8 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
   protected:
     void showEvent(QShowEvent* event) override;
     void hideEvent(QHideEvent* event) override;
+    /// (Un)subscribe the header to market:quote:<current symbol> — on screen only.
+    void follow_live_quote(bool on);
     bool eventFilter(QObject* watched, QEvent* event) override;
 
   private slots:
@@ -139,6 +141,10 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     QTimer* refresh_timer_ = nullptr;
     QString current_symbol_;
     QString current_currency_;
+    /// The quote the header last rendered — the live price stream moves only its
+    /// price; change/change% are re-derived from ITS prev_close.
+    services::equity::QuoteData bar_quote_;
+    QString live_topic_; ///< market:quote:<symbol> this header follows
 
     // Symbol group link — SymbolGroup::None when unlinked.
     SymbolGroup link_group_ = SymbolGroup::None;

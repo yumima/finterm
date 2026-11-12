@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/RenderCoalescer.h"
 #include "screens/dashboard/widgets/BaseWidget.h"
 #include "screens/portfolio/PortfolioTypes.h"
 #include "services/markets/MarketDataService.h"
@@ -160,6 +161,10 @@ class PortfolioSummaryWidget : public BaseWidget {
     QString selected_id_;                // id of the portfolio currently shown
     bool suppress_combo_signal_ = false; // guard against programmatic combo edits
     bool portfolios_loaded_ = false;     // false until first portfolios_loaded()
+
+  private:
+    /// Coalesces the per-quote re-render: one rebuild_from_cache() per tick batch.
+    ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
 } // namespace fincept::screens::widgets

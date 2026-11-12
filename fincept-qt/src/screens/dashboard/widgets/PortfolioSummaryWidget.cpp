@@ -548,7 +548,7 @@ void PortfolioSummaryWidget::hub_resubscribe(const QVector<Holding>& holdings) {
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
-            rebuild_from_cache();
+            quote_render_.request(); // one render per tick batch
         });
     }
     hub_active_ = true;

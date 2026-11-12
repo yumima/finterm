@@ -295,6 +295,38 @@ class TestDataHub : public QObject {
         QVERIFY(!hub.peek(QStringLiteral("test:peek:ttl:1")).isValid());   // stale → invalid
         QVERIFY(hub.peek_raw(QStringLiteral("test:peek:ttl:1")).isValid()); // raw still there
     }
+
+    // publish_live(): a stream tick refining a POLLED value. Delivered and
+    // cached like publish(), but freshness is untouched — a topic kept moving by
+    // ticks must still go stale on its TTL, or its poll would never run again.
+    void publish_live_delivers_without_refreshing() {
+        auto& hub = DataHub::instance();
+        TopicPolicy p;
+        p.ttl_ms = 40;
+        p.min_interval_ms = 0;
+        hub.clear_policy_pattern(QStringLiteral("test:live:*"));
+        hub.set_policy_pattern(QStringLiteral("test:live:*"), p);
+
+        QObject owner;
+        QVariant got;
+        hub.subscribe(&owner, QStringLiteral("test:live:1"), [&](const QVariant& v) { got = v; });
+
+        // Nothing polled yet: a live refinement has nothing to refine — dropped.
+        hub.publish_live(QStringLiteral("test:live:1"), QVariant(1));
+        QCoreApplication::processEvents();
+        QVERIFY(!got.isValid());
+        QVERIFY(!hub.peek_raw(QStringLiteral("test:live:1")).isValid());
+
+        hub.publish(QStringLiteral("test:live:1"), QVariant(10)); // the poll
+        QTRY_COMPARE(got.toInt(), 10);
+        QTest::qWait(25);
+        hub.publish_live(QStringLiteral("test:live:1"), QVariant(11)); // a tick
+        QTRY_COMPARE(got.toInt(), 11);
+        QCOMPARE(hub.peek_raw(QStringLiteral("test:live:1")).toInt(), 11);
+        // 25 + 25 ms after the POLL: stale on the poll's clock, tick or not.
+        QTest::qWait(25);
+        QVERIFY(!hub.peek(QStringLiteral("test:live:1")).isValid());
+    }
 };
 
 QTEST_MAIN(TestDataHub)

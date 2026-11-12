@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/RenderCoalescer.h"
 #include "core/symbol/IGroupLinked.h"
 #include "screens/IStatefulScreen.h"
 #include "services/markets/MarketDataService.h"
@@ -111,6 +112,10 @@ class WatchlistScreen : public QWidget, public IStatefulScreen, public IGroupLin
     // Emit the currently-selected symbol into the linked group, if any.
     // Safe to call with no selection — no-op.
     void publish_selection_to_group();
+
+  private:
+    /// Coalesces the per-quote re-render: one rebuild_from_cache() per tick batch.
+    ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
 } // namespace fincept::screens

@@ -1,5 +1,7 @@
 #include "ui/tables/DataTable.h"
 
+#include "ui/tables/TickFlashDelegate.h"
+
 #include "ui/theme/Theme.h"
 
 #include <QHeaderView>
@@ -49,6 +51,37 @@ void DataTable::add_row(const QStringList& row) {
         setItem(r, c, item);
     }
     setRowHeight(r, 26);
+}
+
+bool DataTable::set_rows(const QVector<QStringList>& rows) {
+    bool same_shape = rowCount() == rows.size();
+    for (int r = 0; same_shape && r < rows.size(); ++r)
+        same_shape = rows[r].size() <= columnCount();
+    if (!same_shape) {
+        set_data(rows);
+        return true;
+    }
+    bool width_may_change = false;
+    for (int r = 0; r < rows.size(); ++r) {
+        const QStringList& row = rows[r];
+        for (int c = 0; c < row.size(); ++c) {
+            QTableWidgetItem* it = item(r, c);
+            if (!it) {
+                it = new QTableWidgetItem(row[c]);
+                it->setForeground(QColor(colors::WHITE()));
+                setItem(r, c, it);
+                width_may_change = true;
+            } else if (it->text() != row[c]) {
+                width_may_change = width_may_change || it->text().size() != row[c].size();
+                it->setText(row[c]);
+            }
+        }
+    }
+    return width_may_change;
+}
+
+void DataTable::enable_tick_flash(int key_column) {
+    TickFlashDelegate::install(this, key_column);
 }
 
 void DataTable::clear_data() {

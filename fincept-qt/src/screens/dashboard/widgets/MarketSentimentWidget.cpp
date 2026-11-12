@@ -193,7 +193,7 @@ void MarketSentimentWidget::hub_subscribe_all() {
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
             clear_error();
-            rebuild_from_cache();
+            quote_render_.request(); // one render per tick batch
         });
     }
     // Surface a fetch failure of its own quotes instead of an endless spinner — only

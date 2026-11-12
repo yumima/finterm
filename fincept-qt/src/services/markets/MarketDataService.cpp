@@ -370,8 +370,142 @@ void MarketDataService::drain_refresh_chunk() {
     }
 }
 
-void MarketDataService::publish_quote_to_hub(const QuoteData& q) {
+void MarketDataService::publish_quote_to_hub(const QuoteData& polled) {
+    // A poll answered while the stream is live is usually OLDER than the last
+    // tick (batch quotes lag the tape by seconds): keep the tick's price on the
+    // poll's baseline, or every poll would yank the price back for a moment.
+    // Past kTickWinsOverPollMs the poll wins — e.g. the closing auction print,
+    // which arrives after the last regular-session tick.
+    QuoteData q = polled;
+    if (auto it = last_tick_.constFind(q.symbol); it != last_tick_.constEnd() &&
+                                                  QDateTime::currentMSecsSinceEpoch() - it->seen_ms < kTickWinsOverPollMs)
+        q = with_live_price(q, it->price, it->volume);
     datahub::DataHub::instance().publish(QStringLiteral("market:quote:") + q.symbol, QVariant::fromValue(q));
+}
+
+// ── Push price stream ───────────────────────────────────────────────────────
+
+QuoteData MarketDataService::with_live_price(QuoteData q, double price, double volume) {
+    // Store one number (the price), derive the rest from the quote's own
+    // previous close — never mix in the stream's change, whose baseline may
+    // differ from the one this quote was polled against.
+    const double prev = (std::isfinite(q.change) && std::isfinite(q.price) && q.price > 0) ? q.price - q.change : qQNaN();
+    q.price = price;
+    if (std::isfinite(prev) && prev > 0) {
+        q.change = price - prev;
+        q.change_pct = q.change / prev * 100.0;
+    }
+    if (q.high > 0 && price > q.high)
+        q.high = price;
+    if (q.low > 0 && price < q.low)
+        q.low = price;
+    if (std::isfinite(volume) && volume > 0)
+        q.volume = volume;
+    return q;
+}
+
+void MarketDataService::init_stream() {
+    auto& hub = datahub::DataHub::instance();
+    stream_sync_timer_ = new QTimer(this);
+    stream_sync_timer_->setSingleShot(true);
+    stream_sync_timer_->setInterval(500);
+    connect(stream_sync_timer_, &QTimer::timeout, this, [this]() { sync_stream(false); });
+    const auto on_topic = [this](const QString& topic) {
+        if (topic.startsWith(QLatin1String("market:quote:")))
+            stream_sync_timer_->start(); // restart: one sync per burst (a screen opening subscribes dozens)
+    };
+    connect(&hub, &datahub::DataHub::topic_active, this, on_topic);
+    connect(&hub, &datahub::DataHub::topic_idle, this, on_topic);
+
+    auto& worker = python::PythonWorker::instance();
+    connect(&worker, &python::PythonWorker::daemon_connected, this, [this]() {
+        stream_unavailable_ = false;
+        sync_stream(true); // a fresh daemon streams nothing until told
+    });
+    connect(&worker, &python::PythonWorker::event_frame, this, [this](const QString& event, const QJsonObject& f) {
+        if (event == QLatin1String("ticks"))
+            apply_ticks(f.value(QStringLiteral("ticks")).toArray());
+    });
+    if (worker.is_ready())
+        sync_stream(true);
+}
+
+void MarketDataService::sync_stream(bool force) {
+    if (stream_unavailable_)
+        return;
+    QStringList syms;
+    for (const auto& st : datahub::DataHub::instance().stats()) {
+        if (st.subscriber_count > 0 && st.topic.startsWith(QLatin1String("market:quote:")))
+            syms << st.topic.mid(13);
+    }
+    syms.sort();
+    if (!force && syms == stream_syms_)
+        return;
+    stream_syms_ = syms;
+    // Symbols that left the stream must not keep overriding polls.
+    for (auto it = last_tick_.begin(); it != last_tick_.end();)
+        it = syms.contains(it.key()) ? std::next(it) : last_tick_.erase(it);
+    QJsonObject payload;
+    payload[QStringLiteral("symbols")] = QJsonArray::fromStringList(syms);
+    QPointer<MarketDataService> self = this;
+    python::PythonWorker::instance().submit(
+        QStringLiteral("stream_set"), payload, [self, n = syms.size()](bool ok, QJsonObject result, QString err) {
+            if (!self)
+                return;
+            if (!ok) {
+                self->stream_syms_.clear(); // not applied: the next sync must resend
+                if (python::PythonWorker::reply_is_transient(ok, result)) {
+                    // Timeout / daemon busy or restarting: try again shortly.
+                    LOG_WARN("MarketData", "price stream set not answered — retrying: " + err);
+                    QTimer::singleShot(5000, self.data(), [self]() {
+                        if (self)
+                            self->sync_stream(false);
+                    });
+                    return;
+                }
+                // A real refusal (yfinance without the live feed): polling carries
+                // on as before; a daemon restart tries again.
+                self->stream_unavailable_ = true;
+                LOG_WARN("MarketData", "price stream unavailable — quotes stay on polling: " + err);
+                return;
+            }
+            LOG_INFO("MarketData", QString("price stream: %1 symbols").arg(n));
+        });
+}
+
+void MarketDataService::apply_ticks(const QJsonArray& ticks) {
+    auto& hub = datahub::DataHub::instance();
+    const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    for (const auto& tv : ticks) {
+        const QJsonObject t = tv.toObject();
+        // Regular session only. Extended-hours ticks belong to the AFT%/FUT%
+        // surfaces, whose session pairing is different (and a pre-market tick's
+        // market_hours is 0 — proto3 omits it, so absence is not "regular").
+        if (t.value(QStringLiteral("market_hours")).toInt(-1) != 1)
+            continue;
+        const QString sym = t.value(QStringLiteral("id")).toString();
+        const double price = t.value(QStringLiteral("price")).toDouble(qQNaN());
+        if (sym.isEmpty() || !std::isfinite(price) || price <= 0)
+            continue;
+        // int64 proto fields arrive as JSON strings.
+        const qint64 tms = t.value(QStringLiteral("time")).toVariant().toLongLong();
+        const QJsonValue vv = t.value(QStringLiteral("day_volume"));
+        const double vol = vv.isUndefined() ? qQNaN() : vv.toVariant().toDouble();
+        LastTick& lt = last_tick_[sym];
+        if (tms > 0 && tms < lt.time_ms)
+            continue; // out of order
+        lt = LastTick{price, vol, tms, now};
+
+        const QString topic = QStringLiteral("market:quote:") + sym;
+        const QVariant cur = hub.peek_raw(topic);
+        if (!cur.canConvert<QuoteData>())
+            continue; // no polled baseline yet — the cold-start poll lands it
+        const QuoteData was = cur.value<QuoteData>();
+        const QuoteData now_q = with_live_price(was, price, vol);
+        if (now_q == was)
+            continue;
+        hub.publish_live(topic, QVariant::fromValue(now_q)); // poll cadence unchanged
+    }
 }
 
 void MarketDataService::publish_history_to_hub(const QString& symbol, const QString& period, const QString& interval,
@@ -418,6 +552,7 @@ void MarketDataService::ensure_registered_with_hub() {
     hub.set_policy_pattern(QStringLiteral("market:history:*"), hist_p);
 
     hub_registered_ = true;
+    init_stream();
     LOG_INFO("DataHub", "MarketDataService registered (quote:*, sparkline:*, history:*)");
 
     // Cold-start hydration is deferred to the next event-loop tick so it

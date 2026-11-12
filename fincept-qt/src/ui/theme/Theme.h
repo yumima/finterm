@@ -5,6 +5,8 @@
 #include <QColor>
 #include <QString>
 
+class QWidget;
+
 namespace fincept::ui {
 
 // ── Color shim ────────────────────────────────────────────────────────────────
@@ -136,6 +138,11 @@ inline QString hint_px() {
 
 /// Returns "#16a34a" for positive values, "#dc2626" for negative.
 QString change_color(double value);
+
+/// QWidget::setStyleSheet() re-polishes the widget and its children even when
+/// the string is identical. Paths that run on every live tick (a colour that
+/// rarely flips) call this instead.
+void set_style_if_changed(QWidget* w, const QString& style);
 
 /// Applies the default theme at startup (delegates to ThemeManager).
 void apply_global_stylesheet();

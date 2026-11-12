@@ -5910,6 +5910,124 @@ def _ext_session_label(now_et):
     return "CLOSED"
 
 
+_STREAM_URL = "wss://streamer.finance.yahoo.com/?version=2"
+_STREAM_TICK_KEYS = ("id", "price", "time", "change", "change_percent", "day_volume",
+                     "day_high", "day_low", "market_hours")
+
+
+class _QuoteStreamer:
+    """Yahoo's push price feed (the protobuf websocket yf.WebSocket wraps),
+    forwarded to the C++ host as unsolicited {"event": "ticks"} frames.
+
+    Polling (batch_all) stays the source of truth for every field; the stream
+    only moves the last price between polls, so a symbol Yahoo never ticks
+    (indices, most futures) is simply left to polling.
+
+    Our own loop rather than yf.WebSocket.listen(): that one gives up on the
+    first error (no reconnect) and the sync client never sends the 15s
+    re-subscribe heartbeat the async one does.
+
+    Ticks are batched — the latest per symbol, flushed every FLUSH_S — so a
+    busy symbol costs the host at most one update per flush, never one per trade.
+    """
+
+    HEARTBEAT_S = 15.0
+    FLUSH_S = 0.25
+
+    def __init__(self, send):
+        self._send = send  # callable(dict) — the daemon's locked frame writer
+        self._lock = threading.Lock()
+        self._want = set()
+        self._pending = {}
+        self._started = False
+
+    def set_symbols(self, symbols):
+        from yfinance.live import BaseWebSocket  # raises on a yfinance without the live feed
+        with self._lock:
+            self._want = {str(x) for x in symbols if x}
+            self._pending = {k: v for k, v in self._pending.items() if k in self._want}
+            if not self._started:
+                self._decode = BaseWebSocket(verbose=False)._decode_message
+                self._started = True
+                threading.Thread(target=self._conn_loop, name="yf-stream", daemon=True).start()
+                threading.Thread(target=self._flush_loop, name="yf-stream-flush", daemon=True).start()
+        return len(self._want)
+
+    def _wanted(self):
+        with self._lock:
+            return set(self._want)
+
+    def _conn_loop(self):
+        from websockets.sync.client import connect
+        backoff = 1.0
+        while True:
+            if not self._wanted():
+                time.sleep(1.0)  # nothing on screen: no connection held open
+                continue
+            try:
+                ws = connect(_STREAM_URL, open_timeout=10, close_timeout=2)
+            except Exception as e:
+                print(f"[yf-stream] connect failed: {e} — retry in {backoff:.0f}s", file=sys.stderr, flush=True)
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60.0)
+                continue
+            opened = time.monotonic()
+            sent, last_hb = set(), 0.0
+            try:
+                while True:
+                    want = self._wanted()
+                    if not want:
+                        break
+                    now = time.monotonic()
+                    if want != sent or now - last_hb >= self.HEARTBEAT_S:
+                        gone = sent - want
+                        if gone:
+                            ws.send(json.dumps({"unsubscribe": sorted(gone)}))
+                        ws.send(json.dumps({"subscribe": sorted(want)}))
+                        sent, last_hb = want, now
+                    try:
+                        raw = ws.recv(timeout=1.0)  # bounded: a changed set is sent within ~1s
+                    except TimeoutError:
+                        continue
+                    try:
+                        msg = self._decode(json.loads(raw).get("message", ""))
+                    except Exception:
+                        continue  # one bad frame is not a dead connection
+                    if not isinstance(msg, dict):
+                        continue
+                    sym = msg.get("id")
+                    if sym and "price" in msg:
+                        with self._lock:
+                            if sym in self._want:
+                                self._pending[sym] = {k: msg[k] for k in _STREAM_TICK_KEYS if k in msg}
+            except Exception as e:
+                print(f"[yf-stream] connection dropped: {e}", file=sys.stderr, flush=True)
+            finally:
+                try:
+                    ws.close()
+                except Exception:
+                    pass
+            # Back off unless the connection actually held: a server that accepts
+            # and then closes at once (rate limit, rejected subscribe) must not be
+            # hammered every second.
+            if time.monotonic() - opened >= 60.0:
+                backoff = 1.0
+            else:
+                time.sleep(backoff)
+                backoff = min(backoff * 2, 60.0)
+
+    def _flush_loop(self):
+        while True:
+            time.sleep(self.FLUSH_S)
+            with self._lock:
+                batch, self._pending = self._pending, {}
+            if batch:
+                try:
+                    self._send({"id": 0, "event": "ticks", "ticks": list(batch.values())})
+                except Exception:
+                    return  # host gone; the daemon is exiting
+
+
 def run_daemon_socket(socket_path):
     """Multi-threaded daemon over a Unix domain socket.
 
@@ -5974,6 +6092,8 @@ def run_daemon_socket(socket_path):
         with write_lock:
             conn.sendall(frame)
 
+    streamer = _QuoteStreamer(_send_response)
+
     def _handle(req_id, action, payload):
         # Pool threads are reused: this request's trace starts empty, so a
         # failure is never judged by an earlier request's statuses.
@@ -6025,6 +6145,18 @@ def run_daemon_socket(socket_path):
                     _send_response({"id": req_id, "ok": True,
                                     "result": {"shutdown": True}})
                     return
+
+                if action == "stream_set":
+                    # Inline (no pool): it only swaps a set; the stream thread
+                    # does the network work.
+                    try:
+                        n_syms = streamer.set_symbols((payload or {}).get("symbols") or [])
+                        _send_response({"id": req_id, "ok": True, "result": {"streaming": n_syms}})
+                    except Exception as exc:
+                        _send_response({"id": req_id, "ok": False, "error": f"streaming unavailable: {exc}",
+                                        "result": {"error": f"streaming unavailable: {exc}",
+                                                   "transient": False}})
+                    continue
 
                 pool = compute_pool if action in _COMPUTE_ACTIONS else network_pool
                 pool.submit(_handle, req_id, action, payload)

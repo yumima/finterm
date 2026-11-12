@@ -1001,6 +1001,7 @@ set(UI_SOURCES
     src/ui/widgets/ConfettiOverlay.cpp
     src/ui/widgets/SpeedSparkline.cpp
     src/ui/tables/DataTable.cpp
+    src/ui/tables/TickFlashDelegate.cpp
     src/ui/charts/ChartFactory.cpp
     src/ui/charts/InlineSparkline.cpp
     src/ui/navigation/NavigationBar.cpp

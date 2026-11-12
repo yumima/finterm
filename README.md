@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`9e49cc1eb`](https://github.com/yumima/finterm/commit/9e49cc1eb) news: survive Ticker.news outage; Market News times in local time
 - [`e759032d3`](https://github.com/yumima/finterm/commit/e759032d3) read-aloud mute: review fixes, a visible muted cue that fits
 - [`895114e14`](https://github.com/yumima/finterm/commit/895114e14) live TV: mute the stream while read-aloud reads
 

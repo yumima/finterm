@@ -449,6 +449,30 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
 
     bool hub_registered_ = false;
 
+    // ── Push price stream (yfinance_data._QuoteStreamer) ──────────────────
+    // Every market:quote:* topic with a subscriber is streamed; each tick moves
+    // the cached quote's price and the values derived from it, so everything on
+    // screen keeps pace with the source between the 30s polls. Polling stays
+    // the source of truth for every other field and for symbols Yahoo never
+    // ticks (indices, most futures).
+    struct LastTick {
+        double price = 0;
+        double volume = 0;   ///< NaN when the tick carried none
+        qint64 time_ms = 0;  ///< exchange timestamp of the tick (ordering)
+        qint64 seen_ms = 0;  ///< when it arrived (freshness vs a poll)
+    };
+    void init_stream();
+    void sync_stream(bool force);
+    void apply_ticks(const QJsonArray& ticks);
+    /// `q` with `price` as its last price: change / change_pct re-derived from
+    /// q's OWN baseline (price − change = previous close), high/low extended.
+    static QuoteData with_live_price(QuoteData q, double price, double volume);
+    QHash<QString, LastTick> last_tick_;
+    QStringList stream_syms_;              ///< the set the daemon was last sent
+    QTimer* stream_sync_timer_ = nullptr;  ///< debounces topic_active/topic_idle bursts
+    bool stream_unavailable_ = false;      ///< this daemon can't stream; retried on restart
+    static constexpr int kTickWinsOverPollMs = 15'000;
+
     // ── Caching — delegated to CacheManager (SQLite-backed, so entries
     // persist across app restarts). Two parallel keys per symbol:
     //   "market:{sym}"      — 30s TTL, drives in-session freshness so the

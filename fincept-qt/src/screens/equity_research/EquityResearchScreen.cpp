@@ -5,6 +5,8 @@
 #include "core/session/ScreenStateManager.h"
 #include "core/symbol/SymbolContext.h"
 #include "core/symbol/SymbolDragSource.h"
+#include "datahub/DataHub.h"
+#include "datahub/DataHubMetaTypes.h"
 #include "screens/equity_research/EquityAiTab.h"
 #include "screens/equity_research/EquityAnalysisTab.h"
 #include "screens/equity_research/EquityEarningsTab.h"
@@ -340,6 +342,7 @@ EquityResearchScreen::EquityResearchScreen(QWidget* parent) : QWidget(parent) {
 void EquityResearchScreen::showEvent(QShowEvent* e) {
     QWidget::showEvent(e);
     refresh_timer_->start();
+    follow_live_quote(true);
     // Force-fresh on tab activation: invalidate the quote cache and re-fetch
     // just the quote. Info/historical stay warm — they don't move fast enough
     // to justify a refetch on every screen activation. The user can force a
@@ -353,6 +356,46 @@ void EquityResearchScreen::showEvent(QShowEvent* e) {
 void EquityResearchScreen::hideEvent(QHideEvent* e) {
     QWidget::hideEvent(e);
     refresh_timer_->stop();
+    follow_live_quote(false); // like every quote consumer: no polling/streaming off screen
+}
+
+void EquityResearchScreen::follow_live_quote(bool on) {
+    auto& hub = datahub::DataHub::instance();
+    const QString want =
+        (on && !current_symbol_.isEmpty()) ? QStringLiteral("market:quote:") + current_symbol_ : QString();
+    if (want == live_topic_)
+        return;
+    if (!live_topic_.isEmpty())
+        hub.unsubscribe(this, live_topic_);
+    live_topic_ = want;
+    if (live_topic_.isEmpty())
+        return;
+    hub.subscribe(this, live_topic_, [this](const QVariant& v) {
+        if (!v.canConvert<services::QuoteData>())
+            return;
+        const auto mq = v.value<services::QuoteData>();
+        // Needs the header's own quote first (it carries prev_close).
+        if (mq.symbol != current_symbol_ || bar_quote_.symbol != current_symbol_)
+            return;
+        if (!std::isfinite(mq.price) || mq.price <= 0)
+            return;
+        auto q = bar_quote_;
+        q.price = mq.price;
+        if (std::isfinite(q.prev_close) && q.prev_close > 0) {
+            q.change = q.price - q.prev_close;
+            q.change_pct = q.change / q.prev_close * 100.0;
+        } else if (std::isfinite(mq.change_pct)) {
+            q.change = mq.change;
+            q.change_pct = mq.change_pct;
+        }
+        if (std::isfinite(q.high) && q.price > q.high)
+            q.high = q.price;
+        if (std::isfinite(q.low) && q.price < q.low)
+            q.low = q.price;
+        if (std::isfinite(mq.volume) && mq.volume > 0)
+            q.volume = mq.volume;
+        update_quote_bar(q);
+    });
 }
 
 // ── UI construction ───────────────────────────────────────────────────────────
@@ -842,6 +885,10 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, boo
     if (!force && symbol == current_symbol_)
         return;
     current_symbol_ = symbol;
+    // Before any tab loads: a cached quote can be delivered synchronously by
+    // the overview tab below and must become the live-tick baseline, not be
+    // wiped after it.
+    bar_quote_ = {};
     // Make the AI chat aware of what the user is looking at — only while this
     // screen is on-screen, so a construction-time / default load doesn't claim
     // the user is "viewing" a symbol they never opened (ambient context).
@@ -923,6 +970,11 @@ void EquityResearchScreen::load_symbol(const QString& symbol_in, bool force, boo
     // the call here.
     services::finnhub::FinnhubLiveTicks::instance().subscribe(symbol);
 
+    // Follow the shared live quote too (the Yahoo price stream moves it between
+    // polls) — works without a Finnhub key and moves change/change% with the
+    // price, not the price label alone. Only while on screen (see showEvent).
+    follow_live_quote(isVisible());
+
     // Publish to linked group so Watchlist/EquityTrading/News/etc. follow.
     if (propagate && link_group_ != SymbolGroup::None) {
         SymbolContext::instance().set_group_symbol(link_group_, SymbolRef::equity(symbol), this);
@@ -969,6 +1021,7 @@ SymbolRef EquityResearchScreen::current_symbol() const {
 void EquityResearchScreen::update_quote_bar(const services::equity::QuoteData& q) {
     if (q.symbol != current_symbol_)
         return;
+    bar_quote_ = q;
 
     const QString cs = EquityOverviewTab::currency_symbol(current_currency_.isEmpty() ? "USD" : current_currency_);
 
@@ -995,7 +1048,7 @@ void EquityResearchScreen::update_quote_bar(const services::equity::QuoteData& q
                                           .arg(arrow)
                                           .arg(qAbs(q.change_pct), 0, 'f', 2)
                                     : dash);
-    change_label_->setStyleSheet(QString("font-size:13px; font-weight:600; color:%1;").arg(chg_color));
+    ui::set_style_if_changed(change_label_, QString("font-size:13px; font-weight:600; color:%1;").arg(chg_color));
 
     auto fmt_vol = [&dash](double v) -> QString {
         if (!std::isfinite(v))

@@ -143,6 +143,13 @@ class DataHub : public QObject {
     /// values to age out even though the scheduler ignores them).
     void publish(const QString& topic, const QVariant& value, std::chrono::milliseconds ttl);
 
+    /// A push refinement of a POLLED value (e.g. a stream tick moving a quote's
+    /// price): cached and fanned out like publish(), but freshness, in_flight
+    /// and the stored error are untouched, so the scheduler keeps polling on
+    /// the topic's TTL as if no tick had arrived. Dropped when the topic has
+    /// never been published (nothing to refine). Thread-safe.
+    void publish_live(const QString& topic, const QVariant& value);
+
     /// Signal that a refresh() for `topic` has failed. Clears the
     /// `in_flight` flag so the scheduler can retry on the next pass and
     /// emits `topic_error(topic, error)` so subscribers can surface the
@@ -306,7 +313,8 @@ class DataHub : public QObject {
     TopicState& state_for(const QString& topic);
     static bool pattern_matches(const QString& pattern, const QString& topic);
     void emit_to_subscribers(const QString& topic, const QVariant& value);
-    void do_publish(const QString& topic, const QVariant& value, std::chrono::milliseconds ttl_override);
+    void do_publish(const QString& topic, const QVariant& value, std::chrono::milliseconds ttl_override,
+                    bool live = false);
     void do_coalesced_flush(const QString& topic);
     void scheduler_body();
     // Periodic eviction of topics that have no subscribers (concrete or

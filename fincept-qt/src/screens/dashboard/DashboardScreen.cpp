@@ -267,11 +267,25 @@ void DashboardScreen::hub_resubscribe_ticker() {
     // set may have changed (user edited ticker symbols).
     hub.unsubscribe(this);
     hub_active_ = false;
-    ticker_cache_.clear();
 
     ticker_subscribed_ = ticker_bar_->symbols();
+    // Keep what is still subscribed and seed the rest from the hub's last-known
+    // value. Clearing the cache here left only the topics still inside their TTL
+    // (the hub re-delivers just those on subscribe): on a tab switch that was
+    // often ONE index, and the wrapping tape painted "^GSPC … ^GSPC … ^GSPC"
+    // across the whole strip until the forced poll answered.
+    for (auto it = ticker_cache_.begin(); it != ticker_cache_.end();)
+        it = ticker_subscribed_.contains(it.key()) ? std::next(it) : ticker_cache_.erase(it);
+    for (const QString& sym : ticker_subscribed_) {
+        if (ticker_cache_.contains(sym))
+            continue;
+        const QVariant last = hub.peek_raw(QStringLiteral("market:quote:") + sym);
+        if (last.canConvert<services::QuoteData>())
+            ticker_cache_.insert(sym, last.value<services::QuoteData>());
+    }
     if (ticker_subscribed_.isEmpty())
         return;
+    rebuild_ticker_from_cache();
 
     QStringList topics;
     topics.reserve(ticker_subscribed_.size());
@@ -282,7 +296,7 @@ void DashboardScreen::hub_resubscribe_ticker() {
             if (!v.canConvert<services::QuoteData>())
                 return;
             ticker_cache_.insert(sym, v.value<services::QuoteData>());
-            rebuild_ticker_from_cache();
+            quote_render_.request(); // one render per tick batch
         });
     }
     // force=true: ticker bar re-subscribe happens on user edits and tab shows —

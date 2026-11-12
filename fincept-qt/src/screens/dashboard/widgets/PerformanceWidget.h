@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/RenderCoalescer.h"
 #include "screens/dashboard/widgets/BaseWidget.h"
 #include "services/markets/MarketDataService.h"
 
@@ -41,6 +42,10 @@ class PerformanceWidget : public BaseWidget {
 
     QHash<QString, services::QuoteData> row_cache_;
     bool hub_active_ = false;
+
+  private:
+    /// Coalesces the per-quote re-render: one rebuild_from_cache() per tick batch.
+    ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
 } // namespace fincept::screens::widgets

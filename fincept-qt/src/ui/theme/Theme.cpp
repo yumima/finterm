@@ -1,5 +1,7 @@
 #include "ui/theme/Theme.h"
 
+#include <QWidget>
+
 #include "ui/theme/ThemeManager.h"
 
 #include <QApplication>
@@ -19,6 +21,11 @@ void set_rtl(bool rtl) {
     qApp->setLayoutDirection(rtl ? Qt::RightToLeft : Qt::LeftToRight);
     // Re-apply current theme so RTL direction change is reflected
     ThemeManager::instance().apply_theme(ThemeManager::instance().current_theme_name());
+}
+
+void set_style_if_changed(QWidget* w, const QString& style) {
+    if (w && w->styleSheet() != style)
+        w->setStyleSheet(style);
 }
 
 QString change_color(double value) {

@@ -1,9 +1,11 @@
 #pragma once
+#include "ui/RenderCoalescer.h"
 #include "screens/dashboard/widgets/BaseWidget.h"
 #include "services/markets/MarketDataService.h"
 
 #include <QGridLayout>
 #include <QHash>
+#include <QLabel>
 
 namespace fincept::screens::widgets {
 
@@ -38,6 +40,16 @@ class SectorHeatmapWidget : public BaseWidget {
     void rebuild_from_cache();
 
     QGridLayout* grid_ = nullptr;
+    /// Persistent cells, built once per symbol set and then updated in place:
+    /// rebuilding 33 styled widgets per live tick was the heatmap's whole cost.
+    struct Cell {
+        QWidget* frame = nullptr;
+        QLabel* chg = nullptr;
+        QString bg;        ///< tint last applied (restyle only when it changes)
+        QString chg_color; ///< change colour last applied
+    };
+    QStringList cell_syms_; ///< symbols the grid holds, in order; empty = rebuild
+    QHash<QString, Cell> cells_;
     QWidget* grid_container_ = nullptr;
 
     static QStringList sector_symbols();
@@ -45,6 +57,10 @@ class SectorHeatmapWidget : public BaseWidget {
 
     QHash<QString, services::QuoteData> row_cache_;
     bool hub_active_ = false;
+
+  private:
+    /// Coalesces the per-quote re-render: one rebuild_from_cache() per tick batch.
+    ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
 } // namespace fincept::screens::widgets

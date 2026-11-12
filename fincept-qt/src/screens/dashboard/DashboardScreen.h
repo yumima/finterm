@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/RenderCoalescer.h"
 #include "screens/dashboard/DashboardStatusBar.h"
 #include "screens/dashboard/DashboardToolBar.h"
 #include "screens/dashboard/MarketPulsePanel.h"
@@ -64,6 +65,10 @@ class DashboardScreen : public QWidget {
     QHash<QString, services::QuoteData> ticker_cache_;
     QStringList ticker_subscribed_;
     bool hub_active_ = false;
+
+  private:
+    /// Coalesces the per-quote re-render: one rebuild_ticker_from_cache() per tick batch.
+    ui::RenderCoalescer quote_render_{this, [this]() { rebuild_ticker_from_cache(); }};
 };
 
 } // namespace fincept::screens

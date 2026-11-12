@@ -469,6 +469,7 @@ void PythonWorker::on_ready_read() {
             connect(socket_, &QLocalSocket::connected, this, [this]() {
                 LOG_INFO("PythonWorker", "Socket connected — dispatching queued requests");
                 dispatch_queued();
+                emit daemon_connected(); // a fresh daemon holds no stream subscriptions
             });
             connect(socket_, &QLocalSocket::errorOccurred, this, [this](QLocalSocket::LocalSocketError err) {
                 LOG_WARN("PythonWorker",
@@ -517,6 +518,11 @@ void PythonWorker::try_drain_frames() {
             continue;
         }
         const QJsonObject obj = doc.object();
+        // Unsolicited push frame (no request behind it): the price stream.
+        if (obj.contains(QStringLiteral("event"))) {
+            emit event_frame(obj.value(QStringLiteral("event")).toString(), obj);
+            continue;
+        }
         const int id = obj.value("id").toInt();
 
         auto it = in_flight_.find(id);

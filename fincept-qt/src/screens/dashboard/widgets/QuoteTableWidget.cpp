@@ -43,6 +43,7 @@ constexpr auto kFutTip = "Each index's futures quote: the future's change since 
 
 void QuoteTableWidget::build_table() {
     table_ = new ui::DataTable;
+    table_->enable_tick_flash(); // live quotes: flash cells as they tick (column 0 = row key)
     if (fut_enabled_) {
         apply_fut_columns();
     } else {
@@ -237,7 +238,7 @@ void QuoteTableWidget::hub_subscribe_all() {
             row_cache_.insert(sym, v.value<services::QuoteData>());
             set_loading(false);
             clear_error();
-            render_from_cache();
+            quote_render_.request(); // one render per tick batch
         });
     }
     // Surface a refresh failure rather than spinning forever. Only error when no
@@ -268,8 +269,12 @@ void QuoteTableWidget::hub_unsubscribe_all() {
 void QuoteTableWidget::render_from_cache() {
     if (!table_)
         return;
-    table_->clear_data();
-    row_symbols_.clear();
+    // Built first, then shown with set_rows(): on a live tick the shape is
+    // unchanged, so only the cells whose text moved are touched and repainted —
+    // not a clear-and-rebuild of the whole table several times a second.
+    QVector<QStringList> rows;
+    QVector<const services::QuoteData*> row_quotes;
+    QStringList row_syms;
     for (const auto& sym : symbols_) {
         auto it = row_cache_.constFind(sym);
         if (it == row_cache_.constEnd())
@@ -288,23 +293,33 @@ void QuoteTableWidget::render_from_cache() {
         if (fut_enabled_)
             cells << (fut != fut_.constEnd() ? ui::formatting::format_percent(fut->pct, 2, true)
                                              : ui::formatting::placeholder());
-        table_->add_row(cells);
-        row_symbols_.append(q.symbol);
-        int row = table_->rowCount() - 1;
+        rows.append(cells);
+        row_quotes.append(&q);
+        row_syms.append(q.symbol);
+    }
+    const bool refit = table_->set_rows(rows);
+    row_symbols_ = row_syms;
+    for (int row = 0; row < row_quotes.size(); ++row) {
+        const auto& q = *row_quotes[row];
         table_->set_cell_color(row, 2, ui::change_color(q.change_pct));
         table_->set_cell_color(row, 3, ui::change_color(q.change_pct));
         if (fut_enabled_) {
             if (auto* it = table_->item(row, kColFut)) {
+                const auto fut = fut_.constFind(q.symbol);
+                const QString display_name = label_map_.value(q.symbol, q.symbol);
                 if (fut != fut_.constEnd()) {
                     it->setForeground(QColor(ui::change_color(fut->pct)));
                     it->setToolTip(services::index_future_tooltip(*fut, display_name));
                 } else {
+                    // Items are reused now (set_rows): reset what a prior future painted.
+                    it->setForeground(QColor(ui::colors::WHITE()));
                     it->setToolTip(services::index_future_unavailable_tooltip(q.symbol, display_name));
                 }
             }
         }
     }
-    schedule_fit();
+    if (refit)
+        schedule_fit();
 }
 
 } // namespace fincept::screens::widgets

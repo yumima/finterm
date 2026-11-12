@@ -1,4 +1,5 @@
 #pragma once
+#include "ui/RenderCoalescer.h"
 #include "screens/dashboard/widgets/BaseWidget.h"
 #include "services/markets/IndexFutures.h"
 #include "services/markets/MarketDataService.h"
@@ -80,6 +81,10 @@ class QuoteTableWidget : public BaseWidget {
     QTimer* fut_timer_ = nullptr;
     bool fut_in_flight_ = false;
     bool fut_failed_ = false;
+
+  private:
+    /// Coalesces the per-quote re-render: one render_from_cache() per tick batch.
+    ui::RenderCoalescer quote_render_{this, [this]() { render_from_cache(); }};
 };
 
 } // namespace fincept::screens::widgets

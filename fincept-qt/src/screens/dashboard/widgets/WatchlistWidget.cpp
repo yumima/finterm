@@ -53,6 +53,7 @@ WatchlistWidget::WatchlistWidget(QWidget* parent)
 
     // Table
     table_ = new ui::DataTable;
+    table_->enable_tick_flash(); // live quotes: flash cells as they tick (column 0 = row key)
     table_->set_headers({"SYMBOL", "PRICE", "CHG", "CHG%", "TREND"});
     table_->set_column_widths({100, 90, 80, 70, 90});
     vl->addWidget(table_);

@@ -935,12 +935,14 @@ void MarketPulsePanel::rebuild_breadth_from_cache() {
 
     if (fg_score_val_) {
         fg_score_val_->setText(QString::number(score));
-        fg_score_val_->setStyleSheet(
+        ui::set_style_if_changed(
+            fg_score_val_,
             QString("color: %1; font-size: 18px; font-weight: bold; background: transparent;").arg(sentiment_color));
     }
     if (fg_sentiment_) {
         fg_sentiment_->setText(sentiment_text);
-        fg_sentiment_->setStyleSheet(
+        ui::set_style_if_changed(
+            fg_sentiment_,
             QString("color: %1; font-size: 9px; font-weight: bold; letter-spacing: 0.5px; background: transparent;")
                 .arg(sentiment_color));
     }
@@ -1017,8 +1019,8 @@ void MarketPulsePanel::rebuild_snapshot_from_cache() {
         row.val->setText(fmt_price(q));
         row.chg->setText(fmt_chg(q));
         QString chg_color = ui::change_color(q.change_pct);
-        row.chg->setStyleSheet(
-            QString("color: %1; font-size: 8px; font-weight: bold; background: transparent;").arg(chg_color));
+        ui::set_style_if_changed(
+            row.chg, QString("color: %1; font-size: 8px; font-weight: bold; background: transparent;").arg(chg_color));
     };
     update_stat("^VIX", vix_row_);
     update_stat("^TNX", us10y_row_);

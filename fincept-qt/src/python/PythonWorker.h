@@ -64,6 +64,14 @@ class PythonWorker : public QObject {
 
     void stop();
 
+  signals:
+    /// The daemon's socket connected — first start or a restart. Push-style
+    /// state the daemon held (stream subscriptions) is gone and must be re-sent.
+    void daemon_connected();
+    /// An unsolicited frame {"event": <name>, …} — today only "ticks", the
+    /// price stream (yfinance_data._QuoteStreamer).
+    void event_frame(const QString& event, const QJsonObject& frame);
+
   private:
     PythonWorker();
     ~PythonWorker() override;

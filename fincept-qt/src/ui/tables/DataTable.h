@@ -15,6 +15,16 @@ class DataTable : public QTableWidget {
     void set_data(const QVector<QStringList>& rows);
     void add_row(const QStringList& row);
     void clear_data();
+    /// Live quote tables only: cells flash green/red as their numbers tick.
+    /// Needs a column whose text is unique per row (the symbol) — a table of
+    /// static or non-unique rows would flash on repaints of unchanged data.
+    void enable_tick_flash(int key_column = 0);
+    /// Show `rows`. Same shape as now (row count, and every row fits the
+    /// columns) → only cells whose text changed are touched: no item churn,
+    /// no relayout, and only those cells repaint — the live-tick path. Any
+    /// other shape → a plain rebuild. Returns true when a cell may now need a
+    /// different width (rebuilt, or a text's length changed) — re-fit then.
+    bool set_rows(const QVector<QStringList>& rows);
     void set_column_widths(const QVector<int>& widths);
 
     // Color a specific cell

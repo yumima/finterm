@@ -255,6 +255,7 @@ QWidget* WatchlistScreen::build_main_panel() {
 
     // Table — the main data area
     table_ = new ui::DataTable;
+    table_->enable_tick_flash(); // live quotes: flash cells as they tick (column 0 = row key)
     // The quote columns, then ownership from the local stores (Koyfin's
     // pattern: ownership as watchlist columns, not only a tab). Each is
     // dated in its header tooltip once the rows land.
@@ -588,7 +589,7 @@ void WatchlistScreen::hub_resubscribe_stocks() {
             if (!v.canConvert<services::QuoteData>())
                 return;
             row_cache_.insert(sym, v.value<services::QuoteData>());
-            rebuild_from_cache();
+            quote_render_.request(); // one render per tick batch
         });
     }
     // force=true: watchlist symbols change on user edit; bypass min_interval
