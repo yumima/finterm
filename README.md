@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`e759032d3`](https://github.com/yumima/finterm/commit/e759032d3) read-aloud mute: review fixes, a visible muted cue that fits
 - [`895114e14`](https://github.com/yumima/finterm/commit/895114e14) live TV: mute the stream while read-aloud reads
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)

@@ -186,10 +186,20 @@ def build_mcp_server() -> Any:
         # Try yfinance news for symbol-specific queries
         if symbol and YFINANCE_AVAILABLE:
             try:
-                ticker = yf.Ticker(symbol.upper())
-                news = ticker.news or []
+                # Search, not Ticker.news: the latter changed shape in
+                # yfinance 0.2.66 (nested "content") and in 2026-11 raises
+                # "YAHOO! FINANCE IS CURRENTLY DOWN". Search still serves the
+                # flat title/link/publisher/providerPublishTime shape parsed below.
+                # Search is a fuzzy TEXT search ("F" matches any company), so keep
+                # only items Yahoo tags with this ticker, and over-fetch: the
+                # date cutoff below runs after the fetch.
+                sym_u = symbol.upper()
+                news = [it for it in (yf.Search(sym_u, news_count=max(limit * 3, 20)).news or [])
+                        if sym_u in (it.get("relatedTickers") or [])]
                 cutoff = datetime.now() - timedelta(days=days_back)
-                for item in news[:limit]:
+                for item in news:
+                    if len(articles) >= limit:
+                        break
                     pub_ts = item.get("providerPublishTime", 0)
                     pub_dt = datetime.fromtimestamp(pub_ts) if pub_ts else None
                     if pub_dt and pub_dt < cutoff:

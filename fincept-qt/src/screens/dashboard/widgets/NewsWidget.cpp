@@ -9,6 +9,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QLabel>
+#include <QLocale>
 #include <QSet>
 
 namespace fincept::screens::widgets {
@@ -99,6 +100,8 @@ void NewsWidget::refresh_data() {
             if (!ok) {
                 // say what happened — a refused request is not "no news"
                 const bool have_prior = news_layout_->count() > 1; // rows actually drawn (the stretch is 1)
+                if (have_prior)
+                    populate(last_articles_); // re-judge "HH:mm" vs date — the day may have turned
                 finalize_refresh(why + (have_prior ? QStringLiteral(" · showing the previous headlines") : QString()));
                 if (!have_prior)
                     set_error(why + QStringLiteral(" — the feed will retry on the next refresh."));
@@ -108,6 +111,8 @@ void NewsWidget::refresh_data() {
             if (articles.isEmpty()) {
                 // A successful answer with no articles (Yahoo had none for SPY just
                 // now). Keep prior articles, just acknowledge the click.
+                if (!last_articles_.isEmpty())
+                    populate(last_articles_); // re-judge "HH:mm" vs date — the day may have turned
                 finalize_refresh(news_layout_->count() > 1 ? QStringLiteral("no articles returned · prior kept")
                                                            : QStringLiteral("no articles returned"));
                 LOG_INFO("NewsWidget", "fetch_news returned empty array — keeping prior articles");
@@ -174,10 +179,15 @@ void NewsWidget::populate(const QJsonArray& articles) {
         if (title.isEmpty())
             continue;
 
-        // Extract time portion from date
+        // published_date is an EVENT instant in UTC ("…Z" or "+00:00"), so it is
+        // parsed and shown in local time — slicing "HH:MM" out of the string
+        // showed UTC as if it were local. Not today → the date instead.
         QString time_str;
-        if (pub_date.length() >= 16) {
-            time_str = pub_date.mid(11, 5); // "HH:MM"
+        const QDateTime when = QDateTime::fromString(pub_date, Qt::ISODate);
+        if (when.isValid()) {
+            const QDateTime local = when.toLocalTime();
+            time_str = local.date() == QDate::currentDate() ? local.toString(QStringLiteral("HH:mm"))
+                                                             : QLocale::c().toString(local, QStringLiteral("MMM d"));
         }
 
         auto* row = new QWidget(this);
@@ -193,8 +203,11 @@ void NewsWidget::populate(const QJsonArray& articles) {
         const QString fs = QString("font-size:%1px;").arg(ui::fonts::font_px(0));
         if (!time_str.isEmpty()) {
             auto* time_lbl = new QLabel(time_str);
-            time_lbl->setFixedWidth(36);
             time_lbl->setStyleSheet(QString("color: %1; background: transparent; %2").arg(ui::colors::CYAN(), fs));
+            // Sized from the font the stylesheet just set (a fixed 36px clipped
+            // "15:35" to "15:3"); the widest form is "MMM dd", so rows line up.
+            time_lbl->ensurePolished();
+            time_lbl->setFixedWidth(time_lbl->fontMetrics().horizontalAdvance(QStringLiteral("Mmm 00")) + 2);
             rl->addWidget(time_lbl);
         }
 

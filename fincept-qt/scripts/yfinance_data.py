@@ -1385,7 +1385,21 @@ def get_ipo_extras(symbol):
 
     # ── News (up to 10 most recent headlines) ─────────────────────────────
     try:
-        items = t.news or []
+        # Same two failure modes as get_news(): [] or a raise ("YAHOO! FINANCE
+        # IS CURRENTLY DOWN"). Either way fall back to Search, mapped to the
+        # row shape below (link/ts instead of url/published_date).
+        primary_err = None
+        try:
+            items = t.news or []
+        except Exception as e:
+            primary_err, items = e, []
+        # Search items are already the flat shape parsed below, with the epoch
+        # intact (the C++ side decodes an integer ts to local time).
+        if not any(((n.get("content") if isinstance(n.get("content"), dict) else n) or {}).get("title")
+                   for n in items):
+            items = _search_news_items(symbol, 10)
+            if not items and primary_err is not None:
+                raise primary_err  # → news_error below: the outage, not "no news"
         news_rows = []
         for n in items[:10]:
             # yfinance 0.2+ wraps the article in a "content" dict; older
@@ -3492,6 +3506,13 @@ def get_earnings_analysis(symbol, quarters=12):
     return out
 
 
+def _search_news_items(symbol, count):
+    """Raw yf.Search news items: flat title/link/publisher/providerPublishTime
+    (unix seconds — an EVENT instant, kept as the integer so consumers decode it
+    to local time), relatedTickers. The one place Search news is fetched."""
+    return yf.Search(symbol, news_count=count).news or []
+
+
 def _news_via_search(symbol, count):
     """Fallback news source: yfinance's Search endpoint.
 
@@ -3503,7 +3524,7 @@ def _news_via_search(symbol, count):
     """
     import re
     from datetime import datetime, timezone
-    items = yf.Search(symbol, news_count=count).news or []
+    items = _search_news_items(symbol, count)
     articles = []
     for it in items:
         title = it.get("title", "")
@@ -3672,9 +3693,15 @@ def get_news(symbol, count=20):
     try:
         import re
         ticker = yf.Ticker(symbol)
-        raw_news = ticker.news
-        if not raw_news:
-            return {"articles": _news_via_search(symbol, count), "symbol": symbol}
+        # Ticker.news has two failure modes and BOTH must reach the Search
+        # fallback: [] (yfinance 0.2.66, endpoint retired) and a raise —
+        # 2026-11 Yahoo answers it with "*** YAHOO! FINANCE IS CURRENTLY
+        # DOWN! ***" (YFDataException) while Search keeps serving news.
+        primary_err = None
+        try:
+            raw_news = ticker.news or []
+        except Exception as e:
+            primary_err, raw_news = e, []
 
         articles = []
         for item in raw_news[:count]:
@@ -3705,6 +3732,19 @@ def get_news(symbol, count=20):
                 "publisher": publisher,
                 "published_date": pub_date
             })
+
+        # The gate is "nothing PARSED", not "nothing returned": a reshaped
+        # Ticker.news (every item missing content.title) blanks the feed too.
+        if not articles:
+            try:
+                articles = _news_via_search(symbol, count)
+            except Exception as e:
+                if primary_err is None:
+                    raise
+                return {"error": f"{primary_err}; search fallback: {e}", "symbol": symbol, "articles": []}
+            if not articles and primary_err is not None:
+                # Empty fallback after a refused primary is the outage, not "no news".
+                return {"error": str(primary_err), "symbol": symbol, "articles": []}
 
         return {"articles": articles, "symbol": symbol}
     except Exception as e:
