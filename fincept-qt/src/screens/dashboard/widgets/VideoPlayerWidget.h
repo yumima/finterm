@@ -224,6 +224,13 @@ class VideoPlayerWidget : public BaseWidget {
     /// player, hidden in WEB-engine mode (which owns its own transport/audio).
     /// Safe to call in any build — guards each control's existence internally.
     void sync_web_mode_controls();
+    /// Mute (not duck — volume is untouched) the stream while a read-aloud
+    /// reading is in progress, preparing included, so the two voices don't talk
+    /// over each other. Any TtsService reading counts: news brief/article, chat,
+    /// the Settings → Voice preview. Covers both engines (the native
+    /// QAudioOutput and the WebEngine page) and shows tts_muted_label_.
+    /// Driven by TtsService::reading_changed; re-applied when the web view is built.
+    void apply_read_aloud_mute(bool reading);
 #ifdef HAS_QT_MULTIMEDIA
     /// Refresh audio_output_ to the current system default sink and
     /// re-attach it to the player. Single source of truth for the
@@ -451,6 +458,7 @@ class VideoPlayerWidget : public BaseWidget {
     // The current channel's name, and the way to change it: a click opens the
     // channel list as a dropdown (switch_channel()) instead of BACK + pick.
     QLabel* now_playing_ = nullptr;
+    QLabel* tts_muted_label_ = nullptr; ///< "MUTED — READ-ALOUD" cue; see apply_read_aloud_mute
     QMenu* channel_menu_ = nullptr;
     QLabel* status_label_ = nullptr;
 

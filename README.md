@@ -2,15 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-11-03)
+## Today's commits (2026-11-12)
 
 Latest first.
 
-- [`4adcdf090`](https://github.com/yumima/finterm/commit/4adcdf090) blame: ignore the clang-format sweep
-- [`4823e51f8`](https://github.com/yumima/finterm/commit/4823e51f8) **style:** clang-format 18 over fincept-qt/src
-- [`e758c429e`](https://github.com/yumima/finterm/commit/e758c429e) lint: fix cppcheck findings, make D1/D4 checks see split calls
-- [`f8b031bf9`](https://github.com/yumima/finterm/commit/f8b031bf9) read-aloud review fixes: session ids, dead-engine probe, gapless chunks
-- [`a31f8744b`](https://github.com/yumima/finterm/commit/a31f8744b) news TL;DR read-aloud: speaker/cross icon, instant start, shared toggle
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

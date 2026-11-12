@@ -110,6 +110,11 @@ class TtsService : public QObject {
     /// global signals which reading an edge belongs to.
     int session() const { return session_; }
 
+    /// A reading is in progress: from speak()/speak_via_engine() launching it —
+    /// "preparing" included — until it ends. Unlike state_changed, it does not
+    /// drop between back-to-back readings (speak()'s internal stop() is hidden).
+    bool is_reading() const { return reading_; }
+
   signals:
     /// Any reading (legacy, session-blind): for consumers that mirror ALL
     /// playback, like chat's hands-free voice mode.
@@ -124,6 +129,9 @@ class TtsService : public QObject {
     void availability_changed();
     /// engine_voices() or the chosen voice changed.
     void engine_voices_changed();
+    /// is_reading() flipped. For consumers that must yield to read-aloud for
+    /// its whole span (the TV mutes), not just while audio is audible.
+    void reading_changed(bool reading);
 
   private:
     TtsService();
@@ -141,6 +149,11 @@ class TtsService : public QObject {
     bool announced_ = false; ///< speaking=true already emitted for session_
     /// Emit state_changed + session_state; true at most once per reading.
     void set_speaking(bool speaking);
+    bool reading_ = false;
+    bool restarting_ = false; ///< inside begin_reading()'s stop(): keep reading_ up
+    void set_reading(bool reading);
+    /// stop() the previous reading + open a new session, with reading_ held true.
+    void begin_reading();
     /// Emit error + session_error.
     void fail(const QString& message);
 

@@ -397,9 +397,26 @@ void TtsService::set_speaking(bool speaking) {
         announced_ = true;
     } else {
         announced_ = false;
+        if (!restarting_)
+            set_reading(false); // every reading's end passes through here
     }
     emit state_changed(speaking);
     emit session_state(session_, speaking);
+}
+
+void TtsService::set_reading(bool reading) {
+    if (reading_ == reading)
+        return;
+    reading_ = reading;
+    emit reading_changed(reading);
+}
+
+void TtsService::begin_reading() {
+    restarting_ = true;
+    stop();
+    restarting_ = false;
+    ++session_;
+    set_reading(true);
 }
 
 void TtsService::fail(const QString& message) {
@@ -431,20 +448,29 @@ void TtsService::mark_engine_failed(const QString& url, int http_status) {
 bool TtsService::speak_via_engine(const QString& text) {
     if (text.trimmed().isEmpty())
         return false;
-    stop();
-    ++session_;
+    begin_reading();
 
+    // A synchronous `return false` emits no state_changed(false), so it must
+    // end the reading itself.
     if (get_setting("tts.provider") == QStringLiteral("none")) {
         fail(QStringLiteral("Read-aloud is switched off (Settings → Voice)"));
+        set_reading(false);
         return false;
     }
     const auto ep = ai_chat::LlmService::instance().speech_endpoint();
-    if (!ep || !engine_usable(ep->url))
-        return start_piper(text); // no (working) speech route: Anthropic, Gemini, a dead hearth, …
+    if (!ep || !engine_usable(ep->url)) {
+        // no (working) speech route: Anthropic, Gemini, a dead hearth, …
+        const bool ok = start_piper(text);
+        if (!ok)
+            set_reading(false);
+        return ok;
+    }
 
     eng_chunks_ = split_for_speech(text, *ep);
-    if (eng_chunks_.isEmpty())
+    if (eng_chunks_.isEmpty()) {
+        set_reading(false);
         return false;
+    }
     eng_url_ = ep->url;
     eng_headers_ = ep->headers;
     eng_body_ = ep->body;
@@ -560,9 +586,11 @@ bool TtsService::speak(const QString& text) {
     // Cancel any in-flight utterance + cleanup before starting new
     // one.  The user clicking 🔊 twice should mean "just say the new
     // one", not "play both overlapping".
-    stop();
-    ++session_;
-    return start_piper(text);
+    begin_reading();
+    const bool ok = start_piper(text);
+    if (!ok)
+        set_reading(false); // synchronous failure: no state_changed(false) follows
+    return ok;
 }
 
 bool TtsService::start_piper(const QString& text) {

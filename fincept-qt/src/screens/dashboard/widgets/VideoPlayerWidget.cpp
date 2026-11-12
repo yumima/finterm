@@ -4,6 +4,7 @@
 #include "core/config/AppIdentity.h"
 #include "core/diagnostics/SlowOpTimer.h"
 #include "core/logging/Logger.h"
+#include "services/tts/TtsService.h"
 #include "services/video/LiveHlsProxy.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "ui/theme/Theme.h"
@@ -469,6 +470,13 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
             t->setToolTip(QStringLiteral("Click to switch channel"));
         }
         cl->addWidget(now_playing_);
+        // Shown while read-aloud holds the stream muted, so the silence reads
+        // as deliberate rather than as a dead stream.
+        tts_muted_label_ = new QLabel(QString(QChar(0x1F507)) + QStringLiteral(" MUTED — READ-ALOUD"));
+        tts_muted_label_->setFixedHeight(20);
+        tts_muted_label_->setToolTip(QStringLiteral("Stream audio returns when the reading ends"));
+        tts_muted_label_->hide();
+        cl->addWidget(tts_muted_label_);
         cl->addStretch(1);
 
 #ifdef HAS_QT_MULTIMEDIA
@@ -692,9 +700,30 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
 
     apply_styles();
     stack_->setCurrentIndex(0);
+
+    // Mute the stream while read-aloud reads (news brief / article, chat).
+    // The user's own volume is untouched — only the mute flag flips. Needs
+    // controls_ (the muted cue), so it runs after the controls bar is built.
+    auto& tts = fincept::services::TtsService::instance();
+    connect(&tts, &fincept::services::TtsService::reading_changed, this,
+            &VideoPlayerWidget::apply_read_aloud_mute);
+    apply_read_aloud_mute(tts.is_reading());
 }
 
 // ── Page 0: Channel list ─────────────────────────────────────────────────────
+
+void VideoPlayerWidget::apply_read_aloud_mute(bool reading) {
+#ifdef HAS_QT_MULTIMEDIA
+    if (audio_output_)
+        audio_output_->setMuted(reading);
+#endif
+#ifdef HAS_QT_WEBENGINE
+    if (web_view_)
+        web_view_->page()->setAudioMuted(reading);
+#endif
+    if (tts_muted_label_)
+        tts_muted_label_->setVisible(reading);
+}
 
 void VideoPlayerWidget::build_channel_list() {
     list_page_ = new QWidget(this);
@@ -1660,6 +1689,7 @@ void VideoPlayerWidget::build_web_view() {
     });
 
     stack_->addWidget(web_view_); // page 2
+    apply_read_aloud_mute(fincept::services::TtsService::instance().is_reading());
 }
 
 // Embed a YouTube video by ID — the path that already works smoothly for
@@ -2813,6 +2843,9 @@ void VideoPlayerWidget::apply_styles() {
     now_playing_->setStyleSheet(
         QString("color: %1; font-size: 9px; font-weight: bold; background: transparent; padding: 0 6px;")
             .arg(ui::colors::AMBER()));
+    tts_muted_label_->setStyleSheet(
+        QString("color: %1; font-size: 9px; font-weight: bold; background: transparent; padding: 0 6px;")
+            .arg(ui::colors::TEXT_SECONDARY()));
     channel_menu_->setStyleSheet(
         QString("QMenu { background: %1; color: %2; border: 1px solid %3; font-size: 10px; padding: 2px; }"
                 "QMenu::item { padding: 4px 18px 4px 6px; }"
