@@ -36,7 +36,7 @@ import warnings
 
 from ..base.base_models import (
     BaseMarketAnalysisModel, SecurityType, ValidationError,
-    FinceptAnalyticsError
+    FintermAnalyticsError
 )
 
 

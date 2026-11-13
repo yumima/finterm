@@ -347,7 +347,11 @@ ReportBuilderService::ReportBuilderService() {
     // The draft is the user's work: keep it with their files, not in /tmp
     // (shared, world-readable on some systems, wiped on reboot).
     QDir().mkpath(AppPaths::files() + "/reports");
-    autosave_path_ = AppPaths::files() + "/reports/autosave.fincept";
+    autosave_path_ = AppPaths::files() + "/reports/autosave.finterm";
+    // The draft an older build saved under the previous extension.
+    if (const QString older = AppPaths::files() + "/reports/autosave.fincept";
+        !QFile::exists(autosave_path_) && QFile::exists(older))
+        QFile::rename(older, autosave_path_);
 
     // Restore current_file_ from settings so the title bar shows the right
     // path on relaunch. (The doc itself comes from autosave below.)

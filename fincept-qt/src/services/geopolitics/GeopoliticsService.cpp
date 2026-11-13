@@ -642,7 +642,7 @@ void GeopoliticsService::refresh(const QStringList& topics) {
 }
 
 int GeopoliticsService::max_requests_per_sec() const {
-    return 2; // Fincept research API + HDX Python — conservative
+    return 2; // Finterm research API + HDX Python — conservative
 }
 
 void GeopoliticsService::ensure_registered_with_hub() {

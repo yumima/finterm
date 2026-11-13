@@ -355,26 +355,26 @@ class ModelValidator:
 
 
 # Exception classes for better error handling
-class FinceptAnalyticsError(Exception):
+class FintermAnalyticsError(Exception):
     """Base exception for analytics module"""
     pass
 
 
-class DataProviderError(FinceptAnalyticsError):
+class DataProviderError(FintermAnalyticsError):
     """Exception for data provider issues"""
     pass
 
 
-class ValidationError(FinceptAnalyticsError):
+class ValidationError(FintermAnalyticsError):
     """Exception for input validation failures"""
     pass
 
 
-class CalculationError(FinceptAnalyticsError):
+class CalculationError(FintermAnalyticsError):
     """Exception for calculation failures"""
     pass
 
 
-class ModelError(FinceptAnalyticsError):
+class ModelError(FintermAnalyticsError):
     """Exception for model-specific issues"""
     pass

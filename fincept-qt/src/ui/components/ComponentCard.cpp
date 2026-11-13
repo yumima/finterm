@@ -15,7 +15,7 @@ namespace {
 // Shared MIME type for dragging a screen id out of the browser. Kept as a
 // constexpr free name so a future drop-on-dock-area handler can include
 // this header and share the string.
-constexpr const char* kScreenIdMime = "application/x-fincept-screen-id";
+constexpr const char* kScreenIdMime = "application/x-finterm-screen-id";
 
 // Per-category accent colour. Keeps the browser visually parseable at a
 // glance — the same Bloomberg trick of colour-coding asset classes in the

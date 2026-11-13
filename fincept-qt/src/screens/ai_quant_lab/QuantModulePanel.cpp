@@ -5673,7 +5673,7 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
     ltvl->setContentsMargins(12, 12, 12, 12);
     ltvl->setSpacing(10);
 
-    auto* lt_info = new QLabel("Schedules are persisted in ~/.fincept/rolling_schedules.json. "
+    auto* lt_info = new QLabel("Schedules are saved in your data folder (user/features/qlib_rolling/). "
                                "Click Refresh to load the latest state.",
                                list_tab);
     lt_info->setWordWrap(true);

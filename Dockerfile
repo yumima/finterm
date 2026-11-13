@@ -150,7 +150,7 @@ RUN . /etc/build.env \
          -DCMAKE_BUILD_TYPE=Release \
          -DCMAKE_PREFIX_PATH="${CMAKE_PREFIX_PATH}" \
          `# Ship build: lock the exact tested Qt patch for ABI-stable installers` \
-         -DFINCEPT_QT_STRICT=ON \
+         -DFINTERM_QT_STRICT=ON \
          -DOPENSSL_ROOT_DIR=/usr \
     && cmake --build build --parallel 4 \
     && strip build/finterm.bin

@@ -57,7 +57,7 @@ class LlmConfigSection : public QWidget {
     QListWidget* provider_list_ = nullptr;
     QPushButton* add_btn_ = nullptr;
     QPushButton* delete_btn_ = nullptr;
-    QStackedWidget* form_stack_ = nullptr; // 0=empty, 1=form, 2=fincept
+    QStackedWidget* form_stack_ = nullptr; // 0=empty, 1=form, 2=(retired)
     QLineEdit* provider_edit_ = nullptr;
     QLineEdit* api_key_edit_ = nullptr;
     QLineEdit* base_url_edit_ = nullptr;

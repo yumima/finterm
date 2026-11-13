@@ -30,7 +30,7 @@ Usage from TtsService (C++ side):
     QProcess piper;
     piper.setProgram("python3");
     piper.setArguments({piper_tts_py, "--output", wav_path});
-    piper.setProcessEnvironment(env_with_FINCEPT_TTS_MODEL);
+    piper.setProcessEnvironment(env_with_FINTERM_TTS_MODEL);
     piper.start();
     piper.write(text.toUtf8());
     piper.closeWriteChannel();

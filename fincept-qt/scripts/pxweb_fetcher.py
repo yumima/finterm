@@ -1,6 +1,5 @@
 """
 PxWeb Statistics Data Fetcher
-Location: fincept-cpp/scripts/
 Description: Standardized PxWeb API wrapper for Statistics Finland.
 """
 

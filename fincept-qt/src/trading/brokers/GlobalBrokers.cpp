@@ -334,7 +334,7 @@ ApiResponse<QVector<BrokerCandle>> AlpacaBroker::get_history(const BrokerCredent
     QMap<QString, QString> data_headers = {
         {"APCA-API-KEY-ID", creds.api_key}, {"APCA-API-SECRET-KEY", creds.api_secret}, {"Accept", "application/json"}};
 
-    // Map fincept timeframe strings to Alpaca timeframe format
+    // Map finterm timeframe strings to Alpaca timeframe format
     static const QMap<QString, QString> tf_map = {
         {"1", "1Min"},   {"1m", "1Min"},     {"1min", "1Min"},   {"5", "5Min"},   {"5m", "5Min"},   {"5min", "5Min"},
         {"15", "15Min"}, {"15m", "15Min"},   {"15min", "15Min"}, {"30", "30Min"}, {"30m", "30Min"}, {"60", "1Hour"},

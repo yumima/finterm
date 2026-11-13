@@ -22,7 +22,7 @@ namespace finterm::symbol_dnd {
 /// convention for "security in flight").
 void startSymbolDrag(QWidget* source, const SymbolRef& ref, SymbolGroup source_group = SymbolGroup::None);
 
-/// Event filter that converts drops of application/x-fincept-symbol into
+/// Event filter that converts drops of application/x-finterm-symbol into
 /// a callback receiving the unpacked SymbolRef. Install on any QWidget
 /// you want to make a drop target.
 ///

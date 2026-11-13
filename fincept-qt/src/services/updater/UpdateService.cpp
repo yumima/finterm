@@ -102,7 +102,7 @@ bool UpdateService::is_newer(const QString& local, const QString& remote) {
 // ── Public entry point ──────────────────────────────────────────────────────
 
 void UpdateService::check_for_updates(bool silent) {
-    // Localhost-only fork: auto-update phones home to a fincept-controlled
+    // Localhost-only fork: auto-update phones home to an upstream-controlled
     // GitHub manifest URL on every launch and on focus, leaking platform +
     // current version. Disabled here so no traffic ever leaves the machine.
     // Pull upstream changes manually via `git pull origin main` when desired.

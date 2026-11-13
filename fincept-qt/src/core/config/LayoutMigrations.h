@@ -5,7 +5,7 @@ namespace finterm {
 
 /// Versioned, idempotent migrations for on-disk *layout* changes — where the
 /// app keeps its settings, caches, and data when those locations move between
-/// releases (e.g. the FinceptTerminal → finterm settings-store rebrand).
+/// releases (e.g. the settings-store and data-folder renames).
 ///
 /// Design goals (in priority order):
 ///   1. Fast no-op. The common case — already up to date — is a single

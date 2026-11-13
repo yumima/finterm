@@ -566,7 +566,7 @@ class CoreAgent:
                 "Configure an LLM provider in Settings > LLM Config."
             )
 
-        # Pass any extra model-level kwargs (e.g. max_tool_rounds for FinceptChat).
+        # Pass any extra model-level kwargs (e.g. max_tool_rounds for FintermChat).
         # Explicitly exclude all known non-constructor fields so metadata never
         # leaks into provider constructors as unexpected kwargs.
         _MODEL_RESERVED_KEYS = {

@@ -1,6 +1,6 @@
 // Market Data connectors (19): Yahoo Finance, Alpha Vantage, Finnhub, IEX Cloud, Twelve Data,
 // Quandl, Binance, Coinbase, Kraken, CoinMarketCap, CoinGecko, EOD Historical, Tiingo,
-// Intrinio, Fincept, Reuters, Marketstack, Finage, Tradier
+// Intrinio, Reuters, Marketstack, Finage, Tradier
 #include "screens/data_sources/ConnectorRegistry.h"
 
 namespace finterm::screens::datasources {

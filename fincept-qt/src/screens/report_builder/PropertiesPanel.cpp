@@ -453,7 +453,7 @@ void PropertiesPanel::show_properties(const ReportComponent* component, int inde
                 // Save clipboard image to a temp file and use that path
                 QImage img = qvariant_cast<QImage>(mime->imageData());
                 QString tmp = QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
-                              QString("/fincept_paste_%1.png").arg(QDateTime::currentMSecsSinceEpoch());
+                              QString("/finterm_paste_%1.png").arg(QDateTime::currentMSecsSinceEpoch());
                 if (img.save(tmp)) {
                     path_lbl->setText("(clipboard image)");
                     emit config_changed(current_index_, "path", tmp);

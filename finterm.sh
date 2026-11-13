@@ -167,7 +167,7 @@ START
 BUILD
     Default: incremental build of the existing build/<preset>.
     --clean   Re-run cmake configure and force a clean rebuild.
-    --tests   Configure with -DFINCEPT_BUILD_TESTS=ON (test suite enabled).
+    --tests   Configure with -DFINTERM_BUILD_TESTS=ON (test suite enabled).
 
 REPAIR
     The everyday "make it work" button. Holistically clears the regenerable
@@ -375,7 +375,7 @@ cmd_build() {
 finterm build — build the Qt binary
 
     --clean    Re-run cmake configure and force a clean rebuild
-    --tests    Configure with -DFINCEPT_BUILD_TESTS=ON
+    --tests    Configure with -DFINTERM_BUILD_TESTS=ON
 
 Without flags, runs an incremental ninja build against
 build/linux-release using the existing configuration.
@@ -392,7 +392,7 @@ EOF
     if [[ ! -f "$BUILD_DIR/CMakeCache.txt" ]] || [[ "$clean" == 1 ]] || [[ "$tests" == 1 ]]; then
         echo "==> Configuring (preset: $BUILD_PRESET${tests:+, tests on})"
         local extra=()
-        [[ "$tests" == 1 ]] && extra+=("-DFINCEPT_BUILD_TESTS=ON")
+        [[ "$tests" == 1 ]] && extra+=("-DFINTERM_BUILD_TESTS=ON")
         # ${extra[@]+"${extra[@]}"} expands to nothing when the array is empty and
         # to the quoted elements otherwise — safe under `set -u` even on bash 3.2
         # (macOS's system /bin/bash), where a bare "${extra[@]}" is "unbound".

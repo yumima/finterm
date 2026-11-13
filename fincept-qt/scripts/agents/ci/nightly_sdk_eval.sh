@@ -10,7 +10,7 @@
 #   1  one or more fixture assertions failed
 #   2  setup error (pip / venv / pytest invocation)
 #
-# Logs land in $FINTERM_EVAL_RESULTS or ~/.fincept/eval_runs.jsonl
+# Logs land in $FINTERM_EVAL_RESULTS or <data>/user/agents/eval_runs.jsonl
 # via the existing result_store; the CI just exits with the code.
 
 set -euo pipefail

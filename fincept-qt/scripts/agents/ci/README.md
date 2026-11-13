@@ -30,7 +30,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: eval-runs
-          path: ~/.fincept/eval_runs.jsonl
+          path: <data>/user/agents/eval_runs.jsonl
 ```
 
 A failed nightly = open issue, investigate the regression.  Pass

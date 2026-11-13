@@ -41,4 +41,4 @@ class IGroupLinked {
 
 } // namespace finterm
 
-Q_DECLARE_INTERFACE(finterm::IGroupLinked, "in.fincept.IGroupLinked/1.0")
+Q_DECLARE_INTERFACE(finterm::IGroupLinked, "io.github.yumima.finterm.IGroupLinked/1.0")

@@ -71,7 +71,7 @@ Under `src/services/agents/`. Add `AgentContext::peek(topic)` and
 
 Agent code today:
 ```python
-quotes = fincept.market_data.get_quotes(["AAPL", "MSFT"])
+quotes = finterm.market_data.get_quotes(["AAPL", "MSFT"])
 ```
 Migrates to:
 ```python
@@ -176,7 +176,7 @@ AgentConfig showing an agent's internal reasoning in real time).
   the topic state entirely.
 - **Bridge API surface churn.** Adding `datahub_peek` / `request`
   to the Python bridge expands the public Python API for agent
-  authors. Mitigation: ship as experimental (`fincept.datahub.*`
+  authors. Mitigation: ship as experimental (`finterm.datahub.*`
   namespace), mark stable after one release.
 
 ---

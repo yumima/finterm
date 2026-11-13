@@ -37,7 +37,7 @@ from enum import Enum
 import math
 
 from .base_models import (
-    BaseMarketAnalysisModel, ValidationError, FinceptAnalyticsError
+    BaseMarketAnalysisModel, ValidationError, FintermAnalyticsError
 )
 
 

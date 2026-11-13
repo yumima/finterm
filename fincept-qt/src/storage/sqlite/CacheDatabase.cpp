@@ -12,7 +12,7 @@ CacheDatabase& CacheDatabase::instance() {
 }
 
 Result<void> CacheDatabase::open(const QString& path) {
-    db_ = QSqlDatabase::addDatabase("QSQLITE", "fincept_cache");
+    db_ = QSqlDatabase::addDatabase("QSQLITE", "finterm_cache");
     db_.setDatabaseName(path);
     if (!db_.open()) {
         return Result<void>::err(db_.lastError().text().toStdString());

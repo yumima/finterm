@@ -15,7 +15,7 @@ Result<void> Database::open(const QString& path) {
         // Workers in execute()/exec() read db_ under mutex_; swap it under
         // the same lock. Released before apply_pragmas(), which takes it.
         QMutexLocker lock(&mutex_);
-        db_ = QSqlDatabase::addDatabase("QSQLITE", "fincept_main");
+        db_ = QSqlDatabase::addDatabase("QSQLITE", "finterm_main");
         db_.setDatabaseName(path);
         if (!db_.open()) {
             return Result<void>::err(db_.lastError().text().toStdString());
@@ -57,8 +57,8 @@ Result<void> Database::reopen(const QString& path) {
         QMutexLocker lock(&mutex_);
         close_locked();
         db_ = QSqlDatabase(); // release the handle before removing the connection
-        if (QSqlDatabase::contains("fincept_main"))
-            QSqlDatabase::removeDatabase("fincept_main");
+        if (QSqlDatabase::contains("finterm_main"))
+            QSqlDatabase::removeDatabase("finterm_main");
     }
     return open(path);
 }

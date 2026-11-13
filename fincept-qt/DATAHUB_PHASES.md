@@ -31,7 +31,7 @@ This document lists the phases to build and migrate to the DataHub. Each phase i
 **Goal:** set up the ground before touching architecture.
 
 ### Deliverables — all landed
-- ✅ `FINTERM_DATAHUB_ENABLED` CMake option added (`CMakeLists.txt:123`), default ON, compiles to `-DFINCEPT_DATAHUB_ENABLED=1`.
+- ✅ `FINTERM_DATAHUB_ENABLED` CMake option added (`CMakeLists.txt:123`), default ON, compiles to `-DFINTERM_DATAHUB_ENABLED=1`.
 - ✅ `Q_DECLARE_METATYPE` for `QuoteData`, `HistoryPoint`, `InfoData`, `NewsArticle`, `EconomicsResult` in `src/datahub/DataHubMetaTypes.h`.
 - ✅ `qRegisterMetaType<...>()` calls in `src/datahub/DataHubMetaTypes.cpp::register_metatypes()`, invoked from `main.cpp` after `QApplication` construction, gated on the feature flag.
 - ✅ Logger: the project uses free-form string tags (no registered categories), so we standardised on the tag string `"DataHub"` — zero changes to `Logger.h`.

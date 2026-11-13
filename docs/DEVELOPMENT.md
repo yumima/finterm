@@ -29,7 +29,7 @@ cmake --build --preset linux-release -j"$(nproc)"
 ./build/linux-release/finterm.bin
 ```
 
-Tests build in their own tree (`-DFINCEPT_BUILD_TESTS=ON`):
+Tests build in their own tree (`-DFINTERM_BUILD_TESTS=ON`):
 
 ```bash
 cmake --build build/linux-tests && (cd build/linux-tests/tests && ctest)

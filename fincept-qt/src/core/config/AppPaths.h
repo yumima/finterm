@@ -45,6 +45,10 @@ class AppPaths {
     static QString legacy_root_path();
     static QString current_root_path();
 
+    /// Whether a running instance (this build or an older one, which named its
+    /// lock differently) holds the database lock in `data_dir`.
+    static bool data_dir_in_use(const QString& data_dir);
+
     /// <profile>/user — everything personal; nothing else is.
     static QString user();
 

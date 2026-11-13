@@ -200,7 +200,7 @@ void Logger::set_file(const QString& path) {
 
     // Fallback: system temp dir so we always leave a breadcrumb.
     // Cross-platform: %TEMP% (Windows), /tmp or $TMPDIR (Linux/macOS).
-    const QString fallback = QDir(QDir::tempPath()).filePath("fincept-boot.log");
+    const QString fallback = QDir(QDir::tempPath()).filePath("finterm-boot.log");
     if (fallback == path)
         return;
     fprintf(stderr, "[Logger] falling back to temp path: %s\n", qUtf8Printable(fallback));

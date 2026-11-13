@@ -9,7 +9,7 @@ flag is being removed. This tool rewrites source files to:
   - `#ifndef FINTERM_DATAHUB_ENABLED` ... `#else` ... `#endif`  -> keep "else" branch, drop legacy + guard lines
 
 Handles nested `#if` / `#ifdef` / `#ifndef` / `#endif` for unrelated macros by
-tracking depth only when inside a matching FINCEPT block. Preserves indentation
+tracking depth only when inside a matching FINTERM block. Preserves indentation
 (only strips the preprocessor directive lines themselves).
 
 Does NOT handle `#if defined(FINTERM_DATAHUB_ENABLED)` / `#elif` variants; the
@@ -47,7 +47,7 @@ class StripError(RuntimeError):
 def _strip_file(text: str, filename: str) -> str:
     """Return the rewritten text.
 
-    Walk line-by-line. When we hit a matching `#ifdef FINCEPT` / `#ifndef FINCEPT`,
+    Walk line-by-line. When we hit a matching `#ifdef FINTERM` / `#ifndef FINTERM`,
     enter "tracking" state and collect the two branches (if / else). Nested
     unrelated `#if*` directives bump a depth counter so we only match the
     #else/#endif that closes the outer guard. On #endif at depth 0, emit the
@@ -89,14 +89,14 @@ def _strip_file(text: str, filename: str) -> str:
             if depth == 0 and RE_ELSE.match(cur):
                 if in_else:
                     raise StripError(
-                        f"{filename}:{i+1}: duplicate #else inside FINCEPT guard at line {guard_start+1}"
+                        f"{filename}:{i+1}: duplicate #else inside FINTERM guard at line {guard_start+1}"
                     )
                 in_else = True
                 i += 1
                 continue
             if RE_ENDIF.match(cur):
                 if depth == 0:
-                    # End of our FINCEPT guard.
+                    # End of our FINTERM guard.
                     i += 1
                     break
                 depth -= 1
@@ -107,7 +107,7 @@ def _strip_file(text: str, filename: str) -> str:
             i += 1
         else:
             raise StripError(
-                f"{filename}:{guard_start+1}: unterminated FINCEPT guard"
+                f"{filename}:{guard_start+1}: unterminated FINTERM guard"
             )
 
         # Select which branch to keep.

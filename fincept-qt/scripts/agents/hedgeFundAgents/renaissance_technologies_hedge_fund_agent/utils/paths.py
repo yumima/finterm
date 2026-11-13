@@ -23,25 +23,25 @@ def get_app_data_dir() -> Path:
     Get the finterm application data directory.
 
     Returns the appropriate directory for the current platform:
-    - Windows: %APPDATA%\fincept-terminal\
-    - macOS: ~/Library/Application Support/fincept-terminal/
-    - Linux: ~/.local/share/fincept-terminal/
+    - Windows: %APPDATA%\finterm\
+    - macOS: ~/Library/Application Support/finterm/
+    - Linux: ~/.local/share/finterm/
 
     Creates the directory if it doesn't exist.
 
     Returns:
-        Path to fincept-terminal app data directory
+        Path to finterm app data directory
     """
     system = platform.system()
 
     if system == "Windows":
-        # Windows: %APPDATA%\fincept-terminal
+        # Windows: %APPDATA%\finterm
         base = Path(os.getenv("APPDATA", os.path.expanduser("~/AppData/Roaming")))
     elif system == "Darwin":
-        # macOS: ~/Library/Application Support/fincept-terminal
+        # macOS: ~/Library/Application Support/finterm
         base = Path.home() / "Library" / "Application Support"
     else:
-        # Linux: ~/.local/share/fincept-terminal
+        # Linux: ~/.local/share/finterm
         base = Path.home() / ".local" / "share"
 
     app_dir = feature_dir("renaissance")
@@ -61,7 +61,7 @@ def get_rentech_data_dir() -> Path:
 
     Returns:
         Path to rentech agent data directory
-        (e.g., %APPDATA%\fincept-terminal\rentech\)
+        (e.g., %APPDATA%\finterm\rentech\)
     """
     rentech_dir = get_app_data_dir() / "rentech"
 
@@ -79,7 +79,7 @@ def get_knowledge_base_path() -> Path:
 
     Returns:
         Path to knowledge base directory
-        (e.g., %APPDATA%\fincept-terminal\rentech\knowledge\)
+        (e.g., %APPDATA%\finterm\rentech\knowledge\)
     """
     kb_dir = get_rentech_data_dir() / "knowledge"
 
@@ -97,7 +97,7 @@ def get_memory_db_path() -> Path:
 
     Returns:
         Path to memory database file
-        (e.g., %APPDATA%\fincept-terminal\rentech\memory.db)
+        (e.g., %APPDATA%\finterm\rentech\memory.db)
     """
     return get_rentech_data_dir() / "memory.db"
 
@@ -108,7 +108,7 @@ def get_logs_dir() -> Path:
 
     Returns:
         Path to logs directory
-        (e.g., %APPDATA%\fincept-terminal\rentech\logs\)
+        (e.g., %APPDATA%\finterm\rentech\logs\)
     """
     logs_dir = get_rentech_data_dir() / "logs"
 
@@ -126,7 +126,7 @@ def get_cache_dir() -> Path:
 
     Returns:
         Path to cache directory
-        (e.g., %APPDATA%\fincept-terminal\rentech\cache\)
+        (e.g., %APPDATA%\finterm\rentech\cache\)
     """
     cache_dir = get_rentech_data_dir() / "cache"
 

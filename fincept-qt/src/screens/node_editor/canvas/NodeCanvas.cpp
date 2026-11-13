@@ -152,7 +152,7 @@ void NodeCanvas::drawBackground(QPainter* painter, const QRectF& rect) {
 // ── Drop from palette ──────────────────────────────────────────────────
 
 void NodeCanvas::dragEnterEvent(QDragEnterEvent* event) {
-    if (event->mimeData()->hasFormat("application/x-fincept-node-type")) {
+    if (event->mimeData()->hasFormat("application/x-finterm-node-type")) {
         event->acceptProposedAction();
     } else {
         QGraphicsView::dragEnterEvent(event);
@@ -160,7 +160,7 @@ void NodeCanvas::dragEnterEvent(QDragEnterEvent* event) {
 }
 
 void NodeCanvas::dragMoveEvent(QDragMoveEvent* event) {
-    if (event->mimeData()->hasFormat("application/x-fincept-node-type")) {
+    if (event->mimeData()->hasFormat("application/x-finterm-node-type")) {
         event->acceptProposedAction();
     } else {
         QGraphicsView::dragMoveEvent(event);
@@ -168,8 +168,8 @@ void NodeCanvas::dragMoveEvent(QDragMoveEvent* event) {
 }
 
 void NodeCanvas::dropEvent(QDropEvent* event) {
-    if (event->mimeData()->hasFormat("application/x-fincept-node-type")) {
-        QString type_id = QString::fromUtf8(event->mimeData()->data("application/x-fincept-node-type"));
+    if (event->mimeData()->hasFormat("application/x-finterm-node-type")) {
+        QString type_id = QString::fromUtf8(event->mimeData()->data("application/x-finterm-node-type"));
         QPointF scene_pos = mapToScene(event->position().toPoint());
         emit node_drop_requested(type_id, scene_pos);
         event->acceptProposedAction();

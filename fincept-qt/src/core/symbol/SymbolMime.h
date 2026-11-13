@@ -15,7 +15,7 @@ namespace finterm {
 /// "came from Group A — match colour".
 namespace symbol_mime {
 
-inline constexpr const char* kMimeType = "application/x-fincept-symbol";
+inline constexpr const char* kMimeType = "application/x-finterm-symbol";
 
 /// Stuff a SymbolRef into an owned QMimeData. Caller takes ownership of
 /// the returned pointer (or passes it to QDrag::setMimeData, which does).

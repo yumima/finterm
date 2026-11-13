@@ -66,7 +66,7 @@ class PythonRunner : public QObject {
     /// Resolve path to scripts directory
     QString scripts_dir() const;
 
-    /// Build the standard Python process environment used by all finagent/PyFincept
+    /// Build the standard Python process environment used by all finagent/Python
     /// subprocess spawns. Sets PYTHONIOENCODING, PYTHONDONTWRITEBYTECODE,
     /// PYTHONUNBUFFERED, FINTERM_DATA_DIR, FINAGENT_DATA_DIR,
     /// FINAGENT_RUNTIME_CACHE_SIZE, and PYTHONPATH (derived from scripts_dir()).

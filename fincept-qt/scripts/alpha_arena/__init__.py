@@ -10,7 +10,6 @@ A production-ready multi-agent trading competition platform with:
 """
 
 __version__ = "2.0.0"
-__author__ = "Fincept Corporation"
 
 from alpha_arena.types.models import (
     CompetitionConfig,

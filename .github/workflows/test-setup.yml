@@ -60,7 +60,7 @@ jobs:
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
-            -DFINCEPT_BUILD_INSTALLER=OFF \
+            -DFINTERM_BUILD_INSTALLER=OFF \
             -DDEPLOY_QT=OFF
 
       # Step 4 — build (mirrors build_script in .cirrus.yml)

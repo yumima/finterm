@@ -52,7 +52,7 @@ logger = logging.getLogger(__name__)
 
 class DataProvider(Enum):
     """Supported market data providers"""
-    FINCEPT = "fincept"
+    FINTERM = "finterm"
     REFINITIV = "refinitiv"
     YAHOO = "yahoo"
     ALPHA_VANTAGE = "alpha_vantage"

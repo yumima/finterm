@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.fincept.terminal</id>
+  <id>io.github.yumima.finterm</id>
   <name>finterm</name>
   <summary>Professional financial intelligence terminal</summary>
   <metadata_license>FSFAP</metadata_license>
@@ -20,7 +20,7 @@
       <li>Geopolitics, prediction markets (Polymarket), maritime tracking</li>
     </ul>
   </description>
-  <launchable type="desktop-id">fincept-terminal.desktop</launchable>
+  <launchable type="desktop-id">finterm.desktop</launchable>
   <url type="homepage">https://github.com/yumima/finterm</url>
   <url type="bugtracker">https://github.com/yumima/finterm/issues</url>
   <url type="help">https://discord.gg/ae87a8ygbN</url>

@@ -2235,7 +2235,7 @@ QWidget* SettingsScreen::build_logging() {
     path_title->setStyleSheet(settings_style::sub_title_ss());
     vl->addWidget(path_title);
 
-    const QString log_path = AppPaths::logs() + "/fincept.log";
+    const QString log_path = AppPaths::logs() + "/finterm.log";
     log_path_label_ = new QLabel(QDir::toNativeSeparators(log_path));
     log_path_label_->setStyleSheet(settings_style::label_ss());
     log_path_label_->setTextInteractionFlags(Qt::TextSelectableByMouse);

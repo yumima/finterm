@@ -16,7 +16,7 @@ void register_integration_nodes(NodeRegistry& registry) {
     // ── MCP Tool Call ──────────────────────────────────────────────
     // Single node that routes to any internal finterm MCP tool.
     // "tool" parameter accepts:
-    //   - bare tool name (e.g. "get_quote")        → routed to fincept-terminal server
+    //   - bare tool name (e.g. "get_quote")        → routed to finterm server
     //   - "serverId__toolName" OpenAI function form → routed via execute_openai_function
     registry.register_type({
         .type_id = "mcp.tool_call",

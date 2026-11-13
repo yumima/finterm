@@ -41,7 +41,7 @@ warnings.filterwarnings('ignore')
 
 from .base_models import (
     BaseMarketAnalysisModel, MarketEfficiencyForm, ValidationError,
-    FinceptAnalyticsError
+    FintermAnalyticsError
 )
 
 

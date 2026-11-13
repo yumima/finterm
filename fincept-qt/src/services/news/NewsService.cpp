@@ -394,7 +394,7 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
 
 // ── AI Analysis (local LLM engine) ──────────────────────────────────────────
 //
-// The old cloud endpoint (/news/analyze on fincept.in, credits-metered) is gone
+// The old cloud endpoint (the upstream /news/analyze service, credits-metered) is gone
 // in the localhost build. We extract the article text and analyse it on-device
 // through the local LLM (hearth), asking for structured JSON we map onto
 // NewsAnalysis. Both the "Analyze" button and the analyze_news_article MCP tool
@@ -1655,7 +1655,7 @@ QVector<RSSFeed> NewsService::default_feeds() {
         {"un-news", "UN News", "https://news.un.org/feed/subscribe/en/news/all/rss.xml", "GEOPOLITICS", "GLOBAL", "UN",
          1},
         // (IMF News removed — endpoint serves an Akamai access-denied HTML page,
-        //  not RSS. Fincept's macro coverage is already provided by Bloomberg /
+        //  not RSS. Finterm's macro coverage is already provided by Bloomberg /
         //  WSJ / Economist / IMF press is reachable via UN feeds.)
 
         // Tier 2 — Major Financial Media

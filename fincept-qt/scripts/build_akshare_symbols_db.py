@@ -11,10 +11,11 @@ import os
 import sys
 
 # Store in AppData like other terminal files
-APPDATA = os.environ.get('APPDATA', os.path.expanduser('~/.config'))
-DB_DIR = os.path.join(APPDATA, 'fincept-terminal')
-os.makedirs(DB_DIR, exist_ok=True)
-DB_PATH = os.path.join(DB_DIR, 'akshare_symbols.db')
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from finterm_paths import market_data_path  # noqa: E402
+
+# Public reference data: the app's market_data/ folder, never the settings folder.
+DB_PATH = str(market_data_path('akshare_symbols.db'))
 
 def create_database():
     """Create SQLite database with symbols table"""

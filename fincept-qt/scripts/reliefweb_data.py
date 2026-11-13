@@ -20,7 +20,7 @@ session.mount('http://', adapter)
 
 def _make_request(endpoint: str, params: Dict = None) -> Any:
     url = f"{BASE_URL}/{endpoint}" if not endpoint.startswith('http') else endpoint
-    default_params = {"appname": "fincept-terminal", "slim": 1}
+    default_params = {"appname": "finterm", "slim": 1}
     if params:
         default_params.update(params)
     try:

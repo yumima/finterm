@@ -7,7 +7,7 @@
 //   VFT2_UNKNOWN         = 0x00000000L
 // Values lifted from verrsrc.h; they are ABI-stable since Windows 2000.
 
-IDI_ICON1 ICON "fincept.ico"
+IDI_ICON1 ICON "finterm.ico"
 
 1 VERSIONINFO
 FILEVERSION     @FINTERM_VER_MAJOR@,@FINTERM_VER_MINOR@,@FINTERM_VER_PATCH@,0

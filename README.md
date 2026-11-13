@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`ca8b5235f`](https://github.com/yumima/finterm/commit/ca8b5235f) tools: weekly brief — insider-buying clusters and the IPO pipeline as Markdown
 - [`4dabec3dc`](https://github.com/yumima/finterm/commit/4dabec3dc) ipo: a $10.00 unit ticker marks a SPAC even when EDGAR's SIC isn't 6770
 - [`4587eabbf`](https://github.com/yumima/finterm/commit/4587eabbf) rename: FINCEPT_* macros, build options and env vars → FINTERM_*
 - [`0f6918c80`](https://github.com/yumima/finterm/commit/0f6918c80) rename: C++ namespace fincept → finterm

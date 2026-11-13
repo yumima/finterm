@@ -193,7 +193,7 @@ static QString render_chart_to_file(const QString& chart_type, const QString& ti
     delete chart; // view took ownership but we grabbed already
 
     QString path = QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
-                   QString("/fincept_chart_%1.png").arg(QDateTime::currentMSecsSinceEpoch());
+                   QString("/finterm_chart_%1.png").arg(QDateTime::currentMSecsSinceEpoch());
     if (pix.save(path, "PNG"))
         return path;
     return {};
@@ -233,7 +233,7 @@ static QString render_sparkline_to_file(const QString& data_str, const ReportThe
     delete chart;
 
     QString path = QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
-                   QString("/fincept_spark_%1.png").arg(QDateTime::currentMSecsSinceEpoch());
+                   QString("/finterm_spark_%1.png").arg(QDateTime::currentMSecsSinceEpoch());
     if (pix.save(path, "PNG"))
         return path;
     return {};

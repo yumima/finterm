@@ -171,7 +171,7 @@ def fetch_historical_data(symbol: str, period: str, interval: str, provider: str
     if provider == 'candle_cache':
         if not db_path:
             # Try default path
-            db_path = os.path.join(os.environ.get('APPDATA', ''), 'fincept-terminal', 'fincept_terminal.db')
+            db_path = os.path.join(os.environ.get('APPDATA', ''), 'finterm', 'fincept_terminal.db')
             debug(f"Using default db_path: {db_path}")
 
         # Map period to limit

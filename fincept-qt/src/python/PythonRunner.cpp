@@ -346,7 +346,7 @@ void PythonRunner::run_code(const QString& code, Callback cb) {
 
     // Write code to a temp file
     QString temp_dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    QString temp_path = temp_dir + "/fincept_cell_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".py";
+    QString temp_path = temp_dir + "/finterm_cell_" + QString::number(QDateTime::currentMSecsSinceEpoch()) + ".py";
 
     QFile file(temp_path);
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
@@ -439,7 +439,7 @@ void PythonRunner::start_next() {
                 if (arg.size() > kArgSpillThreshold) {
                     QString temp_dir = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
                     QString temp_path =
-                        temp_dir + "/fincept_arg_" + QUuid::createUuid().toString(QUuid::WithoutBraces) + ".json";
+                        temp_dir + "/finterm_arg_" + QUuid::createUuid().toString(QUuid::WithoutBraces) + ".json";
                     QFile tf(temp_path);
                     if (tf.open(QIODevice::WriteOnly | QIODevice::Text)) {
                         tf.write(arg.toUtf8());

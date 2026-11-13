@@ -403,7 +403,7 @@ class DatabentoProvider:
         on reboot but persists across app sessions for the day.
         """
         import tempfile
-        d = os.path.join(tempfile.gettempdir(), "fincept_databento_cache")
+        d = os.path.join(tempfile.gettempdir(), "finterm_databento_cache")
         try:
             os.makedirs(d, exist_ok=True)
         except OSError:

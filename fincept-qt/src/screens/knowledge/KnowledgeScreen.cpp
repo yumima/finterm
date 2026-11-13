@@ -58,7 +58,7 @@ QString resolve_root() {
     const QStringList candidates = {
         exe_dir + "/resources/knowledge",
         exe_dir + "/../resources/knowledge",
-        exe_dir + "/../share/fincept/knowledge",
+        exe_dir + "/../share/finterm/knowledge",
     };
     for (const auto& p : candidates)
         if (QDir(p).exists())

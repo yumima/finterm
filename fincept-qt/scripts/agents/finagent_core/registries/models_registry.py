@@ -312,7 +312,7 @@ class ModelsRegistry:
 
         if provider_lower not in cls.MODEL_CATALOG:
             # Unknown provider - treat as OpenAI-compatible with custom base_url
-            # This supports custom endpoints like "fincept", "local-llm", etc.
+            # This supports custom endpoints like "hearth", "local-llm", etc.
             logger.info(f"Unknown provider '{provider}', treating as OpenAI-compatible endpoint")
             config = {
                 "class": "agno.models.openai.OpenAIChat",

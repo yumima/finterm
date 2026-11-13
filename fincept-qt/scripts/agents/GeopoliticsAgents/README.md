@@ -64,8 +64,8 @@ american_order_agent.py        # American liberal order
 #   - framework="marshalls_determinism"
 """
 
-from fincept_terminal.Agents.src.graph.state import AgentState, show_agent_reasoning
-from fincept_terminal.Agents.src.tools.api import get_geopolitical_data
+from agents.src.graph.state import AgentState, show_agent_reasoning
+from agents.src.tools.api import get_geopolitical_data
 # ... other imports
 
 def russia_geography_agent(state: AgentState):

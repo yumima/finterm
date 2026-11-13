@@ -278,17 +278,9 @@ V3Result step_v3_user_data_home() {
     for (const QString& proot : proots) {
         // The lock lives in whichever data/ the instance runs from.
         bool live_here = false;
-        for (const QString& d : {proot + "/data", proot + "/user/data"}) {
-            QLockFile live(d + "/fincept.db.lock");
-            // Match main.cpp: a held lock is never "stale" by age — Qt's
-            // default 30 s would declare a long-running instance dead and
-            // break its lock.
-            live.setStaleLockTime(0);
-            if (QFileInfo::exists(d) && !live.tryLock(0))
+        for (const QString& d : {proot + "/data", proot + "/user/data"})
+            if (AppPaths::data_dir_in_use(d))
                 live_here = true;
-            else
-                live.unlock();
-        }
         // (A same-profile instance starting between this probe and the move
         // below is the one remaining window: the lock file lives inside the
         // folder being renamed, so it cannot be held across the rename.)
@@ -392,7 +384,7 @@ V3Result step_v3_user_data_home() {
     const QFileInfo draft(QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
                           "/fincept_report_autosave.fincept");
     if (draft.exists() && draft.isWritable() && draft.ownerId() == QFileInfo(home).ownerId())
-        m.move_group(draft.absoluteFilePath(), files_dir + "/reports/autosave.fincept", conflicts);
+        m.move_group(draft.absoluteFilePath(), files_dir + "/reports/autosave.finterm", conflicts);
 
     if (m.failed)
         return V3Result::Failed;

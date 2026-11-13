@@ -1,6 +1,5 @@
 """
 FDIC Bank Data Fetcher
-Location: fincept-cpp/scripts/
 Description: Robust, auto-paginated wrapper for the FDIC Bank Data API.
 """
 

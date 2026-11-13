@@ -53,24 +53,10 @@ bool root_in_use(const QString& root) {
     const QDir profiles(root + "/profiles");
     for (const QString& name : profiles.entryList(QDir::Dirs | QDir::NoDotAndDotDot))
         profile_roots << profiles.filePath(name);
-    for (const QString& proot : profile_roots) {
-        for (const QString& d : {proot + "/data", proot + "/user/data"}) {
-            if (!QFileInfo::exists(d))
-                continue;
-            for (const char* name : kDbLockNames) {
-                QLockFile live(d + "/" + name);
-                live.setStaleLockTime(0); // a held lock is never stale by age (see main.cpp)
-                if (live.tryLock(0)) {
-                    live.unlock();
-                    continue;
-                }
-                // Only a lock someone holds means a live instance. A folder we
-                // cannot write a lock into (read-only, full disk) is not one.
-                if (live.error() == QLockFile::LockFailedError)
-                    return true;
-            }
-        }
-    }
+    for (const QString& proot : profile_roots)
+        for (const QString& d : {proot + "/data", proot + "/user/data"})
+            if (AppPaths::data_dir_in_use(d))
+                return true;
 #if defined(Q_OS_LINUX)
     // Processes that run from the folder without holding a database lock: the
     // yfinance daemon and other Python children (their interpreter lives in the
@@ -272,6 +258,24 @@ bool AppPaths::migrate_root() {
     const bool ok = move_legacy_root();
     g_root = resolve_root();
     return ok;
+}
+
+bool AppPaths::data_dir_in_use(const QString& data_dir) {
+    if (!QFileInfo::exists(data_dir))
+        return false;
+    for (const char* name : kDbLockNames) {
+        QLockFile live(data_dir + "/" + name);
+        live.setStaleLockTime(0); // a held lock is never stale by age (see main.cpp)
+        if (live.tryLock(0)) {
+            live.unlock();
+            continue;
+        }
+        // Only a lock someone holds means a live instance. A folder we cannot
+        // write a lock into (read-only, full disk) is not one.
+        if (live.error() == QLockFile::LockFailedError)
+            return true;
+    }
+    return false;
 }
 
 QString AppPaths::current_root_path() {

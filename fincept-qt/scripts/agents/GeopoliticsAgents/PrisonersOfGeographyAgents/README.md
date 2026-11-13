@@ -116,8 +116,8 @@ PrisonersOfGeographyAgents/
 #   - region="specific_region"
 """
 
-from fincept_terminal.Agents.src.graph.state import AgentState, show_agent_reasoning
-from fincept_terminal.Agents.src.tools.api import get_geopolitical_data
+from agents.src.graph.state import AgentState, show_agent_reasoning
+from agents.src.tools.api import get_geopolitical_data
 
 def [region]_geography_agent(state: AgentState):
     """

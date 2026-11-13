@@ -148,12 +148,12 @@ def cmd_stream_task(params: dict[str, Any]) -> None:
         return
 
     try:
-        from agent import create_agent, build_fincept_context
+        from agent import create_agent, build_finterm_context
         from models import create_model
 
         model    = create_model(config)
         compiled = create_agent(model=model, config={**config, "agent_type": agent_type})
-        ctx      = build_fincept_context({**params, "agent_type": agent_type})
+        ctx      = build_finterm_context({**params, "agent_type": agent_type})
 
         run_config = {"recursion_limit": 1000}
         if thread_id:
@@ -317,11 +317,11 @@ def cmd_resume_thread(params: dict[str, Any]) -> dict[str, Any]:
         return _error("resume_thread requires a tool-calling LLM provider")
 
     try:
-        from agent import create_agent, build_fincept_context
+        from agent import create_agent, build_finterm_context
 
         model    = create_model(config)
         compiled = create_agent(model=model, config=config)
-        ctx      = build_fincept_context(params)
+        ctx      = build_finterm_context(params)
 
         run_config = {
             "recursion_limit": 1000,
@@ -349,14 +349,14 @@ def _execute_with_deepagents(
 ) -> dict[str, Any]:
     """Execute via deepagents library (tool-calling LLM path)."""
     try:
-        from agent import create_agent, build_fincept_context
+        from agent import create_agent, build_finterm_context
 
         model    = create_model(config)
         compiled = create_agent(
             model=model,
             config={**config, "agent_type": agent_type},
         )
-        ctx = build_fincept_context({"agent_type": agent_type, "context": context_data})
+        ctx = build_finterm_context({"agent_type": agent_type, "context": context_data})
 
         run_config = {"recursion_limit": 1000}
         if thread_id:

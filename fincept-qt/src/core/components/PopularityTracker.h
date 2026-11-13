@@ -11,7 +11,7 @@ namespace finterm {
 /// Launchpad's component catalogue.
 ///
 /// Storage: QSettings under "component_usage/<id>" = int. Per-user,
-/// per-profile (scoped through the existing "Fincept/finterm"
+/// per-profile (scoped through the existing "finterm/finterm"
 /// QSettings organisation/app). Does NOT sync to the cloud — a user's
 /// usage fingerprint is intentionally local.
 ///

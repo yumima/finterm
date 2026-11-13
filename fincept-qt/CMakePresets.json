@@ -16,7 +16,7 @@
     {
       "name": "win-release",
       "displayName": "Windows Release (MSVC 2022, Qt 6.8.3)",
-      "description": "Pinned Release build for Windows x64. Defaults to fast incremental link; opt into LTO with -DFINCEPT_ENABLE_LTO=ON for ship builds.",
+      "description": "Pinned Release build for Windows x64. Defaults to fast incremental link; opt into LTO with -DFINTERM_ENABLE_LTO=ON for ship builds.",
       "inherits": "base",
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
       "architecture": { "value": "x64", "strategy": "external" },
@@ -54,7 +54,7 @@
     {
       "name": "linux-release",
       "displayName": "Linux Release (GCC, system Qt 6.8+)",
-      "description": "Release build for Linux x86_64. Uses the system/distro Qt (qt6-* dev packages) found on CMake's default search path. Override with -DCMAKE_PREFIX_PATH=<dir> for a specific Qt; add -DFINCEPT_QT_STRICT=ON to lock the exact tested version for ship builds.",
+      "description": "Release build for Linux x86_64. Uses the system/distro Qt (qt6-* dev packages) found on CMake's default search path. Override with -DCMAKE_PREFIX_PATH=<dir> for a specific Qt; add -DFINTERM_QT_STRICT=ON to lock the exact tested version for ship builds.",
       "inherits": "base",
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" },
       "cacheVariables": {

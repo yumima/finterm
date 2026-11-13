@@ -293,9 +293,12 @@ int main(int argc, char* argv[]) {
     // Deleting WAL/SHM files while another process has the DB open corrupts it.
     // We only clean up orphaned files from a previous crash when we are the sole
     // running instance. The lock file is held for the entire process lifetime.
-    QLockFile db_lock(finterm::AppPaths::data() + "/fincept.db.lock");
+    // An older build names its lock fincept.db.lock: probe both names (before
+    // taking ours) so a still-running older instance counts as another one.
+    const bool other_instance = finterm::AppPaths::data_dir_in_use(finterm::AppPaths::data());
+    QLockFile db_lock(finterm::AppPaths::data() + "/finterm.db.lock");
     db_lock.setStaleLockTime(0); // never auto-expire; we control the lifecycle
-    const bool sole_instance = db_lock.tryLock(0);
+    const bool sole_instance = db_lock.tryLock(0) && !other_instance;
     if (sole_instance) {
         // Only the -shm index (SQLite rebuilds it). A -wal left by a crash
         // holds COMMITTED transactions that SQLite replays on the next open;
@@ -304,7 +307,7 @@ int main(int argc, char* argv[]) {
         QFile::remove(finterm::AppPaths::data() + "/cache.db-shm");
     }
     // db_lock remains held (stack-allocated) until main() returns.
-    finterm::Logger::instance().set_file(finterm::AppPaths::logs() + "/fincept.log");
+    finterm::Logger::instance().set_file(finterm::AppPaths::logs() + "/finterm.log");
 
     // P3.18 — route Qt's own qDebug/qWarning/qCritical messages into our log
     // file so framework/3rd-party warnings are visible in Release builds.

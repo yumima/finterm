@@ -21,7 +21,7 @@ package.json
 package-lock.json
 funding.json
 updates.json
-fincept_icon.ico
+finterm_icon.ico
 setup.sh
 Dockerfile
 .dockerignore

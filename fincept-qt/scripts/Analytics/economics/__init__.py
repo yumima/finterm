@@ -101,8 +101,6 @@ from .config import (
 )
 
 __version__ = "1.0.0"
-__author__ = "Fincept Corporation"
-__email__ = "dev@fincept.com"
 
 # Module metadata
 __all__ = [
@@ -183,7 +181,7 @@ def get_version_info():
         'version': __version__,
         'author': __author__,
         'email': __email__,
-        'description': 'CFA-based Economics Analysis Module for FinceptTerminal',
+        'description': 'CFA-based Economics Analysis Module for finterm',
         'modules': len(__all__),
         'cfa_compliance': 'Level I & II'
     }

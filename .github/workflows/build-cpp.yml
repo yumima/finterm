@@ -541,7 +541,7 @@ jobs:
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>CFBundleExecutable</key><string>finterm</string>
-            <key>CFBundleIdentifier</key><string>com.fincept.terminal</string>
+            <key>CFBundleIdentifier</key><string>io.github.yumima.finterm</string>
             <key>CFBundleName</key><string>finterm</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>CFBundleShortVersionString</key><string>4.0.2</string>
@@ -645,11 +645,11 @@ jobs:
           bash .github/scripts/sync_scripts.sh scripts AppDir/usr/bin/scripts
 
           # Desktop entry (required by linuxdeploy)
-          cat > AppDir/usr/share/applications/fincept-terminal.desktop <<'EOF'
+          cat > AppDir/usr/share/applications/finterm.desktop <<'EOF'
           [Desktop Entry]
           Name=finterm
           Exec=finterm.bin
-          Icon=fincept-terminal
+          Icon=finterm
           Type=Application
           Categories=Finance;
           EOF
@@ -660,7 +660,7 @@ jobs:
           # missing-font fallbacks produced zero-byte PNGs that failed libpng's
           # CRC check in linuxdeploy. `python3 -c` sidesteps the YAML-indented
           # heredoc trap (Python rejects the leading spaces as IndentationError).
-          ICON_DEST="AppDir/usr/share/icons/hicolor/256x256/apps/fincept-terminal.png"
+          ICON_DEST="AppDir/usr/share/icons/hicolor/256x256/apps/finterm.png"
           if [ -f "resources/icons/app_icon_256.png" ]; then
             cp resources/icons/app_icon_256.png "${ICON_DEST}"
           else

@@ -11,15 +11,15 @@ cmake_minimum_required(VERSION 3.27)
 if(WIN32 AND CMAKE_HOST_WIN32)
     # Heuristic: if CC/CXX env vars point to clang-cl, or the generator is likely
     # to pick up clang-cl from PATH, force MSVC rc.exe. Harmless on pure MSVC too.
-    find_program(_fincept_rc_exe NAMES rc rc.exe
+    find_program(_finterm_rc_exe NAMES rc rc.exe
         HINTS
             "$ENV{WindowsSdkVerBinPath}x64"
             "$ENV{WindowsSdkDir}bin/$ENV{WindowsSDKVersion}x64"
             "C:/Program Files (x86)/Windows Kits/10/bin/10.0.22621.0/x64"
             "C:/Program Files (x86)/Windows Kits/10/bin/10.0.26100.0/x64")
-    if(_fincept_rc_exe)
-        set(CMAKE_RC_COMPILER "${_fincept_rc_exe}" CACHE FILEPATH "Windows resource compiler" FORCE)
-        set(CMAKE_RC_COMPILER_INIT "${_fincept_rc_exe}")
+    if(_finterm_rc_exe)
+        set(CMAKE_RC_COMPILER "${_finterm_rc_exe}" CACHE FILEPATH "Windows resource compiler" FORCE)
+        set(CMAKE_RC_COMPILER_INIT "${_finterm_rc_exe}")
     endif()
 endif()
 
@@ -80,30 +80,30 @@ if(FINTERM_CCACHE_PROGRAM)
     # ccache.conf in the cache dir. This is idempotent — ccache reads it on
     # every invocation, so changes here propagate without a clean rebuild.
     if(WIN32)
-        set(_fincept_ccache_dir "$ENV{LOCALAPPDATA}/ccache")
+        set(_finterm_ccache_dir "$ENV{LOCALAPPDATA}/ccache")
     elseif(APPLE)
-        set(_fincept_ccache_dir "$ENV{HOME}/Library/Caches/ccache")
+        set(_finterm_ccache_dir "$ENV{HOME}/Library/Caches/ccache")
     else()
-        set(_fincept_ccache_dir "$ENV{HOME}/.ccache")
+        set(_finterm_ccache_dir "$ENV{HOME}/.ccache")
     endif()
-    if(_fincept_ccache_dir AND IS_DIRECTORY "${_fincept_ccache_dir}")
+    if(_finterm_ccache_dir AND IS_DIRECTORY "${_finterm_ccache_dir}")
         # ccache.conf format: KEY = VALUE per line. We write only the keys we
         # need; ccache merges with defaults for everything else.
-        file(WRITE "${_fincept_ccache_dir}/ccache.conf"
+        file(WRITE "${_finterm_ccache_dir}/ccache.conf"
             "sloppiness = pch_defines,time_macros,include_file_mtime,include_file_ctime,locale\n"
             "pch_external_checksum = true\n"
             "depend_mode = true\n"
             "compiler_check = content\n"
             "max_size = 5G\n")
-        message(STATUS "Wrote ccache config to ${_fincept_ccache_dir}/ccache.conf")
+        message(STATUS "Wrote ccache config to ${_finterm_ccache_dir}/ccache.conf")
     endif()
 
     # Wrap ccache in a launcher script that exports the env vars unconditionally
     # — belt-and-braces in case ccache.conf isn't picked up (e.g. when the user
     # has CCACHE_DIR set to a non-default location).
     if(WIN32)
-        set(_fincept_ccache_launcher "${CMAKE_BINARY_DIR}/ccache_launcher.cmd")
-        file(WRITE "${_fincept_ccache_launcher}"
+        set(_finterm_ccache_launcher "${CMAKE_BINARY_DIR}/ccache_launcher.cmd")
+        file(WRITE "${_finterm_ccache_launcher}"
             "@echo off\r\n"
             "set CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime,locale\r\n"
             "set CCACHE_PCH_EXTSUM=true\r\n"
@@ -111,19 +111,19 @@ if(FINTERM_CCACHE_PROGRAM)
             "set CCACHE_COMPILERCHECK=content\r\n"
             "\"${FINTERM_CCACHE_PROGRAM}\" %*\r\n")
     else()
-        set(_fincept_ccache_launcher "${CMAKE_BINARY_DIR}/ccache_launcher.sh")
-        file(WRITE "${_fincept_ccache_launcher}"
+        set(_finterm_ccache_launcher "${CMAKE_BINARY_DIR}/ccache_launcher.sh")
+        file(WRITE "${_finterm_ccache_launcher}"
             "#!/bin/sh\n"
             "export CCACHE_SLOPPINESS=pch_defines,time_macros,include_file_mtime,include_file_ctime,locale\n"
             "export CCACHE_PCH_EXTSUM=true\n"
             "export CCACHE_DEPEND=1\n"
             "export CCACHE_COMPILERCHECK=content\n"
             "exec \"${FINTERM_CCACHE_PROGRAM}\" \"$@\"\n")
-        execute_process(COMMAND chmod +x "${_fincept_ccache_launcher}")
+        execute_process(COMMAND chmod +x "${_finterm_ccache_launcher}")
     endif()
 
-    set(CMAKE_CXX_COMPILER_LAUNCHER "${_fincept_ccache_launcher}")
-    set(CMAKE_C_COMPILER_LAUNCHER   "${_fincept_ccache_launcher}")
+    set(CMAKE_CXX_COMPILER_LAUNCHER "${_finterm_ccache_launcher}")
+    set(CMAKE_C_COMPILER_LAUNCHER   "${_finterm_ccache_launcher}")
     message(STATUS "Compiler cache enabled: ${FINTERM_CCACHE_PROGRAM} (PCH-aware launcher)")
 endif()
 
@@ -246,7 +246,7 @@ add_compile_definitions(NOMINMAX WIN32_LEAN_AND_MEAN)
 
 # ── Test suite (opt-in) ──────────────────────────────────────────────────────
 # OFF by default so a normal build is unchanged. Turn on with
-# -DFINCEPT_BUILD_TESTS=ON to compile the Qt Test executables under
+# -DFINTERM_BUILD_TESTS=ON to compile the Qt Test executables under
 # fincept-qt/tests/. Run via `ctest` in the build directory.
 option(FINTERM_BUILD_TESTS "Build the finterm test suite" OFF)
 
@@ -254,21 +254,21 @@ option(FINTERM_BUILD_TESTS "Build the finterm test suite" OFF)
 # FINTERM_QT_VERSION is the version the project is *tested and shipped* against.
 # By default the build accepts any Qt >= that major.minor (so a system/distro
 # Qt — e.g. apt's qt6-* or Homebrew's qt6 — is used as-is, no vendored copy).
-# Release/installer builds set -DFINCEPT_QT_STRICT=ON to lock the exact tested
+# Release/installer builds set -DFINTERM_QT_STRICT=ON to lock the exact tested
 # patch release, guaranteeing binary/ABI stability of the shipped installer.
 # The Dockerfile and release CI set STRICT; dev boxes and PR CI do not.
-# (The old -DFINCEPT_ALLOW_QT_DRIFT flag is gone — the floor IS the default now;
-#  pass -DFINCEPT_QT_STRICT=ON for the exact pin instead.)
+# (The old ALLOW_QT_DRIFT flag is gone — the floor IS the default now;
+#  pass -DFINTERM_QT_STRICT=ON for the exact pin instead.)
 set(FINTERM_QT_VERSION 6.8.3 CACHE STRING "Qt version the project is tested/shipped against")
 option(FINTERM_QT_STRICT "Require exactly FINTERM_QT_VERSION (release/ship builds)" OFF)
 
 # Resolve the version constraint passed to every find_package(Qt6 ...) below.
 # STRICT  -> exact patch pin (ship builds).  Default -> major.minor floor.
 if(FINTERM_QT_STRICT)
-    set(_fincept_qt_match ${FINTERM_QT_VERSION} EXACT)
+    set(_finterm_qt_match ${FINTERM_QT_VERSION} EXACT)
 else()
-    string(REGEX MATCH "^[0-9]+\\.[0-9]+" _fincept_qt_floor "${FINTERM_QT_VERSION}")
-    set(_fincept_qt_match ${_fincept_qt_floor})
+    string(REGEX MATCH "^[0-9]+\\.[0-9]+" _finterm_qt_floor "${FINTERM_QT_VERSION}")
+    set(_finterm_qt_match ${_finterm_qt_floor})
 endif()
 
 # Qt 6.8 FindWrapOpenGL.cmake hard-codes "-framework AGL" as a fallback when
@@ -279,36 +279,36 @@ if(APPLE AND NOT TARGET WrapOpenGL::WrapOpenGL)
     find_package(OpenGL QUIET)
     if(OpenGL_FOUND)
         add_library(WrapOpenGL::WrapOpenGL INTERFACE IMPORTED)
-        get_target_property(_fincept_ogl_loc OpenGL::GL IMPORTED_LOCATION)
-        if(_fincept_ogl_loc AND NOT _fincept_ogl_loc MATCHES "/([^/]+)\\.framework$")
-            get_filename_component(_fincept_ogl_path "${_fincept_ogl_loc}" DIRECTORY)
+        get_target_property(_finterm_ogl_loc OpenGL::GL IMPORTED_LOCATION)
+        if(_finterm_ogl_loc AND NOT _finterm_ogl_loc MATCHES "/([^/]+)\\.framework$")
+            get_filename_component(_finterm_ogl_path "${_finterm_ogl_loc}" DIRECTORY)
         endif()
-        if(NOT _fincept_ogl_path)
-            set(_fincept_ogl_path "-framework OpenGL")
+        if(NOT _finterm_ogl_path)
+            set(_finterm_ogl_path "-framework OpenGL")
         endif()
-        target_link_libraries(WrapOpenGL::WrapOpenGL INTERFACE "${_fincept_ogl_path}")
+        target_link_libraries(WrapOpenGL::WrapOpenGL INTERFACE "${_finterm_ogl_path}")
         set(WrapOpenGL_FOUND ON)
     endif()
 endif()
 
-find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS
+find_package(Qt6 ${_finterm_qt_match} REQUIRED COMPONENTS
     Widgets Charts PrintSupport Network Sql Concurrent Multimedia)
 
 # Optional: WebSockets (not always installed)
-find_package(Qt6 ${_fincept_qt_match} QUIET COMPONENTS WebSockets)
+find_package(Qt6 ${_finterm_qt_match} QUIET COMPONENTS WebSockets)
 if(Qt6WebSockets_FOUND)
     set(HAS_WEBSOCKETS TRUE)
 endif()
 
 # Optional: MultimediaWidgets (for inline video/stream playback)
 # Qt6::Multimedia is already required above (needed for QMediaPlayer in AiChatBubble / VideoPlayerWidget).
-find_package(Qt6 ${_fincept_qt_match} QUIET COMPONENTS MultimediaWidgets)
+find_package(Qt6 ${_finterm_qt_match} QUIET COMPONENTS MultimediaWidgets)
 if(Qt6MultimediaWidgets_FOUND)
     set(HAS_MULTIMEDIA TRUE)
 endif()
 
 # Optional: TextToSpeech (cross-platform TTS — SAPI/AVSpeech/speech-dispatcher)
-find_package(Qt6 ${_fincept_qt_match} QUIET COMPONENTS TextToSpeech)
+find_package(Qt6 ${_finterm_qt_match} QUIET COMPONENTS TextToSpeech)
 if(Qt6TextToSpeech_FOUND)
     set(HAS_TTS TRUE)
 endif()
@@ -406,7 +406,7 @@ else()
     add_library(QXlsx_stub INTERFACE)
     add_library(QXlsx::QXlsx ALIAS QXlsx_stub)
 endif()
-# NOTE: FINTERM_HAS_QXLSX compile definition is applied to FinceptTerminal
+# NOTE: FINTERM_HAS_QXLSX compile definition is applied to finterm
 # after add_executable() — see the target_compile_definitions block below.
 
 # ── Auto-update service ─────────────────────────────────────────────────────
@@ -1848,12 +1848,12 @@ set_source_files_properties(
 # WIN32     — suppress console window on Windows
 # MACOSX_BUNDLE — create a proper .app bundle on macOS
 if(WIN32)
-    set(_FINCEPT_EXE_FLAGS WIN32)
+    set(_FINTERM_EXE_FLAGS WIN32)
     # Generate app.rc from app.rc.in so FILEVERSION / PRODUCTVERSION / string
     # table reflect the project() VERSION. Without this the exe's PE version
     # resource is 0.0.0.0 and Windows Error Reporting cannot triage crashes
     # by app version (see issue #215). The .ico reference is relative to the
-    # generated file's directory, so copy fincept.ico next to it.
+    # generated file's directory, so copy finterm.ico next to it.
     set(FINTERM_VER_MAJOR ${PROJECT_VERSION_MAJOR})
     set(FINTERM_VER_MINOR ${PROJECT_VERSION_MINOR})
     set(FINTERM_VER_PATCH ${PROJECT_VERSION_PATCH})
@@ -1862,19 +1862,19 @@ if(WIN32)
         "${CMAKE_CURRENT_BINARY_DIR}/app.rc"
         @ONLY)
     configure_file(
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.ico"
-        "${CMAKE_CURRENT_BINARY_DIR}/fincept.ico"
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/finterm.ico"
+        "${CMAKE_CURRENT_BINARY_DIR}/finterm.ico"
         COPYONLY)
-    set(_FINCEPT_PLATFORM_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
+    set(_FINTERM_PLATFORM_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/app.rc")
 elseif(APPLE)
-    set(_FINCEPT_EXE_FLAGS MACOSX_BUNDLE)
-    set(_FINCEPT_PLATFORM_SOURCES "")
+    set(_FINTERM_EXE_FLAGS MACOSX_BUNDLE)
+    set(_FINTERM_PLATFORM_SOURCES "")
 else()
-    set(_FINCEPT_EXE_FLAGS "")
-    set(_FINCEPT_PLATFORM_SOURCES "")
+    set(_FINTERM_EXE_FLAGS "")
+    set(_FINTERM_PLATFORM_SOURCES "")
 endif()
 
-add_executable(FinceptTerminal ${_FINCEPT_EXE_FLAGS}
+add_executable(finterm ${_FINTERM_EXE_FLAGS}
     ${CORE_SOURCES}
     ${NETWORK_SOURCES}
     ${DATAHUB_SOURCES}
@@ -1889,46 +1889,46 @@ add_executable(FinceptTerminal ${_FINCEPT_EXE_FLAGS}
     ${SCREEN_SOURCES}
     ${APP_SOURCES}
     src/services/updater/UpdateService.cpp
-    ${_FINCEPT_PLATFORM_SOURCES}
+    ${_FINTERM_PLATFORM_SOURCES}
 )
 
-target_include_directories(FinceptTerminal PRIVATE
+target_include_directories(finterm PRIVATE
     src
     ${SingleApplication_SOURCE_DIR}
 )
 
 # ── Emitted artifact name ─────────────────────────────────────────────────────
-# The CMake target token "FinceptTerminal" is an internal handle — never seen in
+# The CMake target token "finterm" is an internal handle — never seen in
 # any shipped artifact (like the C++ namespace finterm). Only the produced
 # binary carries the brand:
 #   Linux -> finterm.bin    Windows -> finterm.exe    macOS -> finterm.app
 if(WIN32)
-    set_target_properties(FinceptTerminal PROPERTIES OUTPUT_NAME "finterm")
+    set_target_properties(finterm PROPERTIES OUTPUT_NAME "finterm")
 elseif(APPLE)
-    set_target_properties(FinceptTerminal PROPERTIES OUTPUT_NAME "finterm")
+    set_target_properties(finterm PROPERTIES OUTPUT_NAME "finterm")
 else()
-    set_target_properties(FinceptTerminal PROPERTIES OUTPUT_NAME "finterm.bin")
+    set_target_properties(finterm PROPERTIES OUTPUT_NAME "finterm.bin")
 endif()
 
 # ── macOS bundle properties ───────────────────────────────────────────────────
 if(APPLE)
-    set_target_properties(FinceptTerminal PROPERTIES
-        MACOSX_BUNDLE_GUI_IDENTIFIER    "com.fincept.terminal"
+    set_target_properties(finterm PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER    "io.github.yumima.finterm"
         MACOSX_BUNDLE_BUNDLE_NAME       "finterm"
         MACOSX_BUNDLE_BUNDLE_VERSION    "${CMAKE_PROJECT_VERSION}"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${CMAKE_PROJECT_VERSION}"
-        MACOSX_BUNDLE_ICON_FILE         "fincept.icns"
+        MACOSX_BUNDLE_ICON_FILE         "finterm.icns"
         MACOSX_BUNDLE_COPYRIGHT         "Copyright © 2024-2026 finterm contributors"
     )
     # Copy .icns into the bundle Resources folder at build time
-    set(_FINCEPT_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.icns")
-    if(EXISTS "${_FINCEPT_ICNS}")
-        target_sources(FinceptTerminal PRIVATE "${_FINCEPT_ICNS}")
-        set_source_files_properties("${_FINCEPT_ICNS}"
+    set(_FINTERM_ICNS "${CMAKE_CURRENT_SOURCE_DIR}/resources/finterm.icns")
+    if(EXISTS "${_FINTERM_ICNS}")
+        target_sources(finterm PRIVATE "${_FINTERM_ICNS}")
+        set_source_files_properties("${_FINTERM_ICNS}"
             PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
     else()
-        message(WARNING "macOS icon not found at ${_FINCEPT_ICNS} — app will show generic icon. "
-                        "Generate it with: iconutil -c icns -o resources/fincept.icns <iconset>")
+        message(WARNING "macOS icon not found at ${_FINTERM_ICNS} — app will show generic icon. "
+                        "Generate it with: iconutil -c icns -o resources/finterm.icns <iconset>")
     endif()
 endif()
 
@@ -1939,20 +1939,20 @@ if(APPLE AND DEPLOY_QT)
               "$ENV{QTDIR}/bin"
     )
     if(MACDEPLOYQT_EXECUTABLE)
-        add_custom_command(TARGET FinceptTerminal POST_BUILD
+        add_custom_command(TARGET finterm POST_BUILD
             COMMAND "${MACDEPLOYQT_EXECUTABLE}"
-                "$<TARGET_BUNDLE_DIR:FinceptTerminal>"
+                "$<TARGET_BUNDLE_DIR:finterm>"
                 -no-strip -always-overwrite
             COMMENT "Running macdeployqt to bundle Qt frameworks..."
         )
         # Remove unused SQL driver plugins that reference libraries not present
         # on typical macOS installs (ODBC, PostgreSQL, Mimer). These cause
         # harmless but noisy "ERROR: no file at ..." warnings from macdeployqt.
-        add_custom_command(TARGET FinceptTerminal POST_BUILD
+        add_custom_command(TARGET finterm POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E rm -f
-                "$<TARGET_BUNDLE_DIR:FinceptTerminal>/Contents/PlugIns/sqldrivers/libqsqlodbc.dylib"
-                "$<TARGET_BUNDLE_DIR:FinceptTerminal>/Contents/PlugIns/sqldrivers/libqsqlpsql.dylib"
-                "$<TARGET_BUNDLE_DIR:FinceptTerminal>/Contents/PlugIns/sqldrivers/libqsqlmimer.dylib"
+                "$<TARGET_BUNDLE_DIR:finterm>/Contents/PlugIns/sqldrivers/libqsqlodbc.dylib"
+                "$<TARGET_BUNDLE_DIR:finterm>/Contents/PlugIns/sqldrivers/libqsqlpsql.dylib"
+                "$<TARGET_BUNDLE_DIR:finterm>/Contents/PlugIns/sqldrivers/libqsqlmimer.dylib"
             COMMENT "Removing unused SQL driver plugins (ODBC/PostgreSQL/Mimer)..."
         )
     else()
@@ -1963,7 +1963,7 @@ endif()
 
 # Precompiled header — Qt + std headers parsed once, reused across all TUs
 # QDebug excluded — it adds overhead in Release and is only needed for debugging
-target_precompile_headers(FinceptTerminal PRIVATE
+target_precompile_headers(finterm PRIVATE
     # ── Core Qt objects ───────────────────────────────────────────────────────
     <QObject>
     <QWidget>
@@ -2119,8 +2119,6 @@ if(WIN32 AND NOT OPENSSL_ROOT_DIR AND NOT DEFINED ENV{OPENSSL_ROOT_DIR})
         set(OPENSSL_ROOT_DIR "$ENV{VCPKG_INSTALLED_DIR}/x64-windows" CACHE PATH "" FORCE)
     elseif(DEFINED ENV{VCPKG_ROOT} AND EXISTS "$ENV{VCPKG_ROOT}/installed/x64-windows/lib/libcrypto.lib")
         set(OPENSSL_ROOT_DIR "$ENV{VCPKG_ROOT}/installed/x64-windows" CACHE PATH "" FORCE)
-    elseif(EXISTS "C:/windowsdisk/fincept-cpp/vcpkg_installed/x64-windows/lib/libcrypto.lib")
-        set(OPENSSL_ROOT_DIR "C:/windowsdisk/fincept-cpp/vcpkg_installed/x64-windows" CACHE PATH "" FORCE)
     endif()
 endif()
 
@@ -2131,7 +2129,7 @@ endif()
 find_package(OpenSSL REQUIRED)
 message(STATUS "OpenSSL found: ${OPENSSL_VERSION} — include: ${OPENSSL_INCLUDE_DIR}")
 
-target_include_directories(FinceptTerminal PRIVATE
+target_include_directories(finterm PRIVATE
     "${OPENSSL_INCLUDE_DIR}"
     "${md4c_SOURCE_DIR}/src"
 )
@@ -2146,14 +2144,14 @@ if(NOT Qt6WebEngineWidgets_FOUND)
         # Direct approach: add include paths and link all Qt deps of WebEngine.
         # Creating IMPORTED targets without their full transitive dep chain
         # causes linker errors; listing the .so files directly avoids that.
-        target_include_directories(FinceptTerminal PRIVATE
+        target_include_directories(finterm PRIVATE
             "${CMAKE_PREFIX_PATH}/include/QtWebEngineWidgets"
             "${CMAKE_PREFIX_PATH}/include/QtWebEngineCore")
         foreach(_lib WebEngineWidgets WebEngineCore Positioning WebChannel
                      Qml QmlMeta QmlModels QmlWorkerScript Quick)
             set(_so "${CMAKE_PREFIX_PATH}/lib/libQt6${_lib}.so")
             if(EXISTS "${_so}")
-                target_link_libraries(FinceptTerminal PRIVATE "${_so}")
+                target_link_libraries(finterm PRIVATE "${_so}")
             endif()
         endforeach()
         set(Qt6WebEngineWidgets_FOUND TRUE)
@@ -2165,7 +2163,7 @@ else()
     message(STATUS "Qt6 WebEngineWidgets found — enabling WebEngine video path")
 endif()
 
-target_link_libraries(FinceptTerminal PRIVATE
+target_link_libraries(finterm PRIVATE
     Qt6::Widgets
     Qt6::Charts
     Qt6::OpenGLWidgets
@@ -2186,7 +2184,7 @@ target_link_libraries(FinceptTerminal PRIVATE
 
 # macOS: link Security.framework + CoreFoundation for SecItem API in SecureStorage
 if(APPLE)
-    target_link_libraries(FinceptTerminal PRIVATE "-framework Security" "-framework CoreFoundation")
+    target_link_libraries(finterm PRIVATE "-framework Security" "-framework CoreFoundation")
 endif()
 
 # Linux: optionally link libsecret for cryptographically-secure credential
@@ -2200,8 +2198,8 @@ if(UNIX AND NOT APPLE)
     if(PkgConfig_FOUND)
         pkg_check_modules(LIBSECRET IMPORTED_TARGET libsecret-1)
         if(LIBSECRET_FOUND)
-            target_link_libraries(FinceptTerminal PRIVATE PkgConfig::LIBSECRET)
-            target_compile_definitions(FinceptTerminal PRIVATE FINTERM_HAVE_LIBSECRET)
+            target_link_libraries(finterm PRIVATE PkgConfig::LIBSECRET)
+            target_compile_definitions(finterm PRIVATE FINTERM_HAVE_LIBSECRET)
             message(STATUS "libsecret found — Linux SecureStorage will use Secret Service backend")
         else()
             message(WARNING
@@ -2218,7 +2216,7 @@ endif()
 # /OPT:REF aggressively on release builds the indirect reference via wincred.h
 # can get stripped, producing late-link errors.
 if(WIN32)
-    target_link_libraries(FinceptTerminal PRIVATE dbghelp Advapi32 Crypt32)
+    target_link_libraries(finterm PRIVATE dbghelp Advapi32 Crypt32)
 endif()
 
 # Copy OpenSSL DLLs to build output — Windows only
@@ -2251,13 +2249,13 @@ if(WIN32)
     endif()
 
     if(OPENSSL_CRYPTO_DLL_FILE AND OPENSSL_SSL_DLL_FILE)
-        add_custom_command(TARGET FinceptTerminal POST_BUILD
+        add_custom_command(TARGET finterm POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${OPENSSL_CRYPTO_DLL_FILE}"
-                "$<TARGET_FILE_DIR:FinceptTerminal>"
+                "$<TARGET_FILE_DIR:finterm>"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${OPENSSL_SSL_DLL_FILE}"
-                "$<TARGET_FILE_DIR:FinceptTerminal>"
+                "$<TARGET_FILE_DIR:finterm>"
             COMMENT "Copying OpenSSL DLLs..."
         )
         message(STATUS "OpenSSL DLLs to deploy: ${OPENSSL_CRYPTO_DLL_FILE}, ${OPENSSL_SSL_DLL_FILE}")
@@ -2269,44 +2267,44 @@ endif()
 # ── Application version (single source of truth) ─────────────────────────────
 # FINTERM_VERSION_STRING is consumed by main.cpp so QApplication::applicationVersion()
 # always matches the project() VERSION declared at the top of this file.
-target_compile_definitions(FinceptTerminal PRIVATE
+target_compile_definitions(finterm PRIVATE
     FINTERM_VERSION_STRING="${CMAKE_PROJECT_VERSION}")
 
 # ── Optional feature compile definitions (applied after add_executable) ──────
 if(FINTERM_HAS_PRIVATE_HEADERS)
-    target_compile_definitions(FinceptTerminal PRIVATE FINTERM_HAS_QXLSX)
+    target_compile_definitions(finterm PRIVATE FINTERM_HAS_QXLSX)
 endif()
 
 if(HAS_WEBSOCKETS)
-    target_link_libraries(FinceptTerminal PRIVATE Qt6::WebSockets)
-    target_compile_definitions(FinceptTerminal PRIVATE HAS_QT_WEBSOCKETS)
+    target_link_libraries(finterm PRIVATE Qt6::WebSockets)
+    target_compile_definitions(finterm PRIVATE HAS_QT_WEBSOCKETS)
 endif()
 
 if(HAS_MULTIMEDIA)
-    target_link_libraries(FinceptTerminal PRIVATE Qt6::MultimediaWidgets)
-    target_compile_definitions(FinceptTerminal PRIVATE HAS_QT_MULTIMEDIA)
+    target_link_libraries(finterm PRIVATE Qt6::MultimediaWidgets)
+    target_compile_definitions(finterm PRIVATE HAS_QT_MULTIMEDIA)
 endif()
 
 if(HAS_TTS)
-    target_link_libraries(FinceptTerminal PRIVATE Qt6::TextToSpeech)
-    target_compile_definitions(FinceptTerminal PRIVATE HAS_QT_TTS)
+    target_link_libraries(finterm PRIVATE Qt6::TextToSpeech)
+    target_compile_definitions(finterm PRIVATE HAS_QT_TTS)
 endif()
 
 if(Qt6WebEngineWidgets_FOUND)
     # When found via find_package, link the imported targets.
     # The probe fallback already linked raw .so paths, so guard with TARGET check.
     if(TARGET Qt6::WebEngineWidgets)
-        target_link_libraries(FinceptTerminal PRIVATE Qt6::WebEngineWidgets Qt6::WebEngineCore)
+        target_link_libraries(finterm PRIVATE Qt6::WebEngineWidgets Qt6::WebEngineCore)
     endif()
-    target_compile_definitions(FinceptTerminal PRIVATE HAS_QT_WEBENGINE)
+    target_compile_definitions(finterm PRIVATE HAS_QT_WEBENGINE)
 endif()
 
 # ── Copy qgeoview DLL next to the exe so it's found at runtime ────────────────
 if(WIN32)
-    add_custom_command(TARGET FinceptTerminal POST_BUILD
+    add_custom_command(TARGET finterm POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "$<TARGET_FILE:qgeoview>"
-            "$<TARGET_FILE_DIR:FinceptTerminal>"
+            "$<TARGET_FILE_DIR:finterm>"
         COMMENT "Copying qgeoview.dll..."
     )
 endif()
@@ -2323,9 +2321,9 @@ if(WIN32)
         # Only deploy Qt DLLs when explicitly requested via -DDEPLOY_QT=ON
         # Avoids 10-30s overhead on every incremental build
         if(DEPLOY_QT)
-            add_custom_command(TARGET FinceptTerminal POST_BUILD
+            add_custom_command(TARGET finterm POST_BUILD
                 COMMAND "${WINDEPLOYQT_EXE}"
-                ARGS "--no-translations" "$<TARGET_FILE:FinceptTerminal>"
+                ARGS "--no-translations" "$<TARGET_FILE:finterm>"
                 COMMENT "Running windeployqt..."
             )
         endif()
@@ -2339,12 +2337,12 @@ if(WIN32)
     # Always overwrite the sql plugins with the consistent set after every build.
     set(QT_CONSISTENT_PLUGINS "C:/Qt_temp/6.8.3/msvc2022_64/plugins")
     if(EXISTS "${QT_CONSISTENT_PLUGINS}/sqldrivers/qsqlite.dll")
-        add_custom_command(TARGET FinceptTerminal POST_BUILD
+        add_custom_command(TARGET finterm POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E make_directory
-                "$<TARGET_FILE_DIR:FinceptTerminal>/sqldrivers"
+                "$<TARGET_FILE_DIR:finterm>/sqldrivers"
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${QT_CONSISTENT_PLUGINS}/sqldrivers/qsqlite.dll"
-                "$<TARGET_FILE_DIR:FinceptTerminal>/sqldrivers/qsqlite.dll"
+                "$<TARGET_FILE_DIR:finterm>/sqldrivers/qsqlite.dll"
             COMMENT "Overwriting sqldrivers with consistent Qt_temp plugins..."
         )
     endif()
@@ -2355,11 +2353,11 @@ endif()
 # that must never ship — backup folders (agents.deleted.*), test caches,
 # local SQLite databases — because on macOS anything unexpected in the
 # .app bundle makes codesign reject it ("bundle format unrecognized").
-add_custom_command(TARGET FinceptTerminal POST_BUILD
+add_custom_command(TARGET finterm POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/scripts"
-        "$<TARGET_FILE_DIR:FinceptTerminal>/scripts"
-    COMMAND ${CMAKE_COMMAND} -DSCRIPTS_DIR=$<TARGET_FILE_DIR:FinceptTerminal>/scripts
+        "$<TARGET_FILE_DIR:finterm>/scripts"
+    COMMAND ${CMAKE_COMMAND} -DSCRIPTS_DIR=$<TARGET_FILE_DIR:finterm>/scripts
             -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/prune_scripts_junk.cmake"
     COMMENT "Copying Python scripts to build output + pruning junk..."
 )
@@ -2368,32 +2366,32 @@ add_custom_command(TARGET FinceptTerminal POST_BUILD
 # PythonSetupManager::find_requirements_file() searches exe_dir/resources/ first.
 # Without this POST_BUILD step the files are only available via cmake --install,
 # causing setup to silently fail in dev/debug builds.
-add_custom_command(TARGET FinceptTerminal POST_BUILD
+add_custom_command(TARGET finterm POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources"
+        "$<TARGET_FILE_DIR:finterm>/resources"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/requirements-numpy1.txt"
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/requirements-numpy1.txt"
+        "$<TARGET_FILE_DIR:finterm>/resources/requirements-numpy1.txt"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/requirements-numpy2.txt"
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/requirements-numpy2.txt"
+        "$<TARGET_FILE_DIR:finterm>/resources/requirements-numpy2.txt"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/component_catalog.json"
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/component_catalog.json"
+        "$<TARGET_FILE_DIR:finterm>/resources/component_catalog.json"
     COMMAND ${CMAKE_COMMAND} -E make_directory
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/ai"
+        "$<TARGET_FILE_DIR:finterm>/resources/ai"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/ai/capabilities.json"
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/ai/capabilities.json"
+        "$<TARGET_FILE_DIR:finterm>/resources/ai/capabilities.json"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/resources/knowledge"
-        "$<TARGET_FILE_DIR:FinceptTerminal>/resources/knowledge"
+        "$<TARGET_FILE_DIR:finterm>/resources/knowledge"
     COMMENT "Copying requirements files to build output..."
 )
 
 # Bundle yt-dlp for dashboard YouTube playback on all platforms.
-# Override path with: -DFINCEPT_YTDLP_EXE=/abs/path/to/yt-dlp[.exe]
-set(FINTERM_YTDLP_EXE "" CACHE FILEPATH "Path to yt-dlp executable to bundle with FinceptTerminal")
+# Override path with: -DFINTERM_YTDLP_EXE=/abs/path/to/yt-dlp[.exe]
+set(FINTERM_YTDLP_EXE "" CACHE FILEPATH "Path to yt-dlp executable to bundle with finterm")
 # Default OFF so builds on CI / macOS / Linux succeed without yt-dlp pre-installed.
 # Set ON only for official release builds where yt-dlp must be present.
 option(FINTERM_REQUIRE_BUNDLED_YTDLP "Fail configure if yt-dlp is missing" OFF)
@@ -2415,16 +2413,16 @@ if(FINTERM_YTDLP_TO_BUNDLE AND EXISTS "${FINTERM_YTDLP_TO_BUNDLE}")
         set(FINTERM_YTDLP_OUTPUT_NAME "yt-dlp")
     endif()
 
-    add_custom_command(TARGET FinceptTerminal POST_BUILD
+    add_custom_command(TARGET finterm POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             "${FINTERM_YTDLP_TO_BUNDLE}"
-            "$<TARGET_FILE_DIR:FinceptTerminal>/${FINTERM_YTDLP_OUTPUT_NAME}"
+            "$<TARGET_FILE_DIR:finterm>/${FINTERM_YTDLP_OUTPUT_NAME}"
         COMMENT "Copying yt-dlp for dashboard video playback..."
     )
 
     if(UNIX)
-        add_custom_command(TARGET FinceptTerminal POST_BUILD
-            COMMAND chmod +x "$<TARGET_FILE_DIR:FinceptTerminal>/${FINTERM_YTDLP_OUTPUT_NAME}"
+        add_custom_command(TARGET finterm POST_BUILD
+            COMMAND chmod +x "$<TARGET_FILE_DIR:finterm>/${FINTERM_YTDLP_OUTPUT_NAME}"
             COMMENT "Setting executable permission on bundled yt-dlp..."
         )
     endif()
@@ -2446,13 +2444,13 @@ endif()
 
 if(WIN32)
     # Windows: install exe + all DLLs beside it (windeployqt already copies them)
-    install(TARGETS FinceptTerminal RUNTIME DESTINATION "." COMPONENT core)
+    install(TARGETS finterm RUNTIME DESTINATION "." COMPONENT core)
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/scripts/"
             DESTINATION "scripts" COMPONENT scripts
             REGEX "(\\.deleted\\.|\\.pytest_cache|\\.benchmarks|__pycache__|\\.pyc$|\\.db$|\\.sqlite$|\\.sqlite3$|\\.bak$|\\.orig$)" EXCLUDE)
     # Requirements files — needed by PythonSetupManager at first run to install
     # Python packages. Must be deployed beside the exe so find_requirements_file()
-    # can locate them at C:/Program Files/FinceptTerminal/resources/*.txt.
+    # can locate them at C:/Program Files/finterm/resources/*.txt.
     install(FILES
             "${CMAKE_CURRENT_SOURCE_DIR}/resources/requirements-numpy1.txt"
             "${CMAKE_CURRENT_SOURCE_DIR}/resources/requirements-numpy2.txt"
@@ -2460,41 +2458,41 @@ if(WIN32)
 
 elseif(APPLE)
     # macOS: install the .app bundle
-    install(TARGETS FinceptTerminal BUNDLE DESTINATION "." COMPONENT core)
+    install(TARGETS finterm BUNDLE DESTINATION "." COMPONENT core)
     # Requirements files — deployed beside the .app so PythonSetupManager finds them
     install(FILES
             "${CMAKE_CURRENT_SOURCE_DIR}/resources/requirements-numpy1.txt"
             "${CMAKE_CURRENT_SOURCE_DIR}/resources/requirements-numpy2.txt"
-            DESTINATION "FinceptTerminal.app/Contents/Resources/resources" COMPONENT core)
+            DESTINATION "finterm.app/Contents/Resources/resources" COMPONENT core)
 
 else()
     # Linux: FHS-compliant layout
-    install(TARGETS FinceptTerminal
+    install(TARGETS finterm
             RUNTIME DESTINATION "bin" COMPONENT core)
 
     # Python analytics scripts
     install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/scripts/"
-            DESTINATION "share/fincept-terminal/scripts"
+            DESTINATION "share/finterm/scripts"
             USE_SOURCE_PERMISSIONS COMPONENT scripts
             REGEX "(\\.deleted\\.|\\.pytest_cache|\\.benchmarks|__pycache__|\\.pyc$|\\.db$|\\.sqlite$|\\.sqlite3$|\\.bak$|\\.orig$)" EXCLUDE)
 
     # App icon (PNG required for hicolor theme; convert .ico → .png in CI)
-    set(_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.png")
+    set(_ICON_PNG "${CMAKE_CURRENT_SOURCE_DIR}/resources/finterm.png")
     if(EXISTS "${_ICON_PNG}")
         install(FILES "${_ICON_PNG}"
                 DESTINATION "share/icons/hicolor/256x256/apps"
-                RENAME "fincept-terminal.png" COMPONENT core)
+                RENAME "finterm.png" COMPONENT core)
     else()
         message(STATUS "Linux icon not found at ${_ICON_PNG} — "
-                       "convert resources/fincept.ico to fincept.png for proper desktop integration")
+                       "convert resources/finterm.ico to finterm.png for proper desktop integration")
     endif()
 
     # .desktop file
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/fincept-terminal.desktop"
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/finterm.desktop"
             DESTINATION "share/applications" COMPONENT core)
 
     # AppStream metadata
-    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/fincept-terminal.appdata.xml"
+    install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/finterm.appdata.xml"
             DESTINATION "share/metainfo" COMPONENT core)
 
     # yt-dlp (if bundled)
@@ -2507,7 +2505,7 @@ endif()
 
 # ── Installer (QtIFW via CPackIFW) ───────────────────────────────────────────
 # Generate cross-platform installer with uninstaller:
-#   cmake -B build -DFINCEPT_BUILD_INSTALLER=ON -DDEPLOY_QT=ON ...
+#   cmake -B build -DFINTERM_BUILD_INSTALLER=ON -DDEPLOY_QT=ON ...
 #   cmake --build build --config Release
 #   cd build && cpack -G IFW -C Release
 #
@@ -2520,7 +2518,7 @@ if(FINTERM_BUILD_INSTALLER)
 
     # ── Windows: capture windeployqt output for the installer ────────────────
     if(WIN32 AND DEPLOY_QT)
-        install(DIRECTORY "$<TARGET_FILE_DIR:FinceptTerminal>/"
+        install(DIRECTORY "$<TARGET_FILE_DIR:finterm>/"
                 DESTINATION "."
                 COMPONENT core
                 FILES_MATCHING
@@ -2541,7 +2539,7 @@ if(FINTERM_BUILD_INSTALLER)
         # qt.conf — pins plugin/library paths relative to the exe. Without
         # this Qt uses hardcoded build-machine paths that don't exist on the
         # user's machine, producing "could not load the Qt platform plugin".
-        install(FILES "$<TARGET_FILE_DIR:FinceptTerminal>/qt.conf"
+        install(FILES "$<TARGET_FILE_DIR:finterm>/qt.conf"
                 DESTINATION "." COMPONENT core OPTIONAL)
         # Qt plugin directories. OPTIONAL keeps the install non-fatal when
         # a plugin dir isn't produced by windeployqt on a given host (e.g.
@@ -2550,7 +2548,7 @@ if(FINTERM_BUILD_INSTALLER)
                 platforms sqldrivers imageformats iconengines styles tls
                 multimedia texttospeech networkinformation platforminputcontexts
                 printsupport generic)
-            install(DIRECTORY "$<TARGET_FILE_DIR:FinceptTerminal>/${_plugin_dir}"
+            install(DIRECTORY "$<TARGET_FILE_DIR:finterm>/${_plugin_dir}"
                     DESTINATION "." COMPONENT core OPTIONAL)
         endforeach()
     endif()
@@ -2563,9 +2561,9 @@ if(FINTERM_BUILD_INSTALLER)
         "finterm — local-first financial-research terminal")
     set(CPACK_PACKAGE_HOMEPAGE_URL "")
     set(CPACK_RESOURCE_FILE_LICENSE
-        "${CMAKE_CURRENT_SOURCE_DIR}/packaging/installer/packages/com.fincept.terminal.core/meta/license.txt")
+        "${CMAKE_CURRENT_SOURCE_DIR}/packaging/installer/packages/io.github.yumima.finterm.core/meta/license.txt")
     set(CPACK_PACKAGE_ICON
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.ico")
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/finterm.ico")
 
     # ── Generator: IFW only ──────────────────────────────────────────────────
     set(CPACK_GENERATOR "IFW")
@@ -2590,26 +2588,26 @@ if(FINTERM_BUILD_INSTALLER)
 
     # ── CPackIFW installer configuration ─────────────────────────────────────
     set(CPACK_IFW_PACKAGE_TITLE "finterm")
-    set(CPACK_IFW_PACKAGE_NAME "com.fincept.terminal")
+    set(CPACK_IFW_PACKAGE_NAME "io.github.yumima.finterm")
     set(CPACK_IFW_PACKAGE_PUBLISHER "finterm contributors")
     set(CPACK_IFW_PACKAGE_START_MENU_DIRECTORY "finterm")
     set(CPACK_IFW_PACKAGE_ICON
-        "${CMAKE_CURRENT_SOURCE_DIR}/resources/fincept.ico")
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources/finterm.ico")
     # Kept as-is: Qt IFW finds an existing installation by this name, so
     # renaming it would strand earlier installs (orphaned uninstaller). It is
-    # an install-time identifier, like com.fincept.terminal.
-    set(CPACK_IFW_PACKAGE_MAINTENANCE_TOOL_NAME "FinceptMaintenanceTool")
+    # an install-time identifier, like io.github.yumima.finterm.
+    set(CPACK_IFW_PACKAGE_MAINTENANCE_TOOL_NAME "FintermMaintenanceTool")
     set(CPACK_IFW_PACKAGE_WIZARD_STYLE "Modern")
     set(CPACK_IFW_PACKAGE_ALLOW_SPACE_IN_PATH ON)
     set(CPACK_IFW_PACKAGE_ALLOW_NON_ASCII_CHARACTERS ON)
 
     # Target directory defaults per platform
     if(WIN32)
-        set(CPACK_IFW_TARGET_DIRECTORY "@ApplicationsDirX64@/FinceptTerminal")
+        set(CPACK_IFW_TARGET_DIRECTORY "@ApplicationsDirX64@/finterm")
     elseif(APPLE)
-        set(CPACK_IFW_TARGET_DIRECTORY "/Applications/FinceptTerminal")
+        set(CPACK_IFW_TARGET_DIRECTORY "/Applications/finterm")
     else()
-        set(CPACK_IFW_TARGET_DIRECTORY "@HomeDir@/FinceptTerminal")
+        set(CPACK_IFW_TARGET_DIRECTORY "@HomeDir@/finterm")
     endif()
 
     # Output file naming — arch-aware so the auto-updater manifest can point
@@ -2622,39 +2620,39 @@ if(FINTERM_BUILD_INSTALLER)
     if(WIN32)
         # CMAKE_SYSTEM_PROCESSOR on Windows is "AMD64" for x64 and "ARM64" for arm64.
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64|aarch64")
-            set(_FINCEPT_PKG_ARCH "arm64")
+            set(_FINTERM_PKG_ARCH "arm64")
         else()
-            set(_FINCEPT_PKG_ARCH "x64")
+            set(_FINTERM_PKG_ARCH "x64")
         endif()
         set(CPACK_PACKAGE_FILE_NAME
-            "finterm-${CMAKE_PROJECT_VERSION}-windows-${_FINCEPT_PKG_ARCH}-setup")
+            "finterm-${CMAKE_PROJECT_VERSION}-windows-${_FINTERM_PKG_ARCH}-setup")
     elseif(APPLE)
         # On macOS CMAKE_OSX_ARCHITECTURES is the authoritative source
         # (it drives the actual binary slice). Fall back to host processor.
         if(CMAKE_OSX_ARCHITECTURES)
             list(LENGTH CMAKE_OSX_ARCHITECTURES _osx_arch_count)
             if(_osx_arch_count GREATER 1)
-                set(_FINCEPT_PKG_ARCH "universal")
+                set(_FINTERM_PKG_ARCH "universal")
             elseif("${CMAKE_OSX_ARCHITECTURES}" STREQUAL "arm64")
-                set(_FINCEPT_PKG_ARCH "arm64")
+                set(_FINTERM_PKG_ARCH "arm64")
             else()
-                set(_FINCEPT_PKG_ARCH "x64")
+                set(_FINTERM_PKG_ARCH "x64")
             endif()
         elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
-            set(_FINCEPT_PKG_ARCH "arm64")
+            set(_FINTERM_PKG_ARCH "arm64")
         else()
-            set(_FINCEPT_PKG_ARCH "x64")
+            set(_FINTERM_PKG_ARCH "x64")
         endif()
         set(CPACK_PACKAGE_FILE_NAME
-            "finterm-${CMAKE_PROJECT_VERSION}-macos-${_FINCEPT_PKG_ARCH}-setup")
+            "finterm-${CMAKE_PROJECT_VERSION}-macos-${_FINTERM_PKG_ARCH}-setup")
     else()
         if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64")
-            set(_FINCEPT_PKG_ARCH "arm64")
+            set(_FINTERM_PKG_ARCH "arm64")
         else()
-            set(_FINCEPT_PKG_ARCH "x64")
+            set(_FINTERM_PKG_ARCH "x64")
         endif()
         set(CPACK_PACKAGE_FILE_NAME
-            "finterm-${CMAKE_PROJECT_VERSION}-linux-${_FINCEPT_PKG_ARCH}-setup")
+            "finterm-${CMAKE_PROJECT_VERSION}-linux-${_FINTERM_PKG_ARCH}-setup")
     endif()
     message(STATUS "  Installer filename: ${CPACK_PACKAGE_FILE_NAME}")
 
@@ -2675,20 +2673,20 @@ if(FINTERM_BUILD_INSTALLER)
 
     # ── CPackIFW component configuration ─────────────────────────────────────
     cpack_ifw_configure_component(core
-        NAME "com.fincept.terminal.core"
+        NAME "io.github.yumima.finterm.core"
         VERSION "${CMAKE_PROJECT_VERSION}"
-        SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/packaging/installer/packages/com.fincept.terminal.core/meta/installscript.qs"
-        LICENSES "AGPL-3.0" "${CMAKE_CURRENT_SOURCE_DIR}/packaging/installer/packages/com.fincept.terminal.core/meta/license.txt"
+        SCRIPT "${CMAKE_CURRENT_SOURCE_DIR}/packaging/installer/packages/io.github.yumima.finterm.core/meta/installscript.qs"
+        LICENSES "AGPL-3.0" "${CMAKE_CURRENT_SOURCE_DIR}/packaging/installer/packages/io.github.yumima.finterm.core/meta/license.txt"
         SORTING_PRIORITY 100
         DEFAULT TRUE
         FORCED_INSTALLATION)
 
     cpack_ifw_configure_component(scripts
-        NAME "com.fincept.terminal.scripts"
+        NAME "io.github.yumima.finterm.scripts"
         VERSION "${CMAKE_PROJECT_VERSION}"
         SORTING_PRIORITY 50
         DEFAULT TRUE
-        DEPENDS "com.fincept.terminal.core")
+        DEPENDS "io.github.yumima.finterm.core")
 
 endif() # FINTERM_BUILD_INSTALLER
 

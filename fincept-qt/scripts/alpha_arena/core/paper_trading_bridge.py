@@ -111,13 +111,13 @@ def get_db_path() -> Path:
     # Try different possible locations for the database
     possible_paths = [
         # Windows AppData
-        Path(os.environ.get("APPDATA", "")) / "fincept-terminal" / "fincept_terminal.db",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "fincept-terminal" / "fincept_terminal.db",
+        Path(os.environ.get("APPDATA", "")) / "finterm" / "fincept_terminal.db",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "finterm" / "fincept_terminal.db",
         # Development paths
         Path(__file__).parent.parent.parent.parent.parent.parent / "fincept_terminal.db",
         # Linux/Mac
-        Path.home() / ".config" / "fincept-terminal" / "fincept_terminal.db",
-        Path.home() / ".local" / "share" / "fincept-terminal" / "fincept_terminal.db",
+        Path.home() / ".config" / "finterm" / "fincept_terminal.db",
+        Path.home() / ".local" / "share" / "finterm" / "fincept_terminal.db",
     ]
 
     for path in possible_paths:
@@ -126,7 +126,7 @@ def get_db_path() -> Path:
             return path
 
     # Default to Windows AppData
-    default_path = Path(os.environ.get("APPDATA", "C:/")) / "fincept-terminal" / "fincept_terminal.db"
+    default_path = Path(os.environ.get("APPDATA", "C:/")) / "finterm" / "fincept_terminal.db"
     logger.warning(f"Database not found, using default: {default_path}")
     return default_path
 

@@ -2805,7 +2805,7 @@ void DataSourcesScreen::on_bulk_delete_selected() {
 }
 
 void DataSourcesScreen::on_export_connections() {
-    const QString path = QFileDialog::getSaveFileName(this, "Export Connections", "fincept_connections.json",
+    const QString path = QFileDialog::getSaveFileName(this, "Export Connections", "finterm_connections.json",
                                                       "JSON Files (*.json);;All Files (*)");
     if (path.isEmpty())
         return;
@@ -2903,7 +2903,7 @@ void DataSourcesScreen::on_import_connections() {
 
 void DataSourcesScreen::on_download_template() {
     const QString path = QFileDialog::getSaveFileName(
-        this, "Save Connector Template", "fincept_connections_template.json", "JSON Files (*.json);;All Files (*)");
+        this, "Save Connector Template", "finterm_connections_template.json", "JSON Files (*.json);;All Files (*)");
     if (path.isEmpty())
         return;
 

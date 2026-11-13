@@ -30,11 +30,11 @@ def get_main_db_path() -> Optional[Path]:
     """Get the path to the main finterm database for paper trading integration."""
     possible_paths = [
         # Windows AppData
-        Path(os.environ.get("APPDATA", "")) / "fincept-terminal" / "fincept_terminal.db",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "fincept-terminal" / "fincept_terminal.db",
+        Path(os.environ.get("APPDATA", "")) / "finterm" / "fincept_terminal.db",
+        Path(os.environ.get("LOCALAPPDATA", "")) / "finterm" / "fincept_terminal.db",
         # Linux/Mac
-        Path.home() / ".config" / "fincept-terminal" / "fincept_terminal.db",
-        Path.home() / ".local" / "share" / "fincept-terminal" / "fincept_terminal.db",
+        Path.home() / ".config" / "finterm" / "fincept_terminal.db",
+        Path.home() / ".local" / "share" / "finterm" / "fincept_terminal.db",
     ]
 
     for path in possible_paths:

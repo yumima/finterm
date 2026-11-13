@@ -410,7 +410,7 @@ class LlmService : public QObject {
     /// The cap is looked up for the model the request actually targets, which
     /// is the persona's when a role binding overrode it. Called with mutex_
     /// held. The default-constructed scope resolves to the global settings, so
-    /// persona-less callers (config logging, the legacy fincept endpoint) keep
+    /// persona-less callers (config logging, the retired hosted endpoint) keep
     /// their previous behaviour.
     int resolved_max_tokens(const PersonaScope& persona = {}) const;
 

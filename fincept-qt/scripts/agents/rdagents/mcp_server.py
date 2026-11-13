@@ -70,7 +70,7 @@ def build_mcp_server() -> Any:
         )
 
     mcp = FastMCP(
-        name="fincept-tools",
+        name="finterm-tools",
         instructions=(
             "Financial data tools for quantitative research. "
             "Use market_data to get price history, financial_news for recent headlines, "

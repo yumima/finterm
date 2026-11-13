@@ -47,7 +47,7 @@ QString AuthManager::generate_device_id() const {
     QByteArray hash = QCryptographicHash::hash(info.toUtf8(), QCryptographicHash::Sha256).toHex();
     QString timestamp = QString::number(QDateTime::currentMSecsSinceEpoch(), 36);
     quint32 random = QRandomGenerator::global()->generate();
-    return QString("fincept_desktop_%1_%2_%3")
+    return QString("finterm_desktop_%1_%2_%3")
         .arg(QString::fromUtf8(hash.left(16)), timestamp, QString::number(random, 36));
 }
 
@@ -71,7 +71,7 @@ bool AuthManager::save_session() {
     QJsonDocument doc(session_.to_json());
     const QString json = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
     // Persist to auth.db (always open) so load_session() can read it before
-    // the per-user fincept DB is opened.
+    // the per-user DB is opened.
     AuthService::instance().save_session(session_.api_key, json);
     // Also keep in OS-native SecureStorage as the durable credential.
     auto sr = finterm::SecureStorage::instance().store("api_key", session_.api_key);

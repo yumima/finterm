@@ -3,7 +3,7 @@ agent.py — Full create_deep_agent wiring for finterm.
 
 Single responsibility:
   - create_agent() factory that wires ALL 16 create_deep_agent params
-  - FinceptContext dataclass for user/session injection via context_schema
+  - FintermContext dataclass for user/session injection via context_schema
   - MCP tool wrappers as LangChain BaseTool instances
   - InMemoryStore + InMemoryCache always created
   - MemorySaver checkpointer always on (thread-level state)
@@ -32,11 +32,11 @@ from subagents import get_subagents_for_type
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# FinceptContext — injected into every agent invocation via context_schema
+# FintermContext — injected into every agent invocation via context_schema
 # ---------------------------------------------------------------------------
 
 @dataclass
-class FinceptContext:
+class FintermContext:
     """
     Typed context passed to every deep agent via context_schema / invoke(context=...).
 
@@ -117,7 +117,7 @@ def _build_tools() -> list[BaseTool]:
 # System prompt
 # ---------------------------------------------------------------------------
 
-_FINCEPT_SYSTEM_PROMPT = """You are a Deep Agent for finterm, an institutional-grade financial intelligence platform.
+_FINTERM_SYSTEM_PROMPT = """You are a Deep Agent for finterm, an institutional-grade financial intelligence platform.
 
 You have access to:
 - Financial market data (prices, OHLCV, order books)
@@ -208,33 +208,33 @@ def create_agent(
     compiled = create_deep_agent(
         model=resolved_model,
         tools=_build_tools(),
-        system_prompt=_FINCEPT_SYSTEM_PROMPT,
+        system_prompt=_FINTERM_SYSTEM_PROMPT,
         middleware=(),                    # library builds full stack internally
         subagents=subagents,
         skills=None,                      # no skills defined yet — add when SKILL.md files exist
         memory=memory_sources,
         response_format=response_format,
-        context_schema=FinceptContext,
+        context_schema=FintermContext,
         checkpointer=checkpointer,
         store=_store,
         backend=backend,
         interrupt_on=typed_interrupt,
         debug=debug,
-        name=f"fincept-{agent_type}-agent",
+        name=f"finterm-{agent_type}-agent",
         cache=_cache,
     )
 
     logger.info(
-        "Created fincept-%s-agent with %d subagents, backend=%s",
+        "Created finterm-%s-agent with %d subagents, backend=%s",
         agent_type, len(subagents), backend_mode,
     )
     return compiled
 
 
-def build_fincept_context(params: dict[str, Any]) -> FinceptContext:
-    """Build a FinceptContext from CLI params dict."""
+def build_finterm_context(params: dict[str, Any]) -> FintermContext:
+    """Build a FintermContext from CLI params dict."""
     ctx = params.get("context", {}) or {}
-    return FinceptContext(
+    return FintermContext(
         user_id=      ctx.get("user_id",      ""),
         session_id=   ctx.get("session_id",   ""),
         agent_type=   params.get("agent_type", "general"),

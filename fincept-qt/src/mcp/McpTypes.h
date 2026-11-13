@@ -1,6 +1,6 @@
 #pragma once
 // McpTypes.h — Core type definitions for the Model Context Protocol system (Qt port)
-// Translated from fincept-cpp mcp_types.h — std::string → QString, nlohmann::json → QJsonObject
+// Originally translated from a C++ mcp_types.h — std::string → QString, nlohmann::json → QJsonObject
 
 #include <QHash>
 #include <QJsonArray>

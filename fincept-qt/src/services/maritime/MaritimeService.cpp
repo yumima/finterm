@@ -283,7 +283,7 @@ void MaritimeService::refresh(const QStringList& topics) {
 }
 
 int MaritimeService::max_requests_per_sec() const {
-    return 2; // Fincept marine API — conservative
+    return 2; // Finterm marine API — conservative
 }
 
 void MaritimeService::ensure_registered_with_hub() {

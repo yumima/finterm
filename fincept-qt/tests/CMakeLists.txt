@@ -1,13 +1,13 @@
 # finterm — test suite (opt-in)
 #
-# Enable by configuring with -DFINCEPT_BUILD_TESTS=ON. Disabled by default so
+# Enable by configuring with -DFINTERM_BUILD_TESTS=ON. Disabled by default so
 # normal dev / release builds remain unchanged. Each test is a self-contained
 # Qt Test executable that links the minimum subset of sources it needs
-# (no linking against the full FinceptTerminal target — keeps tests fast).
+# (no linking against the full finterm target — keeps tests fast).
 
-# Inherits ${_fincept_qt_match} from the parent CMakeLists (exact pin under
-# -DFINCEPT_QT_STRICT=ON, else a major.minor floor that accepts system Qt).
-find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS Gui Widgets Network Test)
+# Inherits ${_finterm_qt_match} from the parent CMakeLists (exact pin under
+# -DFINTERM_QT_STRICT=ON, else a major.minor floor that accepts system Qt).
+find_package(Qt6 ${_finterm_qt_match} REQUIRED COMPONENTS Gui Widgets Network Test)
 
 enable_testing()
 
@@ -272,7 +272,7 @@ set_target_properties(technicals_score_series PROPERTIES UNITY_BUILD OFF AUTOMOC
 # ON CONFLICT ... WHERE source <> 'live' upsert — so it is exercised through
 # the actual Database/MigrationRunner/PortfolioRepository stack.
 
-find_package(Qt6 ${_fincept_qt_match} REQUIRED COMPONENTS Sql)
+find_package(Qt6 ${_finterm_qt_match} REQUIRED COMPONENTS Sql)
 
 add_executable(test_portfolio_snapshots
     storage/test_portfolio_snapshots.cpp

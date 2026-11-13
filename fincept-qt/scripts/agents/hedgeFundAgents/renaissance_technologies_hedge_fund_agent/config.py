@@ -53,9 +53,9 @@ class DatabaseConfig:
     Database configuration.
 
     All paths use proper application data directories:
-    - Windows: %APPDATA%\\fincept-terminal\\rentech\\
-    - macOS: ~/Library/Application Support/fincept-terminal/rentech/
-    - Linux: ~/.local/share/fincept-terminal/rentech/
+    - Windows: %APPDATA%\\finterm\\rentech\\
+    - macOS: ~/Library/Application Support/finterm/rentech/
+    - Linux: ~/.local/share/finterm/rentech/
     """
     # SQLite for local development (uses AppData)
     sqlite_path: Optional[str] = None  # Auto-set to AppData location

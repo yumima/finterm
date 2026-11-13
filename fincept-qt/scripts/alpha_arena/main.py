@@ -224,7 +224,7 @@ async def create_competition_handler(params: Dict, api_keys: Dict) -> Dict[str, 
             provider = (model_data.get("provider") or "").lower()
             has_key = bool(model_data.get("api_key"))
             has_provider_key = bool(api_keys.get(provider) or api_keys.get(model_data.get("provider", "")))
-            no_key_required = provider in ("ollama", "fincept")
+            no_key_required = provider in ("ollama", "hearth")
 
             if not has_key and not has_provider_key and not no_key_required:
                 missing_keys.append(f"{model_data.get('name', 'Unknown')} ({provider})")

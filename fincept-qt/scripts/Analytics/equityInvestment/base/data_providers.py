@@ -44,7 +44,7 @@ warnings.filterwarnings('ignore')
 
 from .base_models import (
     DataProvider, CompanyData, MarketData, SecurityType,
-    DataProviderError, FinceptAnalyticsError
+    DataProviderError, FintermAnalyticsError
 )
 
 

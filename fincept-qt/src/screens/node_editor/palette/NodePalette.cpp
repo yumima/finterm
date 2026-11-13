@@ -197,7 +197,7 @@ void NodePalette::start_drag(const QString& type_id) {
 
     auto* drag = new QDrag(this);
     auto* mime = new QMimeData;
-    mime->setData("application/x-fincept-node-type", type_id.toUtf8());
+    mime->setData("application/x-finterm-node-type", type_id.toUtf8());
     drag->setMimeData(mime);
 
     // Create drag preview pixmap

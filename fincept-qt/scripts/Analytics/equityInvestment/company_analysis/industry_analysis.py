@@ -38,7 +38,7 @@ import warnings
 
 from .base_models import (
     BaseCompanyAnalysisModel, CompanyData, ValidationError,
-    FinceptAnalyticsError
+    FintermAnalyticsError
 )
 
 

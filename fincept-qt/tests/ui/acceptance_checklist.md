@@ -11,7 +11,7 @@ Pair this checklist with the automated harness:
 
 - Unit / integration tests: `pytest scripts/agents/evals/tests`
 - Eval fixtures: `python -m evals.runner run-all e2e --parity`
-- Result history: `~/.fincept/eval_runs.jsonl` (Track 14 #37)
+- Result history: `<data>/user/agents/eval_runs.jsonl` (Track 14 #37)
 
 Each checkbox should be initialled by the engineer who verified
 the behaviour and dated. Re-run the full checklist on every

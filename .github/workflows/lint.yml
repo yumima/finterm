@@ -64,7 +64,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Debug \
             -DCMAKE_CXX_COMPILER=clang++ \
             -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-            -DFINCEPT_BUILD_INSTALLER=OFF \
+            -DFINTERM_BUILD_INSTALLER=OFF \
             -DDEPLOY_QT=OFF
 
       - name: Run clang-tidy

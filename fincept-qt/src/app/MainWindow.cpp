@@ -155,13 +155,13 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     app_icon = QApplication::windowIcon(); // set by app.rc at link time
     if (app_icon.isNull()) {
         // Fallback: look next to the executable (works after windeployqt)
-        const QString ico = QCoreApplication::applicationDirPath() + "/fincept.ico";
+        const QString ico = QCoreApplication::applicationDirPath() + "/finterm.ico";
         if (QFile::exists(ico))
             app_icon = QIcon(ico);
     }
 #else
     {
-        const QString ico = QCoreApplication::applicationDirPath() + "/fincept.ico";
+        const QString ico = QCoreApplication::applicationDirPath() + "/finterm.ico";
         if (QFile::exists(ico))
             app_icon = QIcon(ico);
     }
@@ -507,7 +507,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         QPixmap px = scr->grabWindow(winId());
         const QString path = QFileDialog::getSaveFileName(
             this, "Save Screenshot",
-            QDir::homePath() + "/fincept_" + QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") + ".png",
+            QDir::homePath() + "/finterm_" + QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") + ".png",
             "PNG Images (*.png)");
         if (!path.isEmpty()) {
             px.save(path, "PNG");
@@ -739,7 +739,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
             QPixmap px = scr->grabWindow(winId());
             QString path = QFileDialog::getSaveFileName(
                 this, "Save Screenshot",
-                QDir::homePath() + "/fincept_" + QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") + ".png",
+                QDir::homePath() + "/finterm_" + QDateTime::currentDateTime().toString("yyyyMMdd_HHmmss") + ".png",
                 "PNG Images (*.png)");
             if (!path.isEmpty()) {
                 px.save(path, "PNG");

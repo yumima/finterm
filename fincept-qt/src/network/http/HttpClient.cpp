@@ -40,8 +40,8 @@ QNetworkRequest HttpClient::build_request(const QString& url) const {
     // returning data Qt can't parse. Both options can be opted into
     // per-request by callers that have verified their target endpoint.
 
-    // Only attach Fincept auth headers when the request targets the configured
-    // Fincept API host. Notification providers (Slack, Discord, Telegram,
+    // Only attach the auth headers when the request targets the configured
+    // base host (a relative URL). Notification providers (Slack, Discord, Telegram,
     // PagerDuty, user webhooks, …) and other services pass absolute third-party
     // URLs through this same singleton — without this guard their servers would
     // receive the user's X-API-Key and X-Session-Token in every call.

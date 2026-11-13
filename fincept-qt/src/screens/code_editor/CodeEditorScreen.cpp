@@ -1314,7 +1314,7 @@ void CodeEditorScreen::on_open_notebook() {
         }
 
         QJsonObject cell_metadata = co["metadata"].toObject();
-        cell.title = cell_metadata["fincept_title"].toString().trimmed();
+        cell.title = cell_metadata.value("finterm_title").toString(cell_metadata.value("fincept_title").toString()).trimmed(); // older notebooks: fincept_title
         cell.execution_count = co["execution_count"].toInt(0);
         cells_.append(cell);
     }
@@ -1360,7 +1360,7 @@ void CodeEditorScreen::on_save_notebook() {
         co["source"] = src_lines;
         QJsonObject cell_metadata;
         if (!cell.title.trimmed().isEmpty())
-            cell_metadata["fincept_title"] = cell.title.trimmed();
+            cell_metadata["finterm_title"] = cell.title.trimmed();
         co["metadata"] = cell_metadata;
 
         if (cell.cell_type == "code") {

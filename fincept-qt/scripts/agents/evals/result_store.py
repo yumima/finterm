@@ -5,7 +5,7 @@ One JSON line per (fixture × runtime) execution.  The runner calls
 loadable into the Workbench System tab later without any schema
 migration.
 
-Default location is `~/.fincept/eval_runs.jsonl`; override with
+Default location is `<data>/user/agents/eval_runs.jsonl` (finterm_paths.agents_dir); override with
 the FINTERM_EVAL_RESULTS env var (e.g. for CI to write under the
 workspace).  Persistence failures are logged, never raised — a
 broken results file mustn't sink a CI run.

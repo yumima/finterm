@@ -11,7 +11,7 @@ namespace finterm::ui {
 /// One tile in the Component Browser grid. Shows category strip, title,
 /// description, and popularity stars (filled circles rendered via text
 /// — no icon assets required). Emits signals on click / double-click, and
-/// supports drag-out with MIME type application/x-fincept-screen-id so a
+/// supports drag-out with MIME type application/x-finterm-screen-id so a
 /// future "drop a card onto a dock area to open it there" flow can plug
 /// in without reworking the card.
 ///

@@ -35,7 +35,7 @@ class AuthService : public QObject {
     void remove_session(const QString& api_key);
 
     // ── Per-user DB lifecycle ─────────────────────────────────────────────────
-    /// Open the per-user fincept DB (users/<username>.db). Creates it fresh and
+    /// Open the per-user DB (users/<username>.db). Creates it fresh and
     /// runs all migrations if this is the user's first login.
     void open_user_db(const QString& api_key);
     /// Close the per-user DB (called at logout). Safe to call when not open.

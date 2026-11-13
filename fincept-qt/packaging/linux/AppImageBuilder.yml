@@ -13,9 +13,9 @@ AppDir:
   path: ./AppDir
 
   app_info:
-    id: com.fincept.terminal
+    id: io.github.yumima.finterm
     name: finterm
-    icon: fincept-terminal
+    icon: finterm
     version: !ENV ${FINTERM_VERSION:-4.0.2}
     exec: usr/bin/finterm.bin
     exec_args: $@

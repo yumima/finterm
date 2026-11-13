@@ -142,8 +142,8 @@ and agentic memory. State never leaks across personas.
 ```
 
 `FINAGENT_DATA_DIR` defaults to
-`%LOCALAPPDATA%/com.fincept.terminal/finagent` on Windows and
-`$XDG_DATA_HOME/com.fincept.terminal/finagent` (or `~/.local/share/...`)
+`%LOCALAPPDATA%/finterm/user/agents/finagent` on Windows and
+`$XDG_DATA_HOME/finterm/user/agents/finagent` (or `~/.local/share/...`)
 elsewhere.
 
 ### Tuning

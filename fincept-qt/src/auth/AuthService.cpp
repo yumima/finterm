@@ -17,7 +17,7 @@
 
 namespace finterm::auth {
 
-static constexpr const char* kConnName = "fincept_auth";
+static constexpr const char* kConnName = "finterm_auth";
 
 AuthService& AuthService::instance() {
     static AuthService s;
@@ -55,7 +55,7 @@ void AuthService::init_schema() {
         )
     )");
     // sessions table: persists AuthManager session JSON so the user DB path
-    // (derived from username) can be opened before fincept.db is available.
+    // (derived from username) can be opened before the per-user DB is available.
     q.exec(R"(
         CREATE TABLE IF NOT EXISTS sessions (
             api_key      TEXT PRIMARY KEY,

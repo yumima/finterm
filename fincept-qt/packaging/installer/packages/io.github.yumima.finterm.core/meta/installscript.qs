@@ -63,19 +63,19 @@ Component.prototype.createOperations = function()
     if (systemInfo.kernelType === "winnt") {
         // Start Menu shortcut
         component.addOperation("CreateShortcut",
-            targetDir + "/FinceptTerminal.exe",
+            targetDir + "/finterm.exe",
             "@StartMenuDir@/finterm.lnk",
             "workingDirectory=" + targetDir,
-            "iconPath=" + targetDir + "/FinceptTerminal.exe",
+            "iconPath=" + targetDir + "/finterm.exe",
             "iconId=0",
             "description=Local-first Financial Research Terminal");
 
         // Desktop shortcut
         component.addOperation("CreateShortcut",
-            targetDir + "/FinceptTerminal.exe",
+            targetDir + "/finterm.exe",
             "@DesktopDir@/finterm.lnk",
             "workingDirectory=" + targetDir,
-            "iconPath=" + targetDir + "/FinceptTerminal.exe",
+            "iconPath=" + targetDir + "/finterm.exe",
             "iconId=0",
             "description=Local-first Financial Research Terminal");
     }
@@ -88,10 +88,10 @@ Component.prototype.createOperations = function()
             "Name=finterm\n" +
             "GenericName=Financial Research Terminal\n" +
             "Comment=Local-first financial research terminal\n" +
-            "Exec=" + targetDir + "/bin/FinceptTerminal %U\n" +
-            "Icon=" + targetDir + "/share/icons/hicolor/256x256/apps/fincept-terminal.png\n" +
+            "Exec=" + targetDir + "/bin/finterm.bin %U\n" +
+            "Icon=" + targetDir + "/share/icons/hicolor/256x256/apps/finterm.png\n" +
             "Terminal=false\n" +
-            "StartupWMClass=FinceptTerminal\n" +
+            "StartupWMClass=finterm\n" +
             "StartupNotify=true\n" +
             "Categories=Finance;Office;Science;\n" +
             "Keywords=finance;trading;stocks;crypto;portfolio;AI;analytics;markets;\n"
@@ -114,7 +114,7 @@ function onUninstallationStarted()
     console.log("[finterm] uninstallationStarted — prompting for user-data removal.");
 
     var answer = QMessageBox.question(
-        "fincept.uninstall.data",
+        "finterm.uninstall.data",
         "Remove finterm user data?",
         "Do you want to remove all finterm user data?\n\n" +
         "This includes:\n" +
@@ -271,10 +271,12 @@ function cleanUserDataMac()
     removeFilePosix(home + "/Library/Preferences/Fincept.FinceptTerminal-Secure.plist");
 
     // 3. Caches (Qt/QSettings/logs occasionally land here)
+    removeDirPosix(home + "/Library/Caches/io.github.yumima.finterm");
     removeDirPosix(home + "/Library/Caches/com.fincept.terminal");
     removeDirPosix(home + "/Library/Caches/Fincept");
 
     // 4. Saved application state
+    removeDirPosix(home + "/Library/Saved Application State/io.github.yumima.finterm.savedState");
     removeDirPosix(home + "/Library/Saved Application State/com.fincept.terminal.savedState");
 
     // 5. Keychain: delete all entries under service "com.fincept.terminal".

@@ -75,10 +75,10 @@ jobs:
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
-            -DFINCEPT_QT_STRICT=ON \
+            -DFINTERM_QT_STRICT=ON \
             -DOPENSSL_ROOT_DIR="${OPENSSL_ROOT_DIR}" \
             -DDEPLOY_QT=ON \
-            -DFINCEPT_BUILD_INSTALLER=ON
+            -DFINTERM_BUILD_INSTALLER=ON
 
       - name: Build
         shell: bash
@@ -304,7 +304,7 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
-            -DFINCEPT_QT_STRICT=ON \
+            -DFINTERM_QT_STRICT=ON \
             -DOPENSSL_ROOT_DIR=/usr \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
@@ -347,11 +347,11 @@ jobs:
           cp "build/${{ env.APP_NAME }}.bin" "${APPDIR}/usr/bin/"
           chmod +x "${APPDIR}/usr/bin/${{ env.APP_NAME }}.bin"
 
-          cat > "${APPDIR}/usr/share/applications/fincept-terminal.desktop" <<'EOF'
+          cat > "${APPDIR}/usr/share/applications/finterm.desktop" <<'EOF'
           [Desktop Entry]
           Name=finterm
           Exec=finterm.bin
-          Icon=fincept-terminal
+          Icon=finterm
           Type=Application
           Categories=Finance;
           EOF
@@ -362,16 +362,16 @@ jobs:
           # back to a generated solid-color PNG only if no source icon exists —
           # never hand-write PNG bytes inline, ImageMagick's CRC check rejects
           # anything with a malformed IDAT chunk.
-          ICON_DEST="${APPDIR}/usr/share/icons/hicolor/256x256/apps/fincept-terminal.png"
+          ICON_DEST="${APPDIR}/usr/share/icons/hicolor/256x256/apps/finterm.png"
           if [ -f "resources/icons/app_icon_256.png" ]; then
             cp "resources/icons/app_icon_256.png" "${ICON_DEST}"
           elif [ -f "resources/fincept.png" ]; then
             cp "resources/fincept.png" "${ICON_DEST}"
-          elif [ -f "resources/fincept.ico" ]; then
+          elif [ -f "resources/finterm.ico" ]; then
             # .ico may hold multiple frames — "ico:file[0]" selects the first,
             # which is conventionally the largest/primary. Explicit "ico:" prefix
             # forces the ICO decoder in case policy.xml has format detection quirks.
-            convert "ico:resources/fincept.ico[0]" -resize 256x256 -background none -flatten "png:${ICON_DEST}"
+            convert "ico:resources/finterm.ico[0]" -resize 256x256 -background none -flatten "png:${ICON_DEST}"
           else
             # Solid-color 256x256 PNG as last resort. ImageMagick writes it
             # with a valid IDAT + CRC, unlike an inline printf of raw bytes.
@@ -456,7 +456,7 @@ jobs:
             --appdir "${APPDIR}" \
             --plugin qt \
             --output appimage \
-            --desktop-file "${APPDIR}/usr/share/applications/fincept-terminal.desktop" \
+            --desktop-file "${APPDIR}/usr/share/applications/finterm.desktop" \
             --icon-file "${ICON_DEST}" \
             2>&1
 
@@ -546,12 +546,12 @@ jobs:
       - name: Generate .icns icon
         working-directory: fincept-qt
         run: |
-          ICO="resources/fincept.ico"
-          ICNS="resources/fincept.icns"
+          ICO="resources/finterm.ico"
+          ICNS="resources/finterm.icns"
           if [ -f "${ICNS}" ]; then
             echo ".icns already exists"
           elif [ -f "${ICO}" ]; then
-            ICONSET="$(mktemp -d)/fincept.iconset"
+            ICONSET="$(mktemp -d)/finterm.iconset"
             mkdir -p "${ICONSET}"
             sips -s format png "${ICO}" --out "${ICONSET}/icon_512x512.png" \
               --resampleHeightWidth 512 512 2>/dev/null
@@ -583,7 +583,7 @@ jobs:
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
             -DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}" \
-            -DFINCEPT_QT_STRICT=ON \
+            -DFINTERM_QT_STRICT=ON \
             -DCMAKE_OSX_ARCHITECTURES=arm64 \
             -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0 \
             -DCMAKE_C_COMPILER_LAUNCHER=ccache \
@@ -632,7 +632,7 @@ jobs:
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
             <key>CFBundleExecutable</key><string>finterm</string>
-            <key>CFBundleIdentifier</key><string>com.fincept.terminal</string>
+            <key>CFBundleIdentifier</key><string>io.github.yumima.finterm</string>
             <key>CFBundleName</key><string>finterm</string>
             <key>CFBundlePackageType</key><string>APPL</string>
             <key>CFBundleShortVersionString</key><string>4.0.2</string>

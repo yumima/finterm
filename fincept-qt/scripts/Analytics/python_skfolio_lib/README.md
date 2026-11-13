@@ -166,7 +166,7 @@ status = api.get_task_status(async_result.data["task_id"])
 Place the `skfolio_backend` folder in your scripts directory:
 
 ```
-fincept-cpp/
+finterm/
 └── resources/
     └── scripts/
         └── skfolio_backend/
