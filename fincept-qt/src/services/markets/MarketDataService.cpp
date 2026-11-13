@@ -1,5 +1,7 @@
 #include "services/markets/MarketDataService.h"
 
+#include "services/markets/LivePrice.h"
+
 #include "core/logging/Logger.h"
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
@@ -329,7 +331,7 @@ void MarketDataService::drain_refresh_chunk() {
         co["bid_size"] = qd.bid_size;
         co["ask_size"] = qd.ask_size;
         store_quote_entries(qd.symbol, co);
-        publish_quote_to_hub(qd);
+        publish_quote_to_hub(qd, /*polled=*/true);
         --budget;
     }
 
@@ -370,16 +372,19 @@ void MarketDataService::drain_refresh_chunk() {
     }
 }
 
-void MarketDataService::publish_quote_to_hub(const QuoteData& polled) {
+void MarketDataService::publish_quote_to_hub(const QuoteData& q_in, bool polled) {
     // A poll answered while the stream is live is usually OLDER than the last
     // tick (batch quotes lag the tape by seconds): keep the tick's price on the
     // poll's baseline, or every poll would yank the price back for a moment.
     // Past kTickWinsOverPollMs the poll wins — e.g. the closing auction print,
     // which arrives after the last regular-session tick.
-    QuoteData q = polled;
-    if (auto it = last_tick_.constFind(q.symbol); it != last_tick_.constEnd() &&
-                                                  QDateTime::currentMSecsSinceEpoch() - it->seen_ms < kTickWinsOverPollMs)
-        q = with_live_price(q, it->price, it->volume);
+    QuoteData q = q_in;
+    if (polled) {
+        polled_syms_.insert(q.symbol);
+        if (auto it = last_tick_.constFind(q.symbol);
+            it != last_tick_.constEnd() && QDateTime::currentMSecsSinceEpoch() - it->seen_ms < kTickWinsOverPollMs)
+            q = with_live_price(q, it->price, it->volume);
+    }
     datahub::DataHub::instance().publish(QStringLiteral("market:quote:") + q.symbol, QVariant::fromValue(q));
 }
 
@@ -390,18 +395,25 @@ QuoteData MarketDataService::with_live_price(QuoteData q, double price, double v
     // previous close — never mix in the stream's change, whose baseline may
     // differ from the one this quote was polled against.
     const double prev = (std::isfinite(q.change) && std::isfinite(q.price) && q.price > 0) ? q.price - q.change : qQNaN();
-    q.price = price;
-    if (std::isfinite(prev) && prev > 0) {
-        q.change = price - prev;
-        q.change_pct = q.change / prev * 100.0;
-    }
-    if (q.high > 0 && price > q.high)
-        q.high = price;
-    if (q.low > 0 && price < q.low)
-        q.low = price;
-    if (std::isfinite(volume) && volume > 0)
-        q.volume = volume;
+    apply_live_price(q, prev, price, volume);
     return q;
+}
+
+void MarketDataService::overlay_live(QVector<QuoteData>& quotes) const {
+    if (last_tick_.isEmpty())
+        return;
+    auto& hub = datahub::DataHub::instance();
+    for (auto& q : quotes) {
+        if (!last_tick_.contains(q.symbol) || !polled_syms_.contains(q.symbol))
+            continue;
+        // The hub copy is the latest poll with ticks laid on it — never older
+        // than the cache entry, which is written by the same poll: once a
+        // symbol is polled, only polls and ticks write its topic (hydration
+        // skips it).
+        const QVariant cur = hub.peek_raw(QStringLiteral("market:quote:") + q.symbol);
+        if (cur.canConvert<QuoteData>())
+            q = cur.value<QuoteData>();
+    }
 }
 
 void MarketDataService::init_stream() {
@@ -496,10 +508,15 @@ void MarketDataService::apply_ticks(const QJsonArray& ticks) {
             continue; // out of order
         lt = LastTick{price, vol, tms, now};
 
+        // Only on a quote polled this process: a hydrated one may be a prior
+        // session's, and its baseline (price − change) that session's previous
+        // close — the day change would be measured against the wrong day.
+        if (!polled_syms_.contains(sym))
+            continue; // no polled baseline yet — the cold-start poll lands it
         const QString topic = QStringLiteral("market:quote:") + sym;
         const QVariant cur = hub.peek_raw(topic);
         if (!cur.canConvert<QuoteData>())
-            continue; // no polled baseline yet — the cold-start poll lands it
+            continue;
         const QuoteData was = cur.value<QuoteData>();
         const QuoteData now_q = with_live_price(was, price, vol);
         if (now_q == was)
@@ -657,7 +674,10 @@ void MarketDataService::hydrate_next_chunk() {
     // video frames to be delivered between chunks.
     const int n = std::min(kHydrateChunkSize, static_cast<int>(hydrate_pending_.size()));
     for (int i = 0; i < n; ++i)
-        publish_quote_to_hub(hydrate_pending_[i]);
+        // A poll that already landed is newer than any persisted quote — and
+        // is the tick baseline (polled_syms_): never paint the old one over it.
+        if (!polled_syms_.contains(hydrate_pending_[i].symbol))
+            publish_quote_to_hub(hydrate_pending_[i], /*polled=*/false);
     hydrate_pending_.erase(hydrate_pending_.begin(), hydrate_pending_.begin() + n);
 
     if (!hydrate_pending_.isEmpty()) {
@@ -726,6 +746,7 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
             cached_results.append(qd);
         }
         if (!cached_results.isEmpty()) {
+            overlay_live(cached_results);
             cb(true, cached_results);
             return;
         }
@@ -829,7 +850,7 @@ void MarketDataService::flush_batch() {
                     auto quote = parse_quote(q);
                     all_quotes.append(quote);
                     store_quote(quote);
-                    publish_quote_to_hub(quote);
+                    publish_quote_to_hub(quote, /*polled=*/true);
                 }
                 LOG_INFO("MarketData", QString("Fetched %1 quotes (cached)").arg(all_quotes.size()));
             } else {
@@ -879,6 +900,7 @@ void MarketDataService::flush_batch() {
                 // A caller pacing its asks hears a partial refusal (some of
                 // ITS tickers refused by Yahoo) as one, with what did answer.
                 const bool refused_mine = !req.stale_on_failure && wanted.intersects(refused_syms);
+                overlay_live(filtered);
                 req.cb(!refused_mine, filtered);
             }
         },

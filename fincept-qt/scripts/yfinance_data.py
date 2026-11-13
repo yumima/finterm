@@ -5973,10 +5973,12 @@ class _QuoteStreamer:
                 continue
             opened = time.monotonic()
             sent, last_hb = set(), 0.0
+            idle_close = False
             try:
                 while True:
                     want = self._wanted()
                     if not want:
+                        idle_close = True  # our own close: nothing on screen
                         break
                     now = time.monotonic()
                     if want != sent or now - last_hb >= self.HEARTBEAT_S:
@@ -6009,10 +6011,14 @@ class _QuoteStreamer:
                     pass
             # Back off unless the connection actually held: a server that accepts
             # and then closes at once (rate limit, rejected subscribe) must not be
-            # hammered every second.
+            # hammered every second. Closing it ourselves (the user left every
+            # quote screen) is no failure — sleeping here would leave the next
+            # screen without ticks for up to a minute.
+            # The escalated backoff itself is kept across an idle close: a server
+            # that was refusing us is still refusing when the user comes back.
             if time.monotonic() - opened >= 60.0:
                 backoff = 1.0
-            else:
+            elif not idle_close:
                 time.sleep(backoff)
                 backoff = min(backoff * 2, 60.0)
 

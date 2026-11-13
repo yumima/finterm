@@ -500,9 +500,14 @@ void WatchlistScreen::apply_ownership_columns() {
                 item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
                 table_->setItem(row, col, item);
             }
-            item->setText(text);
-            if (!colour.isEmpty())
-                item->setForeground(QColor(colour));
+            // Rows are reused in place (populate_table): set the colour every
+            // time — a row now showing another symbol must not keep the old
+            // one's — but touch the item only when something changed.
+            if (item->text() != text)
+                item->setText(text);
+            const QColor fg(colour.isEmpty() ? QString(colors::WHITE()) : colour);
+            if (item->foreground().color() != fg)
+                item->setForeground(fg);
         };
         if (!have) {
             for (int c = 8; c <= 12; ++c)
@@ -607,33 +612,36 @@ void WatchlistScreen::hub_unsubscribe_all() {
 }
 
 void WatchlistScreen::populate_table(const QVector<services::QuoteData>& quotes) {
-    table_->clear_data();
-
-    // Build a map for quick lookup
+    // In place (DataTable::set_rows): this runs on every live tick batch, and a
+    // clear-and-re-add would drop the selection, current row and scroll each time.
     QMap<QString, services::QuoteData> quote_map;
-    for (const auto& q : quotes) {
+    for (const auto& q : quotes)
         quote_map[q.symbol] = q;
-    }
 
+    QVector<QStringList> rows;
+    QVector<QString> chg_colors; // per row; WHITE when there is no quote
+    rows.reserve(stocks_.size());
+    chg_colors.reserve(stocks_.size());
     for (const auto& s : stocks_) {
         auto it = quote_map.find(s.symbol);
         if (it != quote_map.end()) {
             const auto& q = it.value();
-            table_->add_row(
-                {q.symbol, q.name.isEmpty() ? s.name : q.name, QString("$%1").arg(q.price, 0, 'f', 2),
-                 std::isfinite(q.change) ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2)
-                                         : ui::formatting::placeholder(),
-                 ui::formatting::format_percent(q.change_pct, 2, true), QString("$%1").arg(q.high, 0, 'f', 2),
-                 QString("$%1").arg(q.low, 0, 'f', 2), ui::formatting::format_compact_volume(q.volume)});
-
-            int row = table_->rowCount() - 1;
-            // Green = good, Red = bad
-            QString chg_color = ui::change_color(q.change_pct); // neutral when unknown (NaN)
-            table_->set_cell_color(row, 3, chg_color);
-            table_->set_cell_color(row, 4, chg_color);
+            rows.append({q.symbol, q.name.isEmpty() ? s.name : q.name, QString("$%1").arg(q.price, 0, 'f', 2),
+                         std::isfinite(q.change)
+                             ? QString("%1%2").arg(q.change >= 0 ? "+" : "").arg(q.change, 0, 'f', 2)
+                             : ui::formatting::placeholder(),
+                         ui::formatting::format_percent(q.change_pct, 2, true), QString("$%1").arg(q.high, 0, 'f', 2),
+                         QString("$%1").arg(q.low, 0, 'f', 2), ui::formatting::format_compact_volume(q.volume)});
+            chg_colors.append(ui::change_color(q.change_pct)); // neutral when unknown (NaN)
         } else {
-            table_->add_row({s.symbol, s.name, "--", "--", "--", "--", "--", "--"});
+            rows.append({s.symbol, s.name, "--", "--", "--", "--", "--", "--"});
+            chg_colors.append(colors::WHITE());
         }
+    }
+    table_->set_rows(rows);
+    for (int row = 0; row < rows.size(); ++row) {
+        table_->set_cell_color(row, 3, chg_colors[row]);
+        table_->set_cell_color(row, 4, chg_colors[row]);
     }
     apply_ownership_columns();
 }

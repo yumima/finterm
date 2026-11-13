@@ -952,3 +952,20 @@ if(Python3_Interpreter_FOUND)
                 ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/gen_credential_catalogue.py --check
     )
 endif()
+
+# ── Live ticks: the price rule and the flash direction ──────────────────────
+# A deepening fall shown as "▼ 1.30" after "▼ 1.25" must flash DOWN; a live
+# price re-derives change from the quote's own previous close and never
+# invents a day range from a single print.
+add_executable(test_live_tick
+    ui/test_live_tick.cpp
+    ../src/ui/tables/TickFlashDelegate.cpp
+    ../src/ui/theme/Theme.cpp
+    ../src/ui/theme/ThemeManager.cpp
+    ../src/core/logging/Logger.cpp
+)
+target_include_directories(test_live_tick PRIVATE ../src)
+target_link_libraries(test_live_tick PRIVATE Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+set_target_properties(test_live_tick PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME live_tick COMMAND test_live_tick)
+set_tests_properties(live_tick PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")

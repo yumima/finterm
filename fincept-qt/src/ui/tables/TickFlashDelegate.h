@@ -35,6 +35,10 @@ class TickFlashDelegate : public QStyledItemDelegate {
 
     static constexpr int kFlashMs = 700;
 
+    /// The SIGNED number a display string shows ("+1.25%", "$1,234.50",
+    /// "▼ 0.35" = -0.35, "1.2M"), or false when it shows none.
+    static bool parse_number(const QString& s, double* out);
+
   protected:
     bool eventFilter(QObject* obj, QEvent* ev) override;
 
@@ -59,10 +63,6 @@ class TickFlashDelegate : public QStyledItemDelegate {
     QPointer<QAbstractItemView> view_;
     QTimer* anim_ = nullptr; ///< repaints flashing_ while any flash is fading
     int key_column_ = 0;
-
-    /// The number a display string shows ("+1.25%", "$1,234.50", "-0.35"), or
-    /// false when it shows none.
-    static bool parse_number(const QString& s, double* out);
 };
 
 } // namespace fincept::ui

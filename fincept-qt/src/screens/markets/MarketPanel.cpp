@@ -366,12 +366,25 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
         const QString arr = pos ? QString::fromUtf8("\xe2\x96\xb2") : QString::fromUtf8("\xe2\x96\xbc");
         int prec = q.price > 1.0 ? 2 : 4;
 
-        auto mk = [](const QString& s, const QString& c,
-                     Qt::Alignment a = Qt::AlignRight | Qt::AlignVCenter) -> QTableWidgetItem* {
-            auto* item = new QTableWidgetItem(s);
-            item->setForeground(QColor(c));
-            item->setTextAlignment(a);
-            return item;
+        // Reuse the row's items and touch only what changed: this runs on every
+        // live tick batch, and a fresh item per cell repaints the whole panel.
+        auto put = [this](int r, int c, const QString& text, const QString& color,
+                          Qt::Alignment align = Qt::AlignRight | Qt::AlignVCenter) {
+            QTableWidgetItem* item = table_->item(r, c);
+            if (!item) {
+                item = new QTableWidgetItem(text);
+                item->setForeground(QColor(color));
+                item->setTextAlignment(align);
+                table_->setItem(r, c, item);
+                return;
+            }
+            if (item->text() != text)
+                item->setText(text);
+            const QColor fg(color);
+            if (item->foreground().color() != fg)
+                item->setForeground(fg);
+            if (item->textAlignment() != int(align))
+                item->setTextAlignment(align);
         };
 
         const QStringList& cols = config_.column_order;
@@ -380,34 +393,35 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
         for (int ci = 0; ci < cols.size(); ++ci) {
             const QString& col = cols[ci];
             if (col == "SYMBOL")
-                table_->setItem(row, ci, mk(q.symbol, ui::colors::TEXT_PRIMARY(), Qt::AlignLeft | Qt::AlignVCenter));
+                put(row, ci, q.symbol, ui::colors::TEXT_PRIMARY(), Qt::AlignLeft | Qt::AlignVCenter);
             else if (col == "NAME")
-                table_->setItem(row, ci, mk(q.name, ui::colors::TEXT_SECONDARY(), Qt::AlignLeft | Qt::AlignVCenter));
+                put(row, ci, q.name, ui::colors::TEXT_SECONDARY(), Qt::AlignLeft | Qt::AlignVCenter);
             else if (col == "LAST")
-                table_->setItem(row, ci, mk(QString::number(q.price, 'f', prec), ui::colors::AMBER()));
+                put(row, ci, QString::number(q.price, 'f', prec), ui::colors::AMBER());
             else if (col == "CHG")
-                table_->setItem(row, ci,
-                                chg_known ? mk(QString("%1 %2").arg(arr).arg(std::abs(q.change), 0, 'f', 2), cc)
-                                          : mk(ui::formatting::placeholder(), ui::colors::TEXT_SECONDARY()));
+                put(row, ci,
+                    chg_known ? QString("%1 %2").arg(arr).arg(std::abs(q.change), 0, 'f', 2)
+                              : ui::formatting::placeholder(),
+                    chg_known ? cc : ui::colors::TEXT_SECONDARY());
             else if (col == "CHG%")
-                table_->setItem(row, ci,
-                                chg_known ? mk(QString("%1%2%").arg(arr).arg(std::abs(q.change_pct), 0, 'f', 2), cc)
-                                          : mk(ui::formatting::placeholder(), ui::colors::TEXT_SECONDARY()));
+                put(row, ci,
+                    chg_known ? QString("%1%2%").arg(arr).arg(std::abs(q.change_pct), 0, 'f', 2)
+                              : ui::formatting::placeholder(),
+                    chg_known ? cc : ui::colors::TEXT_SECONDARY());
             else if (col == "HIGH")
-                table_->setItem(row, ci, mk(QString::number(q.high, 'f', 2), ui::colors::TEXT_SECONDARY()));
+                put(row, ci, QString::number(q.high, 'f', 2), ui::colors::TEXT_SECONDARY());
             else if (col == "LOW")
-                table_->setItem(row, ci, mk(QString::number(q.low, 'f', 2), ui::colors::TEXT_SECONDARY()));
+                put(row, ci, QString::number(q.low, 'f', 2), ui::colors::TEXT_SECONDARY());
             else if (col == "VOL")
-                table_->setItem(row, ci,
-                                mk(ui::formatting::format_compact_volume(q.volume), ui::colors::TEXT_SECONDARY()));
+                put(row, ci, ui::formatting::format_compact_volume(q.volume), ui::colors::TEXT_SECONDARY());
             // Same precision as LAST — at 2dp a sub-$1 symbol's bid and ask
             // round to the same number and the spread reads as zero.
             else if (col == "BID")
-                table_->setItem(row, ci,
-                                mk(q.bid > 0 ? QString::number(q.bid, 'f', prec) : "--", ui::colors::TEXT_SECONDARY()));
+                put(row, ci, q.bid > 0 ? QString::number(q.bid, 'f', prec) : QStringLiteral("--"),
+                    ui::colors::TEXT_SECONDARY());
             else if (col == "ASK")
-                table_->setItem(row, ci,
-                                mk(q.ask > 0 ? QString::number(q.ask, 'f', prec) : "--", ui::colors::TEXT_SECONDARY()));
+                put(row, ci, q.ask > 0 ? QString::number(q.ask, 'f', prec) : QStringLiteral("--"),
+                    ui::colors::TEXT_SECONDARY());
             // OPEN is not carried by QuoteData, so this could only ever
             // render "--". A column the user can select and that is
             // permanently empty reads as missing data rather than as an
@@ -433,7 +447,7 @@ void MarketPanel::populate(const QVector<services::QuoteData>& quotes) {
                         color = ui::colors::WARNING();
                     }
                 }
-                table_->setItem(row, ci, mk(label, color));
+                put(row, ci, label, color);
             }
         }
     }

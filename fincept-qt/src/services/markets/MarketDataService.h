@@ -362,7 +362,11 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
 
     /// Internal: publish the per-symbol result to the hub and clear
     /// in_flight for the matching topic. Called from inside `flush_batch`.
-    void publish_quote_to_hub(const QuoteData& q);
+    /// `polled` = a quote fetched this process (a poll), as opposed to a
+    /// persisted one replayed by cold-start hydration — only a polled quote
+    /// is a baseline live ticks may be laid on (a hydrated one can be a prior
+    /// session's, with that session's previous close).
+    void publish_quote_to_hub(const QuoteData& q, bool polled);
     void publish_history_to_hub(const QString& symbol, const QString& period, const QString& interval,
                                 const QVector<HistoryPoint>& points);
     void publish_sparkline_to_hub(const QString& symbol, const QVector<double>& points);
@@ -468,6 +472,12 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
     /// q's OWN baseline (price − change = previous close), high/low extended.
     static QuoteData with_live_price(QuoteData q, double price, double volume);
     QHash<QString, LastTick> last_tick_;
+    QSet<QString> polled_syms_; ///< hub holds a quote polled THIS process (tick baseline)
+    /// fetch_quotes() answers from the poll cache, which ticks never touch:
+    /// for a symbol streaming now, hand out the hub's tick-refined quote
+    /// instead, or a screen rebuilding from fetch_quotes (Portfolio, every
+    /// 20s) snaps back to the older poll price.
+    void overlay_live(QVector<QuoteData>& quotes) const;
     QStringList stream_syms_;              ///< the set the daemon was last sent
     QTimer* stream_sync_timer_ = nullptr;  ///< debounces topic_active/topic_idle bursts
     bool stream_unavailable_ = false;      ///< this daemon can't stream; retried on restart

@@ -23,6 +23,7 @@
 #include "services/equity/EquityResearchService.h"
 #include "services/finnhub/FinnhubLiveTicks.h"
 #include "services/finnhub/FinnhubService.h"
+#include "services/markets/LivePrice.h"
 #include "services/markets/MarketDataService.h"
 #include "services/query/QueryStore.h"
 #include "ui/SearchFailedText.h"
@@ -379,21 +380,18 @@ void EquityResearchScreen::follow_live_quote(bool on) {
             return;
         if (!std::isfinite(mq.price) || mq.price <= 0)
             return;
+        // Baseline: the header's own previous close; failing that, the hub
+        // quote's (price − change) — the same rule MarketDataService applies.
+        const double prev = (std::isfinite(bar_quote_.prev_close) && bar_quote_.prev_close > 0)
+                                ? bar_quote_.prev_close
+                            : std::isfinite(mq.change) ? mq.price - mq.change
+                                                       : qQNaN();
         auto q = bar_quote_;
-        q.price = mq.price;
-        if (std::isfinite(q.prev_close) && q.prev_close > 0) {
-            q.change = q.price - q.prev_close;
-            q.change_pct = q.change / q.prev_close * 100.0;
-        } else if (std::isfinite(mq.change_pct)) {
-            q.change = mq.change;
-            q.change_pct = mq.change_pct;
-        }
-        if (std::isfinite(q.high) && q.price > q.high)
-            q.high = q.price;
-        if (std::isfinite(q.low) && q.price < q.low)
-            q.low = q.price;
-        if (std::isfinite(mq.volume) && mq.volume > 0)
-            q.volume = mq.volume;
+        services::apply_live_price(q, prev, mq.price, mq.volume);
+        // The day range only widens: keep the stretch for the next tick, which
+        // starts from bar_quote_ again.
+        bar_quote_.high = q.high;
+        bar_quote_.low = q.low;
         update_quote_bar(q);
     });
 }

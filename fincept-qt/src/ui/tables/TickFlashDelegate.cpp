@@ -70,11 +70,17 @@ TickFlashDelegate::TickFlashDelegate(QAbstractItemView* view, int key_column)
 }
 
 bool TickFlashDelegate::parse_number(const QString& s, double* out) {
-    // Keep sign, digits and the decimal point; drop $, %, commas, spaces, arrows.
+    // Keep sign, digits and the decimal point; drop $, %, commas, spaces.
+    // A LEADING down arrow is the sign ("▼ 1.25" = -1.25: MarketPanel shows the
+    // change as arrow + magnitude) — dropping it would flash a deepening fall
+    // green. Anywhere else an arrow is decoration, not a sign.
     // A trailing K/M/B/T scales the value (below).
     QString t;
     t.reserve(s.size());
     bool any_digit = false;
+    const QString lead = s.trimmed();
+    const bool down_arrow = !lead.isEmpty() && (lead.front() == QChar(0x25BC) || lead.front() == QChar(0x25BE) ||
+                                                lead.front() == QChar(0x2193)); // ▼ ▾ ↓
     for (const QChar c : s) {
         if (c.isDigit()) {
             t += c;
@@ -89,6 +95,8 @@ bool TickFlashDelegate::parse_number(const QString& s, double* out) {
     double v = t.toDouble(&ok);
     if (!ok)
         return false;
+    if (down_arrow && v > 0)
+        v = -v;
     // Unit suffix after the number ("999.5K" → "1.0M" is UP, not 999.5 → 1.0).
     for (int i = s.size() - 1; i >= 0; --i) {
         const QChar c = s.at(i).toUpper();

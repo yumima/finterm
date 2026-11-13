@@ -96,8 +96,9 @@ void DataTable::set_column_widths(const QVector<int>& widths) {
 
 void DataTable::set_cell_color(int row, int col, const QString& color) {
     auto* it = item(row, col);
-    if (it)
-        it->setForeground(QColor(color));
+    const QColor c(color);
+    if (it && it->foreground().color() != c) // live ticks re-colour every row: skip no-ops
+        it->setForeground(c);
 }
 
 } // namespace fincept::ui
