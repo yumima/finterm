@@ -392,7 +392,7 @@ static bool is_youtube_live_url(const QString& url) {
 }
 
 // Extract YouTube video ID from any standard YouTube URL format.
-static QString extract_youtube_id(const QString& url) {
+[[maybe_unused]] static QString extract_youtube_id(const QString& url) { // WebEngine paths only
     QUrl u(url);
     if (u.host().contains("youtu.be"))
         return u.path().mid(1).section('?', 0, 0);
@@ -413,7 +413,7 @@ static QString extract_youtube_id(const QString& url) {
 // Returns {} if the URL is not a Spotify resource we can embed (including the
 // already-/embed/ form, which we leave alone so we don't re-wrap it). The host
 // check accepts both "open.spotify.com" and the rare "play.spotify.com" alias.
-static std::pair<QString, QString> spotify_resource(const QString& url) {
+[[maybe_unused]] static std::pair<QString, QString> spotify_resource(const QString& url) { // WebEngine only
     const QUrl u(url);
     const QString host = u.host().toLower();
     if (host != QStringLiteral("open.spotify.com") && host != QStringLiteral("play.spotify.com"))

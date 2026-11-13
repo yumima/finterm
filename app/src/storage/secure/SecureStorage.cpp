@@ -25,9 +25,13 @@
 //           casual inspection. Build with libsecret-1-dev for production.
 
 #ifdef Q_OS_WIN
+// ORDER MATTERS — <windows.h> first: wincred.h/wincrypt.h use its types and
+// macros (DECLSPEC_IMPORT, BOOL). Alphabetical order broke the Windows build.
+// clang-format off
+#    include <windows.h>
 #    include <wincred.h>
 #    include <wincrypt.h>
-#    include <windows.h>
+// clang-format on
 #    pragma comment(lib, "Advapi32.lib")
 #endif
 

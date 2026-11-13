@@ -152,11 +152,11 @@ inline QString log_fmt(const QString& fmt, A1&& a1, A2&& a2, A3&& a3, A4&& a4, A
 #define FINTERM_LOG_F_IMPL(level_enum, level_fn, tag, fmt, ...)                                                        \
     do {                                                                                                               \
         if (finterm::Logger::instance().is_enabled(finterm::LogLevel::level_enum, tag))                                \
-            finterm::Logger::instance().level_fn(tag, finterm::detail::log_fmt(fmt, ##__VA_ARGS__));                   \
+            finterm::Logger::instance().level_fn(tag, finterm::detail::log_fmt(fmt __VA_OPT__(,) __VA_ARGS__));                   \
     } while (0)
 
-#define LOG_TRACE_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Trace, trace, tag, fmt, ##__VA_ARGS__)
-#define LOG_DEBUG_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Debug, debug, tag, fmt, ##__VA_ARGS__)
-#define LOG_INFO_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Info, info, tag, fmt, ##__VA_ARGS__)
-#define LOG_WARN_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Warn, warn, tag, fmt, ##__VA_ARGS__)
-#define LOG_ERROR_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Error, error, tag, fmt, ##__VA_ARGS__)
+#define LOG_TRACE_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Trace, trace, tag, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_DEBUG_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Debug, debug, tag, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_INFO_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Info, info, tag, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_WARN_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Warn, warn, tag, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_ERROR_F(tag, fmt, ...) FINTERM_LOG_F_IMPL(Error, error, tag, fmt __VA_OPT__(,) __VA_ARGS__)

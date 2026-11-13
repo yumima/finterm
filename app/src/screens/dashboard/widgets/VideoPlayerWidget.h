@@ -443,12 +443,14 @@ class VideoPlayerWidget : public BaseWidget {
     /// the GL pipeline's auto_paused_on_lock_ contract — we only resume
     /// what we paused, never undo a user-initiated pause.
     bool spotify_auto_paused_on_lock_ = false;
+#endif
     // GL (yt-dlp + QPainter) is the default — works for any public stream,
     // including channels that block YouTube iframe embedding (CNBC, Yahoo, …).
     // WebEngine remains available via the config dialog for custom YouTube
-    // videos. Loaded from SettingsRepository on construct.
+    // videos. Loaded from SettingsRepository on construct. Declared in every
+    // build (always false without WebEngine) so the shared control code
+    // compiles whichever Qt modules are installed.
     bool use_web_engine_ = false;
-#endif
     // Cap on the GL pipeline's preferred resolution — controls the height<=N
     // term in the yt-dlp -f format selector. Allowed: 480, 720, 1080.
     // Loaded on construct, mutated via the config dialog. The format chain
