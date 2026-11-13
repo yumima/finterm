@@ -12,7 +12,7 @@
 #include <QTableWidget>
 #include <QVariant>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 class AgentErrorsWidget : public BaseWidget {
     Q_OBJECT
@@ -47,4 +47,4 @@ class AgentErrorsWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

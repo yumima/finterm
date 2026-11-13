@@ -11,7 +11,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 class CryptoTimeSales;
 class CryptoDepthChart;
@@ -89,4 +89,4 @@ class CryptoBottomPanel : public QWidget {
     bool is_paper_ = true;
 };
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

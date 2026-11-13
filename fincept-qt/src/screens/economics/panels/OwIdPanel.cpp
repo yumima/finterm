@@ -13,7 +13,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kOwIdScript = "owid_data.py";
@@ -162,4 +162,4 @@ void OwIdPanel::on_result(const QString& request_id, const services::EconomicsRe
     LOG_INFO("OwIdPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(display_title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

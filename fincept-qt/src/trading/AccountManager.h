@@ -13,7 +13,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 class IBroker;
 
@@ -63,4 +63,4 @@ class AccountManager : public QObject {
     mutable QMutex mutex_;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

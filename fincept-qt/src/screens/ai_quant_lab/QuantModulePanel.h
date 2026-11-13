@@ -17,14 +17,14 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Dynamic panel for a single AI Quant Lab module.
 /// Builds input forms and result display based on module type.
 class QuantModulePanel : public QWidget {
     Q_OBJECT
   public:
-    explicit QuantModulePanel(const fincept::services::quant::QuantModule& mod, QWidget* parent = nullptr);
+    explicit QuantModulePanel(const finterm::services::quant::QuantModule& mod, QWidget* parent = nullptr);
 
   private slots:
     void on_result(const QString& module_id, const QString& command, const QJsonObject& data);
@@ -72,7 +72,7 @@ class QuantModulePanel : public QWidget {
 
     void refresh_theme();
 
-    fincept::services::quant::QuantModule module_;
+    finterm::services::quant::QuantModule module_;
     QVBoxLayout* results_layout_ = nullptr;
     QLabel* status_label_ = nullptr;
     QWidget* panel_header_ = nullptr; // the fixed header bar inside build_ui()
@@ -95,4 +95,4 @@ class QuantModulePanel : public QWidget {
     QHash<QString, QDateEdit*> date_inputs_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

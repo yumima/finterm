@@ -10,7 +10,7 @@
 
 #include <vector>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 class McpService {
   public:
@@ -76,4 +76,4 @@ class McpService {
     bool is_cache_valid() const;
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Grid coordinate types ─────────────────────────────────────────────────────
 
@@ -254,4 +254,4 @@ inline int max_row(const QVector<GridItem>& items) {
     return m;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

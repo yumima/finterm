@@ -1,6 +1,6 @@
 #include "storage/repositories/WatchlistRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 WatchlistRepository& WatchlistRepository::instance() {
     static WatchlistRepository s;
@@ -79,4 +79,4 @@ Result<QVector<WatchlistStock>> WatchlistRepository::get_stocks(const QString& w
     return Result<QVector<WatchlistStock>>::ok(std::move(result));
 }
 
-} // namespace fincept
+} // namespace finterm

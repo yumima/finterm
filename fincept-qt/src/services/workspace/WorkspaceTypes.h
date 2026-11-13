@@ -6,7 +6,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept {
+namespace finterm {
 
 // ── Workspace screen state ────────────────────────────────────────────────────
 
@@ -68,4 +68,4 @@ struct WorkspaceSummary {
     QString file_path;
 };
 
-} // namespace fincept
+} // namespace finterm

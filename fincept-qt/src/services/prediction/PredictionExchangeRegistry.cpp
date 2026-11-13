@@ -3,7 +3,7 @@
 #include "core/logging/Logger.h"
 #include "services/prediction/PredictionExchangeAdapter.h"
 
-namespace fincept::services::prediction {
+namespace finterm::services::prediction {
 
 PredictionExchangeRegistry& PredictionExchangeRegistry::instance() {
     static PredictionExchangeRegistry s;
@@ -65,4 +65,4 @@ void PredictionExchangeRegistry::set_active(const QString& id) {
     emit active_changed(id);
 }
 
-} // namespace fincept::services::prediction
+} // namespace finterm::services::prediction

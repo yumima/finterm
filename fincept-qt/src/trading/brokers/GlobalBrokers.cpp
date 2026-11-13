@@ -10,7 +10,7 @@
 #include <QDateTime>
 #include <QJsonArray>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 static int64_t now_ts() {
     return QDateTime::currentSecsSinceEpoch();
@@ -1038,4 +1038,4 @@ IMPL_STUB_METHODS(SaxoBankBroker)
 
 #undef IMPL_STUB_METHODS
 
-} // namespace fincept::trading
+} // namespace finterm::trading

@@ -5,7 +5,7 @@
 #include <QByteArray>
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void WhatsAppProvider::load_fields(SettingsRepository& r, const QString& cat) {
     account_sid_ = get_str(r, cat + ".account_sid");
@@ -54,4 +54,4 @@ void WhatsAppProvider::send(const NotificationRequest& req, std::function<void(b
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

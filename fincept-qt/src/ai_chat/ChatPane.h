@@ -35,7 +35,7 @@ class QScrollArea;
 class QTimer;
 class QVBoxLayout;
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 struct ChatPaneConfig {
     /// ChatPersonas.h id — system prompt + curated tool allow-list.
@@ -122,4 +122,4 @@ class ChatPane : public QWidget {
     QString last_reply_;
 };
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

@@ -13,7 +13,7 @@
 
 #include <algorithm>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 void equalize_and_distribute(const QList<QPushButton*>& peers, const QFont& font, int hpad) {
     if (peers.isEmpty())
@@ -89,4 +89,4 @@ void ensure_header_fits(QTableWidget* table, int hpad) {
     });
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

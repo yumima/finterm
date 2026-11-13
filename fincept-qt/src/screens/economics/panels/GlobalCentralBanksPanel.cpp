@@ -19,7 +19,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kGlobalCentralBanksSourceId = "global_cb";
@@ -254,4 +254,4 @@ void GlobalCentralBanksPanel::on_result(const QString& request_id, const service
     LOG_INFO("GlobalCentralBanksPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

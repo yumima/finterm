@@ -9,10 +9,10 @@
 
 #include <algorithm>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-using namespace fincept::ui;
-using namespace fincept::services::prediction;
+using namespace finterm::ui;
+using namespace finterm::services::prediction;
 
 PolymarketOrderBook::PolymarketOrderBook(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(200);
@@ -209,4 +209,4 @@ void PolymarketOrderBook::rebuild_cache() {
     }
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

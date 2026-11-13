@@ -1,7 +1,7 @@
 #pragma once
 #include <QLabel>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Small colored status label (e.g., "CONNECTED" in green, "OFFLINE" in red).
 class StatusBadge : public QLabel {
@@ -14,4 +14,4 @@ class StatusBadge : public QLabel {
     void set_custom(const QString& text, const QString& color);
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

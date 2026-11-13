@@ -35,7 +35,7 @@
 #include <QObject>
 #include <QUuid>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 namespace {
 
@@ -440,4 +440,4 @@ std::vector<ToolDef> get_gov_data_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

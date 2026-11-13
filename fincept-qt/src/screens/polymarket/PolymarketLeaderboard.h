@@ -5,7 +5,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 /// Leaderboard panel showing top traders.
 class PolymarketLeaderboard : public QWidget {
@@ -23,4 +23,4 @@ class PolymarketLeaderboard : public QWidget {
     QTableWidget* table_ = nullptr;
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

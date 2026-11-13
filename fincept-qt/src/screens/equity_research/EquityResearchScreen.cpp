@@ -47,7 +47,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -633,7 +633,7 @@ QWidget* EquityResearchScreen::build_title_bar() {
                 inline_search_popup_->clear();
                 // The delegate paints from the roles, not the item text.
                 auto* it = new QListWidgetItem;
-                it->setData(kRoleName, fincept::ui::search_failed_text(transient));
+                it->setData(kRoleName, finterm::ui::search_failed_text(transient));
                 it->setFlags(Qt::NoItemFlags); // a message, not a pickable symbol
                 inline_search_popup_->addItem(it);
                 position_inline_search_popup();
@@ -1530,4 +1530,4 @@ bool EquityResearchScreen::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

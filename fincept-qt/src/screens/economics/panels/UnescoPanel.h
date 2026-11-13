@@ -11,7 +11,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class UnescoPanel : public EconPanelBase {
     Q_OBJECT
@@ -45,4 +45,4 @@ class UnescoPanel : public EconPanelBase {
     bool indicators_loaded_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

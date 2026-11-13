@@ -8,9 +8,9 @@
 #include <QHeaderView>
 #include <QScrollArea>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::geo;
+using namespace finterm::services::geo;
 
 // Helper: get cyan accent RGB string for rgba() usage
 static QString cyan_rgb() {
@@ -332,4 +332,4 @@ void HDXDataPanel::populate_table(const QVector<HDXDataset>& datasets) {
     dataset_count_->setText(QString("%1 datasets").arg(datasets.size()));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

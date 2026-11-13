@@ -5,7 +5,7 @@
 #include "core/logging/Logger.h"
 #include "storage/repositories/ChatRepository.h"
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 std::vector<ToolDef> get_ai_chat_tools() {
     std::vector<ToolDef> tools;
@@ -58,4 +58,4 @@ std::vector<ToolDef> get_ai_chat_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

@@ -14,7 +14,7 @@
 class QLabel;
 class QVBoxLayout;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class StoredCredentialsSection : public QWidget {
     Q_OBJECT
@@ -30,4 +30,4 @@ class StoredCredentialsSection : public QWidget {
     QVBoxLayout* list_layout_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

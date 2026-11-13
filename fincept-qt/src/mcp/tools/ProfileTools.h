@@ -3,6 +3,6 @@
 
 #include <vector>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 std::vector<ToolDef> get_profile_tools();
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

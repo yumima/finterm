@@ -2,7 +2,7 @@
 #include "trading/BrokerInterface.h"
 #include "trading/brokers/BrokerHttp.h"
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // Credential packing:
 //   ApiKey    = account ID (e.g. "U1234567")
@@ -86,4 +86,4 @@ class IBKRBroker : public IBroker {
                                              const QString& to_date);
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

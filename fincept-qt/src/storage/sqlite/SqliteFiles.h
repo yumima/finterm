@@ -12,7 +12,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::sqlite_files {
+namespace finterm::sqlite_files {
 
 inline const char* const kCompanions[] = {"-wal", "-shm", "-journal"};
 
@@ -46,4 +46,4 @@ inline bool move_unit(const QString& src, const QString& dst, bool* split = null
     return true;
 }
 
-} // namespace fincept::sqlite_files
+} // namespace finterm::sqlite_files

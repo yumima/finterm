@@ -21,7 +21,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kCftcScript = "cftc_data.py";
@@ -406,4 +406,4 @@ void CftcPanel::show_sentiment(const QJsonObject& s) {
     LOG_INFO("CftcPanel", "Displayed sentiment for " + market_combo_->currentText());
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

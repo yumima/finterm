@@ -18,7 +18,7 @@
 #include <QObject>
 #include <QTest>
 
-using fincept::services::video::LiveHlsProxy;
+using finterm::services::video::LiveHlsProxy;
 
 class TestLiveHlsProxy : public QObject {
     Q_OBJECT

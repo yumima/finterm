@@ -8,7 +8,7 @@
 #include <QWidget>
 #include <QtCharts/QChartView>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Chart widget for DBnomics data.
 /// Supports Line, Area, Bar and Scatter chart types.
@@ -46,4 +46,4 @@ class DBnomicsChartWidget : public QWidget {
     bool compact_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

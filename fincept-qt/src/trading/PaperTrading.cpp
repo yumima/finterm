@@ -17,7 +17,7 @@
 #include <cmath>
 #include <stdexcept>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 static QString generate_uuid() {
     return QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -405,4 +405,4 @@ PtStats pt_get_stats(const QString& portfolio_id) {
     return s;
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

@@ -8,7 +8,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Trade geopolitics analysis — benefits/costs, restrictions, sanctions impact.
 class TradeAnalysisPanel : public QWidget {
@@ -31,4 +31,4 @@ class TradeAnalysisPanel : public QWidget {
     QLabel* status_label_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

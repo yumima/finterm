@@ -2,7 +2,7 @@
 // ReportBuilderScreen — view onto ReportBuilderService.
 //
 // All document state (components, metadata, theme, undo stack, autosave,
-// recent files) lives in fincept::services::ReportBuilderService. This
+// recent files) lives in finterm::services::ReportBuilderService. This
 // screen renders that state and forwards user gestures to the service.
 // LLM/MCP tools mutate the same service on a different thread; the screen
 // observes service signals and re-renders live.
@@ -19,16 +19,16 @@
 #include <QUndoStack>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // Type aliases — ComponentToolbar / DocumentCanvas / PropertiesPanel were
-// originally written against types declared inside fincept::screens. After
+// originally written against types declared inside finterm::screens. After
 // the model moved into core/report we keep those aliases so the existing
 // callers (and forward declarations like `struct ReportComponent` in
 // PropertiesPanel.h) keep resolving.
-using ReportComponent = ::fincept::report::ReportComponent;
-using ReportMetadata = ::fincept::report::ReportMetadata;
-using ReportTheme = ::fincept::report::ReportTheme;
+using ReportComponent = ::finterm::report::ReportComponent;
+using ReportMetadata = ::finterm::report::ReportMetadata;
+using ReportTheme = ::finterm::report::ReportTheme;
 
 class ReportBuilderScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
@@ -110,4 +110,4 @@ class ReportBuilderScreen : public QWidget, public IStatefulScreen {
     void hideEvent(QHideEvent* e) override;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

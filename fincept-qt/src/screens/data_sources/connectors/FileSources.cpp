@@ -1,7 +1,7 @@
 // File Source connectors (10): CSV, Excel, JSON, Parquet, XML, Avro, ORC, Feather, FTP, SFTP
 #include "screens/data_sources/ConnectorRegistry.h"
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 static QVector<ConnectorConfig> file_configs() {
     return {
@@ -220,4 +220,4 @@ static bool registered = [] {
     return true;
 }();
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

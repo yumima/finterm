@@ -28,7 +28,7 @@
 #include <QUuid>
 #include <QVariant>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 namespace {
 // Name suffixed per file so the unity build doesn't trip on duplicates
@@ -214,4 +214,4 @@ std::vector<ToolDef> get_agentic_memory_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

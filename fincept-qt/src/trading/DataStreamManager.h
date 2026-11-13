@@ -11,9 +11,9 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
-class DataStreamManager : public QObject, public fincept::datahub::Producer {
+class DataStreamManager : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static DataStreamManager& instance();
@@ -37,7 +37,7 @@ class DataStreamManager : public QObject, public fincept::datahub::Producer {
     // Registers with the hub + installs broker:* policies. Idempotent.
     void ensure_registered_with_hub();
 
-    // fincept::datahub::Producer
+    // finterm::datahub::Producer
     QStringList topic_patterns() const override;
     void refresh(const QStringList& topics) override;
     int max_requests_per_sec() const override;
@@ -77,4 +77,4 @@ class DataStreamManager : public QObject, public fincept::datahub::Producer {
     QHash<QString, AccountDataStream*> streams_; // account_id -> stream (parent = this)
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

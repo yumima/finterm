@@ -12,7 +12,7 @@
 
 #include <QtTest/QtTest>
 
-using namespace fincept::portfolio;
+using namespace finterm::portfolio;
 
 namespace {
 

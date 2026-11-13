@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Phase 9 / decision 10.6: structured error pipeline panel → frame → shell.
 ///
@@ -57,4 +57,4 @@ class ErrorPipeline : public QObject {
     QHash<QString, QString> shell_errors_;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

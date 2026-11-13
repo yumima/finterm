@@ -15,7 +15,7 @@
 #include "core/result/Result.h"
 #include "mcp/McpTypes.h"
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 /// Validate `args` against `schema`. On success, inject defaults into `args`
 /// for any param with a default that wasn't supplied by the caller. The
@@ -25,4 +25,4 @@ namespace fincept::mcp {
 /// <reason>".
 Result<void> validate_args(const ToolSchema& schema, QJsonObject& args);
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

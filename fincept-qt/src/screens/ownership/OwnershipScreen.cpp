@@ -17,9 +17,9 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::screens::ownership_ui;
+using namespace finterm::screens::ownership_ui;
 
 OwnershipScreen::OwnershipScreen(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -275,4 +275,4 @@ QVariantMap OwnershipScreen::save_state() const {
     return {{QStringLiteral("tab"), tabs_->currentIndex()}};
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

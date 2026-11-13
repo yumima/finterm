@@ -13,7 +13,7 @@
 
 #include <limits>
 
-namespace fincept::services {
+namespace finterm::services {
 
 DBnomicsService& DBnomicsService::instance() {
     static DBnomicsService inst;
@@ -39,7 +39,7 @@ QString DBnomicsService::build_url(const QString& path) const {
 
 void DBnomicsService::fetch_providers() {
     {
-        const QVariant cached = fincept::CacheManager::instance().get("dbnomics:providers");
+        const QVariant cached = finterm::CacheManager::instance().get("dbnomics:providers");
         if (!cached.isNull()) {
             LOG_DEBUG("DBnomicsService", "providers: serving from cache");
             const QJsonArray docs = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
@@ -55,7 +55,7 @@ void DBnomicsService::fetch_providers() {
     }
     LOG_INFO("DBnomicsService", "Fetching providers from API");
     const QString url = build_url("/providers");
-    fincept::HttpClient::instance().get(url, [this](fincept::Result<QJsonDocument> result) {
+    finterm::HttpClient::instance().get(url, [this](finterm::Result<QJsonDocument> result) {
         if (result.is_err()) {
             LOG_ERROR("DBnomicsService",
                       QString("providers fetch failed: %1").arg(QString::fromStdString(result.error())));
@@ -77,7 +77,7 @@ void DBnomicsService::fetch_providers() {
             o["name"] = p.name;
             arr.append(o);
         }
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             "dbnomics:providers", QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
             kProviderCacheSec, "dbnomics");
         LOG_INFO("DBnomicsService", QString("Loaded %1 providers").arg(out.size()));
@@ -89,7 +89,7 @@ void DBnomicsService::fetch_datasets(const QString& provider_code, int offset) {
     const bool first_page = (offset == 0);
     if (first_page) {
         const QString ds_key = "dbnomics:datasets:" + provider_code;
-        const QVariant cached = fincept::CacheManager::instance().get(ds_key);
+        const QVariant cached = finterm::CacheManager::instance().get(ds_key);
         if (!cached.isNull()) {
             LOG_DEBUG("DBnomicsService", "datasets: serving from cache");
             const QJsonObject root = QJsonDocument::fromJson(cached.toString().toUtf8()).object();
@@ -108,7 +108,7 @@ void DBnomicsService::fetch_datasets(const QString& provider_code, int offset) {
     }
     const QString url = build_url(QString("/datasets/%1?limit=50&offset=%2").arg(provider_code).arg(offset));
     LOG_INFO("DBnomicsService", QString("Fetching datasets for %1 offset=%2").arg(provider_code).arg(offset));
-    fincept::HttpClient::instance().get(url, [this, provider_code, offset](fincept::Result<QJsonDocument> result) {
+    finterm::HttpClient::instance().get(url, [this, provider_code, offset](finterm::Result<QJsonDocument> result) {
         if (result.is_err()) {
             LOG_ERROR("DBnomicsService",
                       QString("datasets fetch failed: %1").arg(QString::fromStdString(result.error())));
@@ -140,7 +140,7 @@ void DBnomicsService::fetch_datasets(const QString& provider_code, int offset) {
             QJsonObject cache_root;
             cache_root["docs"] = arr;
             cache_root["total"] = total;
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 "dbnomics:datasets:" + provider_code,
                 QVariant(QString::fromUtf8(QJsonDocument(cache_root).toJson(QJsonDocument::Compact))), kDatasetCacheSec,
                 "dbnomics");
@@ -158,7 +158,7 @@ void DBnomicsService::fetch_series(const QString& provider_code, const QString& 
 
     if (first_page && no_query) {
         const QString series_ckey = "dbnomics:series:" + cache_key;
-        const QVariant cv = fincept::CacheManager::instance().get(series_ckey);
+        const QVariant cv = finterm::CacheManager::instance().get(series_ckey);
         if (!cv.isNull()) {
             LOG_DEBUG("DBnomicsService", "series: serving from cache");
             const QJsonObject root = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
@@ -182,8 +182,8 @@ void DBnomicsService::fetch_series(const QString& provider_code, const QString& 
 
     LOG_INFO("DBnomicsService", QString("Fetching series %1 q='%2' offset=%3").arg(cache_key).arg(query).arg(offset));
 
-    fincept::HttpClient::instance().get(
-        build_url(path), [this, cache_key, offset, no_query, first_page](fincept::Result<QJsonDocument> result) {
+    finterm::HttpClient::instance().get(
+        build_url(path), [this, cache_key, offset, no_query, first_page](finterm::Result<QJsonDocument> result) {
             if (result.is_err()) {
                 LOG_ERROR("DBnomicsService",
                           QString("series fetch failed: %1").arg(QString::fromStdString(result.error())));
@@ -215,7 +215,7 @@ void DBnomicsService::fetch_series(const QString& provider_code, const QString& 
                 QJsonObject cache_root;
                 cache_root["docs"] = arr;
                 cache_root["total"] = total;
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     "dbnomics:series:" + cache_key,
                     QVariant(QString::fromUtf8(QJsonDocument(cache_root).toJson(QJsonDocument::Compact))),
                     kSeriesCacheSec, "dbnomics");
@@ -232,8 +232,8 @@ void DBnomicsService::fetch_observations(const QString& provider_code, const QSt
     const QString full_id = QString("%1/%2/%3").arg(provider_code).arg(dataset_code).arg(series_code);
     LOG_INFO("DBnomicsService", QString("Fetching observations for %1").arg(full_id));
 
-    fincept::HttpClient::instance().get(build_url(path), [this, full_id, provider_code, dataset_code,
-                                                          series_code](fincept::Result<QJsonDocument> result) {
+    finterm::HttpClient::instance().get(build_url(path), [this, full_id, provider_code, dataset_code,
+                                                          series_code](finterm::Result<QJsonDocument> result) {
         if (result.is_err()) {
             emit error_occurred("observations", QString::fromStdString(result.error()));
             return;
@@ -272,7 +272,7 @@ void DBnomicsService::fetch_observations(const QString& provider_code, const QSt
         emit observations_loaded(dp);
         if (hub_registered_) {
             const QString topic = hub_topic(provider_code, dataset_code, series_code);
-            fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(dp));
+            finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(dp));
         }
     });
 }
@@ -285,7 +285,7 @@ void DBnomicsService::global_search(const QString& query, int offset) {
                              .arg(offset);
     LOG_INFO("DBnomicsService", QString("Searching: '%1' offset=%2").arg(query).arg(offset));
 
-    fincept::HttpClient::instance().get(build_url(path), [this, offset](fincept::Result<QJsonDocument> result) {
+    finterm::HttpClient::instance().get(build_url(path), [this, offset](finterm::Result<QJsonDocument> result) {
         if (result.is_err()) {
             emit error_occurred("search", QString::fromStdString(result.error()));
             return;
@@ -357,11 +357,11 @@ int DBnomicsService::max_requests_per_sec() const {
 void DBnomicsService::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
     // 1-hour TTL, 60s min_interval — DBnomics series are daily-or-slower.
-    fincept::datahub::TopicPolicy policy;
+    finterm::datahub::TopicPolicy policy;
     policy.ttl_ms = 60 * 60 * 1000;
     policy.min_interval_ms = 60 * 1000;
     policy.push_only = false;
@@ -371,4 +371,4 @@ void DBnomicsService::ensure_registered_with_hub() {
     LOG_INFO("DBnomicsService", "Registered with DataHub (dbnomics:*)");
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

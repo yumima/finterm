@@ -11,7 +11,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class StrategyBuilderPanel;
 class StrategyListPanel;
@@ -57,4 +57,4 @@ class AlgoTradingScreen : public QWidget, public IStatefulScreen {
     bool first_show_ = true;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

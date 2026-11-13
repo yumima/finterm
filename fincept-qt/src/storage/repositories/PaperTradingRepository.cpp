@@ -1,6 +1,6 @@
 #include "storage/repositories/PaperTradingRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 using namespace trading;
 
@@ -313,4 +313,4 @@ Result<PtStats> PaperTradingRepository::get_stats(const QString& portfolio_id) {
     return Result<PtStats>::ok(s);
 }
 
-} // namespace fincept
+} // namespace finterm

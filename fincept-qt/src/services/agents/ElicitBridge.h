@@ -34,7 +34,7 @@
 #include <QString>
 #include <QWaitCondition>
 
-namespace fincept::services {
+namespace finterm::services {
 
 class ElicitBridge : public QObject {
     Q_OBJECT
@@ -77,4 +77,4 @@ class ElicitBridge : public QObject {
     bool response_ready_ = false;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

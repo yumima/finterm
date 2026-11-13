@@ -12,7 +12,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kEcbScript = "ecb_sdmx_data.py";
@@ -129,4 +129,4 @@ void EcbPanel::on_result(const QString& request_id, const services::EconomicsRes
     LOG_INFO("EcbPanel", QString("Displayed %1 observations for %2").arg(obs.size()).arg(series.label));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

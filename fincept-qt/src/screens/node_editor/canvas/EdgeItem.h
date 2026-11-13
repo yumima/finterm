@@ -5,7 +5,7 @@
 #include <QKeyEvent>
 #include <QObject>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 class PortItem;
 
@@ -49,4 +49,4 @@ class EdgeItem : public QObject, public QGraphicsPathItem {
     qreal dash_offset_ = 0.0;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

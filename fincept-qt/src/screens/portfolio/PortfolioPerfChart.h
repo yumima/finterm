@@ -9,7 +9,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// QChartView subclass that draws a vertical crosshair and floating tooltip.
 class CrosshairChartView : public QChartView {
@@ -218,4 +218,4 @@ class PortfolioPerfChart : public QWidget {
     double ob_ask_size_ = 0;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

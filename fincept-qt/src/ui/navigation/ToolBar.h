@@ -8,7 +8,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Combined toolbar: File/Navigate/View/Help menus + branding + clock + user info + logout.
 /// A single row.
@@ -58,4 +58,4 @@ class ToolBar : public QWidget {
     QMenu* build_help_menu();
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

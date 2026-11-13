@@ -26,7 +26,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class AiRolesSection : public QWidget {
     Q_OBJECT
@@ -60,4 +60,4 @@ class AiRolesSection : public QWidget {
     bool loading_ = false; // suppresses currentIndexChanged during repopulation
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

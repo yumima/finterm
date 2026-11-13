@@ -13,7 +13,7 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -21,8 +21,8 @@ namespace {
 // (script, command, args) tuple so cold launches can re-emit the last-known
 // series for any panel that re-issues the same execute() call. Survives
 // across runs; refreshes overwrite atomically.
-fincept::services::util::DiskCache& disk_cache() {
-    static fincept::services::util::DiskCache c(QStringLiteral("economics"));
+finterm::services::util::DiskCache& disk_cache() {
+    static finterm::services::util::DiskCache c(QStringLiteral("economics"));
     return c;
 }
 
@@ -97,7 +97,7 @@ EconomicsService::EconomicsService(QObject* parent) : QObject(parent) {
             // Repopulate CacheManager so a subsequent execute() emits cached
             // immediately. Use full TTL since freshness is gated by execute()'s
             // own age check on next invocation.
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key(rec.script, rec.command, rec.args),
                 QVariant(QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))), kCacheTtlSec,
                 "economics");
@@ -115,7 +115,7 @@ QString EconomicsService::cache_key(const QString& script, const QString& comman
 }
 
 void EconomicsService::invalidate(const QString& request_id) {
-    fincept::CacheManager::instance().remove(request_id);
+    finterm::CacheManager::instance().remove(request_id);
 }
 
 // ── Execute ───────────────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
     dispatch_records_.insert(topic, DispatchRecord{source_id, script, command, args, request_id});
 
     {
-        const QVariant cached = fincept::CacheManager::instance().get(key);
+        const QVariant cached = finterm::CacheManager::instance().get(key);
         if (!cached.isNull()) {
             LOG_DEBUG("EconomicsService", "Cache hit: " + key);
             EconomicsResult res;
@@ -138,7 +138,7 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
             res.source_id = source_id;
             emit result_ready(request_id, res);
             if (hub_registered_)
-                fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(res));
+                finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(res));
             return;
         }
     }
@@ -204,7 +204,7 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
             }
 
             res.success = true;
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 key, QVariant(QString::fromUtf8(QJsonDocument(res.data).toJson(QJsonDocument::Compact))), kCacheTtlSec,
                 "economics");
 
@@ -235,7 +235,7 @@ void EconomicsService::execute(const QString& source_id, const QString& script, 
             emit self->result_ready(request_id, res);
             if (self->hub_registered_) {
                 const QString topic = EconomicsService::hub_topic(source_id, request_id);
-                fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(res));
+                finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(res));
             }
         });
 }
@@ -266,7 +266,7 @@ void EconomicsService::refresh(const QStringList& topics) {
         const DispatchRecord rec = it.value();
         // Force re-fetch: clear CacheManager entry so execute() goes
         // through the Python path rather than returning the cached copy.
-        fincept::CacheManager::instance().remove(cache_key(rec.script, rec.command, rec.args));
+        finterm::CacheManager::instance().remove(cache_key(rec.script, rec.command, rec.args));
         execute(rec.source_id, rec.script, rec.command, rec.args, rec.request_id);
     }
 }
@@ -278,11 +278,11 @@ int EconomicsService::max_requests_per_sec() const {
 void EconomicsService::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
     // 1-hour TTL, 60s min interval — economics series move slowly.
-    fincept::datahub::TopicPolicy policy;
+    finterm::datahub::TopicPolicy policy;
     policy.ttl_ms = 60 * 60 * 1000;
     policy.min_interval_ms = 60 * 1000;
     policy.push_only = false;
@@ -292,4 +292,4 @@ void EconomicsService::ensure_registered_with_hub() {
     LOG_INFO("EconomicsService", "Registered with DataHub (econ:*)");
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

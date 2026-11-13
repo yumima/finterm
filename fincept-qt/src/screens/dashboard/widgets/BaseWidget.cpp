@@ -8,7 +8,7 @@
 #include <QStackedWidget>
 #include <QStyle>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 BaseWidget::BaseWidget(const QString& title, QWidget* parent, const QString& accent_color)
     : QFrame(parent), accent_color_(accent_color.isEmpty() ? ui::colors::AMBER : accent_color) {
@@ -230,4 +230,4 @@ void BaseWidget::on_config_clicked() {
     dlg->exec();
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

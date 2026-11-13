@@ -13,7 +13,7 @@
 
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 inline QString normalize_llm_base(QString base) {
     base = base.trimmed();
@@ -32,4 +32,4 @@ inline QString normalize_llm_base(QString base) {
     return base;
 }
 
-} // namespace fincept
+} // namespace finterm

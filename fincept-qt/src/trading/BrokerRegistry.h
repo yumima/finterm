@@ -9,7 +9,7 @@
 #include <memory>
 #include <unordered_map>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // Hash adapter for std::unordered_map<QString,...>
 struct QStringHash {
@@ -36,4 +36,4 @@ class BrokerRegistry {
     std::unordered_map<QString, BrokerPtr, QStringHash> brokers_;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

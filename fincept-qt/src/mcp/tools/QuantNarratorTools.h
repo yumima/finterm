@@ -16,6 +16,6 @@
 // isn't wired into the runtime yet, the tools return a clear error
 // directing the user to enable an Anthropic or local profile.
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 std::vector<ToolDef> get_quant_narrator_tools();
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

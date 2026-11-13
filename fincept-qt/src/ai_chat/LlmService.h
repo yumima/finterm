@@ -21,7 +21,7 @@
 #include <optional>
 #include <vector>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 // ── Provider helpers ──────────────────────────────────────────────────────────
 
@@ -470,4 +470,4 @@ class LlmService : public QObject {
                                         const QMap<QString, QString>& headers, int timeout_ms = 30000);
 };
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

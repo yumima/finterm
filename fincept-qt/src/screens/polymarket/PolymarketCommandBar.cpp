@@ -6,9 +6,9 @@
 #include <QSignalBlocker>
 #include <QVBoxLayout>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const QStringList SORT_KEYS = {"volume", "liquidity", "startDate"};
 
@@ -469,4 +469,4 @@ void PolymarketCommandBar::set_exchanges(const QStringList& ids, const QStringLi
         exchange_combo_->setCurrentIndex(active_idx);
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

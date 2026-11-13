@@ -3,6 +3,6 @@
 
 #include <vector>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 std::vector<ToolDef> get_paper_trading_tools();
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

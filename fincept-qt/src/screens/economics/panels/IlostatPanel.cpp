@@ -13,7 +13,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kIlostatScript = "ilostat_data.py";
@@ -150,4 +150,4 @@ void IlostatPanel::on_result(const QString& request_id, const services::Economic
     LOG_INFO("IlostatPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

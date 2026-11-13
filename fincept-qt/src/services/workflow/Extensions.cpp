@@ -4,7 +4,7 @@
 #include <cmath>
 #include <limits>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 // ── Array Extensions ───────────────────────────────────────────────────
 
@@ -361,4 +361,4 @@ QJsonValue call_extension(const QString& method, const QJsonValue& target, const
     return {}; // unknown method
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -8,7 +8,7 @@
 #include <QString>
 #include <QVariantList>
 
-namespace fincept {
+namespace finterm {
 
 /// Separate SQLite database for ephemeral cache data.
 /// Uses synchronous=NORMAL under WAL for safe, fast writes.
@@ -37,4 +37,4 @@ class CacheDatabase {
     mutable QMutex mutex_;
 };
 
-} // namespace fincept
+} // namespace finterm

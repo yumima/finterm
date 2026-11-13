@@ -17,10 +17,10 @@
 #include "services/news/NewsBriefSelection.h"
 #include "services/news/NewsClusterService.h"
 
-using namespace fincept::news::brief_select;
-using fincept::services::NewsArticle;
-using fincept::services::NewsCluster;
-using fincept::services::cluster_articles;
+using namespace finterm::news::brief_select;
+using finterm::services::NewsArticle;
+using finterm::services::NewsCluster;
+using finterm::services::cluster_articles;
 
 namespace {
 
@@ -147,7 +147,7 @@ class TestNewsBriefSelection : public QObject {
         // three it keeps must be the three strongest categories.
         QVector<NewsCluster> clusters;
         int strength = 8;
-        for (const QString& cat : fincept::news::category_names())
+        for (const QString& cat : finterm::news::category_names())
             clusters << cluster(QStringLiteral("Story for ") + cat, cat, strength--, 1, kNow);
 
         Config cfg;
@@ -559,7 +559,7 @@ class TestNewsBriefSelection : public QObject {
     // a feed row — it is a story printed under a heading that contradicts it.
 
     void short_keywords_match_whole_words_only() {
-        using fincept::news::classify;
+        using finterm::news::classify;
         // The shipped case: "eps" inside "Epstein" filed three of one day's
         // stories under EARNINGS, and the brief printed a congressional
         // subpoena story under a results heading.
@@ -575,7 +575,7 @@ class TestNewsBriefSelection : public QObject {
     }
 
     void bounded_keywords_still_match_through_punctuation() {
-        using fincept::news::classify;
+        using finterm::news::classify;
         // The boundary view normalises punctuation, so bounding these made
         // them match MORE of what they are for, not less: a bare "fed " missed
         // both of these outright.
@@ -587,7 +587,7 @@ class TestNewsBriefSelection : public QObject {
     }
 
     void unbounded_keywords_are_still_substrings_on_purpose() {
-        using fincept::news::classify;
+        using finterm::news::classify;
         // "tech" is meant to catch these; that is why the whole-word rule is
         // per-keyword rather than applied to everything short.
         QCOMPARE(classify(QStringLiteral("a fintech raises a round")), QStringLiteral("TECH"));
@@ -601,7 +601,7 @@ class TestNewsBriefSelection : public QObject {
 
     void the_breakdown_prompt_names_the_headings_it_wants() {
         const QStringList cats{QStringLiteral("MARKETS"), QStringLiteral("CRYPTO")};
-        const QString p = fincept::news::brief_prompt::build_breakdown(
+        const QString p = finterm::news::brief_prompt::build_breakdown(
             QStringLiteral("### MARKETS\n- a\n\n### CRYPTO\n- b"), cats);
         // Naming them is what stops the model both skipping a category it has
         // stories for and inventing one it does not.
@@ -617,7 +617,7 @@ class TestNewsBriefSelection : public QObject {
         // The two halves are separate requests joined on the marker. If the
         // top half writes its own "### " sections the reading pane shows the
         // categories twice.
-        const QString p = fincept::news::brief_prompt::build_top(QStringLiteral("[1] ..."), {});
+        const QString p = finterm::news::brief_prompt::build_top(QStringLiteral("[1] ..."), {});
         QVERIFY(p.contains(QStringLiteral("no '### ' category headings")));
         QVERIFY(p.contains(QStringLiteral("Overall read")));
         QVERIFY(p.contains(QStringLiteral("Watch")));
@@ -625,10 +625,10 @@ class TestNewsBriefSelection : public QObject {
     }
 
     void the_portfolio_section_appears_only_when_there_are_holdings() {
-        const QString without = fincept::news::brief_prompt::build_top(QStringLiteral("s"), {});
+        const QString without = finterm::news::brief_prompt::build_top(QStringLiteral("s"), {});
         QVERIFY(!without.contains(QStringLiteral("Your portfolio")));
         QVERIFY(!without.contains(QStringLiteral("<<<PORTFOLIO>>>")));
-        const QString with = fincept::news::brief_prompt::build_top(
+        const QString with = finterm::news::brief_prompt::build_top(
             QStringLiteral("s"), QStringLiteral("Holdings: AAPL"));
         QVERIFY(with.contains(QStringLiteral("Your portfolio")));
         QVERIFY(with.contains(QStringLiteral("Holdings: AAPL")));
@@ -638,8 +638,8 @@ class TestNewsBriefSelection : public QObject {
         // Article bodies make grounding MORE important, not less: with real
         // prose in the prompt the model has numbers to hand and is
         // correspondingly readier to pair one with the wrong company.
-        for (const QString& p : {fincept::news::brief_prompt::build_top(QStringLiteral("s"), {}),
-                                 fincept::news::brief_prompt::build_breakdown(
+        for (const QString& p : {finterm::news::brief_prompt::build_top(QStringLiteral("s"), {}),
+                                 finterm::news::brief_prompt::build_breakdown(
                                      QStringLiteral("s"), {QStringLiteral("MARKETS")})}) {
             QVERIFY(p.contains(QStringLiteral("GROUNDING")));
             QVERIFY(p.contains(QStringLiteral("never infer that one is listed")));

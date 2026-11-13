@@ -22,7 +22,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens::brief {
+namespace finterm::screens::brief {
 
 /// Separates the top summary from the per-category detail in a model brief.
 /// The service joins the two halves on this. When it is absent — an older
@@ -330,4 +330,4 @@ inline QPair<QString, QString> split(const QString& text) {
     return {text, QString()};
 }
 
-} // namespace fincept::screens::brief
+} // namespace finterm::screens::brief

@@ -21,9 +21,9 @@
 #    include <xlsxdocument.h>
 #endif
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static QString kAccent() {
     return QString("#ea580c");
@@ -473,4 +473,4 @@ void ExcelScreen::restore_state(const QVariantMap& state) {
         sheet_tabs_->setCurrentIndex(idx);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

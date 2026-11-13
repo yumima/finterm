@@ -8,7 +8,7 @@
 
 #include <functional>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Hook event types for workflow execution lifecycle.
 enum class HookEvent {
@@ -87,4 +87,4 @@ class ExecutionHooks : public QObject {
     int next_handle_ = 1;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

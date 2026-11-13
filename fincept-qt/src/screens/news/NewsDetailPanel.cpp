@@ -27,7 +27,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -784,7 +784,7 @@ void NewsDetailPanel::show_article(const services::NewsArticle& article) {
 
     // Reflect saved state from DB
     {
-        auto r = fincept::NewsArticleRepository::instance().load_saved();
+        auto r = finterm::NewsArticleRepository::instance().load_saved();
         bool is_saved = false;
         if (r.is_ok()) {
             for (const auto& a : r.value()) {
@@ -1309,4 +1309,4 @@ void NewsDetailPanel::hide_tldr() {
         tldr_detail_section_->hide();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

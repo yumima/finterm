@@ -6,7 +6,7 @@
 
 class QLabel;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// One tile in the Component Browser grid. Shows category strip, title,
 /// description, and popularity stars (filled circles rendered via text
@@ -49,4 +49,4 @@ class ComponentCard : public QFrame {
     bool pressed_ = false;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

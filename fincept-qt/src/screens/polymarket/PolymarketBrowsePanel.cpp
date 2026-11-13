@@ -6,10 +6,10 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-using namespace fincept::ui;
-using namespace fincept::services::prediction;
+using namespace finterm::ui;
+using namespace finterm::services::prediction;
 
 PolymarketBrowsePanel::PolymarketBrowsePanel(QWidget* parent) : QWidget(parent) {
     setObjectName("polyBrowsePanel");
@@ -197,4 +197,4 @@ void PolymarketBrowsePanel::update_page() {
     next_btn_->setEnabled(current_page_ + 1 < pages);
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

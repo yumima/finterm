@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -401,4 +401,4 @@ void DBnomicsChartWidget::render_scatter(const QVector<services::DbnDataPoint>& 
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

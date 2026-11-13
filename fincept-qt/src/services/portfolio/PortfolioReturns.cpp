@@ -10,7 +10,7 @@
 #include <cmath>
 #include <limits>
 
-namespace fincept::portfolio {
+namespace finterm::portfolio {
 
 namespace {
 
@@ -292,4 +292,4 @@ QVector<double> twr_index(const QVector<NavPoint>& path, const QVector<Transacti
     return out;
 }
 
-} // namespace fincept::portfolio
+} // namespace finterm::portfolio

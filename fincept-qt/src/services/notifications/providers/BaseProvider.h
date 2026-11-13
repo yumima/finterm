@@ -5,7 +5,7 @@
 
 #include <QSet>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 /// Convenience base class for HTTP-based notification providers.
 /// Subclasses implement provider_id(), display_name(), icon(), and send().
@@ -68,4 +68,4 @@ class BaseProvider : public INotificationProvider {
     virtual void save_fields(SettingsRepository& r, const QString& cat) = 0;
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

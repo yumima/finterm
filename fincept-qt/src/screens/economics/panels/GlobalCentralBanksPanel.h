@@ -7,7 +7,7 @@
 
 #include <QComboBox>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class GlobalCentralBanksPanel : public EconPanelBase {
     Q_OBJECT
@@ -27,4 +27,4 @@ class GlobalCentralBanksPanel : public EconPanelBase {
     void update_series_for_bank(int bank_idx);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

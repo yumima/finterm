@@ -10,9 +10,9 @@
 #include <cmath>
 #include <sstream>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 SurfaceTableWidget::SurfaceTableWidget(QWidget* parent) : QWidget(parent) {
     auto* layout = new QVBoxLayout(this);
@@ -131,7 +131,7 @@ void SurfaceTableWidget::show_generic_matrix(const std::vector<std::string>& row
             // A NaN cell is a gap in the source data: show the placeholder and
             // leave it uncoloured rather than painting it as a real value.
             const bool has = std::isfinite(v);
-            QString text = has ? QString::number((double)v, 'f', 2) : fincept::ui::formatting::placeholder();
+            QString text = has ? QString::number((double)v, 'f', 2) : finterm::ui::formatting::placeholder();
             auto* item = new QTableWidgetItem(text);
             item->setTextAlignment(Qt::AlignCenter);
             table_->setItem(r, c, item);
@@ -229,4 +229,4 @@ void SurfaceTableWidget::show_pca(const PCAData& d) {
     show_generic_matrix(d.assets, d.factors, d.z, mn, mx, true);
 }
 
-} // namespace fincept::surface
+} // namespace finterm::surface

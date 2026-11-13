@@ -7,7 +7,7 @@
 
 #include <functional>
 
-namespace fincept::services::polymarket {
+namespace finterm::services::polymarket {
 
 /// Singleton service for all Polymarket API interactions.
 /// Uses three public APIs:
@@ -96,4 +96,4 @@ class PolymarketService : public QObject {
     static constexpr int kEventsTtlSec = 2 * 60;
 };
 
-} // namespace fincept::services::polymarket
+} // namespace finterm::services::polymarket

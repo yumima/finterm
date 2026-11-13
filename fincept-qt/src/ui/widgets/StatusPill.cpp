@@ -6,7 +6,7 @@
 #include <QHBoxLayout>
 #include <QPushButton>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 StatusPill::StatusPill(QWidget* parent) : QWidget(parent) {
     auto* hl = new QHBoxLayout(this);
@@ -86,4 +86,4 @@ void StatusPill::apply_state(State s, const QString& message) {
         retry_btn_->setVisible(s == State::Error && on_retry_);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

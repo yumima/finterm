@@ -18,7 +18,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Symbols used by this panel ───────────────────────────────────────────────
 
@@ -1107,4 +1107,4 @@ void MarketPulsePanel::refresh_data() {
     fetch_movers();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

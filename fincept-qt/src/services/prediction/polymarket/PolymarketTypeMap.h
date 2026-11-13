@@ -5,7 +5,7 @@
 
 #include <QVector>
 
-namespace fincept::services::prediction::polymarket_map {
+namespace finterm::services::prediction::polymarket_map {
 
 /// Stable adapter id used for MarketKey::exchange_id and hub topics.
 inline constexpr const char* kExchangeId = "polymarket";
@@ -20,4 +20,4 @@ QVector<prediction::PredictionMarket> to_prediction(const QVector<services::poly
 QVector<prediction::PredictionEvent> to_prediction(const QVector<services::polymarket::Event>& src);
 QVector<prediction::PredictionTrade> to_prediction(const QVector<services::polymarket::Trade>& src);
 
-} // namespace fincept::services::prediction::polymarket_map
+} // namespace finterm::services::prediction::polymarket_map

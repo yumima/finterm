@@ -21,10 +21,10 @@
 #include <QTextStream>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
-using fincept::services::FileManagerService;
+using namespace finterm::ui;
+using finterm::services::FileManagerService;
 
 static const char* MF = "font-family:'Consolas','Courier New',monospace;";
 static QString panel_ss() {
@@ -973,4 +973,4 @@ void FileManagerScreen::restore_state(const QVariantMap& state) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -17,9 +17,9 @@
 
 #include <cmath>
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 constexpr const char* CryptoChart::TF_LABELS[];
 
@@ -308,4 +308,4 @@ void CryptoChart::rebuild_chart() {
     update_axes(min_price, max_price, min_time, max_time);
 }
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

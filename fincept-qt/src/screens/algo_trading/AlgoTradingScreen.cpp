@@ -13,9 +13,9 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::algo;
+using namespace finterm::services::algo;
 
 AlgoTradingScreen::AlgoTradingScreen(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -212,4 +212,4 @@ void AlgoTradingScreen::restore_state(const QVariantMap& state) {
         on_tab_changed(idx);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

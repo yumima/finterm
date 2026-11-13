@@ -5,11 +5,11 @@
 #include <QLineEdit>
 #include <QTimer>
 
-namespace fincept::ui {
+namespace finterm::ui {
 class InlineSparkline;
 }
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Watchlist widget — user provides comma-separated symbols, fetches live data via yfinance.
 ///
@@ -54,7 +54,7 @@ class WatchlistWidget : public BaseWidget {
     QHash<QString, int> row_index_;
     QHash<QString, ui::InlineSparkline*> spark_widgets_;
 
-    QHash<QString, fincept::services::QuoteData> row_cache_;
+    QHash<QString, finterm::services::QuoteData> row_cache_;
     QHash<QString, QVector<double>> sparkline_cache_;
     bool hub_active_ = false;
 
@@ -62,4 +62,4 @@ class WatchlistWidget : public BaseWidget {
     QTimer* coalesce_ = nullptr;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

@@ -12,7 +12,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 struct TeamRow {
     QString id;
@@ -59,4 +59,4 @@ class TeamRepository {
     Result<void> write_members(const QString& team_id, const QStringList& member_agent_ids);
 };
 
-} // namespace fincept
+} // namespace finterm

@@ -11,7 +11,7 @@
 #include <QToolButton>
 #include <QVBoxLayout>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 
@@ -160,4 +160,4 @@ void GroupedPane::restyleButtons() {
         buttons_[i]->setStyleSheet(tab_button_ss(buttons_[i]->isChecked()));
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

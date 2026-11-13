@@ -26,7 +26,7 @@
 #include <cmath>
 #include <memory>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -719,7 +719,7 @@ void MarketDataService::ensure_registered_with_hub() {
 
 void MarketDataService::store_quote_entries(const QString& symbol, const QJsonObject& full) {
     // 30s key holds the live snapshot including bid/ask.
-    fincept::CacheManager::instance().put(
+    finterm::CacheManager::instance().put(
         "market:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(full).toJson(QJsonDocument::Compact))),
         kQuoteCacheTtlSec, "market_data");
 
@@ -736,7 +736,7 @@ void MarketDataService::store_quote_entries(const QString& symbol, const QJsonOb
     // cache row (expires_at − ttl_seconds, see CacheManager::multi_get_aged).
     // A payload stamp is only as good as every writer remembering it, and the
     // bug this whole path exists to fix was exactly one writer forgetting.
-    fincept::CacheManager::instance().put(
+    finterm::CacheManager::instance().put(
         "market_last:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(lon).toJson(QJsonDocument::Compact))),
         kQuoteLastKnownTtlSec, "market_data");
 }
@@ -746,7 +746,7 @@ void MarketDataService::hydrate_quotes_from_cache() {
     // SQLite read (fast) plus N small QJsonDocument::fromJson calls. The
     // expensive part (publishing to the hub, which fans out to subscribers
     // and emits state-transition signals) is split off into chunks below.
-    const auto last_known = fincept::CacheManager::instance().get_prefix_aged("market_last:");
+    const auto last_known = finterm::CacheManager::instance().get_prefix_aged("market_last:");
     hydrate_pending_.clear();
     hydrate_pending_.reserve(last_known.size());
     const qint64 now = QDateTime::currentSecsSinceEpoch();
@@ -822,11 +822,11 @@ void MarketDataService::hydrate_next_chunk() {
 void MarketDataService::invalidate_quotes(const QStringList& symbols) {
     if (symbols.isEmpty()) {
         // Bulk clear: drop everything in the "market:" prefix bucket.
-        fincept::CacheManager::instance().remove_prefix("market:");
+        finterm::CacheManager::instance().remove_prefix("market:");
         return;
     }
     for (const auto& sym : symbols)
-        fincept::CacheManager::instance().remove("market:" + sym);
+        finterm::CacheManager::instance().remove("market:" + sym);
 }
 
 // ── Batched + Cached fetch_quotes ───────────────────────────────────────────
@@ -845,7 +845,7 @@ void MarketDataService::fetch_quotes(const QStringList& symbols, QuoteCallback c
     cache_keys.reserve(symbols.size());
     for (const auto& sym : symbols)
         cache_keys.append("market:" + sym);
-    const QHash<QString, QString> hits = fincept::CacheManager::instance().multi_get(cache_keys);
+    const QHash<QString, QString> hits = finterm::CacheManager::instance().multi_get(cache_keys);
 
     if (hits.size() == symbols.size()) {
         QVector<QuoteData> cached_results;
@@ -995,7 +995,7 @@ void MarketDataService::flush_batch() {
                     // On failure, try to serve from stale cache (ignoring TTL)
                     QVector<QuoteData> stale;
                     for (const auto& sym : req.symbols) {
-                        const QVariant cv = fincept::CacheManager::instance().get("market:" + sym);
+                        const QVariant cv = finterm::CacheManager::instance().get("market:" + sym);
                         if (!cv.isNull()) {
                             const QJsonObject o = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
                             QuoteData qd{};
@@ -1282,7 +1282,7 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
     cache_keys.reserve(symbols.size());
     for (const auto& s : symbols)
         cache_keys.append("ipo_info:" + s);
-    const QHash<QString, QString> hits = fincept::CacheManager::instance().multi_get(cache_keys);
+    const QHash<QString, QString> hits = finterm::CacheManager::instance().multi_get(cache_keys);
 
     auto parse_cached = [](const QString& raw, const QString& sym) -> CompanyProfile {
         const QJsonObject o = QJsonDocument::fromJson(raw.toUtf8()).object();
@@ -1377,7 +1377,7 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
                     // is not an answer: reported as `failed`, not cached (the
                     // next session asks again).
                     if (o.value("not_found").toBool()) {
-                        fincept::CacheManager::instance().put("ipo_info:" + p.symbol,
+                        finterm::CacheManager::instance().put("ipo_info:" + p.symbol,
                                                               QVariant(QStringLiteral("{\"none\":true}")),
                                                               // An hour, not a day: a deal priced last night
                                                               // is unknown to Yahoo until it starts trading.
@@ -1412,7 +1412,7 @@ void MarketDataService::fetch_company_profiles(const QStringList& symbols, Profi
                 co["country"] = p.country;
                 co["market_cap"] = p.market_cap;
                 co["employees"] = p.employees;
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     "ipo_info:" + p.symbol,
                     QVariant(QString::fromUtf8(QJsonDocument(co).toJson(QJsonDocument::Compact))), kProfileCacheTtlSec,
                     "ipo_info");
@@ -1456,7 +1456,7 @@ void MarketDataService::fetch_top_movers(int count, TopMoversCallback cb) {
         tm.losers = parse_side(o["losers"].toArray());
         return tm;
     };
-    auto cached = fincept::CacheManager::instance().try_get(cache_key);
+    auto cached = finterm::CacheManager::instance().try_get(cache_key);
     if (cached.has_value()) {
         const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
         cb(true, parse(obj));
@@ -1473,7 +1473,7 @@ void MarketDataService::fetch_top_movers(int count, TopMoversCallback cb) {
                 return;
             }
             const QString raw = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-            fincept::CacheManager::instance().put(cache_key, raw, kTopMoversCacheTtlSec, "movers");
+            finterm::CacheManager::instance().put(cache_key, raw, kTopMoversCacheTtlSec, "movers");
             cb(true, parse(result));
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -1504,7 +1504,7 @@ void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallbac
     // wake-on-resume by clearing IpoWatchView's own info_cache_, but the
     // CacheManager entry stays so subsequent same-session opens are fast.
     const QString cache_key = "ipo_extras:" + symbol;
-    auto cached = fincept::CacheManager::instance().try_get(cache_key);
+    auto cached = finterm::CacheManager::instance().try_get(cache_key);
     auto parse = [](const QJsonObject& o, const QString& sym) -> IpoExtras {
         IpoExtras ex;
         ex.symbol = sym;
@@ -1574,7 +1574,7 @@ void MarketDataService::fetch_ipo_extras(const QString& symbol, IpoExtrasCallbac
                 return;
             }
             const QString raw = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-            fincept::CacheManager::instance().put("ipo_extras:" + symbol, raw, kIpoExtrasCacheTtlSec, "ipo_extras");
+            finterm::CacheManager::instance().put("ipo_extras:" + symbol, raw, kIpoExtrasCacheTtlSec, "ipo_extras");
             cb(true, parse(result, symbol));
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -1603,7 +1603,7 @@ struct SecContact {
     bool unavailable = false; // the keyring could not be read (locked / unreachable) — NOT "unset"
 };
 
-using fincept::services::sec_identity::header_safe_email;
+using finterm::services::sec_identity::header_safe_email;
 
 // Read at most once a minute: SecureStorage::retrieve is a blocking libsecret
 // round-trip on the GUI thread (a locked keyring prompts), and nothing signals
@@ -1627,7 +1627,7 @@ SecContact sec_contact() {
     const qint64 ttl = cache.contact.email.isEmpty() ? 10'000 : 60'000;
     if (cache.read_at && now - cache.read_at < ttl)
         return cache.contact;
-    const auto r = fincept::SecureStorage::instance().retrieve(QStringLiteral("FINCEPT_CONTACT_EMAIL"));
+    const auto r = finterm::SecureStorage::instance().retrieve(QStringLiteral("FINCEPT_CONTACT_EMAIL"));
     SecContact c;
     if (r.is_ok()) {
         const QString e = r.value().trimmed();
@@ -1636,7 +1636,7 @@ SecContact sec_contact() {
         else if (!e.isEmpty())
             LOG_WARN("MarketData", "Contact email is not a plain address (local@domain.tld); not sent to SEC");
     } else {
-        c.unavailable = !fincept::SecureStorage::is_not_found(r);
+        c.unavailable = !finterm::SecureStorage::is_not_found(r);
     }
     cache = {c, now};
     return c;
@@ -1691,7 +1691,7 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         const int cik = it.value();
         const QString cik_padded = QString("%1").arg(cik, 10, 10, QChar('0'));
         const QString cache_key = "sec_filings:" + tkr;
-        auto cached = fincept::CacheManager::instance().try_get(cache_key);
+        auto cached = finterm::CacheManager::instance().try_get(cache_key);
         auto parse = [cik_padded](const QJsonObject& root) -> QVector<SecFiling> {
             QVector<SecFiling> out;
             const auto recent = root["filings"].toObject()["recent"].toObject();
@@ -1727,7 +1727,7 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         QHash<QByteArray, QByteArray> headers;
         const SecContact contact = sec_contact();
         headers["User-Agent"] = sec_user_agent(contact);
-        fincept::HttpClient::instance().get(
+        finterm::HttpClient::instance().get(
             url, headers, [cb, parse, tkr, self_ptr, contact](Result<QJsonDocument> res) {
                 if (!self_ptr)
                     return;
@@ -1741,7 +1741,7 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
                 }
                 const auto obj = res.value().object();
                 const QString raw = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-                fincept::CacheManager::instance().put("sec_filings:" + tkr, raw, kSecFilingsCacheTtlSec, "sec");
+                finterm::CacheManager::instance().put("sec_filings:" + tkr, raw, kSecFilingsCacheTtlSec, "sec");
                 cb(true, parse(obj));
             });
     };
@@ -1785,7 +1785,7 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
         }
     };
 
-    auto cached_map = fincept::CacheManager::instance().try_get("sec_cik_map");
+    auto cached_map = finterm::CacheManager::instance().try_get("sec_cik_map");
     if (cached_map.has_value()) {
         const auto doc = QJsonDocument::fromJson(cached_map->toUtf8());
         if (doc.isObject()) {
@@ -1798,7 +1798,7 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
     const SecContact contact = sec_contact();
     headers["User-Agent"] = sec_user_agent(contact);
     QPointer<MarketDataService> self_ptr = this;
-    fincept::HttpClient::instance().get(
+    finterm::HttpClient::instance().get(
         "https://www.sec.gov/files/company_tickers.json", headers,
         [self_ptr, populate_from_json, fire_waiters, contact](Result<QJsonDocument> res) {
             if (!self_ptr)
@@ -1813,7 +1813,7 @@ void MarketDataService::fetch_sec_filings(const QString& ticker, SecFilingsCallb
             }
             populate_from_json(res.value());
             const QString raw = QString::fromUtf8(res.value().toJson(QJsonDocument::Compact));
-            fincept::CacheManager::instance().put("sec_cik_map", raw, kSecCikMapTtlSec, "sec");
+            finterm::CacheManager::instance().put("sec_cik_map", raw, kSecCikMapTtlSec, "sec");
             fire_waiters(true);
         });
 }
@@ -1837,7 +1837,7 @@ void MarketDataService::fetch_wikipedia_summary(const QString& title_query, Wiki
         s.url = o["content_urls"].toObject()["desktop"].toObject()["page"].toString();
         return s;
     };
-    auto cached = fincept::CacheManager::instance().try_get(cache_key);
+    auto cached = finterm::CacheManager::instance().try_get(cache_key);
     if (cached.has_value()) {
         const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
         cb(!obj.isEmpty(), parse(obj));
@@ -1846,7 +1846,7 @@ void MarketDataService::fetch_wikipedia_summary(const QString& title_query, Wiki
     const QString url = "https://en.wikipedia.org/api/rest_v1/page/summary/" + QUrl::toPercentEncoding(title);
     QHash<QByteArray, QByteArray> headers;
     headers["User-Agent"] = kProjectUserAgent; // the tool, never the user's address
-    fincept::HttpClient::instance().get(url, headers, [cb, parse, cache_key](Result<QJsonDocument> res) {
+    finterm::HttpClient::instance().get(url, headers, [cb, parse, cache_key](Result<QJsonDocument> res) {
         if (!res.is_ok() || !res.value().isObject()) {
             cb(false, {});
             return;
@@ -1859,7 +1859,7 @@ void MarketDataService::fetch_wikipedia_summary(const QString& title_query, Wiki
             return;
         }
         const QString raw = QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact));
-        fincept::CacheManager::instance().put(cache_key, raw, kWikipediaCacheTtlSec, "wikipedia");
+        finterm::CacheManager::instance().put(cache_key, raw, kWikipediaCacheTtlSec, "wikipedia");
         cb(true, parse(obj));
     });
 }
@@ -1899,7 +1899,7 @@ void MarketDataService::fetch_s1_funding(const QString& s1_url, S1FundingCallbac
         }
         return f;
     };
-    auto cached = fincept::CacheManager::instance().try_get(cache_key);
+    auto cached = finterm::CacheManager::instance().try_get(cache_key);
     if (cached.has_value()) {
         const auto obj = QJsonDocument::fromJson(cached->toUtf8()).object();
         cb(true, parse(obj));
@@ -1916,7 +1916,7 @@ void MarketDataService::fetch_s1_funding(const QString& s1_url, S1FundingCallbac
                 return;
             }
             const QString raw = QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact));
-            fincept::CacheManager::instance().put("s1_funding:" + s1_url, raw, kS1CacheTtlSec, "sec");
+            finterm::CacheManager::instance().put("s1_funding:" + s1_url, raw, kS1CacheTtlSec, "sec");
             cb(true, parse(result));
         },
         // S-1 documents are heavy (typically 2-5MB, sometimes 10-20MB).
@@ -2073,4 +2073,4 @@ void MarketDataService::fetch_sparklines(const QStringList& symbols, SparklineCa
         python::PythonWorker::kNetworkActionTimeoutMs);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

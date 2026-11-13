@@ -1,7 +1,7 @@
 #pragma once
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// About & legal information — version, license, contact, resources.
 class AboutScreen : public QWidget {
@@ -10,4 +10,4 @@ class AboutScreen : public QWidget {
     explicit AboutScreen(QWidget* parent = nullptr);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

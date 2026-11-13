@@ -10,7 +10,7 @@
 
 #include <functional>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // ── NER Result Types ────────────────────────────────────────────────────────
 
@@ -100,4 +100,4 @@ class NewsNlpService : public QObject {
     QVector<ArticleGeo> geo_cache_;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

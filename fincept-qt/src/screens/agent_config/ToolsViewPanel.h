@@ -12,7 +12,7 @@
 #include <QTreeWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// TOOLS view — 3-column terminal layout.
 /// Left:   Assign-to context + selected tools list.
@@ -92,4 +92,4 @@ class ToolsViewPanel : public QWidget {
     QString current_tool_; // tool shown in detail panel
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

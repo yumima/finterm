@@ -10,7 +10,7 @@
 #include <QtCharts/QLineSeries>
 #include <QtCharts/QPieSeries>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Factory for creating themed Qt Charts.
 class ChartFactory {
@@ -35,4 +35,4 @@ class ChartFactory {
     static void apply_theme(QChart* chart);
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

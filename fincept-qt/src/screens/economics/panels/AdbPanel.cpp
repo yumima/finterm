@@ -16,7 +16,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kAdbScript = "adb_data.py";
@@ -212,4 +212,4 @@ void AdbPanel::on_result(const QString& request_id, const services::EconomicsRes
     LOG_INFO("AdbPanel", QString("Displayed %1 rows for %2").arg(rows.size()).arg(request_id));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

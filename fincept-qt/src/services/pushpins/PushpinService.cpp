@@ -7,7 +7,7 @@
 #include <QJsonObject>
 #include <QSettings>
 
-namespace fincept {
+namespace finterm {
 
 PushpinService& PushpinService::instance() {
     static PushpinService s;
@@ -83,4 +83,4 @@ void PushpinService::save() const {
     settings.setValue("pushpins/list", QJsonDocument(arr).toJson(QJsonDocument::Compact));
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -8,9 +8,9 @@
 #include <QPainter>
 #include <QShowEvent>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 namespace {
 inline QColor kBgBase() {
@@ -160,4 +160,4 @@ void CryptoTimeSales::rebuild_cache() {
     cache_dirty_ = false;
 }
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

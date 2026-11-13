@@ -6,7 +6,7 @@ class QListWidget;
 class QLabel;
 class QPushButton;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Dialog for opening a saved workspace.
 class WorkspaceOpenDialog : public QDialog {
@@ -29,4 +29,4 @@ class WorkspaceOpenDialog : public QDialog {
     QString selected_path_;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

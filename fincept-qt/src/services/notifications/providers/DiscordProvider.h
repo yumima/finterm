@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 class DiscordProvider final : public BaseProvider {
   public:
@@ -20,4 +20,4 @@ class DiscordProvider final : public BaseProvider {
     QString webhook_url_;
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

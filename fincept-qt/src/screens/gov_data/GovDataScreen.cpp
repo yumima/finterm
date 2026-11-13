@@ -21,9 +21,9 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Dynamic stylesheet ──────────────────────────────────────────────────────
 
@@ -398,4 +398,4 @@ void GovDataScreen::restore_state(const QVariantMap& state) {
         activate_provider(idx);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

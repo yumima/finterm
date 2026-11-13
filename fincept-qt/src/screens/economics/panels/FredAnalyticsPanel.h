@@ -8,7 +8,7 @@
 
 #include <QComboBox>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class FredAnalyticsPanel : public EconPanelBase {
     Q_OBJECT
@@ -25,4 +25,4 @@ class FredAnalyticsPanel : public EconPanelBase {
     QComboBox* dataset_combo_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

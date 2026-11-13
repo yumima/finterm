@@ -8,7 +8,7 @@
 
 class QWidget;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// Small "?" button placed next to a metric label in any screen. Clicking
 /// shows a lightweight popover with the entry's title and abbreviation
@@ -30,4 +30,4 @@ class HelpHint : public QPushButton {
     QString entry_id_;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

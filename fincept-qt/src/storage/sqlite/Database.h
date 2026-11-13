@@ -8,7 +8,7 @@
 #include <QString>
 #include <QVariantList>
 
-namespace fincept {
+namespace finterm {
 
 /// SQLite database wrapper with WAL mode, prepared statements, and transaction support.
 class Database {
@@ -50,4 +50,4 @@ class Database {
     mutable QMutex mutex_;
 };
 
-} // namespace fincept
+} // namespace finterm

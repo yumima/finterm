@@ -11,7 +11,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EquityTechnicalsTab : public QWidget {
     Q_OBJECT
@@ -132,4 +132,4 @@ class EquityTechnicalsTab : public QWidget {
     ui::LoadingOverlay* loading_overlay_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

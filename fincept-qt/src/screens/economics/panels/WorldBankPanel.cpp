@@ -12,7 +12,7 @@
 #include <QSplitter>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kWorldBankScript = "worldbank_data.py";
@@ -225,4 +225,4 @@ void WorldBankPanel::on_indicator_filter(const QString& text) {
     filter_list(indicator_list_, text);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

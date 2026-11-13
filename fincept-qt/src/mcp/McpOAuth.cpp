@@ -15,7 +15,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 namespace {
 
@@ -311,4 +311,4 @@ Result<QString> McpOAuth::ensure_access_token(const OAuthConfig& cfg) {
     return Result<QString>::ok(access);
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

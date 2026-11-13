@@ -3,7 +3,7 @@
 #include <QLineEdit>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Search/command input bar.
 class SearchBar : public QWidget {
@@ -21,4 +21,4 @@ class SearchBar : public QWidget {
     QLineEdit* input_ = nullptr;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

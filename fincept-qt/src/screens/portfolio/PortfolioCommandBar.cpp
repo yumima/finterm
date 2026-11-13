@@ -10,7 +10,7 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 struct DetailBtnDef {
     const char* label;
@@ -620,4 +620,4 @@ void PortfolioCommandBar::apply_dropdown_styles() {
     outline_sm(dd_import_json_btn_, ui::colors::AMBER());
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -10,7 +10,7 @@
 
 #include <cmath>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 QStringList SectorHeatmapWidget::sector_symbols() {
     return {"XLK", "XLV", "XLF", "XLE", "XLY", "XLI", "XLB", "XLU", "XLRE", "XLC", "XLP", "SOXX"};
@@ -209,4 +209,4 @@ void SectorHeatmapWidget::populate(const QVector<services::QuoteData>& quotes) {
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

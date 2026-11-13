@@ -4,7 +4,7 @@
 #include <QPixmap>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Geometric crosshatch background — diagonal lines forming X pattern.
 /// Caches rendering as QPixmap — redraws only on resize or theme change.
@@ -23,4 +23,4 @@ class GeometricBackground : public QWidget {
     ThemeTokens tokens_{};
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

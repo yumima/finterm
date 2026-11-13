@@ -4,7 +4,7 @@
 #include <QScrollArea>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Scrollable tab bar.
 /// Tabs: Dashboard, Markets, Portfolio, News, Report Builder,
@@ -35,4 +35,4 @@ class TabBar : public QWidget {
     void update_styles();
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

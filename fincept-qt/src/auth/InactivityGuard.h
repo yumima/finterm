@@ -5,7 +5,7 @@
 
 class QEvent;
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 /// Global event filter that monitors user activity (mouse/keyboard) and
 /// emits lock_requested() after a configurable idle timeout.
@@ -77,4 +77,4 @@ class InactivityGuard : public QObject {
     QDateTime last_activity_;
 };
 
-} // namespace fincept::auth
+} // namespace finterm::auth

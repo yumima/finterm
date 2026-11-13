@@ -1,6 +1,6 @@
 #include "storage/repositories/AgentConfigRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 AgentConfigRepository& AgentConfigRepository::instance() {
     static AgentConfigRepository s;
@@ -50,4 +50,4 @@ Result<void> AgentConfigRepository::set_active(const QString& id) {
     return exec_write("UPDATE agent_configs SET is_active = 1, updated_at = datetime('now') WHERE id = ?", {id});
 }
 
-} // namespace fincept
+} // namespace finterm

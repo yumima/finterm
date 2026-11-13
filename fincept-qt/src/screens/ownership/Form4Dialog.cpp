@@ -9,10 +9,10 @@
 #include <QTextBrowser>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ownership;
-namespace fmt = fincept::ui::formatting;
+using namespace finterm::ownership;
+namespace fmt = finterm::ui::formatting;
 
 namespace {
 
@@ -107,4 +107,4 @@ Form4Dialog::Form4Dialog(const QVector<InsiderTransaction>& filing, const QStrin
     v->addWidget(buttons);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

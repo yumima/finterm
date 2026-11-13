@@ -4,7 +4,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept {
+namespace finterm {
 
 /// Secure credential storage using OS-native backends:
 ///   Windows : Windows Credential Manager (DPAPI-encrypted, per-user DPAPI key)
@@ -76,4 +76,4 @@ class SecureStorage {
     SecureStorage() = default;
 };
 
-} // namespace fincept
+} // namespace finterm

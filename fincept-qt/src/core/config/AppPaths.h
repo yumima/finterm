@@ -1,7 +1,7 @@
 #pragma once
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// Central registry for all application file-system paths.
 ///
@@ -86,4 +86,4 @@ class AppPaths {
     static void ensure_all();
 };
 
-} // namespace fincept
+} // namespace finterm

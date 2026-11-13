@@ -10,11 +10,11 @@
 #include <QStringList>
 #include <QTimer>
 
-namespace fincept {
+namespace finterm {
 class WebSocketClient;
 }
 
-namespace fincept::services::prediction::kalshi_ns {
+namespace finterm::services::prediction::kalshi_ns {
 
 /// Kalshi v2 WebSocket client.
 ///
@@ -39,7 +39,7 @@ namespace fincept::services::prediction::kalshi_ns {
 /// Delta reconciliation: Kalshi emits `orderbook_snapshot` once per
 /// subscription, then incremental `orderbook_delta`. Messages include a
 /// monotonic `seq`; on gap we re-request a snapshot via REST.
-class KalshiWsClient : public QObject, public fincept::datahub::Producer {
+class KalshiWsClient : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     explicit KalshiWsClient(QObject* parent = nullptr);
@@ -65,8 +65,8 @@ class KalshiWsClient : public QObject, public fincept::datahub::Producer {
 
   signals:
     void price_updated(const QString& asset_id, double price);
-    void orderbook_updated(const QString& asset_id, const fincept::services::prediction::PredictionOrderBook& book);
-    void trade_received(const fincept::services::prediction::PredictionTrade& trade);
+    void orderbook_updated(const QString& asset_id, const finterm::services::prediction::PredictionOrderBook& book);
+    void trade_received(const finterm::services::prediction::PredictionTrade& trade);
     void market_lifecycle_changed(const QString& ticker, const QString& status);
     void connection_status_changed(bool connected);
 
@@ -81,9 +81,9 @@ class KalshiWsClient : public QObject, public fincept::datahub::Producer {
     void ensure_connected();
     void send_subscribe(const QStringList& tickers);
     void publish_price(const QString& asset_id, double price);
-    void publish_orderbook(const QString& asset_id, const fincept::services::prediction::PredictionOrderBook& book);
+    void publish_orderbook(const QString& asset_id, const finterm::services::prediction::PredictionOrderBook& book);
 
-    fincept::WebSocketClient* ws_ = nullptr;
+    finterm::WebSocketClient* ws_ = nullptr;
     QTimer* ping_timer_ = nullptr;
 
     KalshiCredentials creds_;
@@ -96,4 +96,4 @@ class KalshiWsClient : public QObject, public fincept::datahub::Producer {
     static constexpr const char* kDemoWs = "wss://demo-api.kalshi.co/trade-api/ws/v2";
 };
 
-} // namespace fincept::services::prediction::kalshi_ns
+} // namespace finterm::services::prediction::kalshi_ns

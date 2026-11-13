@@ -17,7 +17,7 @@
 #include <QVariantMap>
 #include <QVector>
 
-namespace fincept::services::prediction {
+namespace finterm::services::prediction {
 
 // ── Market keys ─────────────────────────────────────────────────────────────
 
@@ -190,20 +190,20 @@ struct ExchangeCapabilities {
     int max_requests_per_sec = 10;
 };
 
-} // namespace fincept::services::prediction
+} // namespace finterm::services::prediction
 
-Q_DECLARE_METATYPE(fincept::services::prediction::MarketKey)
-Q_DECLARE_METATYPE(fincept::services::prediction::PredictionMarket)
-Q_DECLARE_METATYPE(fincept::services::prediction::PredictionEvent)
-Q_DECLARE_METATYPE(fincept::services::prediction::PredictionOrderBook)
-Q_DECLARE_METATYPE(fincept::services::prediction::PriceHistory)
-Q_DECLARE_METATYPE(fincept::services::prediction::PredictionTrade)
-Q_DECLARE_METATYPE(fincept::services::prediction::PredictionPosition)
-Q_DECLARE_METATYPE(fincept::services::prediction::OpenOrder)
-Q_DECLARE_METATYPE(fincept::services::prediction::OrderResult)
-Q_DECLARE_METATYPE(fincept::services::prediction::AccountBalance)
-Q_DECLARE_METATYPE(QVector<fincept::services::prediction::PredictionMarket>)
-Q_DECLARE_METATYPE(QVector<fincept::services::prediction::PredictionEvent>)
-Q_DECLARE_METATYPE(QVector<fincept::services::prediction::PredictionTrade>)
-Q_DECLARE_METATYPE(QVector<fincept::services::prediction::PredictionPosition>)
-Q_DECLARE_METATYPE(QVector<fincept::services::prediction::OpenOrder>)
+Q_DECLARE_METATYPE(finterm::services::prediction::MarketKey)
+Q_DECLARE_METATYPE(finterm::services::prediction::PredictionMarket)
+Q_DECLARE_METATYPE(finterm::services::prediction::PredictionEvent)
+Q_DECLARE_METATYPE(finterm::services::prediction::PredictionOrderBook)
+Q_DECLARE_METATYPE(finterm::services::prediction::PriceHistory)
+Q_DECLARE_METATYPE(finterm::services::prediction::PredictionTrade)
+Q_DECLARE_METATYPE(finterm::services::prediction::PredictionPosition)
+Q_DECLARE_METATYPE(finterm::services::prediction::OpenOrder)
+Q_DECLARE_METATYPE(finterm::services::prediction::OrderResult)
+Q_DECLARE_METATYPE(finterm::services::prediction::AccountBalance)
+Q_DECLARE_METATYPE(QVector<finterm::services::prediction::PredictionMarket>)
+Q_DECLARE_METATYPE(QVector<finterm::services::prediction::PredictionEvent>)
+Q_DECLARE_METATYPE(QVector<finterm::services::prediction::PredictionTrade>)
+Q_DECLARE_METATYPE(QVector<finterm::services::prediction::PredictionPosition>)
+Q_DECLARE_METATYPE(QVector<finterm::services::prediction::OpenOrder>)

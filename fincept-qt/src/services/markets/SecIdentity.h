@@ -6,7 +6,7 @@
 
 #include <QString>
 
-namespace fincept::services::sec_identity {
+namespace finterm::services::sec_identity {
 
 /// local@domain.tld in printable ASCII, without the characters that would
 /// break the "finterm (<email>)" comment syntax or the header itself (a CR/LF
@@ -23,4 +23,4 @@ inline bool header_safe_email(const QString& e) {
            !domain.endsWith(QLatin1Char('.'));
 }
 
-} // namespace fincept::services::sec_identity
+} // namespace finterm::services::sec_identity

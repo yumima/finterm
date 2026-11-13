@@ -3,7 +3,7 @@
 #include <QString>
 #include <QVariant>
 
-namespace fincept {
+namespace finterm {
 
 /// Application configuration backed by QSettings (persistent across sessions).
 class AppConfig {
@@ -24,4 +24,4 @@ class AppConfig {
     QSettings settings_;
 };
 
-} // namespace fincept
+} // namespace finterm

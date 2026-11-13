@@ -7,7 +7,7 @@
 #include <QTimer>
 #include <QVector>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Singleton service managing workflow persistence and (future) execution.
 class WorkflowService : public QObject {
@@ -50,4 +50,4 @@ class WorkflowService : public QObject {
     class WorkflowExecutor* executor_ = nullptr;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

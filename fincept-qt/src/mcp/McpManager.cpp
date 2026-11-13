@@ -11,7 +11,7 @@
 #include <QJsonObject>
 #include <QUuid>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 static constexpr const char* TAG = "McpManager";
 
@@ -419,4 +419,4 @@ void McpManager::refresh_tools_for(const QString& id) {
     LOG_INFO(TAG, QString("Cached %1 tools from server %2").arg(result.value().size()).arg(id));
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

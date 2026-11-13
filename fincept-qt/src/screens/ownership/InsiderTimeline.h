@@ -12,7 +12,7 @@
 #include <QDate>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class InsiderTimeline : public QWidget {
     Q_OBJECT
@@ -44,4 +44,4 @@ class InsiderTimeline : public QWidget {
     int x_for(const QDate& d, const QRect& plot) const;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

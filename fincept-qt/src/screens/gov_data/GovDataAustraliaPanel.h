@@ -15,7 +15,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class GovDataAustraliaPanel : public QWidget {
     Q_OBJECT
@@ -95,4 +95,4 @@ class GovDataAustraliaPanel : public QWidget {
     QJsonArray current_datasets_; // stored so resources can be extracted without re-fetch
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

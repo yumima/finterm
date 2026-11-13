@@ -10,7 +10,7 @@
 #include <QSqlQuery>
 #include <QVariant>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -57,7 +57,7 @@ QString SectorResolver::fallback_for_unresolvable(const QString& symbol) {
 }
 
 void SectorResolver::load_cache() {
-    auto& db_mgr = fincept::Database::instance();
+    auto& db_mgr = finterm::Database::instance();
     if (!db_mgr.is_open())
         return;
 
@@ -92,7 +92,7 @@ void SectorResolver::load_cache() {
 
 void SectorResolver::persist(const QString& symbol, const QString& sector, const QString& industry,
                              const QString& quote_type) {
-    auto& db_mgr = fincept::Database::instance();
+    auto& db_mgr = finterm::Database::instance();
     if (!db_mgr.is_open())
         return;
 
@@ -216,4 +216,4 @@ void SectorResolver::resolve_async(const QString& symbol) {
     });
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

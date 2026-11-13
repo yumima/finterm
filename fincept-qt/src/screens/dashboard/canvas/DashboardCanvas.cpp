@@ -19,7 +19,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 DashboardCanvas::DashboardCanvas(QWidget* parent) : QWidget(parent) {
     tokens_ = ui::ThemeManager::instance().tokens();
@@ -632,4 +632,4 @@ GridItem* DashboardCanvas::item_for_id(const QString& instance_id) {
     return nullptr;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

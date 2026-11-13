@@ -4,7 +4,7 @@
 
 class QLineEdit;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Compact dialog for "Save Workspace As" — just a name field.
 class WorkspaceSaveAsDialog : public QDialog {
@@ -22,4 +22,4 @@ class WorkspaceSaveAsDialog : public QDialog {
     QString chosen_path_;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -16,7 +16,7 @@
 #include <QTableWidget>
 #include <QVector>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 class OpenPositionsWidget : public BaseWidget {
     Q_OBJECT
@@ -49,4 +49,4 @@ class OpenPositionsWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

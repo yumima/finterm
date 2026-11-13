@@ -21,7 +21,7 @@ namespace {
 static const QStringList kPeriods = {"1M", "3M", "6M", "1Y", "ALL"};
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PerformanceRiskView::PerformanceRiskView(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -369,4 +369,4 @@ void PerformanceRiskView::update_metrics() {
         vol_card_.value->setToolTip(portfolio::metrics_window_note(m));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

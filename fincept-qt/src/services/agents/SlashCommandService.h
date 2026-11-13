@@ -26,7 +26,7 @@
 #include <optional>
 #include <vector>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Resolved slash command — what AgentService::run_agent dispatches.
 struct ResolvedSlash {
@@ -86,4 +86,4 @@ class SlashCommandService {
     std::vector<SlashCommandSpec> specs_;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

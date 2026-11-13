@@ -40,7 +40,7 @@
 #include <limits>
 #include <memory>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // Versioned: articles carry their feed's region tag, and the v2 feed list
 // retagged several feeds (SCMP News/Business, DW, France 24, Guardian UK
@@ -152,7 +152,7 @@ static NewsArticle article_from_json(const QJsonObject& o) {
 
 void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
     if (!force) {
-        const QVariant cached = fincept::CacheManager::instance().get(kArticlesCacheKey);
+        const QVariant cached = finterm::CacheManager::instance().get(kArticlesCacheKey);
         if (!cached.isNull()) {
             const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
             QVector<NewsArticle> articles;
@@ -173,7 +173,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
     struct FetchState {
         QMutex mutex;
         QVector<NewsArticle> all_articles;
-        fincept::news::FeedMergeIndex merge_index; // link / headline -> position in all_articles
+        finterm::news::FeedMergeIndex merge_index; // link / headline -> position in all_articles
         QAtomicInt remaining{0};
         ArticlesCallback callback;
         NewsService* service = nullptr;
@@ -227,7 +227,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
 
             {
                 QMutexLocker lock(&state->mutex);
-                fincept::news::merge_feed_batch(state->all_articles, state->merge_index, articles);
+                finterm::news::merge_feed_batch(state->all_articles, state->merge_index, articles);
             }
 
             if (state->remaining.fetchAndSubRelaxed(1) == 1) {
@@ -249,7 +249,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
                 for (const auto& a : all) {
                     arr.append(article_to_json(a));
                 }
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     kArticlesCacheKey, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                     kArticleCacheTtlSec, "news");
 
@@ -270,7 +270,7 @@ void NewsService::fetch_all_news(bool force, ArticlesCallback cb) {
 
 void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_cb) {
     if (!force) {
-        const QVariant cached = fincept::CacheManager::instance().get(kArticlesCacheKey);
+        const QVariant cached = finterm::CacheManager::instance().get(kArticlesCacheKey);
         if (!cached.isNull()) {
             const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
             QVector<NewsArticle> articles;
@@ -292,7 +292,7 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
     struct FetchState {
         QMutex mutex;
         QVector<NewsArticle> all_articles;
-        fincept::news::FeedMergeIndex merge_index; // link / headline -> position in all_articles
+        finterm::news::FeedMergeIndex merge_index; // link / headline -> position in all_articles
         QAtomicInt remaining{0};
         QAtomicInt done{0};
         ArticlesCallback callback;
@@ -345,7 +345,7 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
             int feeds_done = 0;
             {
                 QMutexLocker lock(&state->mutex);
-                fincept::news::merge_feed_batch(state->all_articles, state->merge_index, batch);
+                finterm::news::merge_feed_batch(state->all_articles, state->merge_index, batch);
                 feeds_done = state->done.fetchAndAddRelaxed(1) + 1;
                 // Partial snapshot sorted by time for progressive display
                 snapshot = state->all_articles;
@@ -376,7 +376,7 @@ void NewsService::fetch_all_news_progressive(bool force, ArticlesCallback final_
                 for (const auto& a : all) {
                     parr.append(article_to_json(a));
                 }
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     kArticlesCacheKey, QVariant(QString::fromUtf8(QJsonDocument(parr).toJson(QJsonDocument::Compact))),
                     kArticleCacheTtlSec, "news");
 
@@ -783,7 +783,7 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
         pool_headlines.append(a.headline);
     const QString pool_key = brief_cache::key(pool_headlines, pf_id, count, kBriefPromptVersion);
     {
-        const QVariant cached = fincept::CacheManager::instance().get(pool_key);
+        const QVariant cached = finterm::CacheManager::instance().get(pool_key);
         if (!cached.isNull()) {
             cb(true, cached.toString());
             return;
@@ -871,13 +871,13 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                 // ── Stage 3: brief cache, keyed on the prompts themselves ──
                 const QString content_key = news::brief_select::brief_key(top_prompt, breakdown_prompt);
                 {
-                    const QVariant cached = fincept::CacheManager::instance().get(content_key);
+                    const QVariant cached = finterm::CacheManager::instance().get(content_key);
                     if (!cached.isNull()) {
                         const QString hit = cached.toString();
                         // Fill the pool slot too, so the next call over
                         // this same feed short-circuits at stage 0 instead
                         // of re-clustering to reach the same answer.
-                        fincept::CacheManager::instance().put(pool_key, QVariant(hit), kSummaryCacheTtlSec, "news");
+                        finterm::CacheManager::instance().put(pool_key, QVariant(hit), kSummaryCacheTtlSec, "news");
                         cb(true, hit);
                         return;
                     }
@@ -971,8 +971,8 @@ void NewsService::summarize_headlines(const QVector<NewsArticle>& articles, int 
                     // turning one transient failure into a permanently
                     // category-less brief. Show it now, ask again next time.
                     if (complete)
-                        fincept::CacheManager::instance().put(content_key, QVariant(out), kBriefCacheTtlSec, "news");
-                    fincept::CacheManager::instance().put(
+                        finterm::CacheManager::instance().put(content_key, QVariant(out), kBriefCacheTtlSec, "news");
+                    finterm::CacheManager::instance().put(
                         pool_key, QVariant(out), complete ? kSummaryCacheTtlSec : kPartialBriefCacheTtlSec, "news");
                     cb(true, out);
                 };
@@ -1149,23 +1149,23 @@ void NewsService::connect_live_feed(const QString& ws_url) {
         QVector<NewsArticle> updated;
         {
             QVector<NewsArticle> existing;
-            const QVariant cv = fincept::CacheManager::instance().get(kArticlesCacheKey);
+            const QVariant cv = finterm::CacheManager::instance().get(kArticlesCacheKey);
             if (!cv.isNull()) {
                 const QJsonArray arr = QJsonDocument::fromJson(cv.toString().toUtf8()).array();
                 existing.reserve(arr.size());
                 for (const auto& v : arr)
                     existing.append(article_from_json(v.toObject()));
             }
-            fincept::news::FeedMergeIndex idx;
-            fincept::news::merge_feed_batch(updated, idx, existing);
-            fincept::news::merge_feed_batch(updated, idx, {article});
+            finterm::news::FeedMergeIndex idx;
+            finterm::news::merge_feed_batch(updated, idx, existing);
+            finterm::news::merge_feed_batch(updated, idx, {article});
             std::stable_sort(updated.begin(), updated.end(),
                              [](const NewsArticle& x, const NewsArticle& y) { return x.sort_ts > y.sort_ts; });
         }
         QJsonArray narr;
         for (const auto& a : updated)
             narr.append(article_to_json(a));
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             kArticlesCacheKey, QVariant(QString::fromUtf8(QJsonDocument(narr).toJson(QJsonDocument::Compact))),
             kArticleCacheTtlSec, "news");
         emit articles_partial(updated, 1, 1);
@@ -1983,13 +1983,13 @@ int NewsService::max_requests_per_sec() const {
 void NewsService::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
     // General feed — cache 5m, min refresh interval 30s, coalesce
     // progressive chunks to 250ms so cold-cache fills don't repaint in
     // a tight loop. `coalesce_within_ms` field arrived in Phase 4.
-    fincept::datahub::TopicPolicy general;
+    finterm::datahub::TopicPolicy general;
     general.ttl_ms = 5 * 60 * 1000;
     general.min_interval_ms = 30 * 1000;
     general.coalesce_within_ms = 250;
@@ -1998,12 +1998,12 @@ void NewsService::ensure_registered_with_hub() {
 
     // Per-symbol / per-category slices share the same TTL; they derive
     // from the same fetch so min_interval keeps producer pacing sane.
-    fincept::datahub::TopicPolicy derived = general;
+    finterm::datahub::TopicPolicy derived = general;
     hub.set_policy_pattern(QStringLiteral("news:symbol:*"), derived);
     hub.set_policy_pattern(QStringLiteral("news:category:*"), derived);
 
     // Server-assigned clusters — push-only, no scheduled refresh.
-    fincept::datahub::TopicPolicy cluster_policy;
+    finterm::datahub::TopicPolicy cluster_policy;
     cluster_policy.push_only = true;
     cluster_policy.ttl_ms = 0;
     cluster_policy.min_interval_ms = 0;
@@ -2017,7 +2017,7 @@ void NewsService::ensure_registered_with_hub() {
 void NewsService::publish_articles_to_hub(const QVector<NewsArticle>& accumulated) {
     if (!hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
 
     // Single canonical publish — the whole accumulated list on news:general.
     hub.publish(QStringLiteral("news:general"), QVariant::fromValue(accumulated));
@@ -2047,4 +2047,4 @@ void NewsService::publish_articles_to_hub(const QVector<NewsArticle>& accumulate
     }
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

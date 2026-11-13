@@ -4,7 +4,7 @@
 
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 
 ToolKillswitchRepository& ToolKillswitchRepository::instance() {
     static ToolKillswitchRepository r;
@@ -74,4 +74,4 @@ Result<void> ToolKillswitchRepository::enable(const QString& tool_name) {
     return Result<void>::ok();
 }
 
-} // namespace fincept
+} // namespace finterm

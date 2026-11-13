@@ -11,7 +11,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // Single dialog-level stylesheet using objectName selectors — 18+ inline
 // setStyleSheet calls collapsed into one CSS parse. Applied in the ctor.
@@ -61,7 +61,7 @@ static QString kDialogStyle() {
 }
 } // namespace
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 CryptoCredentials::CryptoCredentials(const QString& exchange_id, QWidget* parent)
     : QDialog(parent), exchange_id_(exchange_id) {
@@ -244,4 +244,4 @@ void CryptoCredentials::refresh_totp() {
     });
 }
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

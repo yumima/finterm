@@ -17,7 +17,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EconPanelBase : public QWidget {
     Q_OBJECT
@@ -102,4 +102,4 @@ class EconPanelBase : public QWidget {
     QLabel* row_count_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

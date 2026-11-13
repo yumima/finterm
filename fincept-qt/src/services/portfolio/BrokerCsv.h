@@ -26,7 +26,7 @@
 
 #include <optional>
 
-namespace fincept::portfolio::csv {
+namespace finterm::portfolio::csv {
 
 enum class Field {
     Ignore,
@@ -91,4 +91,4 @@ ParseResult to_transactions(const Table& table, const QHash<int, Field>& mapping
 
 QString field_name(Field f);
 
-} // namespace fincept::portfolio::csv
+} // namespace finterm::portfolio::csv

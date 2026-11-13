@@ -16,7 +16,7 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 static QLabel* section_hdr(const QString& text) {
     auto* lbl = new QLabel(text);
@@ -844,4 +844,4 @@ void AgentsViewPanel::apply_tools_selection(const QStringList& /*tools*/) {
         tools_list_->addItem(new QListWidgetItem(t.toString()));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -10,7 +10,7 @@
 
 #include <tuple>
 
-namespace fincept {
+namespace finterm {
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 
@@ -156,4 +156,4 @@ void ScreenStateManager::write_async(const QString& key, const QVariantMap& stat
     });
 }
 
-} // namespace fincept
+} // namespace finterm

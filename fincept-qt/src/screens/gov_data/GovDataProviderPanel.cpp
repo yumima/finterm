@@ -20,9 +20,9 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Shared panel stylesheet ──────────────────────────────────────────────────
 
@@ -815,4 +815,4 @@ void configure_table(QTableWidget* table) {
     table->viewport()->setCursor(Qt::PointingHandCursor);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

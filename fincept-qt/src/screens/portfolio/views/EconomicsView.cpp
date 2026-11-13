@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 EconomicsView::EconomicsView(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -157,4 +157,4 @@ void EconomicsView::update_indicators() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

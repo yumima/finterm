@@ -12,7 +12,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -185,4 +185,4 @@ Result<SkillProposal> SkillProposalService::propose(const AgentTraceRow& trace, 
     return Result<SkillProposal>::ok(out);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -29,7 +29,7 @@
 
 #include <atomic>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 class ExchangeDaemonPool : public QObject {
     Q_OBJECT
@@ -92,4 +92,4 @@ class ExchangeDaemonPool : public QObject {
     QHash<QString, QString> creds_sent_;    // exchange_id -> fingerprint of last-sent creds
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

@@ -34,11 +34,11 @@ class QNetworkAccessManager;
 class QNetworkReply;
 class QTimer;
 
-namespace fincept::ui {
+namespace finterm::ui {
 class DataTable;
 }
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// A table of extracted data — one header row plus N data rows.
 struct ScrapedTable {
@@ -107,4 +107,4 @@ class WebScraperWidget : public BaseWidget {
     QString last_format_;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

@@ -12,7 +12,7 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Obsidian Design System Styles ────────────────────────────────────────────
 // Identical palette to LoginScreen for visual consistency.
@@ -616,4 +616,4 @@ void LockScreen::update_lockout_display() {
     unlock_pin_input_->setEnabled(false);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

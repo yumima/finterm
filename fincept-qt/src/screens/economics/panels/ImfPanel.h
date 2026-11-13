@@ -9,7 +9,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class ImfPanel : public EconPanelBase {
     Q_OBJECT
@@ -33,4 +33,4 @@ class ImfPanel : public EconPanelBase {
     QComboBox* country_combo_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

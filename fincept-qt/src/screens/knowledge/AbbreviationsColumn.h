@@ -8,7 +8,7 @@ class QLineEdit;
 class QListWidget;
 class QListWidgetItem;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// One vertical pane in the cockpit dedicated to the flat abbreviations
 /// dictionary. Header (label + filter input) over a scrollable list.
@@ -35,4 +35,4 @@ class AbbreviationsColumn : public QWidget {
     QString last_entry_id_;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

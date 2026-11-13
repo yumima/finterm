@@ -8,7 +8,7 @@
 #include <QMutex>
 #include <QVector>
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 class ConnectorRegistry {
   public:
@@ -55,4 +55,4 @@ class ConnectorRegistry {
 // Force-include all connector registration units
 void register_all_connectors();
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

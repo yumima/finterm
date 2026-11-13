@@ -20,7 +20,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 
@@ -401,4 +401,4 @@ void EntryBodyView::rebuild() {
     root_->addWidget(content_, 1);
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

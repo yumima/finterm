@@ -6,7 +6,7 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 namespace {
 
@@ -444,4 +444,4 @@ void register_data_format_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

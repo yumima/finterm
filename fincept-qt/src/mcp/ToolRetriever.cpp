@@ -12,7 +12,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 static constexpr const char* TAG = "ToolRetriever";
 
@@ -347,4 +347,4 @@ std::vector<ToolMatch> ToolRetriever::search(const QString& query, int top_k, co
     return out;
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

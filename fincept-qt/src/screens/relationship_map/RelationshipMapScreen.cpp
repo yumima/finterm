@@ -21,16 +21,16 @@
 #include <QShowEvent>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
-using namespace fincept::relmap;
+using namespace finterm::ui;
+using namespace finterm::relmap;
 
 static inline QString MF() {
     return QStringLiteral("font-family:'Consolas','Courier New',monospace;");
 }
 
-namespace fmt = fincept::ui::formatting;
+namespace fmt = finterm::ui::formatting;
 
 // NaN (JSON null) renders as "—"; money uses the reported currency and never
 // invents a "$" when none was reported.
@@ -331,7 +331,7 @@ void RelationshipMapScreen::build_ui() {
 
     // Center card click → navigate to equity research
     connect(scene_, &relmap::RelationshipGraphScene::center_card_clicked, this, [](const QString& ticker) {
-        fincept::EventBus::instance().publish("equity_research.load_symbol", {{"symbol", ticker}, {"type", "equity"}});
+        finterm::EventBus::instance().publish("equity_research.load_symbol", {{"symbol", ticker}, {"type", "equity"}});
     });
 }
 
@@ -573,7 +573,7 @@ void RelationshipMapScreen::fire_asset_search(const QString& query) {
                 return;
             // A failed search says so (read_search_reply) — not the last query's
             // matches, and not an empty list that reads as "no such ticker".
-            const auto reply = fincept::ui::read_search_reply(ok, result);
+            const auto reply = finterm::ui::read_search_reply(ok, result);
             self->on_asset_results(reply.results, reply.failure);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -909,4 +909,4 @@ void RelationshipMapScreen::set_embedded_mode(bool on) {
         status_bar_->setVisible(!on);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

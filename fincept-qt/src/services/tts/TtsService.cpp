@@ -35,7 +35,7 @@
 #    include <unistd.h>
 #endif
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -953,4 +953,4 @@ void TtsService::refresh_engine_voices() {
     });
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -14,7 +14,7 @@
 #include <QTreeWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// QuantLib module descriptor.
 struct QuantModule {
@@ -93,4 +93,4 @@ class QuantLibScreen : public QWidget, public IStatefulScreen {
     QLabel* status_endpoint_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

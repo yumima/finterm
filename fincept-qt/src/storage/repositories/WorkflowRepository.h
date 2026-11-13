@@ -2,7 +2,7 @@
 #include "screens/node_editor/NodeEditorTypes.h"
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 /// Lightweight DB row for workflow list display.
 struct WorkflowRow {
@@ -35,4 +35,4 @@ class WorkflowRepository : public BaseRepository<WorkflowRow> {
     static WorkflowRow map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

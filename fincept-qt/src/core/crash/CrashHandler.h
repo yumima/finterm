@@ -1,6 +1,6 @@
 #pragma once
 
-namespace fincept::crash {
+namespace finterm::crash {
 
 /// Install the platform crash handler. On Windows this registers an
 /// UnhandledExceptionFilter that writes a minidump to AppPaths::crashdumps()
@@ -13,4 +13,4 @@ namespace fincept::crash {
 /// remains safe even when the heap is corrupted.
 void install();
 
-} // namespace fincept::crash
+} // namespace finterm::crash

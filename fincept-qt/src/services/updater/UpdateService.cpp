@@ -21,7 +21,7 @@
 #include <QSysInfo>
 #include <QUrl>
 
-namespace fincept::services {
+namespace finterm::services {
 
 UpdateService& UpdateService::instance() {
     static UpdateService inst;
@@ -424,4 +424,4 @@ void UpdateService::show_error(const QString& text) {
     QMessageBox::warning(dialog_parent(), QStringLiteral("finterm"), text);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

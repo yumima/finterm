@@ -10,7 +10,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 
-namespace fincept::python {
+namespace finterm::python {
 
 namespace {
 
@@ -284,4 +284,4 @@ void OptionGreeksWorker::fail_all_pending(const QString& reason) {
     in_flight_.clear();
 }
 
-} // namespace fincept::python
+} // namespace finterm::python

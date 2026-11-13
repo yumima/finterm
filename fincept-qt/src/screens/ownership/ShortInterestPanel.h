@@ -5,7 +5,7 @@
 
 class QLabel;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// SHORT INTEREST — FINRA's settled position, twice a month, drawn as a bar
 /// chart of the last year, with the three figures that matter beside it.
@@ -31,4 +31,4 @@ class ShortInterestPanel : public QWidget {
     QLabel* foot_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

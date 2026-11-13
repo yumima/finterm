@@ -2,7 +2,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept {
+namespace finterm {
 
 /// Manages named user profiles, each with isolated data/logs/cache directories
 /// and separate credentials.
@@ -66,4 +66,4 @@ class ProfileManager {
     void save_manifest(const QStringList& profiles) const;
 };
 
-} // namespace fincept
+} // namespace finterm

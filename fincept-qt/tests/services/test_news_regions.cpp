@@ -10,9 +10,9 @@
 #include "services/news/NewsFeedMerge.h"
 #include "services/news/NewsRegions.h"
 
-using fincept::news::in_region;
-using fincept::news::merge_feed_batch;
-using fincept::services::NewsArticle;
+using finterm::news::in_region;
+using finterm::news::merge_feed_batch;
+using finterm::services::NewsArticle;
 
 namespace {
 NewsArticle art(const QString& id, const QString& link, const QString& region) {
@@ -43,7 +43,7 @@ NewsArticle story(const QString& source, const QString& headline, qint64 ts, int
     return a;
 }
 } // namespace
-using fincept::news::is_region_code;
+using finterm::news::is_region_code;
 
 class TestNewsRegions : public QObject {
     Q_OBJECT
@@ -120,14 +120,14 @@ class TestNewsRegions : public QObject {
     // Only the summary's lede counts: a region mentioned in passing deep in a
     // long summary is not what the story is about.
     void summary_lede_only() {
-        const QString filler = QString(fincept::news::kSummaryLedeChars, QLatin1Char('x')) + QLatin1Char(' ');
+        const QString filler = QString(finterm::news::kSummaryLedeChars, QLatin1Char('x')) + QLatin1Char(' ');
         QVERIFY(in_region("CHN", "GLOBAL", "Ebola outbreak spreads", "Officials in Beijing warned on Friday."));
         QVERIFY(!in_region("CHN", "GLOBAL", "Ebola outbreak spreads",
                            filler + "It was compared to Covid, which first took hold in China."));
         QVERIFY(!in_region("US", "GLOBAL", "Ebola outbreak spreads", filler + "The US pledged aid."));
         // The cut lands on a word boundary: "Eurovision" straddling it must
         // not become the EU keyword "euro".
-        const QString pad = QString(fincept::news::kSummaryLedeChars - 4, QLatin1Char('x')) + QLatin1Char(' ');
+        const QString pad = QString(finterm::news::kSummaryLedeChars - 4, QLatin1Char('x')) + QLatin1Char(' ');
         QVERIFY(!in_region("EU", "GLOBAL", "Song contest", pad + "Eurovision fans gather."));
     }
 
@@ -135,7 +135,7 @@ class TestNewsRegions : public QObject {
     // and the region-desk copy's tag survives whichever copy arrived first.
     void merge_dedupes_by_link_and_keeps_specific_region() {
         QVector<NewsArticle> all;
-        fincept::news::FeedMergeIndex idx;
+        finterm::news::FeedMergeIndex idx;
         merge_feed_batch(all, idx, {art("world-1", "https://bbc.test/a", "GLOBAL"),
                                     art("world-2", "https://bbc.test/b", "GLOBAL"), art("nolink-1", "", "GLOBAL")});
         merge_feed_batch(all, idx, {art("china-1", " https://bbc.test/a ", "CHINA"), art("nolink-2", "", "CHINA")});
@@ -163,7 +163,7 @@ class TestNewsRegions : public QObject {
     // tier wins, the tickers are joined, a pill tag survives.
     void merge_same_headline_other_link_is_one_row() {
         QVector<NewsArticle> all;
-        fincept::news::FeedMergeIndex idx;
+        finterm::news::FeedMergeIndex idx;
         auto inv = story("INVESTING.COM", "Stellantis chip shortage disrupts Fiat output in Italy, may last through December", 100, 3,
                          {}, {"STLA"});
         auto cna = story("CNA", "Stellantis chip shortage disrupts Fiat output in Italy — may last through December", 90, 2,
@@ -187,17 +187,17 @@ class TestNewsRegions : public QObject {
         // first report (a repost doesn't make it fresh), as urgent as its
         // loudest copy.
         auto repost = story("ABNORMAL RETURNS", "Top clicks this week on Abnormal Returns", 700);
-        repost.priority = fincept::services::Priority::URGENT;
+        repost.priority = finterm::services::Priority::URGENT;
         merge_feed_batch(all, idx, {story("ABNORMAL RETURNS", "Top clicks this week on Abnormal Returns", 50)});
         merge_feed_batch(all, idx, {repost});
         QCOMPARE(all.size(), 2);
         QCOMPARE(all[1].sort_ts, qint64(50));
-        QVERIFY(all[1].priority == fincept::services::Priority::URGENT);
+        QVERIFY(all[1].priority == finterm::services::Priority::URGENT);
 
         // A same-outlet row out of the window doesn't hide another outlet's fresh row.
         {
             QVector<NewsArticle> rows;
-            fincept::news::FeedMergeIndex ix;
+            finterm::news::FeedMergeIndex ix;
             merge_feed_batch(rows, ix, {story("YAHOO", "Fed officials signal patience on further rate cuts", 100'000),
                                         story("REUTERS", "Fed officials signal patience on further rate cuts", 300'000, 1),
                                         story("YAHOO", "Fed officials signal patience on further rate cuts", 300'600)});
@@ -249,7 +249,7 @@ class TestNewsRegions : public QObject {
     // numbers alone never join items across sources or days.
     void merge_templated_series_folds_with_count() {
         QVector<NewsArticle> all;
-        fincept::news::FeedMergeIndex idx;
+        finterm::news::FeedMergeIndex idx;
         const qint64 t0 = 1'780'000'000;
         merge_feed_batch(all, idx,
                          {story("SEEKING ALPHA", "iShares iBonds Dec 2033 Term Corporate ETF declares monthly distribution of $0.1043", t0),
@@ -278,9 +278,9 @@ class TestNewsRegions : public QObject {
         merge_feed_batch(all, idx, {story("SEEKING ALPHA", "Oshkosh partners with Grid Aero", t0 + 300)});
         QCOMPARE(all.size(), 5);
         // CJK headlines have no spaces: each character counts as a word.
-        QVERIFY(fincept::news::headline_keys(QStringLiteral("美联储维持利率不变")).words >= fincept::news::kMinCrossSourceWords);
-        QCOMPARE(fincept::news::headline_keys("Oil at $81.50, up 2%").series, QStringLiteral("oil at # up #"));
-        QCOMPARE(fincept::news::headline_keys("Oil at $81.50, up 2,000").story, QStringLiteral("oil at 81.50 up 2000"));
+        QVERIFY(finterm::news::headline_keys(QStringLiteral("美联储维持利率不变")).words >= finterm::news::kMinCrossSourceWords);
+        QCOMPARE(finterm::news::headline_keys("Oil at $81.50, up 2%").series, QStringLiteral("oil at # up #"));
+        QCOMPARE(finterm::news::headline_keys("Oil at $81.50, up 2,000").story, QStringLiteral("oil at 81.50 up 2000"));
     }
 
     void one_story_two_regions() {

@@ -14,7 +14,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class GovDataCongressPanel : public QWidget {
     Q_OBJECT
@@ -68,4 +68,4 @@ class GovDataCongressPanel : public QWidget {
     int page_size_ = 50;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

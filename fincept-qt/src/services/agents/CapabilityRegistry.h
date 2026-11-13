@@ -24,7 +24,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::services {
+namespace finterm::services {
 
 struct Capability {
     QString id;
@@ -72,4 +72,4 @@ class CapabilityRegistry {
     QStringList runtimes_;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

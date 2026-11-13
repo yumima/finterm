@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 namespace {
 // Triggers with no real event source must not "fire" when run — a fake
@@ -247,4 +247,4 @@ void register_trigger_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -16,11 +16,11 @@
 
 class QLabel;
 
-namespace fincept::trading {
+namespace finterm::trading {
 struct TickerData;
 }
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 class CryptoTickerWidget : public BaseWidget {
     Q_OBJECT
@@ -45,7 +45,7 @@ class CryptoTickerWidget : public BaseWidget {
 
     void build_rows();
     void apply_styles();
-    void on_ticker(const QString& pair, const fincept::trading::TickerData& t);
+    void on_ticker(const QString& pair, const finterm::trading::TickerData& t);
     void hub_resubscribe();
     void hub_unsubscribe_all();
 
@@ -55,4 +55,4 @@ class CryptoTickerWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

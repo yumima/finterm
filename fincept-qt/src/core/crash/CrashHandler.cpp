@@ -100,14 +100,14 @@ LONG WINAPI unhandled_exception_filter(EXCEPTION_POINTERS* ep) {
 } // namespace
 #endif // _WIN32
 
-namespace fincept::crash {
+namespace finterm::crash {
 
 void install() {
 #ifdef _WIN32
     // Resolve and create the dump directory once. AppPaths uses QString so we
     // snapshot it into a static wchar_t buffer for the filter to use without
     // touching the heap during a crash.
-    const QString dir = fincept::AppPaths::crashdumps();
+    const QString dir = finterm::AppPaths::crashdumps();
     QDir().mkpath(dir);
 
     // Normalise to native Windows separators — MiniDumpWriteDump's CreateFileW
@@ -171,4 +171,4 @@ void install() {
 #endif
 }
 
-} // namespace fincept::crash
+} // namespace finterm::crash

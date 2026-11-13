@@ -5,7 +5,7 @@
 #include "core/logging/Logger.h"
 #include "trading/ExchangeService.h"
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 namespace {
 // TickerData/Candle store ccxt nulls as 0. A price of 0 is never real (and a
@@ -199,4 +199,4 @@ std::vector<ToolDef> get_crypto_trading_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

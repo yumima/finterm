@@ -2,7 +2,7 @@
 #include "trading/BrokerInterface.h"
 #include "trading/brokers/BrokerHttp.h"
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // Credential packing:
 //   ApiKey      = access token (from developer.tradier.com)
@@ -82,4 +82,4 @@ class TradierBroker : public IBroker {
     static QJsonArray normalize_array(const QJsonValue& val);
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

@@ -12,21 +12,21 @@ class QToolBar;
 namespace ads {
 class CDockManager;
 }
-namespace fincept {
+namespace finterm {
 class DockScreenRouter;
 }
-namespace fincept::ui {
+namespace finterm::ui {
 class DockToolBar;
 class DockStatusBar;
 class PushpinBar;
 class TabBar;
-} // namespace fincept::ui
-namespace fincept::screens {
+} // namespace finterm::ui
+namespace finterm::screens {
 class LockScreen;
 class WorkbenchScreen;
-} // namespace fincept::screens
+} // namespace finterm::screens
 
-namespace fincept {
+namespace finterm {
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -144,4 +144,4 @@ class MainWindow : public QMainWindow {
     void show_info_help();
 };
 
-} // namespace fincept
+} // namespace finterm

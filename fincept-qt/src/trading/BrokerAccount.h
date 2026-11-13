@@ -4,7 +4,7 @@
 
 #include <QString>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 /// Connection state for a broker account (memory-only, not persisted).
 enum class ConnectionState { Disconnected, Connecting, Connected, TokenExpired, Error };
@@ -43,4 +43,4 @@ inline const char* connection_state_str(ConnectionState s) {
     return "Unknown";
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

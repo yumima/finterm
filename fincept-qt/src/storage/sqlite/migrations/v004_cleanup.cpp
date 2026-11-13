@@ -4,7 +4,7 @@
 
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 Result<void> apply_v004(QSqlDatabase& db) {
@@ -26,4 +26,4 @@ void register_migration_v004() {
     MigrationRunner::register_migration({4, "cleanup_legacy_notes", apply_v004});
 }
 
-} // namespace fincept
+} // namespace finterm

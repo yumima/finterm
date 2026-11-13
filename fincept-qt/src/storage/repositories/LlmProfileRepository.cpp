@@ -10,7 +10,7 @@
 #include <QUuid>
 #include <QVariant>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 QVariant null_text() {
@@ -275,4 +275,4 @@ ResolvedLlmProfile LlmProfileRepository::resolve_for_context(const QString& cont
     return legacy_fallback();
 }
 
-} // namespace fincept
+} // namespace finterm

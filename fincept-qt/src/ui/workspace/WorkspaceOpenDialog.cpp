@@ -10,7 +10,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 static const char* OPEN_DLG_SS =
     "QDialog{background:#0a0a0a;color:#e5e5e5;}"
@@ -136,4 +136,4 @@ QString WorkspaceOpenDialog::selected_path() const {
     return selected_path_;
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

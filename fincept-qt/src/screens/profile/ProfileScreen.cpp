@@ -22,7 +22,7 @@
 #include <QTimer>
 #include <QUrl>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 static const char* MF = "font-family:'Consolas',monospace;";
 static QString PANEL_SS() {
@@ -213,7 +213,7 @@ QWidget* ProfileScreen::build_overview() {
     ob->setCursor(Qt::PointingHandCursor);
     ob->setStyleSheet(button_ss());
     connect(ob, &QPushButton::clicked, this,
-            []() { QDesktopServices::openUrl(QUrl::fromLocalFile(fincept::AppPaths::user())); });
+            []() { QDesktopServices::openUrl(QUrl::fromLocalFile(finterm::AppPaths::user())); });
     frl->addWidget(ob);
     frl->addStretch();
     ivl->addWidget(fr);
@@ -330,11 +330,11 @@ void ProfileScreen::hide_api_key() {
 
 void ProfileScreen::refresh_all() {
     // Install facts hold whether or not anyone is signed in.
-    ov_data_profile_->setText(fincept::ProfileManager::instance().active());
-    ov_data_folder_->setText(QDir::toNativeSeparators(fincept::AppPaths::user()));
+    ov_data_profile_->setText(finterm::ProfileManager::instance().active());
+    ov_data_folder_->setText(QDir::toNativeSeparators(finterm::AppPaths::user()));
     // auth.db and users/<name>.db live under AppPaths::data(), which can be a
     // legacy <profile>/data outside the folder above.
-    ov_account_dbs_->setText(QDir::toNativeSeparators(fincept::AppPaths::data()));
+    ov_account_dbs_->setText(QDir::toNativeSeparators(finterm::AppPaths::data()));
 
     const bool has_pin = auth::PinManager::instance().has_pin();
     sec_pin_->setText(has_pin ? "SET" : "NOT SET");
@@ -407,7 +407,7 @@ void ProfileScreen::show_delete_account_dialog() {
                 "(%2 — watchlists, portfolios and other per-user data), its saved notification "
                 "credentials and the device PIN. Other files in the data folders are not touched.\n\n"
                 "This action CANNOT be undone. Are you sure?")
-            .arg(username, QDir::toNativeSeparators(fincept::AppPaths::data() + "/users/" + username + ".db")),
+            .arg(username, QDir::toNativeSeparators(finterm::AppPaths::data() + "/users/" + username + ".db")),
         QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
     if (first != QMessageBox::Yes)
         return;
@@ -480,4 +480,4 @@ void ProfileScreen::show_delete_account_dialog() {
     });
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

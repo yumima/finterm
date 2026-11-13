@@ -9,7 +9,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 class CryptoTimeSales : public QWidget {
     Q_OBJECT
@@ -37,4 +37,4 @@ class CryptoTimeSales : public QWidget {
     static constexpr int ROW_H = 18;
 };
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

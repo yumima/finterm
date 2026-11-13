@@ -12,7 +12,7 @@
 #include <QTableWidget>
 #include <QVector>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 class BrokerHoldingsWidget : public BaseWidget {
     Q_OBJECT
@@ -45,4 +45,4 @@ class BrokerHoldingsWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

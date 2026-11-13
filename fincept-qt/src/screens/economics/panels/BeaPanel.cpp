@@ -30,7 +30,7 @@
 #include <QSplitter>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kBeaScript = "bea_data.py";
@@ -295,4 +295,4 @@ void BeaPanel::on_result(const QString& request_id, const services::EconomicsRes
     LOG_INFO("BeaPanel", QString("Displayed %1 data points for %2").arg(rows.size()).arg(request_id));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

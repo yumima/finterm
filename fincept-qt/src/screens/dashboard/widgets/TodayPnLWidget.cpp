@@ -16,7 +16,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 namespace {
 QString fmt_pnl(double v) {
@@ -24,7 +24,7 @@ QString fmt_pnl(double v) {
     // P&L keeps its explicit +/- sign: format_money already prefixes "-" for
     // negatives, so we only add the "+" for non-negative. Compact magnitude
     // ($1.2K / $3.4M / $1.1B at 1dp) keeps the hero number narrow.
-    using namespace fincept::ui::formatting;
+    using namespace finterm::ui::formatting;
     const QString plus = v >= 0 ? QStringLiteral("+") : QString();
     return plus + format_money(v, QStringLiteral("USD"), /*compact=*/true);
 }
@@ -253,4 +253,4 @@ void TodayPnLWidget::apply_styles() {
             QString("color:%1;font-size:12px;font-weight:600;background:transparent;").arg(ui::colors::TEXT_PRIMARY()));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

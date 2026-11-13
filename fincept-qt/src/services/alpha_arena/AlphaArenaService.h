@@ -13,7 +13,7 @@
 
 #include <functional>
 
-namespace fincept::services::alpha_arena {
+namespace finterm::services::alpha_arena {
 
 struct ActionResult {
     bool success = false;
@@ -36,4 +36,4 @@ class AlphaArenaService : public QObject {
     AlphaArenaService() = default;
 };
 
-} // namespace fincept::services::alpha_arena
+} // namespace finterm::services::alpha_arena

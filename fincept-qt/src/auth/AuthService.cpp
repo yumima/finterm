@@ -15,7 +15,7 @@
 #include <QSqlQuery>
 #include <QUuid>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 static constexpr const char* kConnName = "fincept_auth";
 
@@ -27,7 +27,7 @@ AuthService& AuthService::instance() {
 // ── Initialisation ────────────────────────────────────────────────────────────
 
 void AuthService::initialize() {
-    const QString path = fincept::AppPaths::data() + "/auth.db";
+    const QString path = finterm::AppPaths::data() + "/auth.db";
     db_ = QSqlDatabase::addDatabase("QSQLITE", kConnName);
     db_.setDatabaseName(path);
     if (!db_.open()) {
@@ -118,7 +118,7 @@ QString AuthService::username_for_key(const QString& api_key) const {
 }
 
 QString AuthService::user_db_path(const QString& username) const {
-    const QString dir = fincept::AppPaths::data() + "/users";
+    const QString dir = finterm::AppPaths::data() + "/users";
     QDir().mkpath(dir);
     return dir + "/" + username + ".db";
 }
@@ -132,10 +132,10 @@ void AuthService::open_user_db(const QString& api_key) {
     const QString path = user_db_path(username);
     // Skip reopen if the correct DB is already open — avoids an unnecessary
     // close/reopen when load_session() and complete_auth_flow() both call us.
-    if (fincept::Database::instance().is_open() && fincept::Database::instance().path() == path) {
+    if (finterm::Database::instance().is_open() && finterm::Database::instance().path() == path) {
         return;
     }
-    auto r = fincept::Database::instance().reopen(path);
+    auto r = finterm::Database::instance().reopen(path);
     if (r.is_err())
         LOG_ERROR("AuthService", "Failed to open user DB for " + username + ": " + QString::fromStdString(r.error()));
     else
@@ -143,7 +143,7 @@ void AuthService::open_user_db(const QString& api_key) {
 }
 
 void AuthService::close_user_db() {
-    fincept::Database::instance().close();
+    finterm::Database::instance().close();
     LOG_INFO("AuthService", "User DB closed");
 }
 
@@ -392,4 +392,4 @@ void AuthService::replace_api_key(const QString& old_key, const QString& new_key
     cb({true, data, {}, 200});
 }
 
-} // namespace fincept::auth
+} // namespace finterm::auth

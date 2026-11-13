@@ -15,7 +15,7 @@
 #include <QSqlQuery>
 #include <QUuid>
 
-namespace fincept::services::algo {
+namespace finterm::services::algo {
 
 static constexpr int kDeploymentsTtlSec = 30;
 static constexpr const char* kDeploymentsCacheKey = "algo:deployments";
@@ -43,7 +43,7 @@ static bool looks_like_main_db(const QString& path) {
 }
 
 static QString algo_db_path() {
-    const QString data = fincept::AppPaths::data();
+    const QString data = finterm::AppPaths::data();
     const QString path = data + "/algo_trading.db";
     // The algo scripts used to be handed data/fincept.db. Adopt it under its
     // own name — but only if it really is theirs: an old single-user main
@@ -53,9 +53,9 @@ static QString algo_db_path() {
     if (!adopted) {
         adopted = true;
         const QString legacy = data + "/fincept.db";
-        if (fincept::sqlite_files::unit_free(path) && QFileInfo::exists(legacy) &&
+        if (finterm::sqlite_files::unit_free(path) && QFileInfo::exists(legacy) &&
             QFileInfo::exists(data + "/auth.db") && !looks_like_main_db(legacy)) {
-            const bool ok = fincept::sqlite_files::move_unit(legacy, path);
+            const bool ok = finterm::sqlite_files::move_unit(legacy, path);
             LOG_INFO("AlgoTrading", ok ? QStringLiteral("Adopted data/fincept.db as algo_trading.db")
                                        : QStringLiteral("Could not rename data/fincept.db to algo_trading.db"));
         }
@@ -233,7 +233,7 @@ static QVector<AlgoDeployment> parse_deployments(const QJsonArray& arr) {
 }
 
 void AlgoTradingService::list_deployments() {
-    const QVariant cached = fincept::CacheManager::instance().get(kDeploymentsCacheKey);
+    const QVariant cached = finterm::CacheManager::instance().get(kDeploymentsCacheKey);
     if (!cached.isNull()) {
         auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (!doc.isNull()) {
@@ -250,7 +250,7 @@ void AlgoTradingService::list_deployments() {
                    }
                    auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
                    auto obj = doc.object();
-                   fincept::CacheManager::instance().put(
+                   finterm::CacheManager::instance().put(
                        kDeploymentsCacheKey,
                        QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
                        kDeploymentsTtlSec, "algo_trading");
@@ -302,4 +302,4 @@ void AlgoTradingService::run_scan(const QJsonArray& conditions, const QStringLis
                });
 }
 
-} // namespace fincept::services::algo
+} // namespace finterm::services::algo

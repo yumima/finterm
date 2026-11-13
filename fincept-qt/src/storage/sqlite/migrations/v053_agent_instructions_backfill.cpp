@@ -27,7 +27,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 constexpr const char* kTag = "Migration053";
@@ -129,4 +129,4 @@ void register_migration_v053() {
     MigrationRunner::register_migration({53, "agent_instructions_backfill", apply_v053});
 }
 
-} // namespace fincept
+} // namespace finterm

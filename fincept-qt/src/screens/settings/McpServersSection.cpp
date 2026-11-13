@@ -27,7 +27,7 @@
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrent>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 using mcp::McpManager;
 using mcp::McpServerConfig;
@@ -644,4 +644,4 @@ void McpServersSection::show_status(const QString& msg, bool error) {
     QTimer::singleShot(4000, status_lbl_, &QLabel::hide);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

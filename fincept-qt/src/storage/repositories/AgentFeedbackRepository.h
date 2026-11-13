@@ -10,7 +10,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept {
+namespace finterm {
 
 struct AgentFeedbackRow {
     qint64 id = 0;
@@ -37,4 +37,4 @@ class AgentFeedbackRepository {
     AgentFeedbackRepository() = default;
 };
 
-} // namespace fincept
+} // namespace finterm

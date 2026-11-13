@@ -19,7 +19,7 @@
 
 #include <cstdio>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
@@ -491,4 +491,4 @@ void LayoutMigrations::run() {
     s.sync();
 }
 
-} // namespace fincept
+} // namespace finterm

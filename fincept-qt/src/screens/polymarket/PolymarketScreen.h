@@ -14,20 +14,20 @@
 
 #include <atomic>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 class PolymarketCommandBar;
 class PolymarketBrowsePanel;
 class PolymarketDetailPanel;
 class PolymarketLeaderboard;
 class PolymarketOrderBlotter;
 class PolymarketStatusBar;
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket
 
-namespace fincept::services::prediction {
+namespace finterm::services::prediction {
 class PredictionExchangeAdapter;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Production-grade Prediction Markets screen.
 ///
@@ -41,7 +41,7 @@ namespace fincept::screens {
 /// related markets, open interest) are fetched directly from the
 /// PolymarketService singleton when the active exchange is Polymarket.
 /// On Kalshi, those detail-panel tabs are hidden.
-class PolymarketScreen : public QWidget, public fincept::screens::IStatefulScreen {
+class PolymarketScreen : public QWidget, public finterm::screens::IStatefulScreen {
     Q_OBJECT
   public:
     explicit PolymarketScreen(QWidget* parent = nullptr);
@@ -66,47 +66,47 @@ class PolymarketScreen : public QWidget, public fincept::screens::IStatefulScree
     void on_exchange_changed(const QString& exchange_id);
 
     // Browse panel
-    void on_market_selected(const fincept::services::prediction::PredictionMarket& market);
-    void on_event_selected(const fincept::services::prediction::PredictionEvent& event);
+    void on_market_selected(const finterm::services::prediction::PredictionMarket& market);
+    void on_event_selected(const finterm::services::prediction::PredictionEvent& event);
 
     // Detail panel
     void on_interval_changed(const QString& interval);
     void on_outcome_changed(int index);
-    void on_related_market_clicked(const fincept::services::prediction::PredictionMarket& market);
+    void on_related_market_clicked(const finterm::services::prediction::PredictionMarket& market);
 
     // Adapter (unified) responses
-    void on_markets_ready(const QVector<fincept::services::prediction::PredictionMarket>& markets);
-    void on_events_ready(const QVector<fincept::services::prediction::PredictionEvent>& events);
-    void on_search_results_ready(const QVector<fincept::services::prediction::PredictionMarket>& markets,
-                                 const QVector<fincept::services::prediction::PredictionEvent>& events);
+    void on_markets_ready(const QVector<finterm::services::prediction::PredictionMarket>& markets);
+    void on_events_ready(const QVector<finterm::services::prediction::PredictionEvent>& events);
+    void on_search_results_ready(const QVector<finterm::services::prediction::PredictionMarket>& markets,
+                                 const QVector<finterm::services::prediction::PredictionEvent>& events);
     void on_tags_ready(const QStringList& tags);
-    void on_order_book_ready(const fincept::services::prediction::PredictionOrderBook& book);
-    void on_price_history_ready(const fincept::services::prediction::PriceHistory& history);
-    void on_trades_ready(const QVector<fincept::services::prediction::PredictionTrade>& trades);
+    void on_order_book_ready(const finterm::services::prediction::PredictionOrderBook& book);
+    void on_price_history_ready(const finterm::services::prediction::PriceHistory& history);
+    void on_trades_ready(const QVector<finterm::services::prediction::PredictionTrade>& trades);
     void on_leaderboard_ready(const QVariantList& entries);
     void on_adapter_error(const QString& ctx, const QString& msg);
     void on_ws_price_updated(const QString& asset_id, double price);
     void on_ws_orderbook_updated(const QString& asset_id,
-                                 const fincept::services::prediction::PredictionOrderBook& book);
+                                 const finterm::services::prediction::PredictionOrderBook& book);
     void on_ws_connection_changed(bool connected);
 
     // Polymarket-only (PolymarketService) enrichments
-    void on_price_summary_received(const fincept::services::polymarket::PriceSummary& summary);
-    void on_top_holders_received(const QVector<fincept::services::polymarket::TopHolder>& holders);
-    void on_comments_received(const QVector<fincept::services::polymarket::Comment>& comments);
-    void on_related_markets_received(const QVector<fincept::services::polymarket::Market>& markets);
+    void on_price_summary_received(const finterm::services::polymarket::PriceSummary& summary);
+    void on_top_holders_received(const QVector<finterm::services::polymarket::TopHolder>& holders);
+    void on_comments_received(const QVector<finterm::services::polymarket::Comment>& comments);
+    void on_related_markets_received(const QVector<finterm::services::polymarket::Market>& markets);
 
     // Kalshi-only enrichments (surfaced via KalshiAdapter-specific signals).
     void on_kalshi_exchange_status(const QJsonObject& status);
     void on_kalshi_exchange_schedule(const QJsonObject& schedule);
-    void on_kalshi_ws_trade(const fincept::services::prediction::PredictionTrade& trade);
+    void on_kalshi_ws_trade(const finterm::services::prediction::PredictionTrade& trade);
     void on_kalshi_market_lifecycle(const QString& ticker, const QString& status);
-    void on_kalshi_batch_candles(const QHash<QString, fincept::services::prediction::PriceHistory>& histories);
-    void on_kalshi_market_detail(const fincept::services::prediction::PredictionMarket& market);
+    void on_kalshi_batch_candles(const QHash<QString, finterm::services::prediction::PriceHistory>& histories);
+    void on_kalshi_market_detail(const finterm::services::prediction::PredictionMarket& market);
     void on_kalshi_series_detail(const QString& series_ticker, const QJsonObject& series);
 
     // Open-orders blotter.
-    void on_open_orders_ready(const QVector<fincept::services::prediction::OpenOrder>& orders);
+    void on_open_orders_ready(const QVector<finterm::services::prediction::OpenOrder>& orders);
     void on_order_refresh_requested(const QString& order_id);
     void on_order_amend_requested(const QString& order_id, const QString& side, double price);
     void on_order_cancel_requested(const QString& order_id);
@@ -120,12 +120,12 @@ class PolymarketScreen : public QWidget, public fincept::screens::IStatefulScree
     void connect_polymarket_extras();
     void install_presentation(const screens::polymarket::ExchangePresentation& p);
     void load_current_view();
-    void select_market(const fincept::services::prediction::PredictionMarket& market);
-    void subscribe_to_market(const fincept::services::prediction::PredictionMarket& market);
+    void select_market(const finterm::services::prediction::PredictionMarket& market);
+    void subscribe_to_market(const finterm::services::prediction::PredictionMarket& market);
     void unsubscribe_current();
 
     bool active_is_polymarket() const;
-    fincept::services::prediction::PredictionExchangeAdapter* active_adapter() const;
+    finterm::services::prediction::PredictionExchangeAdapter* active_adapter() const;
 
     // Sub-widgets
     polymarket::PolymarketCommandBar* command_bar_ = nullptr;
@@ -139,7 +139,7 @@ class PolymarketScreen : public QWidget, public fincept::screens::IStatefulScree
     QString active_view_ = "MARKETS";
     QString active_category_ = "ALL";
     QString active_sort_ = "volume";
-    fincept::services::prediction::PredictionMarket selected_market_;
+    finterm::services::prediction::PredictionMarket selected_market_;
     bool has_selection_ = false;
     bool first_show_ = true;
     std::atomic<int> request_generation_{0};
@@ -151,10 +151,10 @@ class PolymarketScreen : public QWidget, public fincept::screens::IStatefulScree
     QStringList subscribed_asset_ids_;
     /// The browse list's outcomes stream too (the list itself refreshes every
     /// 60 s; each card's price moves with the exchange's feed in between).
-    QVector<fincept::services::prediction::PredictionMarket> browse_markets_;
+    QVector<finterm::services::prediction::PredictionMarket> browse_markets_;
     QHash<QString, int> browse_index_; ///< outcome asset_id → browse_markets_ row
     QStringList browse_asset_ids_;     ///< what is subscribed for the list
-    void stream_browse(const QVector<fincept::services::prediction::PredictionMarket>& markets);
+    void stream_browse(const QVector<finterm::services::prediction::PredictionMarket>& markets);
     void unstream_browse();
 
     // Per-adapter Qt connections, dropped whenever the active exchange
@@ -167,7 +167,7 @@ class PolymarketScreen : public QWidget, public fincept::screens::IStatefulScree
 
     // Batch-candles cache for Kalshi browse panel sparklines. Populated in
     // on_markets_ready (Kalshi only). Keyed by market_id.
-    QHash<QString, fincept::services::prediction::PriceHistory> batch_candles_cache_;
+    QHash<QString, finterm::services::prediction::PriceHistory> batch_candles_cache_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -5,7 +5,7 @@
 
 #include <array>
 
-namespace fincept::surface::defaults {
+namespace finterm::surface::defaults {
 
 // Starter equity options underlyings — used to seed the asset search field
 // when the user first opens an OPRA-backed surface.
@@ -29,4 +29,4 @@ inline constexpr int STRIKE_WINDOW_PCT = 20;
 inline constexpr int DTE_MIN = 7;
 inline constexpr int DTE_MAX = 365;
 
-} // namespace fincept::surface::defaults
+} // namespace finterm::surface::defaults

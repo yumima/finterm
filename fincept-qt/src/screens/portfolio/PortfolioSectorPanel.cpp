@@ -17,7 +17,7 @@
 #include <numeric>
 #include <optional>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // 16 sector colors
 static const QColor kSectorColors[] = {
@@ -370,4 +370,4 @@ bool PortfolioSectorPanel::eventFilter(QObject* obj, QEvent* event) {
     return QWidget::eventFilter(obj, event);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

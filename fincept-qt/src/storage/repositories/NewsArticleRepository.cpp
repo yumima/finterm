@@ -8,14 +8,14 @@
 
 #include <cstdint>
 
-namespace fincept {
+namespace finterm {
 
-using fincept::services::Impact;
-using fincept::services::NewsArticle;
-using fincept::services::Priority;
-using fincept::services::Sentiment;
-using fincept::services::SourceFlag;
-using fincept::services::ThreatLevel;
+using finterm::services::Impact;
+using finterm::services::NewsArticle;
+using finterm::services::Priority;
+using finterm::services::Sentiment;
+using finterm::services::SourceFlag;
+using finterm::services::ThreatLevel;
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 
@@ -329,7 +329,7 @@ Result<bool> NewsArticleRepository::toggle_saved(const QString& id) {
 
 // ── load_saved ────────────────────────────────────────────────────────────────
 
-Result<QVector<fincept::services::NewsArticle>> NewsArticleRepository::load_saved() const {
+Result<QVector<finterm::services::NewsArticle>> NewsArticleRepository::load_saved() const {
     return query_list("SELECT id, headline, summary, source, region, category, link, sort_ts, "
                       "       priority, sentiment, impact, tickers, tier, lang, "
                       "       threat_level, threat_cat, threat_conf, source_flag "
@@ -339,7 +339,7 @@ Result<QVector<fincept::services::NewsArticle>> NewsArticleRepository::load_save
 
 // ── search_fts ────────────────────────────────────────────────────────────────
 
-Result<QVector<fincept::services::NewsArticle>> NewsArticleRepository::search_fts(const QString& query,
+Result<QVector<finterm::services::NewsArticle>> NewsArticleRepository::search_fts(const QString& query,
                                                                                   int64_t since_ts, int limit) const {
 
     // Escape FTS special characters to prevent query parse errors
@@ -371,11 +371,11 @@ Result<QVector<fincept::services::NewsArticle>> NewsArticleRepository::search_ft
 
     auto r = db().execute(fts_sql, params);
     if (r.is_ok()) {
-        QVector<fincept::services::NewsArticle> result;
+        QVector<finterm::services::NewsArticle> result;
         auto& q = r.value();
         while (q.next())
             result.append(map_row(q));
-        return Result<QVector<fincept::services::NewsArticle>>::ok(std::move(result));
+        return Result<QVector<finterm::services::NewsArticle>>::ok(std::move(result));
     }
 
     // Fallback: LIKE scan (FTS table may not exist on old DB)
@@ -418,4 +418,4 @@ Result<QSet<QString>> NewsArticleRepository::load_seen_ids(int64_t since_ts) con
     return Result<QSet<QString>>::ok(std::move(ids));
 }
 
-} // namespace fincept
+} // namespace finterm

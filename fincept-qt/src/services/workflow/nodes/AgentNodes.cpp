@@ -13,7 +13,7 @@
 #include <QUuid>
 #include <QtConcurrent/QtConcurrent>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 // Serialise an input QJsonValue to a readable string for injecting into prompts.
 static QString json_to_context(const QJsonValue& v) {
@@ -87,7 +87,7 @@ void register_agent_nodes(NodeRegistry& registry) {
                 QString instructions;
                 QJsonArray tools;
                 if (!agent_id.isEmpty()) {
-                    auto res = fincept::AgentConfigRepository::instance().get(agent_id);
+                    auto res = finterm::AgentConfigRepository::instance().get(agent_id);
                     if (res.is_ok()) {
                         auto cfg_json = QJsonDocument::fromJson(res.value().config_json.toUtf8()).object();
                         instructions = cfg_json.value("instructions").toString();
@@ -103,9 +103,9 @@ void register_agent_nodes(NodeRegistry& registry) {
                 }
 
                 // Resolve LLM profile
-                using fincept::ai_chat::LlmService;
-                using fincept::LlmProfileRepository;
-                using fincept::ResolvedLlmProfile;
+                using finterm::ai_chat::LlmService;
+                using finterm::LlmProfileRepository;
+                using finterm::ResolvedLlmProfile;
 
                 ResolvedLlmProfile resolved;
                 if (!profile_id.isEmpty()) {
@@ -161,7 +161,7 @@ void register_agent_nodes(NodeRegistry& registry) {
                     return;
                 }
 
-                auto& svc = fincept::services::AgentService::instance();
+                auto& svc = finterm::services::AgentService::instance();
 
                 // Run agent — result comes back via agent_result signal.
                 // Connect a one-shot lambda guarded by request_id to avoid
@@ -181,8 +181,8 @@ void register_agent_nodes(NodeRegistry& registry) {
                 guard->cb = cb;
                 guard->req_id = req_id;
                 guard->conn = QObject::connect(
-                    &svc, &fincept::services::AgentService::agent_result, guard,
-                    [guard](const fincept::services::AgentExecutionResult& result) {
+                    &svc, &finterm::services::AgentService::agent_result, guard,
+                    [guard](const finterm::services::AgentExecutionResult& result) {
                         if (result.request_id != guard->req_id)
                             return;
                         QObject::disconnect(guard->conn);
@@ -247,8 +247,8 @@ void register_agent_nodes(NodeRegistry& registry) {
                                         tool_list;
 
                 (void)QtConcurrent::run([system_prompt, query, cb]() {
-                    using fincept::ai_chat::LlmService;
-                    using fincept::ai_chat::ConversationMessage;
+                    using finterm::ai_chat::LlmService;
+                    using finterm::ai_chat::ConversationMessage;
 
                     // Single non-streaming call using globally active LLM config
                     auto resp = LlmService::instance().chat(query, {ConversationMessage{"system", system_prompt}});
@@ -281,4 +281,4 @@ void register_agent_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

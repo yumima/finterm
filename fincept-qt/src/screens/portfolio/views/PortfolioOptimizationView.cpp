@@ -7,8 +7,8 @@
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 
-using fincept::services::AnalyticsResult;
-using fincept::services::PortfolioAnalyticsService;
+using finterm::services::AnalyticsResult;
+using finterm::services::PortfolioAnalyticsService;
 
 #define QT_CHARTS_USE_NAMESPACE
 #include <QChart>
@@ -27,7 +27,7 @@ using fincept::services::PortfolioAnalyticsService;
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -367,7 +367,7 @@ void PortfolioOptimizationView::run_optimization() {
 
     // Cache optimization results — same inputs always produce same output
     const QString cache_key = "portopt:" + args_str;
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto cached_doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (!cached_doc.isNull() && cached_doc.isObject()) {
@@ -498,7 +498,7 @@ void PortfolioOptimizationView::run_optimization() {
                 self->update_strategies(root["comparison"].toObject());
                 self->update_compare(root["comparison"].toObject());
 
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     cache_key, QVariant(QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact))), 10 * 60,
                     "portfolio_opt");
             },
@@ -738,4 +738,4 @@ void PortfolioOptimizationView::update_compare(const QJsonObject& comparison) {
     compare_stack_->setCurrentIndex(1);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

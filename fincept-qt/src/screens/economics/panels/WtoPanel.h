@@ -11,7 +11,7 @@
 #include <QLabel>
 #include <QLineEdit>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class WtoPanel : public EconPanelBase {
     Q_OBJECT
@@ -34,4 +34,4 @@ class WtoPanel : public EconPanelBase {
     QLabel* apikey_notice_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

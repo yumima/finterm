@@ -10,10 +10,10 @@
 #include <QScrollArea>
 #include <QShowEvent>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
-using namespace fincept::ui;
-using fincept::services::FileManagerService;
+using namespace finterm::ui;
+using finterm::services::FileManagerService;
 
 static const char* MF = "font-family:'Consolas','Courier New',monospace;";
 
@@ -137,4 +137,4 @@ void RecentFilesWidget::on_theme_changed() {
     apply_styles();
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

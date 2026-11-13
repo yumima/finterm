@@ -14,7 +14,7 @@
 
 class QLabel;
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 class PolymarketPriceWidget : public BaseWidget {
     Q_OBJECT
@@ -51,4 +51,4 @@ class PolymarketPriceWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

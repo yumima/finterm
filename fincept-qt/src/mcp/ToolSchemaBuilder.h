@@ -19,7 +19,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 class ToolSchemaBuilder {
   public:
@@ -132,4 +132,4 @@ class ToolSchemaBuilder {
     }
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

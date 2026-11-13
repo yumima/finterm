@@ -1,7 +1,7 @@
 #pragma once
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Terms of Service — scrollable legal document.
 class TermsScreen : public QWidget {
@@ -15,4 +15,4 @@ class TermsScreen : public QWidget {
     void navigate_contact();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

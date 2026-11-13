@@ -24,7 +24,7 @@
 #include <cmath>
 #include <limits>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -852,4 +852,4 @@ bool SectorCardClickForwarder::eventFilter(QObject* obj, QEvent* ev) {
     return QObject::eventFilter(obj, ev);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

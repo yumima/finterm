@@ -2,7 +2,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Wrap tooltip prose to a readable column.
 ///
@@ -39,4 +39,4 @@ inline QString tooltip_wrap(const QString& text, int cols = 62) {
     return out.join(QLatin1Char('\n'));
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

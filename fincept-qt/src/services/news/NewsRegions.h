@@ -30,7 +30,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::news {
+namespace finterm::news {
 
 /// One region pill: the label the command bar shows and the filter keys on,
 /// and the feed region tag (RSSFeed::region) that puts a whole feed under it.
@@ -442,4 +442,4 @@ inline bool in_region(const QString& code, const QString& feed_region, const QSt
     return detail::contains_any(bounded, needles);
 }
 
-} // namespace fincept::news
+} // namespace finterm::news

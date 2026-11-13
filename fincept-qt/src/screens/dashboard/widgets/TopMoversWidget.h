@@ -11,11 +11,11 @@
 
 #include <algorithm>
 
-namespace fincept::ui {
+namespace finterm::ui {
 class InlineSparkline;
 }
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Top movers widget with gainers/losers tab toggle.
 ///
@@ -85,4 +85,4 @@ class TopMoversWidget : public BaseWidget {
     void follow_live();
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

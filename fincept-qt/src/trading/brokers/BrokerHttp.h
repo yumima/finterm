@@ -9,7 +9,7 @@
 #include <QMap>
 #include <QString>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 struct BrokerHttpResponse {
     bool success = false;
@@ -57,4 +57,4 @@ class BrokerHttp {
     int timeout_ms_ = 8000;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

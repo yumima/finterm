@@ -6,7 +6,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Slide-in toast notification overlay.
 /// Anchored to the top-right of its parent widget.
@@ -23,7 +23,7 @@ class NotifToast : public QWidget {
     explicit NotifToast(QWidget* parent = nullptr);
 
   public slots:
-    void show_notification(const fincept::notifications::NotificationRecord& record);
+    void show_notification(const finterm::notifications::NotificationRecord& record);
 
   protected:
     void paintEvent(QPaintEvent* e) override;
@@ -42,7 +42,7 @@ class NotifToast : public QWidget {
     QTimer* auto_dismiss_ = nullptr;
     QPropertyAnimation* slide_anim_ = nullptr;
 
-    fincept::notifications::NotifLevel current_level_{fincept::notifications::NotifLevel::Info};
+    finterm::notifications::NotifLevel current_level_{finterm::notifications::NotifLevel::Info};
 
     static constexpr int TOAST_W = 320;
     static constexpr int TOAST_H = 72;
@@ -51,4 +51,4 @@ class NotifToast : public QWidget {
     static constexpr int ANIM_MS = 250;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -39,7 +39,7 @@
 
 #include <cmath>
 
-namespace fincept::screens::fingpt {
+namespace finterm::screens::fingpt {
 
 // ── Forecaster data shapes ───────────────────────────────────────────────────
 
@@ -387,4 +387,4 @@ inline QString vote_sentiment(const QStringList& labels) {
     return QStringLiteral("neutral");
 }
 
-} // namespace fincept::screens::fingpt
+} // namespace finterm::screens::fingpt

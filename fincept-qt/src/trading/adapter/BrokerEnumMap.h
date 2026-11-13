@@ -15,7 +15,7 @@
 
 #include <optional>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 /// Typed enum→wire-value mapping. `T` is the broker's wire type
 /// (typically `QString` or `int`).
@@ -77,4 +77,4 @@ class BrokerEnumMap {
     QHash<int, T> product_;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

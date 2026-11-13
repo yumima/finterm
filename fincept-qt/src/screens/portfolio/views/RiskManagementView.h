@@ -7,7 +7,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Risk Management detail view with sub-tabs for Risk Overview, Stress Test,
 /// and Risk Contribution analysis.
@@ -41,4 +41,4 @@ class RiskManagementView : public QWidget {
     QString currency_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

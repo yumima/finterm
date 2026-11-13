@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 
 namespace {
-using namespace fincept::ui;
+using namespace finterm::ui;
 static QColor bg_surface() {
     return colors::BG_SURFACE;
 }
@@ -31,7 +31,7 @@ static QColor border_med() {
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 EquityOrderBook::EquityOrderBook(QWidget* parent) : QWidget(parent) {
     setObjectName("eqOrderBook");
@@ -194,4 +194,4 @@ void EquityOrderBook::rebuild_cache() {
     cache_dirty_ = false;
 }
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

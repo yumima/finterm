@@ -10,7 +10,7 @@
 
 #include <functional>
 
-namespace fincept {
+namespace finterm {
 
 /// Async HTTP client wrapping QNetworkAccessManager.
 /// All responses delivered via callbacks on the Qt event loop.
@@ -46,4 +46,4 @@ class HttpClient : public QObject {
     QString session_token_;
 };
 
-} // namespace fincept
+} // namespace finterm

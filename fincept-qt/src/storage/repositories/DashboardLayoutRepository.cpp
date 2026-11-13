@@ -7,7 +7,7 @@
 #include <QSqlQuery>
 #include <QUuid>
 
-namespace fincept {
+namespace finterm {
 
 DashboardLayoutRepository& DashboardLayoutRepository::instance() {
     static DashboardLayoutRepository inst;
@@ -118,4 +118,4 @@ Result<void> DashboardLayoutRepository::clear_layout(const QString& profile_name
     return exec_write("DELETE FROM dashboard_widget_instances WHERE layout_id = ?", {layout_id});
 }
 
-} // namespace fincept
+} // namespace finterm

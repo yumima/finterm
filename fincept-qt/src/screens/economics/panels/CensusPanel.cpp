@@ -14,7 +14,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kCensusScript = "census_data.py";
@@ -132,4 +132,4 @@ void CensusPanel::on_result(const QString& request_id, const services::Economics
     LOG_INFO("CensusPanel", QString("Displayed %1 rows for %2").arg(rows.size()).arg(title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -16,7 +16,7 @@
 #include <QVBoxLayout>
 #include <QVector>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Earnings Calendar Widget — two views over upcoming earnings prints:
 ///
@@ -171,4 +171,4 @@ class EarningsCalendarWidget : public BaseWidget {
     static constexpr int kMaxSymbolFetches = 50;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

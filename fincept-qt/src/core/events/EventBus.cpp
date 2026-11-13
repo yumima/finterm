@@ -2,7 +2,7 @@
 
 #include <QMutexLocker>
 
-namespace fincept {
+namespace finterm {
 
 EventBus& EventBus::instance() {
     static EventBus s;
@@ -51,4 +51,4 @@ void EventBus::publish(const QString& event, const QVariantMap& data) {
         h(data);
 }
 
-} // namespace fincept
+} // namespace finterm

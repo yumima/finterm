@@ -7,7 +7,7 @@
 #include <QPaintEvent>
 #include <QPainter>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 NewsTickerStrip::NewsTickerStrip(QWidget* parent)
     : QWidget(parent), ticker_font_(ui::fonts::DATA_FAMILY, 10), ticker_fm_(ticker_font_) {
@@ -128,4 +128,4 @@ void NewsTickerStrip::leaveEvent(QEvent*) {
         scroll_timer_.start();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

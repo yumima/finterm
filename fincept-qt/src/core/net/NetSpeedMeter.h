@@ -21,7 +21,7 @@
 
 #include <cstdint>
 
-namespace fincept::net {
+namespace finterm::net {
 
 class NetSpeedMeter : public QObject {
     Q_OBJECT
@@ -60,4 +60,4 @@ class NetSpeedMeter : public QObject {
     qint64 last_up_bps_ = 0;
 };
 
-} // namespace fincept::net
+} // namespace finterm::net

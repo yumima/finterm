@@ -2,7 +2,7 @@
 
 #include <QString>
 
-namespace fincept::services::prediction::kalshi_ns {
+namespace finterm::services::prediction::kalshi_ns {
 
 /// Kalshi API credentials. Kalshi authenticates with RSA-PSS signatures
 /// (private key) + API key ID. Stored encrypted in SecureStorage under
@@ -16,4 +16,4 @@ struct KalshiCredentials {
     bool is_valid() const { return !api_key_id.isEmpty() && !private_key_pem.isEmpty(); }
 };
 
-} // namespace fincept::services::prediction::kalshi_ns
+} // namespace finterm::services::prediction::kalshi_ns

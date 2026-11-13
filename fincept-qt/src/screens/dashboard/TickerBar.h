@@ -8,7 +8,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Scrolling ticker bar with live market data.
 /// Right-click → "Edit Symbols" to customise the symbol list.
@@ -85,4 +85,4 @@ class TickerBar : public QWidget {
     QPushButton* edit_cancel_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

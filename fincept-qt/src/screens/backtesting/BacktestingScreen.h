@@ -23,12 +23,12 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Multi-provider backtesting terminal with 6 providers, 9 commands, 50+ strategies.
 class BacktestingScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     Q_OBJECT
-    Q_INTERFACES(fincept::IGroupLinked)
+    Q_INTERFACES(finterm::IGroupLinked)
   public:
     explicit BacktestingScreen(QWidget* parent = nullptr);
 
@@ -157,4 +157,4 @@ class BacktestingScreen : public QWidget, public IStatefulScreen, public IGroupL
     void publish_first_symbol_to_group();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -15,7 +15,7 @@
 #include <QSpinBox>
 #include <QTableWidget>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 TradeTapeWidget::TradeTapeWidget(const QJsonObject& cfg, QWidget* parent) : BaseWidget("TRADES", parent) {
     auto* vl = content_layout();
@@ -87,9 +87,9 @@ void TradeTapeWidget::hideEvent(QHideEvent* e) {
 }
 
 void TradeTapeWidget::on_trade(const QVariant& v) {
-    if (!v.canConvert<fincept::trading::TradeData>())
+    if (!v.canConvert<finterm::trading::TradeData>())
         return;
-    const auto td = v.value<fincept::trading::TradeData>();
+    const auto td = v.value<finterm::trading::TradeData>();
     Trade t;
     t.when = (td.timestamp > 0) ? QDateTime::fromMSecsSinceEpoch(td.timestamp) : QDateTime::currentDateTime();
     t.side = td.side;
@@ -172,4 +172,4 @@ void TradeTapeWidget::apply_styles() {
                  ui::colors::TEXT_SECONDARY()));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

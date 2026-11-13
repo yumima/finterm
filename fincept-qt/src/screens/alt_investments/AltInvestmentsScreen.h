@@ -12,7 +12,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 struct AltAnalyzer {
     QString id;          // Python CLI command (e.g. "high-yield")
@@ -117,4 +117,4 @@ class AltInvestmentsScreen : public QWidget, public IStatefulScreen {
     QLabel* status_analyzer_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -7,7 +7,7 @@
 
 #include <functional>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 /// In-process authentication service backed by a local SQLite database.
 /// Replaces the external stub server that used to run on :8765 (since deleted).
@@ -81,4 +81,4 @@ class AuthService : public QObject {
     QSqlDatabase db_; // auth.db connection
 };
 
-} // namespace fincept::auth
+} // namespace finterm::auth

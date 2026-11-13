@@ -5,7 +5,7 @@
 #include <QJsonDocument>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// Pure static utility — converts WorkspaceDef ↔ QJsonDocument.
 /// No file I/O, no Qt signals. Stateless.
@@ -29,4 +29,4 @@ class WorkspaceSerializer {
     static screens::GridLayout deserialize_layout(const QJsonObject& obj);
 };
 
-} // namespace fincept
+} // namespace finterm

@@ -2,7 +2,7 @@
 
 #include <QJsonArray>
 
-namespace fincept::services {
+namespace finterm::services {
 
 SlashCommandService& SlashCommandService::instance() {
     static SlashCommandService s;
@@ -213,4 +213,4 @@ std::optional<SlashCommandSpec> SlashCommandService::spec_for(const QString& com
     return std::nullopt;
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

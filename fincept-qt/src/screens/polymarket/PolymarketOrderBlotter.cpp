@@ -9,10 +9,10 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-using namespace fincept::ui;
-using namespace fincept::services::prediction;
+using namespace finterm::ui;
+using namespace finterm::services::prediction;
 
 namespace {
 
@@ -270,4 +270,4 @@ void PolymarketOrderBlotter::on_cancel_all_clicked() {
         emit cancel_all(ids);
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

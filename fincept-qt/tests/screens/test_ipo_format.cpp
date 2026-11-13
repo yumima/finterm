@@ -22,7 +22,7 @@
 
 #include <QtTest/QtTest>
 
-namespace fmt = fincept::pre_ipo::fmt;
+namespace fmt = finterm::pre_ipo::fmt;
 
 class TestIpoFormat : public QObject {
     Q_OBJECT

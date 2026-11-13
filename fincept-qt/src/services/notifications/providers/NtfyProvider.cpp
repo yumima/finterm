@@ -4,7 +4,7 @@
 
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void NtfyProvider::load_fields(SettingsRepository& r, const QString& cat) {
     server_url_ = get_str(r, cat + ".server_url");
@@ -60,4 +60,4 @@ void NtfyProvider::send(const NotificationRequest& req, std::function<void(bool,
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

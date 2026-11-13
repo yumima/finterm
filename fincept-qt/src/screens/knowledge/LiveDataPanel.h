@@ -10,7 +10,7 @@
 class QGridLayout;
 class QLabel;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// Renders the live values declared by an entry's `live_examples`.
 /// Fetches via MarketDataService::fetch_info per unique ticker, then plucks
@@ -31,4 +31,4 @@ class LiveDataPanel : public QWidget {
     QVector<QLabel*> value_labels_;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

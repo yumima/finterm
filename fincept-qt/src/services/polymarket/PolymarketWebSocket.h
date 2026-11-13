@@ -7,11 +7,11 @@
 #include <QSet>
 #include <QTimer>
 
-namespace fincept {
+namespace finterm {
 class WebSocketClient;
 }
 
-namespace fincept::services::polymarket {
+namespace finterm::services::polymarket {
 
 /// Singleton WebSocket client for real-time Polymarket market data.
 /// Connects to wss://ws-subscriptions-clob.polymarket.com/ws/market
@@ -20,7 +20,7 @@ namespace fincept::services::polymarket {
 /// `polymarket:orderbook:*`. The existing `price_updated` /
 /// `orderbook_updated` signals are kept alive alongside hub publishes
 /// so consumers can migrate incrementally.
-class PolymarketWebSocket : public QObject, public fincept::datahub::Producer {
+class PolymarketWebSocket : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static PolymarketWebSocket& instance();
@@ -34,7 +34,7 @@ class PolymarketWebSocket : public QObject, public fincept::datahub::Producer {
     /// Register with the hub + install polymarket:* policies. Idempotent.
     void ensure_registered_with_hub();
 
-    // ── fincept::datahub::Producer ────────────────────────────────────────
+    // ── finterm::datahub::Producer ────────────────────────────────────────
     QStringList topic_patterns() const override;
     void refresh(const QStringList& topics) override; // no-op: push_only
     int max_requests_per_sec() const override;        // 10 (CLOB REST cap)
@@ -57,7 +57,7 @@ class PolymarketWebSocket : public QObject, public fincept::datahub::Producer {
     void send_subscribe(const QStringList& token_ids);
     void send_operation(const QStringList& token_ids, const QString& op); ///< incremental (un)subscribe
 
-    fincept::WebSocketClient* ws_ = nullptr;
+    finterm::WebSocketClient* ws_ = nullptr;
     QTimer* ping_timer_ = nullptr;
     QSet<QString> subscribed_tokens_;
     bool connected_ = false;
@@ -69,4 +69,4 @@ class PolymarketWebSocket : public QObject, public fincept::datahub::Producer {
     bool hub_registered_ = false;
 };
 
-} // namespace fincept::services::polymarket
+} // namespace finterm::services::polymarket

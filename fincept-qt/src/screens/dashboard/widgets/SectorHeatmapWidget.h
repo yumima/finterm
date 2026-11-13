@@ -7,7 +7,7 @@
 #include <QHash>
 #include <QLabel>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Sector heatmap — fetches sector ETFs (XLK, XLV, XLF, etc.) via yfinance
 /// and renders a color-intensity grid.
@@ -63,4 +63,4 @@ class SectorHeatmapWidget : public BaseWidget {
     ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

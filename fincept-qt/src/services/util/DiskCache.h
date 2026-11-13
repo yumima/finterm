@@ -27,7 +27,7 @@
 
 #include <algorithm>
 
-namespace fincept::services::util {
+namespace finterm::services::util {
 
 class DiskCache {
   public:
@@ -153,4 +153,4 @@ class DiskCache {
     QString service_id_;
 };
 
-} // namespace fincept::services::util
+} // namespace finterm::services::util

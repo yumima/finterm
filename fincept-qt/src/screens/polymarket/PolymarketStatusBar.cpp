@@ -4,9 +4,9 @@
 
 #include <QHBoxLayout>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 PolymarketStatusBar::PolymarketStatusBar(QWidget* parent) : QWidget(parent) {
     setFixedHeight(22);
@@ -148,4 +148,4 @@ void PolymarketStatusBar::set_next_session(const QString& text) {
     next_session_->setVisible(true);
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

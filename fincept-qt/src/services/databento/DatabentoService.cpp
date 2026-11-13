@@ -15,15 +15,15 @@
 #include <limits>
 #include <set>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
 // Persistent on-disk cache. One file per logical surface family so cold
 // launches can paint the last-viewed surface immediately. Files match the
 // in-memory single-slot caches (cached_ohlcv_, cached_vol_, ...).
-fincept::services::util::DiskCache& disk_cache() {
-    static fincept::services::util::DiskCache c(QStringLiteral("databento"));
+finterm::services::util::DiskCache& disk_cache() {
+    static finterm::services::util::DiskCache c(QStringLiteral("databento"));
     return c;
 }
 
@@ -42,7 +42,7 @@ float z_cell(const QJsonValue& v) {
 
 } // namespace
 
-using namespace fincept::python;
+using namespace finterm::python;
 
 // Extract the last JSON object/array from Python script stdout
 static QString extract_json_from_output(const QString& output) {
@@ -1122,4 +1122,4 @@ surface::ContangoData DatabentoService::parse_contango(const QJsonObject& j) {
     return data;
 }
 
-} // namespace fincept
+} // namespace finterm

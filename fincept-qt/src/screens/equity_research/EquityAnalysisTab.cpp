@@ -13,7 +13,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Panel card helpers (file-local) ───────────────────────────────────────────
 namespace {
@@ -258,4 +258,4 @@ QString EquityAnalysisTab::fmt_pct(double v) {
     return std::isfinite(v) ? ui::formatting::format_percent(v * 100.0, 2) : ui::formatting::placeholder();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -11,7 +11,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Markets terminal — workstation with QSplitter panel layout.
 /// Panels fill screen height; horizontal and vertical handles are user-resizable.
@@ -84,4 +84,4 @@ class MarketsScreen : public QWidget {
     static constexpr int kNumColumns = 3;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

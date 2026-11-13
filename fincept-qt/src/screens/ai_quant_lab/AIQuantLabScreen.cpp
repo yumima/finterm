@@ -11,9 +11,9 @@
 #include <QHBoxLayout>
 #include <QScrollArea>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::quant;
+using namespace finterm::services::quant;
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -460,4 +460,4 @@ void AIQuantLabScreen::restore_state(const QVariantMap& state) {
         on_module_selected(idx);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

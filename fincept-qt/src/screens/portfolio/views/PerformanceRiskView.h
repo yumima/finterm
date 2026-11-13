@@ -7,7 +7,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Performance & Risk detail view with NAV chart, risk metric cards, and period selector.
 class PerformanceRiskView : public QWidget {
@@ -59,4 +59,4 @@ class PerformanceRiskView : public QWidget {
     QString currency_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

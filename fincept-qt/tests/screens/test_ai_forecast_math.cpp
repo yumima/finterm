@@ -19,7 +19,7 @@
 
 #include <optional>
 
-using namespace fincept::screens::ai_forecast;
+using namespace finterm::screens::ai_forecast;
 
 class TestAiForecastMath : public QObject {
     Q_OBJECT

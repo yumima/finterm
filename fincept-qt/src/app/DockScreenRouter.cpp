@@ -30,7 +30,7 @@
 #include <DockWidgetTab.h>
 #include <cstdlib>
 
-namespace fincept {
+namespace finterm {
 
 QString DockScreenRouter::title_for_id(const QString& id) {
     static const QHash<QString, QString> titles = {
@@ -1338,4 +1338,4 @@ void DockScreenRouter::apply_ads_theme() {
     }
 }
 
-} // namespace fincept
+} // namespace finterm

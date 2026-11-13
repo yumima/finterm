@@ -24,11 +24,11 @@ class QPushButton;
 class QSpinBox;
 class QTableWidget;
 
-namespace fincept::ui {
+namespace finterm::ui {
 class LoadingOverlay;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class InsiderBuysPanel : public QWidget {
     Q_OBJECT
@@ -121,4 +121,4 @@ class LargestFundsPanel : public QWidget {
     bool selected_from_search_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

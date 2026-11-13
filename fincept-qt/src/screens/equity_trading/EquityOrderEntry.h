@@ -13,7 +13,7 @@
 
 #include <atomic>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 class EquityOrderEntry : public QWidget {
     Q_OBJECT
@@ -99,4 +99,4 @@ class EquityOrderEntry : public QWidget {
     QVector<trading::ProductTypeDef> product_types_;
 };
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

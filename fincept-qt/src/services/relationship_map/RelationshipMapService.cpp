@@ -16,9 +16,9 @@
 #include <algorithm>
 #include <limits>
 
-namespace fincept::services {
+namespace finterm::services {
 
-using namespace fincept::relmap;
+using namespace finterm::relmap;
 
 namespace {
 
@@ -31,8 +31,8 @@ double num_or_nan(const QJsonValue& v) {
 // Persistent on-disk cache so the relationship-map panel paints the most
 // recently-viewed ticker immediately on next launch. One file per ticker;
 // directory bounded by the universe the user has actually browsed.
-fincept::services::util::DiskCache& disk_cache() {
-    static fincept::services::util::DiskCache c(QStringLiteral("relationship_map"));
+finterm::services::util::DiskCache& disk_cache() {
+    static finterm::services::util::DiskCache c(QStringLiteral("relationship_map"));
     return c;
 }
 
@@ -87,7 +87,7 @@ RelationshipMapService::RelationshipMapService() {
             const QString blob = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
             // Use the same TTL the live fetch uses so a stale on-disk copy
             // doesn't masquerade as fresh — CacheManager will expire it.
-            fincept::CacheManager::instance().put("relmap:" + ticker.toUpper(), QVariant(blob),
+            finterm::CacheManager::instance().put("relmap:" + ticker.toUpper(), QVariant(blob),
                                                   /*ttl_sec=*/10 * 60, "relmap");
         }
     });
@@ -105,7 +105,7 @@ void RelationshipMapService::fetch(const QString& ticker) {
 
     // Check cache first
     const QString cache_key = "relmap:" + current_ticker_;
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         LOG_DEBUG("RelMapService", "Cache hit for " + current_ticker_);
         emit progress_changed(100, "Loaded from cache");
@@ -129,7 +129,7 @@ void RelationshipMapService::fetch(const QString& ticker) {
             }
 
             // Cache raw JSON output
-            fincept::CacheManager::instance().put(cache_key, QVariant(result.output), kRelMapTtlSec, "relmap");
+            finterm::CacheManager::instance().put(cache_key, QVariant(result.output), kRelMapTtlSec, "relmap");
 
             // Persist to disk so the next launch hydrates the CacheManager
             // entry above without a Python round-trip. Save the parsed JSON
@@ -391,7 +391,7 @@ void RelationshipMapService::parse_result(const QString& json_output) {
     emit data_ready(data_);
 
     if (hub_registered_ && !data_.company.ticker.isEmpty()) {
-        fincept::datahub::DataHub::instance().publish(
+        finterm::datahub::DataHub::instance().publish(
             QStringLiteral("geopolitics:relationship_graph:") + data_.company.ticker, QVariant::fromValue(data_));
     }
 
@@ -500,12 +500,12 @@ int RelationshipMapService::max_requests_per_sec() const {
 void RelationshipMapService::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
     // Matches kRelMapTtlSec (10 min). Min 2 min between refreshes — the Python
     // fetch is slow (~5-15 s) and consumers are dashboards, not tickers.
-    fincept::datahub::TopicPolicy policy;
+    finterm::datahub::TopicPolicy policy;
     policy.ttl_ms = kRelMapTtlSec * 1000;
     policy.min_interval_ms = 2 * 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("geopolitics:relationship_graph:*"), policy);
@@ -514,4 +514,4 @@ void RelationshipMapService::ensure_registered_with_hub() {
     LOG_INFO("RelMapService", "Registered with DataHub (geopolitics:relationship_graph:*)");
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -5,7 +5,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Reusable card widget — dark panel with title bar and content area.
 class Card : public QFrame {
@@ -26,4 +26,4 @@ class Card : public QFrame {
     QVBoxLayout* content_layout_ = nullptr;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -9,7 +9,7 @@
 #include <QTimeZone>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -241,4 +241,4 @@ void ActivityPanelSection::show_trace_dialog(const AgentTraceRow& t) {
     dlg.exec();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

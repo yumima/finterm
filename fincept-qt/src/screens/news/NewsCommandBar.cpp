@@ -6,7 +6,7 @@
 #include <QScrollArea>
 #include <QStyle>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 NewsCommandBar::NewsCommandBar(QWidget* parent) : QWidget(parent) {
     setObjectName("newsCommandBar");
@@ -83,7 +83,7 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     auto* region_sep = new QLabel("|", row);
     region_sep->setObjectName("newsCommandBarSep");
     hl->addWidget(region_sep);
-    for (const auto& pill : fincept::news::kRegionPills)
+    for (const auto& pill : finterm::news::kRegionPills)
         add_pill(QString::fromLatin1(pill.code))->setToolTip(QString::fromUtf8(pill.tooltip));
     update_pill_group(category_btns_, active_category_);
 
@@ -555,4 +555,4 @@ void NewsCommandBar::update_monitor_summary(int total_monitors, int active_alert
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

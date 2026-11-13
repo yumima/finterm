@@ -10,7 +10,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kOecdScript = "oecd_data.py";
@@ -112,4 +112,4 @@ void OecdPanel::on_result(const QString& request_id, const services::EconomicsRe
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

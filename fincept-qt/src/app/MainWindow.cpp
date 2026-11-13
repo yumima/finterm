@@ -111,7 +111,7 @@
 #include <FloatingDockContainer.h>
 #include <algorithm>
 
-namespace fincept {
+namespace finterm {
 
 // Window-title base — "finterm @ <hostname>" with optional [profile] suffix.
 // Hostname is computed once and cached: machineHostName() does a syscall
@@ -1096,7 +1096,7 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("pre_ipo", []() { return new screens::PreIpoScreen; });
     dock_router_->register_factory("geopolitics", []() { return new screens::GeopoliticsScreen; });
     dock_router_->register_factory("maritime", []() { return new screens::MaritimeScreen; });
-    dock_router_->register_factory("surface_analytics", []() { return new fincept::surface::SurfaceAnalyticsScreen; });
+    dock_router_->register_factory("surface_analytics", []() { return new finterm::surface::SurfaceAnalyticsScreen; });
     dock_router_->register_factory("agent_config", []() { return new screens::AgentConfigScreen; });
     dock_router_->register_factory("mcp_servers", []() { return new screens::McpServersScreen; });
     dock_router_->register_factory("data_mapping", []() { return new screens::DataMappingScreen; });
@@ -1648,4 +1648,4 @@ void MainWindow::changeEvent(QEvent* event) {
         auth::InactivityGuard::instance().trigger_manual_lock();
 }
 
-} // namespace fincept
+} // namespace finterm

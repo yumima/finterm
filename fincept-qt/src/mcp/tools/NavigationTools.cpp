@@ -16,7 +16,7 @@
 
 #include <algorithm>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "NavTools";
 
@@ -161,7 +161,7 @@ std::vector<ToolDef> get_navigation_tools() {
                 auto read_from = [&screen_id](QWidget* w) {
                     if (!w || !screen_id.isEmpty())
                         return;
-                    for (auto* r : w->findChildren<fincept::DockScreenRouter*>()) {
+                    for (auto* r : w->findChildren<finterm::DockScreenRouter*>()) {
                         screen_id = r->current_screen_id();
                         if (!screen_id.isEmpty())
                             return;
@@ -189,4 +189,4 @@ std::vector<ToolDef> get_navigation_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

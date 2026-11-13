@@ -15,7 +15,7 @@
 #include <QTextEdit>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// AGENTS view — 3-panel layout for listing, editing, and testing agents.
 /// LLM provider/model is sourced from LlmService (configured in Settings > LLM Config).
@@ -100,4 +100,4 @@ class AgentsViewPanel : public QWidget {
     QString pending_request_id_; // guards against cross-panel signal contamination
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

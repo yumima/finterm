@@ -2,7 +2,7 @@
 
 #include <QUuid>
 
-namespace fincept {
+namespace finterm {
 
 // ── Helper to build a GridItem ────────────────────────────────────────────────
 
@@ -178,4 +178,4 @@ QVector<WorkspaceSummary> WorkspaceTemplates::available() {
     return list;
 }
 
-} // namespace fincept
+} // namespace finterm

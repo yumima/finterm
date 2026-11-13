@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Thin wrapper over CacheManager for workflow execution results and node outputs.
 /// Preserves the original public API; all persistence/TTL handled by CacheManager.
@@ -50,4 +50,4 @@ class WorkflowCache : public QObject {
     mutable int misses_ = 0;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

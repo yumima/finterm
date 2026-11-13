@@ -11,7 +11,7 @@
 
 #include <QJsonDocument>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "EdgarTools";
 static constexpr const char* SCRIPT = "mcp/edgar/main.py";
@@ -23,7 +23,7 @@ static constexpr int kEdgarTtlSec = 30 * 60; // 30 min — SEC filings rarely ch
 static ToolResult run_edgar(const QStringList& args) {
     // Cache key: join all args
     const QString cache_key = "edgar:" + args.join(":");
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (!doc.isNull() && doc.isObject())
@@ -37,13 +37,13 @@ static ToolResult run_edgar(const QStringList& args) {
     // The previous worker-thread QEventLoop pattern caused QObject parentage
     // violations since QProcess signals fire on the main thread and never
     // wake the worker's loop. See mcp/tools/ThreadHelper.h.
-    auto* runner = &fincept::python::PythonRunner::instance();
+    auto* runner = &finterm::python::PythonRunner::instance();
     detail::run_async_wait(runner, [&](auto signal_done) {
-        runner->run(SCRIPT, args, [&, signal_done](const fincept::python::PythonResult& r) {
+        runner->run(SCRIPT, args, [&, signal_done](const finterm::python::PythonResult& r) {
             if (!r.success) {
                 error = r.error.isEmpty() ? r.output : r.error;
             } else {
-                QString text = fincept::python::extract_json(r.output);
+                QString text = finterm::python::extract_json(r.output);
                 QJsonParseError pe;
                 auto doc = QJsonDocument::fromJson(text.toUtf8(), &pe);
                 if (pe.error != QJsonParseError::NoError) {
@@ -76,7 +76,7 @@ static ToolResult run_edgar(const QStringList& args) {
         return ToolResult::fail(error);
     }
 
-    fincept::CacheManager::instance().put(
+    finterm::CacheManager::instance().put(
         cache_key, QVariant(QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))), kEdgarTtlSec,
         "edgar");
 
@@ -877,4 +877,4 @@ std::vector<ToolDef> get_edgar_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

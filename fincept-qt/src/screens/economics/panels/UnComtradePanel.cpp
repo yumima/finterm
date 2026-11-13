@@ -11,7 +11,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kUnComtradeScript = "un_comtrade_data.py";
@@ -105,4 +105,4 @@ void UnComtradePanel::on_result(const QString& request_id, const services::Econo
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

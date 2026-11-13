@@ -6,7 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace fincept::services::crypto {
+namespace finterm::services::crypto {
 
 TotpService& TotpService::instance() {
     static TotpService s;
@@ -23,10 +23,10 @@ void TotpService::generate(const QString& secret, TotpCallback cb) {
         return;
     }
 
-    const QString script = fincept::python::PythonRunner::instance().scripts_dir() + "/exchange/totp_gen.py";
+    const QString script = finterm::python::PythonRunner::instance().scripts_dir() + "/exchange/totp_gen.py";
 
-    fincept::python::PythonRunner::instance().run(
-        script, {secret}, [cb = std::move(cb)](const fincept::python::PythonResult& result) {
+    finterm::python::PythonRunner::instance().run(
+        script, {secret}, [cb = std::move(cb)](const finterm::python::PythonResult& result) {
             TotpResult out;
             if (!result.success) {
                 out.error = result.output.isEmpty() ? QStringLiteral("totp_gen failed") : result.output;
@@ -56,4 +56,4 @@ void TotpService::generate(const QString& secret, TotpCallback cb) {
         });
 }
 
-} // namespace fincept::services::crypto
+} // namespace finterm::services::crypto

@@ -3,7 +3,7 @@
 
 #include <QToolBar>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// QToolBar wrapper around the existing ToolBar widget.
 /// Used with QMainWindow::addToolBar() so the toolbar lives outside
@@ -19,4 +19,4 @@ class DockToolBar : public QToolBar {
     ToolBar* inner_ = nullptr;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

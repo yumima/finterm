@@ -17,7 +17,7 @@
 #include <string>
 #include <vector>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 /// Daily closes for one symbol, oldest first.
 using PriceSeries = std::vector<double>;
@@ -160,4 +160,4 @@ struct PcaResult {
 };
 PcaResult compute_pca(const PriceTable& prices, int max_factors = 5);
 
-} // namespace fincept::surface
+} // namespace finterm::surface

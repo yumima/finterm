@@ -26,7 +26,7 @@
 #include <cmath>
 #include <limits>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 // The user's own valuation edits for the Pre-IPO screen: personal data, so
@@ -37,7 +37,7 @@ QString valuation_overrides_path() {
 }
 } // namespace
 
-using namespace fincept::pre_ipo;
+using namespace finterm::pre_ipo;
 
 namespace {
 
@@ -2099,4 +2099,4 @@ QString PreIpoService::cursor_payload(QJsonObject base, const QString& src) cons
     return QString::fromUtf8(QJsonDocument(base).toJson(QJsonDocument::Compact));
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

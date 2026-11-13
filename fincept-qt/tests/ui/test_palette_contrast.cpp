@@ -50,12 +50,12 @@ private slots:
         // The regression that shipped: text_dim was 1.91:1 and text_tertiary
         // 2.53:1 against the ground, both below WCAG's 3:1 floor for ANY text,
         // and both were used for the lines explaining where a number came from.
-        const QColor bg(fincept::ui::colors::BG_BASE());
+        const QColor bg(finterm::ui::colors::BG_BASE());
         struct { const char* name; QColor c; double floor; } tokens[] = {
-            {"TEXT_PRIMARY", QColor(fincept::ui::colors::TEXT_PRIMARY()), 4.5},
-            {"TEXT_SECONDARY", QColor(fincept::ui::colors::TEXT_SECONDARY()), 4.5},
-            {"TEXT_TERTIARY", QColor(fincept::ui::colors::TEXT_TERTIARY()), 3.0},
-            {"TEXT_DIM", QColor(fincept::ui::colors::TEXT_DIM()), 3.0},
+            {"TEXT_PRIMARY", QColor(finterm::ui::colors::TEXT_PRIMARY()), 4.5},
+            {"TEXT_SECONDARY", QColor(finterm::ui::colors::TEXT_SECONDARY()), 4.5},
+            {"TEXT_TERTIARY", QColor(finterm::ui::colors::TEXT_TERTIARY()), 3.0},
+            {"TEXT_DIM", QColor(finterm::ui::colors::TEXT_DIM()), 3.0},
         };
         for (const auto& t : tokens) {
             const double r = contrast(t.c, bg);
@@ -66,17 +66,17 @@ private slots:
         }
         // The accents used for semantic state have to be legible too.
         for (const char* n : {"GREEN", "RED", "AMBER", "CYAN"}) {
-            const QColor c(n == QLatin1String("GREEN")   ? fincept::ui::colors::GREEN()
-                           : n == QLatin1String("RED")   ? fincept::ui::colors::RED()
-                           : n == QLatin1String("AMBER") ? fincept::ui::colors::AMBER()
-                                                         : fincept::ui::colors::CYAN());
+            const QColor c(n == QLatin1String("GREEN")   ? finterm::ui::colors::GREEN()
+                           : n == QLatin1String("RED")   ? finterm::ui::colors::RED()
+                           : n == QLatin1String("AMBER") ? finterm::ui::colors::AMBER()
+                                                         : finterm::ui::colors::CYAN());
             QVERIFY2(contrast(c, bg) >= 3.0,
                      qPrintable(QStringLiteral("%1 is %2:1").arg(n).arg(contrast(c, bg))));
         }
     }
 
     void qss_slots_fill_by_number() {
-        using fincept::ui::fill_qss_slots;
+        using finterm::ui::fill_qss_slots;
         // An .arg() chain would put "b" into %3 because %2 is unused.
         auto r = fill_qss_slots("x:%1; y:%3;", {"a", "b", "c"});
         QCOMPARE(r.text, QStringLiteral("x:a; y:c;"));
@@ -100,7 +100,7 @@ private slots:
     }
 
     void global_qss_slots_match_values_and_state_colours_land() {
-        auto& tm = fincept::ui::ThemeManager::instance();
+        auto& tm = finterm::ui::ThemeManager::instance();
         const auto fill = tm.build_global_qss_fill();
         QVERIFY2(fill.missing.isEmpty(), "global QSS has a slot with no value");
         QVERIFY2(fill.unused.isEmpty(), "global QSS has a value no slot uses (shifts nothing now, but is dead)");
@@ -114,9 +114,9 @@ private slots:
     void screen_stylesheets_slots_match_values() {
         // fill_qss_checked warns on any mismatch; any warning fails this test.
         QTest::failOnWarning(QRegularExpression(QStringLiteral(".*")));
-        QVERIFY(!fincept::ui::styles::news_screen_styles().isEmpty());
-        QVERIFY(!fincept::ui::styles::crypto_trading_styles().isEmpty());
-        QVERIFY(!fincept::ui::styles::equity_trading_styles().isEmpty());
+        QVERIFY(!finterm::ui::styles::news_screen_styles().isEmpty());
+        QVERIFY(!finterm::ui::styles::crypto_trading_styles().isEmpty());
+        QVERIFY(!finterm::ui::styles::equity_trading_styles().isEmpty());
     }
 
 };

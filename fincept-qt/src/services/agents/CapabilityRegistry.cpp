@@ -11,7 +11,7 @@
 #include <QJsonObject>
 #include <QStandardPaths>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -152,4 +152,4 @@ QStringList CapabilityRegistry::runtimes() const {
     return runtimes_;
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

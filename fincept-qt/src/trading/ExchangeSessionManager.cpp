@@ -7,7 +7,7 @@
 #include <QMutexLocker>
 #include <QVariant>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 namespace {
 const QString kMgrTag = "ExchangeSessionManager";
@@ -65,26 +65,26 @@ SessionPublisher ExchangeSessionManager::build_publisher() {
         if (!hub_supported_exchange(exchange) || pair.isEmpty())
             return;
         const QString topic = QStringLiteral("ws:") + exchange + QStringLiteral(":ticker:") + pair;
-        fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(t));
+        finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(t));
     };
     p.publish_orderbook = [](const QString& exchange, const QString& pair, const OrderBookData& ob) {
         if (!hub_supported_exchange(exchange) || pair.isEmpty())
             return;
         const QString topic = QStringLiteral("ws:") + exchange + QStringLiteral(":orderbook:") + pair;
-        fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(ob));
+        finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(ob));
     };
     p.publish_trade = [](const QString& exchange, const QString& pair, const TradeData& td) {
         if (!hub_supported_exchange(exchange) || pair.isEmpty())
             return;
         const QString topic = QStringLiteral("ws:") + exchange + QStringLiteral(":trades:") + pair;
-        fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(td));
+        finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(td));
     };
     p.publish_candle = [](const QString& exchange, const QString& pair, const QString& interval, const Candle& c) {
         if (!hub_supported_exchange(exchange) || pair.isEmpty())
             return;
         const QString topic =
             QStringLiteral("ws:") + exchange + QStringLiteral(":ohlc:") + pair + QLatin1Char(':') + interval;
-        fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(c));
+        finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(c));
     };
     return p;
 }
@@ -107,15 +107,15 @@ int ExchangeSessionManager::max_requests_per_sec() const {
 void ExchangeSessionManager::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
-    fincept::datahub::TopicPolicy push_only;
+    finterm::datahub::TopicPolicy push_only;
     push_only.push_only = true;
     push_only.ttl_ms = 0;
     push_only.min_interval_ms = 0;
 
-    fincept::datahub::TopicPolicy coalesced_ticker = push_only;
+    finterm::datahub::TopicPolicy coalesced_ticker = push_only;
     coalesced_ticker.coalesce_within_ms = 50; // 20 Hz fan-out cap
 
     hub.set_policy_pattern("ws:kraken:ticker:*", coalesced_ticker);
@@ -132,4 +132,4 @@ void ExchangeSessionManager::ensure_registered_with_hub() {
     LOG_INFO(kMgrTag, "Registered with DataHub (ws:kraken:*, ws:hyperliquid:*)");
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

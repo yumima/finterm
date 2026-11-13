@@ -1,7 +1,7 @@
 // src/core/config/LayoutMigrations.h
 #pragma once
 
-namespace fincept {
+namespace finterm {
 
 /// Versioned, idempotent migrations for on-disk *layout* changes — where the
 /// app keeps its settings, caches, and data when those locations move between
@@ -38,4 +38,4 @@ class LayoutMigrations {
     static void run();
 };
 
-} // namespace fincept
+} // namespace finterm

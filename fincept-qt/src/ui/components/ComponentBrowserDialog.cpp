@@ -13,7 +13,7 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 namespace {
 
@@ -173,4 +173,4 @@ void ComponentBrowserDialog::on_category_changed(int row) {
     rebuild_cards();
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

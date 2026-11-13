@@ -6,7 +6,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Left panel — component type buttons, font settings, document structure.
 class ComponentToolbar : public QWidget {
@@ -41,4 +41,4 @@ class ComponentToolbar : public QWidget {
     void add_type_button(QVBoxLayout* layout, const QString& label, const QString& type);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -17,10 +17,10 @@
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrentRun>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
-using namespace fincept::ui;
-using namespace fincept::trading;
+using namespace finterm::ui;
+using namespace finterm::trading;
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -477,4 +477,4 @@ void AccountManagementDialog::on_rename_account() {
     }
 }
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

@@ -16,10 +16,10 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
-using namespace fincept::pre_ipo;
+using namespace finterm::ui;
+using namespace finterm::pre_ipo;
 
 namespace {
 
@@ -1293,4 +1293,4 @@ void CompanyDetailPanel::rebuild_tags(const QStringList& tags) {
         tags_section_->setVisible(!tags.isEmpty());
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

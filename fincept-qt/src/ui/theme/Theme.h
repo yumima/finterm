@@ -7,7 +7,7 @@
 
 class QWidget;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 // ── Color shim ────────────────────────────────────────────────────────────────
 // ColorToken is a single type for all color names.
@@ -150,4 +150,4 @@ void apply_global_stylesheet();
 bool is_rtl();
 void set_rtl(bool rtl);
 
-} // namespace fincept::ui
+} // namespace finterm::ui

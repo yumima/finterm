@@ -9,7 +9,7 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// IPO Calendar Widget — fetches upcoming and recently priced IPOs from
 /// the Nasdaq public calendar API (no API key required).
@@ -55,4 +55,4 @@ inline BaseWidget* create_ipo_calendar_widget() {
     return new IpoCalendarWidget;
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

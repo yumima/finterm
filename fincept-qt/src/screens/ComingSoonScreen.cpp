@@ -4,7 +4,7 @@
 
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 ComingSoonScreen::ComingSoonScreen(const QString& tab_name, QWidget* parent) : QWidget(parent) {
     setStyleSheet(QString("background:%1;").arg(ui::colors::BG_BASE()));
@@ -37,4 +37,4 @@ ComingSoonScreen::ComingSoonScreen(const QString& tab_name, QWidget* parent) : Q
     vl->addWidget(desc);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

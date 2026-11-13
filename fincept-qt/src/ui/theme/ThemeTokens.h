@@ -1,7 +1,7 @@
 #pragma once
 #include <array>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// All color, font, and spacing tokens for a single theme preset.
 /// Custom painters and QSS builders read from this struct — no hardcoded hex anywhere else.
@@ -65,4 +65,4 @@ struct ThemeTokens {
 // ---------------------------------------------------------------------------
 extern const ThemeTokens THEME_OBSIDIAN;
 
-} // namespace fincept::ui
+} // namespace finterm::ui

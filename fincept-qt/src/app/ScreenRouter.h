@@ -6,7 +6,7 @@
 
 #include <functional>
 
-namespace fincept {
+namespace finterm {
 
 /// Manages screen navigation using QStackedWidget.
 /// Supports both eager (register_screen) and lazy (register_factory) registration.
@@ -37,4 +37,4 @@ class ScreenRouter : public QObject {
     QString current_id_;
 };
 
-} // namespace fincept
+} // namespace finterm

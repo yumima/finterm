@@ -30,7 +30,7 @@
 #include <QUuid>
 #include <QVBoxLayout>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 NodeEditorScreen::NodeEditorScreen(QWidget* parent)
     : QWidget(parent), undo_stack_(new QUndoStack(this)), auto_save_timer_(new QTimer(this)) {
@@ -1070,4 +1070,4 @@ void NodeEditorScreen::restore_state(const QVariantMap& state) {
     WorkflowService::instance().load_workflow(wf_id);
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

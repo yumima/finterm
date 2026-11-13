@@ -14,9 +14,9 @@
 
 #include <cmath>
 
-namespace fincept::services::prediction::kalshi_ns {
+namespace finterm::services::prediction::kalshi_ns {
 
-namespace pr = fincept::services::prediction;
+namespace pr = finterm::services::prediction;
 
 static constexpr int kPingIntervalMs = 20000;
 
@@ -29,11 +29,11 @@ static double kalshi_fp_to_double(const QJsonValue& v) {
 // ── Construction / lifecycle ────────────────────────────────────────────────
 
 KalshiWsClient::KalshiWsClient(QObject* parent) : QObject(parent) {
-    ws_ = new fincept::WebSocketClient(this);
-    connect(ws_, &fincept::WebSocketClient::connected, this, &KalshiWsClient::on_connected);
-    connect(ws_, &fincept::WebSocketClient::disconnected, this, &KalshiWsClient::on_disconnected);
-    connect(ws_, &fincept::WebSocketClient::message_received, this, &KalshiWsClient::on_message);
-    connect(ws_, &fincept::WebSocketClient::error_occurred, this, &KalshiWsClient::on_error);
+    ws_ = new finterm::WebSocketClient(this);
+    connect(ws_, &finterm::WebSocketClient::connected, this, &KalshiWsClient::on_connected);
+    connect(ws_, &finterm::WebSocketClient::disconnected, this, &KalshiWsClient::on_disconnected);
+    connect(ws_, &finterm::WebSocketClient::message_received, this, &KalshiWsClient::on_message);
+    connect(ws_, &finterm::WebSocketClient::error_occurred, this, &KalshiWsClient::on_error);
 
     ping_timer_ = new QTimer(this);
     ping_timer_->setInterval(kPingIntervalMs);
@@ -94,7 +94,7 @@ void KalshiWsClient::ensure_connected() {
     // Phase 4 keeps this a stub that logs what *would* happen. Phase 7
     // wires in the RSA-PSS signing via the Python bridge and flips the
     // ws_->connect_to() call live. The connect needs KALSHI-ACCESS-KEY /
-    // -SIGNATURE / -TIMESTAMP headers which fincept::WebSocketClient
+    // -SIGNATURE / -TIMESTAMP headers which finterm::WebSocketClient
     // doesn't expose — adding that is also Phase 7 work.
     if (ws_->is_connected())
         return;
@@ -204,7 +204,7 @@ void KalshiWsClient::on_message(const QString& msg) {
         t.ts_ms = iso.isEmpty() ? qint64(payload.value("ts").toVariant().toLongLong()) * 1000
                                 : QDateTime::fromString(iso, Qt::ISODate).toMSecsSinceEpoch();
         emit trade_received(t);
-        fincept::datahub::DataHub::instance().publish(QStringLiteral("prediction:kalshi:trade:") + ticker,
+        finterm::datahub::DataHub::instance().publish(QStringLiteral("prediction:kalshi:trade:") + ticker,
                                                       QVariant::fromValue(t));
         return;
     }
@@ -239,13 +239,13 @@ void KalshiWsClient::on_message(const QString& msg) {
 void KalshiWsClient::publish_price(const QString& asset_id, double price) {
     emit price_updated(asset_id, price);
     const QString topic = QStringLiteral("prediction:kalshi:price:") + asset_id;
-    fincept::datahub::DataHub::instance().publish(topic, QVariant(price));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant(price));
 }
 
 void KalshiWsClient::publish_orderbook(const QString& asset_id, const pr::PredictionOrderBook& book) {
     emit orderbook_updated(asset_id, book);
     const QString topic = QStringLiteral("prediction:kalshi:orderbook:") + asset_id;
-    fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(book));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(book));
 }
 
 // ── DataHub producer ────────────────────────────────────────────────────────
@@ -264,10 +264,10 @@ void KalshiWsClient::refresh(const QStringList& /*topics*/) {
 void KalshiWsClient::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
-    fincept::datahub::TopicPolicy push_only;
+    finterm::datahub::TopicPolicy push_only;
     push_only.push_only = true;
     push_only.ttl_ms = 0;
     push_only.min_interval_ms = 0;
@@ -279,4 +279,4 @@ void KalshiWsClient::ensure_registered_with_hub() {
     LOG_INFO("KalshiWS", "Registered with DataHub (prediction:kalshi:price:*, prediction:kalshi:orderbook:*)");
 }
 
-} // namespace fincept::services::prediction::kalshi_ns
+} // namespace finterm::services::prediction::kalshi_ns

@@ -12,7 +12,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 // Dock ids (DockScreenRouter objectName, minus any "#dupN" suffix).
@@ -190,4 +190,4 @@ void AppContextService::reevaluate() {
     }
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

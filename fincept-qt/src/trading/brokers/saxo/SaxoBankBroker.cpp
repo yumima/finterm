@@ -8,7 +8,7 @@
 #include <QTimeZone>
 #include <QUrlQuery>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // Live and SIM token endpoints
 static constexpr const char* TOKEN_URL_LIVE = "https://live.logonvalidation.net/token";
@@ -618,4 +618,4 @@ ApiResponse<QVector<BrokerCandle>> SaxoBankBroker::get_history(const BrokerCrede
     return {true, candles, "", ts};
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

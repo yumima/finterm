@@ -16,7 +16,7 @@
 #include <string>
 #include <vector>
 
-namespace fincept {
+namespace finterm {
 
 // Metadata types for the Surface Analytics control panel
 struct DbPublisher {
@@ -200,4 +200,4 @@ class DatabentoService : public QObject {
     static constexpr const char* SCRIPT = "databento_provider.py";
 };
 
-} // namespace fincept
+} // namespace finterm

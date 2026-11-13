@@ -41,10 +41,10 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-namespace rep = ::fincept::report;
-using Service = ::fincept::services::ReportBuilderService;
+namespace rep = ::finterm::report;
+using Service = ::finterm::services::ReportBuilderService;
 
 // ── Constructor / Destructor ─────────────────────────────────────────────────
 
@@ -131,8 +131,8 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
                 svc.update_component(comp_id, comps[idx].content, loading_cfg);
 
                 QPointer<ReportBuilderScreen> self = this;
-                fincept::services::MarketDataService::instance().fetch_info(
-                    sym, [self, comp_id, sym](bool ok, fincept::services::InfoData info) {
+                finterm::services::MarketDataService::instance().fetch_info(
+                    sym, [self, comp_id, sym](bool ok, finterm::services::InfoData info) {
                         if (!self)
                             return;
                         QMetaObject::invokeMethod(
@@ -228,10 +228,10 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
                 svc.update_component(comp_id, comps[idx].content, cfg);
 
                 const QString topic = QStringLiteral("market:history:") + sym + QStringLiteral(":6mo:1d");
-                auto& hub = fincept::datahub::DataHub::instance();
+                auto& hub = finterm::datahub::DataHub::instance();
                 QPointer<ReportBuilderScreen> self = this;
 
-                auto apply = [self, comp_id, sym](const QVector<fincept::services::HistoryPoint>& history) {
+                auto apply = [self, comp_id, sym](const QVector<finterm::services::HistoryPoint>& history) {
                     if (!self)
                         return;
                     auto& s = Service::instance();
@@ -270,17 +270,17 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
                 };
 
                 QVariant cached = hub.peek(topic);
-                if (cached.isValid() && cached.canConvert<QVector<fincept::services::HistoryPoint>>()) {
-                    apply(cached.value<QVector<fincept::services::HistoryPoint>>());
+                if (cached.isValid() && cached.canConvert<QVector<finterm::services::HistoryPoint>>()) {
+                    apply(cached.value<QVector<finterm::services::HistoryPoint>>());
                     return;
                 }
 
-                hub.subscribe<QVector<fincept::services::HistoryPoint>>(
-                    this, topic, [self, topic, apply](const QVector<fincept::services::HistoryPoint>& history) {
+                hub.subscribe<QVector<finterm::services::HistoryPoint>>(
+                    this, topic, [self, topic, apply](const QVector<finterm::services::HistoryPoint>& history) {
                         if (!self)
                             return;
                         apply(history);
-                        fincept::datahub::DataHub::instance().unsubscribe(self, topic);
+                        finterm::datahub::DataHub::instance().unsubscribe(self, topic);
                     });
                 hub.request(topic, /*force=*/true);
                 return;
@@ -296,10 +296,10 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
                 svc.update_component(comp_id, comps[idx].content, cfg);
 
                 const QString topic = QStringLiteral("market:quote:") + sym;
-                auto& hub = fincept::datahub::DataHub::instance();
+                auto& hub = finterm::datahub::DataHub::instance();
                 QPointer<ReportBuilderScreen> self = this;
 
-                auto apply = [self, comp_id](const fincept::services::QuoteData& q) {
+                auto apply = [self, comp_id](const finterm::services::QuoteData& q) {
                     if (!self)
                         return;
                     auto& s = Service::instance();
@@ -324,16 +324,16 @@ ReportBuilderScreen::ReportBuilderScreen(QWidget* parent) : QWidget(parent) {
                 };
 
                 QVariant cached = hub.peek(topic);
-                if (cached.isValid() && cached.canConvert<fincept::services::QuoteData>()) {
-                    apply(cached.value<fincept::services::QuoteData>());
+                if (cached.isValid() && cached.canConvert<finterm::services::QuoteData>()) {
+                    apply(cached.value<finterm::services::QuoteData>());
                     return;
                 }
-                hub.subscribe<fincept::services::QuoteData>(
-                    this, topic, [self, topic, apply](const fincept::services::QuoteData& q) {
+                hub.subscribe<finterm::services::QuoteData>(
+                    this, topic, [self, topic, apply](const finterm::services::QuoteData& q) {
                         if (!self)
                             return;
                         apply(q);
-                        fincept::datahub::DataHub::instance().unsubscribe(self, topic);
+                        finterm::datahub::DataHub::instance().unsubscribe(self, topic);
                     });
                 hub.request(topic, /*force=*/true);
                 return;
@@ -1247,4 +1247,4 @@ void ReportBuilderScreen::restore_state(const QVariantMap& state) {
     rebind_from_service();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

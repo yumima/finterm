@@ -9,7 +9,7 @@
 
 #include <optional>
 
-namespace fincept::services::equity {
+namespace finterm::services::equity {
 
 /// The pre-earnings outlook: three questions, each answered only as far as
 /// the evidence goes.
@@ -158,4 +158,4 @@ int days_to_next_earnings(const EarningsAnalysis& a);
 /// Same, against a caller-supplied clock, so it can be tested at a fixed time.
 int days_to_next_earnings(const EarningsAnalysis& a, const QDateTime& now);
 
-} // namespace fincept::services::equity
+} // namespace finterm::services::equity

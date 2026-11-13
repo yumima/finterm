@@ -4,7 +4,7 @@
 
 #include <QSettings>
 
-namespace fincept {
+namespace finterm {
 
 static constexpr const char* kOrg = AppIdentity::kOrg;
 static constexpr const char* kApp = AppIdentity::kApp;
@@ -59,4 +59,4 @@ void PopularityTracker::clear_all() {
     settings.endGroup();
 }
 
-} // namespace fincept
+} // namespace finterm

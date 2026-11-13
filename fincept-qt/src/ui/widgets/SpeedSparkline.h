@@ -9,7 +9,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 class SpeedSparkline : public QWidget {
     Q_OBJECT
@@ -33,4 +33,4 @@ class SpeedSparkline : public QWidget {
     QColor fill_color_ = QColor(217, 119, 6, 40);
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -5,7 +5,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Left panel showing categorized node types that can be dragged onto the canvas.
 class NodePalette : public QWidget {
@@ -26,4 +26,4 @@ class NodePalette : public QWidget {
     QWidget* categories_container_ = nullptr;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

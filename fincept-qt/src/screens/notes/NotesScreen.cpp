@@ -18,9 +18,9 @@
 #include <QTextStream>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui::colors;
+using namespace finterm::ui::colors;
 
 // ── Style constants (Obsidian Design System) ────────────────────────────────
 
@@ -423,7 +423,7 @@ QWidget* NotesScreen::build_editor_panel() {
 // ── Data Loading ─────────────────────────────────────────────────────────────
 
 void NotesScreen::load_notes() {
-    auto r = fincept::NotesRepository::instance().list_all();
+    auto r = finterm::NotesRepository::instance().list_all();
     if (r.is_ok()) {
         notes_ = r.value();
     } else {
@@ -522,7 +522,7 @@ void NotesScreen::on_save_note() {
         return;
     }
 
-    fincept::FinancialNote note;
+    finterm::FinancialNote note;
     note.title = title;
     note.content = edit_content_->toPlainText();
     note.category = edit_category_->currentData().toString();
@@ -532,7 +532,7 @@ void NotesScreen::on_save_note() {
     note.tickers = edit_tickers_->text().trimmed().toUpper();
     note.word_count = note.content.split(QRegularExpression("\\s+"), Qt::SkipEmptyParts).size();
 
-    auto& repo = fincept::NotesRepository::instance();
+    auto& repo = finterm::NotesRepository::instance();
 
     if (selected_note_id_ > 0) {
         // Update existing
@@ -573,7 +573,7 @@ void NotesScreen::on_delete_note() {
     if (reply != QMessageBox::Yes)
         return;
 
-    fincept::NotesRepository::instance().remove(selected_note_id_);
+    finterm::NotesRepository::instance().remove(selected_note_id_);
     selected_note_id_ = -1;
     right_stack_->setCurrentIndex(0);
     load_notes();
@@ -582,10 +582,10 @@ void NotesScreen::on_delete_note() {
 void NotesScreen::on_toggle_favorite() {
     if (selected_note_id_ <= 0)
         return;
-    fincept::NotesRepository::instance().toggle_favorite(selected_note_id_);
+    finterm::NotesRepository::instance().toggle_favorite(selected_note_id_);
     load_notes();
     // Re-show updated note
-    auto r = fincept::NotesRepository::instance().get(selected_note_id_);
+    auto r = finterm::NotesRepository::instance().get(selected_note_id_);
     if (r.is_ok())
         show_note(r.value());
 }
@@ -593,7 +593,7 @@ void NotesScreen::on_toggle_favorite() {
 void NotesScreen::on_toggle_archive() {
     if (selected_note_id_ <= 0)
         return;
-    fincept::NotesRepository::instance().toggle_archive(selected_note_id_);
+    finterm::NotesRepository::instance().toggle_archive(selected_note_id_);
     selected_note_id_ = -1;
     right_stack_->setCurrentIndex(0);
     load_notes();
@@ -643,7 +643,7 @@ void NotesScreen::on_export_note() {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-void NotesScreen::show_note(const fincept::FinancialNote& note) {
+void NotesScreen::show_note(const finterm::FinancialNote& note) {
     view_title_->setText(note.is_favorite ? ("* " + note.title) : note.title);
 
     QStringList meta_parts;
@@ -727,4 +727,4 @@ void NotesScreen::restore_state(const QVariantMap& state) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

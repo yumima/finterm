@@ -12,7 +12,7 @@
 #include <QJsonObject>
 #include <QPointer>
 
-namespace fincept::services::finnhub {
+namespace finterm::services::finnhub {
 
 namespace {
 constexpr const char* kScript = "finnhub_data.py";
@@ -40,7 +40,7 @@ FinnhubService& FinnhubService::instance() {
 FinnhubService::FinnhubService(QObject* parent) : QObject(parent) {}
 
 bool FinnhubService::has_api_key() const {
-    auto r = fincept::SecureStorage::instance().retrieve(QStringLiteral("FINNHUB_API_KEY"));
+    auto r = finterm::SecureStorage::instance().retrieve(QStringLiteral("FINNHUB_API_KEY"));
     return r.is_ok() && !r.value().isEmpty();
 }
 
@@ -61,7 +61,7 @@ void FinnhubService::subscribe_ipo_calendar(QObject* owner, const QDate& from, c
     const QString key = QString("finnhub:ipo_calendar:%1:%2").arg(from_s, to_s);
     auto fetcher = [this, from_s, to_s](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         // Local cache check first.
-        const QVariant cv = fincept::CacheManager::instance().get("finnhub:ipo_calendar:" + from_s + ":" + to_s);
+        const QVariant cv = finterm::CacheManager::instance().get("finnhub:ipo_calendar:" + from_s + ":" + to_s);
         if (!cv.isNull()) {
             const auto doc = QJsonDocument::fromJson(cv.toString().toUtf8());
             if (doc.isObject()) {
@@ -95,7 +95,7 @@ void FinnhubService::subscribe_ipo_calendar(QObject* owner, const QDate& from, c
                     resolve(QVariant::fromValue(QVector<FinnhubIPO>{}));
                     return;
                 }
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     "finnhub:ipo_calendar:" + from_s + ":" + to_s,
                     QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kIpoCalendarTtlSec,
                     "finnhub");
@@ -113,7 +113,7 @@ void FinnhubService::subscribe_lockups(QObject* owner, const QDate& from, const 
     const QString sym = symbol.toUpper();
     const QString key = QString("finnhub:lockups:%1:%2:%3").arg(from_s, to_s, sym);
     auto fetcher = [this, from_s, to_s, sym](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const QVariant cv = fincept::CacheManager::instance().get("finnhub:lockups:" + from_s + ":" + to_s + ":" + sym);
+        const QVariant cv = finterm::CacheManager::instance().get("finnhub:lockups:" + from_s + ":" + to_s + ":" + sym);
         if (!cv.isNull()) {
             const auto doc = QJsonDocument::fromJson(cv.toString().toUtf8());
             if (doc.isObject()) {
@@ -146,7 +146,7 @@ void FinnhubService::subscribe_lockups(QObject* owner, const QDate& from, const 
                     resolve(QVariant::fromValue(QVector<FinnhubLockup>{}));
                     return;
                 }
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     "finnhub:lockups:" + from_s + ":" + to_s + ":" + sym,
                     QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kLockupTtlSec,
                     "finnhub");
@@ -165,7 +165,7 @@ void FinnhubService::subscribe_insider_tx(QObject* owner, const QString& symbol,
     const QString key = QString("finnhub:insider_tx:%1:%2:%3").arg(sym, from_s, to_s);
     auto fetcher = [this, sym, from_s, to_s](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const QVariant cv =
-            fincept::CacheManager::instance().get("finnhub:insider_tx:" + sym + ":" + from_s + ":" + to_s);
+            finterm::CacheManager::instance().get("finnhub:insider_tx:" + sym + ":" + from_s + ":" + to_s);
         if (!cv.isNull()) {
             const auto doc = QJsonDocument::fromJson(cv.toString().toUtf8());
             if (doc.isObject()) {
@@ -200,7 +200,7 @@ void FinnhubService::subscribe_insider_tx(QObject* owner, const QString& symbol,
                     resolve(QVariant::fromValue(QVector<FinnhubInsiderTx>{}));
                     return;
                 }
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     "finnhub:insider_tx:" + sym + ":" + from_s + ":" + to_s,
                     QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInsiderTxTtlSec,
                     "finnhub");
@@ -215,7 +215,7 @@ void FinnhubService::subscribe_recommendations(QObject* owner, const QString& sy
     const QString sym = symbol.toUpper();
     const QString key = "finnhub:recommendations:" + sym;
     auto fetcher = [this, sym, key](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const QVariant cv = fincept::CacheManager::instance().get(key);
+        const QVariant cv = finterm::CacheManager::instance().get(key);
         if (!cv.isNull()) {
             const auto doc = QJsonDocument::fromJson(cv.toString().toUtf8());
             // The endpoint returns a bare array — handle both shapes.
@@ -244,7 +244,7 @@ void FinnhubService::subscribe_recommendations(QObject* owner, const QString& sy
                     return;
                 }
                 const auto arr = doc.isArray() ? doc.array() : QJsonArray{};
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     "finnhub:recommendations:" + sym,
                     QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), kRecTrendsTtlSec,
                     "finnhub");
@@ -346,4 +346,4 @@ QVector<FinnhubRecTrend> FinnhubService::parse_recommendations(const QJsonArray&
     return out;
 }
 
-} // namespace fincept::services::finnhub
+} // namespace finterm::services::finnhub

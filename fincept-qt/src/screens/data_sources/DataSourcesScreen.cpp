@@ -41,10 +41,10 @@
 
 #include <algorithm>
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
-namespace col = fincept::ui::colors;
-namespace fnt = fincept::ui::fonts;
+namespace col = finterm::ui::colors;
+namespace fnt = finterm::ui::fonts;
 
 namespace {
 
@@ -3044,4 +3044,4 @@ void DataSourcesScreen::restore_state(const QVariantMap& state) {
         select_connector_by_id(id);
 }
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

@@ -20,10 +20,10 @@
 #include <QVBoxLayout>
 #include <QWheelEvent>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ownership;
-using namespace fincept::screens::ownership_ui;
+using namespace finterm::ownership;
+using namespace finterm::screens::ownership_ui;
 
 StockOwnershipPanel::StockOwnershipPanel(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -262,4 +262,4 @@ void StockOwnershipPanel::render() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

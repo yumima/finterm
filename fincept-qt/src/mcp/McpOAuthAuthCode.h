@@ -29,7 +29,7 @@
 
 #include <QString>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 struct AuthCodeConfig {
     QString server_id;              ///< Used to namespace SecureStorage keys.
@@ -59,4 +59,4 @@ class McpOAuthAuthCode {
     static Result<QString> refresh(const AuthCodeConfig& cfg);
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

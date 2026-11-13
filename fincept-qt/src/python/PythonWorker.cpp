@@ -18,7 +18,7 @@
 
 #include <algorithm>
 
-namespace fincept::python {
+namespace finterm::python {
 
 namespace {
 
@@ -327,7 +327,7 @@ void PythonWorker::launch_process() {
     // that failed. A per-process name means one instance can only ever touch
     // its own file. Sockets left by crashed processes are swept here, and
     // only when their owner is verifiably gone.
-    const QString runtime_dir = fincept::AppPaths::runtime();
+    const QString runtime_dir = finterm::AppPaths::runtime();
     socket_path_ = QStringLiteral("%1/yfinance-%2.sock").arg(runtime_dir).arg(QCoreApplication::applicationPid());
     QFile::remove(socket_path_); // our own stale file from a previous crash
     for (const QString& name :
@@ -638,4 +638,4 @@ void PythonWorker::fail_all_pending(const QString& reason) {
     }
 }
 
-} // namespace fincept::python
+} // namespace finterm::python

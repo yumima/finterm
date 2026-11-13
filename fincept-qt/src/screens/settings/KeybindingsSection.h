@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Modal dialog that captures a single key combination from the user.
 class KeyCaptureDialog : public QDialog {
@@ -52,4 +52,4 @@ class KeybindingsSection : public QWidget {
     QLineEdit* search_input_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

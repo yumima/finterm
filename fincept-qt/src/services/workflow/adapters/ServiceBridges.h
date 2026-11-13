@@ -1,6 +1,6 @@
 #pragma once
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 class NodeRegistry;
 
 /// Wire market data node execute functions to MarketDataService + PythonRunner.
@@ -15,4 +15,4 @@ void wire_agent_bridges(NodeRegistry& registry);
 /// Wire all bridges at once.
 void wire_all_bridges(NodeRegistry& registry);
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

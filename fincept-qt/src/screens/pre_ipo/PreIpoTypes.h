@@ -8,7 +8,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::pre_ipo {
+namespace finterm::pre_ipo {
 
 // ── Enums ─────────────────────────────────────────────────────────────────────
 
@@ -310,4 +310,4 @@ struct PreIpoSummary {
     bool loaded = false;
 };
 
-} // namespace fincept::pre_ipo
+} // namespace finterm::pre_ipo

@@ -5,12 +5,12 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ReportComponent comes from core/report/ReportDocument.h. PropertiesPanel
 // historically used the screens-namespace forward declaration; with the
-// model migrated to fincept::report we refer to the concrete type directly.
-using ReportComponent = ::fincept::report::ReportComponent;
+// model migrated to finterm::report we refer to the concrete type directly.
+using ReportComponent = ::finterm::report::ReportComponent;
 
 /// Right panel — context-sensitive property editor for selected component.
 class PropertiesPanel : public QWidget {
@@ -39,4 +39,4 @@ class PropertiesPanel : public QWidget {
     QVBoxLayout* editor_layout_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

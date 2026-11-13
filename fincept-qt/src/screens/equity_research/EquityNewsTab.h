@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EquityNewsTab : public QWidget {
     Q_OBJECT
@@ -38,4 +38,4 @@ class EquityNewsTab : public QWidget {
     ui::LoadingOverlay* loading_overlay_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -4,7 +4,7 @@
 
 #include <QObject>
 
-namespace fincept::pre_ipo {
+namespace finterm::pre_ipo {
 
 /// Singleton service owning the PRE-IPO company universe, Form D feed, and IPO pipeline.
 ///
@@ -29,7 +29,7 @@ class PreIpoService : public QObject {
     QDateTime last_updated() const { return summary_.last_updated; }
 
   signals:
-    void data_loaded(fincept::pre_ipo::PreIpoSummary summary);
+    void data_loaded(finterm::pre_ipo::PreIpoSummary summary);
     void error_occurred(QString error);
 
   private:
@@ -41,4 +41,4 @@ class PreIpoService : public QObject {
     PreIpoSummary summary_;
 };
 
-} // namespace fincept::pre_ipo
+} // namespace finterm::pre_ipo

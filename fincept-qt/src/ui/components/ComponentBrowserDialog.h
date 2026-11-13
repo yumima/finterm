@@ -8,7 +8,7 @@ class QScrollArea;
 class QGridLayout;
 class QLabel;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 class ComponentCard;
 
@@ -54,4 +54,4 @@ class ComponentBrowserDialog : public QDialog {
     QString selected_id_;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

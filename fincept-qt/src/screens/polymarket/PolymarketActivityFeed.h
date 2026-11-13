@@ -6,7 +6,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 /// Activity feed showing recent trades for a market.
 /// Consumes unified prediction::PredictionTrade so both Polymarket and Kalshi
@@ -16,11 +16,11 @@ class PolymarketActivityFeed : public QWidget {
   public:
     explicit PolymarketActivityFeed(QWidget* parent = nullptr);
 
-    void set_trades(const QVector<fincept::services::prediction::PredictionTrade>& trades);
+    void set_trades(const QVector<finterm::services::prediction::PredictionTrade>& trades);
     /// Prepend a live trade (e.g. from a WebSocket feed). Keeps the cap at
     /// 200 rows; older trades fall off the bottom. Flashes the new row
     /// briefly in the exchange accent to draw the eye.
-    void append_trade(const fincept::services::prediction::PredictionTrade& trade);
+    void append_trade(const finterm::services::prediction::PredictionTrade& trade);
     void clear();
 
     /// Per-exchange number formatting (decimals on the price column).
@@ -32,7 +32,7 @@ class PolymarketActivityFeed : public QWidget {
 
     // Cached last trades so set_presentation() can re-render with the new
     // decimal places.
-    QVector<fincept::services::prediction::PredictionTrade> last_trades_;
+    QVector<finterm::services::prediction::PredictionTrade> last_trades_;
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

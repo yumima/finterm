@@ -1,7 +1,7 @@
 #pragma once
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Trademarks — finterm and third-party trademark acknowledgments.
 class TrademarksScreen : public QWidget {
@@ -13,4 +13,4 @@ class TrademarksScreen : public QWidget {
     void navigate_back();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

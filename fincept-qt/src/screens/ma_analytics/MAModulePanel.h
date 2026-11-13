@@ -17,14 +17,14 @@
 
 #include <functional>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Renders the input form + results area for a single M&A module.
 /// Each module has sub-tabs (methods), input fields, a Run button, and result display.
 class MAModulePanel : public QWidget {
     Q_OBJECT
   public:
-    explicit MAModulePanel(const fincept::services::ma::ModuleInfo& info, QWidget* parent = nullptr);
+    explicit MAModulePanel(const finterm::services::ma::ModuleInfo& info, QWidget* parent = nullptr);
 
   public slots:
     void refresh_theme();
@@ -83,7 +83,7 @@ class MAModulePanel : public QWidget {
     void clear_results();
     QWidget* build_metric_card(const QString& label, const QString& value, const QString& color, QWidget* parent);
 
-    fincept::services::ma::ModuleInfo module_;
+    finterm::services::ma::ModuleInfo module_;
     QTabWidget* sub_tabs_ = nullptr;
     QWidget* header_bar_ = nullptr;
     QLabel* header_title_ = nullptr;
@@ -100,4 +100,4 @@ class MAModulePanel : public QWidget {
     QHash<QString, QString> text_kinds_; // combo key -> "text" | "pct_list" | "num_list"
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

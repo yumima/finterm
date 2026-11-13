@@ -11,9 +11,9 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const char* MF = "font-family:'Consolas','Courier New',monospace;";
 
@@ -356,4 +356,4 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
     });
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

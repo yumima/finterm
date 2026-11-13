@@ -14,11 +14,11 @@
 
 class QLabel;
 
-namespace fincept::services {
+namespace finterm::services {
 struct QuoteData;
 }
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 class MarketQuoteStripWidget : public BaseWidget {
     Q_OBJECT
@@ -43,7 +43,7 @@ class MarketQuoteStripWidget : public BaseWidget {
 
     void build_rows();
     void apply_styles();
-    void on_quote(const fincept::services::QuoteData& q);
+    void on_quote(const finterm::services::QuoteData& q);
     void hub_resubscribe();
     void hub_unsubscribe_all();
 
@@ -52,4 +52,4 @@ class MarketQuoteStripWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

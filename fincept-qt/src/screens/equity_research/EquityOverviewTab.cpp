@@ -29,7 +29,7 @@
 #include <cmath>
 #include <functional>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Accent colors without a theme token ──────────────────────────────────────
 static constexpr const char* CYAN = "#22d3ee";
@@ -90,7 +90,7 @@ QLabel* add_row(QFrame* panel, const QString& key, const char* val_color, const 
 
     hl->addWidget(k);
     if (!entry_id.isEmpty()) {
-        auto* hint = new fincept::knowledge::HelpHint(entry_id, panel);
+        auto* hint = new finterm::knowledge::HelpHint(entry_id, panel);
         hint->setFixedSize(14, 14);
         hl->addWidget(hint);
     }
@@ -1316,11 +1316,11 @@ void EquityOverviewTab::save_chart_view() const {
     view.insert("sma200", btn_sma200_ ? btn_sma200_->isChecked() : false);
     view.insert("earn", show_earnings_);
     const QString blob = QString::fromUtf8(QJsonDocument(view).toJson(QJsonDocument::Compact));
-    fincept::SettingsRepository::instance().set("er.chart_view." + current_symbol_, blob);
+    finterm::SettingsRepository::instance().set("er.chart_view." + current_symbol_, blob);
 }
 
 void EquityOverviewTab::load_chart_view(const QString& symbol) {
-    auto r = fincept::SettingsRepository::instance().get("er.chart_view." + symbol);
+    auto r = finterm::SettingsRepository::instance().get("er.chart_view." + symbol);
     if (!r.is_ok() || r.value().isEmpty()) {
         // No saved view for this symbol — keep the previous tab's settings.
         // (We don't reset toggles to off; users typically want their chart
@@ -2518,4 +2518,4 @@ QString EquityOverviewTab::fmt_price(double v) const {
     return QString("%1%2").arg(sym).arg(v, 0, 'f', 2);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

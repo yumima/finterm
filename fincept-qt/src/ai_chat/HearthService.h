@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// Resolves + (optionally) discovers the local AI engine (hearth) that chat +
 /// embeddings share.
@@ -68,4 +68,4 @@ class HearthService : public QObject {
     bool detecting_ = false;
 };
 
-} // namespace fincept
+} // namespace finterm

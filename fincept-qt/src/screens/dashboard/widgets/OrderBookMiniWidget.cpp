@@ -21,7 +21,7 @@
 #include <QPushButton>
 #include <QtConcurrent>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 OrderBookMiniWidget::OrderBookMiniWidget(const QJsonObject& cfg, QWidget* parent)
     : BaseWidget("WORKING ORDERS", parent) {
@@ -239,4 +239,4 @@ void OrderBookMiniWidget::apply_styles() {
                  ui::colors::TEXT_SECONDARY()));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

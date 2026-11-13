@@ -27,7 +27,7 @@
 #include <QTextBrowser>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -818,4 +818,4 @@ void PortfolioInsightsPanel::render_empty(QTextBrowser* target, const QString& h
                         .arg(ui::colors::TEXT_SECONDARY(), safe));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -13,7 +13,7 @@
 #include <functional>
 #include <vector>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 class McpProvider {
   public:
@@ -165,4 +165,4 @@ class McpProvider {
     LogHandler default_log_handler_;
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

@@ -10,7 +10,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 Result<void> sql(QSqlDatabase& db, const char* stmt) {
@@ -44,4 +44,4 @@ void register_migration_v017() {
     MigrationRunner::register_migration({17, "perf_indexes", apply_v017});
 }
 
-} // namespace fincept
+} // namespace finterm

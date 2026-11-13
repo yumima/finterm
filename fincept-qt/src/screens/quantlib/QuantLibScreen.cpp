@@ -16,7 +16,7 @@
 #include <QVBoxLayout>
 
 namespace {
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 inline QString kStyle() {
     return QStringLiteral("#qlScreen { background: %1; }"
@@ -92,9 +92,9 @@ inline QString kStyle() {
 }
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 #include "ui/theme/ThemeManager.h"
 
 // ── Module definitions ──────────────────────────────────────────────────────
@@ -1396,4 +1396,4 @@ void QuantLibScreen::restore_state(const QVariantMap& state) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

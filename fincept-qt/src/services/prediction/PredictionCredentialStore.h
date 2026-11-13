@@ -6,7 +6,7 @@
 
 #include <optional>
 
-namespace fincept::services::prediction {
+namespace finterm::services::prediction {
 
 /// Polymarket credential set. See the plan §C.
 ///
@@ -51,4 +51,4 @@ class PredictionCredentialStore {
     static bool clear_kalshi();
 };
 
-} // namespace fincept::services::prediction
+} // namespace finterm::services::prediction

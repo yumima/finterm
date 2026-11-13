@@ -10,7 +10,7 @@
 #include <QScreen>
 #include <QVBoxLayout>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 std::function<void(QString)>& navigator_storage() {
@@ -136,4 +136,4 @@ void HelpHint::show_popover() {
     popover->show();
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

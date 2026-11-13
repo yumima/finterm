@@ -17,7 +17,7 @@
 // ── Screen-level stylesheet ─────────────────────────────────────────────────
 
 namespace {
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const QString kStyle =
     QStringLiteral("#akScreen { background: %1; }"
@@ -120,9 +120,9 @@ static const QString kStyle =
     ;
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Data source definitions ─────────────────────────────────────────────────
 
@@ -499,7 +499,7 @@ void AkShareScreen::on_source_clicked(int index) {
         load_endpoints(sources_[index]);
     }
 
-    fincept::ScreenStateManager::instance().notify_changed(this);
+    finterm::ScreenStateManager::instance().notify_changed(this);
 }
 
 void AkShareScreen::on_endpoint_clicked(QListWidgetItem* item) {
@@ -509,7 +509,7 @@ void AkShareScreen::on_endpoint_clicked(QListWidgetItem* item) {
     status_endpoint_->setText(active_endpoint_);
     refresh_btn_->setEnabled(true);
 
-    fincept::ScreenStateManager::instance().notify_changed(this);
+    finterm::ScreenStateManager::instance().notify_changed(this);
 
     // Auto-execute
     on_execute();
@@ -522,7 +522,7 @@ void AkShareScreen::on_search_changed(const QString& text) {
                      item->data(Qt::UserRole).toString().contains(text, Qt::CaseInsensitive);
         item->setHidden(!match);
     }
-    fincept::ScreenStateManager::instance().notify_changed(this);
+    finterm::ScreenStateManager::instance().notify_changed(this);
 }
 
 void AkShareScreen::on_execute() {
@@ -548,7 +548,7 @@ void AkShareScreen::on_view_toggle() {
     is_table_view_ = !is_table_view_;
     view_stack_->setCurrentIndex(is_table_view_ ? 0 : 1);
     view_toggle_btn_->setText(is_table_view_ ? "JSON" : "TABLE");
-    fincept::ScreenStateManager::instance().notify_changed(this);
+    finterm::ScreenStateManager::instance().notify_changed(this);
 }
 
 void AkShareScreen::on_refresh() {
@@ -559,7 +559,7 @@ void AkShareScreen::on_refresh() {
 
 void AkShareScreen::load_endpoints(const AkShareSource& source) {
     const QString cache_key = "akshare:endpoints:" + source.script;
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (!doc.isNull() && doc.isObject()) {
@@ -589,7 +589,7 @@ void AkShareScreen::load_endpoints(const AkShareSource& source) {
             }
 
             const QJsonObject obj = r.data;
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), 60 * 60,
                 "akshare");
             self->endpoint_cache_[script] = obj;
@@ -655,7 +655,7 @@ void AkShareScreen::execute_query(const QString& script, const QString& endpoint
     full_args << endpoint << args;
 
     const QString cache_key = "akshare:query:" + script + ":" + full_args.join(":");
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (doc.isArray() && !doc.array().isEmpty()) {
@@ -694,7 +694,7 @@ void AkShareScreen::execute_query(const QString& script, const QString& endpoint
             self->data_status_->setText(endpoint);
 
             if (!data_array.isEmpty()) {
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     cache_key, QVariant(QString::fromUtf8(QJsonDocument(data_array).toJson(QJsonDocument::Compact))),
                     2 * 60, "akshare");
             }
@@ -850,4 +850,4 @@ void AkShareScreen::restore_state(const QVariantMap& state) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

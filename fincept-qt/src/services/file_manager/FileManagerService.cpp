@@ -13,7 +13,7 @@
 #include <QMimeDatabase>
 #include <QUuid>
 
-namespace fincept::services {
+namespace finterm::services {
 
 static constexpr const char* kFileManagerTag = "FileManagerService";
 
@@ -33,7 +33,7 @@ FileManagerService::FileManagerService(QObject* parent) : QObject(parent) {
 // ── Paths ────────────────────────────────────────────────────────────────────
 
 QString FileManagerService::storage_dir() const {
-    return fincept::AppPaths::files();
+    return finterm::AppPaths::files();
 }
 
 QString FileManagerService::full_path(const QString& stored_name) const {
@@ -215,4 +215,4 @@ bool FileManagerService::remove_file(const QString& id) {
     return false;
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

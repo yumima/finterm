@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 QString section_header_qss() {
     return QString("QLabel { background:%1; color:%2; font-size:12px; font-weight:700;"
@@ -30,4 +30,4 @@ QLabel* make_section_header(const QString& text, QWidget* parent) {
     return lbl;
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

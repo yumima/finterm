@@ -3,7 +3,7 @@
 #include <QFontMetrics>
 #include <QStyledItemDelegate>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Paints news rows directly with QPainter — zero widget allocation per item.
 /// Handles WIRE (dense 26px rows) and CLUSTERS (multi-line cards) modes.
@@ -48,4 +48,4 @@ class NewsFeedDelegate : public QStyledItemDelegate {
     int source_col_width_ = kSourceColDefault;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 CryptoOrderEntry::CryptoOrderEntry(QWidget* parent) : QWidget(parent) {
     setObjectName("cryptoOrderEntry");
@@ -371,4 +371,4 @@ void CryptoOrderEntry::update_cost_preview() {
         cost_label_->setText("Est: --");
 }
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

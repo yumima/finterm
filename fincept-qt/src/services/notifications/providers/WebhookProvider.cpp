@@ -4,7 +4,7 @@
 
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void WebhookProvider::load_fields(SettingsRepository& r, const QString& cat) {
     url_ = get_str(r, cat + ".url");
@@ -44,4 +44,4 @@ void WebhookProvider::send(const NotificationRequest& req, std::function<void(bo
         HttpClient::instance().post(url_, body, handler);
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

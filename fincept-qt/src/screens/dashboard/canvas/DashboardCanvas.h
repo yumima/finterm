@@ -7,7 +7,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Absolute-positioned canvas — react-grid-layout port.
 /// 12 columns, drag from title bar, resize from bottom-right, vertical compaction.
@@ -89,7 +89,7 @@ class DashboardCanvas : public QWidget {
     // Responsive shrink is allowed, but we restore this when width permits.
     int canonical_cols_ = 12;
 
-    fincept::ui::ThemeTokens tokens_{};
+    finterm::ui::ThemeTokens tokens_{};
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -15,7 +15,7 @@
 
 #include <algorithm>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 NodeItem::NodeItem(const NodeDef& def, const NodeTypeDef& type_def, QGraphicsItem* parent)
     : QGraphicsObject(parent), def_(def), type_def_(type_def) {
@@ -284,4 +284,4 @@ void NodeItem::hoverLeaveEvent(QGraphicsSceneHoverEvent* event) {
     QGraphicsObject::hoverLeaveEvent(event);
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

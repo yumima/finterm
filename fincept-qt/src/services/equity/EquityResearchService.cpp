@@ -24,7 +24,7 @@
 #include <limits>
 #include <memory>
 
-namespace fincept::services::equity {
+namespace finterm::services::equity {
 
 namespace {
 
@@ -131,8 +131,8 @@ QString history_error_text(const QJsonObject& result) {
 // symbol holds every category (quote, info, candles by period, financials,
 // technicals by period, peers, news) — keeps the directory bounded by the
 // universe the user has actually browsed.
-fincept::services::util::DiskCache& disk_cache() {
-    static fincept::services::util::DiskCache c(QStringLiteral("equity_research"));
+finterm::services::util::DiskCache& disk_cache() {
+    static finterm::services::util::DiskCache c(QStringLiteral("equity_research"));
     return c;
 }
 
@@ -190,7 +190,7 @@ bool cache_history_series(const QJsonObject& result, const QJsonArray& arr, cons
                                        .arg(symbol, disk_sub));
         return false;
     }
-    fincept::CacheManager::instance().put(
+    finterm::CacheManager::instance().put(
         candles_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), ttl_sec, "equity");
     const QString fname = symbol_filename(symbol);
     QJsonObject root = disk_cache().load(fname).object();
@@ -254,7 +254,7 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
             // Full TTL + explicit age: the entry expires on the original
             // schedule and try_get_aged reports the original write time
             // instead of claiming the blob was fetched at app launch.
-            fincept::CacheManager::instance().put(cache_prefix + symbol, QVariant(blob), ttl_sec, "equity", age_sec);
+            finterm::CacheManager::instance().put(cache_prefix + symbol, QVariant(blob), ttl_sec, "equity", age_sec);
         };
         // quote / info / financials / news live in the root, peers as array
         if (root.contains("quote"))
@@ -279,7 +279,7 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
             const QJsonValue v = root.value("peers");
             if (v.isArray() && age_sec < kPeersTtlSec) {
                 const QString blob = QString::fromUtf8(QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
-                fincept::CacheManager::instance().put(root.value("peers_key").toString(), QVariant(blob), kPeersTtlSec,
+                finterm::CacheManager::instance().put(root.value("peers_key").toString(), QVariant(blob), kPeersTtlSec,
                                                       "equity", age_sec);
             }
         }
@@ -293,7 +293,7 @@ EquityResearchService::EquityResearchService(QObject* parent) : QObject(parent) 
                 if (!v.isArray())
                     continue;
                 const QString blob = QString::fromUtf8(QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact));
-                fincept::CacheManager::instance().put(cache_prefix + symbol + ":" + it.key(), QVariant(blob), ttl_sec,
+                finterm::CacheManager::instance().put(cache_prefix + symbol + ":" + it.key(), QVariant(blob), ttl_sec,
                                                       "equity", age_sec);
             }
         };
@@ -415,7 +415,7 @@ void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbo
         // Cache check inside the fetcher so we participate in QueryStore's
         // in-flight dedup. If multiple subscribers attach concurrently, only
         // one daemon spawn happens; everyone else waits on the same fetch.
-        const auto qcv_aged = fincept::CacheManager::instance().try_get_aged("equity:quote:" + symbol);
+        const auto qcv_aged = finterm::CacheManager::instance().try_get_aged("equity:quote:" + symbol);
         const QVariant qcv = qcv_aged ? QVariant(qcv_aged->value) : QVariant();
         if (!qcv.isNull()) {
             QuoteData parsed = parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object());
@@ -440,7 +440,7 @@ void EquityResearchService::subscribe_quote(QObject* owner, const QString& symbo
                 reject(msg);
                 return;
             }
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 "equity:quote:" + symbol,
                 QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kQuoteTtlSec, "equity");
             update_symbol_cache(symbol, "quote", obj);
@@ -462,7 +462,7 @@ void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol
         return;
     const QString key = "equity:info:v3:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:v3:" + symbol);
+        const auto icv_aged = finterm::CacheManager::instance().try_get_aged("equity:info:v3:" + symbol);
         const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
         if (!icv.isNull()) {
             StockInfo parsed = parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object());
@@ -490,7 +490,7 @@ void EquityResearchService::subscribe_info(QObject* owner, const QString& symbol
                 reject(transient ? mark_transient_error(msg) : msg);
                 return;
             }
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 "equity:info:v3:" + symbol,
                 QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kInfoTtlSec, "equity");
             update_symbol_cache(symbol, "info_v3", obj);
@@ -514,7 +514,7 @@ void EquityResearchService::subscribe_historical(QObject* owner, const QString& 
     const QString key = "equity:candles:" + symbol + ":" + period;
     auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const QString candles_key = "equity:candles:" + symbol + ":" + period;
-        const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+        const auto hcv_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
         const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
             QVector<Candle> parsed = parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
@@ -590,7 +590,7 @@ void EquityResearchService::subscribe_technicals(QObject* owner, const QString& 
         // broadcast synchronously without going through resolve, which would
         // skip the QueryStore delivery path. So we do an inline check that
         // calls resolve directly on hit.
-        const auto tcv_aged = fincept::CacheManager::instance().try_get_aged(key);
+        const auto tcv_aged = finterm::CacheManager::instance().try_get_aged(key);
         const QVariant tcv = tcv_aged ? QVariant(tcv_aged->value) : QVariant();
         if (!tcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
@@ -653,7 +653,7 @@ void EquityResearchService::subscribe_financials(QObject* owner, const QString& 
         return;
     const QString key = "equity:financials:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto fcv_aged = fincept::CacheManager::instance().try_get_aged("equity:financials:" + symbol);
+        const auto fcv_aged = finterm::CacheManager::instance().try_get_aged("equity:financials:" + symbol);
         const QVariant fcv = fcv_aged ? QVariant(fcv_aged->value) : QVariant();
         if (!fcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(fcv.toString().toUtf8());
@@ -696,7 +696,7 @@ void EquityResearchService::subscribe_news(QObject* owner, const QString& symbol
         return;
     const QString key = "equity:news:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto ncv_aged = fincept::CacheManager::instance().try_get_aged("equity:news:" + symbol);
+        const auto ncv_aged = finterm::CacheManager::instance().try_get_aged("equity:news:" + symbol);
         const QVariant ncv = ncv_aged ? QVariant(ncv_aged->value) : QVariant();
         if (!ncv.isNull()) {
             const auto doc = QJsonDocument::fromJson(ncv.toString().toUtf8());
@@ -778,7 +778,7 @@ void EquityResearchService::subscribe_earnings(QObject* owner, const QString& sy
         return;
     const QString key = "equity:earnings:" + symbol;
     auto fetcher = [this, symbol](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto ecv_aged = fincept::CacheManager::instance().try_get_aged("equity:earnings:" + symbol);
+        const auto ecv_aged = finterm::CacheManager::instance().try_get_aged("equity:earnings:" + symbol);
         const QVariant ecv = ecv_aged ? QVariant(ecv_aged->value) : QVariant();
         if (!ecv.isNull()) {
             const auto doc = QJsonDocument::fromJson(ecv.toString().toUtf8());
@@ -808,7 +808,7 @@ void EquityResearchService::subscribe_earnings(QObject* owner, const QString& sy
                     return;
                 }
                 const QJsonArray arr = result.value("dates").toArray();
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     "equity:earnings:" + symbol,
                     QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), kEarningsTtlSec,
                     "equity");
@@ -827,7 +827,7 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
     const QString key = "equity:candles:" + symbol + ":" + period;
     auto fetcher = [this, symbol, period](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
         const QString candles_key = "equity:candles:" + symbol + ":" + period;
-        const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+        const auto hcv_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
         const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
             QVector<Candle> parsed = parse_candles(QJsonDocument::fromJson(hcv.toString().toUtf8()).array());
@@ -860,7 +860,7 @@ void EquityResearchService::prefetch_historical(const QString& symbol, const QSt
 void EquityResearchService::fetch_quote(const QString& symbol) {
     if (symbol.isEmpty())
         return;
-    const auto qcv_aged = fincept::CacheManager::instance().try_get_aged("equity:quote:" + symbol);
+    const auto qcv_aged = finterm::CacheManager::instance().try_get_aged("equity:quote:" + symbol);
     const QVariant qcv = qcv_aged ? QVariant(qcv_aged->value) : QVariant();
     if (!qcv.isNull()) {
         emit quote_loaded(parse_quote(QJsonDocument::fromJson(qcv.toString().toUtf8()).object()));
@@ -881,7 +881,7 @@ void EquityResearchService::fetch_quote(const QString& symbol) {
             emit quote_loaded(failed);
             return;
         }
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             "equity:quote:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
             kQuoteTtlSec, "equity");
         update_symbol_cache(symbol, "quote", obj);
@@ -934,7 +934,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
 
     // ── Info ─────────────────────────────────────────────────────────────────
     {
-        const auto icv_aged = fincept::CacheManager::instance().try_get_aged("equity:info:v3:" + symbol);
+        const auto icv_aged = finterm::CacheManager::instance().try_get_aged("equity:info:v3:" + symbol);
         const QVariant icv = icv_aged ? QVariant(icv_aged->value) : QVariant();
         if (!icv.isNull()) {
             emit info_loaded(parse_info(QJsonDocument::fromJson(icv.toString().toUtf8()).object()));
@@ -972,7 +972,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
                                 emit info_loaded(failed);
                                 return;
                             }
-                            fincept::CacheManager::instance().put(
+                            finterm::CacheManager::instance().put(
                                 "equity:info:v3:" + symbol,
                                 QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
                                 kInfoTtlSec, "equity");
@@ -992,7 +992,7 @@ void EquityResearchService::load_symbol(const QString& symbol, const QString& pe
     // period and emits stale data, leaving the chart visually unchanged.
     {
         const QString candles_key = "equity:candles:" + symbol + ":" + period;
-        const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+        const auto hcv_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
         const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
             emit historical_loaded(symbol, period,
@@ -1030,7 +1030,7 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
     // Tier 0: SWR cache — emit cached immediately and skip the network if
     // we have a fresh entry. Quarterly data; 1h TTL is plenty.
     {
-        const auto fcv_aged = fincept::CacheManager::instance().try_get_aged("equity:financials:" + symbol);
+        const auto fcv_aged = finterm::CacheManager::instance().try_get_aged("equity:financials:" + symbol);
         const QVariant fcv = fcv_aged ? QVariant(fcv_aged->value) : QVariant();
         if (!fcv.isNull()) {
             const auto cached = QJsonDocument::fromJson(fcv.toString().toUtf8()).object();
@@ -1054,7 +1054,7 @@ void EquityResearchService::fetch_financials(const QString& symbol) {
             emit error_occurred(symbol, "Financials", obj["error"].toString());
             return;
         }
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             "equity:financials:" + symbol,
             QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), kFinancialsTtlSec,
             "equity");
@@ -1082,7 +1082,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
 
     // ── Tier 0: technicals cache ─────────────────────────────────────────────
     {
-        const auto tcv_aged = fincept::CacheManager::instance().try_get_aged(tech_key);
+        const auto tcv_aged = finterm::CacheManager::instance().try_get_aged(tech_key);
         const QVariant tcv = tcv_aged ? QVariant(tcv_aged->value) : QVariant();
         if (!tcv.isNull()) {
             const auto cached_doc = QJsonDocument::fromJson(tcv.toString().toUtf8());
@@ -1141,7 +1141,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
                 }
                 // Cache the computed series so re-opens are <100ms.
                 const QString blob = QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact));
-                fincept::CacheManager::instance().put(tech_key, QVariant(blob), kTechnicalsTtlSec, "equity");
+                finterm::CacheManager::instance().put(tech_key, QVariant(blob), kTechnicalsTtlSec, "equity");
                 {
                     const QString fname = symbol_filename(symbol);
                     QJsonObject root = disk_cache().load(fname).object();
@@ -1168,7 +1168,7 @@ void EquityResearchService::fetch_technicals(const QString& symbol, const QStrin
     const QString candles_disk_sub = interval == QLatin1String("1d") ? period : interval + ":" + period;
     QJsonArray candles_from_cache;
     {
-        const auto hcv_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+        const auto hcv_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
         const QVariant hcv = hcv_aged ? QVariant(hcv_aged->value) : QVariant();
         if (!hcv.isNull()) {
             const auto doc = QJsonDocument::fromJson(hcv.toString().toUtf8());
@@ -1230,7 +1230,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
 
     // Tier 0: SWR cache — peer ratios are stable over hour-scale.
     {
-        const auto pcv_aged = fincept::CacheManager::instance().try_get_aged(cache_key);
+        const auto pcv_aged = finterm::CacheManager::instance().try_get_aged(cache_key);
         const QVariant pcv = pcv_aged ? QVariant(pcv_aged->value) : QVariant();
         if (!pcv.isNull()) {
             const auto arr = QJsonDocument::fromJson(pcv.toString().toUtf8()).array();
@@ -1260,7 +1260,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
         // multiple_ratios returns a list; PythonWorker wraps under "_value".
         const auto arr =
             result.contains("_value") ? result.value("_value").toArray() : result.value("ratios").toArray();
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             cache_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))), kPeersTtlSec,
             "equity");
         update_symbol_cache(symbol, "peers", arr);
@@ -1274,7 +1274,7 @@ void EquityResearchService::fetch_peers(const QString& symbol, const QStringList
 void EquityResearchService::fetch_news(const QString& symbol, int count) {
     // Tier 0: SWR cache — emit cached immediately and skip the network.
     {
-        const auto ncv_aged = fincept::CacheManager::instance().try_get_aged("equity:news:" + symbol);
+        const auto ncv_aged = finterm::CacheManager::instance().try_get_aged("equity:news:" + symbol);
         const QVariant ncv = ncv_aged ? QVariant(ncv_aged->value) : QVariant();
         if (!ncv.isNull()) {
             const QJsonArray arr = QJsonDocument::fromJson(ncv.toString().toUtf8()).array();
@@ -1303,7 +1303,7 @@ void EquityResearchService::fetch_news(const QString& symbol, int count) {
             return;
         }
         const QJsonArray arr = obj.value("articles").toArray();
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             "equity:news:" + symbol, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
             kNewsTtlSec, "equity");
         update_symbol_cache(symbol, "news", arr);
@@ -1363,7 +1363,7 @@ void EquityResearchService::compute_talipp(const QString& symbol, const QString&
     // Use cached historical if available, else fetch. Cache key includes
     // period so different period selections don't reuse each other's data.
     const QString candles_key = "equity:candles:" + symbol + ":" + period;
-    const auto cached_candles_aged = fincept::CacheManager::instance().try_get_aged(candles_key);
+    const auto cached_candles_aged = finterm::CacheManager::instance().try_get_aged(candles_key);
     const QVariant cached_candles = cached_candles_aged ? QVariant(cached_candles_aged->value) : QVariant();
     const auto cached_doc =
         cached_candles.isNull() ? QJsonDocument() : QJsonDocument::fromJson(cached_candles.toString().toUtf8());
@@ -1550,7 +1550,7 @@ namespace {
 /// Aroon's other leg — so the whole row is loaded rather than the display
 /// subset. Nulls (the JSON encoding of a NaN warm-up value) are not `isDouble`
 /// and drop out here; IndicatorRow::set filters any remaining non-finite value.
-void fill_row(fincept::services::equity::IndicatorRow& row, const QJsonObject& src) {
+void fill_row(finterm::services::equity::IndicatorRow& row, const QJsonObject& src) {
     for (auto it = src.constBegin(); it != src.constEnd(); ++it) {
         if (it.value().isDouble())
             row.set(it.key(), it.value().toDouble());
@@ -1937,7 +1937,7 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
     // — a write resolve() never revisits. The bump makes that window zero.
     const QString key = "equity:earnings_analysis:v3:" + symbol;
     auto fetcher = [this, symbol, key](query::QueryStore::Resolver resolve, query::QueryStore::Rejecter reject) {
-        const auto cached_aged = fincept::CacheManager::instance().try_get_aged(key);
+        const auto cached_aged = finterm::CacheManager::instance().try_get_aged(key);
         const QVariant cached = cached_aged ? QVariant(cached_aged->value) : QVariant();
         if (!cached.isNull()) {
             const auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
@@ -1965,7 +1965,7 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
                     reject(result.value("error").toString());
                     return;
                 }
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     key, QVariant(QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))),
                     kEarningsAnalysisTtlSec, "equity");
                 resolve(QVariant::fromValue(parse_earnings_analysis(result)));
@@ -1976,4 +1976,4 @@ void EquityResearchService::subscribe_earnings_analysis(QObject* owner, const QS
                                             std::move(cb), std::move(fetcher));
 }
 
-} // namespace fincept::services::equity
+} // namespace finterm::services::equity

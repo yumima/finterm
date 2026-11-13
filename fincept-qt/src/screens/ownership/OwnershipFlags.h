@@ -41,7 +41,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::ownership {
+namespace finterm::ownership {
 
 // ── Thresholds ──────────────────────────────────────────────────────────────
 // Named here rather than buried in the branches so they can be argued with.
@@ -331,4 +331,4 @@ inline ForwardReturns forward_returns(const QJsonArray& closes, const QDate& tra
     return r;
 }
 
-} // namespace fincept::ownership
+} // namespace finterm::ownership

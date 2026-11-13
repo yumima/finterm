@@ -10,9 +10,9 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static QString PANEL() {
     return QString("background: %1; border: 1px solid %2; border-radius: 2px;")
@@ -157,4 +157,4 @@ ContactScreen::ContactScreen(QWidget* parent) : QWidget(parent) {
     root->addWidget(scroll, 1);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

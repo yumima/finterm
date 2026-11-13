@@ -8,7 +8,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 static constexpr const char* kCategory = "workflow";
 // Key prefix so workflow entries are namespaced inside CacheManager
@@ -28,7 +28,7 @@ QJsonValue WorkflowCache::get(const QString& key) const {
         misses_++;
         return {};
     }
-    const QVariant cv = fincept::CacheManager::instance().get(kPrefix + key);
+    const QVariant cv = finterm::CacheManager::instance().get(kPrefix + key);
     if (cv.isNull()) {
         misses_++;
         return {};
@@ -57,7 +57,7 @@ QJsonValue WorkflowCache::get(const QString& key) const {
 bool WorkflowCache::has(const QString& key) const {
     if (!enabled_)
         return false;
-    return fincept::CacheManager::instance().has(kPrefix + key);
+    return finterm::CacheManager::instance().has(kPrefix + key);
 }
 
 // ── Write ─────────────────────────────────────────────────────────────────────
@@ -80,22 +80,22 @@ void WorkflowCache::put(const QString& key, const QJsonValue& value, int ttl_ms)
     }
 
     const int ttl_sec = std::max(1, ttl_ms / 1000);
-    fincept::CacheManager::instance().put(kPrefix + key, QVariant(serialized), ttl_sec, kCategory);
+    finterm::CacheManager::instance().put(kPrefix + key, QVariant(serialized), ttl_sec, kCategory);
 }
 
 // ── Remove ────────────────────────────────────────────────────────────────────
 
 void WorkflowCache::remove(const QString& key) {
-    fincept::CacheManager::instance().remove(kPrefix + key);
+    finterm::CacheManager::instance().remove(kPrefix + key);
 }
 
 void WorkflowCache::invalidate_prefix(const QString& prefix) {
-    fincept::CacheManager::instance().remove_prefix(kPrefix + prefix);
+    finterm::CacheManager::instance().remove_prefix(kPrefix + prefix);
     LOG_DEBUG("WorkflowCache", "Invalidated prefix: " + prefix);
 }
 
 void WorkflowCache::clear() {
-    fincept::CacheManager::instance().clear_category(kCategory);
+    finterm::CacheManager::instance().clear_category(kCategory);
     hits_ = 0;
     misses_ = 0;
     LOG_INFO("WorkflowCache", "Cleared all workflow cache entries");
@@ -105,7 +105,7 @@ void WorkflowCache::clear() {
 
 int WorkflowCache::size() const {
     // CacheManager has no per-category count — return total entries as proxy
-    return fincept::CacheManager::instance().entry_count();
+    return finterm::CacheManager::instance().entry_count();
 }
 
 double WorkflowCache::hit_rate() const {
@@ -113,4 +113,4 @@ double WorkflowCache::hit_rate() const {
     return total > 0 ? static_cast<double>(hits_) / total : 0.0;
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

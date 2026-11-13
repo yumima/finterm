@@ -14,10 +14,10 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
-using namespace fincept::pre_ipo;
+using namespace finterm::ui;
+using namespace finterm::pre_ipo;
 
 namespace {
 
@@ -414,4 +414,4 @@ QWidget* PicksView::make_signal_card(const Signal& s) const {
     return row;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

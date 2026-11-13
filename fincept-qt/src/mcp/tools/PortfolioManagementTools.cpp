@@ -7,7 +7,7 @@
 #include "services/portfolio/PortfolioService.h"
 #include "storage/repositories/PortfolioRepository.h"
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "PortfolioMgmtTools";
 
@@ -378,4 +378,4 @@ std::vector<ToolDef> get_portfolio_management_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

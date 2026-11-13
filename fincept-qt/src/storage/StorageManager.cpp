@@ -13,7 +13,7 @@
 #include <QSettings>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 
 StorageManager& StorageManager::instance() {
     static StorageManager s;
@@ -526,4 +526,4 @@ Result<void> StorageManager::clear_qsettings() {
     return Result<void>::ok();
 }
 
-} // namespace fincept
+} // namespace finterm

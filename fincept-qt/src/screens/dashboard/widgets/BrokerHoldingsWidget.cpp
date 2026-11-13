@@ -15,7 +15,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 BrokerHoldingsWidget::BrokerHoldingsWidget(const QJsonObject& cfg, QWidget* parent) : BaseWidget("HOLDINGS", parent) {
     auto* vl = content_layout();
@@ -187,4 +187,4 @@ void BrokerHoldingsWidget::apply_styles() {
                  ui::colors::TEXT_SECONDARY()));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

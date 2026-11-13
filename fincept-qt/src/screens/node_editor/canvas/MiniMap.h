@@ -3,7 +3,7 @@
 #include <QGraphicsView>
 #include <QTimer>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 class NodeScene;
 
@@ -39,4 +39,4 @@ class MiniMap : public QGraphicsView {
     QTimer* update_timer_ = nullptr;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

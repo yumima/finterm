@@ -27,7 +27,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -231,7 +231,7 @@ PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
             [this](const QVector<services::StreamTick>& ticks) {
                 if (!isVisible())
                     return;
-                namespace exthours = fincept::screens::widgets::exthours;
+                namespace exthours = finterm::screens::widgets::exthours;
                 bool changed = false;
                 QSet<QString> held; // once per batch, not a holdings scan per print
                 for (const auto& h : summary_.holdings)
@@ -667,4 +667,4 @@ void PortfolioFuturesView::load_ext_cache() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

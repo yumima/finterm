@@ -15,7 +15,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Style constants ─────────────────────────────────────────────────────────
 
@@ -420,7 +420,7 @@ QWidget* TradeVizScreen::build_filter_bar() {
 
     // Persist filter selections so the user returns to the same country/period
     // after restarting the app.
-    auto on_filter = [this]() { fincept::ScreenStateManager::instance().notify_changed(this); };
+    auto on_filter = [this]() { finterm::ScreenStateManager::instance().notify_changed(this); };
     connect(country_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, on_filter);
     connect(order_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, on_filter);
     connect(period_combo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, on_filter);
@@ -584,4 +584,4 @@ void TradeVizScreen::restore_state(const QVariantMap& state) {
     apply(year_combo_, "year");
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

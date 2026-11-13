@@ -5,11 +5,11 @@
 
 #include <QObject>
 
-namespace fincept::services::ma {
+namespace finterm::services::ma {
 
 /// Singleton service for all M&A Analytics Python backend calls.
 /// Each method is async — results delivered via signals.
-class MAAnalyticsService : public QObject, public fincept::datahub::Producer {
+class MAAnalyticsService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static MAAnalyticsService& instance();
@@ -17,7 +17,7 @@ class MAAnalyticsService : public QObject, public fincept::datahub::Producer {
     /// Register with the hub + install ma:* policies. Idempotent.
     void ensure_registered_with_hub();
 
-    // ── fincept::datahub::Producer ─────────────────────────────────────────
+    // ── finterm::datahub::Producer ─────────────────────────────────────────
     QStringList topic_patterns() const override;
     void refresh(const QStringList& topics) override;
     int max_requests_per_sec() const override;
@@ -111,4 +111,4 @@ class MAAnalyticsService : public QObject, public fincept::datahub::Producer {
     bool hub_registered_ = false;
 };
 
-} // namespace fincept::services::ma
+} // namespace finterm::services::ma

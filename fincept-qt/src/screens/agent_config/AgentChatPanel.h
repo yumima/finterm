@@ -13,7 +13,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Rich chat panel — conversational interface for interacting with configured agents.
 /// Matches the terminal chat design: proper bubbles, typing indicator, welcome panel,
@@ -95,4 +95,4 @@ class AgentChatPanel : public QWidget {
     QTimer* typing_timer_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -11,7 +11,7 @@
 
 #include <functional>
 
-namespace fincept::services::query {
+namespace finterm::services::query {
 
 /// Generic data-subscription layer that sits between async fetchers and UI
 /// consumers. Each "query" is identified by a string key (e.g.
@@ -256,4 +256,4 @@ class QueryStore : public QObject {
     QHash<QString, Entry> entries_;
 };
 
-} // namespace fincept::services::query
+} // namespace finterm::services::query

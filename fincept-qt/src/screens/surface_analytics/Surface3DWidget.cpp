@@ -8,7 +8,7 @@
 #include <cmath>
 #include <vector>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 Surface3DWidget::Surface3DWidget(QWidget* parent) : QWidget(parent) {
     setMinimumSize(400, 300);
@@ -380,4 +380,4 @@ void Surface3DWidget::wheelEvent(QWheelEvent* event) {
     update();
 }
 
-} // namespace fincept::surface
+} // namespace finterm::surface

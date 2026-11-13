@@ -19,9 +19,9 @@
 #include <QVBoxLayout>
 #include <QtConcurrent>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const QString kAccent = colors::AMBER;
 
@@ -46,8 +46,8 @@ SetupScreen::SetupScreen(QWidget* parent) : QWidget(parent) {
 
     // Liveness: system-wide network throughput meter (starts when user clicks
     // BEGIN SETUP, stops on completion/skip/timeout).
-    net_meter_ = new fincept::net::NetSpeedMeter(this);
-    connect(net_meter_, &fincept::net::NetSpeedMeter::speed_changed, this, &SetupScreen::on_net_speed);
+    net_meter_ = new finterm::net::NetSpeedMeter(this);
+    connect(net_meter_, &finterm::net::NetSpeedMeter::speed_changed, this, &SetupScreen::on_net_speed);
 
     // Elapsed-time ticker, drives the "Elapsed: Xm Ys" label once per second.
     elapsed_timer_ = new QTimer(this);
@@ -163,7 +163,7 @@ void SetupScreen::build_ui() {
     up_lbl_->setFixedWidth(110);
     live_hl->addWidget(up_lbl_);
 
-    sparkline_ = new fincept::ui::SpeedSparkline(live_row_);
+    sparkline_ = new finterm::ui::SpeedSparkline(live_row_);
     sparkline_->setMinimumHeight(18);
     sparkline_->set_line_color(QColor(kAccent));
     QColor accent_fill(kAccent);
@@ -350,9 +350,9 @@ void SetupScreen::on_begin_setup() {
 
 void SetupScreen::on_net_speed(qint64 down_bps, qint64 up_bps) {
     if (down_lbl_)
-        down_lbl_->setText(QStringLiteral("\u2193 ") + fincept::net::NetSpeedMeter::format_bps(down_bps));
+        down_lbl_->setText(QStringLiteral("\u2193 ") + finterm::net::NetSpeedMeter::format_bps(down_bps));
     if (up_lbl_)
-        up_lbl_->setText(QStringLiteral("\u2191 ") + fincept::net::NetSpeedMeter::format_bps(up_bps));
+        up_lbl_->setText(QStringLiteral("\u2191 ") + finterm::net::NetSpeedMeter::format_bps(up_bps));
     if (sparkline_)
         sparkline_->push(down_bps);
 }
@@ -525,4 +525,4 @@ void SetupScreen::prefill_completed_steps() {
     });
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

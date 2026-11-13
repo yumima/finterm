@@ -12,7 +12,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class NewsFeedPanel : public QWidget {
     Q_OBJECT
@@ -132,4 +132,4 @@ class NewsFeedPanel : public QWidget {
     static constexpr int kSourceColDragHotzone = 4; // px on each side of boundary
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

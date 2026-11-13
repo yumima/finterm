@@ -11,7 +11,7 @@
 #include <QLabel>
 #include <QScrollArea>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 using ownership::CalendarEntry;
 
@@ -227,4 +227,4 @@ void OwnershipCalendarWidget::populate() {
         QStringLiteral("%1 events in the next %2 days · SPACs excluded from lock-ups").arg(shown).arg(c.days));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

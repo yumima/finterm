@@ -14,7 +14,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Portfolio Summary Widget — mirrors a real portfolio from PortfolioService.
 /// A dropdown selects which portfolio to view when several are configured;
@@ -169,4 +169,4 @@ class PortfolioSummaryWidget : public BaseWidget {
     ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

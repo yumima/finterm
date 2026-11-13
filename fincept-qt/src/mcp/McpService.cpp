@@ -16,7 +16,7 @@
 #include <QThread>
 #include <QTimer>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 static constexpr const char* TAG = "McpService";
 
@@ -374,4 +374,4 @@ void McpService::refresh_cache() {
                       .arg(external.size()));
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

@@ -10,7 +10,7 @@
 
 #include <functional>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // ── Signal Types ────────────────────────────────────────────────────────────
 
@@ -72,4 +72,4 @@ class NewsCorrelationService : public QObject {
     QMap<QString, CategoryBaseline> baselines_;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

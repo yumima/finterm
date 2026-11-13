@@ -11,7 +11,7 @@
 #include <array>
 #include <cstddef>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
@@ -332,4 +332,4 @@ void Logger::write(LogLevel level, const QString& tag, const QString& raw_msg) {
     }
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -41,7 +41,7 @@
 
 #include <memory>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 
@@ -55,12 +55,12 @@ AgentService::AgentService(QObject* parent) : QObject(parent) {}
 // ── Cache helpers ────────────────────────────────────────────────────────────
 
 void AgentService::clear_cache() {
-    fincept::CacheManager::instance().clear_category("agents");
+    finterm::CacheManager::instance().clear_category("agents");
     LOG_INFO("AgentService", "Cache cleared");
 }
 
 QVector<AgentInfo> AgentService::cached_agents() const {
-    const QVariant cv = fincept::CacheManager::instance().get("agents:list");
+    const QVariant cv = finterm::CacheManager::instance().get("agents:list");
     if (cv.isNull())
         return {};
     const QJsonObject root = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
@@ -83,7 +83,7 @@ QVector<AgentInfo> AgentService::cached_agents() const {
 }
 
 int AgentService::cached_agent_count() const {
-    const QVariant cv = fincept::CacheManager::instance().get("agents:list");
+    const QVariant cv = finterm::CacheManager::instance().get("agents:list");
     if (cv.isNull())
         return 0;
     return QJsonDocument::fromJson(cv.toString().toUtf8()).object()["agents"].toArray().size();
@@ -651,7 +651,7 @@ void AgentService::run_python_stdin(const QString& action, const QJsonObject& pa
 
 void AgentService::discover_agents() {
     {
-        const QVariant cv = fincept::CacheManager::instance().get("agents:list");
+        const QVariant cv = finterm::CacheManager::instance().get("agents:list");
         if (!cv.isNull()) {
             LOG_DEBUG("AgentService", "agents: serving from cache");
             const QJsonObject root = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
@@ -782,7 +782,7 @@ void AgentService::discover_agents() {
         QJsonObject root;
         root["agents"] = agents_arr;
         root["categories"] = cats_arr;
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             "agents:list", QVariant(QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact))),
             kAgentCacheTtlSec, "agents");
 
@@ -909,10 +909,10 @@ QString AgentService::run_agent(const QString& query, const QJsonObject& config)
         // agent didn't call emit_artefact, latest_for_request
         // returns nullopt and we just skip.
         if (r.success && !predecessor_id.isEmpty()) {
-            auto latest = fincept::ChatArtefactRepository::instance().latest_for_request(req_id);
+            auto latest = finterm::ChatArtefactRepository::instance().latest_for_request(req_id);
             if (latest.is_ok() && latest.value().has_value()) {
                 const QString new_id = latest.value()->id;
-                if (auto sr = fincept::ChatArtefactRepository::instance().set_supersedes(new_id, predecessor_id);
+                if (auto sr = finterm::ChatArtefactRepository::instance().set_supersedes(new_id, predecessor_id);
                     sr.is_err()) {
                     LOG_WARN(
                         "AgentService",
@@ -1472,7 +1472,7 @@ QString AgentService::execute_plan(const QJsonObject& plan, const QJsonObject& c
 
 void AgentService::get_system_info() {
     {
-        const QVariant cv = fincept::CacheManager::instance().get("agents:sysinfo");
+        const QVariant cv = finterm::CacheManager::instance().get("agents:sysinfo");
         if (!cv.isNull()) {
             const QJsonObject r = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
             AgentSystemInfo info;
@@ -1502,7 +1502,7 @@ void AgentService::get_system_info() {
         for (const auto& f : result["features"].toArray())
             info.features.append(f.toString());
 
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             "agents:sysinfo", QVariant(QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))),
             kSysInfoCacheTtlSec, "agents");
 
@@ -1512,7 +1512,7 @@ void AgentService::get_system_info() {
 
 void AgentService::list_tools() {
     {
-        const QVariant cv = fincept::CacheManager::instance().get("agents:tools");
+        const QVariant cv = finterm::CacheManager::instance().get("agents:tools");
         if (!cv.isNull()) {
             const QJsonObject r = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
             AgentToolsInfo info;
@@ -1540,7 +1540,7 @@ void AgentService::list_tools() {
         for (const auto& c : result["categories"].toArray())
             info.categories.append(c.toString());
 
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             "agents:tools", QVariant(QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))),
             kToolsCacheTtlSec, "agents");
 
@@ -1550,7 +1550,7 @@ void AgentService::list_tools() {
 
 void AgentService::list_models() {
     {
-        const QVariant cv = fincept::CacheManager::instance().get("agents:models");
+        const QVariant cv = finterm::CacheManager::instance().get("agents:models");
         if (!cv.isNull()) {
             const QJsonObject r = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
             AgentModelsInfo info;
@@ -1576,7 +1576,7 @@ void AgentService::list_models() {
         for (const auto& p : result["providers"].toArray())
             info.providers.append(p.toString());
 
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             "agents:models", QVariant(QString::fromUtf8(QJsonDocument(result).toJson(QJsonDocument::Compact))),
             kModelsCacheTtlSec, "agents");
 
@@ -2098,7 +2098,7 @@ QString AgentService::make_cache_key(const QString& action, const QJsonObject& p
 }
 
 bool AgentService::get_cached_response(const QString& key, QJsonObject& out) const {
-    const QVariant cv = fincept::CacheManager::instance().get("agents:resp:" + key);
+    const QVariant cv = finterm::CacheManager::instance().get("agents:resp:" + key);
     if (cv.isNull())
         return false;
     out = QJsonDocument::fromJson(cv.toString().toUtf8()).object();
@@ -2106,20 +2106,20 @@ bool AgentService::get_cached_response(const QString& key, QJsonObject& out) con
 }
 
 void AgentService::set_cached_response(const QString& key, const QJsonObject& data) {
-    fincept::CacheManager::instance().put(
+    finterm::CacheManager::instance().put(
         "agents:resp:" + key, QVariant(QString::fromUtf8(QJsonDocument(data).toJson(QJsonDocument::Compact))),
         kResponseCacheTtlSec, "agents");
 }
 
 void AgentService::clear_response_cache() {
-    fincept::CacheManager::instance().remove_prefix("agents:resp:");
+    finterm::CacheManager::instance().remove_prefix("agents:resp:");
     LOG_INFO("AgentService", "Response cache cleared");
 }
 
 QJsonObject AgentService::get_cache_stats() const {
     QJsonObject stats;
     stats["agents_cached"] = cached_agent_count();
-    stats["total_entries"] = fincept::CacheManager::instance().entry_count();
+    stats["total_entries"] = finterm::CacheManager::instance().entry_count();
     return stats;
 }
 
@@ -2147,37 +2147,37 @@ int AgentService::max_requests_per_sec() const {
 void AgentService::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
     // Output: short-lived per-run topic, retired on completion.
-    fincept::datahub::TopicPolicy output_policy;
+    finterm::datahub::TopicPolicy output_policy;
     output_policy.push_only = true;
     output_policy.ttl_ms = 10 * 60 * 1000; // safety net if retire_topic is missed
     hub.set_policy_pattern(QStringLiteral("agent:output:*"), output_policy);
 
     // Stream: token firehose — coalesce at 50ms so subscribers don't drown.
-    fincept::datahub::TopicPolicy stream_policy;
+    finterm::datahub::TopicPolicy stream_policy;
     stream_policy.push_only = true;
     stream_policy.coalesce_within_ms = 50;
     stream_policy.ttl_ms = 5 * 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("agent:stream:*"), stream_policy);
 
     // Status: thinking/tool narration — same shape as stream.
-    fincept::datahub::TopicPolicy status_policy;
+    finterm::datahub::TopicPolicy status_policy;
     status_policy.push_only = true;
     status_policy.coalesce_within_ms = 100;
     status_policy.ttl_ms = 5 * 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("agent:status:*"), status_policy);
 
     // Routing: one-shot decision per run.
-    fincept::datahub::TopicPolicy routing_policy;
+    finterm::datahub::TopicPolicy routing_policy;
     routing_policy.push_only = true;
     routing_policy.ttl_ms = 10 * 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("agent:routing:*"), routing_policy);
 
     // Error: rare but important — keep briefly for late subscribers.
-    fincept::datahub::TopicPolicy error_policy;
+    finterm::datahub::TopicPolicy error_policy;
     error_policy.push_only = true;
     error_policy.ttl_ms = 2 * 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("agent:error:*"), error_policy);
@@ -2308,11 +2308,11 @@ void AgentService::publish_agent_result(const AgentExecutionResult& r, bool fina
         {"final", final},
     };
     const QString topic = QStringLiteral("agent:output:") + r.request_id;
-    fincept::datahub::DataHub::instance().publish(topic, QVariant(obj));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant(obj));
     if (final) {
         // Disposable per-run topic — drop cached state to bound hub memory.
         // Subscribers still pinned via owner remain attached.
-        fincept::datahub::DataHub::instance().retire_topic(topic);
+        finterm::datahub::DataHub::instance().retire_topic(topic);
     }
 }
 
@@ -2320,14 +2320,14 @@ void AgentService::publish_agent_token(const QString& run_id, const QString& tok
     if (!hub_registered_ || run_id.isEmpty())
         return;
     QJsonObject obj{{"request_id", run_id}, {"token", token}};
-    fincept::datahub::DataHub::instance().publish(QStringLiteral("agent:stream:") + run_id, QVariant(obj));
+    finterm::datahub::DataHub::instance().publish(QStringLiteral("agent:stream:") + run_id, QVariant(obj));
 }
 
 void AgentService::publish_agent_status(const QString& run_id, const QString& status) {
     if (!hub_registered_ || run_id.isEmpty())
         return;
     QJsonObject obj{{"request_id", run_id}, {"status", status}};
-    fincept::datahub::DataHub::instance().publish(QStringLiteral("agent:status:") + run_id, QVariant(obj));
+    finterm::datahub::DataHub::instance().publish(QStringLiteral("agent:status:") + run_id, QVariant(obj));
 }
 
 void AgentService::publish_routing_result(const RoutingResult& r) {
@@ -2341,14 +2341,14 @@ void AgentService::publish_routing_result(const RoutingResult& r) {
         {"match_score", r.has_match_score ? QJsonValue(r.match_score) : QJsonValue()},
         {"score_basis", r.score_basis},
     };
-    fincept::datahub::DataHub::instance().publish(QStringLiteral("agent:routing:") + r.request_id, QVariant(obj));
+    finterm::datahub::DataHub::instance().publish(QStringLiteral("agent:routing:") + r.request_id, QVariant(obj));
 }
 
 void AgentService::publish_agent_error(const QString& context, const QString& message) {
     if (!hub_registered_)
         return;
     QJsonObject obj{{"context", context}, {"message", message}};
-    fincept::datahub::DataHub::instance().publish(QStringLiteral("agent:error:") + context, QVariant(obj));
+    finterm::datahub::DataHub::instance().publish(QStringLiteral("agent:error:") + context, QVariant(obj));
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

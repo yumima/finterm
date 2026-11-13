@@ -6,7 +6,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Earnings change plotted against what the stock actually did on the print.
 ///
@@ -84,4 +84,4 @@ class EarningsReactionChart : public QWidget {
     services::equity::ReactionMetric metric_ = services::equity::ReactionMetric::Surprise;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -4,7 +4,7 @@
 
 #include <QDateTime>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 ToastService& ToastService::instance() {
     static ToastService s;
@@ -46,4 +46,4 @@ QList<ToastService::Notification> ToastService::history() const {
     return history_;
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

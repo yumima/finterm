@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 #include <QVector>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Stock Screener Widget — screens a broad basket by volume, change%, or price.
 /// Fetches live data via yfinance batch_quotes and sorts/filters client-side.
@@ -77,4 +77,4 @@ class ScreenerWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

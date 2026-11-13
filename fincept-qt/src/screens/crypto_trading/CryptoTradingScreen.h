@@ -18,16 +18,16 @@
 
 #include <atomic>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 class CryptoTickerBar;
 class CryptoWatchlist;
 class CryptoChart;
 class CryptoOrderEntry;
 class CryptoOrderBook;
 class CryptoBottomPanel;
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class CryptoTradingScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
@@ -174,4 +174,4 @@ class CryptoTradingScreen : public QWidget, public IStatefulScreen {
     void flush_ws_updates();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

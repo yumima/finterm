@@ -22,11 +22,11 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::services {
+namespace finterm::services {
 struct SkillProposal;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class AiSystemSection : public QWidget {
     Q_OBJECT
@@ -70,4 +70,4 @@ class AiSystemSection : public QWidget {
     void show_proposal_dialog(const Result<services::SkillProposal>& r);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

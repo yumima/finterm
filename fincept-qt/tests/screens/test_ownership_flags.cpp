@@ -12,7 +12,7 @@
 
 #include "screens/ownership/OwnershipFlags.h"
 
-using namespace fincept::ownership;
+using namespace finterm::ownership;
 
 namespace {
 

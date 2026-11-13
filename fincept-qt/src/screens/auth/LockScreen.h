@@ -6,7 +6,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Lock screen — PIN setup (mandatory first time) and PIN unlock (subsequent).
 /// Obsidian design: sharp corners, monospace, no shadows, terminal aesthetic.
@@ -75,4 +75,4 @@ class LockScreen : public QWidget {
     void hideEvent(QHideEvent* event) override;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

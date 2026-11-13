@@ -39,7 +39,7 @@ void apply_solid_background(QWidget* widget, const QColor& color) {
 
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
     apply_solid_background(this, QColor(ui::colors::BG_BASE()));
@@ -99,10 +99,10 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
     vl->addWidget(status_bar_);
 
     // ── In-app notification toast (overlay, not in layout) ────────────────────
-    notif_toast_ = new fincept::ui::NotifToast(this);
-    connect(&fincept::notifications::NotificationService::instance(),
-            &fincept::notifications::NotificationService::notification_received, notif_toast_,
-            &fincept::ui::NotifToast::show_notification);
+    notif_toast_ = new finterm::ui::NotifToast(this);
+    connect(&finterm::notifications::NotificationService::instance(),
+            &finterm::notifications::NotificationService::notification_received, notif_toast_,
+            &finterm::ui::NotifToast::show_notification);
 
     // ── Debounced save timer (P3: not started in constructor) ──
     save_timer_ = new QTimer(this);
@@ -132,7 +132,7 @@ DashboardScreen::DashboardScreen(QWidget* parent) : QWidget(parent) {
         auto* dlg = new TemplatePicker(this);
         connect(dlg, &TemplatePicker::template_selected, this, [this](const QString& tid) {
             // Clear saved state so fresh template is used
-            fincept::SettingsRepository::instance().remove("dashboard_canvas_layout");
+            finterm::SettingsRepository::instance().remove("dashboard_canvas_layout");
             canvas_->apply_template(tid);
         });
         dlg->exec();
@@ -363,11 +363,11 @@ void DashboardScreen::save_layout() {
         stream << item.config; // per-instance gear config (broker/account/symbol/…)
     }
 
-    fincept::SettingsRepository::instance().set("dashboard_canvas_layout", buf.toBase64(), "dashboard");
+    finterm::SettingsRepository::instance().set("dashboard_canvas_layout", buf.toBase64(), "dashboard");
 }
 
 void DashboardScreen::restore_layout() {
-    auto result = fincept::SettingsRepository::instance().get("dashboard_canvas_layout");
+    auto result = finterm::SettingsRepository::instance().get("dashboard_canvas_layout");
 
     if (result.is_err() || result.value().isEmpty()) {
         build_default_layout();
@@ -423,4 +423,4 @@ void DashboardScreen::build_default_layout() {
     canvas_->apply_template("portfolio_manager");
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

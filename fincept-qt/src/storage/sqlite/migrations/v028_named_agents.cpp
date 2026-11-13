@@ -31,7 +31,7 @@
 #include <QSqlQuery>
 #include <QVector>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 constexpr const char* kTag = "Migration028";
@@ -277,4 +277,4 @@ void register_migration_v028() {
     MigrationRunner::register_migration({28, "named_agents", apply_v028});
 }
 
-} // namespace fincept
+} // namespace finterm

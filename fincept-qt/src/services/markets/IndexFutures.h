@@ -15,7 +15,7 @@
 #include <functional>
 #include <limits>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// The futures quote for a cash index — ES for the S&P 500, NQ for the
 /// Nasdaq, … — the way a futures board shows it: last price and change since
@@ -120,4 +120,4 @@ QString contract_label(const IndexFutureQuote& q);
 QString index_future_tooltip(const IndexFutureQuote& q, const QString& label);
 QString index_future_unavailable_tooltip(const QString& index, const QString& label);
 
-} // namespace fincept::services
+} // namespace finterm::services

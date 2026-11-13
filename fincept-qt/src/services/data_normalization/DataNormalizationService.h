@@ -9,7 +9,7 @@
 
 #include <functional>
 
-namespace fincept::services {
+namespace finterm::services {
 
 struct NormalizedRecord {
     QString id;
@@ -76,4 +76,4 @@ class DataNormalizationService : public QObject {
     void apply_auth(const DataMapping& mapping);
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

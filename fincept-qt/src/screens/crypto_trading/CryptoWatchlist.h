@@ -10,7 +10,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 struct WatchlistEntry {
     QString symbol;
@@ -51,4 +51,4 @@ class CryptoWatchlist : public QWidget {
     QMutex mutex_;
 };
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

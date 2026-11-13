@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Strategy list — the user's saved strategies, compact table with pagination.
 class StrategyListPanel : public QWidget {
@@ -19,7 +19,7 @@ class StrategyListPanel : public QWidget {
     explicit StrategyListPanel(QWidget* parent = nullptr);
 
   private slots:
-    void on_strategies_loaded(QVector<fincept::services::algo::AlgoStrategy> strategies);
+    void on_strategies_loaded(QVector<finterm::services::algo::AlgoStrategy> strategies);
     void on_sort_changed(int index);
     void on_error(const QString& context, const QString& msg);
     void on_filter_changed(const QString& text);
@@ -42,9 +42,9 @@ class StrategyListPanel : public QWidget {
     QPushButton* prev_btn_ = nullptr;
     QPushButton* next_btn_ = nullptr;
 
-    QVector<fincept::services::algo::AlgoStrategy> strategies_; // full list
-    QVector<fincept::services::algo::AlgoStrategy> filtered_;   // after search/sort
+    QVector<finterm::services::algo::AlgoStrategy> strategies_; // full list
+    QVector<finterm::services::algo::AlgoStrategy> filtered_;   // after search/sort
     int current_page_ = 0;                                      // 0-based
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

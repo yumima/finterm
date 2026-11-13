@@ -1,7 +1,7 @@
 #pragma once
 #include <QPushButton>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Bell button with unread badge — lives in DashboardStatusBar.
 /// Connects to NotificationService::unread_count_changed to update badge.
@@ -20,4 +20,4 @@ class NotifBell : public QPushButton {
     int unread_{0};
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

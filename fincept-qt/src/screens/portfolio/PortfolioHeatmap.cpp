@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PortfolioHeatmap::PortfolioHeatmap(QWidget* parent) : QWidget(parent) {
     connect(&services::MarketDataService::instance(), &services::MarketDataService::stream_ticks, this,
@@ -933,7 +933,7 @@ void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
             // pairing and the timestamp check, so this column would happily
             // colour a tile from a reference bar left over from an earlier day
             // — a multi-day return painted as an after-hours move.
-            namespace exthours = fincept::screens::widgets::exthours;
+            namespace exthours = finterm::screens::widgets::exthours;
             const bool in_pre = exthours::before_the_close_et();
             const qint64 now_secs = QDateTime::currentSecsSinceEpoch();
             for (const auto& v : rows) {
@@ -979,7 +979,7 @@ void PortfolioHeatmap::hideEvent(QHideEvent* e) {
 void PortfolioHeatmap::on_stream_ticks(const QVector<services::StreamTick>& ticks) {
     if (mode_ != portfolio::HeatmapMode::Aft || !isVisible())
         return;
-    namespace exthours = fincept::screens::widgets::exthours;
+    namespace exthours = finterm::screens::widgets::exthours;
     QSet<QString> moved;
     QSet<QString> held; // once per batch, not a holdings scan per print
     for (const auto& h : holdings_)
@@ -1014,4 +1014,4 @@ void PortfolioHeatmap::on_stream_ticks(const QVector<services::StreamTick>& tick
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

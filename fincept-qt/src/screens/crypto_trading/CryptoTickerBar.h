@@ -4,7 +4,7 @@
 #include <QLabel>
 #include <QWidget>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 class CryptoTickerBar : public QWidget {
     Q_OBJECT
@@ -44,4 +44,4 @@ class CryptoTickerBar : public QWidget {
     double last_spread_display_ = -1;
 };
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

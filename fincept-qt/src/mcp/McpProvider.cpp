@@ -14,7 +14,7 @@
 #include <atomic>
 #include <memory>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 static constexpr const char* TAG = "McpProvider";
 
@@ -566,4 +566,4 @@ quint64 McpProvider::generation() const {
     return generation_;
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

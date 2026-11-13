@@ -10,7 +10,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Modal dialog for choosing a widget to add to the dashboard canvas.
 /// Dynamically pulls categories from WidgetRegistry — no hardcoded list.
@@ -44,4 +44,4 @@ class AddWidgetDialog : public QDialog {
     QString active_category_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

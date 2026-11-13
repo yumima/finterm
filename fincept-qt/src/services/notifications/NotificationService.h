@@ -8,7 +8,7 @@
 #include <memory>
 #include <vector>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 // ── Enumerations ──────────────────────────────────────────────────────────────
 
@@ -98,7 +98,7 @@ class NotificationService : public QObject {
     void reload_all_configs();
 
   signals:
-    void notification_received(const fincept::notifications::NotificationRecord& record);
+    void notification_received(const finterm::notifications::NotificationRecord& record);
     void unread_count_changed(int count);
 
   private:
@@ -111,4 +111,4 @@ class NotificationService : public QObject {
     int unread_{0};
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

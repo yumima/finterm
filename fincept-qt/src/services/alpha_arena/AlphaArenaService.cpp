@@ -6,7 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 
-namespace fincept::services::alpha_arena {
+namespace finterm::services::alpha_arena {
 
 AlphaArenaService& AlphaArenaService::instance() {
     static AlphaArenaService s;
@@ -17,9 +17,9 @@ void AlphaArenaService::run_action(const QJsonObject& payload, ActionCallback cb
     const QString json_arg = QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
     const QString action = payload.value("action").toString();
 
-    fincept::python::PythonRunner::instance().run(
+    finterm::python::PythonRunner::instance().run(
         QStringLiteral("alpha_arena/main.py"), {json_arg},
-        [cb = std::move(cb), action](const fincept::python::PythonResult& result) {
+        [cb = std::move(cb), action](const finterm::python::PythonResult& result) {
             ActionResult out;
             if (!result.success) {
                 out.error = result.error.isEmpty() ? QStringLiteral("Engine call failed") : result.error;
@@ -29,7 +29,7 @@ void AlphaArenaService::run_action(const QJsonObject& payload, ActionCallback cb
                 return;
             }
 
-            const QString json_str = fincept::python::extract_json(result.output);
+            const QString json_str = finterm::python::extract_json(result.output);
             if (json_str.isEmpty()) {
                 out.error = QStringLiteral("No response from engine");
                 if (cb)
@@ -61,4 +61,4 @@ void AlphaArenaService::run_action(const QJsonObject& payload, ActionCallback cb
         });
 }
 
-} // namespace fincept::services::alpha_arena
+} // namespace finterm::services::alpha_arena

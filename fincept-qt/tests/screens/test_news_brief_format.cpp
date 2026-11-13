@@ -11,8 +11,8 @@
 
 #include "screens/news/NewsBriefFormat.h"
 
-using fincept::screens::brief::merge_duplicate_sections;
-using fincept::screens::brief::split;
+using finterm::screens::brief::merge_duplicate_sections;
+using finterm::screens::brief::split;
 
 namespace {
 
@@ -228,7 +228,7 @@ private slots:
     // ── the vocabulary the split depends on ──────────────────────────────────
 
     void heading_separators_a_model_actually_uses_are_recognised() {
-        using fincept::news::categories_in_heading;
+        using finterm::news::categories_in_heading;
         const QStringList both{QStringLiteral("DEFENSE"), QStringLiteral("CRYPTO")};
         QCOMPARE(categories_in_heading(QStringLiteral("DEFENSE, CRYPTO")), both);
         QCOMPARE(categories_in_heading(QStringLiteral("DEFENSE / CRYPTO")), both);
@@ -245,7 +245,7 @@ private slots:
         // All-or-nothing is the contract the caller relies on to leave a
         // heading alone. Returning the recognised subset would let the caller
         // split a heading whose other half it cannot name.
-        using fincept::news::categories_in_heading;
+        using finterm::news::categories_in_heading;
         QVERIFY(categories_in_heading(QStringLiteral("ENERGY & COMMODITIES")).isEmpty());
         QVERIFY(categories_in_heading(QStringLiteral("ENERGY, COMMODITIES & CRYPTO")).isEmpty());
         QVERIFY(categories_in_heading(QStringLiteral("TOP STORIES")).isEmpty());
@@ -255,7 +255,7 @@ private slots:
         // QString::remove(regex) strips every match, not just the edges, so a
         // \s in the decoration class would collapse "MARKET S" to "MARKETS" and
         // recognise a heading as a category it is not.
-        using fincept::news::categories_in_heading;
+        using finterm::news::categories_in_heading;
         QVERIFY(categories_in_heading(QStringLiteral("MARKET S, TECH")).isEmpty());
         QVERIFY(categories_in_heading(QStringLiteral("CRY PTO, DEFENSE")).isEmpty());
     }
@@ -265,24 +265,24 @@ private slots:
         // editorial order decides what the model reaches for first — but they
         // must never hold different NAMES, or the prompt offers a category the
         // renderer cannot recognise in a heading.
-        QStringList menu = fincept::news::prompt_menu();
-        QStringList rules = fincept::news::category_names();
+        QStringList menu = finterm::news::prompt_menu();
+        QStringList rules = finterm::news::category_names();
         QVERIFY2(menu != rules, "if these ever match, the editorial order was lost to a refactor");
         menu.sort();
         rules.sort();
         QCOMPARE(menu, rules);
         // PORTFOLIO is a heading but not a classification: no wording in a
         // headline can make a story belong to the reader's holdings.
-        QVERIFY(fincept::news::heading_vocabulary().contains(QStringLiteral("PORTFOLIO")));
+        QVERIFY(finterm::news::heading_vocabulary().contains(QStringLiteral("PORTFOLIO")));
         QVERIFY(!rules.contains(QStringLiteral("PORTFOLIO")));
-        QCOMPARE(fincept::news::classify(QStringLiteral("your nvda position is exposed")), QString());
+        QCOMPARE(finterm::news::classify(QStringLiteral("your nvda position is exposed")), QString());
     }
 
     void classification_order_survived_the_move_out_of_enrich_article() {
         // The table was an if/else-if chain inside enrich_article(); first
         // match still wins, and the order still decides the overlaps. Miners'
         // results are EARNINGS before they are CRYPTO.
-        using fincept::news::classify;
+        using finterm::news::classify;
         QCOMPARE(classify(QStringLiteral("bitcoin miner posts quarterly results")),
                  QStringLiteral("EARNINGS"));
         QCOMPARE(classify(QStringLiteral("ethereum staking hits a record")),
@@ -295,7 +295,7 @@ private slots:
     void the_allow_list_keeps_a_bullet_out_of_a_section_the_model_never_wrote() {
         // A DEFENSE/CRYPTO bullet mentioning Russia must not be pulled into
         // GEOPOLITICS, which is not one of the names on that heading.
-        using fincept::news::classify;
+        using finterm::news::classify;
         const QSet<QString> allowed{QStringLiteral("DEFENSE"), QStringLiteral("CRYPTO")};
         QCOMPARE(classify(QStringLiteral("russia moved troops to the border"), allowed),
                  QStringLiteral("DEFENSE"));

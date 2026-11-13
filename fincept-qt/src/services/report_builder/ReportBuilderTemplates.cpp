@@ -8,7 +8,7 @@
 
 #include <QDateTime>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace rep = report;
 
@@ -563,4 +563,4 @@ void apply_template_to_service(ReportBuilderService* svc, const QString& name) {
     svc->replace_document(doc);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

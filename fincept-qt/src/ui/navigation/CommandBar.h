@@ -6,7 +6,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 struct ScreenCommand {
     QString id;
@@ -116,4 +116,4 @@ class CommandBar : public QWidget {
     void execute_index(int index);
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

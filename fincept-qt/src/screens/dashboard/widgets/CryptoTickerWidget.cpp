@@ -16,7 +16,7 @@
 #include <QLabel>
 #include <QLineEdit>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 namespace {
 const QStringList kDefaultPairs = {"BTC/USD", "ETH/USD", "SOL/USD"};
@@ -128,9 +128,9 @@ void CryptoTickerWidget::hub_resubscribe() {
         const QString topic = QStringLiteral("ws:") + exchange_ + QStringLiteral(":ticker:") + pair;
         const QString pair_copy = pair;
         hub.subscribe(this, topic, [this, pair_copy](const QVariant& v) {
-            if (!v.canConvert<fincept::trading::TickerData>())
+            if (!v.canConvert<finterm::trading::TickerData>())
                 return;
-            on_ticker(pair_copy, v.value<fincept::trading::TickerData>());
+            on_ticker(pair_copy, v.value<finterm::trading::TickerData>());
         });
     }
     hub_active_ = true;
@@ -153,7 +153,7 @@ void CryptoTickerWidget::hideEvent(QHideEvent* e) {
         hub_unsubscribe_all();
 }
 
-void CryptoTickerWidget::on_ticker(const QString& pair, const fincept::trading::TickerData& t) {
+void CryptoTickerWidget::on_ticker(const QString& pair, const finterm::trading::TickerData& t) {
     auto it = rows_.find(pair);
     if (it == rows_.end())
         return;
@@ -224,4 +224,4 @@ void CryptoTickerWidget::apply_styles() {
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

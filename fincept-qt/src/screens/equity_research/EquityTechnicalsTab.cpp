@@ -17,7 +17,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Accent colors without a theme token ──────────────────────────────────────
 static constexpr const char* LTGREEN = "#4ade80";
@@ -1335,4 +1335,4 @@ void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& p
     as_of_label_->setVisible(!bits.isEmpty());
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

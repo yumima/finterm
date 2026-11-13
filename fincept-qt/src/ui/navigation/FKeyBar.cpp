@@ -5,7 +5,7 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 TabBar::TabBar(QWidget* parent) : QWidget(parent) {
     setFixedHeight(32);
@@ -102,4 +102,4 @@ void TabBar::update_styles() {
     }
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

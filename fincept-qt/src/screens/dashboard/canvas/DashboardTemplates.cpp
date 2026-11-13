@@ -1,6 +1,6 @@
 #include "screens/dashboard/canvas/DashboardTemplates.h"
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // Helper: create a GridItem with type + 12-col layout (no instance_id)
 static GridItem gi(const char* id, int x, int y, int w, int h, int mw = 2, int mh = 3) {
@@ -105,4 +105,4 @@ QVector<DashboardTemplate> all_dashboard_templates() {
     };
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

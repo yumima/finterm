@@ -5,7 +5,7 @@ class QLabel;
 class QString;
 class QWidget;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Canonical section-header bar used at the top of each panel's content
 /// region — e.g. "RANKINGS", "LEADERBOARD", "COMMITTEE INTELLIGENCE". Returns
@@ -32,4 +32,4 @@ QLabel* make_section_header(const QString& text, QWidget* parent = nullptr);
 /// QLabel and want to re-style it (e.g. on theme refresh).
 QString section_header_qss();
 
-} // namespace fincept::ui
+} // namespace finterm::ui

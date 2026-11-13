@@ -25,9 +25,9 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 namespace {
 
@@ -822,4 +822,4 @@ void SurfaceControlPanel::set_provider_status(const QString& provider_name, cons
         dt->setText(detail);
 }
 
-} // namespace fincept::surface
+} // namespace finterm::surface

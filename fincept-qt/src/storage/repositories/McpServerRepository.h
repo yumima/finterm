@@ -1,7 +1,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 struct McpServer {
     QString id;
@@ -48,4 +48,4 @@ class McpServerRepository : public BaseRepository<McpServer> {
     static McpServer map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

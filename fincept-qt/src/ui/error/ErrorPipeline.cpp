@@ -3,7 +3,7 @@
 #include "core/logging/Logger.h"
 #include "ui/notifications/ToastService.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 ErrorPipeline& ErrorPipeline::instance() {
     static ErrorPipeline s;
@@ -60,4 +60,4 @@ int ErrorPipeline::shell_error_count() const {
     return shell_errors_.size();
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

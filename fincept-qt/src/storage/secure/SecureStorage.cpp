@@ -63,12 +63,12 @@ struct KeyringIdentity {
     const wchar_t* win_prefix; // Credential Manager target prefix
     const char* settings_org; // QSettings organization of the obfuscated fallback
 };
-static const KeyringIdentity kCurrentId{fincept::AppIdentity::kBundleId, "finterm-key", L"finterm/",
-                                        fincept::AppIdentity::kOrg};
-static const KeyringIdentity kLegacyId{fincept::AppIdentity::kBundleIdLegacy, "fincept-key", L"FinceptTerminal/",
-                                       fincept::AppIdentity::kOrgLegacy};
+static const KeyringIdentity kCurrentId{finterm::AppIdentity::kBundleId, "finterm-key", L"finterm/",
+                                        finterm::AppIdentity::kOrg};
+static const KeyringIdentity kLegacyId{finterm::AppIdentity::kBundleIdLegacy, "fincept-key", L"FinceptTerminal/",
+                                       finterm::AppIdentity::kOrgLegacy};
 
-namespace fincept {
+namespace finterm {
 
 QString SecureStorage::backend_name() {
 #if defined(Q_OS_WIN)
@@ -924,4 +924,4 @@ Result<QStringList> SecureStorage::list_keys(const QString& prefix) {
 #endif
 }
 
-} // namespace fincept
+} // namespace finterm

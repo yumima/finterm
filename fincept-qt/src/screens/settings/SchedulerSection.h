@@ -13,7 +13,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class SchedulerSection : public QWidget {
     Q_OBJECT
@@ -45,4 +45,4 @@ class SchedulerSection : public QWidget {
     bool selected_enabled() const;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -13,9 +13,9 @@
 #include <QRegularExpression>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const QString kGovDataCongressColor = "#8B5CF6";
 static const QString kGovDataCongressScript = "congress_gov_data.py";
@@ -372,4 +372,4 @@ void GovDataCongressPanel::on_export_csv() {
     export_table_to_csv(table, "congress_data.csv", this);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

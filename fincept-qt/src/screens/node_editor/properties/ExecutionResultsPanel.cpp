@@ -14,7 +14,7 @@
 #include <QScrollBar>
 #include <QTimer>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -402,4 +402,4 @@ void ExecutionResultsPanel::set_finished(const WorkflowExecutionResult& result) 
     }
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

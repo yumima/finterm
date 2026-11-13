@@ -1,7 +1,7 @@
 #pragma once
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Contact Us — email, phone, office address, quick actions.
 class ContactScreen : public QWidget {
@@ -13,4 +13,4 @@ class ContactScreen : public QWidget {
     void navigate_back();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

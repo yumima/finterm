@@ -16,7 +16,7 @@
 #include <QLabel>
 #include <QLineEdit>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 namespace {
 const QStringList kDefaultSymbols = {"AAPL", "MSFT", "GOOGL", "AMZN", "NVDA"};
@@ -117,9 +117,9 @@ void MarketQuoteStripWidget::hub_resubscribe() {
     for (const auto& sym : symbols_) {
         const QString topic = QStringLiteral("market:quote:") + sym;
         hub.subscribe(this, topic, [this](const QVariant& v) {
-            if (!v.canConvert<fincept::services::QuoteData>())
+            if (!v.canConvert<finterm::services::QuoteData>())
                 return;
-            on_quote(v.value<fincept::services::QuoteData>());
+            on_quote(v.value<finterm::services::QuoteData>());
         });
     }
     hub_active_ = true;
@@ -142,7 +142,7 @@ void MarketQuoteStripWidget::hideEvent(QHideEvent* e) {
         hub_unsubscribe_all();
 }
 
-void MarketQuoteStripWidget::on_quote(const fincept::services::QuoteData& q) {
+void MarketQuoteStripWidget::on_quote(const finterm::services::QuoteData& q) {
     auto it = rows_.find(q.symbol);
     if (it == rows_.end())
         return;
@@ -206,4 +206,4 @@ void MarketQuoteStripWidget::apply_styles() {
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

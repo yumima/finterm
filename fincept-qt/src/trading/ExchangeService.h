@@ -23,7 +23,7 @@
 
 #include <atomic>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 class ExchangeSession;
 
@@ -120,4 +120,4 @@ class ExchangeService : public QObject {
     int feed_interval_ = 5;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

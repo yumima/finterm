@@ -17,7 +17,7 @@
 
 static constexpr int kRefDataTtlSec = 60 * 60; // 1 hour — static reference data
 
-namespace fincept::services {
+namespace finterm::services {
 
 static constexpr const char* kQuantLibClientTag = "QuantLibClient";
 
@@ -147,7 +147,7 @@ void QuantLibClient::call(const QString& endpoint, const QJsonObject& body, Quan
         if (!body.isEmpty())
             cache_key += ":" + QString::fromUtf8(QJsonDocument(body).toJson(QJsonDocument::Compact));
 
-        const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+        const QVariant cached = finterm::CacheManager::instance().get(cache_key);
         if (!cached.isNull()) {
             auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
             mcp::ToolResult result =
@@ -186,7 +186,7 @@ void QuantLibClient::call(const QString& endpoint, const QJsonObject& body, Quan
                 else if (result.data.isArray())
                     to_cache = QString::fromUtf8(QJsonDocument(result.data.toArray()).toJson(QJsonDocument::Compact));
                 if (!to_cache.isEmpty())
-                    fincept::CacheManager::instance().put(cache_key, QVariant(to_cache), kRefDataTtlSec, "quantlib");
+                    finterm::CacheManager::instance().put(cache_key, QVariant(to_cache), kRefDataTtlSec, "quantlib");
             }
             LOG_DEBUG(
                 kQuantLibClientTag,
@@ -243,4 +243,4 @@ mcp::ToolResult QuantLibClient::call_sync(const QString& endpoint, const QJsonOb
     return result;
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

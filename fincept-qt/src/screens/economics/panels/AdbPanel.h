@@ -9,7 +9,7 @@
 #include <QComboBox>
 #include <QLineEdit>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class AdbPanel : public EconPanelBase {
     Q_OBJECT
@@ -32,4 +32,4 @@ class AdbPanel : public EconPanelBase {
     QLineEdit* end_input_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

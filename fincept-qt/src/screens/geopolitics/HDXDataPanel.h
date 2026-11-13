@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// HDX Humanitarian Data Exchange panel — search, browse, and explore datasets.
 class HDXDataPanel : public QWidget {
@@ -19,13 +19,13 @@ class HDXDataPanel : public QWidget {
     explicit HDXDataPanel(QWidget* parent = nullptr);
 
   private slots:
-    void on_hdx_results(const QString& context, QVector<fincept::services::geo::HDXDataset> datasets);
+    void on_hdx_results(const QString& context, QVector<finterm::services::geo::HDXDataset> datasets);
     void on_view_changed(int index);
 
   private:
     void build_ui();
     void connect_service();
-    void populate_table(const QVector<fincept::services::geo::HDXDataset>& datasets);
+    void populate_table(const QVector<finterm::services::geo::HDXDataset>& datasets);
     void show_loading(bool on);
 
     // View tab buttons
@@ -48,9 +48,9 @@ class HDXDataPanel : public QWidget {
     QLabel* dataset_count_ = nullptr;
 
     // Per-view result cache (avoids re-fetching on tab switch)
-    QVector<fincept::services::geo::HDXDataset> cache_conflicts_;
-    QVector<fincept::services::geo::HDXDataset> cache_humanitarian_;
-    QVector<fincept::services::geo::HDXDataset> cache_datasets_;
+    QVector<finterm::services::geo::HDXDataset> cache_conflicts_;
+    QVector<finterm::services::geo::HDXDataset> cache_humanitarian_;
+    QVector<finterm::services::geo::HDXDataset> cache_datasets_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

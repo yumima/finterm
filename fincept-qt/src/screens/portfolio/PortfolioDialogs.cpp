@@ -28,7 +28,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── CreatePortfolioDialog ────────────────────────────────────────────────────
 
@@ -360,7 +360,7 @@ void AddAssetDialog::fire_search(const QString& query) {
                 return;
             // A failed search says so (read_search_reply) — not the last query's
             // matches, and not an empty list that reads as "no such ticker".
-            const auto reply = fincept::ui::read_search_reply(ok, result);
+            const auto reply = finterm::ui::read_search_reply(ok, result);
             self->show_results(reply.results, reply.failure);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -1077,4 +1077,4 @@ QString AddDividendDialog::notes() const {
     return notes_edit_->text().trimmed();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

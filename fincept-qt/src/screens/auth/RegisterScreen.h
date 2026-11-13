@@ -4,7 +4,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Local-only registration: pick a username + set a 4-6 digit PIN.
 /// No email, no OTP, no MFA — everything is stored in the local auth.db.
@@ -34,4 +34,4 @@ class RegisterScreen : public QWidget {
     void on_create();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

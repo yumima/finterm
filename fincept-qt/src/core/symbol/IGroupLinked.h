@@ -4,7 +4,7 @@
 
 #include <QtPlugin>
 
-namespace fincept {
+namespace finterm {
 
 /// Mix-in interface implemented by any screen that participates in symbol
 /// group linking (Bloomberg Launchpad "Security Groups" equivalent).
@@ -39,6 +39,6 @@ class IGroupLinked {
     virtual SymbolRef current_symbol() const = 0;
 };
 
-} // namespace fincept
+} // namespace finterm
 
-Q_DECLARE_INTERFACE(fincept::IGroupLinked, "in.fincept.IGroupLinked/1.0")
+Q_DECLARE_INTERFACE(finterm::IGroupLinked, "in.fincept.IGroupLinked/1.0")

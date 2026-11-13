@@ -7,7 +7,7 @@
 
 #include <utility>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 // Exclusive upper bound for a prefix range query: increment the last char
@@ -312,4 +312,4 @@ int CacheManager::entry_count() const {
     return q.next() ? q.value(0).toInt() : 0;
 }
 
-} // namespace fincept
+} // namespace finterm

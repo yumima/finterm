@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// `prev_close` NaN or ≤ 0 → change left as it was. A missing (NaN or ≤ 0)
 /// high/low is left missing — a tick is one print, not a day range.
@@ -43,4 +43,4 @@ inline bool tick_pairs_with(double close, double price, double change) {
     return std::abs((price - change) - close) <= 1e-5 * close;
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -1,6 +1,6 @@
 #include "storage/repositories/NotesRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 NotesRepository& NotesRepository::instance() {
     static NotesRepository s;
@@ -117,4 +117,4 @@ Result<qint64> NotesRepository::create_template(const NoteTemplate& t) {
                        {t.name, t.description, t.content, t.category});
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -13,12 +13,12 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::relmap {
+namespace finterm::relmap {
 class RelationshipGraphScene;
 class RelationshipGraphView;
-} // namespace fincept::relmap
+} // namespace finterm::relmap
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Corporate Intelligence Relationship Map — full screen with search, graph,
 /// filter panel, detail panel, legend, and status bar.
@@ -57,7 +57,7 @@ class RelationshipMapScreen : public QWidget, public IStatefulScreen {
                           const QString& failure = {}); // failure: shown instead of "No results"
     void show_dropdown();
     void hide_dropdown();
-    void on_data_ready(const fincept::relmap::RelationshipData& data);
+    void on_data_ready(const finterm::relmap::RelationshipData& data);
     void on_fetch_failed(const QString& error);
     void on_progress(int percent, const QString& message);
     void on_node_selected();
@@ -115,4 +115,4 @@ class RelationshipMapScreen : public QWidget, public IStatefulScreen {
     bool search_input_focused_ = false; // only show dropdown when user is actively typing
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

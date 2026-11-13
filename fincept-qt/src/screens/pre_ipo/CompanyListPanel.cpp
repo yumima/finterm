@@ -9,10 +9,10 @@
 #include <QResizeEvent>
 #include <QScrollBar>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
-using namespace fincept::pre_ipo;
+using namespace finterm::ui;
+using namespace finterm::pre_ipo;
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -372,4 +372,4 @@ QString CompanyListPanel::valuation_label(double b) {
     return QString("$%1M").arg(b * 1000, 0, 'f', 0);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

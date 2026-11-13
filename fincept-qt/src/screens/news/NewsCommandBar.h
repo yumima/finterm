@@ -9,7 +9,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Redesigned two-row news header:
 ///   Row 1 (32px): Search, category pills, time pills, sort/view toggles, controls
@@ -135,4 +135,4 @@ class NewsCommandBar : public QWidget {
     QPushButton* tldr_btn_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

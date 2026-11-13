@@ -20,7 +20,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 class Surface3DWidget;
 class SurfaceTableWidget;
@@ -28,9 +28,9 @@ class SurfaceLineWidget;
 class SurfaceControlPanel;
 class SurfaceDataInspector;
 
-class SurfaceAnalyticsScreen : public QWidget, public fincept::screens::IStatefulScreen, public fincept::IGroupLinked {
+class SurfaceAnalyticsScreen : public QWidget, public finterm::screens::IStatefulScreen, public finterm::IGroupLinked {
     Q_OBJECT
-    Q_INTERFACES(fincept::IGroupLinked)
+    Q_INTERFACES(finterm::IGroupLinked)
   public:
     explicit SurfaceAnalyticsScreen(QWidget* parent = nullptr);
 
@@ -42,10 +42,10 @@ class SurfaceAnalyticsScreen : public QWidget, public fincept::screens::IStatefu
     // IGroupLinked — subscribe-only. Equity group changes are forwarded to
     // the SurfaceControlPanel which becomes the new symbol of record; surfaces
     // reset and the chart re-renders via on_control_symbol_changed.
-    void set_group(fincept::SymbolGroup g) override { link_group_ = g; }
-    fincept::SymbolGroup group() const override { return link_group_; }
-    void on_group_symbol_changed(const fincept::SymbolRef& ref) override;
-    fincept::SymbolRef current_symbol() const override;
+    void set_group(finterm::SymbolGroup g) override { link_group_ = g; }
+    finterm::SymbolGroup group() const override { return link_group_; }
+    void on_group_symbol_changed(const finterm::SymbolRef& ref) override;
+    finterm::SymbolRef current_symbol() const override;
 
   private slots:
     void on_category_clicked(int index);
@@ -59,10 +59,10 @@ class SurfaceAnalyticsScreen : public QWidget, public fincept::screens::IStatefu
     void on_control_symbol_changed(const QString& sym);
     void on_fetch_requested();
     // Databento data slots
-    void on_vol_surface_received(const fincept::DatabentoVolSurfaceResult& r);
-    void on_ohlcv_received(const fincept::DatabentoOhlcvResult& r);
-    void on_futures_received(const fincept::DatabentoFuturesResult& r);
-    void on_surface_received(const fincept::DatabentoSurfaceResult& r);
+    void on_vol_surface_received(const finterm::DatabentoVolSurfaceResult& r);
+    void on_ohlcv_received(const finterm::DatabentoOhlcvResult& r);
+    void on_futures_received(const finterm::DatabentoFuturesResult& r);
+    void on_surface_received(const finterm::DatabentoSurfaceResult& r);
     void on_db_fetch_started(const QString& desc);
     void on_db_fetch_failed(const QString& err);
     void on_db_connection_tested(bool ok, const QString& msg);
@@ -85,10 +85,10 @@ class SurfaceAnalyticsScreen : public QWidget, public fincept::screens::IStatefu
     /// Build Correlation, PCA, VaR, Drawdown and Beta from the daily bars a
     /// fetch returned. Everything it fills is marked fetched_, so the badge
     /// and the lineage report real provenance for them.
-    void compute_equity_surfaces(const fincept::DatabentoOhlcvResult& r);
+    void compute_equity_surfaces(const finterm::DatabentoOhlcvResult& r);
     /// Ask FRED for the Treasury curve, TIPS real yields and breakevens.
     void load_rates_from_fred();
-    void on_fred_result(const QString& request_id, const fincept::services::EconomicsResult& r);
+    void on_fred_result(const QString& request_id, const finterm::services::EconomicsResult& r);
     /// Implied forwards derived from the published curve — see the .cpp for
     /// why they are only built on top of real data and never alone.
     void build_forward_rates();
@@ -182,7 +182,7 @@ class SurfaceAnalyticsScreen : public QWidget, public fincept::screens::IStatefu
     MonetaryPolicyData monetary_data_;
 
     // Symbol group link — SymbolGroup::None when unlinked.
-    fincept::SymbolGroup link_group_ = fincept::SymbolGroup::None;
+    finterm::SymbolGroup link_group_ = finterm::SymbolGroup::None;
 
     // Spot cache, populated from DataHub::peek("market:quote:<sym>") on demand.
     // Falls back to a constant if the hub has no quote for the symbol.
@@ -200,4 +200,4 @@ class SurfaceAnalyticsScreen : public QWidget, public fincept::screens::IStatefu
     };
 };
 
-} // namespace fincept::surface
+} // namespace finterm::surface

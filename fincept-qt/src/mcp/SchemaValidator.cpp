@@ -5,7 +5,7 @@
 #include <QJsonArray>
 #include <QRegularExpression>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 namespace {
 
@@ -161,4 +161,4 @@ Result<void> validate_args(const ToolSchema& schema, QJsonObject& args) {
     return Result<void>::ok();
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

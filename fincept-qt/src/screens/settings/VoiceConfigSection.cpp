@@ -26,7 +26,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 static constexpr const char* TAG = "VoiceConfigSection";
 static constexpr const char* kSecureKey = "voice.deepgram.api_key";
@@ -560,4 +560,4 @@ void VoiceConfigSection::test_tts() {
     tts_status_lbl_->setStyleSheet(QString("color:%1;").arg(ui::colors::POSITIVE()));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

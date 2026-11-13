@@ -48,7 +48,7 @@
 #include <cmath>
 #include <utility>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -1972,4 +1972,4 @@ QVariantMap ScreenerScreen::save_state() const {
             {QStringLiteral("account"), account_value_},         {QStringLiteral("risk"), risk_frac_}};
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

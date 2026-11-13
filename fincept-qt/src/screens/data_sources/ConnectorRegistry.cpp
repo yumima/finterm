@@ -1,7 +1,7 @@
 // ConnectorRegistry.cpp — force-link all connector registration units
 #include "screens/data_sources/ConnectorRegistry.h"
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 // Each connector .cpp file uses a static-init bool to self-register.
 // This function exists solely to ensure the linker includes all those
@@ -14,4 +14,4 @@ void register_all_connectors() {
     (void)ConnectorRegistry::instance().count();
 }
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

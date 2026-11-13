@@ -7,7 +7,7 @@
 class QChartView;
 class QLabel;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// Bar chart of a single metric across a list of peer tickers. Each bar
 /// is one ticker; the metric is fetched via MarketDataService::fetch_info
@@ -25,4 +25,4 @@ class PeerChartPanel : public QWidget {
     QLabel* status_ = nullptr;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

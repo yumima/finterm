@@ -3,7 +3,7 @@
 
 #include <vector>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 std::vector<ToolDef> get_news_tools();
 std::vector<Resource> get_news_resources();
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

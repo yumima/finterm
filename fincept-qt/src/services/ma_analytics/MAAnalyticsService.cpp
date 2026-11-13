@@ -14,13 +14,13 @@
 #include <QJsonDocument>
 #include <QPointer>
 
-namespace fincept::services::ma {
+namespace finterm::services::ma {
 
 namespace {
 inline void publish_ma_result(bool hub_registered, const QString& context, const QJsonObject& obj) {
     if (!hub_registered)
         return;
-    fincept::datahub::DataHub::instance().publish(QStringLiteral("ma:") + context, QVariant(obj));
+    finterm::datahub::DataHub::instance().publish(QStringLiteral("ma:") + context, QVariant(obj));
 }
 
 // Persistent on-disk cache for the M&A analytics screen. Only the slow
@@ -33,8 +33,8 @@ inline void publish_ma_result(bool hub_registered, const QString& context, const
 // pure disk bloat. The CacheManager 5-min TTL covers same-session reuse;
 // cross-session reuse for per-input models is rare enough that the cost
 // isn't worth the complexity.
-fincept::services::util::DiskCache& disk_cache() {
-    static fincept::services::util::DiskCache c(QStringLiteral("ma_analytics"));
+finterm::services::util::DiskCache& disk_cache() {
+    static finterm::services::util::DiskCache c(QStringLiteral("ma_analytics"));
     return c;
 }
 
@@ -163,7 +163,7 @@ void MAAnalyticsService::run_python_json(const QString& script, const QString& c
     auto params_json = QJsonDocument(params).toJson(QJsonDocument::Compact);
     const QString cache_key = "ma:" + context + "_" + command + ":" + QString::fromUtf8(params_json);
 
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (!doc.isNull()) {
@@ -211,7 +211,7 @@ void MAAnalyticsService::run_python_json(const QString& script, const QString& c
                 obj = obj.value("data").toObject();
             else if (obj.contains("success") && obj.value("data").isArray())
                 obj = QJsonObject{{"items", obj.value("data")}};
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))),
                 kResultTtlSec, "ma_analytics");
             // Per-input results (DCF/LBO/comps) intentionally do NOT persist
@@ -487,10 +487,10 @@ int MAAnalyticsService::max_requests_per_sec() const {
 void MAAnalyticsService::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
-    fincept::datahub::TopicPolicy policy;
+    finterm::datahub::TopicPolicy policy;
     policy.push_only = true;
     policy.ttl_ms = kResultTtlSec * 1000; // 2 min cache for latecomers.
     hub.set_policy_pattern(QStringLiteral("ma:*"), policy);
@@ -499,4 +499,4 @@ void MAAnalyticsService::ensure_registered_with_hub() {
     LOG_INFO("MAAnalyticsService", "Registered with DataHub (ma:*)");
 }
 
-} // namespace fincept::services::ma
+} // namespace finterm::services::ma

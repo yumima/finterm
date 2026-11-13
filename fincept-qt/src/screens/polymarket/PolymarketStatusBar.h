@@ -4,7 +4,7 @@
 #include <QLabel>
 #include <QWidget>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 /// Bottom status strip with brand, view info, market count, selection,
 /// exchange-level status (Kalshi only), and WS status.
@@ -42,4 +42,4 @@ class PolymarketStatusBar : public QWidget {
     QColor accent_{0xD97706}; // default amber — Polymarket
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

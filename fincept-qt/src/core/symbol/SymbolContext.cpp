@@ -4,7 +4,7 @@
 
 #include <QJsonObject>
 
-namespace fincept {
+namespace finterm {
 
 SymbolContext& SymbolContext::instance() {
     static SymbolContext s;
@@ -89,4 +89,4 @@ void SymbolContext::from_json(const QJsonObject& o) {
     }
 }
 
-} // namespace fincept
+} // namespace finterm

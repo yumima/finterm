@@ -15,7 +15,7 @@
 #include <memory>
 #include <optional>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 namespace {
 
@@ -384,4 +384,4 @@ std::vector<ToolDef> get_memory_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

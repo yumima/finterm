@@ -8,7 +8,7 @@
 class QNetworkReply;
 class QWidget;
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Cross-platform auto-update service.
 ///
@@ -107,4 +107,4 @@ class UpdateService : public QObject {
     bool silent_check_done_ = false;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

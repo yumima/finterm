@@ -11,7 +11,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class VoiceConfigSection : public QWidget {
     Q_OBJECT
@@ -70,4 +70,4 @@ class VoiceConfigSection : public QWidget {
     void test_tts();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

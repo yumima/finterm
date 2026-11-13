@@ -4,7 +4,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 /// Data-access layer for all paper trading tables.
 /// Business logic (fill engine, margin checks) stays in PaperTrading.cpp.
@@ -58,4 +58,4 @@ class PaperTradingRepository : public BaseRepository<trading::PtPortfolio> {
     PaperTradingRepository() = default;
 };
 
-} // namespace fincept
+} // namespace finterm

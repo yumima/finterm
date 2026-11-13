@@ -7,7 +7,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// Per-user, per-slot metadata for symbol link groups (A..J).
 ///
@@ -59,7 +59,7 @@ class SymbolGroupRegistry : public QObject {
   signals:
     /// Fires after any mutation to a slot. Subscribers re-render badges,
     /// menu labels, title-bar text, etc.
-    void group_metadata_changed(fincept::SymbolGroup g);
+    void group_metadata_changed(finterm::SymbolGroup g);
 
   private:
     SymbolGroupRegistry();
@@ -76,4 +76,4 @@ class SymbolGroupRegistry : public QObject {
     QHash<SymbolGroup, Slot> slots_;
 };
 
-} // namespace fincept
+} // namespace finterm

@@ -6,7 +6,7 @@
 
 #include "services/markets/SecIdentity.h"
 
-using fincept::services::sec_identity::header_safe_email;
+using finterm::services::sec_identity::header_safe_email;
 
 class TestSecIdentity : public QObject {
     Q_OBJECT

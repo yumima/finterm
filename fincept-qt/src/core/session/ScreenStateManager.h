@@ -4,11 +4,11 @@
 #include <QPointer>
 
 // Forward declare to avoid including the full screen header here.
-namespace fincept::screens {
+namespace finterm::screens {
 class IStatefulScreen;
 }
 
-namespace fincept {
+namespace finterm {
 
 /// Central coordinator for screen UI state persistence.
 ///
@@ -69,4 +69,4 @@ class ScreenStateManager : public QObject {
     QString session_id_;
 };
 
-} // namespace fincept
+} // namespace finterm

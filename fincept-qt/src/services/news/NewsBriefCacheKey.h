@@ -13,7 +13,7 @@
 
 #include <algorithm>
 
-namespace fincept::services::brief_cache {
+namespace finterm::services::brief_cache {
 
 /// Builds the cache key for a brief.
 ///
@@ -41,4 +41,4 @@ inline QString key(QStringList headlines, const QString& portfolio_id, int sampl
     return QStringLiteral("news:summary:v%1:n%2:%3:%4").arg(prompt_version).arg(sample_size).arg(portfolio_id, digest);
 }
 
-} // namespace fincept::services::brief_cache
+} // namespace finterm::services::brief_cache

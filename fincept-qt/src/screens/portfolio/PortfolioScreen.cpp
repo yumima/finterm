@@ -44,7 +44,7 @@
 #include <limits>
 #include <memory>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PortfolioScreen::PortfolioScreen(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -1669,4 +1669,4 @@ void PortfolioScreen::on_group_symbol_changed(const SymbolRef& ref) {
         order_panel_->set_holding(find_holding(ref.symbol));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

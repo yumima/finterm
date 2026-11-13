@@ -17,14 +17,14 @@ class QStackedWidget;
 class QTableWidget;
 class QTextBrowser;
 class QButtonGroup;
-namespace fincept::services {
+namespace finterm::services {
 class LiveQuoteFollower;
 }
 class QPoint;
 class QUrl;
 class QTimer;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// SCREENER — rule-exact stock screens from investing-competition winners
 /// (Minervini, CAN SLIM, Kullamägi, Martin Luk) and the academic literature
@@ -199,4 +199,4 @@ class ScreenerScreen : public QWidget, public IStatefulScreen {
     double risk_frac_ = 0.005;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

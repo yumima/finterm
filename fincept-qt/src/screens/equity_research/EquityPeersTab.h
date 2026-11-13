@@ -10,7 +10,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EquityPeersTab : public QWidget {
     Q_OBJECT
@@ -75,4 +75,4 @@ class EquityPeersTab : public QWidget {
     ui::LoadingOverlay* loading_overlay_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -5,7 +5,7 @@
 #include "core/logging/Logger.h"
 #include "trading/PaperTrading.h"
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "TradingTools";
 
@@ -305,4 +305,4 @@ std::vector<ToolDef> get_trading_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

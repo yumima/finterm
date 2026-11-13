@@ -12,7 +12,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 class PolymarketOrderBook;
 class PolymarketPriceChart;
@@ -37,25 +37,25 @@ class PolymarketDetailPanel : public QWidget {
     void set_presentation(const ExchangePresentation& p);
 
     // Core (unified) setters — consumed for both Polymarket and Kalshi.
-    void set_market(const fincept::services::prediction::PredictionMarket& market);
-    void set_order_book(const fincept::services::prediction::PredictionOrderBook& book);
-    void set_price_history(const fincept::services::prediction::PriceHistory& history);
-    void set_trades(const QVector<fincept::services::prediction::PredictionTrade>& trades);
+    void set_market(const finterm::services::prediction::PredictionMarket& market);
+    void set_order_book(const finterm::services::prediction::PredictionOrderBook& book);
+    void set_price_history(const finterm::services::prediction::PriceHistory& history);
+    void set_trades(const QVector<finterm::services::prediction::PredictionTrade>& trades);
 
     // Trading ticket setters — wired from adapter balance_ready / positions_ready.
-    void set_balance(const fincept::services::prediction::AccountBalance& balance);
-    void set_positions(const QVector<fincept::services::prediction::PredictionPosition>& positions);
-    void on_order_result(const fincept::services::prediction::OrderResult& result);
+    void set_balance(const finterm::services::prediction::AccountBalance& balance);
+    void set_positions(const QVector<finterm::services::prediction::PredictionPosition>& positions);
+    void on_order_result(const finterm::services::prediction::OrderResult& result);
 
     /// Called when credentials state changes so ticket can show/hide the
     /// "connect account" placeholder vs the actual ticket form.
     void set_trading_enabled(bool enabled);
 
     // Polymarket-only enrichment setters — guarded by active_id at the caller.
-    void set_price_summary(const fincept::services::polymarket::PriceSummary& summary);
-    void set_top_holders(const QVector<fincept::services::polymarket::TopHolder>& holders);
-    void set_comments(const QVector<fincept::services::polymarket::Comment>& comments);
-    void set_related_markets(const QVector<fincept::services::prediction::PredictionMarket>& markets);
+    void set_price_summary(const finterm::services::polymarket::PriceSummary& summary);
+    void set_top_holders(const QVector<finterm::services::polymarket::TopHolder>& holders);
+    void set_comments(const QVector<finterm::services::polymarket::Comment>& comments);
+    void set_related_markets(const QVector<finterm::services::prediction::PredictionMarket>& markets);
     void set_open_interest(double oi);
 
     /// Attach a long-form tooltip (e.g. series fee info) to the market
@@ -74,8 +74,8 @@ class PolymarketDetailPanel : public QWidget {
     void tab_changed(int index);
     void interval_changed(const QString& interval);
     void outcome_changed(int index);
-    void related_market_clicked(const fincept::services::prediction::PredictionMarket& market);
-    void place_order(const fincept::services::prediction::OrderRequest& req);
+    void related_market_clicked(const finterm::services::prediction::PredictionMarket& market);
+    void place_order(const finterm::services::prediction::OrderRequest& req);
 
   private:
     void build_ui();
@@ -88,7 +88,7 @@ class PolymarketDetailPanel : public QWidget {
     void set_active_tab(int tab);
     void apply_accent_to_tabs();
     void apply_presentation_to_stats(); // show/hide OPEN INT cell, re-label
-    void render_status_badge(const fincept::services::prediction::PredictionMarket& market);
+    void render_status_badge(const finterm::services::prediction::PredictionMarket& market);
     void refresh_ticket_side_style();
     void on_submit_clicked();
 
@@ -147,7 +147,7 @@ class PolymarketDetailPanel : public QWidget {
 
     // Cached copy of the last market rendered — needed so set_presentation()
     // can re-render the overview + status badge with new formatters.
-    fincept::services::prediction::PredictionMarket last_market_;
+    finterm::services::prediction::PredictionMarket last_market_;
     bool has_last_market_ = false;
 
     // Tab indices.
@@ -158,4 +158,4 @@ class PolymarketDetailPanel : public QWidget {
     static constexpr int kTabRelated = 7;
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

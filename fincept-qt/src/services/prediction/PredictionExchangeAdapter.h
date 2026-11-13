@@ -8,7 +8,7 @@
 #include <QVariantList>
 #include <QVector>
 
-namespace fincept::services::prediction {
+namespace finterm::services::prediction {
 
 /// Abstract base for every prediction-market exchange integration.
 ///
@@ -85,34 +85,34 @@ class PredictionExchangeAdapter : public QObject {
 
   signals:
     // Read
-    void markets_ready(const QVector<fincept::services::prediction::PredictionMarket>& markets);
-    void events_ready(const QVector<fincept::services::prediction::PredictionEvent>& events);
-    void search_results_ready(const QVector<fincept::services::prediction::PredictionMarket>& markets,
-                              const QVector<fincept::services::prediction::PredictionEvent>& events);
+    void markets_ready(const QVector<finterm::services::prediction::PredictionMarket>& markets);
+    void events_ready(const QVector<finterm::services::prediction::PredictionEvent>& events);
+    void search_results_ready(const QVector<finterm::services::prediction::PredictionMarket>& markets,
+                              const QVector<finterm::services::prediction::PredictionEvent>& events);
     void tags_ready(const QStringList& tags);
-    void market_detail_ready(const fincept::services::prediction::PredictionMarket& market);
-    void event_detail_ready(const fincept::services::prediction::PredictionEvent& event);
-    void order_book_ready(const fincept::services::prediction::PredictionOrderBook& book);
-    void price_history_ready(const fincept::services::prediction::PriceHistory& history);
-    void recent_trades_ready(const QVector<fincept::services::prediction::PredictionTrade>& trades);
+    void market_detail_ready(const finterm::services::prediction::PredictionMarket& market);
+    void event_detail_ready(const finterm::services::prediction::PredictionEvent& event);
+    void order_book_ready(const finterm::services::prediction::PredictionOrderBook& book);
+    void price_history_ready(const finterm::services::prediction::PriceHistory& history);
+    void recent_trades_ready(const QVector<finterm::services::prediction::PredictionTrade>& trades);
     void top_holders_ready(const QVariantList& holders);
     void leaderboard_ready(const QVariantList& entries);
 
     // WebSocket
     void ws_price_updated(const QString& asset_id, double price);
-    void ws_orderbook_updated(const QString& asset_id, const fincept::services::prediction::PredictionOrderBook& book);
+    void ws_orderbook_updated(const QString& asset_id, const finterm::services::prediction::PredictionOrderBook& book);
     void ws_connection_changed(bool connected);
 
     // Account / trading
     void credentials_changed(); // emitted when user adds/removes a credential set
-    void balance_ready(const fincept::services::prediction::AccountBalance& balance);
-    void positions_ready(const QVector<fincept::services::prediction::PredictionPosition>& positions);
-    void open_orders_ready(const QVector<fincept::services::prediction::OpenOrder>& orders);
-    void order_placed(const fincept::services::prediction::OrderResult& result);
+    void balance_ready(const finterm::services::prediction::AccountBalance& balance);
+    void positions_ready(const QVector<finterm::services::prediction::PredictionPosition>& positions);
+    void open_orders_ready(const QVector<finterm::services::prediction::OpenOrder>& orders);
+    void order_placed(const finterm::services::prediction::OrderResult& result);
     void order_cancelled(const QString& order_id, bool ok, const QString& error_message);
     void account_activity_ready(const QVariantList& activities);
 
     void error_occurred(const QString& context, const QString& message);
 };
 
-} // namespace fincept::services::prediction
+} // namespace finterm::services::prediction

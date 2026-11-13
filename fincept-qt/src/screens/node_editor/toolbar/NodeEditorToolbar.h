@@ -5,7 +5,7 @@
 #include <QShowEvent>
 #include <QWidget>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Top toolbar for the node editor with workflow name, status, and action buttons.
 class NodeEditorToolbar : public QWidget {
@@ -46,4 +46,4 @@ class NodeEditorToolbar : public QWidget {
     QPushButton* execute_btn_ = nullptr;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

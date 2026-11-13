@@ -4,7 +4,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // ── Core domain objects ──────────────────────────────────────────────────────
 
@@ -68,7 +68,7 @@ struct DbnSlot {
     DbnChartType chart_type = DbnChartType::Line;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services
 
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::services::DbnDataPoint)
+Q_DECLARE_METATYPE(finterm::services::DbnDataPoint)

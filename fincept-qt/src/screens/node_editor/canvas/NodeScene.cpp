@@ -9,7 +9,7 @@
 
 #include <QUuid>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 NodeScene::NodeScene(QObject* parent) : QGraphicsScene(parent) {
     setSceneRect(-5000, -5000, 10000, 10000);
@@ -267,4 +267,4 @@ void NodeScene::tick_edge_animations() {
     }
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

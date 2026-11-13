@@ -1,7 +1,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 struct DataMapping {
     QString id;
@@ -39,4 +39,4 @@ class DataMappingRepository : public BaseRepository<DataMapping> {
     static DataMapping map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

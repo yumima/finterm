@@ -7,7 +7,7 @@
 #include <QJsonObject>
 #include <QUuid>
 
-namespace fincept {
+namespace finterm {
 
 CustomIndexRepository& CustomIndexRepository::instance() {
     static CustomIndexRepository s;
@@ -123,4 +123,4 @@ double CustomIndexRepository::latest_value(const QString& index_id) {
     return map_value(q).value;
 }
 
-} // namespace fincept
+} // namespace finterm

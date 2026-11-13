@@ -31,7 +31,7 @@
 #include <atomic>
 #include <functional>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 /// Thin publisher seam. The manager injects one of these at construction so
 /// sessions never pull in DataHub headers themselves.
@@ -147,4 +147,4 @@ class ExchangeSession : public QObject {
     mutable QMutex mutex_;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

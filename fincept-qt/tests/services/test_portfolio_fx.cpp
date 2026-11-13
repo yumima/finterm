@@ -16,7 +16,7 @@
 
 #include <QtTest/QtTest>
 
-using namespace fincept::portfolio;
+using namespace finterm::portfolio;
 
 class TestPortfolioFx : public QObject {
     Q_OBJECT

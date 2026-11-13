@@ -1,6 +1,6 @@
 #include "storage/repositories/ContextRecordingRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 ContextRecordingRepository& ContextRecordingRepository::instance() {
     static ContextRecordingRepository s;
@@ -48,4 +48,4 @@ Result<void> ContextRecordingRepository::clear_all() {
     return exec_write("DELETE FROM recorded_contexts", {});
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -4,7 +4,7 @@
 #include <QJsonValue>
 #include <QString>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Evaluates simple template expressions in node parameters.
 /// Supports ={{$input.key}} variable substitution from upstream data.
@@ -22,4 +22,4 @@ class ExpressionEngine {
     static QJsonValue resolve_expression(const QString& expr, const QJsonObject& context);
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

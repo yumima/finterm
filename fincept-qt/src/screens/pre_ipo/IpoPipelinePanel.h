@@ -8,7 +8,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Right panel showing IPO pipeline (S-1 filers) and recent Form D deal flow.
 class IpoPipelinePanel : public QWidget {
@@ -38,4 +38,4 @@ class IpoPipelinePanel : public QWidget {
     QVector<pre_ipo::FormDFiling> form_d_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

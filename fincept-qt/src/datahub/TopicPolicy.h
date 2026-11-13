@@ -1,6 +1,6 @@
 #pragma once
 
-namespace fincept::datahub {
+namespace finterm::datahub {
 
 /// Per-topic refresh + caching metadata.
 /// Populated by `DataHub::set_policy()` or `set_policy_pattern()`.
@@ -53,4 +53,4 @@ struct TopicPolicy {
     bool pause_when_inactive = false;
 };
 
-} // namespace fincept::datahub
+} // namespace finterm::datahub

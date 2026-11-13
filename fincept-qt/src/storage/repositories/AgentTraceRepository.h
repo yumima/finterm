@@ -15,7 +15,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 struct AgentTraceRow {
     qint64 id = 0;
@@ -94,4 +94,4 @@ class AgentTraceRepository {
     AgentTraceRepository() = default;
 };
 
-} // namespace fincept
+} // namespace finterm

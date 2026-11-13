@@ -14,14 +14,14 @@
 #include <QPointer>
 #include <QUuid>
 
-namespace fincept::services::prediction::polymarket_ns {
+namespace finterm::services::prediction::polymarket_ns {
 
-namespace pm = fincept::services::polymarket;
-namespace pr = fincept::services::prediction;
-namespace pmap = fincept::services::prediction::polymarket_map;
+namespace pm = finterm::services::polymarket;
+namespace pr = finterm::services::prediction;
+namespace pmap = finterm::services::prediction::polymarket_map;
 
 PolymarketAdapter::PolymarketAdapter(QObject* parent)
-    : fincept::services::prediction::PredictionExchangeAdapter(parent) {
+    : finterm::services::prediction::PredictionExchangeAdapter(parent) {
     service_ = &pm::PolymarketService::instance();
     ws_ = &pm::PolymarketWebSocket::instance();
     wire_service();
@@ -200,16 +200,16 @@ void PolymarketAdapter::run_py(const QString& command, const QJsonObject& payloa
                                std::function<void(const QJsonObject&)> on_ok, const QString& ctx) {
     const QString payload_str = QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
     QPointer<PolymarketAdapter> self = this;
-    fincept::python::PythonRunner::instance().run(
+    finterm::python::PythonRunner::instance().run(
         QStringLiteral("prediction_polymarket.py"), {command, payload_str},
-        [self, on_ok, ctx](fincept::python::PythonResult r) {
+        [self, on_ok, ctx](finterm::python::PythonResult r) {
             if (!self)
                 return;
             if (!r.success) {
                 emit self->error_occurred(ctx, r.error.isEmpty() ? r.output : r.error);
                 return;
             }
-            const QString json_str = fincept::python::extract_json(r.output);
+            const QString json_str = finterm::python::extract_json(r.output);
             QJsonParseError perr;
             auto doc = QJsonDocument::fromJson(json_str.toUtf8(), &perr);
             if (doc.isNull() || !doc.isObject()) {
@@ -609,4 +609,4 @@ void PolymarketAdapter::on_ws_status(bool connected) {
     emit ws_connection_changed(connected);
 }
 
-} // namespace fincept::services::prediction::polymarket_ns
+} // namespace finterm::services::prediction::polymarket_ns

@@ -6,7 +6,7 @@
 #include <QByteArrayList>
 #include <QNetworkRequest>
 
-namespace fincept::services::video {
+namespace finterm::services::video {
 
 LiveHlsProxy::LiveHlsProxy(QObject* parent) : QObject(parent) {
     server_ = new QTcpServer(this);
@@ -370,4 +370,4 @@ QByteArray LiveHlsProxy::trim_playlist(const QByteArray& upstream, int keep_segm
     return out;
 }
 
-} // namespace fincept::services::video
+} // namespace finterm::services::video

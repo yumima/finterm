@@ -5,10 +5,10 @@
 
 #include <QObject>
 
-namespace fincept::services::maritime {
+namespace finterm::services::maritime {
 
 /// Singleton service for Maritime Intelligence — HTTP calls to /marine/ on the localhost stub.
-class MaritimeService : public QObject, public fincept::datahub::Producer {
+class MaritimeService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static MaritimeService& instance();
@@ -16,7 +16,7 @@ class MaritimeService : public QObject, public fincept::datahub::Producer {
     /// Register with the hub + install maritime:* policies. Idempotent.
     void ensure_registered_with_hub();
 
-    // ── fincept::datahub::Producer ─────────────────────────────────────────
+    // ── finterm::datahub::Producer ─────────────────────────────────────────
     QStringList topic_patterns() const override;
     void refresh(const QStringList& topics) override;
     int max_requests_per_sec() const override;
@@ -42,9 +42,9 @@ class MaritimeService : public QObject, public fincept::datahub::Producer {
     void check_health();
 
   signals:
-    void vessels_loaded(QVector<fincept::services::maritime::VesselData> vessels, int total);
-    void vessel_found(fincept::services::maritime::VesselData vessel);
-    void vessel_history_loaded(QVector<fincept::services::maritime::VesselData> history);
+    void vessels_loaded(QVector<finterm::services::maritime::VesselData> vessels, int total);
+    void vessel_found(finterm::services::maritime::VesselData vessel);
+    void vessel_history_loaded(QVector<finterm::services::maritime::VesselData> history);
     void health_loaded(QJsonObject data);
     void error_occurred(QString context, QString message);
 
@@ -57,4 +57,4 @@ class MaritimeService : public QObject, public fincept::datahub::Producer {
     bool hub_registered_ = false;
 };
 
-} // namespace fincept::services::maritime
+} // namespace finterm::services::maritime

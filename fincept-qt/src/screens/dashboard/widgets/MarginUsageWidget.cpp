@@ -17,14 +17,14 @@
 #include <QLabel>
 #include <QProgressBar>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 namespace {
 QString fmt_money(double v) {
     // USD compact money via the shared layer (was India Cr/L before the US
     // rebase). Compact magnitude ($1.2K / $3.4M / $1.1B at 1dp) keeps the
     // dashboard tile's value cells narrow, matching the sibling P&L widget.
-    return fincept::ui::formatting::format_money(v, QStringLiteral("USD"), /*compact=*/true);
+    return finterm::ui::formatting::format_money(v, QStringLiteral("USD"), /*compact=*/true);
 }
 } // namespace
 
@@ -248,4 +248,4 @@ void MarginUsageWidget::apply_styles() {
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

@@ -23,11 +23,11 @@ class QPlainTextEdit;
 class QTimer;
 template <typename T>
 class QFutureWatcher;
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 struct LlmResponse;
 }
 
-namespace fincept::services {
+namespace finterm::services {
 
 class InlineCompletionController : public QObject {
     Q_OBJECT
@@ -49,7 +49,7 @@ class InlineCompletionController : public QObject {
   private:
     QPointer<QPlainTextEdit> editor_;
     QTimer* idle_timer_ = nullptr;
-    QFutureWatcher<fincept::ai_chat::LlmResponse>* watcher_ = nullptr;
+    QFutureWatcher<finterm::ai_chat::LlmResponse>* watcher_ = nullptr;
 
     // Ghost-text marker — when a completion is displayed inline, the
     // text in [pending_anchor_, pending_anchor_ + pending_len_) carries
@@ -74,4 +74,4 @@ class InlineCompletionController : public QObject {
     QString current_prefix_for_completion() const;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

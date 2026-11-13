@@ -12,12 +12,12 @@ class QPushButton;
 class QStackedWidget;
 class QTableWidget;
 
-namespace fincept::surface {
+namespace finterm::surface {
 class Surface3DWidget;
 class SurfaceLineWidget;
-} // namespace fincept::surface
+} // namespace finterm::surface
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Per-stock implied-volatility view: the IV surface (3D), the smile per
 /// expiry, the ATM term structure, and the quotes behind them. Data is
@@ -89,11 +89,11 @@ class EquityOptionsTab : public QWidget {
     std::vector<QPushButton*> view_buttons_;
     QStackedWidget* stack_ = nullptr;
     QLabel* message_ = nullptr;
-    fincept::surface::Surface3DWidget* surface_ = nullptr;
-    fincept::surface::SurfaceLineWidget* smile_ = nullptr;
-    fincept::surface::SurfaceLineWidget* term_ = nullptr;
+    finterm::surface::Surface3DWidget* surface_ = nullptr;
+    finterm::surface::SurfaceLineWidget* smile_ = nullptr;
+    finterm::surface::SurfaceLineWidget* term_ = nullptr;
     QTableWidget* table_ = nullptr;
     int view_ = 0;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

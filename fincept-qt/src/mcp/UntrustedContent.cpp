@@ -1,6 +1,6 @@
 #include "mcp/UntrustedContent.h"
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 QString UntrustedContent::wrap(const QString& content) {
     if (content.isEmpty())
@@ -15,4 +15,4 @@ QString UntrustedContent::wrap(const QString& content) {
     return QString::fromLatin1(kOpenTag) + safe + QString::fromLatin1(kCloseTag);
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

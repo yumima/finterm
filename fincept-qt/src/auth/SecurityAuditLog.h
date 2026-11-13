@@ -4,7 +4,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 /// One persisted security audit event. Mirrors the `security_audit_log`
 /// table created by migration v020.
@@ -40,4 +40,4 @@ class SecurityAuditLog {
     SecurityAuditLog() = default;
 };
 
-} // namespace fincept::auth
+} // namespace finterm::auth

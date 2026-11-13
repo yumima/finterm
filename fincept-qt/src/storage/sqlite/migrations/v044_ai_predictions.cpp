@@ -13,7 +13,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 static Result<void> sql(QSqlDatabase& db, const char* stmt) {
@@ -65,4 +65,4 @@ void register_migration_v044() {
     MigrationRunner::register_migration({44, "ai_predictions", apply_v044});
 }
 
-} // namespace fincept
+} // namespace finterm

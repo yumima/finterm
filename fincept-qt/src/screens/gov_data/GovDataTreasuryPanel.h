@@ -13,7 +13,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class GovDataTreasuryPanel : public QWidget {
     Q_OBJECT
@@ -70,4 +70,4 @@ class GovDataTreasuryPanel : public QWidget {
     QTableWidget* type_breakdown_table_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -22,7 +22,7 @@
 #include <QScreen>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 static constexpr int kMaxResults = 10;
 static constexpr int kSearchDebounceMs = 150;
@@ -1190,7 +1190,7 @@ void CommandBar::fire_asset_search(const QString& query) {
                 return;
             // A failed search says so (read_search_reply) — not the last query's
             // matches, and not an empty list that reads as "no such ticker".
-            const auto reply = fincept::ui::read_search_reply(ok, result);
+            const auto reply = finterm::ui::read_search_reply(ok, result);
             self->on_asset_results(reply.results, reply.failure);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -1519,4 +1519,4 @@ void CommandBar::update_position() {
     dropdown_->setGeometry(global_pos.x(), global_pos.y(), w, h);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

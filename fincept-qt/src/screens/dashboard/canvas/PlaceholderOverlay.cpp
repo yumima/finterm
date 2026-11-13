@@ -5,7 +5,7 @@
 #include <QPainter>
 #include <QPen>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PlaceholderOverlay::PlaceholderOverlay(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_TransparentForMouseEvents);
@@ -27,4 +27,4 @@ void PlaceholderOverlay::paintEvent(QPaintEvent*) {
     p.drawRect(rect().adjusted(0, 0, -1, -1));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

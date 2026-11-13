@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class DBnomicsSelectionPanel : public QWidget {
     Q_OBJECT
@@ -114,4 +114,4 @@ class DBnomicsSelectionPanel : public QWidget {
     bool search_loading_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

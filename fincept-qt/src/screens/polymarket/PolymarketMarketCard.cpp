@@ -6,10 +6,10 @@
 
 #include <cmath>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-using namespace fincept::ui;
-using namespace fincept::services::prediction;
+using namespace finterm::ui;
+using namespace finterm::services::prediction;
 
 static const char* OUTCOME_BAR_COLORS[] = {"#00D66F", "#FF3B3B", "#FF8800", "#4F8EF7", "#A855F7"};
 
@@ -241,4 +241,4 @@ void PolymarketMarketCardDelegate::paint(QPainter* painter, const QStyleOptionVi
     painter->restore();
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

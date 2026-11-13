@@ -4,7 +4,7 @@
 
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void GotifyProvider::load_fields(SettingsRepository& r, const QString& cat) {
     server_url_ = get_str(r, cat + ".server_url");
@@ -52,4 +52,4 @@ void GotifyProvider::send(const NotificationRequest& req, std::function<void(boo
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

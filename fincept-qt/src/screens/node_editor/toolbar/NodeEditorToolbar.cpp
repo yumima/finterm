@@ -7,7 +7,7 @@
 #include <QLabel>
 #include <QPalette>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 static QString btn_style() {
     return QString("QPushButton {"
@@ -197,4 +197,4 @@ void NodeEditorToolbar::build_ui() {
     connect(execute_btn_, &QPushButton::clicked, this, &NodeEditorToolbar::execute_clicked);
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

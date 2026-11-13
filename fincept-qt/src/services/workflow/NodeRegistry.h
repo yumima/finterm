@@ -7,7 +7,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Singleton registry of all available node type definitions.
 class NodeRegistry {
@@ -27,4 +27,4 @@ class NodeRegistry {
     QHash<QString, NodeTypeDef> registry_;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

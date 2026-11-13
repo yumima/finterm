@@ -9,7 +9,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 // ── Canvas: draws candles via QPainter ───────────────────────────────────────
 class CandleCanvas : public QWidget {
@@ -61,4 +61,4 @@ class EquityChart : public QWidget {
     static constexpr const char* TF_LABELS[] = {"1m", "5m", "15m", "1h", "1d", "1w"};
 };
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

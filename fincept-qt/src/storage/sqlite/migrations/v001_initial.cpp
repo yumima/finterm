@@ -6,7 +6,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 /// Helper: exec a SQL statement on the given db, return Result<void>.
@@ -356,4 +356,4 @@ void register_migration_v001() {
     MigrationRunner::register_migration({1, "initial_schema", apply_v001});
 }
 
-} // namespace fincept
+} // namespace finterm

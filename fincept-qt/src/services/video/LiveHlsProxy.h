@@ -13,7 +13,7 @@
 #include <QTimer>
 #include <QUrl>
 
-namespace fincept::services::video {
+namespace finterm::services::video {
 
 /// Local HTTP proxy that trims YouTube DVR-mode HLS playlists to a small
 /// live-edge window before serving them to QMediaPlayer.
@@ -183,4 +183,4 @@ class LiveHlsProxy : public QObject {
     bool stale_error_emitted_ = false;
 };
 
-} // namespace fincept::services::video
+} // namespace finterm::services::video

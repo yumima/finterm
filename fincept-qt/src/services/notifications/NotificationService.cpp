@@ -23,7 +23,7 @@
 
 #include <algorithm>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
 
@@ -206,4 +206,4 @@ void NotificationService::reload_all_configs() {
     LOG_INFO("NotificationService", "All provider configs reloaded");
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

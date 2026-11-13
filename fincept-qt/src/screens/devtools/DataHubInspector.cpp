@@ -8,7 +8,7 @@
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 
-namespace fincept::screens::devtools {
+namespace finterm::screens::devtools {
 
 namespace {
 QString format_age(qint64 ms_since_epoch) {
@@ -73,4 +73,4 @@ void DataHubInspector::refresh() {
     }
 }
 
-} // namespace fincept::screens::devtools
+} // namespace finterm::screens::devtools

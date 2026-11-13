@@ -13,11 +13,11 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 class ReadAloudToggle;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Article reading pane — the permanent right half of the news screen,
 /// beside the headline list. It is never hidden: with no article selected
@@ -223,4 +223,4 @@ class NewsDetailPanel : public QWidget {
     static QString spoken_text(const QString& markdown); ///< markdown → the words read aloud
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

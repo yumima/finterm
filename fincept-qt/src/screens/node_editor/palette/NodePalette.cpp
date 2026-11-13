@@ -14,7 +14,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 NodePalette::NodePalette(QWidget* parent) : QWidget(parent) {
     setFixedWidth(240);
@@ -237,4 +237,4 @@ void NodePalette::start_drag(const QString& type_id) {
     drag->exec(Qt::CopyAction);
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

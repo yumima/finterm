@@ -14,13 +14,13 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
 QString panel_style() {
     return QString("QWidget#authPanel { background:%1; border:1px solid %2; border-radius:6px; }")
-        .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_MED());
+        .arg(finterm::ui::colors::BG_SURFACE(), finterm::ui::colors::BORDER_MED());
 }
 
 QString user_list_style() {
@@ -29,8 +29,8 @@ QString user_list_style() {
                    "QListWidget::item { padding:10px 14px; border-bottom:1px solid %3; }"
                    "QListWidget::item:hover { background:%4; }"
                    "QListWidget::item:selected { background:%5; color:%6; }")
-        .arg(fincept::ui::colors::BG_BASE(), fincept::ui::colors::TEXT_PRIMARY(), fincept::ui::colors::BORDER_DIM(),
-             fincept::ui::colors::BG_HOVER(), fincept::ui::colors::AMBER_DIM(), fincept::ui::colors::AMBER());
+        .arg(finterm::ui::colors::BG_BASE(), finterm::ui::colors::TEXT_PRIMARY(), finterm::ui::colors::BORDER_DIM(),
+             finterm::ui::colors::BG_HOVER(), finterm::ui::colors::AMBER_DIM(), finterm::ui::colors::AMBER());
 }
 
 QString pin_input_style() {
@@ -38,8 +38,8 @@ QString pin_input_style() {
                    "  padding:12px 16px; font-size:24px; font-family:Consolas,monospace;"
                    "  letter-spacing:12px; }"
                    "QLineEdit:focus { border:1px solid %4; }")
-        .arg(fincept::ui::colors::BG_BASE(), fincept::ui::colors::TEXT_PRIMARY(), fincept::ui::colors::BORDER_MED(),
-             fincept::ui::colors::AMBER());
+        .arg(finterm::ui::colors::BG_BASE(), finterm::ui::colors::TEXT_PRIMARY(), finterm::ui::colors::BORDER_MED(),
+             finterm::ui::colors::AMBER());
 }
 
 QString primary_btn_style() {
@@ -47,22 +47,22 @@ QString primary_btn_style() {
                    "  padding:10px 20px; font-size:13px; font-weight:700; letter-spacing:0.6px; }"
                    "QPushButton:hover { background:%2; }"
                    "QPushButton:disabled { background:%3; color:%4; }")
-        .arg(fincept::ui::colors::AMBER(), fincept::ui::colors::AMBER_DIM(), fincept::ui::colors::BG_RAISED(),
-             fincept::ui::colors::TEXT_TERTIARY());
+        .arg(finterm::ui::colors::AMBER(), finterm::ui::colors::AMBER_DIM(), finterm::ui::colors::BG_RAISED(),
+             finterm::ui::colors::TEXT_TERTIARY());
 }
 
 QString secondary_btn_style() {
     return QString("QPushButton { background:transparent; color:%1; border:1px solid %2;"
                    "  border-radius:3px; padding:8px 16px; font-size:12px; }"
                    "QPushButton:hover { color:%3; border-color:%3; }")
-        .arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::BORDER_MED(), fincept::ui::colors::AMBER());
+        .arg(finterm::ui::colors::TEXT_SECONDARY(), finterm::ui::colors::BORDER_MED(), finterm::ui::colors::AMBER());
 }
 
 QString danger_btn_style() {
     return QString("QPushButton { background:transparent; color:%1; border:none;"
                    "  padding:6px 10px; font-size:11px; }"
                    "QPushButton:hover { color:%2; text-decoration:underline; }")
-        .arg(fincept::ui::colors::TEXT_TERTIARY(), fincept::ui::colors::NEGATIVE());
+        .arg(finterm::ui::colors::TEXT_TERTIARY(), finterm::ui::colors::NEGATIVE());
 }
 
 } // namespace
@@ -85,7 +85,7 @@ LoginScreen::LoginScreen(QWidget* parent) : QWidget(parent) {
 
 void LoginScreen::paintEvent(QPaintEvent*) {
     QPainter p(this);
-    p.fillRect(rect(), QColor(fincept::ui::colors::BG_BASE()));
+    p.fillRect(rect(), QColor(finterm::ui::colors::BG_BASE()));
 }
 
 void LoginScreen::showEvent(QShowEvent* event) {
@@ -120,12 +120,12 @@ void LoginScreen::build_picker_page() {
     auto* title = new QLabel(QStringLiteral("Sign in"), panel);
     title->setAlignment(Qt::AlignCenter);
     title->setStyleSheet(QString("color:%1; font-size:20px; font-weight:700; letter-spacing:0.4px;")
-                             .arg(fincept::ui::colors::TEXT_PRIMARY()));
+                             .arg(finterm::ui::colors::TEXT_PRIMARY()));
 
     auto* subtitle = new QLabel(QStringLiteral("Pick your local user, then enter your PIN."), panel);
     subtitle->setAlignment(Qt::AlignCenter);
     subtitle->setWordWrap(true);
-    subtitle->setStyleSheet(QString("color:%1; font-size:12px;").arg(fincept::ui::colors::TEXT_SECONDARY()));
+    subtitle->setStyleSheet(QString("color:%1; font-size:12px;").arg(finterm::ui::colors::TEXT_SECONDARY()));
 
     user_list_ = new QListWidget(panel);
     user_list_->setStyleSheet(user_list_style());
@@ -139,7 +139,7 @@ void LoginScreen::build_picker_page() {
     picker_empty_->setWordWrap(true);
     picker_empty_->setStyleSheet(QString("color:%1; font-size:12px; padding:24px; border:1px dashed %2;"
                                          " border-radius:3px;")
-                                     .arg(fincept::ui::colors::TEXT_TERTIARY(), fincept::ui::colors::BORDER_DIM()));
+                                     .arg(finterm::ui::colors::TEXT_TERTIARY(), finterm::ui::colors::BORDER_DIM()));
     picker_empty_->hide();
 
     create_btn_ = new QPushButton(QStringLiteral("CREATE ACCOUNT"), panel);
@@ -180,11 +180,11 @@ void LoginScreen::build_pin_page() {
     pin_username_lbl_ = new QLabel(panel);
     pin_username_lbl_->setAlignment(Qt::AlignCenter);
     pin_username_lbl_->setStyleSheet(QString("color:%1; font-size:18px; font-weight:700; letter-spacing:0.4px;")
-                                         .arg(fincept::ui::colors::TEXT_PRIMARY()));
+                                         .arg(finterm::ui::colors::TEXT_PRIMARY()));
 
     auto* hint = new QLabel(QStringLiteral("Enter PIN"), panel);
     hint->setAlignment(Qt::AlignCenter);
-    hint->setStyleSheet(QString("color:%1; font-size:12px;").arg(fincept::ui::colors::TEXT_SECONDARY()));
+    hint->setStyleSheet(QString("color:%1; font-size:12px;").arg(finterm::ui::colors::TEXT_SECONDARY()));
 
     pin_input_ = new QLineEdit(panel);
     pin_input_->setPlaceholderText(QStringLiteral("\xe2\x80\xa2 \xe2\x80\xa2 \xe2\x80\xa2 \xe2\x80\xa2"));
@@ -195,7 +195,7 @@ void LoginScreen::build_pin_page() {
     pin_input_->setStyleSheet(pin_input_style());
 
     pin_error_ = new QLabel(panel);
-    pin_error_->setStyleSheet(QString("color:%1; font-size:12px; padding:2px;").arg(fincept::ui::colors::NEGATIVE()));
+    pin_error_->setStyleSheet(QString("color:%1; font-size:12px; padding:2px;").arg(finterm::ui::colors::NEGATIVE()));
     pin_error_->setAlignment(Qt::AlignCenter);
     pin_error_->setWordWrap(true);
     pin_error_->hide();
@@ -355,4 +355,4 @@ void LoginScreen::on_login_failed(const QString& error) {
         pin_input_->selectAll();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 ExecutionHooks& ExecutionHooks::instance() {
     static ExecutionHooks s;
@@ -84,4 +84,4 @@ void ExecutionHooks::emit_node_error(const QString& workflow_id, const QString& 
     emit_event({HookEvent::NodeError, workflow_id, node_id, {}, false, error, 0, {}});
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

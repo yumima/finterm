@@ -26,7 +26,7 @@
 #include <QSplitter>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kUnescoScript = "unesco_data.py";
@@ -305,4 +305,4 @@ void UnescoPanel::on_result(const QString& request_id, const services::Economics
     LOG_INFO("UnescoPanel", QString("Displayed %1 data points for %2").arg(rows.size()).arg(request_id));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

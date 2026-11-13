@@ -11,7 +11,7 @@
 #include <QRegularExpression>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 static const char* SAVEAS_DLG_SS = "QDialog{background:#0a0a0a;color:#e5e5e5;}"
                                    "QLabel{color:#e5e5e5;}"
@@ -105,4 +105,4 @@ QString WorkspaceSaveAsDialog::chosen_path() const {
     return chosen_path_ + "/" + filename + ".fwsp";
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

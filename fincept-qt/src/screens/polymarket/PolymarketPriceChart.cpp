@@ -6,10 +6,10 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-using namespace fincept::ui;
-using namespace fincept::services::prediction;
+using namespace finterm::ui;
+using namespace finterm::services::prediction;
 
 static const QStringList INTERVAL_LABELS = {"1H", "6H", "1D", "1W", "1M", "ALL"};
 static const QStringList INTERVAL_VALUES = {"1h", "6h", "1d", "1w", "1m", "max"};
@@ -146,4 +146,4 @@ void PolymarketPriceChart::set_outcome_labels(const QStringList& labels) {
         outcome_combo_->setCurrentIndex(0);
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

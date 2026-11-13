@@ -10,7 +10,7 @@
 
 #include <cmath>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 // Symbols: VIX + SPY/QQQ/IWM/TLT for correlation proxies + 6 volatile stocks
 static const QStringList kRiskSymbols = {"^VIX", "SPY", "QQQ",  "IWM",  "TLT", "NVDA",
@@ -342,4 +342,4 @@ void RiskMetricsWidget::populate(const QVector<services::QuoteData>& quotes) {
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

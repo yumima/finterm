@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 /// SMS via Twilio SMS API.
 class SMSProvider final : public BaseProvider {
@@ -26,4 +26,4 @@ class SMSProvider final : public BaseProvider {
     QString to_number_;
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

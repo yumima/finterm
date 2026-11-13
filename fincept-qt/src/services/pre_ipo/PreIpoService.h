@@ -12,7 +12,7 @@
 
 class QJsonArray;
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Singleton service for pre-IPO / private company data.
 ///
@@ -113,7 +113,7 @@ class PreIpoService : public QObject {
     QString dossier_reason(const QString& company_id) const { return dossier_reason_.value(company_id); }
 
   signals:
-    void data_loaded(fincept::pre_ipo::PreIpoSummary summary);
+    void data_loaded(finterm::pre_ipo::PreIpoSummary summary);
     void company_updated(QString id);
     void error_occurred(QString message);
     void progress(QString message); // "Loading Form D…", "Loading marks…"
@@ -296,4 +296,4 @@ class PreIpoService : public QObject {
     bool loaded_ = false;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

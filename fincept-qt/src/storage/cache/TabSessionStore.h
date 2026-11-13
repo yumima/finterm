@@ -4,7 +4,7 @@
 #include <QJsonObject>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 struct TabSession {
     QString tab_id;
@@ -36,4 +36,4 @@ class TabSessionStore {
     TabSessionStore() = default;
 };
 
-} // namespace fincept
+} // namespace finterm

@@ -3,13 +3,13 @@
 #include "services/notifications/NotificationService.h"
 #include "services/workflow/NodeRegistry.h"
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 // Helper: dispatch a notification via NotificationService and pipe input through.
 static auto make_execute(const QString& provider_id) {
     return [provider_id](const QJsonObject& params, const QVector<QJsonValue>& inputs,
                          std::function<void(bool, QJsonValue, QString)> cb) {
-        using namespace fincept::notifications;
+        using namespace finterm::notifications;
 
         NotificationRequest req;
         req.title = params.value("title").toString("Workflow Alert");
@@ -81,4 +81,4 @@ void register_notification_nodes(NodeRegistry& registry) {
                 {"method", "Method", "select", "POST", {"POST", "PUT", "PATCH"}, ""}});
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

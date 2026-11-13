@@ -8,7 +8,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 /// SQLite-backed cache. All reads and writes go directly to CacheDatabase (cache.db).
 /// No in-memory layer — avoids double-storage and keeps a single source of truth.
@@ -80,4 +80,4 @@ class CacheManager : public QObject {
     explicit CacheManager(QObject* parent = nullptr);
 };
 
-} // namespace fincept
+} // namespace finterm

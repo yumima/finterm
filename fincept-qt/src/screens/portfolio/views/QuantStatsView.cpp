@@ -30,10 +30,10 @@
 #include <cmath>
 #include <limits>
 
-using fincept::services::AnalyticsResult;
-using fincept::services::PortfolioAnalyticsService;
+using finterm::services::AnalyticsResult;
+using finterm::services::PortfolioAnalyticsService;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1167,4 +1167,4 @@ void QuantStatsView::run_monte_carlo() {
         });
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

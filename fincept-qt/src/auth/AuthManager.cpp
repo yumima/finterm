@@ -14,7 +14,7 @@
 #include <QRandomGenerator>
 #include <QSysInfo>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 AuthManager& AuthManager::instance() {
     static AuthManager s;
@@ -54,7 +54,7 @@ QString AuthManager::generate_device_id() const {
 // ── Token helper — single place to set/clear tokens on HttpClient ────────────
 
 static void apply_tokens(const QString& api_key, const QString& session_token) {
-    auto& http = fincept::HttpClient::instance();
+    auto& http = finterm::HttpClient::instance();
     http.set_auth_header(api_key);
     http.set_session_token(session_token);
 }
@@ -74,7 +74,7 @@ bool AuthManager::save_session() {
     // the per-user fincept DB is opened.
     AuthService::instance().save_session(session_.api_key, json);
     // Also keep in OS-native SecureStorage as the durable credential.
-    auto sr = fincept::SecureStorage::instance().store("api_key", session_.api_key);
+    auto sr = finterm::SecureStorage::instance().store("api_key", session_.api_key);
     if (sr.is_err()) {
         LOG_WARN("Auth", "SecureStorage: failed to persist api_key");
         return false;
@@ -84,7 +84,7 @@ bool AuthManager::save_session() {
 
 void AuthManager::load_session() {
     // Step 1: recover api_key from SecureStorage — doesn't need any DB.
-    const auto secure_key = fincept::SecureStorage::instance().retrieve("api_key");
+    const auto secure_key = finterm::SecureStorage::instance().retrieve("api_key");
     if (!secure_key.is_ok() || secure_key.value().isEmpty()) {
         session_.authenticated = false;
         return;
@@ -116,7 +116,7 @@ void AuthManager::clear_session(bool wipe_device_pin) {
     clear_tokens();
     // Remove session record from auth.db and OS keychain.
     AuthService::instance().remove_session(api_key);
-    fincept::SecureStorage::instance().remove("api_key");
+    finterm::SecureStorage::instance().remove("api_key");
     // The device PIN survives an ordinary sign-out: wiping it here is what
     // used to turn every logout (including a stray toolbar click) into a
     // forced PIN re-creation.
@@ -139,7 +139,7 @@ void AuthManager::initialize() {
         // startup validation. The server enforces single-session via
         // X-Session-Token; sending a stale one triggers 401 even though
         // the api_key is perfectly valid and permanent.
-        auto& http = fincept::HttpClient::instance();
+        auto& http = finterm::HttpClient::instance();
         http.set_auth_header(session_.api_key);
         http.clear_session_token();
 
@@ -214,7 +214,7 @@ void AuthManager::complete_auth_flow(std::function<void()> on_done) {
         const QString identity =
             !session_.user_info.username.isEmpty() ? session_.user_info.username : session_.user_info.email;
         if (!identity.isEmpty()) {
-            auto& store = fincept::SecureStorage::instance();
+            auto& store = finterm::SecureStorage::instance();
             const auto owner = store.retrieve("pin_owner");
             const QString owner_val = owner.is_ok() ? owner.value() : QString();
             if (PinManager::instance().has_pin() && !owner_val.isEmpty() && owner_val != identity) {
@@ -288,10 +288,10 @@ void AuthManager::delete_local_user(const QString& username, std::function<void(
         // "Reset this user" is the forgotten-credentials recovery path: the
         // deleted user's device PIN must not gate a future account re-created
         // under the same name.
-        const auto owner = fincept::SecureStorage::instance().retrieve("pin_owner");
+        const auto owner = finterm::SecureStorage::instance().retrieve("pin_owner");
         if (owner.is_ok() && owner.value() == username.toLower().trimmed()) {
             PinManager::instance().clear_pin();
-            fincept::SecureStorage::instance().remove("pin_owner");
+            finterm::SecureStorage::instance().remove("pin_owner");
         }
         if (on_done)
             on_done(true, {});
@@ -393,4 +393,4 @@ void AuthManager::regenerate_api_key(std::function<void(bool, const QString&)> o
     });
 }
 
-} // namespace fincept::auth
+} // namespace finterm::auth

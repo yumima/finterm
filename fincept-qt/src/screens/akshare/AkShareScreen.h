@@ -17,7 +17,7 @@
 
 #include <functional>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Data source descriptor for AkShare scripts.
 struct AkShareSource {
@@ -105,4 +105,4 @@ class AkShareScreen : public QWidget, public IStatefulScreen {
     bool loading_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

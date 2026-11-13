@@ -14,7 +14,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 BrokerHttp& BrokerHttp::instance() {
     static BrokerHttp s;
@@ -177,4 +177,4 @@ BrokerHttpResponse BrokerHttp::execute(const QString& method, const QString& url
     return result;
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

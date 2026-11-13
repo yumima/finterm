@@ -30,7 +30,7 @@
 
 #include <QString>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 std::vector<ToolDef> get_agents_tools() {
     std::vector<ToolDef> tools;
@@ -41,4 +41,4 @@ std::vector<ToolDef> get_agents_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

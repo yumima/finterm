@@ -25,10 +25,10 @@
 #include <cmath>
 #include <limits>
 
-using fincept::services::AnalyticsResult;
-using fincept::services::PortfolioAnalyticsService;
+using finterm::services::AnalyticsResult;
+using finterm::services::PortfolioAnalyticsService;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Palette for multi-series charts ──────────────────────────────────────────
 static const QStringList k_series_colors = {
@@ -978,4 +978,4 @@ void PortfolioFFNView::run_ffn() {
         });
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

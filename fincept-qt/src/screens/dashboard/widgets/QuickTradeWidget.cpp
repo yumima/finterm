@@ -9,7 +9,7 @@
 #include <QHBoxLayout>
 #include <QMessageBox>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 static QString input_style(const QString& border_color = "") {
     QString bc = border_color.isEmpty() ? ui::colors::BORDER_MED() : border_color;
@@ -293,4 +293,4 @@ void QuickTradeWidget::submit_order() {
         QString("%1 %2 %3 @ %4\nOrder sent to trading engine.").arg(side).arg(qty, 0, 'f', 0).arg(sym).arg(price_str));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

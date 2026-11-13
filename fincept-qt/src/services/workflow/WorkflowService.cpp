@@ -9,7 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 WorkflowService& WorkflowService::instance() {
     static WorkflowService s;
@@ -229,4 +229,4 @@ bool WorkflowService::is_executing() const {
     return executor_ && executor_->is_running();
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -4,7 +4,7 @@
 
 #include <QObject>
 
-namespace fincept::services::algo {
+namespace finterm::services::algo {
 
 /// Singleton service for Algo Trading — strategy CRUD, deployment, scanning, backtesting.
 class AlgoTradingService : public QObject {
@@ -34,10 +34,10 @@ class AlgoTradingService : public QObject {
 
   signals:
     void strategy_saved(QString id);
-    void strategies_loaded(QVector<fincept::services::algo::AlgoStrategy> strategies);
+    void strategies_loaded(QVector<finterm::services::algo::AlgoStrategy> strategies);
     void strategy_deleted(QString id);
     void deployment_started(QString deployment_id);
-    void deployments_loaded(QVector<fincept::services::algo::AlgoDeployment> deployments);
+    void deployments_loaded(QVector<finterm::services::algo::AlgoDeployment> deployments);
     void deployment_stopped(QString deployment_id);
     void backtest_result(QJsonObject data);
     void scan_result(QJsonObject data);
@@ -51,4 +51,4 @@ class AlgoTradingService : public QObject {
                     std::function<void(bool, const QString&)> cb);
 };
 
-} // namespace fincept::services::algo
+} // namespace finterm::services::algo

@@ -14,7 +14,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class ConflictMonitorPanel;
 class HDXDataPanel;
@@ -82,4 +82,4 @@ class GeopoliticsScreen : public QWidget, public IStatefulScreen {
     bool first_show_ = true;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

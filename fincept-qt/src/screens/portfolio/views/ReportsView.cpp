@@ -17,7 +17,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 ReportsView::ReportsView(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -399,4 +399,4 @@ void ReportsView::update_attribution() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

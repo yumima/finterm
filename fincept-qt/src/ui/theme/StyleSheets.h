@@ -1,7 +1,7 @@
 #pragma once
 #include <QString>
 
-namespace fincept::ui::styles {
+namespace finterm::ui::styles {
 
 /// Pre-built stylesheets for common widget patterns.
 QString card_frame();
@@ -22,4 +22,4 @@ QString crypto_trading_styles();
 /// Equity trading screen global styles (applied once at EquityTradingScreen level).
 QString equity_trading_styles();
 
-} // namespace fincept::ui::styles
+} // namespace finterm::ui::styles

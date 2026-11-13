@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 class SlackProvider final : public BaseProvider {
   public:
@@ -21,4 +21,4 @@ class SlackProvider final : public BaseProvider {
     QString channel_; // optional override, e.g. "#alerts"
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

@@ -19,7 +19,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 static const QStringList kMethods = {
     "Price Weighted",      "Market Cap Weighted", "Equal Weighted", "Float Adjusted", "Fundamental Weighted",
@@ -548,7 +548,7 @@ void CustomIndexView::show_index_performance(const QString& index_id, const QStr
 static double split_ratio_since(const QString& portfolio_id, const QString& symbol, const QString& since) {
     if (portfolio_id.isEmpty() || symbol.isEmpty())
         return 1.0;
-    const auto txns = fincept::services::PortfolioService::instance().symbol_transactions(portfolio_id, symbol);
+    const auto txns = finterm::services::PortfolioService::instance().symbol_transactions(portfolio_id, symbol);
     double ratio = 1.0;
     for (const auto& t : txns) {
         if (t.transaction_type != QLatin1String("SPLIT") || t.quantity <= 0.0)
@@ -635,4 +635,4 @@ double CustomIndexView::compute_index_value(const CustomIndex& idx) const {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

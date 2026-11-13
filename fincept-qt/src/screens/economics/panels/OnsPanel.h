@@ -7,7 +7,7 @@
 
 #include <QComboBox>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class OnsPanel : public EconPanelBase {
     Q_OBJECT
@@ -24,4 +24,4 @@ class OnsPanel : public EconPanelBase {
     QComboBox* series_combo_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

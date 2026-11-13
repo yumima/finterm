@@ -9,7 +9,7 @@
 #include <QJsonDocument>
 #include <QPointer>
 
-namespace fincept::services::quant {
+namespace finterm::services::quant {
 
 // ── Singleton ────────────────────────────────────────────────────────────────
 AIQuantLabService& AIQuantLabService::instance() {
@@ -82,7 +82,7 @@ void AIQuantLabService::run_python(const QString& script, const QStringList& arg
 void AIQuantLabService::run_python_cached(const QString& script, const QStringList& args, const QString& module_id,
                                           const QString& command, int ttl_sec) {
     const QString cache_key = "aiquant:" + module_id + ":" + command;
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (!doc.isNull()) {
@@ -116,7 +116,7 @@ void AIQuantLabService::run_python_cached(const QString& script, const QStringLi
                 emit self->error_occurred(module_id, msg);
                 return;
             }
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(doc.object()).toJson(QJsonDocument::Compact))),
                 ttl_sec, "ai_quant_lab");
             LOG_INFO("AIQuantLab", QString("[%1/%2] Result ready").arg(module_id, command));
@@ -617,4 +617,4 @@ void AIQuantLabService::reporting_cumulative_returns(const QJsonObject& params) 
     run_module("quant_reporting", "cumulative_return_graph", params);
 }
 
-} // namespace fincept::services::quant
+} // namespace finterm::services::quant

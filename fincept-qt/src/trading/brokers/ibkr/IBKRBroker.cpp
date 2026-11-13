@@ -6,7 +6,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 static int64_t now_ts() {
     return QDateTime::currentSecsSinceEpoch();
@@ -612,4 +612,4 @@ ApiResponse<QVector<BrokerCandle>> IBKRBroker::get_history(const BrokerCredentia
     return {true, candles, "", ts};
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

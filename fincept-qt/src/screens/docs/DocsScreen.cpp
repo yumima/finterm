@@ -9,7 +9,7 @@
 #include <QScrollArea>
 #include <QSplitter>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Style constants ─────────────────────────────────────────────────────────
 
@@ -1582,4 +1582,4 @@ DocsScreen::DocsScreen(QWidget* parent) : QWidget(parent) {
     navigate_to("welcome");
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

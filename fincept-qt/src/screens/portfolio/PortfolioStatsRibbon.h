@@ -6,7 +6,7 @@
 #include <QLabel>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class PortfolioStatsRibbon : public QWidget {
     Q_OBJECT
@@ -63,4 +63,4 @@ class PortfolioStatsRibbon : public QWidget {
     ChipCell risk_score_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

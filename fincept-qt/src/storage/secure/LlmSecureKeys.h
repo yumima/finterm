@@ -13,7 +13,7 @@
 
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// Returns the SecureStorage id for an `llm_configs` row.
 /// Format: "llm.configs.<provider>"
@@ -39,4 +39,4 @@ Result<void> llm_secure_store(const QString& key, const QString& value);
 /// Remove a key from SecureStorage. Not-found is treated as success.
 Result<void> llm_secure_remove(const QString& key);
 
-} // namespace fincept
+} // namespace finterm

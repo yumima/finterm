@@ -5,7 +5,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Risk check severity level.
 enum class RiskSeverity { Info, Warning, Error, Critical };
@@ -93,4 +93,4 @@ class RiskManager : public QObject {
     DailyTradingStats daily_stats_;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

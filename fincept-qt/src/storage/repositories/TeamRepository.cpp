@@ -4,7 +4,7 @@
 
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
@@ -172,4 +172,4 @@ Result<std::optional<TeamRow>> TeamRepository::get_by_name(const QString& name) 
     return Out::ok(t);
 }
 
-} // namespace fincept
+} // namespace finterm

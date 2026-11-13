@@ -3,7 +3,7 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 DockStatusBar::DockStatusBar(QWidget* parent) : QStatusBar(parent) {
     inner_ = new StatusBar(this);
@@ -19,4 +19,4 @@ DockStatusBar::DockStatusBar(QWidget* parent) : QStatusBar(parent) {
             [apply_style](const ThemeTokens&) { apply_style(); });
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

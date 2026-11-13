@@ -4,7 +4,7 @@
 
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void MattermostProvider::load_fields(SettingsRepository& r, const QString& cat) {
     webhook_url_ = get_str(r, cat + ".webhook_url");
@@ -40,4 +40,4 @@ void MattermostProvider::send(const NotificationRequest& req, std::function<void
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

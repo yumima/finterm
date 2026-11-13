@@ -14,14 +14,14 @@
 
 #include <cmath>
 
-namespace fincept::services::prediction::kalshi_ns {
+namespace finterm::services::prediction::kalshi_ns {
 
-namespace pr = fincept::services::prediction;
+namespace pr = finterm::services::prediction;
 
 // ── Construction ────────────────────────────────────────────────────────────
 
 KalshiAdapter::KalshiAdapter(QObject* parent)
-    : fincept::services::prediction::PredictionExchangeAdapter(parent),
+    : finterm::services::prediction::PredictionExchangeAdapter(parent),
       rest_(std::make_unique<KalshiRestClient>(this)),
       ws_(std::make_unique<KalshiWsClient>(this)) {
     wire();
@@ -251,16 +251,16 @@ void KalshiAdapter::run_py(const QString& command, const QJsonObject& extra,
     }
     const QString payload_str = QString::fromUtf8(QJsonDocument(payload).toJson(QJsonDocument::Compact));
     QPointer<KalshiAdapter> self = this;
-    fincept::python::PythonRunner::instance().run(
+    finterm::python::PythonRunner::instance().run(
         QStringLiteral("prediction_kalshi.py"), {command, payload_str},
-        [self, on_ok, ctx](fincept::python::PythonResult r) {
+        [self, on_ok, ctx](finterm::python::PythonResult r) {
             if (!self)
                 return;
             if (!r.success) {
                 emit self->error_occurred(ctx, r.error.isEmpty() ? r.output : r.error);
                 return;
             }
-            const QString json_str = fincept::python::extract_json(r.output);
+            const QString json_str = finterm::python::extract_json(r.output);
             QJsonParseError perr;
             auto doc = QJsonDocument::fromJson(json_str.toUtf8(), &perr);
             if (doc.isNull() || !doc.isObject()) {
@@ -669,4 +669,4 @@ void KalshiAdapter::wire() {
     connect(ws_.get(), &KalshiWsClient::connection_status_changed, this, &KalshiAdapter::ws_connection_changed);
 }
 
-} // namespace fincept::services::prediction::kalshi_ns
+} // namespace finterm::services::prediction::kalshi_ns

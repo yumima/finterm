@@ -29,8 +29,8 @@
 #include <QSplitterHandle>
 #include <QTest>
 
-using namespace fincept;
-using namespace fincept::screens;
+using namespace finterm;
+using namespace finterm::screens;
 
 // Presentation helpers the model and delegate call while building row text.
 // Defined here rather than by linking NewsService.cpp, which would drag in
@@ -39,13 +39,13 @@ using namespace fincept::screens;
 // have no bearing on the layout and index-mapping behaviour under test. The
 // declarations still come from the real NewsService.h, so a signature change
 // upstream breaks this build rather than silently diverging.
-namespace fincept::services {
+namespace finterm::services {
 QString priority_color(Priority) { return QStringLiteral("#ffffff"); }
 QString relative_time(int64_t) { return QStringLiteral("1m"); }
 QString threat_level_string(ThreatLevel) { return QString(); }
 QString threat_level_color(ThreatLevel) { return QStringLiteral("#ffffff"); }
 QString NewsService::source_flag_label(SourceFlag) { return QString(); }
-} // namespace fincept::services
+} // namespace finterm::services
 
 namespace {
 
@@ -291,7 +291,7 @@ void TestNewsFeedPanel::duplicate_category_sections_are_merged() {
 // changes, and must not change for things that don't. Getting this wrong is
 // silent: the user is served someone else's brief, or their own stale one.
 void TestNewsFeedPanel::brief_cache_key_covers_every_input() {
-    using fincept::services::brief_cache::key;
+    using finterm::services::brief_cache::key;
 
     const QStringList base{QStringLiteral("Alpha leads market higher"),
                            QStringLiteral("Beta cuts guidance"),

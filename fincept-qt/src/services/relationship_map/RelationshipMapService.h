@@ -6,11 +6,11 @@
 
 #include <QObject>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Fetches corporate relationship data via Python/yfinance.
 /// Emits progress signals for progressive UI updates.
-class RelationshipMapService : public QObject, public fincept::datahub::Producer {
+class RelationshipMapService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static RelationshipMapService& instance();
@@ -24,14 +24,14 @@ class RelationshipMapService : public QObject, public fincept::datahub::Producer
     /// Register with the hub + install geopolitics:relationship_graph:* policy. Idempotent.
     void ensure_registered_with_hub();
 
-    // ── fincept::datahub::Producer ─────────────────────────────────────────
+    // ── finterm::datahub::Producer ─────────────────────────────────────────
     QStringList topic_patterns() const override;
     void refresh(const QStringList& topics) override;
     int max_requests_per_sec() const override;
 
   signals:
     void progress_changed(int percent, const QString& message);
-    void data_ready(const fincept::relmap::RelationshipData& data);
+    void data_ready(const finterm::relmap::RelationshipData& data);
     void fetch_failed(const QString& error);
 
   private:
@@ -47,4 +47,4 @@ class RelationshipMapService : public QObject, public fincept::datahub::Producer
     bool hub_registered_ = false;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

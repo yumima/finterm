@@ -14,7 +14,7 @@
 #include <QFile>
 #include <QUuid>
 
-namespace fincept {
+namespace finterm {
 
 // ── Singleton ─────────────────────────────────────────────────────────────────
 
@@ -413,4 +413,4 @@ void WorkspaceManager::update_mru(const QString& id) {
     SettingsRepository::instance().set("workspace.mru_list", mru.join(','), "workspace");
 }
 
-} // namespace fincept
+} // namespace finterm

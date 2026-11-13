@@ -18,7 +18,7 @@
 
 #include <functional>
 
-namespace fincept::services::asia_markets {
+namespace finterm::services::asia_markets {
 
 /// Result of an endpoint-list query.
 struct EndpointsResult {
@@ -56,4 +56,4 @@ class AsiaMarketsService : public QObject {
     AsiaMarketsService() = default;
 };
 
-} // namespace fincept::services::asia_markets
+} // namespace finterm::services::asia_markets

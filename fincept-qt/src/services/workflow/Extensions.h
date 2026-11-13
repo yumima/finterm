@@ -6,7 +6,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Array extension functions for expression evaluation.
 namespace ArrayExt {
@@ -72,4 +72,4 @@ QJsonObject merge(const QJsonObject& a, const QJsonObject& b);
 /// Dispatch an extension call from an expression like "$input.prices.sum()"
 QJsonValue call_extension(const QString& method, const QJsonValue& target, const QJsonValue& arg = {});
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

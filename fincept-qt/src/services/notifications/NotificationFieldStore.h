@@ -21,7 +21,7 @@
 
 #include <optional>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 inline bool is_secret_field(const QString& field) {
     const QString f = field.toLower();
@@ -128,4 +128,4 @@ inline void remove_user_secrets(const QString& username) {
     store.remove(index_key(prefix));
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

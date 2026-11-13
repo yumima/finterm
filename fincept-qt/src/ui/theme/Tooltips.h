@@ -3,7 +3,7 @@
 
 class QApplication;
 
-namespace fincept::ui::tooltips {
+namespace finterm::ui::tooltips {
 
 /// Make every tooltip in the app behave the same way: appear the moment the
 /// pointer lands, next to the pointer, and wrapped into a readable box.
@@ -23,4 +23,4 @@ namespace fincept::ui::tooltips {
 /// stylesheet is applied.
 void install(QApplication& app);
 
-} // namespace fincept::ui::tooltips
+} // namespace finterm::ui::tooltips

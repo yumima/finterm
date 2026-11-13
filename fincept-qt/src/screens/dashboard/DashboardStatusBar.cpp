@@ -28,7 +28,7 @@ void apply_solid_background(QWidget* widget, const QColor& color) {
 
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 DashboardStatusBar::DashboardStatusBar(QWidget* parent) : QWidget(parent) {
     setFixedHeight(24);
@@ -105,10 +105,10 @@ DashboardStatusBar::DashboardStatusBar(QWidget* parent) : QWidget(parent) {
     rl->addWidget(make_sep());
 
     // ── Notification bell ──────────────────────────────────────────────────
-    notif_bell_ = new fincept::ui::NotifBell(this);
+    notif_bell_ = new finterm::ui::NotifBell(this);
     rl->addWidget(notif_bell_);
 
-    connect(notif_bell_, &fincept::ui::NotifBell::bell_clicked, this, &DashboardStatusBar::toggle_notif_panel);
+    connect(notif_bell_, &finterm::ui::NotifBell::bell_clicked, this, &DashboardStatusBar::toggle_notif_panel);
 
     hl->addWidget(right);
 
@@ -197,7 +197,7 @@ void DashboardStatusBar::toggle_notif_panel() {
     // Lazy-create the panel parented to the window so it floats freely
     if (!notif_panel_) {
         QWidget* root = window();
-        notif_panel_ = new fincept::ui::NotifPanel(root ? root : this);
+        notif_panel_ = new finterm::ui::NotifPanel(root ? root : this);
     }
     if (notif_panel_->isVisible()) {
         notif_panel_->hide();
@@ -208,4 +208,4 @@ void DashboardStatusBar::toggle_notif_panel() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

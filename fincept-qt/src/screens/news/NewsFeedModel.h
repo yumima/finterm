@@ -8,7 +8,7 @@
 #include <QSet>
 #include <QVector>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Custom roles for the delegate to query article data without creating widgets.
 enum NewsFeedRole {
@@ -91,4 +91,4 @@ class NewsFeedModel : public QAbstractListModel {
     QVector<FormattedRow> formatted_rows_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

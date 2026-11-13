@@ -13,7 +13,7 @@
 
 #include <vector>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 class SurfaceLineWidget : public QWidget {
     Q_OBJECT
@@ -55,4 +55,4 @@ class SurfaceLineWidget : public QWidget {
     QPointF data_to_pixel(float x, float y, const QRectF& plot_area) const;
 };
 
-} // namespace fincept::surface
+} // namespace finterm::surface

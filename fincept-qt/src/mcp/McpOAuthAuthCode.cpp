@@ -20,7 +20,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 namespace {
 
@@ -311,4 +311,4 @@ Result<QString> McpOAuthAuthCode::refresh(const AuthCodeConfig& cfg) {
     return Result<QString>::ok(access);
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

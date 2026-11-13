@@ -23,7 +23,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // L% = drop from the highest daily high since entry (trailing-stop distance),
 // P% = P&L against cost basis. They answer different questions, so they get
@@ -540,4 +540,4 @@ void PortfolioBlotter::refresh_theme() {
     populate_table();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

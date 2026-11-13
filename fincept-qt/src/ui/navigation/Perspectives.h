@@ -10,7 +10,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 inline const QMap<QString, QStringList>& perspective_layouts() {
     static const QMap<QString, QStringList> layouts = {
@@ -46,4 +46,4 @@ inline QStringList perspective_screens(const QString& action) {
     return out;
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

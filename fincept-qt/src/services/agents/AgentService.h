@@ -7,13 +7,13 @@
 #include <QJsonObject>
 #include <QObject>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Singleton service for all agent operations.
 /// Delegates to Python finagent_core/main.py via PythonRunner (lightweight calls)
 /// or custom QProcess + stdin (large payloads like agent execution).
 /// All results emitted as signals on the Qt event loop.
-class AgentService : public QObject, public fincept::datahub::Producer {
+class AgentService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static AgentService& instance();
@@ -161,4 +161,4 @@ class AgentService : public QObject, public fincept::datahub::Producer {
     bool hub_registered_ = false;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -4,7 +4,7 @@
 
 #include <QDate>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 RiskManager& RiskManager::instance() {
     static RiskManager s;
@@ -144,4 +144,4 @@ RiskSeverity RiskManager::current_risk_level() const {
     return RiskSeverity::Info;
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

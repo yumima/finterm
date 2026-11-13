@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 /// Email provider via SMTP-over-HTTP relay (uses a simple HTTP API endpoint
 /// that wraps SMTP, e.g. a self-hosted relay or a service like MailHog/Mailpit).
@@ -28,4 +28,4 @@ class EmailProvider final : public BaseProvider {
     QString from_addr_;
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

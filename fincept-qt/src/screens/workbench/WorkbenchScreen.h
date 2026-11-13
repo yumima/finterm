@@ -21,7 +21,7 @@
 
 #include <vector>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class WorkbenchScreen : public QWidget {
     Q_OBJECT
@@ -52,4 +52,4 @@ class WorkbenchScreen : public QWidget {
     QWidget* build_system_section();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

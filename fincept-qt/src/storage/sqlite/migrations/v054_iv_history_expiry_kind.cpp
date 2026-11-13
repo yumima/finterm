@@ -16,7 +16,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 Result<void> apply_v054(QSqlDatabase& db) {
@@ -55,4 +55,4 @@ void register_migration_v054() {
     MigrationRunner::register_migration({54, "iv_history_expiry_kind", apply_v054});
 }
 
-} // namespace fincept
+} // namespace finterm

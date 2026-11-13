@@ -6,7 +6,7 @@
 
 #include <functional>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Shared status-pill widget for panel headers. Renders as a compact:
 ///
@@ -69,4 +69,4 @@ class StatusPill : public QWidget {
     State state_ = State::Idle;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

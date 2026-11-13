@@ -39,7 +39,7 @@ class QNetworkAccessManager;
 class QNetworkReply;
 class QAudioOutput;
 
-namespace fincept::services {
+namespace finterm::services {
 
 class TtsService : public QObject {
     Q_OBJECT
@@ -239,4 +239,4 @@ class TtsService : public QObject {
     static constexpr int kAvailCacheTtlMs = 2000;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

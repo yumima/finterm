@@ -16,9 +16,9 @@
 
 #include <cmath>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 EquityOrderEntry::EquityOrderEntry(QWidget* parent) : QWidget(parent) {
     setObjectName("eqOrderEntry");
@@ -510,4 +510,4 @@ void EquityOrderEntry::fetch_margin_async() {
     });
 }
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

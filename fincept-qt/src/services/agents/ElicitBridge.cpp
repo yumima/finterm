@@ -5,7 +5,7 @@
 #include <QMetaType>
 #include <QUuid>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 constexpr const char* kElicitTag = "ElicitBridge";
@@ -16,8 +16,8 @@ void ensure_meta_types_registered() {
     static bool done = false;
     if (done)
         return;
-    qRegisterMetaType<fincept::mcp::ElicitRequest>("fincept::mcp::ElicitRequest");
-    qRegisterMetaType<fincept::mcp::ElicitResponse>("fincept::mcp::ElicitResponse");
+    qRegisterMetaType<finterm::mcp::ElicitRequest>("finterm::mcp::ElicitRequest");
+    qRegisterMetaType<finterm::mcp::ElicitResponse>("finterm::mcp::ElicitResponse");
     done = true;
 }
 } // namespace
@@ -99,4 +99,4 @@ void ElicitBridge::resolve(const QString& token, const mcp::ElicitResponse& resp
     cv_.wakeAll();
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

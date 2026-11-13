@@ -15,7 +15,7 @@
 #include <functional>
 #include <utility>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 class RenderCoalescer {
   public:
@@ -39,4 +39,4 @@ class RenderCoalescer {
     bool pending_ = false;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

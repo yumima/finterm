@@ -21,7 +21,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 QPointer<MarketChartDialog> MarketChartDialog::instance_;
 
@@ -571,4 +571,4 @@ void MarketChartDialog::keyPressEvent(QKeyEvent* e) {
     QDialog::keyPressEvent(e);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

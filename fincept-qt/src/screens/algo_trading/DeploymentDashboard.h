@@ -8,7 +8,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Live deployment monitor — shows running strategies with real-time metrics.
 class DeploymentDashboard : public QWidget {
@@ -17,14 +17,14 @@ class DeploymentDashboard : public QWidget {
     explicit DeploymentDashboard(QWidget* parent = nullptr);
 
   private slots:
-    void on_deployments_loaded(QVector<fincept::services::algo::AlgoDeployment> deployments);
+    void on_deployments_loaded(QVector<finterm::services::algo::AlgoDeployment> deployments);
     void on_error(const QString& context, const QString& msg);
 
   private:
     void build_ui();
     void connect_service();
-    QWidget* build_deployment_card(const fincept::services::algo::AlgoDeployment& d, QWidget* parent);
-    void update_summary(const QVector<fincept::services::algo::AlgoDeployment>& deployments);
+    QWidget* build_deployment_card(const finterm::services::algo::AlgoDeployment& d, QWidget* parent);
+    void update_summary(const QVector<finterm::services::algo::AlgoDeployment>& deployments);
 
     // Summary stats
     QLabel* active_count_ = nullptr;
@@ -39,4 +39,4 @@ class DeploymentDashboard : public QWidget {
     QLabel* status_label_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

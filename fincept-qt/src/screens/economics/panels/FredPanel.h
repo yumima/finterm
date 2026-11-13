@@ -8,7 +8,7 @@
 #include <QComboBox>
 #include <QLineEdit>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class FredPanel : public EconPanelBase {
     Q_OBJECT
@@ -26,4 +26,4 @@ class FredPanel : public EconPanelBase {
     QComboBox* preset_combo_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

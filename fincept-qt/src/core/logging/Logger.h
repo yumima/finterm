@@ -9,7 +9,7 @@
 #include <atomic>
 #include <utility>
 
-namespace fincept {
+namespace finterm {
 
 enum class LogLevel { Trace = 0, Debug = 1, Info = 2, Warn = 3, Error = 4, Fatal = 5 };
 
@@ -66,7 +66,7 @@ class Logger {
     QMutex mutex_;
 };
 
-} // namespace fincept
+} // namespace finterm
 
 // ── LOG_* macros — lazy evaluation via is_enabled() (P2.11) ────────────────
 // Existing call sites LOG_INFO("Tag", some_qstring) keep working unchanged.
@@ -74,8 +74,8 @@ class Logger {
 // `QString("...").arg(expensive())` without paying for it in production.
 #define FINCEPT_LOG_IMPL(level_enum, level_fn, tag, msg)                                                               \
     do {                                                                                                               \
-        if (fincept::Logger::instance().is_enabled(fincept::LogLevel::level_enum, tag))                                \
-            fincept::Logger::instance().level_fn(tag, msg);                                                            \
+        if (finterm::Logger::instance().is_enabled(finterm::LogLevel::level_enum, tag))                                \
+            finterm::Logger::instance().level_fn(tag, msg);                                                            \
     } while (0)
 
 #define LOG_TRACE(tag, msg) FINCEPT_LOG_IMPL(Trace, trace, tag, msg)
@@ -88,8 +88,8 @@ class Logger {
 #ifndef NDEBUG
 #    define LOG_FATAL(tag, msg)                                                                                        \
         do {                                                                                                           \
-            fincept::Logger::instance().fatal(tag, msg);                                                               \
-            fincept::Logger::instance().flush_and_close();                                                             \
+            finterm::Logger::instance().fatal(tag, msg);                                                               \
+            finterm::Logger::instance().flush_and_close();                                                             \
             qFatal("FATAL [%s] %s", qUtf8Printable(QString(tag)), qUtf8Printable(QString(msg)));                       \
         } while (0)
 #else
@@ -104,7 +104,7 @@ class Logger {
 //   LOG_INFO_F("Net", "GET %1 -> %2", url, status);
 //
 // The format helper expands QString(fmt).arg(a).arg(b)... for up to 6 args.
-namespace fincept::detail {
+namespace finterm::detail {
 inline QString log_fmt(const QString& fmt) {
     return fmt;
 }
@@ -147,12 +147,12 @@ inline QString log_fmt(const QString& fmt, A1&& a1, A2&& a2, A3&& a3, A4&& a4, A
         .arg(std::forward<A5>(a5))
         .arg(std::forward<A6>(a6));
 }
-} // namespace fincept::detail
+} // namespace finterm::detail
 
 #define FINCEPT_LOG_F_IMPL(level_enum, level_fn, tag, fmt, ...)                                                        \
     do {                                                                                                               \
-        if (fincept::Logger::instance().is_enabled(fincept::LogLevel::level_enum, tag))                                \
-            fincept::Logger::instance().level_fn(tag, fincept::detail::log_fmt(fmt, ##__VA_ARGS__));                   \
+        if (finterm::Logger::instance().is_enabled(finterm::LogLevel::level_enum, tag))                                \
+            finterm::Logger::instance().level_fn(tag, finterm::detail::log_fmt(fmt, ##__VA_ARGS__));                   \
     } while (0)
 
 #define LOG_TRACE_F(tag, fmt, ...) FINCEPT_LOG_F_IMPL(Trace, trace, tag, fmt, ##__VA_ARGS__)

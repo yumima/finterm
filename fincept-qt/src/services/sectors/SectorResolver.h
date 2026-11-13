@@ -23,7 +23,7 @@
 #include <QSet>
 #include <QString>
 
-namespace fincept::services {
+namespace finterm::services {
 
 class SectorResolver : public QObject {
     Q_OBJECT
@@ -68,4 +68,4 @@ class SectorResolver : public QObject {
     QHash<QString, qint64> retry_after_; // symbol → epoch secs: unanswered, ask again then
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

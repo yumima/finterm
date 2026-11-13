@@ -8,7 +8,7 @@
 
 #include <QComboBox>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EcbPanel : public EconPanelBase {
     Q_OBJECT
@@ -26,4 +26,4 @@ class EcbPanel : public EconPanelBase {
     QComboBox* country_combo_ = nullptr; // for exchange_rates currency
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

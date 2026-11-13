@@ -29,7 +29,7 @@
 #include <numeric>
 #include <utility>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -42,8 +42,8 @@ double json_num_or_nan(const QJsonValue& v) {
     return v.isDouble() ? v.toDouble() : kNaN;
 }
 
-fincept::services::util::DiskCache& portfolio_disk_cache() {
-    static fincept::services::util::DiskCache c(QStringLiteral("portfolio"));
+finterm::services::util::DiskCache& portfolio_disk_cache() {
+    static finterm::services::util::DiskCache c(QStringLiteral("portfolio"));
     return c;
 }
 
@@ -511,7 +511,7 @@ void PortfolioService::refresh_summary_prices_from_market_last(portfolio::Portfo
         if (!pair.isEmpty())
             keys.append(QStringLiteral("market_last:") + pair);
     }
-    const auto hits = fincept::CacheManager::instance().multi_get_aged(keys);
+    const auto hits = finterm::CacheManager::instance().multi_get_aged(keys);
 
     // Returns the cached payload only when it post-dates the snapshot we are
     // about to overwrite. The write time comes from the cache row itself, not
@@ -750,8 +750,8 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 keys.reserve(missing.size());
                 for (const auto& s : missing)
                     keys.append(QStringLiteral("market_last:") + s);
-                const QHash<QString, fincept::CacheManager::Aged> hits =
-                    fincept::CacheManager::instance().multi_get_aged(keys);
+                const QHash<QString, finterm::CacheManager::Aged> hits =
+                    finterm::CacheManager::instance().multi_get_aged(keys);
                 const QDate today_local = QDate::currentDate();
                 for (auto it = hits.cbegin(); it != hits.cend(); ++it) {
                     // Key off the cache key suffix (== the asset symbol we
@@ -801,7 +801,7 @@ void PortfolioService::build_summary(const QString& portfolio_id, const QVector<
                 return factor * it->price;
             // Last known pair rate — FX closes barely move vs equity risk, and
             // a slightly stale rate beats a face-value cross-currency sum.
-            const auto ml = fincept::CacheManager::instance().try_get(QStringLiteral("market_last:") + pair);
+            const auto ml = finterm::CacheManager::instance().try_get(QStringLiteral("market_last:") + pair);
             if (ml) {
                 const double px = QJsonDocument::fromJson(ml->toUtf8()).object().value("price").toDouble();
                 if (px > 0)
@@ -1568,7 +1568,7 @@ void PortfolioService::fetch_benchmark_history(const QString& symbol, const QStr
                     // ^HSI. ^N225's midnight JST is 15:00 UTC the
                     // PREVIOUS day, so a UTC decode shifted the whole benchmark
                     // series one session against the NAV it is plotted with.
-                    const QDate d = fincept::core::bartime::bar_date(ts);
+                    const QDate d = finterm::core::bartime::bar_date(ts);
                     dates.append(d.toString(Qt::ISODate));
                     closes.append(o["close"].toDouble());
                 }
@@ -1708,7 +1708,7 @@ void PortfolioService::fetch_portfolio_intraday(const QString& portfolio_id) {
             continue;
         }
         double px = 0;
-        if (const auto ml = fincept::CacheManager::instance().try_get(QStringLiteral("market_last:") + pair))
+        if (const auto ml = finterm::CacheManager::instance().try_get(QStringLiteral("market_last:") + pair))
             px = QJsonDocument::fromJson(ml->toUtf8()).object().value("price").toDouble();
         if (px > 0)
             fx_by_symbol.insert(sym, factor * px);
@@ -3232,7 +3232,7 @@ QString PortfolioService::cached_symbol_currency(const QString& symbol) {
         if (it != instance().currency_memo_.constEnd())
             return it.value();
     }
-    const QString v = fincept::CacheManager::instance().try_get(symbol_currency_key(symbol)).value_or(QString());
+    const QString v = finterm::CacheManager::instance().try_get(symbol_currency_key(symbol)).value_or(QString());
     // kCurrencyUnknown is a NEGATIVE cache entry: "asked, got nothing". It
     // reads as unknown to callers while still suppressing the re-request, so
     // an ETF or delisted ticker with no info payload can't drive one full
@@ -3262,14 +3262,14 @@ void PortfolioService::persist_fx_pair_series(const QString& pair, const QMap<QS
     QJsonObject o;
     for (auto it = series.cbegin(); it != series.cend(); ++it)
         o.insert(it.key(), it.value());
-    fincept::CacheManager::instance().put(fx_series_key(pair),
+    finterm::CacheManager::instance().put(fx_series_key(pair),
                                           QVariant(QString::fromUtf8(QJsonDocument(o).toJson(QJsonDocument::Compact))),
                                           kFxSeriesTtlSec, "portfolio");
 }
 
 void PortfolioService::hydrate_fx_pair_series() {
     const QHash<QString, QString> rows =
-        fincept::CacheManager::instance().get_prefix(QStringLiteral("portfolio_fx_series:"));
+        finterm::CacheManager::instance().get_prefix(QStringLiteral("portfolio_fx_series:"));
     for (auto it = rows.cbegin(); it != rows.cend(); ++it) {
         const QString pair = it.key().mid(sizeof("portfolio_fx_series:") - 1);
         if (pair.isEmpty())
@@ -3320,7 +3320,7 @@ void PortfolioService::note_symbol_currency(const QString& symbol, const QString
     const QString up = symbol.toUpper();
     if (up.isEmpty() || currency.isEmpty())
         return;
-    fincept::CacheManager::instance().put(symbol_currency_key(up), currency, kSymbolCurrencyTtlSec);
+    finterm::CacheManager::instance().put(symbol_currency_key(up), currency, kSymbolCurrencyTtlSec);
     QMutexLocker lock(&cache_mutex_);
     currency_memo_.insert(up, currency);
 }
@@ -3335,7 +3335,7 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
         keys.reserve(symbols.size());
         for (const QString& s : symbols)
             keys.append(symbol_currency_key(s));
-        const QHash<QString, QString> known = fincept::CacheManager::instance().multi_get(keys);
+        const QHash<QString, QString> known = finterm::CacheManager::instance().multi_get(keys);
 
         QMutexLocker lock(&cache_mutex_);
         for (const QString& s : symbols) {
@@ -3362,7 +3362,7 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                 }
                 const QString ccy = obj.value("currency").toString();
                 if (ok && !ccy.isEmpty()) {
-                    fincept::CacheManager::instance().put(symbol_currency_key(sym), ccy, kSymbolCurrencyTtlSec);
+                    finterm::CacheManager::instance().put(symbol_currency_key(sym), ccy, kSymbolCurrencyTtlSec);
                     QMutexLocker lock(&self->cache_mutex_);
                     self->currency_memo_.insert(sym, ccy);
                 } else if (QMutexLocker lock(&self->cache_mutex_); !self->currency_memo_.contains(sym)) {
@@ -3375,7 +3375,7 @@ void PortfolioService::ensure_symbol_currencies(const QStringList& symbols) {
                     // A daemon {"error"} arrives as ok:false with its body, which
                     // says whether it was a refusal; no body (timeout) is one.
                     const bool transient = python::PythonWorker::reply_is_transient(ok, obj);
-                    fincept::CacheManager::instance().put(symbol_currency_key(sym),
+                    finterm::CacheManager::instance().put(symbol_currency_key(sym),
                                                           QString::fromLatin1(kCurrencyUnknown),
                                                           transient ? kCurrencyRetryTtlSec : kCurrencyUnknownTtlSec);
                 }
@@ -3412,4 +3412,4 @@ void PortfolioService::invalidate_cache(const QString& portfolio_id) {
     fundamentals_cache_.remove(portfolio_id);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

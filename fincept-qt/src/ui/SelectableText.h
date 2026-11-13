@@ -23,7 +23,7 @@
 #include <QLabel>
 #include <QObject>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 class SelectableTextFilter : public QObject {
   public:
@@ -64,4 +64,4 @@ inline void install_selectable_text(QApplication& app) {
     app.installEventFilter(new SelectableTextFilter(&app));
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

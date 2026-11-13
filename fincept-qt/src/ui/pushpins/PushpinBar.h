@@ -5,7 +5,7 @@ class QHBoxLayout;
 class QLabel;
 class QScrollArea;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 class SymbolChip;
 
@@ -30,4 +30,4 @@ class PushpinBar : public QWidget {
     QLabel* empty_hint_ = nullptr;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

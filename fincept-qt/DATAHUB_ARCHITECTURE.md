@@ -119,7 +119,7 @@ struct TopicPolicy {
 ## 4. Public API
 
 ```cpp
-namespace fincept::datahub {
+namespace finterm::datahub {
 
 class DataHub : public QObject {
     Q_OBJECT
@@ -206,7 +206,7 @@ class DataHub : public QObject {
     // ... internals: subscription registry, scheduler timer, dispatcher ...
 };
 
-} // namespace fincept::datahub
+} // namespace finterm::datahub
 ```
 
 ---
@@ -275,10 +275,10 @@ Values flow as `QVariant`. Producers register their structs with Qt's meta-type 
 
 ```cpp
 // In MarketDataService.h
-Q_DECLARE_METATYPE(fincept::services::QuoteData)
+Q_DECLARE_METATYPE(finterm::services::QuoteData)
 
 // At startup
-qRegisterMetaType<fincept::services::QuoteData>();
+qRegisterMetaType<finterm::services::QuoteData>();
 ```
 
 Subscribers unwrap:

@@ -5,7 +5,7 @@
 
 #include <vector>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Transparent overlay that renders a 10-second confetti burst animation
 /// with multiple particle shapes, shimmer, sway, and staggered bursts.
@@ -48,4 +48,4 @@ class ConfettiOverlay : public QWidget {
     void draw_streamer(QPainter& painter, float size, float rotation);
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

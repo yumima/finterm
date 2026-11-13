@@ -1,7 +1,7 @@
 // src/storage/repositories/AiPredictionRepository.cpp
 #include "storage/repositories/AiPredictionRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 AiPredictionRepository& AiPredictionRepository::instance() {
     static AiPredictionRepository inst;
@@ -79,4 +79,4 @@ void AiPredictionRepository::resolve(qint64 id, double price_at_resolve, double 
                {price_at_resolve, actual_pct, correct ? 1 : 0, resolved_at, id});
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -7,10 +7,10 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-using namespace fincept::ui;
-using namespace fincept::services::polymarket;
+using namespace finterm::ui;
+using namespace finterm::services::polymarket;
 
 static QString fmt_pnl(double v) {
     QString sign = v >= 0 ? "+" : "";
@@ -100,4 +100,4 @@ void PolymarketLeaderboard::set_loading(bool loading) {
     }
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

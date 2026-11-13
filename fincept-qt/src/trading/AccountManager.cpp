@@ -14,7 +14,7 @@
 #include <cmath>
 #include <exception>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // ── Credential key helpers ──────────────────────────────────────────────────
 
@@ -406,4 +406,4 @@ IBroker* AccountManager::broker_for(const QString& account_id) const {
     return BrokerRegistry::instance().get(broker_id);
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

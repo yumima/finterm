@@ -1,9 +1,9 @@
 #include "services/prediction/polymarket/PolymarketTypeMap.h"
 
-namespace fincept::services::prediction::polymarket_map {
+namespace finterm::services::prediction::polymarket_map {
 
-namespace pm = fincept::services::polymarket;
-namespace pr = fincept::services::prediction;
+namespace pm = finterm::services::polymarket;
+namespace pr = finterm::services::prediction;
 
 static pr::MarketKey make_market_key(const pm::Market& m) {
     pr::MarketKey k;
@@ -112,4 +112,4 @@ QVector<pr::PredictionTrade> to_prediction(const QVector<pm::Trade>& src) {
     return out;
 }
 
-} // namespace fincept::services::prediction::polymarket_map
+} // namespace finterm::services::prediction::polymarket_map

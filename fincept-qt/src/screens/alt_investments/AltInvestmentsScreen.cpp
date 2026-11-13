@@ -21,7 +21,7 @@
 // ── Stylesheet ───────────────────────────────────────────────────────────────
 
 namespace {
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const QString kStyle =
     QStringLiteral("#altScreen { background: %1; }"
@@ -117,9 +117,9 @@ static const QString kStyle =
     ;
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Field factory helpers ────────────────────────────────────────────────────
 
@@ -846,7 +846,7 @@ void AltInvestmentsScreen::on_analyzer_changed(int index) {
     analyzer_combo_->setCurrentIndex(index);
     rebuild_form(active_category_, index);
 
-    fincept::ScreenStateManager::instance().notify_changed(this);
+    finterm::ScreenStateManager::instance().notify_changed(this);
 }
 
 void AltInvestmentsScreen::on_analyze() {
@@ -908,7 +908,7 @@ void AltInvestmentsScreen::run_analysis(const QString& command, const QJsonObjec
     const QString data_json = QString::fromUtf8(QJsonDocument(form).toJson(QJsonDocument::Compact));
     const QString cache_key = "alt_screen:" + command + ":" + data_json;
 
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (doc.isObject()) {
@@ -955,7 +955,7 @@ void AltInvestmentsScreen::run_analysis(const QString& command, const QJsonObjec
                 return;
             }
 
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), 10 * 60,
                 "alt_investments");
 
@@ -1206,4 +1206,4 @@ void AltInvestmentsScreen::restore_state(const QVariantMap& state) {
         on_analyzer_changed(ana);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

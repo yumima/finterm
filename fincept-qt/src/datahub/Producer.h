@@ -3,7 +3,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::datahub {
+namespace finterm::datahub {
 
 /// A Producer owns refresh for a set of topic patterns. Services
 /// (MarketDataService, NewsService, ExchangeService, broker adapters, …)
@@ -29,4 +29,4 @@ class Producer {
     virtual int max_requests_per_sec() const { return 0; }
 };
 
-} // namespace fincept::datahub
+} // namespace finterm::datahub

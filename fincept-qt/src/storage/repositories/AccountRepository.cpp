@@ -1,6 +1,6 @@
 #include "storage/repositories/AccountRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 AccountRepository& AccountRepository::instance() {
     static AccountRepository s;
@@ -68,4 +68,4 @@ Result<QVector<trading::BrokerAccount>> AccountRepository::find_active() {
                       {}, map_row);
 }
 
-} // namespace fincept
+} // namespace finterm

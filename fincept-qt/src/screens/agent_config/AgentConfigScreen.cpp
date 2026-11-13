@@ -19,7 +19,7 @@
 #include <QShowEvent>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── View mode metadata ───────────────────────────────────────────────────────
 
@@ -292,7 +292,7 @@ void AgentConfigScreen::set_view(services::AgentViewMode mode) {
     for (int i = 0; i < nav_buttons_.size(); ++i)
         nav_buttons_[i]->setChecked(i == idx);
 
-    fincept::ScreenStateManager::instance().notify_changed(this);
+    finterm::ScreenStateManager::instance().notify_changed(this);
 }
 
 // ── Service-level connections (global signals, no per-panel wiring) ──────────
@@ -361,4 +361,4 @@ void AgentConfigScreen::restore_state(const QVariantMap& state) {
     set_view(static_cast<services::AgentViewMode>(v));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

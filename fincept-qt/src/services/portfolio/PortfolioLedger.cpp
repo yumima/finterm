@@ -5,7 +5,7 @@
 
 #include <algorithm>
 
-namespace fincept::portfolio {
+namespace finterm::portfolio {
 
 namespace {
 
@@ -129,4 +129,4 @@ void LedgerCursor::advance_to(const QString& date) {
     }
 }
 
-} // namespace fincept::portfolio
+} // namespace finterm::portfolio

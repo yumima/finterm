@@ -1,7 +1,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 struct AgentConfig {
     QString id;
@@ -32,4 +32,4 @@ class AgentConfigRepository : public BaseRepository<AgentConfig> {
     static AgentConfig map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

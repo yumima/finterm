@@ -6,7 +6,7 @@
 #include <QMap>
 #include <QTimer>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 class NodeItem;
 class EdgeItem;
@@ -89,4 +89,4 @@ class NodeScene : public QGraphicsScene {
     int animated_edge_count_ = 0;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

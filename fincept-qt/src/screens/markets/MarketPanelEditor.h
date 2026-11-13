@@ -8,7 +8,7 @@
 #include <QString>
 #include <QTimer>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Modal dialog for creating or editing a market panel.
 /// Symbol search uses the same /market/search API as the command bar.
@@ -48,4 +48,4 @@ class MarketPanelEditor : public QDialog {
     QString pending_query_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

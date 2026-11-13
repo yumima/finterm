@@ -11,7 +11,7 @@
 
 #include <functional>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 struct OrderFillEvent {
     QString order_id;
@@ -81,4 +81,4 @@ class OrderMatcher {
     double get_fill_price(const PtOrder& order, const PriceData& price) const;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

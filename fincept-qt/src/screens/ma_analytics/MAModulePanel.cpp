@@ -23,9 +23,9 @@
 #include <cmath>
 #include <initializer_list>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::ma;
+using namespace finterm::services::ma;
 
 // ── Helpers: create styled input widgets ─────────────────────────────────────
 
@@ -230,7 +230,7 @@ QDoubleSpinBox* MAModulePanel::add_field(QWidget* tab, QVBoxLayout* vl, const QS
     // real 0 (or the range minimum) can still be entered.
     const double eps = std::pow(10.0, -decimals);
     auto* spin = make_double_spin(min - eps, max, min - eps, decimals, suffix, tab);
-    spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    spin->setSpecialValueText(finterm::ui::formatting::placeholder());
     double_inputs_[key] = spin;
     vl->addWidget(build_input_row(label, spin, tab));
     return spin;
@@ -1558,7 +1558,7 @@ void MAModulePanel::display_error(const QString& msg) {
 // "*_pct" (or a "%" label) = percent units, "*_x" = multiple, otherwise a
 // plain number. Units are never guessed from magnitude, and null is "—".
 static QString format_value(const QString& key, const QJsonValue& val) {
-    namespace fmt = fincept::ui::formatting;
+    namespace fmt = finterm::ui::formatting;
     if (val.isBool())
         return val.toBool() ? "YES" : "NO";
     if (val.isString())
@@ -1905,4 +1905,4 @@ void MAModulePanel::refresh_theme() {
     apply_tab_stylesheet();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

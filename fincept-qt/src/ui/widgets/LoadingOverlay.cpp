@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 LoadingOverlay::LoadingOverlay(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_TransparentForMouseEvents, false);
@@ -133,4 +133,4 @@ void LoadingOverlay::paintEvent(QPaintEvent*) {
     p.drawRect(cx - box_w / 2, cy - max_bar_h - 10, box_w, box_h);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

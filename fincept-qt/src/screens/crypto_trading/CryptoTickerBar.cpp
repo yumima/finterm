@@ -7,9 +7,9 @@
 
 #include <cmath>
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 CryptoTickerBar::CryptoTickerBar(QWidget* parent) : QWidget(parent) {
     setObjectName("cryptoPriceRibbon");
@@ -178,4 +178,4 @@ void CryptoTickerBar::update_mark_price(double mark_price, double index_price) {
     }
 }
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

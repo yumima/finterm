@@ -18,22 +18,22 @@
 namespace {
 
 inline QString kMonoFont() {
-    return QString("font-family: %1;").arg(fincept::ui::fonts::DATA_FAMILY);
+    return QString("font-family: %1;").arg(finterm::ui::fonts::DATA_FAMILY);
 }
 
 inline QString kLabelStyle() {
     return QString("color: %1; font-size: %2px; font-weight: 700; letter-spacing: 0.5px; %3"
                    " background: transparent; border: none;")
-        .arg(fincept::ui::colors::TEXT_SECONDARY())
-        .arg(fincept::ui::fonts::TINY)
+        .arg(finterm::ui::colors::TEXT_SECONDARY())
+        .arg(finterm::ui::fonts::TINY)
         .arg(kMonoFont());
 }
 
 inline QString kSectionLabel() {
     return QString("color: %1; font-size: %2px; font-weight: 700; letter-spacing: 0.5px; %3"
                    " background: transparent; border: none;")
-        .arg(fincept::ui::colors::AMBER())
-        .arg(fincept::ui::fonts::TINY)
+        .arg(finterm::ui::colors::AMBER())
+        .arg(finterm::ui::fonts::TINY)
         .arg(kMonoFont());
 }
 
@@ -43,10 +43,10 @@ inline QString kComboStyle() {
                    "QComboBox::drop-down { border: none; }"
                    "QComboBox QAbstractItemView { background: %1; color: %2; border: 1px solid %3;"
                    " selection-background-color: %6; %5 }")
-        .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::TEXT_PRIMARY(), fincept::ui::colors::BORDER_DIM())
-        .arg(fincept::ui::fonts::SMALL)
+        .arg(finterm::ui::colors::BG_SURFACE(), finterm::ui::colors::TEXT_PRIMARY(), finterm::ui::colors::BORDER_DIM())
+        .arg(finterm::ui::fonts::SMALL)
         .arg(kMonoFont())
-        .arg(fincept::ui::colors::BG_HOVER());
+        .arg(finterm::ui::colors::BG_HOVER());
 }
 
 inline QString kSpinStyle() {
@@ -56,8 +56,8 @@ inline QString kSpinStyle() {
                    "QSpinBox { background: %1; color: %2; border: 1px solid %3; padding: 4px 8px;"
                    " font-size: %4px; %5 }"
                    "QSpinBox::up-button, QSpinBox::down-button { width: 14px; }")
-        .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::TEXT_PRIMARY(), fincept::ui::colors::BORDER_DIM())
-        .arg(fincept::ui::fonts::SMALL)
+        .arg(finterm::ui::colors::BG_SURFACE(), finterm::ui::colors::TEXT_PRIMARY(), finterm::ui::colors::BORDER_DIM())
+        .arg(finterm::ui::fonts::SMALL)
         .arg(kMonoFont());
 }
 
@@ -65,24 +65,24 @@ inline QString kTextEditStyle() {
     return QString("QTextEdit { background: %1; border: 1px solid %2; color: %3; padding: 6px;"
                    " font-size: %4px; %5 }"
                    "QTextEdit:focus { border-color: %6; }")
-        .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_DIM(), fincept::ui::colors::TEXT_PRIMARY())
-        .arg(fincept::ui::fonts::SMALL)
+        .arg(finterm::ui::colors::BG_SURFACE(), finterm::ui::colors::BORDER_DIM(), finterm::ui::colors::TEXT_PRIMARY())
+        .arg(finterm::ui::fonts::SMALL)
         .arg(kMonoFont())
-        .arg(fincept::ui::colors::BORDER_BRIGHT());
+        .arg(finterm::ui::colors::BORDER_BRIGHT());
 }
 
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::algo;
+using namespace finterm::services::algo;
 
 // ── Helper: build a condition row ───────────────────────────────────────────
 
 static QWidget* build_condition_row(QVBoxLayout* /*owner_layout*/, QWidget* parent) {
     auto* row = new QWidget(parent);
     row->setStyleSheet(QString("background: %1; border: 1px solid %2;")
-                           .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_DIM()));
+                           .arg(finterm::ui::colors::BG_SURFACE(), finterm::ui::colors::BORDER_DIM()));
     auto* hl = new QHBoxLayout(row);
     hl->setContentsMargins(6, 4, 6, 4);
     hl->setSpacing(4);
@@ -131,10 +131,10 @@ static QWidget* build_condition_row(QVBoxLayout* /*owner_layout*/, QWidget* pare
     rm_btn->setStyleSheet(QString("QPushButton { background: transparent; color: %1; border: 1px solid %2;"
                                   " font-size: %3px; font-weight: 700; %4 }"
                                   "QPushButton:hover { color: %5; border-color: %5; }")
-                              .arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::BORDER_DIM())
-                              .arg(fincept::ui::fonts::TINY)
+                              .arg(finterm::ui::colors::TEXT_SECONDARY(), finterm::ui::colors::BORDER_DIM())
+                              .arg(finterm::ui::fonts::TINY)
                               .arg(kMonoFont())
-                              .arg(fincept::ui::colors::NEGATIVE()));
+                              .arg(finterm::ui::colors::NEGATIVE()));
     QObject::connect(rm_btn, &QPushButton::clicked, row, [row]() { row->deleteLater(); });
 
     hl->addWidget(ind_combo);
@@ -260,10 +260,10 @@ void ScannerPanel::build_ui() {
                                   "QScrollBar:vertical { background: %1; width: 6px; }"
                                   "QScrollBar::handle:vertical { background: %2; }"
                                   "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
-                              .arg(fincept::ui::colors::BG_BASE(), fincept::ui::colors::BORDER_MED()));
+                              .arg(finterm::ui::colors::BG_BASE(), finterm::ui::colors::BORDER_MED()));
 
     auto* content = new QWidget(this);
-    content->setStyleSheet(QString("background: %1;").arg(fincept::ui::colors::BG_BASE()));
+    content->setStyleSheet(QString("background: %1;").arg(finterm::ui::colors::BG_BASE()));
     auto* main_vl = new QVBoxLayout(content);
     main_vl->setContentsMargins(16, 12, 16, 12);
     main_vl->setSpacing(12);
@@ -327,10 +327,10 @@ void ScannerPanel::build_ui() {
     add_cond_btn->setStyleSheet(QString("QPushButton { background: transparent; color: %1; border: 1px dashed %2;"
                                         " font-size: %3px; font-weight: 700; %4 }"
                                         "QPushButton:hover { color: %5; border-color: %5; }")
-                                    .arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::BORDER_DIM())
-                                    .arg(fincept::ui::fonts::TINY)
+                                    .arg(finterm::ui::colors::TEXT_SECONDARY(), finterm::ui::colors::BORDER_DIM())
+                                    .arg(finterm::ui::fonts::TINY)
                                     .arg(kMonoFont())
-                                    .arg(fincept::ui::colors::AMBER()));
+                                    .arg(finterm::ui::colors::AMBER()));
     connect(add_cond_btn, &QPushButton::clicked, this, [this, cond_container]() {
         conditions_layout_->addWidget(build_condition_row(conditions_layout_, cond_container));
     });
@@ -370,11 +370,11 @@ void ScannerPanel::build_ui() {
     megacaps_btn->setStyleSheet(QString("QPushButton { background: %1; color: %2; border: 1px solid %3;"
                                         " font-size: %4px; font-weight: 700; %5 padding: 2px 10px; }"
                                         "QPushButton:hover { background: %6; color: %7; }")
-                                    .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::TEXT_SECONDARY(),
-                                         fincept::ui::colors::BORDER_DIM())
-                                    .arg(fincept::ui::fonts::TINY)
+                                    .arg(finterm::ui::colors::BG_RAISED(), finterm::ui::colors::TEXT_SECONDARY(),
+                                         finterm::ui::colors::BORDER_DIM())
+                                    .arg(finterm::ui::fonts::TINY)
                                     .arg(kMonoFont())
-                                    .arg(fincept::ui::colors::BG_HOVER(), fincept::ui::colors::TEXT_PRIMARY()));
+                                    .arg(finterm::ui::colors::BG_HOVER(), finterm::ui::colors::TEXT_PRIMARY()));
     connect(megacaps_btn, &QPushButton::clicked, this,
             [this]() { symbols_edit_->setPlainText(megacap_symbols().join("\n")); });
     quick_row->addWidget(megacaps_btn);
@@ -428,9 +428,9 @@ void ScannerPanel::build_ui() {
                                     " border: 1px solid #FFC400; font-size: %1px; font-weight: 700; %2"
                                     " padding: 6px 24px; }"
                                     "QPushButton:hover { background: #FFC400; color: %3; }")
-                                .arg(fincept::ui::fonts::DATA)
+                                .arg(finterm::ui::fonts::DATA)
                                 .arg(kMonoFont())
-                                .arg(fincept::ui::colors::BG_BASE()));
+                                .arg(finterm::ui::colors::BG_BASE()));
     connect(scan_btn, &QPushButton::clicked, this, &ScannerPanel::on_scan);
     main_vl->addWidget(scan_btn);
 
@@ -438,8 +438,8 @@ void ScannerPanel::build_ui() {
     status_label_ = new QLabel("", content);
     status_label_->setWordWrap(true);
     status_label_->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                                     .arg(fincept::ui::colors::TEXT_SECONDARY())
-                                     .arg(fincept::ui::fonts::SMALL)
+                                     .arg(finterm::ui::colors::TEXT_SECONDARY())
+                                     .arg(finterm::ui::fonts::SMALL)
                                      .arg(kMonoFont()));
     main_vl->addWidget(status_label_);
 
@@ -473,14 +473,14 @@ void ScannerPanel::build_ui() {
                                           " font-weight: 700; font-family: %4; padding: 4px 8px;"
                                           " border: none; border-bottom: 1px solid %2; }"
                                           "QTableWidget::item:selected { background: %9; color: %5; }")
-                                      .arg(fincept::ui::colors::BG_BASE(), fincept::ui::colors::BORDER_DIM())
-                                      .arg(fincept::ui::fonts::SMALL)
-                                      .arg(fincept::ui::fonts::DATA_FAMILY)
-                                      .arg(fincept::ui::colors::TEXT_PRIMARY())
-                                      .arg(fincept::ui::colors::BG_SURFACE())
-                                      .arg(fincept::ui::colors::BG_RAISED())
-                                      .arg(fincept::ui::colors::TEXT_SECONDARY())
-                                      .arg(fincept::ui::colors::BG_HOVER()));
+                                      .arg(finterm::ui::colors::BG_BASE(), finterm::ui::colors::BORDER_DIM())
+                                      .arg(finterm::ui::fonts::SMALL)
+                                      .arg(finterm::ui::fonts::DATA_FAMILY)
+                                      .arg(finterm::ui::colors::TEXT_PRIMARY())
+                                      .arg(finterm::ui::colors::BG_SURFACE())
+                                      .arg(finterm::ui::colors::BG_RAISED())
+                                      .arg(finterm::ui::colors::TEXT_SECONDARY())
+                                      .arg(finterm::ui::colors::BG_HOVER()));
     main_vl->addWidget(results_table_);
     main_vl->addStretch();
 
@@ -495,8 +495,8 @@ void ScannerPanel::on_scan() {
     if (conditions.isEmpty()) {
         status_label_->setText("Add at least one scan condition.");
         status_label_->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                                         .arg(fincept::ui::colors::NEGATIVE())
-                                         .arg(fincept::ui::fonts::SMALL)
+                                         .arg(finterm::ui::colors::NEGATIVE())
+                                         .arg(finterm::ui::fonts::SMALL)
                                          .arg(kMonoFont()));
         return;
     }
@@ -506,8 +506,8 @@ void ScannerPanel::on_scan() {
     if (raw.isEmpty()) {
         status_label_->setText("Enter symbols to scan.");
         status_label_->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                                         .arg(fincept::ui::colors::NEGATIVE())
-                                         .arg(fincept::ui::fonts::SMALL)
+                                         .arg(finterm::ui::colors::NEGATIVE())
+                                         .arg(finterm::ui::fonts::SMALL)
                                          .arg(kMonoFont()));
         return;
     }
@@ -521,7 +521,7 @@ void ScannerPanel::on_scan() {
 
     status_label_->setText(QString("Scanning %1 symbols...").arg(symbols.size()));
     status_label_->setStyleSheet(QString("color: #FFC400; font-size: %1px; %2 background: transparent; border: none;")
-                                     .arg(fincept::ui::fonts::SMALL)
+                                     .arg(finterm::ui::fonts::SMALL)
                                      .arg(kMonoFont()));
 
     AlgoTradingService::instance().run_scan(conditions, symbols, timeframe_combo_->currentText(),
@@ -542,8 +542,8 @@ void ScannerPanel::on_scan_result(const QJsonObject& payload) {
     status_label_->setText(
         QString("Scan complete: %1 matches out of %2 symbols").arg(matches.size()).arg(total_scanned));
     status_label_->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                                     .arg(fincept::ui::colors::POSITIVE())
-                                     .arg(fincept::ui::fonts::SMALL)
+                                     .arg(finterm::ui::colors::POSITIVE())
+                                     .arg(finterm::ui::fonts::SMALL)
                                      .arg(kMonoFont()));
 
     for (const auto& mval : matches) {
@@ -563,13 +563,13 @@ void ScannerPanel::on_scan_result(const QJsonObject& payload) {
         QString signal_text, signal_color;
         if (bullish_count > 0 && bearish_count == 0) {
             signal_text = "BULLISH";
-            signal_color = fincept::ui::colors::POSITIVE();
+            signal_color = finterm::ui::colors::POSITIVE();
         } else if (bearish_count > 0 && bullish_count == 0) {
             signal_text = "BEARISH";
-            signal_color = fincept::ui::colors::NEGATIVE();
+            signal_color = finterm::ui::colors::NEGATIVE();
         } else {
             signal_text = "NEUTRAL";
-            signal_color = fincept::ui::colors::TEXT_SECONDARY();
+            signal_color = finterm::ui::colors::TEXT_SECONDARY();
         }
 
         // Build condition detail string
@@ -586,31 +586,31 @@ void ScannerPanel::on_scan_result(const QJsonObject& payload) {
 
         // Col 0: Symbol
         auto* sym_item = new QTableWidgetItem(symbol);
-        sym_item->setForeground(QColor(fincept::ui::colors::AMBER()));
-        sym_item->setFont(QFont(fincept::ui::fonts::DATA_FAMILY(), fincept::ui::fonts::SMALL, QFont::Bold));
+        sym_item->setForeground(QColor(finterm::ui::colors::AMBER()));
+        sym_item->setFont(QFont(finterm::ui::fonts::DATA_FAMILY(), finterm::ui::fonts::SMALL, QFont::Bold));
         results_table_->setItem(row, 0, sym_item);
 
         // Col 1: Signal
         auto* sig_item = new QTableWidgetItem(signal_text);
         sig_item->setForeground(QColor(signal_color));
-        sig_item->setFont(QFont(fincept::ui::fonts::DATA_FAMILY(), fincept::ui::fonts::TINY, QFont::Bold));
+        sig_item->setFont(QFont(finterm::ui::fonts::DATA_FAMILY(), finterm::ui::fonts::TINY, QFont::Bold));
         results_table_->setItem(row, 1, sig_item);
 
         // Col 2: Match count
         auto* match_item = new QTableWidgetItem(QString("%1/%2").arg(matched_conds.size()).arg(condition_count));
-        match_item->setForeground(QColor(fincept::ui::colors::POSITIVE()));
+        match_item->setForeground(QColor(finterm::ui::colors::POSITIVE()));
         match_item->setTextAlignment(Qt::AlignCenter);
         results_table_->setItem(row, 2, match_item);
 
         // Col 3: Timeframe
         auto* tf_item = new QTableWidgetItem(timeframe_combo_->currentText().toUpper());
-        tf_item->setForeground(QColor(fincept::ui::colors::CYAN()));
+        tf_item->setForeground(QColor(finterm::ui::colors::CYAN()));
         tf_item->setTextAlignment(Qt::AlignCenter);
         results_table_->setItem(row, 3, tf_item);
 
         // Col 4: Details
         auto* detail_item = new QTableWidgetItem(cond_strs.join(" | "));
-        detail_item->setForeground(QColor(fincept::ui::colors::TEXT_SECONDARY()));
+        detail_item->setForeground(QColor(finterm::ui::colors::TEXT_SECONDARY()));
         results_table_->setItem(row, 4, detail_item);
     }
 
@@ -622,10 +622,10 @@ void ScannerPanel::on_error(const QString& context, const QString& msg) {
     if (status_label_) {
         status_label_->setText(QString("Error [%1]: %2").arg(context, msg));
         status_label_->setStyleSheet(QString("color: %1; font-size: %2px; %3 background: transparent; border: none;")
-                                         .arg(fincept::ui::colors::NEGATIVE())
-                                         .arg(fincept::ui::fonts::SMALL)
+                                         .arg(finterm::ui::colors::NEGATIVE())
+                                         .arg(finterm::ui::fonts::SMALL)
                                          .arg(kMonoFont()));
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

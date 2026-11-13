@@ -7,7 +7,7 @@
 #include <QHBoxLayout>
 #include <QTimeZone>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PortfolioStatusBar::PortfolioStatusBar(QWidget* parent) : QWidget(parent) {
     setFixedHeight(24);
@@ -134,4 +134,4 @@ void PortfolioStatusBar::set_summary(const portfolio::PortfolioSummary& s) {
                                                   : ui::colors::NEGATIVE()));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

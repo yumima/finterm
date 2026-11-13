@@ -27,7 +27,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::portfolio {
+namespace finterm::portfolio {
 
 /// YYYY-MM-DD of `stamp` in the local time zone (see header comment).
 inline QString local_date_of(const QString& stamp) {
@@ -101,4 +101,4 @@ inline QVector<PortfolioSnapshot> usable_snapshots(const QVector<PortfolioSnapsh
     return out;
 }
 
-} // namespace fincept::portfolio
+} // namespace finterm::portfolio

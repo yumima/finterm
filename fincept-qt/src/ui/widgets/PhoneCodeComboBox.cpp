@@ -8,7 +8,7 @@
 #include <QScrollBar>
 #include <QStandardItem>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 static const struct {
     const char* flag;
@@ -360,4 +360,4 @@ void PhoneCodeComboBox::set_dial_code(const QString& code) {
     }
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -12,7 +12,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 class CryptoOrderBook : public QWidget {
     Q_OBJECT
@@ -62,4 +62,4 @@ class CryptoOrderBook : public QWidget {
     static constexpr int SPREAD_H = 22;
 };
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

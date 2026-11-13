@@ -14,7 +14,7 @@
 #include <QTextEdit>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// TEAMS view — assemble multi-agent teams and execute queries.
 class TeamsViewPanel : public QWidget {
@@ -74,4 +74,4 @@ class TeamsViewPanel : public QWidget {
     QString pending_request_id_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

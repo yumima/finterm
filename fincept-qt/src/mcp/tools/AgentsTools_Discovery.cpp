@@ -22,9 +22,9 @@
 #include <QTimer>
 #include <QUuid>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
-using namespace fincept::mcp::tools::agents_internal;
+using namespace finterm::mcp::tools::agents_internal;
 
 void agents_internal::register_discovery_tools(std::vector<ToolDef>& tools) {
     // ── 1. list_agents ──────────────────────────────────────────────────
@@ -216,4 +216,4 @@ void agents_internal::register_discovery_tools(std::vector<ToolDef>& tools) {
         tools.push_back(std::move(t));
     }
 }
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

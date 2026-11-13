@@ -26,7 +26,7 @@
 #include <QJsonObject>
 #include <QProcessEnvironment>
 
-namespace fincept::services {
+namespace finterm::services {
 
 static constexpr auto TAG = "SpeechService";
 static constexpr int kShutdownTimeoutMs = 2000;
@@ -377,4 +377,4 @@ void SpeechService::teardown_provider() {
     provider_.reset();
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

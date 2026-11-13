@@ -9,7 +9,7 @@
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PortfolioTxnPanel::PortfolioTxnPanel(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -191,4 +191,4 @@ void PortfolioTxnPanel::refresh_theme() {
     populate();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

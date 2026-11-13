@@ -5,7 +5,7 @@
 
 #include <QStringList>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 NewsFeedModel::NewsFeedModel(QObject* parent) : QAbstractListModel(parent) {
     qRegisterMetaType<services::NewsArticle>("NewsArticle");
@@ -277,4 +277,4 @@ void NewsFeedModel::advance_pulse() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

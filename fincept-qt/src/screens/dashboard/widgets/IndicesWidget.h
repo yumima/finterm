@@ -1,7 +1,7 @@
 #pragma once
 #include "screens/dashboard/widgets/QuoteTableWidget.h"
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Global indices widget — fetches 12 major indices via yfinance.
 inline QuoteTableWidget* create_indices_widget(QWidget* parent = nullptr) {
@@ -16,4 +16,4 @@ inline QuoteTableWidget* create_indices_widget(QWidget* parent = nullptr) {
     return w;
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

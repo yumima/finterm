@@ -3,7 +3,7 @@
 #include "ui/theme/StyleSheets.h"
 #include "ui/theme/Theme.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 Card::Card(const QString& title, QWidget* parent) : QFrame(parent) {
     setStyleSheet(styles::card_frame());
@@ -55,4 +55,4 @@ void Card::set_title(const QString& title) {
     title_label_->setText(title);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

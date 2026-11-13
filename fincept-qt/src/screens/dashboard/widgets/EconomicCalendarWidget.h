@@ -6,7 +6,7 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Economic Calendar Widget — fetches this week + next week macro events from
 /// ForexFactory's public JSON feed (no API key required).
@@ -36,4 +36,4 @@ class EconomicCalendarWidget : public BaseWidget {
     int ok_fetches_ = 0;       // how many of this batch's HTTP calls succeeded
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

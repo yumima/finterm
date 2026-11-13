@@ -3,7 +3,7 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 StatusBar::StatusBar(QWidget* parent) : QWidget(parent) {
     setFixedHeight(26);
@@ -54,4 +54,4 @@ void StatusBar::set_ready(bool ready) {
                                     .arg(ready ? colors::POSITIVE() : colors::TEXT_SECONDARY()));
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

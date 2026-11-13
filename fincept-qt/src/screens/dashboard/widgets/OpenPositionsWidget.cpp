@@ -16,7 +16,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 OpenPositionsWidget::OpenPositionsWidget(const QJsonObject& cfg, QWidget* parent)
     : BaseWidget("OPEN POSITIONS", parent) {
@@ -190,4 +190,4 @@ void OpenPositionsWidget::apply_styles() {
                  ui::colors::TEXT_SECONDARY()));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

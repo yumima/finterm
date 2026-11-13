@@ -19,7 +19,7 @@
 #include <QtConcurrent>
 #include <QtGlobal> // qgetenv
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
@@ -144,4 +144,4 @@ HearthService::Status HearthService::status() const {
     return status_;
 }
 
-} // namespace fincept
+} // namespace finterm

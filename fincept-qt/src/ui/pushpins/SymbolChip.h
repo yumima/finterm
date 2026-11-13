@@ -5,7 +5,7 @@
 #include <QMouseEvent>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Single-symbol chip rendered in the PushpinBar. Interactions:
 ///   - Left-click: publish to the current "default broadcast group"
@@ -26,7 +26,7 @@ class SymbolChip : public QWidget {
     const SymbolRef& ref() const { return ref_; }
 
   signals:
-    void remove_requested(fincept::SymbolRef ref);
+    void remove_requested(finterm::SymbolRef ref);
 
   protected:
     void mousePressEvent(QMouseEvent* e) override;
@@ -44,4 +44,4 @@ class SymbolChip : public QWidget {
     bool pressed_ = false;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

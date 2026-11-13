@@ -13,7 +13,7 @@
 #include <QTimer>
 #include <QtConcurrent/QtConcurrent>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -297,4 +297,4 @@ QString InlineCompletionController::cache_get(const QString& prefix) const {
     return cache_.value(prefix);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

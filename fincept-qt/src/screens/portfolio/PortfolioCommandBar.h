@@ -10,7 +10,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class PortfolioCommandBar : public QWidget {
     Q_OBJECT
@@ -108,4 +108,4 @@ class PortfolioCommandBar : public QWidget {
     bool dropdown_visible_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

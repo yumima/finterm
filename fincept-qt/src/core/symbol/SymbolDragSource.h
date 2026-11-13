@@ -11,7 +11,7 @@ class QDropEvent;
 class QDragEnterEvent;
 class QMouseEvent;
 
-namespace fincept::symbol_dnd {
+namespace finterm::symbol_dnd {
 
 /// Start a QDrag carrying the given SymbolRef. Intended to be called from
 /// a mouseMoveEvent (with the left button held) once the user drags past
@@ -83,4 +83,4 @@ class SymbolDragFilter : public QObject {
 SymbolDragFilter* installDragSource(QWidget* source, SymbolDragFilter::RefProvider provider,
                                     SymbolGroup source_group = SymbolGroup::None);
 
-} // namespace fincept::symbol_dnd
+} // namespace finterm::symbol_dnd

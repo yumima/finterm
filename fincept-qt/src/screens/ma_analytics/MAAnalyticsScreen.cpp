@@ -11,9 +11,9 @@
 #include <QScrollArea>
 #include <QSplitter>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::ma;
+using namespace finterm::services::ma;
 
 // ── Constructor ──────────────────────────────────────────────────────────────
 MAAnalyticsScreen::MAAnalyticsScreen(QWidget* parent) : QWidget(parent) {
@@ -601,4 +601,4 @@ void MAAnalyticsScreen::restore_state(const QVariantMap& state) {
         on_module_selected(idx);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

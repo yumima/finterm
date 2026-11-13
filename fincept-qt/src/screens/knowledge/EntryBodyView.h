@@ -9,7 +9,7 @@ class QLabel;
 class QTextBrowser;
 class QVBoxLayout;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// Body-only renderer for an entry: compact header (difficulty, title,
 /// subtitle), warnings, and the markdown body. NO right rail — meant to
@@ -35,4 +35,4 @@ class EntryBodyView : public QWidget {
     QWidget* content_ = nullptr;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

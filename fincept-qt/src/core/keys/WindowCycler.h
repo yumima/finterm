@@ -3,7 +3,7 @@
 #include <QObject>
 #include <QPointer>
 
-namespace fincept {
+namespace finterm {
 
 class MainWindow;
 
@@ -63,4 +63,4 @@ class WindowCycler : public QObject {
     QList<QPointer<MainWindow>> windows_;
 };
 
-} // namespace fincept
+} // namespace finterm

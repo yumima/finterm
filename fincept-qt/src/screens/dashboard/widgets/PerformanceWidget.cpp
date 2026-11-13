@@ -13,7 +13,7 @@ namespace {
 inline const QStringList kPerfSymbols = {"^GSPC", "^IXIC", "^DJI", "^RUT", "^VIX", "GC=F"};
 }
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 PerformanceWidget::PerformanceWidget(QWidget* parent)
     : BaseWidget("PERFORMANCE TRACKER", parent, ui::colors::POSITIVE()) {
@@ -172,4 +172,4 @@ void PerformanceWidget::populate(const QVector<services::QuoteData>& quotes) {
         set_row(7, map["GC=F"]->change_pct);
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

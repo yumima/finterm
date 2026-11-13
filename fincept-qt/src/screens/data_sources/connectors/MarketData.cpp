@@ -3,7 +3,7 @@
 // Intrinio, Fincept, Reuters, Marketstack, Finage, Tradier
 #include "screens/data_sources/ConnectorRegistry.h"
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 static QVector<ConnectorConfig> market_configs() {
     return {
@@ -313,4 +313,4 @@ static bool registered = [] {
     return true;
 }();
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

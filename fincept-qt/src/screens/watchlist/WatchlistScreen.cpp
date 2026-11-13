@@ -24,9 +24,9 @@
 #include <QTextStream>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Style builders (read live theme tokens) ─────────────────────────────────
 
@@ -286,7 +286,7 @@ QWidget* WatchlistScreen::build_main_panel() {
     symbol_dnd::installDropFilter(main_panel_, [this](const SymbolRef& ref, SymbolGroup) {
         if (current_wl_id_.isEmpty() || !ref.is_valid())
             return;
-        fincept::WatchlistRepository::instance().add_stock(current_wl_id_, ref.symbol);
+        finterm::WatchlistRepository::instance().add_stock(current_wl_id_, ref.symbol);
         load_stocks();
     });
 
@@ -386,7 +386,7 @@ void WatchlistScreen::refresh_theme() {
 // ── Data Loading ─────────────────────────────────────────────────────────────
 
 void WatchlistScreen::load_watchlists() {
-    auto r = fincept::WatchlistRepository::instance().list_all();
+    auto r = finterm::WatchlistRepository::instance().list_all();
     if (r.is_err()) {
         LOG_ERROR("Watchlist", "Failed to load watchlists");
         watchlists_.clear();
@@ -397,11 +397,11 @@ void WatchlistScreen::load_watchlists() {
     // Ensure at least one default watchlist exists
     if (watchlists_.isEmpty()) {
         QColor acc(colors::AMBER());
-        auto cr = fincept::WatchlistRepository::instance().create("Default", acc.name());
+        auto cr = finterm::WatchlistRepository::instance().create("Default", acc.name());
         if (cr.is_ok()) {
             watchlists_.append(cr.value());
             // Add some starter symbols
-            auto& repo = fincept::WatchlistRepository::instance();
+            auto& repo = finterm::WatchlistRepository::instance();
             repo.add_stock(watchlists_.first().id, "AAPL", "Apple Inc");
             repo.add_stock(watchlists_.first().id, "MSFT", "Microsoft Corp");
             repo.add_stock(watchlists_.first().id, "GOOGL", "Alphabet Inc");
@@ -432,7 +432,7 @@ void WatchlistScreen::load_stocks() {
     if (current_wl_id_.isEmpty())
         return;
 
-    auto r = fincept::WatchlistRepository::instance().get_stocks(current_wl_id_);
+    auto r = finterm::WatchlistRepository::instance().get_stocks(current_wl_id_);
     if (r.is_err()) {
         stocks_.clear();
     } else {
@@ -666,7 +666,7 @@ void WatchlistScreen::on_add_watchlist() {
     if (!ok || name.trimmed().isEmpty())
         return;
 
-    auto r = fincept::WatchlistRepository::instance().create(name.trimmed());
+    auto r = finterm::WatchlistRepository::instance().create(name.trimmed());
     if (r.is_ok()) {
         load_watchlists();
         // Select the new one (last in list)
@@ -685,7 +685,7 @@ void WatchlistScreen::on_delete_watchlist() {
     if (reply != QMessageBox::Yes)
         return;
 
-    fincept::WatchlistRepository::instance().remove(current_wl_id_);
+    finterm::WatchlistRepository::instance().remove(current_wl_id_);
     current_wl_id_.clear();
     table_->clear_data();
     panel_title_->setText("Select a watchlist");
@@ -705,7 +705,7 @@ void WatchlistScreen::on_add_stock() {
     if (text.isEmpty())
         return;
 
-    auto& repo = fincept::WatchlistRepository::instance();
+    auto& repo = finterm::WatchlistRepository::instance();
     for (auto& s : text.split(",")) {
         QString symbol = s.trimmed();
         if (!symbol.isEmpty()) {
@@ -726,7 +726,7 @@ void WatchlistScreen::on_remove_stock() {
         return;
 
     QString symbol = stocks_[row].symbol;
-    fincept::WatchlistRepository::instance().remove_stock(current_wl_id_, symbol);
+    finterm::WatchlistRepository::instance().remove_stock(current_wl_id_, symbol);
     load_stocks();
 }
 
@@ -849,7 +849,7 @@ void WatchlistScreen::on_import_csv() {
     int skipped_dupe = 0;
     int skipped_blank = 0;
 
-    auto& repo = fincept::WatchlistRepository::instance();
+    auto& repo = finterm::WatchlistRepository::instance();
 
     while (!in.atEnd()) {
         const QString line = in.readLine();
@@ -950,4 +950,4 @@ void WatchlistScreen::publish_selection_to_group() {
     SymbolContext::instance().set_group_symbol(link_group_, ref, this);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

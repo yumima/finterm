@@ -16,11 +16,11 @@
 
 #include <cmath>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-using namespace fincept::ui;
-namespace pmx = fincept::services::polymarket;
-using namespace fincept::services::prediction;
+using namespace finterm::ui;
+namespace pmx = finterm::services::polymarket;
+using namespace finterm::services::prediction;
 
 static const QStringList TAB_NAMES = {"OVERVIEW", "ORDER BOOK", "CHART",    "TRADE",
                                       "TRADES",   "HOLDERS",    "COMMENTS", "RELATED"};
@@ -976,4 +976,4 @@ void PolymarketDetailPanel::render_status_badge(const PredictionMarket& market) 
                                      .arg(badge.fg.name(), bg_css, badge.fg.name()));
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

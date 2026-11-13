@@ -16,7 +16,7 @@
 
 #include <optional>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class PortfolioCommandBar;
 class PortfolioStatsRibbon;
@@ -33,7 +33,7 @@ class PortfolioInsightsPanel;
 
 class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     Q_OBJECT
-    Q_INTERFACES(fincept::IGroupLinked)
+    Q_INTERFACES(finterm::IGroupLinked)
   public:
     explicit PortfolioScreen(QWidget* parent = nullptr);
 
@@ -185,4 +185,4 @@ class PortfolioScreen : public QWidget, public IStatefulScreen, public IGroupLin
     SymbolGroup link_group_ = SymbolGroup::None;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

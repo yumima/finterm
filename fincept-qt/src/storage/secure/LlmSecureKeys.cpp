@@ -3,7 +3,7 @@
 #include "core/logging/Logger.h"
 #include "storage/secure/SecureStorage.h"
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 constexpr const char* kTag = "LlmSecureKeys";
@@ -51,4 +51,4 @@ Result<void> llm_secure_remove(const QString& key) {
     return r;
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -22,7 +22,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Stylesheet helpers ───────────────────────────────────────────────────────
 
@@ -794,4 +794,4 @@ void ToolsViewPanel::copy_tool_name(const QString& name) {
     QTimer::singleShot(1500, this, [this]() { copy_btn_->setText("COPY NAME"); });
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

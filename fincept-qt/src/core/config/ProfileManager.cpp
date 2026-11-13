@@ -9,7 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace fincept {
+namespace finterm {
 
 ProfileManager& ProfileManager::instance() {
     static ProfileManager s;
@@ -150,4 +150,4 @@ void ProfileManager::save_manifest(const QStringList& profiles) const {
     }
 }
 
-} // namespace fincept
+} // namespace finterm

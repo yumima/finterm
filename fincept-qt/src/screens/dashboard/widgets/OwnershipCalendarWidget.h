@@ -8,7 +8,7 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Ownership Calendar — the dated events that move the ownership numbers.
 ///
@@ -40,4 +40,4 @@ class OwnershipCalendarWidget : public BaseWidget {
     QVector<QLabel*> header_labels_;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

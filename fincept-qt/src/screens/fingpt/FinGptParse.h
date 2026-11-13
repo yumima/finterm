@@ -29,7 +29,7 @@
 #include <limits>
 #include <utility>
 
-namespace fincept::screens::fingpt {
+namespace finterm::screens::fingpt {
 
 struct ForecasterAnswer {
     QString positives;        // body of [Positive Developments]
@@ -316,4 +316,4 @@ inline QString describe_forecast(const ForecasterAnswer& a) {
     return s;
 }
 
-} // namespace fincept::screens::fingpt
+} // namespace finterm::screens::fingpt

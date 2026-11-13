@@ -16,7 +16,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 EquityPeersTab::EquityPeersTab(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -583,4 +583,4 @@ QStringList EquityPeersTab::default_peers(const QString& symbol) const {
     return kPeers.value(symbol.toUpper(), {"SPY", "QQQ", "DIA"});
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

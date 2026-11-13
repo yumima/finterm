@@ -8,7 +8,7 @@
 #include <QJsonObject>
 #include <QPointer>
 
-namespace fincept::services {
+namespace finterm::services {
 
 NewsCorrelationService& NewsCorrelationService::instance() {
     static NewsCorrelationService s;
@@ -198,4 +198,4 @@ void NewsCorrelationService::detect_deviations(const QMap<QString, int>& current
                                          });
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -5,7 +5,7 @@
 
 #include <cmath>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 static const QColor COLORS[] = {
     QColor(217, 119, 6),   // amber
@@ -242,4 +242,4 @@ void ConfettiOverlay::paintEvent(QPaintEvent*) {
     }
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

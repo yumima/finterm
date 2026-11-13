@@ -11,7 +11,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Intelligence drawer — slides in from the left over the feed panel.
 /// Contains all advanced intelligence sections: monitors, top stories,
@@ -104,4 +104,4 @@ class NewsSidePanel : public QWidget {
     QWidget* saved_section_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

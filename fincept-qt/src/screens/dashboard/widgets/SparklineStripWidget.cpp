@@ -19,7 +19,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 // ── Inline sparkline canvas ──────────────────────────────────────────────────
 class SparklineCanvas : public QWidget {
@@ -240,4 +240,4 @@ void SparklineStripWidget::apply_styles() {
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

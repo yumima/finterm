@@ -7,7 +7,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Minimal sparkline widget — draws a mini line chart from data points.
 /// Caches render as QPixmap (P9) and repaints only on data or size change.
@@ -32,4 +32,4 @@ class PortfolioSparkline : public QWidget {
     bool dirty_ = true;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

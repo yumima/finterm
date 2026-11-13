@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
@@ -105,4 +105,4 @@ void HistoryChartPanel::load() {
         });
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

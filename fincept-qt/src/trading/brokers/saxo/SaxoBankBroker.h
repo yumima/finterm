@@ -2,7 +2,7 @@
 #include "trading/BrokerInterface.h"
 #include "trading/brokers/BrokerHttp.h"
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // Credential packing:
 //   ApiKey    = App Key (client_id)
@@ -88,4 +88,4 @@ class SaxoBankBroker : public IBroker {
     static QString extract_uic(const QString& symbol);
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

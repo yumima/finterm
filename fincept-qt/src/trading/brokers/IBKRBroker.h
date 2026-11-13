@@ -1,7 +1,7 @@
 #pragma once
 #include "trading/BrokerInterface.h"
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 class IBKRBroker : public IBroker {
   public:
@@ -60,4 +60,4 @@ class IBKRBroker : public IBroker {
     QMap<QString, QString> auth_headers(const BrokerCredentials& creds) const override;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

@@ -9,7 +9,7 @@
 #include <QStandardPaths>
 #include <QTimer>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 constexpr const char* kHearthSupTag = "HearthSupervisor";
@@ -166,4 +166,4 @@ void HearthSupervisor::on_process_finished(int exit_code, QProcess::ExitStatus /
     retry_timer_->start(delay);
 }
 
-} // namespace fincept
+} // namespace finterm

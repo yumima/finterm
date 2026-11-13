@@ -14,9 +14,9 @@
 #include <QSplitter>
 #include <QUrl>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::geo;
+using namespace finterm::services::geo;
 
 ConflictMonitorPanel::ConflictMonitorPanel(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -33,7 +33,7 @@ void ConflictMonitorPanel::build_ui() {
     left_splitter->setStyleSheet(QString("QSplitter::handle { background:%1; }").arg(ui::colors::BORDER_DIM()));
 
     // ── World Map ───────────────────────────────────────────────────────────
-    map_widget_ = new fincept::ui::WorldMapWidget(left_splitter);
+    map_widget_ = new finterm::ui::WorldMapWidget(left_splitter);
     map_widget_->setMinimumHeight(160);
     left_splitter->addWidget(map_widget_);
 
@@ -241,7 +241,7 @@ void ConflictMonitorPanel::set_events(const QVector<NewsEvent>& events) {
 }
 
 void ConflictMonitorPanel::update_map(const QVector<NewsEvent>& events) {
-    QVector<fincept::ui::MapPin> pins;
+    QVector<finterm::ui::MapPin> pins;
     pins.reserve(events.size());
 
     QHash<QString, int> coord_counts;
@@ -333,4 +333,4 @@ void ConflictMonitorPanel::update_stats(const QVector<NewsEvent>& events) {
     stats_label_->setText(QString("%1 events loaded").arg(events.size()));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

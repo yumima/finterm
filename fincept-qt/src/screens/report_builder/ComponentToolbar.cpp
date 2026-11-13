@@ -7,7 +7,7 @@
 #include <QLabel>
 #include <QScrollArea>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 ComponentToolbar::ComponentToolbar(QWidget* parent) : QWidget(parent) {
     // Use min/max width pair (not setFixedWidth) so the parent splitter can
@@ -239,4 +239,4 @@ void ComponentToolbar::update_structure(const QStringList& items, int selected_i
     structure_list_->blockSignals(false);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

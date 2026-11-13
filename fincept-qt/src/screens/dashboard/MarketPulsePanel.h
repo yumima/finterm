@@ -11,7 +11,7 @@
 
 class QFrame;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Right-side market pulse panel — Fear/Greed, breadth, top movers, global
 /// snapshot, market hours.
@@ -168,4 +168,4 @@ class MarketPulsePanel : public QWidget {
     QTimer* snapshot_coalesce_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -13,7 +13,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Custom QPainter candlestick canvas ───────────────────────────────────────
 class ResearchCandleCanvas : public QWidget {
@@ -440,4 +440,4 @@ class EquityOverviewTab : public QWidget {
     QVector<ui::LoadingOverlay*> info_overlays_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -27,7 +27,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 struct OAuthConfig {
     QString server_id;         ///< Used to namespace SecureStorage keys.
@@ -64,4 +64,4 @@ class McpOAuth {
     static QString secure_key_expires_at(const QString& server_id);
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

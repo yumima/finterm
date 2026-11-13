@@ -9,7 +9,7 @@
 #include <QRegularExpression>
 #include <QString>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 /// Strip closed <think>…</think> blocks AND a dangling unclosed <think>
 /// (a truncated stream ends mid-trace; the raw deliberation must never
@@ -24,4 +24,4 @@ inline QString strip_think_traces(QString text) {
     return text;
 }
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

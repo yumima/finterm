@@ -32,7 +32,7 @@
 // ── Stylesheet ────────────────────────────────────────────────────────────────
 
 namespace {
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 inline QString kStyle() {
     return QString(
@@ -156,9 +156,9 @@ inline QString kStyle() {
 
 } // namespace
 
-namespace fincept::screens {
-using namespace fincept::ui;
-using namespace fincept::mcp;
+namespace finterm::screens {
+using namespace finterm::ui;
+using namespace finterm::mcp;
 
 // ── Marketplace catalog ───────────────────────────────────────────────────────
 
@@ -1186,4 +1186,4 @@ void McpServersScreen::restore_state(const QVariantMap& state) {
         on_view_changed(view);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

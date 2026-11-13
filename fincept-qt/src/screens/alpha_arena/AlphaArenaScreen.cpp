@@ -20,7 +20,7 @@
 // ── Stylesheet ──────────────────────────────────────────────────────────────
 
 namespace {
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const QString kStyle =
     // Placeholder numbers must be CONTIGUOUS from %1: Qt assigns the Nth
@@ -149,9 +149,9 @@ static const QStringList MODEL_COLORS = {
 };
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Constructor ─────────────────────────────────────────────────────────────
 
@@ -1072,4 +1072,4 @@ void AlphaArenaScreen::restore_state(const QVariantMap& state) {
         on_right_tab_changed(tab);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

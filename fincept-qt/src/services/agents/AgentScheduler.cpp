@@ -8,7 +8,7 @@
 #include <QSqlQuery>
 #include <QUuid>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 constexpr const char* TAG = "AgentScheduler";
@@ -283,4 +283,4 @@ Result<void> AgentScheduler::set_enabled(const QString& id, bool enabled) {
     return Result<void>::ok();
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

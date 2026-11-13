@@ -2,7 +2,7 @@
 
 #include "ui/theme/Theme.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 StatusBadge::StatusBadge(QWidget* parent) : QLabel(parent) {
     set_status(Status::Idle);
@@ -35,4 +35,4 @@ void StatusBadge::set_custom(const QString& text, const QString& color) {
     setStyleSheet(QString("color: %1; font-size: 13px; background: transparent;").arg(color));
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

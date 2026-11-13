@@ -4,7 +4,7 @@
 
 #include <QVariant>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 // Typed-NULL QVariant for a TEXT column.  Binding a default-constructed
@@ -141,4 +141,4 @@ Result<void> LlmConfigRepository::delete_model(const QString& id) {
     return r;
 }
 
-} // namespace fincept
+} // namespace finterm

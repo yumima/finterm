@@ -2,7 +2,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Tiny in-row sparkline. Renders a polyline normalised to the widget's bounds
 /// and colours it green if the last value >= first, red otherwise. Designed to
@@ -30,4 +30,4 @@ class InlineSparkline : public QWidget {
     QVector<double> pts_;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

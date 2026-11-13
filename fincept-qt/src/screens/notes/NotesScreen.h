@@ -11,7 +11,7 @@
 #include <QTextEdit>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Financial Notes Screen — 3-panel layout:
 /// Category Sidebar | Notes List | Editor / Viewer
@@ -43,14 +43,14 @@ class NotesScreen : public QWidget, public IStatefulScreen {
     QWidget* build_editor_panel();
     void load_notes();
     void update_notes_list();
-    void show_note(const fincept::FinancialNote& note);
+    void show_note(const finterm::FinancialNote& note);
     void clear_editor();
     void enter_edit_mode();
     void enter_view_mode();
 
     // Data
-    QVector<fincept::FinancialNote> notes_;
-    QVector<fincept::FinancialNote> filtered_notes_;
+    QVector<finterm::FinancialNote> notes_;
+    QVector<finterm::FinancialNote> filtered_notes_;
     QString current_category_ = "ALL";
     int selected_note_id_ = -1;
     bool is_editing_ = false;
@@ -80,4 +80,4 @@ class NotesScreen : public QWidget, public IStatefulScreen {
     QLineEdit* edit_tickers_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

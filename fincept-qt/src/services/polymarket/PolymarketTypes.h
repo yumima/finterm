@@ -7,7 +7,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::services::polymarket {
+namespace finterm::services::polymarket {
 
 // ── Market (from Gamma API) ─────────────────────────────────────────────────
 
@@ -226,7 +226,7 @@ struct WsMarketUpdate {
     static WsMarketUpdate from_json(const QJsonObject& obj);
 };
 
-} // namespace fincept::services::polymarket
+} // namespace finterm::services::polymarket
 
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::services::polymarket::OrderBook)
+Q_DECLARE_METATYPE(finterm::services::polymarket::OrderBook)

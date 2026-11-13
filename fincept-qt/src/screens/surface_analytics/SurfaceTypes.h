@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 // ============================================================================
 // Chart type enum — all 35 surfaces
@@ -366,4 +366,4 @@ struct MonetaryPolicyData {
     std::vector<std::vector<float>> z;
 };
 
-} // namespace fincept::surface
+} // namespace finterm::surface

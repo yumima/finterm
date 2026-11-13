@@ -12,11 +12,11 @@
 #include <cmath>
 #include <optional>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
-using fincept::python::extract_json;
-using fincept::python::PythonResult;
-using fincept::python::PythonRunner;
+using finterm::python::extract_json;
+using finterm::python::PythonResult;
+using finterm::python::PythonRunner;
 
 namespace {
 
@@ -260,7 +260,7 @@ void register_market_data_nodes(NodeRegistry& registry) {
         .outputs = {{"output_main", "Main", PortDirection::Output, ConnectionType::EconomicData}},
         .parameters =
             {
-                {"preset", "Preset", "select", "GDPC1", fincept::screens::fred_preset_series_ids(),
+                {"preset", "Preset", "select", "GDPC1", finterm::screens::fred_preset_series_ids(),
                  "Pick a common series, or use Series ID below for any FRED code"},
                 {"series_id",
                  "Series ID (override)",
@@ -695,4 +695,4 @@ void register_market_data_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

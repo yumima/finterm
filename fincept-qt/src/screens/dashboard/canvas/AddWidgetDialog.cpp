@@ -11,7 +11,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Category accent colors ──────────────────────────────────────────────────
 
@@ -363,4 +363,4 @@ void AddWidgetDialog::populate_cards(const QString& filter, const QString& categ
     card_grid_->setRowStretch(row + (col > 0 ? 1 : 0), 1);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

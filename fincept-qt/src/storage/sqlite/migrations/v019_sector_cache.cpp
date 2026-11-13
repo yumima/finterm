@@ -7,7 +7,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 static Result<void> sql(QSqlDatabase& db, const char* stmt) {
@@ -57,4 +57,4 @@ void register_migration_v019() {
     MigrationRunner::register_migration({19, "sector_cache", apply_v019});
 }
 
-} // namespace fincept
+} // namespace finterm

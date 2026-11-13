@@ -7,7 +7,7 @@
 #include <cstdlib>
 #include <stdexcept>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 // ---- Generic CSV parser ----
 std::vector<std::vector<std::string>> parse_csv_file(const QString& path, std::string& out_error) {
@@ -414,4 +414,4 @@ bool load_monetary(const std::vector<std::vector<std::string>>& rows, MonetaryPo
     return load_generic_matrix<std::string, int>(rows, out.central_banks, out.meetings_ahead, out.z, err);
 }
 
-} // namespace fincept::surface
+} // namespace finterm::surface

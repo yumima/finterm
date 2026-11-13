@@ -35,7 +35,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 namespace {
 
@@ -988,4 +988,4 @@ QDialog* WebScraperWidget::make_config_dialog(QWidget* parent) {
     return dlg;
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

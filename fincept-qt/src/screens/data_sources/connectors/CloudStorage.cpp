@@ -2,7 +2,7 @@
 // Backblaze B2, Wasabi, Cloudflare R2, Oracle Cloud, IBM Cloud
 #include "screens/data_sources/ConnectorRegistry.h"
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 static QVector<ConnectorConfig> cloud_configs() {
     return {
@@ -153,4 +153,4 @@ static bool registered = [] {
     return true;
 }();
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

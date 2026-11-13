@@ -14,7 +14,7 @@
 
 #include <array>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // Mini preview widget — paints scaled-down widget rectangles
 class TemplatePreview : public QWidget {
@@ -140,4 +140,4 @@ TemplatePicker::TemplatePicker(QWidget* parent) : QDialog(parent) {
     vl->addLayout(bot);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

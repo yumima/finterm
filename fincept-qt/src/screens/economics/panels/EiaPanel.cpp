@@ -27,7 +27,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kEiaScript = "eia_data.py";
@@ -189,4 +189,4 @@ void EiaPanel::on_result(const QString& request_id, const services::EconomicsRes
     LOG_INFO("EiaPanel", QString("Displayed %1 rows — %2").arg(rows.size()).arg(request_id));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

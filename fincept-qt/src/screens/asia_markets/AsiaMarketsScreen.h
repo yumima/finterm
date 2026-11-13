@@ -14,7 +14,7 @@
 #include <QTextEdit>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Stock category descriptor for the Asia Markets explorer.
 struct StockCategory {
@@ -107,4 +107,4 @@ class AsiaMarketsScreen : public QWidget, public IStatefulScreen {
     QJsonArray last_data_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -8,7 +8,7 @@
 
 #include <cmath>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 TempEdge::TempEdge(PortItem* source, QGraphicsItem* parent) : QGraphicsPathItem(parent), source_(source) {
     setPen(QPen(QColor(ui::colors::AMBER.get()), 2.0, Qt::DashLine, Qt::RoundCap));
@@ -36,4 +36,4 @@ void TempEdge::update_target(const QPointF& scene_pos) {
     setPath(path);
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

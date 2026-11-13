@@ -8,7 +8,7 @@
 
 #include <functional>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 // ── Enums ──────────────────────────────────────────────────────────────
 
@@ -137,4 +137,4 @@ struct WorkflowExecutionResult {
     QString error;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -7,7 +7,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::services::algo {
+namespace finterm::services::algo {
 
 // ── Strategy ────────────────────────────────────────────────────────────────
 
@@ -209,4 +209,4 @@ inline QStringList bank_symbols() {
     return {"JPM", "BAC", "WFC", "C", "GS", "MS", "USB", "PNC", "HSBC", "BCS", "DB", "UBS"};
 }
 
-} // namespace fincept::services::algo
+} // namespace finterm::services::algo

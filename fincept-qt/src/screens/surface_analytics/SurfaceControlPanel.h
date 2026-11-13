@@ -30,7 +30,7 @@ class QTimer;
 class QToolButton;
 class QVBoxLayout;
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 struct SurfaceControlsState {
     QString symbol = "SPY";
@@ -184,4 +184,4 @@ class SurfaceControlPanel : public QWidget {
     SurfaceControlsState state_;
 };
 
-} // namespace fincept::surface
+} // namespace finterm::surface

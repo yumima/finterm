@@ -13,11 +13,11 @@ class QLabel;
 class QPushButton;
 class QTimer;
 
-namespace fincept::ui {
+namespace finterm::ui {
 class LoadingOverlay;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class ResearchCandleCanvas;
 
@@ -93,4 +93,4 @@ class MarketChartDialog : public QDialog {
     static QPointer<MarketChartDialog> instance_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -11,7 +11,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kImfScript = "imf_datamapper_data.py";
@@ -217,4 +217,4 @@ void ImfPanel::on_indicator_filter(const QString& text) {
     filter_list(indicator_list_, text);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

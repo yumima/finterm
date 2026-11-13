@@ -15,11 +15,11 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 class StockOwnershipPanel;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EquityOverviewTab;
 class EquityFinancialsTab;
@@ -35,7 +35,7 @@ class RelationshipMapScreen;
 
 class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     Q_OBJECT
-    Q_INTERFACES(fincept::IGroupLinked)
+    Q_INTERFACES(finterm::IGroupLinked)
   public:
     explicit EquityResearchScreen(QWidget* parent = nullptr);
 
@@ -150,4 +150,4 @@ class EquityResearchScreen : public QWidget, public IStatefulScreen, public IGro
     SymbolGroup link_group_ = SymbolGroup::None;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

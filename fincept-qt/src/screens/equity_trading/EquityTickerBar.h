@@ -4,7 +4,7 @@
 #include <QLabel>
 #include <QWidget>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 class EquityTickerBar : public QWidget {
     Q_OBJECT
@@ -31,4 +31,4 @@ class EquityTickerBar : public QWidget {
     QString currency_sym_ = "$";
 };
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

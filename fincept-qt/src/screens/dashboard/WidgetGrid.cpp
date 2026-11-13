@@ -19,7 +19,7 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 WidgetGrid::WidgetGrid(QWidget* parent) : QWidget(parent) {
     auto* scroll = new QScrollArea;
@@ -106,4 +106,4 @@ WidgetGrid::WidgetGrid(QWidget* parent) : QWidget(parent) {
     main_layout->addWidget(scroll);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

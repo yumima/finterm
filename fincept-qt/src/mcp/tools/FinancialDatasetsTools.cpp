@@ -33,7 +33,7 @@
 #include <functional>
 #include <memory>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 namespace {
 
@@ -325,4 +325,4 @@ std::vector<ToolDef> get_financial_datasets_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

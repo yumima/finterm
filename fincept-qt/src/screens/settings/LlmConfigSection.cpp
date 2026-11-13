@@ -25,7 +25,7 @@
 
 #include <memory>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 static constexpr const char* TAG = "LlmConfigSection";
 
@@ -1510,4 +1510,4 @@ void LlmConfigSection::on_set_default_profile() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

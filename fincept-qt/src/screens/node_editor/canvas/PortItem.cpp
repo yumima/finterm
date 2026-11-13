@@ -7,7 +7,7 @@
 #include <QGraphicsSceneMouseEvent>
 #include <QPainter>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 PortItem::PortItem(const PortDef& def, NodeItem* parent_node)
     : QGraphicsObject(parent_node), def_(def), parent_node_(parent_node) {
@@ -105,4 +105,4 @@ void PortItem::mousePressEvent(QGraphicsSceneMouseEvent* event) {
     }
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

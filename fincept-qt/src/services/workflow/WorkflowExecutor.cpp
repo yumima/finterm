@@ -10,7 +10,7 @@
 #include <QMetaObject>
 #include <QSet>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 WorkflowExecutor::WorkflowExecutor(QObject* parent) : QObject(parent) {}
 
@@ -553,4 +553,4 @@ QVector<QJsonValue> WorkflowExecutor::collect_inputs(const QString& node_id) con
     return inputs;
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

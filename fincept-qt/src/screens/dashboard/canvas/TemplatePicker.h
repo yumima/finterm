@@ -2,7 +2,7 @@
 #include <QDialog>
 #include <QString>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Dialog showing 6 dashboard template cards with mini previews.
 /// Emits template_selected(id) when user picks one and clicks APPLY.
@@ -15,4 +15,4 @@ class TemplatePicker : public QDialog {
     void template_selected(const QString& template_id);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

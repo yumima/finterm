@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 class GotifyProvider final : public BaseProvider {
   public:
@@ -21,4 +21,4 @@ class GotifyProvider final : public BaseProvider {
     QString app_token_;
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

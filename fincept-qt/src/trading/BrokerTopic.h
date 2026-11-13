@@ -12,7 +12,7 @@
 
 #include <QString>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 /// Canonical default account id used when the caller has no explicit one.
 inline constexpr const char* kDefaultAccountId = "default";
@@ -29,4 +29,4 @@ inline QString broker_topic(const QString& broker_id, const QString& account_id,
     return topic;
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

@@ -10,7 +10,7 @@
 #include <QLabel>
 #include <QTableWidgetItem>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 WatchlistWidget::WatchlistWidget(QWidget* parent)
     : BaseWidget("WATCHLIST", parent, ui::colors::INFO),
@@ -263,4 +263,4 @@ void WatchlistWidget::populate(const QVector<services::QuoteData>& quotes) {
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

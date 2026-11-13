@@ -11,7 +11,7 @@
 #include "trading/brokers/saxo/SaxoBankBroker.h"
 #include "trading/brokers/tradier/TradierBroker.h"
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // ============================================================================
 // IBroker credential helpers
@@ -128,4 +128,4 @@ bool BrokerRegistry::has(const QString& broker_id) const {
     return brokers_.count(broker_id) > 0;
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

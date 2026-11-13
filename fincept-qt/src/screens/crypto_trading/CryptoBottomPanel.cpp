@@ -14,9 +14,9 @@
 
 #include <cmath>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 namespace {
 inline QColor kRowEven() {
@@ -528,4 +528,4 @@ void CryptoBottomPanel::set_live_balance(double balance, double equity, double u
     live_margin_label_->setText(QString("$%1").arg(used_margin, 0, 'f', 2));
 }
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

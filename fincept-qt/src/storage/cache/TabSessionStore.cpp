@@ -4,7 +4,7 @@
 
 #include <QJsonDocument>
 
-namespace fincept {
+namespace finterm {
 
 TabSessionStore& TabSessionStore::instance() {
     static TabSessionStore s;
@@ -117,4 +117,4 @@ Result<QJsonObject> TabSessionStore::load_screen_state(const QString& key, int e
     return Result<QJsonObject>::ok(obj);
 }
 
-} // namespace fincept
+} // namespace finterm

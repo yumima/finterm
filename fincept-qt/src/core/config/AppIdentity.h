@@ -1,6 +1,6 @@
 #pragma once
 
-namespace fincept {
+namespace finterm {
 
 /// Single source of truth for the application's identity.
 ///
@@ -49,4 +49,4 @@ struct AppIdentity {
     static constexpr const char* kDisplayName = "finterm";
 };
 
-} // namespace fincept
+} // namespace finterm

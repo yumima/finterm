@@ -17,7 +17,7 @@
 /// after which the table's DIRECTION column, its TARGET column, the chart's
 /// segment and the accuracy metric each quoted a different one while the panel
 /// presented them as a single forecast.
-namespace fincept::screens::ai_forecast {
+namespace finterm::screens::ai_forecast {
 
 /// Moves smaller than this (in percent) are "flat" rather than up or down.
 ///
@@ -138,4 +138,4 @@ inline Forecast reconcile(double price_now, double stated_target, std::optional<
     return f;
 }
 
-} // namespace fincept::screens::ai_forecast
+} // namespace finterm::screens::ai_forecast

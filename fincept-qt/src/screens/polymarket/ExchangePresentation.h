@@ -6,11 +6,11 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::services::prediction {
+namespace finterm::services::prediction {
 class PredictionExchangeAdapter;
-} // namespace fincept::services::prediction
+} // namespace finterm::services::prediction
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 /// How a given exchange should be presented to the user. Captures the
 /// per-exchange UX knobs that aren't part of the data model — accent color,
@@ -74,13 +74,13 @@ struct ExchangePresentation {
         QColor bg;       // may be transparent
         QString tooltip; // optional long-form description for hover
     };
-    StatusBadge status_badge(const fincept::services::prediction::PredictionMarket& market) const;
+    StatusBadge status_badge(const finterm::services::prediction::PredictionMarket& market) const;
 
     // Factories.
     static ExchangePresentation for_polymarket();
     static ExchangePresentation for_kalshi();
-    static ExchangePresentation for_adapter(const fincept::services::prediction::PredictionExchangeAdapter* adapter);
+    static ExchangePresentation for_adapter(const finterm::services::prediction::PredictionExchangeAdapter* adapter);
     static ExchangePresentation for_id(const QString& exchange_id);
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

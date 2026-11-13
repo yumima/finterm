@@ -13,7 +13,7 @@
 
 #include <limits>
 
-namespace fincept::services::polymarket {
+namespace finterm::services::polymarket {
 
 // ── API base URLs ────────────────────────────────────────────────────────────
 
@@ -383,7 +383,7 @@ void PolymarketService::get_data(const QString& path, JsonCallback on_success, c
 void PolymarketService::fetch_markets(const QString& sort_by, int limit, int offset, bool closed) {
     const QString cache_key =
         QString("polymarket:markets:%1:%2:%3:%4").arg(sort_by).arg(limit).arg(offset).arg(closed ? 1 : 0);
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
         QVector<Market> result;
@@ -404,7 +404,7 @@ void PolymarketService::fetch_markets(const QString& sort_by, int limit, int off
         path,
         [this, cache_key](const QJsonDocument& doc) {
             QJsonArray arr = doc.isArray() ? doc.array() : QJsonArray();
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                 kMarketsTtlSec, "polymarket");
             QVector<Market> result;
@@ -497,7 +497,7 @@ void PolymarketService::unified_search(const QString& query) {
 void PolymarketService::fetch_events(const QString& sort_by, int limit, int offset, bool closed) {
     const QString cache_key =
         QString("polymarket:events:%1:%2:%3:%4").arg(sort_by).arg(limit).arg(offset).arg(closed ? 1 : 0);
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
         QVector<Event> result;
@@ -518,7 +518,7 @@ void PolymarketService::fetch_events(const QString& sort_by, int limit, int offs
         path,
         [this, cache_key](const QJsonDocument& doc) {
             QJsonArray arr = doc.isArray() ? doc.array() : QJsonArray();
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                 kEventsTtlSec, "polymarket");
             QVector<Event> result;
@@ -560,7 +560,7 @@ void PolymarketService::fetch_related_markets(int event_id) {
 }
 
 void PolymarketService::fetch_tags() {
-    const QVariant cached = fincept::CacheManager::instance().get("polymarket:tags");
+    const QVariant cached = finterm::CacheManager::instance().get("polymarket:tags");
     if (!cached.isNull()) {
         QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
         QVector<Tag> result;
@@ -580,7 +580,7 @@ void PolymarketService::fetch_tags() {
         "/tags?limit=50",
         [this](const QJsonDocument& doc) {
             QJsonArray arr = doc.isArray() ? doc.array() : QJsonArray();
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 "polymarket:tags", QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                 kTagsTtlSec, "polymarket");
             QVector<Tag> result;
@@ -752,7 +752,7 @@ void PolymarketService::fetch_top_holders(const QString& condition_id, int limit
 
 void PolymarketService::fetch_leaderboard(int limit) {
     const QString cache_key = QString("polymarket:leaderboard:%1").arg(limit);
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
         QVector<LeaderboardEntry> result;
@@ -778,7 +778,7 @@ void PolymarketService::fetch_leaderboard(int limit) {
             QJsonArray arr = doc.isArray() ? doc.array() : QJsonArray();
             if (arr.isEmpty() && doc.isObject() && doc.object().contains("data"))
                 arr = doc.object()["data"].toArray();
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                 kLeaderboardTtlSec, "polymarket");
             QVector<LeaderboardEntry> result;
@@ -844,4 +844,4 @@ void PolymarketService::fetch_open_interest(const QStringList& condition_ids) {
         "FetchOpenInterest");
 }
 
-} // namespace fincept::services::polymarket
+} // namespace finterm::services::polymarket

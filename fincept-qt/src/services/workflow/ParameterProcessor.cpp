@@ -7,7 +7,7 @@
 #include <QUrl>
 #include <QUrlQuery>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 QJsonValue ParameterProcessor::convert(const QJsonValue& raw, const QString& target_type) {
     if (target_type == "string") {
@@ -194,4 +194,4 @@ QJsonValue ParameterProcessor::extract_path(const QJsonObject& obj, const QStrin
     return current;
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

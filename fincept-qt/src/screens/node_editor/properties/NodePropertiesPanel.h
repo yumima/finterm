@@ -6,7 +6,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Right panel showing editable properties for the selected node.
 class NodePropertiesPanel : public QWidget {
@@ -36,4 +36,4 @@ class NodePropertiesPanel : public QWidget {
     QString current_node_id_;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

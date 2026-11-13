@@ -7,7 +7,7 @@
 
 #include <algorithm>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // Tokenize headline into lowercase words for Jaccard similarity.
 // The non-word-boundary regex is compiled once per process — previously a
@@ -164,4 +164,4 @@ QVector<NewsCluster> get_breaking_clusters(const QVector<NewsCluster>& clusters)
     return result;
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

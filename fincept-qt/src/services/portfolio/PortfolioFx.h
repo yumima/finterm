@@ -25,7 +25,7 @@
 #include <QPair>
 #include <QString>
 
-namespace fincept::portfolio {
+namespace finterm::portfolio {
 
 /// Normalise a quoted currency code: returns {UPPERCASE code, price factor}
 /// where the factor converts a quoted price into the major unit (GBp → GBP
@@ -92,4 +92,4 @@ class FxRates {
     QHash<QString, QMap<QString, double>> series_;
 };
 
-} // namespace fincept::portfolio
+} // namespace finterm::portfolio

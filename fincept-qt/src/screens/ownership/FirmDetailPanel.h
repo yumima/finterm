@@ -4,11 +4,11 @@
 class QLabel;
 class QTableWidget;
 
-namespace fincept::ui {
+namespace finterm::ui {
 class LoadingOverlay;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// One manager's disclosed equity book, and what moved in it.
 ///
@@ -50,4 +50,4 @@ class FirmDetailPanel : public QWidget {
     bool populating_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

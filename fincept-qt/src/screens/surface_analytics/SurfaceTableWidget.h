@@ -5,7 +5,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 // SurfaceTableWidget — renders the current surface data as a color-coded table
 class SurfaceTableWidget : public QWidget {
@@ -32,4 +32,4 @@ class SurfaceTableWidget : public QWidget {
     static QColor heat_color(float t, bool diverging);
 };
 
-} // namespace fincept::surface
+} // namespace finterm::surface

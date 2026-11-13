@@ -15,9 +15,9 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
-using namespace fincept::auth;
+using namespace finterm::auth;
 
 // The fields worth reporting from AuthService's profile JSON.
 static QJsonObject local_profile_fields(const QJsonObject& p) {
@@ -57,7 +57,7 @@ std::vector<ToolDef> get_profile_tools() {
             if (!resp.success)
                 return ToolResult::fail(resp.error.isEmpty() ? "Could not read the local profile" : resp.error);
             QJsonObject out = local_profile_fields(resp.data);
-            out["data_profile"] = fincept::ProfileManager::instance().active();
+            out["data_profile"] = finterm::ProfileManager::instance().active();
             return ToolResult::ok_data(out);
         };
         tools.push_back(std::move(t));
@@ -87,7 +87,7 @@ std::vector<ToolDef> get_profile_tools() {
             if (!authenticated)
                 return ToolResult::fail("Not authenticated");
             out["authenticated"] = true;
-            out["data_profile"] = fincept::ProfileManager::instance().active();
+            out["data_profile"] = finterm::ProfileManager::instance().active();
             return ToolResult::ok_data(out);
         };
         tools.push_back(std::move(t));
@@ -163,7 +163,7 @@ std::vector<ToolDef> get_profile_tools() {
             int offset = args["offset"].toInt(0);
             bool unread = args["unread_only"].toBool(false);
 
-            using namespace fincept::notifications;
+            using namespace finterm::notifications;
             const auto& history = NotificationService::instance().history();
 
             QJsonArray arr;
@@ -211,7 +211,7 @@ std::vector<ToolDef> get_profile_tools() {
             int id = args["id"].toInt(-1);
             if (id < 0)
                 return ToolResult::fail("Missing or invalid 'id'");
-            fincept::notifications::NotificationService::instance().mark_read(id);
+            finterm::notifications::NotificationService::instance().mark_read(id);
             QJsonObject result;
             result["success"] = true;
             result["id"] = id;
@@ -228,7 +228,7 @@ std::vector<ToolDef> get_profile_tools() {
         t.category = "profile";
         t.input_schema.properties = QJsonObject{};
         t.handler = [](const QJsonObject&) -> ToolResult {
-            fincept::notifications::NotificationService::instance().mark_all_read();
+            finterm::notifications::NotificationService::instance().mark_all_read();
             return ToolResult::ok("All notifications marked as read");
         };
         tools.push_back(std::move(t));
@@ -237,4 +237,4 @@ std::vector<ToolDef> get_profile_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

@@ -18,7 +18,7 @@
 #include <QSet>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 struct ScreenVisibility {
     static constexpr const char* kSettingKey = "ui/show_experimental_screens";
@@ -52,4 +52,4 @@ struct ScreenVisibility {
     static bool listed(const QString& id) { return !is_experimental(id) || show_experimental(); }
 };
 
-} // namespace fincept
+} // namespace finterm

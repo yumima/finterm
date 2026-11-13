@@ -14,7 +14,7 @@
 #include <QPainter>
 #include <QPainterPath>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 SymbolChip::SymbolChip(SymbolRef ref, QWidget* parent) : QWidget(parent), ref_(std::move(ref)) {
     setCursor(Qt::PointingHandCursor);
@@ -102,4 +102,4 @@ void SymbolChip::broadcast_to_group(SymbolGroup g) {
     SymbolContext::instance().set_group_symbol(g, ref_, this);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -5,7 +5,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::services {
+namespace finterm::services {
 
 struct NewsCluster {
     QString id;
@@ -23,4 +23,4 @@ struct NewsCluster {
 QVector<NewsCluster> cluster_articles(const QVector<NewsArticle>& articles);
 QVector<NewsCluster> get_breaking_clusters(const QVector<NewsCluster>& clusters);
 
-} // namespace fincept::services
+} // namespace finterm::services

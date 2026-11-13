@@ -9,11 +9,11 @@
 #include <DockWidget.h>
 #include <functional>
 
-namespace fincept::ui {
+namespace finterm::ui {
 class GroupBadge;
 }
 
-namespace fincept {
+namespace finterm {
 
 class IGroupLinked;
 struct SymbolRef;
@@ -220,7 +220,7 @@ class DockScreenRouter : public QObject {
     QHash<QString, IGroupLinked*> group_linked_;
     QHash<QString, QPointer<ui::GroupBadge>> group_badges_;
 
-    void on_group_symbol_changed_external(fincept::SymbolGroup g, const fincept::SymbolRef& ref, QObject* source);
+    void on_group_symbol_changed_external(finterm::SymbolGroup g, const finterm::SymbolRef& ref, QObject* source);
     /// Apply theme colors directly to all CDockAreaTitleBar and CDockWidgetTab
     /// widgets. Called after any addDockWidget() call since those create new
     /// QFrame-derived widgets that the app-level QFrame rule overrides.
@@ -248,4 +248,4 @@ class DockScreenRouter : public QObject {
     void show_tab_context_menu(const QString& id, const QPoint& global_pos);
 };
 
-} // namespace fincept
+} // namespace finterm

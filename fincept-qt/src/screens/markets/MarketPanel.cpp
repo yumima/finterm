@@ -17,7 +17,7 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 MarketPanel::MarketPanel(const MarketPanelConfig& config, QWidget* parent) : QWidget(parent), config_(config) {
     if (config_.column_order.isEmpty())
@@ -582,4 +582,4 @@ void MarketPanel::show_row_context_menu(const QPoint& pos) {
     menu.exec(table_->viewport()->mapToGlobal(pos));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

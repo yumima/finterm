@@ -22,9 +22,9 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::backtest;
+using namespace finterm::services::backtest;
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -1663,4 +1663,4 @@ void BacktestingScreen::publish_first_symbol_to_group() {
     SymbolContext::instance().set_group_symbol(link_group_, ref, this);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

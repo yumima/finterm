@@ -22,7 +22,7 @@ struct Q {
 };
 double parsed(const QString& s) {
     double v = kNaN;
-    return fincept::ui::TickFlashDelegate::parse_number(s, &v) ? v : kNaN;
+    return finterm::ui::TickFlashDelegate::parse_number(s, &v) ? v : kNaN;
 }
 } // namespace
 
@@ -31,7 +31,7 @@ class TestLiveTick : public QObject {
   private slots:
     void change_derives_from_prev_close() {
         Q q{100, 2, 2.04, 101, 97, 1e6};
-        fincept::services::apply_live_price(q, 98.0, 102.0, 2e6);
+        finterm::services::apply_live_price(q, 98.0, 102.0, 2e6);
         QCOMPARE(q.price, 102.0);
         QCOMPARE(q.change, 4.0);
         QVERIFY(std::abs(q.change_pct - 4.0 / 98.0 * 100.0) < 1e-12);
@@ -41,20 +41,20 @@ class TestLiveTick : public QObject {
     }
     void unknown_baseline_keeps_change() {
         Q q{100, 2, 2.0, 101, 97, 1e6};
-        fincept::services::apply_live_price(q, kNaN, 103.0, kNaN);
+        finterm::services::apply_live_price(q, kNaN, 103.0, kNaN);
         QCOMPARE(q.price, 103.0);
         QCOMPARE(q.change, 2.0);
         QCOMPARE(q.volume, 1e6); // no tick volume → kept
     }
     void missing_range_stays_missing() {
         Q q{100, 2, 2.0, 0, kNaN, 1e6};
-        fincept::services::apply_live_price(q, 98.0, 103.0, kNaN);
+        finterm::services::apply_live_price(q, 98.0, 103.0, kNaN);
         QCOMPARE(q.high, 0.0); // a tick is one print, not a day range
         QVERIFY(std::isnan(q.low));
     }
     // ── live prints on numbers measured against a close ──────────────────
     void tick_pairs_only_with_its_own_close() {
-        using fincept::services::tick_pairs_with;
+        using finterm::services::tick_pairs_with;
         // ESZ26.CME on the wire: 7641.5, change 26.25 (float32) → close 7615.25
         QVERIFY(tick_pairs_with(7615.25, 7641.5, double(26.25f)));
         // AAPL overnight print: 355.9 / +1.019989 (float32 noise) vs the 354.88 close
@@ -69,7 +69,7 @@ class TestLiveTick : public QObject {
         QVERIFY(!tick_pairs_with(0, 355.9, 1.0));
     }
     void ext_side_by_session() {
-        namespace ex = fincept::screens::widgets::exthours;
+        namespace ex = finterm::screens::widgets::exthours;
         QVERIFY(ex::live_ext_side(0, 100.0, 101.0, 1.0) == ex::ExtSide::Pre);
         QVERIFY(ex::live_ext_side(2, 100.0, 99.0, -1.0) == ex::ExtSide::Post);
         // overnight (20:00–04:00 ET), measured against the same close
@@ -78,7 +78,7 @@ class TestLiveTick : public QObject {
         QVERIFY(!ex::live_ext_side(2, 100.0, 101.0, 2.0)); // measured against another close
     }
     void ext_tick_moves_only_forward() {
-        namespace ex = fincept::screens::widgets::exthours;
+        namespace ex = finterm::screens::widgets::exthours;
         double price = 101.0, pct = 1.0;
         qint64 ts = 1000;
         // older print (a reconnect replay): ignored
@@ -97,7 +97,7 @@ class TestLiveTick : public QObject {
         QCOMPARE(pct, 0.0);
     }
     void ext_quote_from_one_print() {
-        namespace ex = fincept::screens::widgets::exthours;
+        namespace ex = finterm::screens::widgets::exthours;
         // AAPL overnight: 355.90, Yahoo's change +1.02 against the 354.88 close
         const auto f = ex::ext_from_tick(4, 355.9, 1.02, 1794538210000);
         QVERIFY(f && f->side == ex::ExtSide::Overnight);
@@ -107,7 +107,7 @@ class TestLiveTick : public QObject {
         QVERIFY(!ex::ext_from_tick(2, 355.9, kNaN, 0)); // no change: no pair
     }
     void future_tick_needs_its_contract_and_close() {
-        fincept::services::IndexFutureQuote q;
+        finterm::services::IndexFutureQuote q;
         q.index = "^GSPC";
         q.contract = "ESZ26.CME";
         q.price = 7639.25;
@@ -115,7 +115,7 @@ class TestLiveTick : public QObject {
         q.change = 24.0;
         q.pct = 24.0 / 7615.25 * 100.0;
         q.ts = 1794537600;
-        using fincept::services::apply_future_tick;
+        using finterm::services::apply_future_tick;
         QVERIFY(!apply_future_tick(q, "ESH27.CME", 7650.0, 34.75, 1794537700000)); // another month
         QVERIFY(!apply_future_tick(q, "ESZ26.CME", 7650.0, 34.75, 1794537500000)); // older than shown
         QVERIFY(!apply_future_tick(q, "ESZ26.CME", 7650.0, kNaN, 1794537700000));  // no pair
@@ -130,12 +130,12 @@ class TestLiveTick : public QObject {
         QVERIFY(apply_future_tick(q, "ESZ26.CME", 7650.0, 9.5, 1794540000000));
         QCOMPARE(q.ref_price, 7640.5);
         // A pending row (quote refused) is filled by its first print.
-        fincept::services::IndexFutureQuote p;
+        finterm::services::IndexFutureQuote p;
         p.index = "^GSPC";
         p.contract = "ESZ26.CME";
-        QVERIFY(fincept::services::is_pending(p));
+        QVERIFY(finterm::services::is_pending(p));
         QVERIFY(apply_future_tick(p, "ESZ26.CME", 7641.5, 26.25, 1794537611000));
-        QVERIFY(!fincept::services::is_pending(p));
+        QVERIFY(!finterm::services::is_pending(p));
         QCOMPARE(p.session_date, QDate(2026, 11, 13)); // 21:00 ET Thu → the Fri 13 Nov session
     }
     // The flash's direction is the SIGNED number a cell shows ("▼ 1.25" = -1.25).

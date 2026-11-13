@@ -15,9 +15,9 @@
 
 #include <atomic>
 
-using fincept::datahub::DataHub;
-using fincept::datahub::Producer;
-using fincept::datahub::TopicPolicy;
+using finterm::datahub::DataHub;
+using finterm::datahub::Producer;
+using finterm::datahub::TopicPolicy;
 
 namespace {
 

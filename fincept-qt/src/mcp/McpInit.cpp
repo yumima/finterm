@@ -39,7 +39,7 @@
 #include "mcp/tools/SystemTools.h"
 #include "mcp/tools/WatchlistTools.h"
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 static constexpr const char* TAG = "McpInit";
 
@@ -170,4 +170,4 @@ void shutdown_mcp() {
     LOG_INFO(TAG, "MCP system shut down");
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

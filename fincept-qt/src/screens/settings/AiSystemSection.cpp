@@ -24,7 +24,7 @@
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrent>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 constexpr int kRecentTracesLimit = 50;
@@ -600,4 +600,4 @@ void AiSystemSection::show_status(const QString& msg, bool error) {
     status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;") : QStringLiteral("color: #393;"));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

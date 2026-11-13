@@ -19,7 +19,7 @@ class QStandardItemModel;
 class QTabBar;
 class QTableView;
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 class SurfaceDataInspector : public QWidget {
     Q_OBJECT
@@ -77,4 +77,4 @@ class SurfaceDataInspector : public QWidget {
     QVector<TableSnapshot> snapshots_;
 };
 
-} // namespace fincept::surface
+} // namespace finterm::surface

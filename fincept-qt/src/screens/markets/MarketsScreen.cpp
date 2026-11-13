@@ -22,7 +22,7 @@
 #include <QTimeZone>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ---------------------------------------------------------------------------
 // Helper
@@ -643,4 +643,4 @@ void MarketsScreen::refresh_theme() {
         vs->setStyleSheet(handle_ss);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

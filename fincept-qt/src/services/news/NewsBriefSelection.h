@@ -34,9 +34,9 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::news::brief_select {
+namespace finterm::news::brief_select {
 
-using fincept::services::NewsCluster;
+using finterm::services::NewsCluster;
 
 /// One story as the brief will see it — a cluster flattened to the fields the
 /// prompt actually uses, plus the score that put it here.
@@ -480,4 +480,4 @@ inline QString brief_key(const QString& prompt_a, const QString& prompt_b) {
     return QStringLiteral("news:brief:") + QString::fromLatin1(h.result().toHex());
 }
 
-} // namespace fincept::news::brief_select
+} // namespace finterm::news::brief_select

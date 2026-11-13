@@ -4,7 +4,7 @@
 
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void PushoverProvider::load_fields(SettingsRepository& r, const QString& cat) {
     api_token_ = get_str(r, cat + ".api_token");
@@ -57,4 +57,4 @@ void PushoverProvider::send(const NotificationRequest& req, std::function<void(b
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

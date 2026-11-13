@@ -20,10 +20,10 @@
 namespace {
 static const QString kIn =
     QString("background:%1;color:%2;border:1px solid %3;padding:4px 8px;font-size:12px;")
-        .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::TEXT_PRIMARY(), fincept::ui::colors::BORDER_MED());
+        .arg(finterm::ui::colors::BG_RAISED(), finterm::ui::colors::TEXT_PRIMARY(), finterm::ui::colors::BORDER_MED());
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 static const QMap<QString, QString> kModeDescriptions = {
     {"coordinate", "Agents coordinate through a leader who delegates and synthesizes results."},
@@ -589,4 +589,4 @@ void TeamsViewPanel::showEvent(QShowEvent* event) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

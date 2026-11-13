@@ -13,10 +13,10 @@
 #include <cmath>
 #include <iterator>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ownership;
-namespace fmt = fincept::ui::formatting;
+using namespace finterm::ownership;
+namespace fmt = finterm::ui::formatting;
 
 namespace {
 
@@ -359,4 +359,4 @@ void FirmDetailPanel::render() {
     positions_->setColumnWidth(0, qMin(positions_->columnWidth(0), 150));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

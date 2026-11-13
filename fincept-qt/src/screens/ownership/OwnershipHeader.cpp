@@ -8,10 +8,10 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ownership;
-using namespace fincept::screens::ownership_ui;
+using namespace finterm::ownership;
+using namespace finterm::screens::ownership_ui;
 
 namespace {
 
@@ -345,4 +345,4 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

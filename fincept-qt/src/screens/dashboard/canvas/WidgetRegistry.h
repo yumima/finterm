@@ -6,11 +6,11 @@
 
 #include <functional>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 class BaseWidget;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Factory receives the tile's persisted config (empty object for fresh widgets).
 /// Widgets that don't need per-instance config can ignore it.
@@ -42,4 +42,4 @@ class WidgetRegistry {
     QMap<QString, WidgetMeta> registry_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

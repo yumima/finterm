@@ -17,7 +17,7 @@
 #include <QTextBrowser>
 #include <QVBoxLayout>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 
@@ -257,9 +257,9 @@ void AITutorPanel::send_user_message(const QString& text) {
     // so a destroyed panel (e.g. user closes the tab mid-response) doesn't
     // dereference dead memory.
     QPointer<AITutorPanel> guard(this);
-    fincept::ai_chat::PersonaScope persona;
+    finterm::ai_chat::PersonaScope persona;
     {
-        const auto target = fincept::ai_chat::LlmService::instance().scope_for_role(QStringLiteral("knowledge"));
+        const auto target = finterm::ai_chat::LlmService::instance().scope_for_role(QStringLiteral("knowledge"));
         persona.provider = target.provider;
         persona.model = target.model;
         persona.api_key = target.api_key;
@@ -370,4 +370,4 @@ void AITutorPanel::set_busy(bool busy) {
     }
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

@@ -16,7 +16,7 @@
 #include <QStackedWidget>
 #include <QVBoxLayout>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 class AccountManagementDialog : public QDialog {
     Q_OBJECT
@@ -64,4 +64,4 @@ class AccountManagementDialog : public QDialog {
     QString selected_account_id_;
 };
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

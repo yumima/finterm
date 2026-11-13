@@ -5,7 +5,7 @@
 #include <QStandardItemModel>
 #include <QString>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Searchable country dial-code selector using QStandardItemModel.
 /// Dropdown shows: flag + country name + dial code (searchable by any field).
@@ -29,4 +29,4 @@ class PhoneCodeComboBox : public QComboBox {
     void sync_display(int index);
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

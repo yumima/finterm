@@ -11,7 +11,7 @@
 #include <QStackedWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Professional derivatives pricing screen.
 /// Supports: Bonds, Equity Options, FX Options, IR Swaps, Credit (CDS).
@@ -119,4 +119,4 @@ class DerivativesScreen : public QWidget, public IStatefulScreen {
     QDoubleSpinBox* cds_discount_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

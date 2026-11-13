@@ -7,7 +7,7 @@ class QPlainTextEdit;
 class QListWidget;
 class QLabel;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Dialog for creating a new workspace — name, description, template selector.
 class WorkspaceNewDialog : public QDialog {
@@ -30,4 +30,4 @@ class WorkspaceNewDialog : public QDialog {
     QPushButton* create_btn_ = nullptr;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

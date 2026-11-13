@@ -28,7 +28,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::services {
+namespace finterm::services {
 
 struct ResolvedMentions {
     /// True if any @-mention was found AND resolved.
@@ -65,4 +65,4 @@ class MentionResolverService {
     QHash<QString, QString> registry_;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

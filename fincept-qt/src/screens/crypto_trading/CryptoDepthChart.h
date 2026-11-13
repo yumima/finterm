@@ -8,7 +8,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 class CryptoDepthChart : public QWidget {
     Q_OBJECT
@@ -36,4 +36,4 @@ class CryptoDepthChart : public QWidget {
     QTimer* repaint_timer_ = nullptr;
 };
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

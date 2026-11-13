@@ -28,7 +28,7 @@
 
 #include <QString>
 
-namespace fincept::services {
+namespace finterm::services {
 
 class BudgetService {
   public:
@@ -56,4 +56,4 @@ class BudgetService {
     BudgetService() = default;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

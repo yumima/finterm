@@ -31,8 +31,8 @@
 
 #include <optional>
 
-using fincept::Database;
-using fincept::PortfolioRepository;
+using finterm::Database;
+using finterm::PortfolioRepository;
 
 class TestPortfolioSnapshots : public QObject {
     Q_OBJECT
@@ -61,7 +61,7 @@ class TestPortfolioSnapshots : public QObject {
     QString date(int days_ago) const {
         return QDate::currentDate().addDays(-days_ago).toString(Qt::ISODate);
     }
-    std::optional<fincept::portfolio::PortfolioSnapshot> row_for(const QString& d,
+    std::optional<finterm::portfolio::PortfolioSnapshot> row_for(const QString& d,
                                                                  const QString& portfolio_id = {}) {
         const QString pid = portfolio_id.isEmpty() ? portfolio_id_ : portfolio_id;
         auto snaps = PortfolioRepository::instance().get_snapshots(pid, 36500);
@@ -76,9 +76,9 @@ class TestPortfolioSnapshots : public QObject {
 
 void TestPortfolioSnapshots::initTestCase() {
     QVERIFY(dir_.isValid());
-    fincept::register_migration_v006();
-    fincept::register_migration_v048();
-    fincept::register_migration_v049();
+    finterm::register_migration_v006();
+    finterm::register_migration_v048();
+    finterm::register_migration_v049();
     auto opened = Database::instance().open(dir_.filePath(QStringLiteral("test.db")));
     QVERIFY2(opened.is_ok(), opened.is_err() ? opened.error().c_str() : "");
 
@@ -291,7 +291,7 @@ void TestPortfolioSnapshots::same_day_transactions_replay_in_insertion_order() {
                                 .arg(stamps[i - 1], stamps[i])));
 
     // And the replay it protects lands on the right answer.
-    const auto pos = fincept::portfolio::replay_transactions(txns.value());
+    const auto pos = finterm::portfolio::replay_transactions(txns.value());
     QCOMPARE(pos.quantity, 0.0);
     QCOMPARE(pos.realized_pnl, 100.0 * kPairs);
     QVERIFY2(pos.warnings.isEmpty(), qPrintable(pos.warnings.join("; ")));
@@ -352,7 +352,7 @@ void TestPortfolioSnapshots::closed_position_removes_the_row_and_keeps_the_histo
     auto txns = repo.get_symbol_transactions(pid.value(), QStringLiteral("AMD"));
     QVERIFY(txns.is_ok());
     QCOMPARE(txns.value().size(), 2);
-    const auto pos = fincept::portfolio::replay_transactions(txns.value());
+    const auto pos = finterm::portfolio::replay_transactions(txns.value());
     QCOMPARE(pos.quantity, 0.0);
     QCOMPARE(pos.realized_pnl, 300.0); // 10 x (80 - 50), still recoverable
 }

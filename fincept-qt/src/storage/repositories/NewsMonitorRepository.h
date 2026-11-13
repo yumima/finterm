@@ -3,7 +3,7 @@
 
 #include <QStringList>
 
-namespace fincept {
+namespace finterm {
 
 struct NewsMonitorRow {
     QString id;
@@ -27,4 +27,4 @@ class NewsMonitorRepository : public BaseRepository<NewsMonitorRow> {
     static NewsMonitorRow map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

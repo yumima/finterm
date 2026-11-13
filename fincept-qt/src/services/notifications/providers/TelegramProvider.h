@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 class TelegramProvider final : public BaseProvider {
   public:
@@ -22,4 +22,4 @@ class TelegramProvider final : public BaseProvider {
     QString chat_id_;
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

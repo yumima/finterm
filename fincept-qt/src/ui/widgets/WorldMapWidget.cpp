@@ -17,7 +17,7 @@
 #include <QPainter>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 // ── One-time network manager setup for QGeoView tile loading ────────────────
 static void ensure_network_manager() {
@@ -26,7 +26,7 @@ static void ensure_network_manager() {
 
     auto* nam = new QNetworkAccessManager(qApp);
     auto* cache = new QNetworkDiskCache(nam);
-    QString cache_dir = fincept::AppPaths::cache() + "/map_tiles";
+    QString cache_dir = finterm::AppPaths::cache() + "/map_tiles";
     cache->setCacheDirectory(cache_dir);
     cache->setMaximumCacheSize(100 * 1024 * 1024); // 100 MB
     nam->setCache(cache);
@@ -173,4 +173,4 @@ void WorldMapWidget::fit_to_pins() {
     map_->flyTo(QGVCameraActions(map_).scaleTo(target));
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

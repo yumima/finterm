@@ -18,7 +18,7 @@
 
 #include <vector>
 
-namespace fincept {
+namespace finterm {
 
 // ── AiChatBubble ─────────────────────────────────────────────────────────────
 // Floating AI assistant bubble — fixed bottom-right corner of the main window.
@@ -138,4 +138,4 @@ class AiChatBubble : public QWidget {
     void animate_pulse();
 };
 
-} // namespace fincept
+} // namespace finterm

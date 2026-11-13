@@ -26,7 +26,7 @@
 #include <cmath>
 #include <optional>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 // QSettings key remembering which portfolio the dashboard widget last showed.
 static constexpr auto kSelectedPortfolioKey = "dashboard/portfolio_id";
@@ -848,4 +848,4 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

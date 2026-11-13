@@ -9,7 +9,7 @@
 #include <QJsonObject>
 #include <QMutexLocker>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 UnifiedTrading& UnifiedTrading::instance() {
     static UnifiedTrading ut;
@@ -302,4 +302,4 @@ bool UnifiedTrading::is_bridge_running() const {
     return bridge_running_.load();
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

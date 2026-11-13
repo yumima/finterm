@@ -2,7 +2,7 @@
 #include "storage/repositories/BaseRepository.h"
 #include "trading/BrokerAccount.h"
 
-namespace fincept {
+namespace finterm {
 
 /// Repository for the broker_accounts table.
 /// Stores account metadata (credentials live in SecureStorage, not here).
@@ -24,4 +24,4 @@ class AccountRepository : public BaseRepository<trading::BrokerAccount> {
     static trading::BrokerAccount map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

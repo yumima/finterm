@@ -3,7 +3,7 @@
 #include "ui/theme/QssSlots.h"
 #include "ui/theme/Theme.h"
 
-namespace fincept::ui::styles {
+namespace finterm::ui::styles {
 
 QString card_frame() {
     return QString("QFrame { background: %1; border: 1px solid %2; border-radius: 2px; }")
@@ -720,4 +720,4 @@ QString equity_trading_styles() {
         });
 }
 
-} // namespace fincept::ui::styles
+} // namespace finterm::ui::styles

@@ -17,7 +17,7 @@
 
 #include <QRegularExpression>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 NodeRegistry& NodeRegistry::instance() {
     static NodeRegistry inst;
@@ -316,4 +316,4 @@ void NodeRegistry::register_builtin_nodes() {
     wire_all_bridges(*this);
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

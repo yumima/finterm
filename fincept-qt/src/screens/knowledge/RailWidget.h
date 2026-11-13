@@ -7,7 +7,7 @@
 
 class QVBoxLayout;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// Right-rail panel: Live in finterm, Try in finterm, Where in finterm,
 /// Related, Further reading, AI Tutor. Driven by a single "active entry"
@@ -31,4 +31,4 @@ class RailWidget : public QWidget {
     QWidget* content_ = nullptr;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

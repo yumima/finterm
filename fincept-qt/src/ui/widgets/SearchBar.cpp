@@ -2,7 +2,7 @@
 
 #include "ui/theme/Theme.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 SearchBar::SearchBar(QWidget* parent) : QWidget(parent) {
     setFixedHeight(32);
@@ -32,4 +32,4 @@ void SearchBar::clear() {
     input_->clear();
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

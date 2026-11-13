@@ -3,7 +3,7 @@
 #include <QJsonArray>
 #include <QRegularExpression>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 QJsonValue ExpressionEngine::evaluate(const QJsonValue& param_value, const QJsonObject& context) {
     if (!param_value.isString())
@@ -86,4 +86,4 @@ QJsonValue ExpressionEngine::resolve_expression(const QString& expr, const QJson
     return current;
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -7,7 +7,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::services::finnhub {
+namespace finterm::services::finnhub {
 
 // ── Data models ──────────────────────────────────────────────────────────────
 // Per-endpoint structs sized to what the UI actually consumes. We don't try
@@ -119,11 +119,11 @@ class FinnhubService : public QObject {
     static constexpr int kRecTrendsTtlSec = 86400;  // 24h — monthly bucket
 };
 
-} // namespace fincept::services::finnhub
+} // namespace finterm::services::finnhub
 
 // ── QVariant interop for QueryStore ──────────────────────────────────────────
 #include <QMetaType>
-Q_DECLARE_METATYPE(QVector<fincept::services::finnhub::FinnhubIPO>)
-Q_DECLARE_METATYPE(QVector<fincept::services::finnhub::FinnhubLockup>)
-Q_DECLARE_METATYPE(QVector<fincept::services::finnhub::FinnhubInsiderTx>)
-Q_DECLARE_METATYPE(QVector<fincept::services::finnhub::FinnhubRecTrend>)
+Q_DECLARE_METATYPE(QVector<finterm::services::finnhub::FinnhubIPO>)
+Q_DECLARE_METATYPE(QVector<finterm::services::finnhub::FinnhubLockup>)
+Q_DECLARE_METATYPE(QVector<finterm::services::finnhub::FinnhubInsiderTx>)
+Q_DECLARE_METATYPE(QVector<finterm::services::finnhub::FinnhubRecTrend>)

@@ -3,7 +3,7 @@
 // Canonical tag names used by the logging system.
 //
 // Usage:
-//   LOG_INFO(fincept::log::kApp, "starting up");
+//   LOG_INFO(finterm::log::kApp, "starting up");
 //
 // This header is purely additive — existing call sites that pass
 // string literals (e.g. LOG_INFO("App", "...")) continue to work
@@ -11,7 +11,7 @@
 // stay consistent across the codebase (no drift between "Auth"
 // vs "auth" vs "AUTH").
 
-namespace fincept::log {
+namespace finterm::log {
 
 inline constexpr const char* kApp = "App";
 inline constexpr const char* kAuth = "Auth";
@@ -35,4 +35,4 @@ inline constexpr const char* kWorkflow = "Workflow";
 inline constexpr const char* kDataHub = "DataHub";
 inline constexpr const char* kProfile = "ProfileManager";
 
-} // namespace fincept::log
+} // namespace finterm::log

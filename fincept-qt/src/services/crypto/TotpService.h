@@ -11,7 +11,7 @@
 
 #include <functional>
 
-namespace fincept::services::crypto {
+namespace finterm::services::crypto {
 
 struct TotpResult {
     bool success = false;
@@ -39,4 +39,4 @@ class TotpService : public QObject {
     TotpService() = default;
 };
 
-} // namespace fincept::services::crypto
+} // namespace finterm::services::crypto

@@ -9,7 +9,7 @@
 
 #include <functional>
 
-namespace fincept {
+namespace finterm {
 
 /// A single versioned migration.
 struct Migration {
@@ -105,4 +105,4 @@ void register_migration_v055();
 void register_migration_v056();
 void register_migration_v057();
 
-} // namespace fincept
+} // namespace finterm

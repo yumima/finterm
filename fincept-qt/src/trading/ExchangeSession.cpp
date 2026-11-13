@@ -12,7 +12,7 @@
 #include <QPointer>
 #include <QTimer>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 namespace {
 const QString kSessionTag = "ExchangeSession";
@@ -25,7 +25,7 @@ QString creds_key(const QString& exchange, const QString& field) {
 }
 
 QString session_resolve_script_path(const QString& relative) {
-    const QString dir = fincept::python::PythonRunner::instance().scripts_dir();
+    const QString dir = finterm::python::PythonRunner::instance().scripts_dir();
     if (dir.isEmpty())
         return {};
     return dir + "/" + relative;
@@ -59,7 +59,7 @@ void ExchangeSession::set_credentials(const ExchangeCredentials& creds) {
     // these without prompting. Empty fields map to a remove() so clearing
     // credentials actually wipes them from disk. A failure to persist is
     // non-fatal — the in-memory credentials still drive this session.
-    auto& ss = fincept::SecureStorage::instance();
+    auto& ss = finterm::SecureStorage::instance();
     const QString k_api = creds_key(exchange_id_, "api_key");
     const QString k_sec = creds_key(exchange_id_, "secret");
     const QString k_pw = creds_key(exchange_id_, "password");
@@ -83,7 +83,7 @@ void ExchangeSession::set_credentials(const ExchangeCredentials& creds) {
 }
 
 void ExchangeSession::load_stored_credentials() {
-    auto& ss = fincept::SecureStorage::instance();
+    auto& ss = finterm::SecureStorage::instance();
     ExchangeCredentials next;
     {
         QMutexLocker lock(&mutex_);
@@ -646,4 +646,4 @@ QHash<QString, TickerData> ExchangeSession::snapshot_price_cache() const {
     return price_cache_;
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

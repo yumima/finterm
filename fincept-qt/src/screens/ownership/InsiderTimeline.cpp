@@ -11,9 +11,9 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-namespace fmt = fincept::ui::formatting;
+namespace fmt = finterm::ui::formatting;
 
 namespace {
 constexpr int kPadX = 8;
@@ -161,4 +161,4 @@ bool InsiderTimeline::event(QEvent* e) {
     return QWidget::event(e);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

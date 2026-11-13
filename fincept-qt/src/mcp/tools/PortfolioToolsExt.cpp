@@ -14,7 +14,7 @@
 #include "services/portfolio/PortfolioService.h"
 #include "storage/repositories/PortfolioRepository.h"
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "PortfolioExtTools";
 
@@ -227,4 +227,4 @@ std::vector<ToolDef> get_investment_portfolio_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

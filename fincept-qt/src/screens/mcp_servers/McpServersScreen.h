@@ -12,7 +12,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class McpServersScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
@@ -56,7 +56,7 @@ class McpServersScreen : public QWidget, public IStatefulScreen {
     void update_status_bar();
 
     /// Builds a self-contained server card for the Installed view.
-    QWidget* build_server_card(const fincept::mcp::McpServerConfig& s);
+    QWidget* build_server_card(const finterm::mcp::McpServerConfig& s);
 
     // State
     int active_view_ = 0;
@@ -91,4 +91,4 @@ class McpServersScreen : public QWidget, public IStatefulScreen {
     QLabel* status_running_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

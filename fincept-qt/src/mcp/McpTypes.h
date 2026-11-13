@@ -15,7 +15,7 @@
 #include <optional>
 #include <vector>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 // ============================================================================
 // Tool Result — returned by tool handlers
@@ -635,4 +635,4 @@ struct UnifiedTool {
 inline constexpr const char* INTERNAL_SERVER_ID = "int";
 inline constexpr const char* INTERNAL_SERVER_NAME = "finterm";
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

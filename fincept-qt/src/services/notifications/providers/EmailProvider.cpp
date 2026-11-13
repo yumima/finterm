@@ -4,7 +4,7 @@
 
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void EmailProvider::load_fields(SettingsRepository& r, const QString& cat) {
     smtp_host_ = get_str(r, cat + ".smtp_host");
@@ -57,4 +57,4 @@ void EmailProvider::send(const NotificationRequest& req, std::function<void(bool
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

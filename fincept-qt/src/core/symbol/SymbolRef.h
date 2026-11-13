@@ -3,7 +3,7 @@
 #include <QMetaType>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// Strongly-typed reference to a tradable/observable security. Used as the
 /// payload for cross-panel symbol links (SymbolContext) so that receivers
@@ -65,6 +65,6 @@ struct SymbolRef {
     }
 };
 
-} // namespace fincept
+} // namespace finterm
 
-Q_DECLARE_METATYPE(fincept::SymbolRef)
+Q_DECLARE_METATYPE(finterm::SymbolRef)

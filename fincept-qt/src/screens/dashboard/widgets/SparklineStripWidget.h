@@ -13,7 +13,7 @@
 
 class QLabel;
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 class SparklineCanvas;
 
@@ -49,4 +49,4 @@ class SparklineStripWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

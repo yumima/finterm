@@ -10,7 +10,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 /// Singleton that owns one QAction per KeyAction.
 /// Widgets connect to action(a)->triggered instead of QShortcut::activated.
@@ -52,7 +52,7 @@ class KeyConfigManager : public QObject {
     std::optional<KeyAction> find_conflict(const QKeySequence& seq, KeyAction exclude) const;
 
   signals:
-    void key_changed(fincept::KeyAction a, QKeySequence seq);
+    void key_changed(finterm::KeyAction a, QKeySequence seq);
 
   private:
     KeyConfigManager();
@@ -63,4 +63,4 @@ class KeyConfigManager : public QObject {
     QMap<KeyAction, QKeySequence> defaults_;
 };
 
-} // namespace fincept
+} // namespace finterm

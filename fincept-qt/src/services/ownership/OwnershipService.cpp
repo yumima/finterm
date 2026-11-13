@@ -23,9 +23,9 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::services {
+namespace finterm::services {
 
-using namespace fincept::ownership;
+using namespace finterm::ownership;
 
 namespace {
 
@@ -1055,13 +1055,13 @@ QStringList OwnershipService::own_symbols() const {
         if (!u.isEmpty() && !out.contains(u))
             out << u;
     };
-    auto& pf = fincept::PortfolioRepository::instance();
+    auto& pf = finterm::PortfolioRepository::instance();
     if (const auto lists = pf.list_portfolios(); lists.is_ok())
         for (const auto& p : lists.value())
             if (const auto assets = pf.get_assets(p.id); assets.is_ok())
                 for (const auto& a : assets.value())
                     add(a.symbol);
-    auto& wl = fincept::WatchlistRepository::instance();
+    auto& wl = finterm::WatchlistRepository::instance();
     if (const auto lists = wl.list_all(); lists.is_ok())
         for (const auto& w : lists.value())
             if (const auto stocks = wl.get_stocks(w.id); stocks.is_ok())
@@ -1072,7 +1072,7 @@ QStringList OwnershipService::own_symbols() const {
 
 namespace {
 QString alert_stamps_path() {
-    return fincept::AppPaths::data() + QStringLiteral("/ownership_alerts.json");
+    return finterm::AppPaths::data() + QStringLiteral("/ownership_alerts.json");
 }
 QJsonObject read_stamps() {
     QFile f(alert_stamps_path());
@@ -1081,7 +1081,7 @@ QJsonObject read_stamps() {
     return QJsonDocument::fromJson(f.readAll()).object();
 }
 void write_stamps(const QJsonObject& o) {
-    QDir().mkpath(fincept::AppPaths::data());
+    QDir().mkpath(finterm::AppPaths::data());
     QFile f(alert_stamps_path());
     if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
         f.write(QJsonDocument(o).toJson(QJsonDocument::Compact));
@@ -1097,7 +1097,7 @@ void OwnershipService::check_holdings_alerts() {
     {
         // The repository answers "" for a key never saved; that is the
         // default, and the default is on.
-        const auto r = fincept::SettingsRepository::instance().get(QStringLiteral("notifications.ownership_alerts"));
+        const auto r = finterm::SettingsRepository::instance().get(QStringLiteral("notifications.ownership_alerts"));
         if (r.is_ok() && r.value() == QLatin1String("0"))
             return;
     }
@@ -1569,4 +1569,4 @@ void OwnershipService::resolve_symbols(int /*limit*/) {
         /*on_line=*/{}, kIndexBuildTimeoutMs);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -1,6 +1,6 @@
 #include "storage/repositories/ReportRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 ReportRepository& ReportRepository::instance() {
     static ReportRepository s;
@@ -62,4 +62,4 @@ Result<void> ReportRepository::remove_template(const QString& id) {
     return exec_write("DELETE FROM report_templates WHERE id = ?", {id});
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -21,20 +21,20 @@
 
 #include <atomic>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 class EquityTickerBar;
 class EquityWatchlist;
 class EquityChart;
 class EquityOrderEntry;
 class EquityOrderBook;
 class EquityBottomPanel;
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EquityTradingScreen : public QWidget, public IWorkspaceParticipant, public IGroupLinked {
     Q_OBJECT
-    Q_INTERFACES(fincept::IGroupLinked)
+    Q_INTERFACES(finterm::IGroupLinked)
   public:
     explicit EquityTradingScreen(QWidget* parent = nullptr);
     ~EquityTradingScreen();
@@ -134,4 +134,4 @@ class EquityTradingScreen : public QWidget, public IWorkspaceParticipant, public
     SymbolGroup link_group_ = SymbolGroup::None;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

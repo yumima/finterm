@@ -11,7 +11,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // ── Provider metadata ────────────────────────────────────────────────────────
 
@@ -39,7 +39,7 @@ struct GovDataResult {
 /// Phase 6 — DataHub producer for `govdata:<provider>:<request_id>`.
 /// Same dispatch-replay shape as EconomicsService: execute() remembers
 /// dispatch params so refresh(topic) can replay.
-class GovDataService : public QObject, public fincept::datahub::Producer {
+class GovDataService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static GovDataService& instance();
@@ -88,7 +88,7 @@ class GovDataService : public QObject, public fincept::datahub::Producer {
     bool hub_registered_ = false;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services
 
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::services::GovDataResult)
+Q_DECLARE_METATYPE(finterm::services::GovDataResult)

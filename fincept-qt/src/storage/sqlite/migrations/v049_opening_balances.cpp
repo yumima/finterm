@@ -19,7 +19,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 Result<void> apply_v049(QSqlDatabase& db) {
@@ -50,4 +50,4 @@ void register_migration_v049() {
     MigrationRunner::register_migration({49, "opening_balances", apply_v049});
 }
 
-} // namespace fincept
+} // namespace finterm

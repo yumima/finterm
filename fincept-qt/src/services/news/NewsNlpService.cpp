@@ -8,7 +8,7 @@
 #include <QJsonObject>
 #include <QPointer>
 
-namespace fincept::services {
+namespace finterm::services {
 
 NewsNlpService& NewsNlpService::instance() {
     static NewsNlpService s;
@@ -202,4 +202,4 @@ void NewsNlpService::translate_text(const QString& text, const QString& target_l
         });
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

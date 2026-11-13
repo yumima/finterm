@@ -5,7 +5,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::services::geo {
+namespace finterm::services::geo {
 
 // ── News event from conflict monitor ────────────────────────────────────────
 
@@ -95,14 +95,14 @@ inline QStringList event_categories() {
             "political_violence", "crisis",    "explosions", "strategic"};
 }
 
-} // namespace fincept::services::geo
+} // namespace finterm::services::geo
 
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::services::geo::NewsEvent)
-Q_DECLARE_METATYPE(fincept::services::geo::HDXDataset)
-Q_DECLARE_METATYPE(fincept::services::geo::UniqueCountry)
-Q_DECLARE_METATYPE(fincept::services::geo::UniqueCategory)
-Q_DECLARE_METATYPE(QVector<fincept::services::geo::NewsEvent>)
-Q_DECLARE_METATYPE(QVector<fincept::services::geo::HDXDataset>)
-Q_DECLARE_METATYPE(QVector<fincept::services::geo::UniqueCountry>)
-Q_DECLARE_METATYPE(QVector<fincept::services::geo::UniqueCategory>)
+Q_DECLARE_METATYPE(finterm::services::geo::NewsEvent)
+Q_DECLARE_METATYPE(finterm::services::geo::HDXDataset)
+Q_DECLARE_METATYPE(finterm::services::geo::UniqueCountry)
+Q_DECLARE_METATYPE(finterm::services::geo::UniqueCategory)
+Q_DECLARE_METATYPE(QVector<finterm::services::geo::NewsEvent>)
+Q_DECLARE_METATYPE(QVector<finterm::services::geo::HDXDataset>)
+Q_DECLARE_METATYPE(QVector<finterm::services::geo::UniqueCountry>)
+Q_DECLARE_METATYPE(QVector<finterm::services::geo::UniqueCategory>)

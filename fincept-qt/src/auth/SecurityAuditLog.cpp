@@ -6,7 +6,7 @@
 #include <QSqlQuery>
 #include <QVariantList>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 SecurityAuditLog& SecurityAuditLog::instance() {
     static SecurityAuditLog s;
@@ -54,4 +54,4 @@ QList<AuditEvent> SecurityAuditLog::recent(int limit) {
     return out;
 }
 
-} // namespace fincept::auth
+} // namespace finterm::auth

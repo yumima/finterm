@@ -8,7 +8,7 @@
 #include <QSpinBox>
 #include <QWidget>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 class CryptoOrderEntry : public QWidget {
     Q_OBJECT
@@ -75,4 +75,4 @@ class CryptoOrderEntry : public QWidget {
     QString current_symbol_ = "BTC/USDT";
 };
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

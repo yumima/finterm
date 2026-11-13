@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 /// ntfy.sh — open-source push notification service.
 class NtfyProvider final : public BaseProvider {
@@ -23,4 +23,4 @@ class NtfyProvider final : public BaseProvider {
     QString token_; // optional auth token
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

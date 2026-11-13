@@ -9,10 +9,10 @@
 
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
-using namespace fincept::pre_ipo;
+using namespace finterm::ui;
+using namespace finterm::pre_ipo;
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ void PreIpoScreen::build_ui() {
     // for the same dataset cut different ways. The PreIpoService Python
     // fetchers stay registered but unused — keeping them around lets us
     // re-enable an EDGAR-driven PIPELINE lens later without re-plumbing.
-    ipo_watch_view_ = new fincept::screens::widgets::IpoWatchView;
+    ipo_watch_view_ = new finterm::screens::widgets::IpoWatchView;
     root->addWidget(ipo_watch_view_, 1);
 }
 
@@ -104,4 +104,4 @@ void PreIpoScreen::on_error(const QString& msg) {
     LOG_WARN("PreIpo", msg);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

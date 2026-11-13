@@ -4,7 +4,7 @@
 
 #include <QUrl>
 
-namespace fincept {
+namespace finterm {
 
 HttpClient& HttpClient::instance() {
     static HttpClient s;
@@ -156,4 +156,4 @@ void HttpClient::set_base_url(const QString& base) {
     base_url_ = base;
 }
 
-} // namespace fincept
+} // namespace finterm

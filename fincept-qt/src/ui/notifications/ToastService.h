@@ -6,7 +6,7 @@
 
 class QWidget;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Phase 9 / decision 10.7: shell-singleton toast service.
 ///
@@ -21,7 +21,7 @@ namespace fincept::ui {
 /// last N notifications in memory for any drawer that wants them.
 ///
 /// Naming note: this is intentionally `ToastService`, distinct from
-/// `fincept::notifications::NotificationService` (the external-channel
+/// `finterm::notifications::NotificationService` (the external-channel
 /// dispatcher: Slack / Telegram / PagerDuty / etc.). Toasts are in-app
 /// UI; the notification service routes off-machine. Don't confuse the two.
 class ToastService : public QObject {
@@ -57,4 +57,4 @@ class ToastService : public QObject {
     QList<Notification> history_;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -13,7 +13,7 @@
 #include <optional>
 #include <vector>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // ============================================================================
 // Paper Trading Types
@@ -538,15 +538,15 @@ struct UnifiedOrderResponse {
     QString mode;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading
 
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::trading::BrokerPosition)
-Q_DECLARE_METATYPE(fincept::trading::BrokerHolding)
-Q_DECLARE_METATYPE(fincept::trading::BrokerOrderInfo)
-Q_DECLARE_METATYPE(fincept::trading::BrokerQuote)
-Q_DECLARE_METATYPE(fincept::trading::BrokerFunds)
-Q_DECLARE_METATYPE(QVector<fincept::trading::BrokerPosition>)
-Q_DECLARE_METATYPE(QVector<fincept::trading::BrokerHolding>)
-Q_DECLARE_METATYPE(QVector<fincept::trading::BrokerOrderInfo>)
-Q_DECLARE_METATYPE(QVector<fincept::trading::BrokerQuote>)
+Q_DECLARE_METATYPE(finterm::trading::BrokerPosition)
+Q_DECLARE_METATYPE(finterm::trading::BrokerHolding)
+Q_DECLARE_METATYPE(finterm::trading::BrokerOrderInfo)
+Q_DECLARE_METATYPE(finterm::trading::BrokerQuote)
+Q_DECLARE_METATYPE(finterm::trading::BrokerFunds)
+Q_DECLARE_METATYPE(QVector<finterm::trading::BrokerPosition>)
+Q_DECLARE_METATYPE(QVector<finterm::trading::BrokerHolding>)
+Q_DECLARE_METATYPE(QVector<finterm::trading::BrokerOrderInfo>)
+Q_DECLARE_METATYPE(QVector<finterm::trading::BrokerQuote>)

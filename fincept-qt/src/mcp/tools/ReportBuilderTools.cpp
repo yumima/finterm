@@ -29,13 +29,13 @@
 #include <QStringList>
 #include <QThread>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 namespace {
 
 constexpr const char* RB_TOOLS_TAG = "ReportBuilderTools";
-namespace rep = ::fincept::report;
-using Service = ::fincept::services::ReportBuilderService;
+namespace rep = ::finterm::report;
+using Service = ::finterm::services::ReportBuilderService;
 
 // ── Threading helper ─────────────────────────────────────────────────────────
 //
@@ -67,7 +67,7 @@ void maybe_request_navigation() {
     if (!last_nav_ms.compare_exchange_strong(prev, now))
         return;
     LOG_INFO(RB_TOOLS_TAG, "Auto-navigate: publishing nav.switch_screen → report_builder");
-    fincept::EventBus::instance().publish("nav.switch_screen",
+    finterm::EventBus::instance().publish("nav.switch_screen",
                                           QVariantMap{{"screen_id", "report_builder"}, {"tab_index", 8}});
 }
 
@@ -550,4 +550,4 @@ std::vector<ToolDef> get_report_builder_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

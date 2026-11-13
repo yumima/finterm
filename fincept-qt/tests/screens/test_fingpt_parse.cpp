@@ -14,7 +14,7 @@
 
 #include <cmath>
 
-using namespace fincept::screens::fingpt;
+using namespace finterm::screens::fingpt;
 
 namespace {
 const QString kCanonical = QStringLiteral(

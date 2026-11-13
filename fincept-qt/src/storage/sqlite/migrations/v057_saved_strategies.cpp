@@ -12,7 +12,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 Result<void> apply_v057(QSqlDatabase& db) {
@@ -43,4 +43,4 @@ void register_migration_v057() {
     MigrationRunner::register_migration({57, "saved_strategies", apply_v057});
 }
 
-} // namespace fincept
+} // namespace finterm

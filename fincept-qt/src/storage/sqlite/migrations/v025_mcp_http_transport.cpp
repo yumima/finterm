@@ -35,7 +35,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 constexpr const char* kTag = "Migration025";
@@ -88,4 +88,4 @@ void register_migration_v025() {
     MigrationRunner::register_migration({25, "mcp_http_transport", apply_v025});
 }
 
-} // namespace fincept
+} // namespace finterm

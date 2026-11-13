@@ -6,7 +6,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Compact transaction history panel — shows the last N transactions for the
 /// currently selected portfolio, with live reload on asset changes.
@@ -32,4 +32,4 @@ class PortfolioTxnPanel : public QWidget {
     QVector<portfolio::Transaction> txns_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

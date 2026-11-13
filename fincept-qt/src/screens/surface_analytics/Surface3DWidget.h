@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 class Surface3DWidget : public QWidget {
     Q_OBJECT
@@ -74,4 +74,4 @@ class Surface3DWidget : public QWidget {
     bool supported_ = true;
 };
 
-} // namespace fincept::surface
+} // namespace finterm::surface

@@ -9,7 +9,7 @@
 #include <QToolTip>
 #include <QWidget>
 
-namespace fincept::ui::tooltips {
+namespace finterm::ui::tooltips {
 namespace {
 
 /// Width the wrapped box is laid out to. Wide enough that a two-line
@@ -100,4 +100,4 @@ void install(QApplication& app) {
     app.installEventFilter(new TooltipFormatter(&app));
 }
 
-} // namespace fincept::ui::tooltips
+} // namespace finterm::ui::tooltips

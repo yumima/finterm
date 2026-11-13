@@ -25,9 +25,9 @@
 #include <map>
 #include <set>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-namespace fmt = fincept::ui::formatting;
+namespace fmt = finterm::ui::formatting;
 
 namespace {
 
@@ -94,9 +94,9 @@ void EquityOptionsTab::build_ui() {
     vl->addLayout(bar);
 
     stack_ = new QStackedWidget;
-    surface_ = new fincept::surface::Surface3DWidget;
-    smile_ = new fincept::surface::SurfaceLineWidget;
-    term_ = new fincept::surface::SurfaceLineWidget;
+    surface_ = new finterm::surface::Surface3DWidget;
+    smile_ = new finterm::surface::SurfaceLineWidget;
+    term_ = new finterm::surface::SurfaceLineWidget;
 
     table_ = new QTableWidget;
     table_->setColumnCount(7);
@@ -350,11 +350,11 @@ void EquityOptionsTab::render_smile() {
     const QColor palette[] = {QColor(ui::colors::AMBER()),    QColor(ui::colors::CYAN()),
                               QColor(ui::colors::POSITIVE()), QColor(ui::colors::NEGATIVE()),
                               QColor(ui::colors::WARNING()),  QColor(ui::colors::TEXT_PRIMARY())};
-    std::vector<fincept::surface::SurfaceLineWidget::Series> series;
+    std::vector<finterm::surface::SurfaceLineWidget::Series> series;
     for (size_t i = 0; i < picked.size(); ++i) {
         auto pts = by_dte[picked[i]];
         std::sort(pts.begin(), pts.end(), [](const Point* a, const Point* b) { return a->strike < b->strike; });
-        fincept::surface::SurfaceLineWidget::Series s;
+        finterm::surface::SurfaceLineWidget::Series s;
         s.name = QStringLiteral("%1D (%2)").arg(picked[i]).arg(pts.front()->expiry);
         s.color = palette[i % std::size(palette)];
         for (const Point* p : pts) {
@@ -412,4 +412,4 @@ void EquityOptionsTab::render_table() {
     table_->sortByColumn(1, Qt::AscendingOrder);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

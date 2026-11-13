@@ -9,7 +9,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Audit action types.
 enum class AuditAction {
@@ -80,4 +80,4 @@ class AuditLogger : public QObject {
     static AuditEntry map_entry(QSqlQuery& q);
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

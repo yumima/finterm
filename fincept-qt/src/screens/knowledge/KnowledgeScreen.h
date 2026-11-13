@@ -9,7 +9,7 @@
 class QLineEdit;
 class QLabel;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 class CategoryColumn;
 class AbbreviationsColumn;
@@ -70,4 +70,4 @@ class KnowledgeScreen : public QWidget {
     void update_recent_bar();
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

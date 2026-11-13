@@ -19,7 +19,7 @@
 #include <QTabWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class LlmConfigSection;
 class AiRolesSection;
@@ -39,4 +39,4 @@ class AiConfigSection : public QWidget {
     AiRolesSection* roles_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

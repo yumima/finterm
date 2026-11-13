@@ -10,7 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace fincept::services::polymarket {
+namespace finterm::services::polymarket {
 
 static constexpr int kPingIntervalMs = 50000;
 
@@ -206,10 +206,10 @@ int PolymarketWebSocket::max_requests_per_sec() const {
 void PolymarketWebSocket::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
-    fincept::datahub::TopicPolicy push_only;
+    finterm::datahub::TopicPolicy push_only;
     push_only.push_only = true;
     push_only.ttl_ms = 0;
     push_only.min_interval_ms = 0;
@@ -226,14 +226,14 @@ void PolymarketWebSocket::publish_price_to_hub(const QString& asset_id, double p
     if (asset_id.isEmpty())
         return;
     const QString topic = QStringLiteral("prediction:polymarket:price:") + asset_id;
-    fincept::datahub::DataHub::instance().publish(topic, QVariant(price));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant(price));
 }
 
 void PolymarketWebSocket::publish_orderbook_to_hub(const QString& asset_id, const OrderBook& book) {
     if (asset_id.isEmpty())
         return;
     const QString topic = QStringLiteral("prediction:polymarket:orderbook:") + asset_id;
-    fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(book));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(book));
 }
 
-} // namespace fincept::services::polymarket
+} // namespace finterm::services::polymarket

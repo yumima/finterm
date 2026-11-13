@@ -29,7 +29,7 @@
 
 #include <algorithm>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 /// A brief's longest legitimate line. Bullets run to ~40 words; 120 is far past
 /// anything the prompt asks for and well clear of a verbose-but-valid model.
@@ -117,4 +117,4 @@ inline bool looks_degenerate(const QString& text) {
     return vocab_ratio(text) < kMinVocabRatio;
 }
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

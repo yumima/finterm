@@ -3,7 +3,7 @@
 #include "screens/portfolio/PortfolioTypes.h"
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 class PortfolioRepository : public BaseRepository<portfolio::Portfolio> {
   public:
@@ -61,4 +61,4 @@ class PortfolioRepository : public BaseRepository<portfolio::Portfolio> {
     static portfolio::PortfolioSnapshot map_snapshot(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

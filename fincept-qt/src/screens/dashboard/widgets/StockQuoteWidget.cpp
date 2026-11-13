@@ -8,7 +8,7 @@
 #include <QFrame>
 #include <QtNumeric>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 StockQuoteWidget::StockQuoteWidget(const QString& symbol, QWidget* parent)
     : BaseWidget(QString("QUOTE: %1").arg(symbol.toUpper()), parent), symbol_(symbol.toUpper()) {
@@ -215,4 +215,4 @@ void StockQuoteWidget::populate(const services::QuoteData& q) {
     volume_val_->setText(ui::formatting::format_compact_volume(q.volume));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

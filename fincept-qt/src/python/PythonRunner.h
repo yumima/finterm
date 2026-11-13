@@ -8,7 +8,7 @@
 
 #include <functional>
 
-namespace fincept::python {
+namespace finterm::python {
 
 struct PythonResult {
     bool success = false;
@@ -131,4 +131,4 @@ class PythonRunner : public QObject {
 /// Extract last JSON line/block from Python output
 QString extract_json(const QString& output);
 
-} // namespace fincept::python
+} // namespace finterm::python

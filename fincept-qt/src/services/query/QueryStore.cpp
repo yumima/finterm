@@ -6,7 +6,7 @@
 
 #include <algorithm>
 
-namespace fincept::services::query {
+namespace finterm::services::query {
 
 QueryStore& QueryStore::instance() {
     static QueryStore inst;
@@ -424,4 +424,4 @@ void QueryStore::prune_owner(QObject* owner) {
     }
 }
 
-} // namespace fincept::services::query
+} // namespace finterm::services::query

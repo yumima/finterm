@@ -17,7 +17,7 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace csv = portfolio::csv;
 
@@ -204,4 +204,4 @@ QVector<portfolio::ImportRecord> BrokerCsvDialog::records() const {
     return out;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

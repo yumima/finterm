@@ -61,15 +61,15 @@ private slots:
             QStringLiteral("smb://server/share"),
         };
         for (const QString& u : hostile)
-            QVERIFY2(!fincept::ui::open_external_link(u), qPrintable(u));
+            QVERIFY2(!finterm::ui::open_external_link(u), qPrintable(u));
     }
 
     void empty_and_malformed_are_refused() {
-        QVERIFY(!fincept::ui::open_external_link(QString()));
-        QVERIFY(!fincept::ui::open_external_link(QStringLiteral("   ")));
+        QVERIFY(!finterm::ui::open_external_link(QString()));
+        QVERIFY(!finterm::ui::open_external_link(QStringLiteral("   ")));
         // Relative — an article object whose url field held a path fragment.
-        QVERIFY(!fincept::ui::open_external_link(QStringLiteral("/news/story-123.html")));
-        QVERIFY(!fincept::ui::open_external_link(QStringLiteral("example.com/no-scheme")));
+        QVERIFY(!finterm::ui::open_external_link(QStringLiteral("/news/story-123.html")));
+        QVERIFY(!finterm::ui::open_external_link(QStringLiteral("example.com/no-scheme")));
     }
 
     void the_local_predicate_agrees_with_the_real_function() {
@@ -85,7 +85,7 @@ private slots:
             QStringLiteral("example.com/no-scheme"),
         };
         for (const QString& u : refused) {
-            QVERIFY2(!fincept::ui::open_external_link(u), qPrintable(u));
+            QVERIFY2(!finterm::ui::open_external_link(u), qPrintable(u));
             QVERIFY2(!would_open(u), qPrintable(u));
         }
     }

@@ -23,7 +23,7 @@ void apply_solid_background(QWidget* widget, const QColor& color) {
 
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 DashboardToolBar::DashboardToolBar(QWidget* parent) : QWidget(parent) {
     setFixedHeight(26);
@@ -205,4 +205,4 @@ void DashboardToolBar::set_connected(bool connected) {
                                     .arg(connected ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

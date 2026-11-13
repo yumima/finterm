@@ -11,7 +11,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kFredScript = "fred_data.py";
@@ -136,4 +136,4 @@ void FredPanel::on_result(const QString& request_id, const services::EconomicsRe
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

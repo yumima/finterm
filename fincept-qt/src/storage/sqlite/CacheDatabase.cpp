@@ -4,7 +4,7 @@
 
 #include <QMutexLocker>
 
-namespace fincept {
+namespace finterm {
 
 CacheDatabase& CacheDatabase::instance() {
     static CacheDatabase s;
@@ -152,4 +152,4 @@ Result<void> CacheDatabase::create_tables() {
     return Result<void>::ok();
 }
 
-} // namespace fincept
+} // namespace finterm

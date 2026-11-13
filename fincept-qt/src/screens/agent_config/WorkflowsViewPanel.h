@@ -12,7 +12,7 @@
 #include <QTextEdit>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// WORKFLOWS view — 3-column: catalog | params | execution log + result.
 class WorkflowsViewPanel : public QWidget {
@@ -66,4 +66,4 @@ class WorkflowsViewPanel : public QWidget {
     QString current_workflow_type_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

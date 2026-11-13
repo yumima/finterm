@@ -6,7 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 
-namespace fincept::services::asia_markets {
+namespace finterm::services::asia_markets {
 
 AsiaMarketsService& AsiaMarketsService::instance() {
     static AsiaMarketsService s;
@@ -14,9 +14,9 @@ AsiaMarketsService& AsiaMarketsService::instance() {
 }
 
 void AsiaMarketsService::fetch_endpoints(const QString& script, EndpointsCallback cb) {
-    fincept::python::PythonRunner::instance().run(
+    finterm::python::PythonRunner::instance().run(
         script, {QStringLiteral("get_all_endpoints")},
-        [cb = std::move(cb), script](const fincept::python::PythonResult& result) {
+        [cb = std::move(cb), script](const finterm::python::PythonResult& result) {
             EndpointsResult out;
             if (!result.success) {
                 out.error = result.error.isEmpty() ? QStringLiteral("Endpoint listing failed") : result.error;
@@ -27,7 +27,7 @@ void AsiaMarketsService::fetch_endpoints(const QString& script, EndpointsCallbac
                 return;
             }
 
-            const QString json_str = fincept::python::extract_json(result.output);
+            const QString json_str = finterm::python::extract_json(result.output);
             if (json_str.isEmpty()) {
                 out.error = QStringLiteral("Empty endpoint response");
                 if (cb)
@@ -56,8 +56,8 @@ void AsiaMarketsService::query(const QString& script, const QString& endpoint, c
     QStringList args;
     args << endpoint << extra_args;
 
-    fincept::python::PythonRunner::instance().run(
-        script, args, [cb = std::move(cb), script, endpoint](const fincept::python::PythonResult& result) {
+    finterm::python::PythonRunner::instance().run(
+        script, args, [cb = std::move(cb), script, endpoint](const finterm::python::PythonResult& result) {
             QueryResult out;
             if (!result.success) {
                 out.error = result.error.isEmpty() ? QStringLiteral("Query failed") : result.error;
@@ -68,7 +68,7 @@ void AsiaMarketsService::query(const QString& script, const QString& endpoint, c
                 return;
             }
 
-            const QString json_str = fincept::python::extract_json(result.output);
+            const QString json_str = finterm::python::extract_json(result.output);
             if (json_str.isEmpty()) {
                 out.error = QStringLiteral("No data from %1").arg(endpoint);
                 if (cb)
@@ -125,4 +125,4 @@ void AsiaMarketsService::query(const QString& script, const QString& endpoint, c
         });
 }
 
-} // namespace fincept::services::asia_markets
+} // namespace finterm::services::asia_markets

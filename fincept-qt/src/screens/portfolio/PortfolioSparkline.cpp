@@ -7,7 +7,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PortfolioSparkline::PortfolioSparkline(int w, int h, QWidget* parent) : QWidget(parent) {
     if (w > 0 && h > 0)
@@ -84,4 +84,4 @@ void PortfolioSparkline::rebuild_pixmap() {
     dirty_ = false;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

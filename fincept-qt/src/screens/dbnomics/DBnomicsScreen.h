@@ -12,7 +12,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class DBnomicsSelectionPanel;
 class DBnomicsChartWidget;
@@ -93,4 +93,4 @@ class DBnomicsScreen : public QWidget, public IStatefulScreen {
     QVector<SlotCard> slot_cards_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

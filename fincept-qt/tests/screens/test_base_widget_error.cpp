@@ -13,7 +13,7 @@
 
 #include "screens/dashboard/widgets/BaseWidget.h"
 
-using fincept::screens::widgets::BaseWidget;
+using finterm::screens::widgets::BaseWidget;
 
 class TestBaseWidgetError : public QObject {
     Q_OBJECT

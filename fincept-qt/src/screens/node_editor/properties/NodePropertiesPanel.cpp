@@ -9,7 +9,7 @@
 #include <QPushButton>
 #include <QScrollArea>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 NodePropertiesPanel::NodePropertiesPanel(QWidget* parent) : QWidget(parent) {
     setFixedWidth(280);
@@ -224,4 +224,4 @@ void NodePropertiesPanel::build_editor(const NodeDef& node, const NodeTypeDef& t
     editor_layout_->insertWidget(pos++, cof_check);
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

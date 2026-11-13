@@ -1,7 +1,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 struct Setting {
     QString key;
@@ -26,4 +26,4 @@ class SettingsRepository : public BaseRepository<Setting> {
     static Setting map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

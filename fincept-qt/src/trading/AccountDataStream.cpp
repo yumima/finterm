@@ -14,7 +14,7 @@
 
 #include <algorithm>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 namespace {
 constexpr const char* ADS_TAG = "AccountDataStream";
@@ -681,4 +681,4 @@ void AccountDataStream::ws_resubscribe() {
     // Will be implemented when WS is wired in Phase 5
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

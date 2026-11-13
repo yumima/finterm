@@ -1,6 +1,6 @@
 #include "storage/repositories/DataMappingRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 DataMappingRepository& DataMappingRepository::instance() {
     static DataMappingRepository s;
@@ -84,4 +84,4 @@ Result<void> DataMappingRepository::remove(const QString& id) {
     return exec_write("DELETE FROM data_mappings WHERE id = ?", {id});
 }
 
-} // namespace fincept
+} // namespace finterm

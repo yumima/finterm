@@ -1,6 +1,6 @@
 #include "storage/repositories/SettingsRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 SettingsRepository& SettingsRepository::instance() {
     static SettingsRepository s;
@@ -45,4 +45,4 @@ Result<void> SettingsRepository::clear_category(const QString& category) {
     return exec_write("DELETE FROM settings WHERE category = ?", {category});
 }
 
-} // namespace fincept
+} // namespace finterm

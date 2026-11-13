@@ -20,7 +20,7 @@
 #include <QShowEvent>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Style helpers (live — read active theme tokens) ───────────────────────────
 
@@ -792,4 +792,4 @@ void PythonEnvSection::show_status(const QString& msg, bool error) {
         QString("color:%1;background:transparent;").arg(error ? ui::colors::NEGATIVE() : ui::colors::TEXT_SECONDARY()));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

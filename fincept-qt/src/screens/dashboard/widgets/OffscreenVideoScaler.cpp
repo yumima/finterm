@@ -11,7 +11,7 @@
 #    include <QSurfaceFormat>
 #    include <QVideoFrameFormat>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 namespace {
 
@@ -355,6 +355,6 @@ QImage OffscreenVideoScaler::process(const QVideoFrame& frame_in, const QSize& t
     return out;
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets
 
 #endif // HAS_QT_MULTIMEDIA

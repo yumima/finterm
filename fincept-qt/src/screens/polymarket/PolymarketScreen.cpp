@@ -24,11 +24,11 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-namespace pred = fincept::services::prediction;
-namespace pmx = fincept::services::polymarket;
-using namespace fincept::screens::polymarket;
+namespace pred = finterm::services::prediction;
+namespace pmx = finterm::services::polymarket;
+using namespace finterm::screens::polymarket;
 
 static QString kPolymarketId() {
     return QStringLiteral("polymarket");
@@ -1195,4 +1195,4 @@ void PolymarketScreen::restore_state(const QVariantMap& state) {
     on_category_changed(cat);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

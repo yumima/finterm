@@ -6,10 +6,10 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
-using namespace fincept::pre_ipo;
+using namespace finterm::ui;
+using namespace finterm::pre_ipo;
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -254,4 +254,4 @@ QWidget* IpoPipelinePanel::make_form_d_card(const FormDFiling& f) const {
     return card;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

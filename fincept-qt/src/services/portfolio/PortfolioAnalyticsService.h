@@ -14,7 +14,7 @@
 
 #include <functional>
 
-namespace fincept::services {
+namespace finterm::services {
 
 struct AnalyticsResult {
     bool success = false;
@@ -57,4 +57,4 @@ class PortfolioAnalyticsService : public QObject {
     void run_script(const QString& script, const QString& args_json, AnalyticsCallback cb);
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

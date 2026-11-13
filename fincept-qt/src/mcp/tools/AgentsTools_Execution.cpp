@@ -23,9 +23,9 @@
 #include <QTimer>
 #include <QUuid>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
-using namespace fincept::mcp::tools::agents_internal;
+using namespace finterm::mcp::tools::agents_internal;
 
 void agents_internal::register_execution_tools(std::vector<ToolDef>& tools) {
     // ── 7. run_agent ────────────────────────────────────────────────────
@@ -420,4 +420,4 @@ void agents_internal::register_execution_tools(std::vector<ToolDef>& tools) {
         tools.push_back(std::move(t));
     }
 }
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

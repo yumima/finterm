@@ -5,7 +5,7 @@
 #include <QString>
 #include <QTimer>
 
-namespace fincept {
+namespace finterm {
 
 /// Opt-in supervisor for the local hearth AI engine.
 ///
@@ -55,4 +55,4 @@ class HearthSupervisor : public QObject {
     int gen_ = 0; // bumped on each start/stop; invalidates stale kill timers
 };
 
-} // namespace fincept
+} // namespace finterm

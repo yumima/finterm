@@ -30,7 +30,7 @@
 
 #include <functional>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -673,4 +673,4 @@ QWidget* WorkbenchScreen::build_system_section() {
     return w;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -3,7 +3,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 struct ChatSession {
     QString id;
@@ -58,4 +58,4 @@ class ChatRepository : public BaseRepository<ChatSession> {
     static ChatMessage map_message(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

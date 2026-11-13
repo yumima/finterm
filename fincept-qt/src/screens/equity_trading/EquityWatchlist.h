@@ -11,7 +11,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 struct WatchlistEntry {
     QString symbol;
@@ -54,4 +54,4 @@ class EquityWatchlist : public QWidget {
     QMutex mutex_;
 };
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

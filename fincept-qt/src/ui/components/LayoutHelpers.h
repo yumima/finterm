@@ -8,7 +8,7 @@ class QPushButton;
 class QTableWidget;
 class QWidget;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Make a row of peer widgets (pills, tabs, chips) all the same width and
 /// distribute them across the available horizontal space:
@@ -47,4 +47,4 @@ void equalize_and_distribute(const QList<QPushButton*>& peers, const QFont& font
 /// deferred execution.
 void ensure_header_fits(QTableWidget* table, int hpad = 18);
 
-} // namespace fincept::ui
+} // namespace finterm::ui

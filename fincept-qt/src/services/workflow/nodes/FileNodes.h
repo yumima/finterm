@@ -1,6 +1,6 @@
 #pragma once
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 class NodeRegistry;
 void register_file_nodes(NodeRegistry& registry);
-} // namespace fincept::workflow
+} // namespace finterm::workflow

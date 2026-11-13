@@ -15,9 +15,9 @@
 #include <QHBoxLayout>
 #include <QScrollArea>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::geo;
+using namespace finterm::services::geo;
 
 // ── Constructor ──────────────────────────────────────────────────────────────
 GeopoliticsScreen::GeopoliticsScreen(QWidget* parent) : QWidget(parent) {
@@ -31,8 +31,8 @@ GeopoliticsScreen::GeopoliticsScreen(QWidget* parent) : QWidget(parent) {
     clock_timer_ = new QTimer(this);
     clock_timer_->setInterval(1000);
 
-    connect(&fincept::ui::ThemeManager::instance(), &fincept::ui::ThemeManager::theme_changed, this,
-            [this](const fincept::ui::ThemeTokens&) { refresh_theme(); });
+    connect(&finterm::ui::ThemeManager::instance(), &finterm::ui::ThemeManager::theme_changed, this,
+            [this](const finterm::ui::ThemeTokens&) { refresh_theme(); });
 
     LOG_INFO("Geopolitics", "Screen constructed");
 }
@@ -484,4 +484,4 @@ void GeopoliticsScreen::restore_state(const QVariantMap& state) {
         on_tab_changed(idx);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

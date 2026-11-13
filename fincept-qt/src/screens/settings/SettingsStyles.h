@@ -9,7 +9,7 @@
 
 #include <QString>
 
-namespace fincept::screens::settings_style {
+namespace finterm::screens::settings_style {
 
 // ── Token-based style builders (live — reflect active theme) ─────────────────
 
@@ -67,4 +67,4 @@ inline QString check_ss() {
         .arg(ui::colors::TEXT_SECONDARY(), ui::colors::BORDER_BRIGHT(), ui::colors::BG_RAISED(), ui::colors::AMBER());
 }
 
-} // namespace fincept::screens::settings_style
+} // namespace finterm::screens::settings_style

@@ -5,7 +5,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void DiscordProvider::load_fields(SettingsRepository& r, const QString& cat) {
     webhook_url_ = get_str(r, cat + ".webhook_url");
@@ -61,4 +61,4 @@ void DiscordProvider::send(const NotificationRequest& req, std::function<void(bo
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

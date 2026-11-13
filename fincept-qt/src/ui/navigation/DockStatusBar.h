@@ -3,7 +3,7 @@
 
 #include <QStatusBar>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// QStatusBar wrapper around the existing StatusBar widget.
 /// Used with QMainWindow::setStatusBar() so the status bar lives outside
@@ -19,4 +19,4 @@ class DockStatusBar : public QStatusBar {
     StatusBar* inner_ = nullptr;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

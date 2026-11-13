@@ -18,7 +18,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Stylesheet (token-based) ──────────────────────────────────────────────────
 
@@ -543,4 +543,4 @@ void EconPanelBase::filter_list(QListWidget* list, const QString& text) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -7,7 +7,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::relmap {
+namespace finterm::relmap {
 
 // ── Node Categories ──────────────────────────────────────────────────────────
 
@@ -399,7 +399,7 @@ inline QString layout_label(LayoutMode m) {
     return "LAYERED";
 }
 
-} // namespace fincept::relmap
+} // namespace finterm::relmap
 
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::relmap::RelationshipData)
+Q_DECLARE_METATYPE(finterm::relmap::RelationshipData)

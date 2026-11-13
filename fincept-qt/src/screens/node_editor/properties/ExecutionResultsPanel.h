@@ -8,7 +8,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Bottom drawer showing per-node execution results with collapsible UI.
 class ExecutionResultsPanel : public QWidget {
@@ -39,4 +39,4 @@ class ExecutionResultsPanel : public QWidget {
     QString copy_buffer_;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -17,7 +17,7 @@
 #include <QValueAxis>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// FFN (Financial Functions) analytics view with 6 sub-tabs.
 /// Uses Python ffn library via PortfolioAnalyticsService (D1/P6 compliant).
@@ -91,4 +91,4 @@ class PortfolioFFNView : public QWidget {
     QJsonObject ffn_data_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

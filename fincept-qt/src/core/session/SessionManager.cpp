@@ -1,6 +1,6 @@
 #include "core/session/SessionManager.h"
 
-namespace fincept {
+namespace finterm {
 
 SessionManager& SessionManager::instance() {
     static SessionManager s;
@@ -185,4 +185,4 @@ QString SessionManager::last_primary_screen() const {
     return settings_.value("session/last_primary_screen").toString();
 }
 
-} // namespace fincept
+} // namespace finterm

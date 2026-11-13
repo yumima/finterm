@@ -9,7 +9,7 @@
 #include <QJsonDocument>
 #include <QStringList>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 static int64_t now_ts() {
     return QDateTime::currentSecsSinceEpoch();
@@ -961,4 +961,4 @@ ApiResponse<QVector<BrokerMetaEntry>> AlpacaBroker::get_exchange_codes(const Bro
     return {true, result, "", ts};
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

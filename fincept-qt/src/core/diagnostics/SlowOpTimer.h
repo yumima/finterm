@@ -4,7 +4,7 @@
 #include <QElapsedTimer>
 #include <QString>
 
-namespace fincept::diagnostics {
+namespace finterm::diagnostics {
 
 // RAII helper that logs a WARN if the scope outlives a threshold.
 // Use via the FT_TIME_SLOT macro so callers don't need to name the local.
@@ -32,7 +32,7 @@ class SlowOpTimer {
     QElapsedTimer timer_;
 };
 
-} // namespace fincept::diagnostics
+} // namespace finterm::diagnostics
 
 // Token-pasting helper so multiple FT_TIME_SLOT uses in the same function
 // generate unique local-variable names.
@@ -43,4 +43,4 @@ class SlowOpTimer {
 // exceeds threshold_ms. Example:
 //   FT_TIME_SLOT("AuthService.login_local", 50);
 #define FT_TIME_SLOT(name, threshold_ms)                                                                               \
-    ::fincept::diagnostics::SlowOpTimer FT_TIME_SLOT_CAT(ft_slow_op_, __LINE__)(name, threshold_ms)
+    ::finterm::diagnostics::SlowOpTimer FT_TIME_SLOT_CAT(ft_slow_op_, __LINE__)(name, threshold_ms)

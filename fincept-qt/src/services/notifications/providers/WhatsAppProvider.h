@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 /// WhatsApp via Twilio's WhatsApp API.
 class WhatsAppProvider final : public BaseProvider {
@@ -26,4 +26,4 @@ class WhatsAppProvider final : public BaseProvider {
     QString to_number_;   // whatsapp:+1XXXXXXXXXX
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

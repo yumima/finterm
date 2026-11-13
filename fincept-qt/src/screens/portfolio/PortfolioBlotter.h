@@ -8,7 +8,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class PortfolioSparkline;
 
@@ -68,4 +68,4 @@ class PortfolioBlotter : public QWidget {
     ui::RenderCoalescer spark_render_{this, [this]() { repaint_sparkline_cells(); }};
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

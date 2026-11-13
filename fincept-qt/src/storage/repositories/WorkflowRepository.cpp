@@ -5,7 +5,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace fincept {
+namespace finterm {
 
 WorkflowRepository& WorkflowRepository::instance() {
     static WorkflowRepository s;
@@ -174,4 +174,4 @@ Result<void> WorkflowRepository::remove(const QString& id) {
     return exec_write("DELETE FROM workflows WHERE id = ?", {id});
 }
 
-} // namespace fincept
+} // namespace finterm

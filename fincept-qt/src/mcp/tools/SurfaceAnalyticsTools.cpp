@@ -22,7 +22,7 @@
 
 #include <cmath>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 namespace {
 // Names suffixed per file so the unity build doesn't trip on duplicates
@@ -579,4 +579,4 @@ std::vector<ToolDef> get_surface_analytics_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

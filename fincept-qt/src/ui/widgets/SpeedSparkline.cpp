@@ -7,7 +7,7 @@
 
 #include <algorithm>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 SpeedSparkline::SpeedSparkline(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_OpaquePaintEvent, false);
@@ -83,4 +83,4 @@ void SpeedSparkline::paintEvent(QPaintEvent*) {
     p.drawPath(line);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

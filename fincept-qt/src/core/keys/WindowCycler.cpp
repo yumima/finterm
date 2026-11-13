@@ -10,7 +10,7 @@
 
 #include <algorithm>
 
-namespace fincept {
+namespace finterm {
 
 WindowCycler& WindowCycler::instance() {
     static WindowCycler s;
@@ -132,4 +132,4 @@ void WindowCycler::move_current_window_to_monitor(int monitor_index) {
     w->move_to_screen(screens.at(monitor_index));
 }
 
-} // namespace fincept
+} // namespace finterm

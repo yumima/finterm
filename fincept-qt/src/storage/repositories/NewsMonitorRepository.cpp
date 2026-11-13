@@ -1,6 +1,6 @@
 #include "storage/repositories/NewsMonitorRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 NewsMonitorRepository& NewsMonitorRepository::instance() {
     static NewsMonitorRepository s;
@@ -33,4 +33,4 @@ Result<void> NewsMonitorRepository::set_enabled(const QString& id, bool enabled)
                       {enabled ? 1 : 0, id});
 }
 
-} // namespace fincept
+} // namespace finterm

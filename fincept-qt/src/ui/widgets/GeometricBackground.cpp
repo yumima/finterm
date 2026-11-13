@@ -6,7 +6,7 @@
 #include <QPen>
 #include <QResizeEvent>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 GeometricBackground::GeometricBackground(QWidget* parent) : QWidget(parent) {
     setAttribute(Qt::WA_StyledBackground, true);
@@ -64,4 +64,4 @@ void GeometricBackground::paintEvent(QPaintEvent*) {
     p.drawPixmap(0, 0, cache_);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

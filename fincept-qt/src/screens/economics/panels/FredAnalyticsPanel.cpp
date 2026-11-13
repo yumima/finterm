@@ -19,7 +19,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kFredAnalyticsScript = "fred_economic_data.py";
@@ -158,4 +158,4 @@ void FredAnalyticsPanel::on_result(const QString& request_id, const services::Ec
     LOG_INFO("FredAnalyticsPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

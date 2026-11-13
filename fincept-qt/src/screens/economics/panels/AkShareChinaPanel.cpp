@@ -14,7 +14,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kAkShareChinaScript = "akshare_economics_china.py";
@@ -121,4 +121,4 @@ void AkShareChinaPanel::on_result(const QString& request_id, const services::Eco
     LOG_INFO("AkShareChinaPanel", QString("Displayed %1 rows: %2").arg(rows.size()).arg(title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

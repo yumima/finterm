@@ -14,7 +14,7 @@
 #include <QTimer>
 #include <QUrl>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
@@ -98,4 +98,4 @@ void EmbeddingsClient::embed(const QString& text, std::function<void(std::option
     });
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 namespace {
 inline const QStringList kSentimentSymbols = {"^VIX", "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "NFLX",
@@ -311,4 +311,4 @@ void MarketSentimentWidget::populate(const QVector<services::QuoteData>& quotes)
                                       .arg(bullish > bearish ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

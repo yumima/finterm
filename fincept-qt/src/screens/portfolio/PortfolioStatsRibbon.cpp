@@ -11,7 +11,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PortfolioStatsRibbon::PortfolioStatsRibbon(QWidget* parent) : QWidget(parent) {
     setFixedHeight(72);
@@ -452,4 +452,4 @@ void PortfolioStatsRibbon::refresh_theme() {
     apply_chip_styles(risk_score_, ui::colors::NEGATIVE);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

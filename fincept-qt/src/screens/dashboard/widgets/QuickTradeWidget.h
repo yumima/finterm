@@ -8,7 +8,7 @@
 #include <QLineEdit>
 #include <QPushButton>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Quick Trade Widget — symbol lookup + order entry form.
 /// Fetches live quote via yfinance on symbol search.
@@ -67,4 +67,4 @@ class QuickTradeWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

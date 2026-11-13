@@ -54,7 +54,7 @@
 #include <algorithm>
 #include <functional>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// The read-aloud glyphs, drawn rather than shipped as assets so they take the
 /// current theme accent: a speaker with sound waves (start reading), the same
@@ -427,4 +427,4 @@ class ReadAloudToggle : public QObject {
     bool state_tooltip_owned_ = false; ///< btn_'s tooltip is a state hint, to restore on idle
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

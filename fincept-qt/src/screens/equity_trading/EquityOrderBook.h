@@ -12,7 +12,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 class EquityOrderBook : public QWidget {
     Q_OBJECT
@@ -52,4 +52,4 @@ class EquityOrderBook : public QWidget {
     static constexpr int MAX_LEVELS = 10;
 };
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

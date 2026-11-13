@@ -3,7 +3,7 @@
 #include <QScrollArea>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Main dashboard grid — 9 default widget cards using individual widget classes.
 /// All widgets source real data from yfinance via MarketDataService.
@@ -19,4 +19,4 @@ class WidgetGrid : public QWidget {
     int widget_count_ = 0;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

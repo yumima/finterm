@@ -13,7 +13,7 @@ class QStackedWidget;
 class QTabWidget;
 class QTextEdit;
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 /// Credential setup dialog for the Prediction Markets tab.
 ///
@@ -74,4 +74,4 @@ class PredictionAccountDialog : public QDialog {
     QPushButton* ks_clear_btn_ = nullptr;
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

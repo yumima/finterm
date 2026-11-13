@@ -7,7 +7,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// SYSTEM view — live capabilities dashboard: agent count, LLM profiles,
 /// tools registry, cache stats, and framework info.
@@ -57,4 +57,4 @@ class SystemViewPanel : public QWidget {
     bool data_loaded_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

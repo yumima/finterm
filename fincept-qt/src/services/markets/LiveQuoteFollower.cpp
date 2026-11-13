@@ -8,7 +8,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::services {
+namespace finterm::services {
 
 LiveQuoteFollower::~LiveQuoteFollower() {
     clear();
@@ -81,4 +81,4 @@ void LiveQuoteFollower::refresh_movers(MarketDataService::TopMovers& movers) {
     rank(movers);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

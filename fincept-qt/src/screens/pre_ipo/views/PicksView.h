@@ -7,7 +7,7 @@
 class QLabel;
 class QVBoxLayout;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Daily digest of investable signals: high-readiness names, fresh S-1s,
 /// fund mark-ups, amendment bursts. Default landing tab — answers
@@ -38,4 +38,4 @@ class PicksView : public QWidget {
     QLabel* signals_count_lbl_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

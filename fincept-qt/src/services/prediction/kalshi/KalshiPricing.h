@@ -3,7 +3,7 @@
 #include <cmath>
 #include <limits>
 
-namespace fincept::services::prediction::kalshi_ns {
+namespace finterm::services::prediction::kalshi_ns {
 
 /// Implied YES probability (0..1) for a Kalshi binary market.
 ///
@@ -23,4 +23,4 @@ inline double kalshi_implied_yes_probability(double yes_bid, double yes_ask, dou
     return std::numeric_limits<double>::quiet_NaN();
 }
 
-} // namespace fincept::services::prediction::kalshi_ns
+} // namespace finterm::services::prediction::kalshi_ns

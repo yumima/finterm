@@ -14,7 +14,7 @@
 #include <memory>
 #include <vector>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 class McpManager : public QObject {
     Q_OBJECT
@@ -91,4 +91,4 @@ class McpManager : public QObject {
     void do_health_check();
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

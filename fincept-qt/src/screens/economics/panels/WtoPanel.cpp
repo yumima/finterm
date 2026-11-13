@@ -31,7 +31,7 @@
 #include <QSet>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kWtoScript = "wto_data.py";
@@ -271,4 +271,4 @@ void WtoPanel::on_result(const QString& request_id, const services::EconomicsRes
     LOG_INFO("WtoPanel", QString("Displayed %1 rows for %2").arg(rows.size()).arg(request_id));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -8,7 +8,7 @@ class QComboBox;
 class QLabel;
 class QTableWidget;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// HOLDERS — the 13F register, in the industry's columns.
 ///
@@ -51,4 +51,4 @@ class HoldersTable : public QWidget {
     QLabel* foot_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

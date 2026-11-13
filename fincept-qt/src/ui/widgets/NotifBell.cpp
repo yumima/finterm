@@ -4,7 +4,7 @@
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 NotifBell::NotifBell(QWidget* parent) : QPushButton(parent) {
     setFlat(true);
@@ -13,8 +13,8 @@ NotifBell::NotifBell(QWidget* parent) : QPushButton(parent) {
     update_label();
 
     // Wire to service
-    connect(&fincept::notifications::NotificationService::instance(),
-            &fincept::notifications::NotificationService::unread_count_changed, this, &NotifBell::set_unread);
+    connect(&finterm::notifications::NotificationService::instance(),
+            &finterm::notifications::NotificationService::unread_count_changed, this, &NotifBell::set_unread);
 
     connect(this, &QPushButton::clicked, this, &NotifBell::bell_clicked);
 }
@@ -35,4 +35,4 @@ void NotifBell::update_label() {
                       .arg(color, unread_ > 0 ? "bold" : "normal", QString(ui::colors::AMBER())));
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

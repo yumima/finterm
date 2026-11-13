@@ -13,7 +13,7 @@
 #include <QJsonDocument>
 #include <QPushButton>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 static QString input_style() {
     return QString("background: %1; color: %2; border: 1px solid %3;"
@@ -174,7 +174,7 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
             combo->clear();
             combo->addItem("— select file —", QString());
 
-            auto& svc = fincept::services::FileManagerService::instance();
+            auto& svc = finterm::services::FileManagerService::instance();
             for (const auto& v : svc.all_files()) {
                 QJsonObject f = v.toObject();
                 QString stored_name = f.value("name").toString();
@@ -229,13 +229,13 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
                 if (path.isEmpty())
                     return;
 
-                QString file_id = fincept::services::FileManagerService::instance().import_file(path, "workflow_node");
+                QString file_id = finterm::services::FileManagerService::instance().import_file(path, "workflow_node");
                 if (file_id.isEmpty())
                     return;
 
                 // Find the full managed path for the newly imported file
-                auto f = fincept::services::FileManagerService::instance().find_by_id(file_id);
-                QString full_path = fincept::services::FileManagerService::instance().full_path(f.name);
+                auto f = finterm::services::FileManagerService::instance().find_by_id(file_id);
+                QString full_path = finterm::services::FileManagerService::instance().full_path(f.name);
 
                 populate(full_path);
                 on_change(key, QJsonValue(full_path));
@@ -266,7 +266,7 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
             combo->clear();
             combo->addItem("— select agent —", QString());
 
-            const auto agents = fincept::services::AgentService::instance().cached_agents();
+            const auto agents = finterm::services::AgentService::instance().cached_agents();
             for (const auto& a : agents) {
                 QString label = a.name;
                 if (!a.category.isEmpty())
@@ -279,20 +279,20 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
 
         // Helper: wire one-shot discovery → populate
         auto trigger_discovery = [populate_agents, combo]() {
-            auto& svc = fincept::services::AgentService::instance();
-            QObject::connect(&svc, &fincept::services::AgentService::agents_discovered, combo,
-                             [populate_agents, combo](const QVector<fincept::services::AgentInfo>&,
-                                                      const QVector<fincept::services::AgentCategory>&) {
+            auto& svc = finterm::services::AgentService::instance();
+            QObject::connect(&svc, &finterm::services::AgentService::agents_discovered, combo,
+                             [populate_agents, combo](const QVector<finterm::services::AgentInfo>&,
+                                                      const QVector<finterm::services::AgentCategory>&) {
                                  populate_agents();
-                                 QObject::disconnect(&fincept::services::AgentService::instance(),
-                                                     &fincept::services::AgentService::agents_discovered, combo,
+                                 QObject::disconnect(&finterm::services::AgentService::instance(),
+                                                     &finterm::services::AgentService::agents_discovered, combo,
                                                      nullptr);
                              });
             svc.discover_agents();
         };
 
         // Always auto-discover on widget creation — don't make user navigate elsewhere
-        auto& svc = fincept::services::AgentService::instance();
+        auto& svc = finterm::services::AgentService::instance();
         if (svc.cached_agent_count() > 0) {
             populate_agents(); // cache hot — fill immediately
         } else {
@@ -332,7 +332,7 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
         combo->addItem("— agent default —", QString());
 
         QString saved = current_value.toString();
-        auto res = fincept::LlmProfileRepository::instance().list_profiles();
+        auto res = finterm::LlmProfileRepository::instance().list_profiles();
         if (res.is_ok()) {
             for (const auto& p : res.value()) {
                 QString display = p.name + "  [" + p.provider + " / " + p.model_id + "]";
@@ -436,4 +436,4 @@ QWidget* ParameterWidgetFactory::create(const ParamDef& param, const QJsonValue&
     return container;
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -7,7 +7,7 @@
 
 #include <array>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 /// Manages local PIN authentication — hashing, verification, and lockout.
 ///
@@ -97,4 +97,4 @@ class PinManager : public QObject {
     void load_lockout_state();
 };
 
-} // namespace fincept::auth
+} // namespace finterm::auth

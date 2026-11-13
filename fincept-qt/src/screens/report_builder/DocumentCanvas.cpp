@@ -4,7 +4,7 @@
 #include "ui/theme/Theme.h"
 
 namespace { // forward-declare default theme for constructor use
-static fincept::screens::ReportTheme default_canvas_theme() {
+static finterm::screens::ReportTheme default_canvas_theme() {
     return {"Light Professional",
             "#1a1a1a",
             "#d97706",
@@ -47,7 +47,7 @@ static fincept::screens::ReportTheme default_canvas_theme() {
 #include <QVBoxLayout>
 #include <QValueAxis>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Chart rendering helpers ────────────────────────────────────────────────────
 
@@ -1095,4 +1095,4 @@ void DocumentCanvas::render(const QVector<ReportComponent>& components, const Re
     current_page->setTextCursor(cursor);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -14,7 +14,7 @@
 
 #include <functional>
 
-namespace fincept::services::akshare {
+namespace finterm::services::akshare {
 
 struct EndpointsResult {
     bool success = false;
@@ -46,4 +46,4 @@ class AkShareService : public QObject {
     AkShareService() = default;
 };
 
-} // namespace fincept::services::akshare
+} // namespace finterm::services::akshare

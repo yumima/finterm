@@ -3,7 +3,7 @@
 
 #include <QScrollArea>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Dashboard widget — shows the 8 most recently added files from FileManagerService.
 class RecentFilesWidget : public BaseWidget {
@@ -24,4 +24,4 @@ class RecentFilesWidget : public BaseWidget {
     bool loaded_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

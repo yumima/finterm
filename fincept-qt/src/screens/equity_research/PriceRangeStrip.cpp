@@ -11,9 +11,9 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-namespace fmt = fincept::ui::formatting;
+namespace fmt = finterm::ui::formatting;
 
 namespace {
 constexpr int kPad = 10;
@@ -225,4 +225,4 @@ bool PriceRangeStrip::event(QEvent* e) {
     return QWidget::event(e);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

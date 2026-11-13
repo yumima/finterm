@@ -8,7 +8,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Lightweight record describing one managed file.
 struct ManagedFile {
@@ -67,4 +67,4 @@ class FileManagerService : public QObject {
     QJsonArray files_cache_; // in-memory copy, kept in sync with disk
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

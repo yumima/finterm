@@ -2,7 +2,7 @@
 #include "screens/dashboard/widgets/QuoteTableWidget.h"
 #include "ui/theme/Theme.h"
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Commodities widget — fetches 8 major commodities via yfinance.
 inline QuoteTableWidget* create_commodities_widget(QWidget* parent = nullptr) {
@@ -14,4 +14,4 @@ inline QuoteTableWidget* create_commodities_widget(QWidget* parent = nullptr) {
                                 ui::colors::WARNING(), parent);
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

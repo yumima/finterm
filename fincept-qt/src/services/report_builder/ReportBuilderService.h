@@ -26,7 +26,7 @@
 #include <QUndoStack>
 #include <QVector>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace detail {
 class ServiceFriend; // defined in ReportBuilderService.cpp
@@ -166,4 +166,4 @@ class ReportBuilderService : public QObject {
     mutable bool recent_loaded_ = false;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

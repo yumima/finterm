@@ -7,11 +7,11 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 class WorldMapWidget;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Shows geopolitical events in a sortable table with category color coding
 /// and an interactive world map plotting event locations.
@@ -19,15 +19,15 @@ class ConflictMonitorPanel : public QWidget {
     Q_OBJECT
   public:
     explicit ConflictMonitorPanel(QWidget* parent = nullptr);
-    void set_events(const QVector<fincept::services::geo::NewsEvent>& events);
+    void set_events(const QVector<finterm::services::geo::NewsEvent>& events);
 
   private:
     void build_ui();
-    void update_stats(const QVector<fincept::services::geo::NewsEvent>& events);
-    void update_map(const QVector<fincept::services::geo::NewsEvent>& events);
+    void update_stats(const QVector<finterm::services::geo::NewsEvent>& events);
+    void update_map(const QVector<finterm::services::geo::NewsEvent>& events);
 
     // Map
-    fincept::ui::WorldMapWidget* map_widget_ = nullptr;
+    finterm::ui::WorldMapWidget* map_widget_ = nullptr;
 
     QTableWidget* events_table_ = nullptr;
     QLabel* stats_label_ = nullptr;
@@ -43,4 +43,4 @@ class ConflictMonitorPanel : public QWidget {
     QWidget* detail_panel_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

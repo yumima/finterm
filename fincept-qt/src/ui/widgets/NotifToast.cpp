@@ -9,9 +9,9 @@
 #include <QShowEvent>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
-using namespace fincept::notifications;
+using namespace finterm::notifications;
 
 NotifToast::NotifToast(QWidget* parent) : QWidget(parent, Qt::ToolTip | Qt::FramelessWindowHint) {
     setAttribute(Qt::WA_TranslucentBackground);
@@ -177,4 +177,4 @@ void NotifToast::dismiss() {
     slide_anim_->start();
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

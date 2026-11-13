@@ -11,7 +11,7 @@
 #include <functional>
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 /// Header-only base class for all repositories.
 /// Provides common query helpers that wrap Database::instance().
@@ -102,4 +102,4 @@ class BaseRepository {
     Result<void> exec_raw(const QString& sql) const { return db().exec(sql); }
 };
 
-} // namespace fincept
+} // namespace finterm

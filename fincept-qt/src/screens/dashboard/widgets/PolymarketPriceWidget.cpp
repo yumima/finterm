@@ -12,7 +12,7 @@
 #include <QLabel>
 #include <QPlainTextEdit>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 PolymarketPriceWidget::PolymarketPriceWidget(const QJsonObject& cfg, QWidget* parent)
     : BaseWidget("POLYMARKET", parent) {
@@ -207,4 +207,4 @@ void PolymarketPriceWidget::apply_styles() {
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

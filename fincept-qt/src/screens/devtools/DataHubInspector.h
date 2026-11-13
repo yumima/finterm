@@ -5,7 +5,7 @@
 
 class QTableWidget;
 
-namespace fincept::screens::devtools {
+namespace finterm::screens::devtools {
 
 /// Minimal live view over `DataHub::stats()`. Refreshes once per second
 /// while visible. Surfaced in Settings → Developer as an inline diagnostic
@@ -26,4 +26,4 @@ class DataHubInspector : public QWidget {
     QTimer refresh_timer_;
 };
 
-} // namespace fincept::screens::devtools
+} // namespace finterm::screens::devtools

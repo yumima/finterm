@@ -13,7 +13,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 TopMoversWidget::TopMoversWidget(QWidget* parent) : BaseWidget("TOP MOVERS", parent) {
     build_body();
@@ -244,4 +244,4 @@ void TopMoversWidget::render_table() {
         table_->setRowHidden(i, true);
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

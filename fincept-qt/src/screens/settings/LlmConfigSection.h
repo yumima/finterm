@@ -19,7 +19,7 @@
 #include <QTabWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class LlmConfigSection : public QWidget {
     Q_OBJECT
@@ -129,4 +129,4 @@ class LlmConfigSection : public QWidget {
     static QStringList fallback_models(const QString& provider);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

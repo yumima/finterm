@@ -14,7 +14,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Custom Index creation and tracking view with 10 calculation methods.
 /// Indices are persisted to SQLite via CustomIndexRepository.
@@ -67,4 +67,4 @@ class CustomIndexView : public QWidget {
     QVector<CustomIndex> loaded_indices_; // cached from DB
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

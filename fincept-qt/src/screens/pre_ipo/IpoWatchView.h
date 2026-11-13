@@ -52,7 +52,7 @@ class QTabWidget;
 class QVBoxLayout;
 QT_FORWARD_DECLARE_CLASS(QChartView)
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 class IpoWatchView : public QWidget {
     Q_OBJECT
@@ -511,4 +511,4 @@ class IpoWatchView : public QWidget {
     QLabel* right_bottom_ = nullptr; // research links
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

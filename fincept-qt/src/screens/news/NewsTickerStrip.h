@@ -7,7 +7,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// 22px scrolling ticker at the bottom showing FLASH/URGENT/BREAKING headlines.
 class NewsTickerStrip : public QWidget {
@@ -52,4 +52,4 @@ class NewsTickerStrip : public QWidget {
     static constexpr int SEGMENT_GAP = 8;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

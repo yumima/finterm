@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Center panel showing detailed information for a selected private company.
 class CompanyDetailPanel : public QWidget {
@@ -135,4 +135,4 @@ class CompanyDetailPanel : public QWidget {
     QLabel* kpi_raised_lbl_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

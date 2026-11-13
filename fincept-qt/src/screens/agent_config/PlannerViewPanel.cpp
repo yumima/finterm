@@ -24,10 +24,10 @@
 namespace {
 static const QString kIn =
     QString("background:%1;color:%2;border:1px solid %3;padding:4px 8px;font-size:12px;")
-        .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::TEXT_PRIMARY(), fincept::ui::colors::BORDER_MED());
+        .arg(finterm::ui::colors::BG_RAISED(), finterm::ui::colors::TEXT_PRIMARY(), finterm::ui::colors::BORDER_MED());
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PlannerViewPanel::PlannerViewPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("PlannerViewPanel");
@@ -87,8 +87,8 @@ QWidget* PlannerViewPanel::build_templates_panel() {
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED()));
     llm_profile_combo_->addItem("Default (Global)", QString{});
     {
-        const auto pr = fincept::LlmProfileRepository::instance().list_profiles();
-        const auto profiles = pr.is_ok() ? pr.value() : QVector<fincept::LlmProfile>{};
+        const auto pr = finterm::LlmProfileRepository::instance().list_profiles();
+        const auto profiles = pr.is_ok() ? pr.value() : QVector<finterm::LlmProfile>{};
         for (const auto& prof : profiles)
             llm_profile_combo_->addItem(prof.is_default ? prof.name + " [default]" : prof.name, prof.id);
     }
@@ -107,7 +107,7 @@ QWidget* PlannerViewPanel::build_templates_panel() {
             .arg(ui::colors::BG_RAISED(), ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_MED()));
     portfolio_combo_->addItem("None", QString{});
     {
-        auto& repo = fincept::PortfolioRepository::instance();
+        auto& repo = finterm::PortfolioRepository::instance();
         const auto res = repo.list_portfolios();
         if (res.is_ok()) {
             for (const auto& pf : res.value())
@@ -617,4 +617,4 @@ void PlannerViewPanel::showEvent(QShowEvent* event) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

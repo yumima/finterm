@@ -5,7 +5,7 @@
 #include <QGraphicsObject>
 #include <QPen>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 class NodeItem;
 class EdgeItem;
@@ -58,4 +58,4 @@ class PortItem : public QGraphicsObject {
     static constexpr qreal kHitRadius = 8.0;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

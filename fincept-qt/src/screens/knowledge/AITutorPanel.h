@@ -9,7 +9,7 @@ class QPushButton;
 class QTextBrowser;
 class QLabel;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 struct KnowledgeEntry;
 
@@ -53,4 +53,4 @@ class AITutorPanel : public QWidget {
     QPushButton* apply_btn_ = nullptr;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

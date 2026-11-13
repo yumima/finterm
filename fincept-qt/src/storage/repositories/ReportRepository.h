@@ -1,7 +1,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 struct Report {
     int id = 0;
@@ -41,4 +41,4 @@ class ReportRepository : public BaseRepository<Report> {
     static ReportTemplate map_template(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

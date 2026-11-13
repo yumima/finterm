@@ -15,7 +15,7 @@
 #include <cmath>
 #include <numeric>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // Pre-defined stress test scenarios
 struct StressScenario {
@@ -409,4 +409,4 @@ void RiskManagementView::update_contribution() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

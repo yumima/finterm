@@ -21,7 +21,7 @@ class QPushButton;
 class QRadioButton;
 class QTableWidget;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class BrokerCsvDialog : public QDialog {
     Q_OBJECT
@@ -55,4 +55,4 @@ class BrokerCsvDialog : public QDialog {
     QPushButton* import_btn_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -10,7 +10,7 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // ── Static provider list ─────────────────────────────────────────────────────
 
@@ -84,7 +84,7 @@ void GovDataService::execute(const QString& script, const QString& command, cons
     dispatch_records_.insert(topic, DispatchRecord{script, command, args, request_id});
 
     // Serve from cache if fresh
-    const QVariant cached = fincept::CacheManager::instance().get(key);
+    const QVariant cached = finterm::CacheManager::instance().get(key);
     if (!cached.isNull()) {
         LOG_DEBUG("GovDataService", QString("Cache hit: %1").arg(key));
         GovDataResult result;
@@ -92,7 +92,7 @@ void GovDataService::execute(const QString& script, const QString& command, cons
         result.data = QJsonDocument::fromJson(cached.toString().toUtf8()).object();
         emit result_ready(request_id, result);
         if (hub_registered_)
-            fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(result));
+            finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(result));
         return;
     }
 
@@ -164,7 +164,7 @@ void GovDataService::execute(const QString& script, const QString& command, cons
             result.success = true;
 
             // Cache the result
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 key, QVariant(QString::fromUtf8(QJsonDocument(result.data).toJson(QJsonDocument::Compact))),
                 kCacheTtlSec, "govdata");
 
@@ -172,7 +172,7 @@ void GovDataService::execute(const QString& script, const QString& command, cons
             emit self->result_ready(request_id, result);
             if (self->hub_registered_) {
                 const QString topic = GovDataService::hub_topic(script, request_id);
-                fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(result));
+                finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(result));
             }
         });
 }
@@ -209,7 +209,7 @@ void GovDataService::refresh(const QStringList& topics) {
             continue;
         }
         const DispatchRecord rec = it.value();
-        fincept::CacheManager::instance().remove(cache_key(rec.script, rec.command, rec.args));
+        finterm::CacheManager::instance().remove(cache_key(rec.script, rec.command, rec.args));
         execute(rec.script, rec.command, rec.args, rec.request_id);
     }
 }
@@ -221,11 +221,11 @@ int GovDataService::max_requests_per_sec() const {
 void GovDataService::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
     // 1-hour TTL, 60s min_interval — same as economics (govdata updates slowly).
-    fincept::datahub::TopicPolicy policy;
+    finterm::datahub::TopicPolicy policy;
     policy.ttl_ms = 60 * 60 * 1000;
     policy.min_interval_ms = 60 * 1000;
     policy.push_only = false;
@@ -235,4 +235,4 @@ void GovDataService::ensure_registered_with_hub() {
     LOG_INFO("GovDataService", "Registered with DataHub (govdata:*)");
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

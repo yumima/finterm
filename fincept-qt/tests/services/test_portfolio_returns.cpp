@@ -15,7 +15,7 @@
 #include <cmath>
 #include <ctime>
 
-using namespace fincept::portfolio;
+using namespace finterm::portfolio;
 
 namespace {
 

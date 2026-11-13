@@ -25,7 +25,7 @@
 #include <QTableWidget>
 #include <QTextEdit>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PropertiesPanel::PropertiesPanel(QWidget* parent) : QWidget(parent) {
     // Use min/max width pair (not setFixedWidth) so the parent splitter can
@@ -589,4 +589,4 @@ void PropertiesPanel::show_properties(const ReportComponent* component, int inde
     stack_->setCurrentIndex(1);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

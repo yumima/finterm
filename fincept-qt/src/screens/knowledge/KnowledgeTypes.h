@@ -4,7 +4,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 struct ExternalLink {
     QString type;   ///< primer, reference, deep_dive, video, tool
@@ -112,4 +112,4 @@ struct KnowledgeCategory {
     QVector<KnowledgeEntry> entries;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

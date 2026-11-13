@@ -11,7 +11,7 @@
 
 #include <array>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 enum class SurfaceTier {
     LIVE,     // Direct Databento fetch
@@ -208,4 +208,4 @@ inline bool is_live(ChartType t) {
     return tier != SurfaceTier::DEMO;
 }
 
-} // namespace fincept::surface
+} // namespace finterm::surface

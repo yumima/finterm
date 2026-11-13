@@ -21,7 +21,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class ActivityPanelSection : public QWidget {
     Q_OBJECT
@@ -49,4 +49,4 @@ class ActivityPanelSection : public QWidget {
     void show_trace_dialog(const AgentTraceRow& t);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

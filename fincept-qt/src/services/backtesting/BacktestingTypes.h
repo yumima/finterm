@@ -7,7 +7,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::services::backtest {
+namespace finterm::services::backtest {
 
 // ── Provider definitions ────────────────────────────────────────────────────
 
@@ -229,4 +229,4 @@ inline QStringList count_metric_keys() {
             "losingTrades", "winning_days",   "losing_days",   "consecutive_wins", "consecutive_losses"};
 }
 
-} // namespace fincept::services::backtest
+} // namespace finterm::services::backtest

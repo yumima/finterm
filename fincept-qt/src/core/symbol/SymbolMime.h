@@ -5,7 +5,7 @@
 #include <QMimeData>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// MIME type used for cross-panel drag/drop of securities. Any panel that
 /// produces a drag of a symbol tags its QMimeData with this type; any panel
@@ -33,4 +33,4 @@ bool has_symbol(const QMimeData* mime);
 
 } // namespace symbol_mime
 
-} // namespace fincept
+} // namespace finterm

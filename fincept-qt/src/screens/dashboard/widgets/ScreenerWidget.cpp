@@ -10,7 +10,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 // Broad basket: large-caps across sectors for screening
 static const QStringList kScreenerSymbols = {
@@ -341,4 +341,4 @@ void ScreenerWidget::render_rows(const QVector<services::QuoteData>& rows) {
             rows_[i].container->hide();
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

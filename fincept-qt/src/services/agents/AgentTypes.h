@@ -5,7 +5,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // ── View modes for the Agent Config screen ──────────────────────────────────
 
@@ -139,4 +139,4 @@ struct ExecutionPlan {
     QStringList warnings;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

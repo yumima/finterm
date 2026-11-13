@@ -49,7 +49,7 @@
 #include <algorithm>
 #include <memory>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 // ── VideoRenderWidget ─────────────────────────────────────────────────────────
 // Plain QWidget + QPainter. Decoded frames arrive from QVideoSink and are
@@ -291,7 +291,7 @@ void VideoPlayerWidget::assign_colors(QVector<ChannelDef>& channels) {
 }
 
 void VideoPlayerWidget::load_channels() {
-    auto& repo = fincept::SettingsRepository::instance();
+    auto& repo = finterm::SettingsRepository::instance();
     auto r = repo.get(kSettingsKey);
     QString raw = r.is_ok() ? r.value() : QString();
 
@@ -334,13 +334,13 @@ void VideoPlayerWidget::save_channels(const QVector<ChannelDef>& channels) {
         arr.append(o);
     }
     const QString json = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
-    auto r = fincept::SettingsRepository::instance().set(kSettingsKey, json, kSettingsCategory);
+    auto r = finterm::SettingsRepository::instance().set(kSettingsKey, json, kSettingsCategory);
     if (r.is_err())
         LOG_ERROR("VideoPlayer", "failed to persist video.channels: " + QString::fromStdString(r.error()));
 }
 
 void VideoPlayerWidget::load_engine() {
-    auto r = fincept::SettingsRepository::instance().get(kEngineKey);
+    auto r = finterm::SettingsRepository::instance().get(kEngineKey);
     const QString raw = r.is_ok() ? r.value().trimmed().toLower() : QString();
     // Default to GL when unset — the WebEngine path fails for several major
     // news channels that block /embed/VIDEO_ID. GL works for any public stream.
@@ -348,13 +348,13 @@ void VideoPlayerWidget::load_engine() {
 }
 
 void VideoPlayerWidget::save_engine(bool web) {
-    auto r = fincept::SettingsRepository::instance().set(kEngineKey, web ? "web" : "gl", kSettingsCategory);
+    auto r = finterm::SettingsRepository::instance().set(kEngineKey, web ? "web" : "gl", kSettingsCategory);
     if (r.is_err())
         LOG_ERROR("VideoPlayer", "failed to persist video.engine: " + QString::fromStdString(r.error()));
 }
 
 void VideoPlayerWidget::load_max_height() {
-    auto r = fincept::SettingsRepository::instance().get(kMaxHeightKey);
+    auto r = finterm::SettingsRepository::instance().get(kMaxHeightKey);
     bool ok = false;
     const int raw = r.is_ok() ? r.value().toInt(&ok) : 0;
     // Clamp to the allowed set. Anything else (including the unset case
@@ -366,7 +366,7 @@ void VideoPlayerWidget::load_max_height() {
 }
 
 void VideoPlayerWidget::save_max_height(int height) {
-    auto r = fincept::SettingsRepository::instance().set(kMaxHeightKey, QString::number(height), kSettingsCategory);
+    auto r = finterm::SettingsRepository::instance().set(kMaxHeightKey, QString::number(height), kSettingsCategory);
     if (r.is_err())
         LOG_ERROR("VideoPlayer", "failed to persist video.max_height: " + QString::fromStdString(r.error()));
 }
@@ -489,7 +489,7 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
         // Restore the persisted choice first so populate_audio_devices() can
         // select it (per-user QSettings; empty pinned id → follow default).
         {
-            QSettings s(fincept::AppIdentity::kOrg, fincept::AppIdentity::kApp);
+            QSettings s(finterm::AppIdentity::kOrg, finterm::AppIdentity::kApp);
             follow_system_default_ = s.value(QStringLiteral("video/audio_follow_default"), true).toBool();
             pinned_audio_id_ = s.value(QStringLiteral("video/audio_pinned_id")).toByteArray();
             if (pinned_audio_id_.isEmpty())
@@ -508,7 +508,7 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
             const QByteArray id = audio_device_combo_->currentData().toByteArray();
             follow_system_default_ = id.isEmpty();
             pinned_audio_id_ = id;
-            QSettings s(fincept::AppIdentity::kOrg, fincept::AppIdentity::kApp);
+            QSettings s(finterm::AppIdentity::kOrg, finterm::AppIdentity::kApp);
             s.setValue(QStringLiteral("video/audio_follow_default"), follow_system_default_);
             s.setValue(QStringLiteral("video/audio_pinned_id"), pinned_audio_id_);
             refresh_audio_output();
@@ -708,8 +708,8 @@ VideoPlayerWidget::VideoPlayerWidget(QWidget* parent) : BaseWidget("LIVE TV / ST
     // Mute the stream while read-aloud reads (news brief / article, chat).
     // The user's own volume is untouched — only the mute flag flips. Needs
     // controls_ (the muted cue), so it runs after the controls bar is built.
-    auto& tts = fincept::services::TtsService::instance();
-    connect(&tts, &fincept::services::TtsService::reading_changed, this, [this](bool reading) {
+    auto& tts = finterm::services::TtsService::instance();
+    connect(&tts, &finterm::services::TtsService::reading_changed, this, [this](bool reading) {
         LOG_INFO("VideoPlayer",
                  reading ? "read-aloud started — stream muted" : "read-aloud ended — stream unmuted");
         apply_read_aloud_mute(reading);
@@ -1103,7 +1103,7 @@ void VideoPlayerWidget::refresh_audio_output() {
             // Persist the revert: otherwise the stale pinned id reloads on the
             // next launch and re-triggers this fallback forever, so the player
             // never simply follows the system default like the user expects.
-            QSettings s(fincept::AppIdentity::kOrg, fincept::AppIdentity::kApp);
+            QSettings s(finterm::AppIdentity::kOrg, finterm::AppIdentity::kApp);
             s.setValue(QStringLiteral("video/audio_follow_default"), true);
             s.setValue(QStringLiteral("video/audio_pinned_id"), QByteArray());
             if (audio_device_combo_) {
@@ -1696,7 +1696,7 @@ void VideoPlayerWidget::build_web_view() {
     });
 
     stack_->addWidget(web_view_); // page 2
-    apply_read_aloud_mute(fincept::services::TtsService::instance().is_reading());
+    apply_read_aloud_mute(finterm::services::TtsService::instance().is_reading());
 }
 
 // Embed a YouTube video by ID — the path that already works smoothly for
@@ -2370,13 +2370,13 @@ void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
     player_->stop();
     stop_hls_proxy();
 
-    hls_proxy_ = new fincept::services::video::LiveHlsProxy(this);
+    hls_proxy_ = new finterm::services::video::LiveHlsProxy(this);
 
     // Wait for the proxy's first successful fetch before pointing
     // QMediaPlayer at it. Otherwise QMediaPlayer's first GET hits a
     // 503 "not ready yet" and Qt's HLS demuxer typically gives up
     // immediately rather than retrying.
-    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::ready, this, [this]() {
+    connect(hls_proxy_, &finterm::services::video::LiveHlsProxy::ready, this, [this]() {
         if (!hls_proxy_)
             return; // user stopped between fetch start and ready
         status_label_->hide();
@@ -2392,9 +2392,9 @@ void VideoPlayerWidget::play_via_proxy(const QString& hls_url) {
     // segments go 403. Answer with a fresh yt-dlp resolve and hand the URL
     // back — the player keeps reading the same local URL throughout, so this
     // is invisible: no source reset, no stop, no re-buffer.
-    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::refresh_upstream_requested, this,
+    connect(hls_proxy_, &finterm::services::video::LiveHlsProxy::refresh_upstream_requested, this,
             &VideoPlayerWidget::refresh_live_session);
-    connect(hls_proxy_, &fincept::services::video::LiveHlsProxy::upstream_error, this, [this](const QString& msg) {
+    connect(hls_proxy_, &finterm::services::video::LiveHlsProxy::upstream_error, this, [this](const QString& msg) {
         set_loading(false);
         status_label_->setText("Live stream relay failed: " + msg.left(200));
         status_label_->show();
@@ -3075,4 +3075,4 @@ QDialog* VideoPlayerWidget::make_config_dialog(QWidget* parent) {
     return dlg;
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

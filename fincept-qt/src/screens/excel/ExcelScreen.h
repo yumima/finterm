@@ -13,7 +13,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class SpreadsheetWidget;
 
@@ -54,4 +54,4 @@ class ExcelScreen : public QWidget, public IStatefulScreen {
     int sheet_counter_ = 1;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

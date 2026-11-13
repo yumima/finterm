@@ -12,7 +12,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PortfolioOrderPanel::PortfolioOrderPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("PortfolioOrderPanel");
@@ -226,4 +226,4 @@ void PortfolioOrderPanel::update_display() {
                            : ui::formatting::placeholder());
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

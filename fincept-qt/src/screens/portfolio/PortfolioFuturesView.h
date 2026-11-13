@@ -14,7 +14,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// "Futures & Extended Hours" detail view.
 ///
@@ -104,4 +104,4 @@ class PortfolioFuturesView : public QWidget {
     ui::RenderCoalescer ext_render_{this, [this]() { populate_extended(); }};
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

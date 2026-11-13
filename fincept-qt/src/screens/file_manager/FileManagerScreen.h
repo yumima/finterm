@@ -16,7 +16,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// File Manager Screen — lists all files tracked by FileManagerService.
 /// Features: filter chips, sort controls, inline preview, bulk delete, quota bar.
@@ -98,4 +98,4 @@ class FileManagerScreen : public QWidget, public IStatefulScreen {
     bool loaded_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

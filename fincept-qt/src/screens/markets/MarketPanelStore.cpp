@@ -7,7 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 MarketPanelStore& MarketPanelStore::instance() {
     static MarketPanelStore inst;
@@ -114,4 +114,4 @@ QVector<MarketPanelConfig> MarketPanelStore::build_defaults() {
     return panels;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

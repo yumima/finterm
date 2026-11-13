@@ -6,7 +6,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Dropdown notification history panel.
 /// Shown/hidden by DashboardStatusBar when the bell is clicked.
@@ -34,4 +34,4 @@ class NotifPanel : public QFrame {
     static constexpr int PANEL_H = 400;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

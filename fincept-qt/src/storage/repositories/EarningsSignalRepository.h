@@ -4,7 +4,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 /// One reading of the pre-earnings scorecard, taken on one day, about one
 /// upcoming print — and, once that print has happened, what it actually did.
@@ -95,4 +95,4 @@ class EarningsSignalRepository : public BaseRepository<EarningsSignalRecord> {
     static EarningsSignalRecord map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

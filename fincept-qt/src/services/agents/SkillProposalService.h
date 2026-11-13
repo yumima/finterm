@@ -25,7 +25,7 @@
 
 #include <QString>
 
-namespace fincept::services {
+namespace finterm::services {
 
 struct SkillProposal {
     QString skill_name;       ///< extracted from trace config_json
@@ -61,4 +61,4 @@ class SkillProposalService {
     SkillProposalService() = default;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

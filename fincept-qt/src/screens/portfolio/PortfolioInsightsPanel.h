@@ -13,7 +13,7 @@ class QStackedWidget;
 class QTextBrowser;
 class QVBoxLayout;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Unified right-hand dock that exposes both AI analysis and Agent Runner in
 /// one coherent surface. Replaces the old PortfolioAiPanel / PortfolioAgentPanel
@@ -108,4 +108,4 @@ class PortfolioInsightsPanel : public QWidget {
     QHash<QString, QString> agent_cache_; // agent_id -> markdown
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

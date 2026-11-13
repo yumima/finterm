@@ -13,7 +13,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Strategy builder — QSplitter workstation layout.
 /// Left: strategy editor (definition + conditions + risk).
@@ -75,4 +75,4 @@ class StrategyBuilderPanel : public QWidget {
     QWidget* kpi_grid_widget_ = nullptr; // hidden until first result
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

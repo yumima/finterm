@@ -14,7 +14,7 @@
 #include <QVBoxLayout>
 #include <QValueAxis>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Static category/indicator data (matches reference INDICATORS object) ──────
 const QList<EquityTalippTab::CategoryDef>& EquityTalippTab::categories() {
@@ -544,4 +544,4 @@ void EquityTalippTab::on_talipp_result(QString indicator, QVector<double> values
     results_widget_->show();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

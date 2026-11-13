@@ -4,7 +4,7 @@
 
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
@@ -82,4 +82,4 @@ Result<int> AgentFeedbackRepository::count_by_verdict(const QString& verdict) {
     return Result<int>::ok(0);
 }
 
-} // namespace fincept
+} // namespace finterm

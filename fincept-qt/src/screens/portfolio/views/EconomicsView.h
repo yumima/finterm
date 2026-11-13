@@ -6,7 +6,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Economics view: per-holding contribution to value and P&L. The factor-
 /// sensitivity section states that no factor model data exists (it used to
@@ -29,4 +29,4 @@ class EconomicsView : public QWidget {
     QString currency_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

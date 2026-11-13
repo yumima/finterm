@@ -9,7 +9,7 @@
 #include <limits>
 #include <optional>
 
-namespace fincept::services::equity {
+namespace finterm::services::equity {
 
 /// "The vendor did not supply this number." Distinct from a real 0.0.
 inline constexpr double kUnknown = std::numeric_limits<double>::quiet_NaN();
@@ -473,7 +473,7 @@ struct EarningsAnalysis {
     bool has_content() const { return !history.isEmpty() || !estimates.isEmpty() || next.timestamp.has_value(); }
 };
 
-} // namespace fincept::services::equity
+} // namespace finterm::services::equity
 
 // ── QVariant interop for QueryStore ─────────────────────────────────────────
 // QueryStore is type-erased through QVariant. Each parsed-payload type needs
@@ -481,12 +481,12 @@ struct EarningsAnalysis {
 // QVariant. Outside the namespace because Q_DECLARE_METATYPE injects template
 // specializations into the global namespace.
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::services::equity::QuoteData)
-Q_DECLARE_METATYPE(fincept::services::equity::StockInfo)
-Q_DECLARE_METATYPE(QVector<fincept::services::equity::Candle>)
-Q_DECLARE_METATYPE(fincept::services::equity::TechnicalsData)
-Q_DECLARE_METATYPE(fincept::services::equity::FinancialsData)
-Q_DECLARE_METATYPE(QVector<fincept::services::equity::NewsArticle>)
-Q_DECLARE_METATYPE(QVector<fincept::services::equity::PeerData>)
-Q_DECLARE_METATYPE(QVector<fincept::services::equity::EarningsEvent>)
-Q_DECLARE_METATYPE(fincept::services::equity::EarningsAnalysis)
+Q_DECLARE_METATYPE(finterm::services::equity::QuoteData)
+Q_DECLARE_METATYPE(finterm::services::equity::StockInfo)
+Q_DECLARE_METATYPE(QVector<finterm::services::equity::Candle>)
+Q_DECLARE_METATYPE(finterm::services::equity::TechnicalsData)
+Q_DECLARE_METATYPE(finterm::services::equity::FinancialsData)
+Q_DECLARE_METATYPE(QVector<finterm::services::equity::NewsArticle>)
+Q_DECLARE_METATYPE(QVector<finterm::services::equity::PeerData>)
+Q_DECLARE_METATYPE(QVector<finterm::services::equity::EarningsEvent>)
+Q_DECLARE_METATYPE(finterm::services::equity::EarningsAnalysis)

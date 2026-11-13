@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 // Parse a CSV file into rows of string columns
 std::vector<std::vector<std::string>> parse_csv_file(const QString& path, std::string& out_error);
@@ -46,4 +46,4 @@ bool load_implied_div(const std::vector<std::vector<std::string>>& rows, Implied
 bool load_inflation(const std::vector<std::vector<std::string>>& rows, InflationExpData& out, std::string& err);
 bool load_monetary(const std::vector<std::vector<std::string>>& rows, MonetaryPolicyData& out, std::string& err);
 
-} // namespace fincept::surface
+} // namespace finterm::surface

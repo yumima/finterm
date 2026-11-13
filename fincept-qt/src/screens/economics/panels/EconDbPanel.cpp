@@ -15,7 +15,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kEconDbScript = "econdb_data.py";
@@ -144,4 +144,4 @@ void EconDbPanel::on_result(const QString& request_id, const services::Economics
     LOG_INFO("EconDbPanel", QString("Displayed %1 observations: %2").arg(obs.size()).arg(title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

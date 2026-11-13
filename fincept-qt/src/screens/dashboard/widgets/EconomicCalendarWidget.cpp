@@ -11,7 +11,7 @@
 #include <QJsonObject>
 #include <QPointer>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 EconomicCalendarWidget::EconomicCalendarWidget(QWidget* parent)
     : BaseWidget("ECONOMIC CALENDAR", parent, ui::colors::CYAN()) {
@@ -303,4 +303,4 @@ void EconomicCalendarWidget::populate(const QJsonArray& events) {
     list_layout_->addStretch();
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

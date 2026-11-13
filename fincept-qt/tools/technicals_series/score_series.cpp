@@ -22,7 +22,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QTextStream>
-using namespace fincept::services::equity;
+using namespace finterm::services::equity;
 
 static void fill_row(IndicatorRow& r, const QJsonObject& o) {
     for (auto it = o.constBegin(); it != o.constEnd(); ++it)

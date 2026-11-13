@@ -5,7 +5,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void TeamsProvider::load_fields(SettingsRepository& r, const QString& cat) {
     webhook_url_ = get_str(r, cat + ".webhook_url");
@@ -69,4 +69,4 @@ void TeamsProvider::send(const NotificationRequest& req, std::function<void(bool
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

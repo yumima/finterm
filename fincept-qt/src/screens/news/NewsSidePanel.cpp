@@ -10,7 +10,7 @@
 #include <QScrollArea>
 #include <QTimer>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -576,4 +576,4 @@ void NewsSidePanel::update_saved(const QVector<services::NewsArticle>& saved) {
     schedule_reelide();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -3,7 +3,7 @@
 #include <QGraphicsView>
 #include <QPixmap>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 class NodeScene;
 class PortItem;
@@ -48,4 +48,4 @@ class NodeCanvas : public QGraphicsView {
     static constexpr qreal kMaxZoom = 3.0;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

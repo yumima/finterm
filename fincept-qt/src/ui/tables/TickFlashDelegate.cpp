@@ -9,7 +9,7 @@
 #include <QRegion>
 #include <QTimer>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 TickFlashDelegate* TickFlashDelegate::install(QAbstractItemView* view, int key_column) {
     if (!view)
@@ -152,4 +152,4 @@ void TickFlashDelegate::paint(QPainter* p, const QStyleOptionViewItem& opt, cons
     p->fillRect(opt.rect, col);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

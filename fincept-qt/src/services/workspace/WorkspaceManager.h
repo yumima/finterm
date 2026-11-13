@@ -10,7 +10,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 class ScreenRouter;
 
@@ -99,4 +99,4 @@ class WorkspaceManager : public QObject {
     QTimer* autosave_timer_ = nullptr;
 };
 
-} // namespace fincept
+} // namespace finterm

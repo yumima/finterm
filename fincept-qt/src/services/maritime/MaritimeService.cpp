@@ -12,11 +12,11 @@
 #include <QJsonObject>
 #include <QPointer>
 
-namespace fincept::services::maritime {
+namespace finterm::services::maritime {
 
 namespace {
 inline void publish_to_hub(const QString& topic, const QVariant& value) {
-    fincept::datahub::DataHub::instance().publish(topic, value);
+    finterm::datahub::DataHub::instance().publish(topic, value);
 }
 } // namespace
 
@@ -103,7 +103,7 @@ void MaritimeService::get_vessel_position(const QString& imo) {
     }
 
     const QString cache_key = "maritime:vessel:" + imo.trimmed();
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto vessel = parse_vessel(QJsonDocument::fromJson(cached.toString().toUtf8()).object());
         emit vessel_found(vessel);
@@ -126,7 +126,7 @@ void MaritimeService::get_vessel_position(const QString& imo) {
             }
             auto data = unwrap(result.value().object());
             auto vessel_obj = data["vessel"].toObject();
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(vessel_obj).toJson(QJsonDocument::Compact))),
                 kVesselTtlSec, "maritime");
             auto vessel = self->parse_vessel(vessel_obj);
@@ -146,7 +146,7 @@ void MaritimeService::get_multi_vessel_positions(const QStringList& imos) {
     QStringList sorted = imos;
     std::sort(sorted.begin(), sorted.end());
     const QString cache_key = "maritime:multi:" + sorted.join(",");
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         QJsonArray vessels_arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
         QVector<VesselData> vessels;
@@ -175,7 +175,7 @@ void MaritimeService::get_multi_vessel_positions(const QStringList& imos) {
             }
             auto data = unwrap(result.value().object());
             auto vessels_arr = data["vessels"].toArray();
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(vessels_arr).toJson(QJsonDocument::Compact))),
                 kVesselTtlSec, "maritime");
             QVector<VesselData> vessels;
@@ -197,7 +197,7 @@ void MaritimeService::get_vessel_history(const QString& imo) {
         return;
     }
     const QString cache_key = "maritime:history:" + imo.trimmed();
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         QJsonArray history_arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
         QVector<VesselData> history;
@@ -225,7 +225,7 @@ void MaritimeService::get_vessel_history(const QString& imo) {
             auto arr = data["positions"].toArray();
             if (arr.isEmpty())
                 arr = data["history"].toArray();
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact))),
                 kHistoryTtlSec, "maritime");
             QVector<VesselData> history;
@@ -289,24 +289,24 @@ int MaritimeService::max_requests_per_sec() const {
 void MaritimeService::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
     // Position data: 1 min TTL matches kVesselTtlSec; min 30s between refreshes.
-    fincept::datahub::TopicPolicy vessel_policy;
+    finterm::datahub::TopicPolicy vessel_policy;
     vessel_policy.ttl_ms = kVesselTtlSec * 1000;
     vessel_policy.min_interval_ms = 30 * 1000;
     hub.set_policy_pattern(QStringLiteral("maritime:vessel:*"), vessel_policy);
     hub.set_policy_pattern(QStringLiteral("maritime:vessels:*"), vessel_policy);
 
     // History: 5 min TTL.
-    fincept::datahub::TopicPolicy history_policy;
+    finterm::datahub::TopicPolicy history_policy;
     history_policy.ttl_ms = kHistoryTtlSec * 1000;
     history_policy.min_interval_ms = 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("maritime:history:*"), history_policy);
 
     // Health: 5 min TTL, non-urgent.
-    fincept::datahub::TopicPolicy health_policy;
+    finterm::datahub::TopicPolicy health_policy;
     health_policy.ttl_ms = 5 * 60 * 1000;
     health_policy.min_interval_ms = 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("maritime:health"), health_policy);
@@ -315,4 +315,4 @@ void MaritimeService::ensure_registered_with_hub() {
     LOG_INFO("MaritimeService", "Registered with DataHub (maritime:*)");
 }
 
-} // namespace fincept::services::maritime
+} // namespace finterm::services::maritime

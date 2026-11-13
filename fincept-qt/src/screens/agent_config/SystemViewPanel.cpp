@@ -14,7 +14,7 @@
 #include <QScrollArea>
 #include <QShowEvent>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -447,4 +447,4 @@ void SystemViewPanel::showEvent(QShowEvent* event) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

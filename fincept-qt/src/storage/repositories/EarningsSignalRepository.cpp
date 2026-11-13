@@ -3,7 +3,7 @@
 
 #include <QDateTime>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 /// SQL NULL → nullopt, so "no data" survives the round trip instead of
@@ -137,4 +137,4 @@ int EarningsSignalRepository::resolve(const QString& symbol, qint64 report_ts, s
     return updated;
 }
 
-} // namespace fincept
+} // namespace finterm

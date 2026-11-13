@@ -12,7 +12,7 @@
 
 #include <cstdio>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
@@ -400,4 +400,4 @@ void AppPaths::ensure_all() {
     }
 }
 
-} // namespace fincept
+} // namespace finterm

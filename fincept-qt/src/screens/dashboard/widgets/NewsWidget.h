@@ -6,7 +6,7 @@
 #include <QScrollArea>
 #include <QTimer>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Market news widget — fetches real news via yfinance for major tickers.
 class NewsWidget : public BaseWidget {
@@ -39,4 +39,4 @@ class NewsWidget : public BaseWidget {
     qint64 refresh_token_ = 0; // increments per click; callbacks check it
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

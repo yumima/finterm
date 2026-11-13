@@ -32,11 +32,11 @@
 
 #include <optional>
 
-using fincept::python::extract_json;
-using fincept::python::PythonResult;
-using fincept::python::PythonRunner;
+using finterm::python::extract_json;
+using finterm::python::PythonResult;
+using finterm::python::PythonRunner;
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 // ── Market Data Bridge ─────────────────────────────────────────────────
 
@@ -1144,4 +1144,4 @@ void wire_all_bridges(NodeRegistry& registry) {
     LOG_INFO("ServiceBridges", QString("All bridges wired (%1 not-implemented fallbacks)").arg(wired_count));
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

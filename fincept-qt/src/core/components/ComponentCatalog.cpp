@@ -13,7 +13,7 @@
 
 #include <algorithm>
 
-namespace fincept {
+namespace finterm {
 
 ComponentCatalog& ComponentCatalog::instance() {
     static ComponentCatalog s;
@@ -117,4 +117,4 @@ ComponentMeta ComponentCatalog::by_id(const QString& id) const {
     return entries_.at(idx);
 }
 
-} // namespace fincept
+} // namespace finterm

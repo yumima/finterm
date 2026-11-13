@@ -21,7 +21,7 @@
 #include <QJsonObject>
 #include <QObject>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 namespace {
 
@@ -329,4 +329,4 @@ std::vector<ToolDef> get_quant_lab_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

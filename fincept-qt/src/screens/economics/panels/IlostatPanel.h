@@ -8,7 +8,7 @@
 #include <QComboBox>
 #include <QLineEdit>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class IlostatPanel : public EconPanelBase {
     Q_OBJECT
@@ -28,4 +28,4 @@ class IlostatPanel : public EconPanelBase {
     QLineEdit* end_edit_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

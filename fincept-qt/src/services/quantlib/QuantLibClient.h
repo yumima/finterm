@@ -9,7 +9,7 @@
 
 #include <functional>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Callback type: delivers unwrapped data payload or error string.
 /// On success: result.success == true, result.data has the payload.
@@ -46,4 +46,4 @@ class QuantLibClient : public QObject {
     static mcp::ToolResult parse_response(int http_status, const QByteArray& raw);
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

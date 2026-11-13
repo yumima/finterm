@@ -21,7 +21,7 @@
 
 #include <cmath>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "DataHubTools";
 
@@ -151,7 +151,7 @@ std::vector<ToolDef> get_datahub_tools() {
                         "is currently streaming.";
         t.category = "datahub";
         t.handler = [](const QJsonObject&) -> ToolResult {
-            const auto snap = fincept::datahub::DataHub::instance().stats();
+            const auto snap = finterm::datahub::DataHub::instance().stats();
             const qint64 now = QDateTime::currentMSecsSinceEpoch();
             QJsonArray arr;
             for (const auto& s : snap) {
@@ -185,7 +185,7 @@ std::vector<ToolDef> get_datahub_tools() {
             const QString topic = args["topic"].toString().trimmed();
             if (topic.isEmpty())
                 return ToolResult::fail("Missing 'topic'");
-            auto& hub = fincept::datahub::DataHub::instance();
+            auto& hub = finterm::datahub::DataHub::instance();
             // peek_raw: MCP diagnostic tool shows stale data rather than
             // nothing — callers use stats() / last_publish_ms to judge freshness.
             const QVariant v = hub.peek_raw(topic);
@@ -228,7 +228,7 @@ std::vector<ToolDef> get_datahub_tools() {
             if (topic.isEmpty())
                 return ToolResult::fail("Missing 'topic'");
             const bool force = args["force"].toBool(false);
-            fincept::datahub::DataHub::instance().request(topic, force);
+            finterm::datahub::DataHub::instance().request(topic, force);
             return ToolResult::ok(QString("Refresh requested for %1 (force=%2)").arg(topic, force ? "true" : "false"),
                                   QJsonObject{{"topic", topic}, {"force", force}});
         };
@@ -259,7 +259,7 @@ std::vector<ToolDef> get_datahub_tools() {
                 return ToolResult::fail("Missing 'topic'");
             int duration = args["duration_ms"].toInt();
             duration = std::clamp(duration, 100, 30000);
-            auto& hub = fincept::datahub::DataHub::instance();
+            auto& hub = finterm::datahub::DataHub::instance();
             QObject owner;
             QJsonArray collected;
             QElapsedTimer clock;
@@ -290,4 +290,4 @@ std::vector<ToolDef> get_datahub_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

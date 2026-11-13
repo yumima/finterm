@@ -9,7 +9,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class WorldBankPanel : public EconPanelBase {
     Q_OBJECT
@@ -38,4 +38,4 @@ class WorldBankPanel : public EconPanelBase {
     bool countries_loaded_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

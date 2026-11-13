@@ -38,9 +38,9 @@
 #include <cmath>
 #include <limits>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::quant;
+using namespace finterm::services::quant;
 
 // ── Result-field readers ───────────────────────────────────────────────────────
 // A numeric field the backend omitted, sent as null, or sent as a non-number is
@@ -5881,4 +5881,4 @@ QWidget* QuantModulePanel::build_rolling_retraining_panel() {
     return w;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

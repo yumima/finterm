@@ -36,7 +36,7 @@
 
 #include <algorithm>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 static constexpr const char* TAG = "LlmService";
 
@@ -2474,8 +2474,8 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
     // pull semantics), just a publisher. The policy caps cached state
     // and applies coalescing across the topic family.
     [[maybe_unused]] static bool policy_once = []() {
-        auto& hub = fincept::datahub::DataHub::instance();
-        fincept::datahub::TopicPolicy policy;
+        auto& hub = finterm::datahub::DataHub::instance();
+        finterm::datahub::TopicPolicy policy;
         policy.push_only = true;
         policy.coalesce_within_ms = 50;
         policy.ttl_ms = 5 * 60 * 1000;
@@ -2494,7 +2494,7 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
             {"chunk", chunk},
             {"done", done},
         };
-        auto& hub = fincept::datahub::DataHub::instance();
+        auto& hub = finterm::datahub::DataHub::instance();
         hub.publish(stream_topic, QVariant(payload));
         if (done) {
             // Retire the per-session topic; subscribers remain attached
@@ -2531,4 +2531,4 @@ void LlmService::chat_streaming(const QString& user_message, const std::vector<C
     });
 }
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

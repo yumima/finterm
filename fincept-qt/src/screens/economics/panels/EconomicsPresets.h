@@ -8,7 +8,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 struct FredPreset {
     QString label;     // human-readable, e.g. "Real GDP (GDPC1)"
@@ -49,4 +49,4 @@ inline QStringList fred_preset_series_ids() {
     return ids;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

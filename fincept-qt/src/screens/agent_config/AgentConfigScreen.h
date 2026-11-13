@@ -10,7 +10,7 @@
 #include <QWidget>
 
 // Forward-declare all panels — constructed lazily on first navigation
-namespace fincept::screens {
+namespace finterm::screens {
 class AgentsViewPanel;
 class CreateAgentPanel;
 class TeamsViewPanel;
@@ -19,9 +19,9 @@ class PlannerViewPanel;
 class ToolsViewPanel;
 class AgentChatPanel;
 class SystemViewPanel;
-} // namespace fincept::screens
+} // namespace finterm::screens
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Main Agent Studio screen — 8-view navigation shell.
 /// Panels are constructed lazily on first navigation (P2 compliance).
@@ -74,4 +74,4 @@ class AgentConfigScreen : public QWidget, public IStatefulScreen {
     bool first_show_ = true;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

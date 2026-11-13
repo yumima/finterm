@@ -22,7 +22,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::news::brief_prompt {
+namespace finterm::news::brief_prompt {
 
 // Two prompts, not one. The brief used to be a single request that produced
 // the top-of-brief summary, a <<<CATEGORIES>>> sentinel and the per-category
@@ -130,4 +130,4 @@ inline QString build_breakdown(const QString& grouped, const QStringList& catego
            grounding_rules() + QStringLiteral("<<<STORIES>>>\n") + grouped + QStringLiteral("\n<<<END>>>");
 }
 
-} // namespace fincept::news::brief_prompt
+} // namespace finterm::news::brief_prompt

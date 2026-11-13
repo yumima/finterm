@@ -7,7 +7,7 @@ class QGridLayout;
 class QLabel;
 class QVBoxLayout;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// The ownership summary: the six figures every terminal puts at the top
 /// (Bloomberg OWN, FactSet's statistics block, Nasdaq's summary), each with
@@ -40,4 +40,4 @@ class OwnershipHeader : public QWidget {
     QVector<QWidget*> flag_widgets_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

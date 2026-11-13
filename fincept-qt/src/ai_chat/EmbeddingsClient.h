@@ -6,7 +6,7 @@
 #include <functional>
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 /// Async client for a local OpenAI-compatible `/v1/embeddings` endpoint —
 /// hearth (the local AI engine) by default.  Embeddings always go to the
@@ -34,4 +34,4 @@ class EmbeddingsClient {
     static QString base_url();
 };
 
-} // namespace fincept
+} // namespace finterm

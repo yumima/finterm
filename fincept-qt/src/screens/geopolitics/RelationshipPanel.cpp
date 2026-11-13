@@ -7,9 +7,9 @@
 #include <QHBoxLayout>
 #include <QScrollArea>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::geo;
+using namespace finterm::services::geo;
 
 // Static reference taxonomy only (which crises/organizations relate to which
 // conflicts). Severity ratings and dataset counts used to be hardcoded here
@@ -266,4 +266,4 @@ QWidget* RelationshipPanel::build_node_card(const RelationshipNode& node, QWidge
     return card;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

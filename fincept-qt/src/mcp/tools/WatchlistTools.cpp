@@ -10,7 +10,7 @@
 #include <QJsonDocument>
 #include <QVariantMap>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "WatchlistTools";
 
@@ -278,4 +278,4 @@ std::vector<Resource> get_watchlist_resources() {
     return resources;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

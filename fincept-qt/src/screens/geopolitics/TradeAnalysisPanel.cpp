@@ -14,9 +14,9 @@
 #include <QScrollArea>
 #include <QTableWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::geo;
+using namespace finterm::services::geo;
 
 TradeAnalysisPanel::TradeAnalysisPanel(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -189,7 +189,7 @@ void TradeAnalysisPanel::build_ui() {
     eff_spin->setDecimals(1);
     eff_spin->setValue(0);
     eff_spin->setSuffix("%");
-    eff_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    eff_spin->setSpecialValueText(finterm::ui::formatting::placeholder());
     eff_spin->setStyleSheet(spin_style());
     p0l->addWidget(make_field("ASSUMED EFFICIENCY GAIN", eff_spin, p0,
                               "Your assumption: % efficiency gain on traded volume (unset = not quantified)"));
@@ -251,7 +251,7 @@ void TradeAnalysisPanel::build_ui() {
     r_elast_spin->setRange(0, 20);
     r_elast_spin->setDecimals(2);
     r_elast_spin->setValue(0);
-    r_elast_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    r_elast_spin->setSpecialValueText(finterm::ui::formatting::placeholder());
     r_elast_spin->setStyleSheet(spin_style());
     p1l->addWidget(make_field("IMPORT DEMAND ELASTICITY", r_elast_spin, p1,
                               "Magnitude of the import demand price elasticity for this market (your estimate)"));
@@ -270,7 +270,7 @@ void TradeAnalysisPanel::build_ui() {
     r_imp_spin->setDecimals(2);
     r_imp_spin->setValue(0);
     r_imp_spin->setSuffix("B USD");
-    r_imp_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    r_imp_spin->setSpecialValueText(finterm::ui::formatting::placeholder());
     r_imp_spin->setStyleSheet(spin_style());
     p1l->addWidget(make_field("IMPORT VALUE (OPTIONAL)", r_imp_spin, p1,
                               "Border value of imports at zero tariff; adds revenue and welfare amounts"));
@@ -426,7 +426,7 @@ void TradeAnalysisPanel::build_ui() {
         sp->setValue(val);
         sp->setSuffix("%");
         if (required)
-            sp->setSpecialValueText(fincept::ui::formatting::placeholder());
+            sp->setSpecialValueText(finterm::ui::formatting::placeholder());
         sp->setStyleSheet(spin_style());
         return sp;
     };
@@ -447,7 +447,7 @@ void TradeAnalysisPanel::build_ui() {
                                      .arg(ui::fonts::DATA_FAMILY));
     auto refresh_new_level = [cur_tariff_spin, cut_spin, new_level_lbl]() {
         if (cur_tariff_spin->value() <= 0 || cut_spin->value() <= 0) {
-            new_level_lbl->setText(QString("New tariff level: %1").arg(fincept::ui::formatting::placeholder()));
+            new_level_lbl->setText(QString("New tariff level: %1").arg(finterm::ui::formatting::placeholder()));
             return;
         }
         const double t1 = cur_tariff_spin->value() * (1.0 - cut_spin->value() / 100.0);
@@ -463,7 +463,7 @@ void TradeAnalysisPanel::build_ui() {
     elast_spin->setRange(0, 20);
     elast_spin->setDecimals(2);
     elast_spin->setValue(0);
-    elast_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    elast_spin->setSpecialValueText(finterm::ui::formatting::placeholder());
     elast_spin->setStyleSheet(spin_style());
     p3l->addWidget(make_field("IMPORT DEMAND ELASTICITY", elast_spin, p3,
                               "Magnitude of the import demand price elasticity (your estimate for this market)"));
@@ -479,7 +479,7 @@ void TradeAnalysisPanel::build_ui() {
     imp_spin->setDecimals(2);
     imp_spin->setValue(0);
     imp_spin->setSuffix("B USD");
-    imp_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    imp_spin->setSpecialValueText(finterm::ui::formatting::placeholder());
     imp_spin->setStyleSheet(spin_style());
     p3l->addWidget(make_field("IMPORT VALUE", imp_spin, p3, "Border (pre-tariff) value of affected imports today"));
 
@@ -488,7 +488,7 @@ void TradeAnalysisPanel::build_ui() {
     gdp_spin->setDecimals(1);
     gdp_spin->setValue(0);
     gdp_spin->setSuffix("B USD");
-    gdp_spin->setSpecialValueText(fincept::ui::formatting::placeholder());
+    gdp_spin->setSpecialValueText(finterm::ui::formatting::placeholder());
     gdp_spin->setStyleSheet(spin_style());
     p3l->addWidget(make_field("GDP (OPTIONAL)", gdp_spin, p3, "Expresses the welfare change as % of GDP"));
 
@@ -585,12 +585,12 @@ void TradeAnalysisPanel::display_result(const QJsonObject& payload) {
                 if (it.value().isDouble()) {
                     // *_pct values are already in percent units.
                     val = it.key().endsWith(QStringLiteral("_pct"))
-                              ? fincept::ui::formatting::format_percent(it.value().toDouble())
+                              ? finterm::ui::formatting::format_percent(it.value().toDouble())
                               : QString::number(it.value().toDouble(), 'f', 2);
                 } else if (it.value().isBool()) {
                     val = it.value().toBool() ? "YES" : "NO";
                 } else if (it.value().isNull()) {
-                    val = fincept::ui::formatting::placeholder();
+                    val = finterm::ui::formatting::placeholder();
                 } else {
                     val = it.value().toString();
                 }
@@ -666,4 +666,4 @@ void TradeAnalysisPanel::on_error(const QString& context, const QString& message
     results_layout_->addWidget(err);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

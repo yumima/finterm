@@ -3,7 +3,7 @@
 #include "core/logging/Logger.h"
 #include "core/session/SessionManager.h"
 
-namespace fincept {
+namespace finterm {
 
 ScreenRouter::ScreenRouter(QStackedWidget* stack, QObject* parent) : QObject(parent), stack_(stack) {}
 
@@ -42,4 +42,4 @@ void ScreenRouter::navigate(const QString& id) {
     LOG_WARN("Router", "Unknown screen: " + id);
 }
 
-} // namespace fincept
+} // namespace finterm

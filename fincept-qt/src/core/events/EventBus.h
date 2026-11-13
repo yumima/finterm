@@ -7,7 +7,7 @@
 
 #include <functional>
 
-namespace fincept {
+namespace finterm {
 
 /// Application-wide event bus.
 /// Decouples screens from services — anyone can subscribe; anyone can publish.
@@ -54,4 +54,4 @@ class EventBus : public QObject {
     HandlerId next_id_ = 1;
 };
 
-} // namespace fincept
+} // namespace finterm

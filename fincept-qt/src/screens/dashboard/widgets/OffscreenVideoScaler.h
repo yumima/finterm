@@ -17,7 +17,7 @@ class QOpenGLContext;
 class QOpenGLFramebufferObject;
 class QOffscreenSurface;
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// GPU-side YUV→RGB conversion + scaling for NV12 video frames.
 ///
@@ -112,6 +112,6 @@ class OffscreenVideoScaler {
     int loc_u_uv_ = -1;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets
 
 #endif // HAS_QT_MULTIMEDIA

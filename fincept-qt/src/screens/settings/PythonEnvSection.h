@@ -12,7 +12,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class PythonEnvSection : public QWidget {
     Q_OBJECT
@@ -99,4 +99,4 @@ class PythonEnvSection : public QWidget {
     static QString canonicalise(const QString& name);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -14,7 +14,7 @@
 
 #include <vector>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr int kTimeoutMs = 30000;
 static constexpr int kAltTtlSec = 10 * 60; // 10 min — deterministic given same inputs
@@ -35,7 +35,7 @@ static QString extract_error(const QString& out) {
 
 static ToolResult run_alt_sync(const QStringList& cli_args) {
     const QString cache_key = "alt:" + cli_args.join('\x1f');
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (!doc.isNull() && doc.isObject())
@@ -88,7 +88,7 @@ static ToolResult run_alt_sync(const QStringList& cli_args) {
                     signal_done();
                     return;
                 }
-                fincept::CacheManager::instance().put(
+                finterm::CacheManager::instance().put(
                     cache_key, QVariant(QString::fromUtf8(QJsonDocument(metrics).toJson(QJsonDocument::Compact))),
                     kAltTtlSec, "alt_investments");
                 tool_result = ToolResult::ok_data(metrics);
@@ -483,4 +483,4 @@ std::vector<ToolDef> get_alt_investments_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

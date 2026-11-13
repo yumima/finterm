@@ -5,7 +5,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::services::maritime {
+namespace finterm::services::maritime {
 
 // ── Vessel data from API ────────────────────────────────────────────────────
 
@@ -97,8 +97,8 @@ struct AreaSearchParams {
     int days_ago = 0;
 };
 
-} // namespace fincept::services::maritime
+} // namespace finterm::services::maritime
 
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::services::maritime::VesselData)
-Q_DECLARE_METATYPE(QVector<fincept::services::maritime::VesselData>)
+Q_DECLARE_METATYPE(finterm::services::maritime::VesselData)
+Q_DECLARE_METATYPE(QVector<finterm::services::maritime::VesselData>)

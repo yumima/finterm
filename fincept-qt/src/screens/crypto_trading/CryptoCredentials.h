@@ -6,7 +6,7 @@
 #include <QLineEdit>
 #include <QTimer>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 class CryptoCredentials : public QDialog {
     Q_OBJECT
@@ -44,4 +44,4 @@ class CryptoCredentials : public QDialog {
     QTimer* totp_timer_ = nullptr;
 };
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

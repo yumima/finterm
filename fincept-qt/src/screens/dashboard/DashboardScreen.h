@@ -7,9 +7,9 @@
 #include "screens/dashboard/canvas/DashboardCanvas.h"
 #include "services/markets/MarketDataService.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 class NotifToast;
-} // namespace fincept::ui
+} // namespace finterm::ui
 
 #include <QHash>
 #include <QHideEvent>
@@ -19,7 +19,7 @@ class NotifToast;
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Main dashboard screen — toolbar, ticker, draggable widget grid, market pulse, status bar.
 ///
@@ -56,7 +56,7 @@ class DashboardScreen : public QWidget {
     QSplitter* content_split_ = nullptr;
     MarketPulsePanel* market_pulse_ = nullptr;
     DashboardStatusBar* status_bar_ = nullptr;
-    fincept::ui::NotifToast* notif_toast_ = nullptr;
+    finterm::ui::NotifToast* notif_toast_ = nullptr;
     QTimer* save_timer_ = nullptr;
     bool pulse_visible_ = true;
     bool layout_restored_ = false;
@@ -71,4 +71,4 @@ class DashboardScreen : public QWidget {
     ui::RenderCoalescer quote_render_{this, [this]() { rebuild_ticker_from_cache(); }};
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

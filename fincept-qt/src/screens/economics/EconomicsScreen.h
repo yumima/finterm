@@ -14,11 +14,11 @@
 #include <QStackedWidget>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 struct ThemeTokens;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EconPanelBase;
 
@@ -59,4 +59,4 @@ class EconomicsScreen : public QWidget, public IStatefulScreen {
     EconPanelBase* get_or_create_panel(SourceEntry& entry);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

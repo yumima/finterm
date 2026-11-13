@@ -7,7 +7,7 @@
 #include <QGraphicsView>
 #include <QTimer>
 
-namespace fincept::relmap {
+namespace finterm::relmap {
 
 class GraphNodeItem;
 class RelNode;
@@ -71,4 +71,4 @@ class RelationshipGraphView : public QGraphicsView {
     static constexpr double kMaxZoom = 4.0;
 };
 
-} // namespace fincept::relmap
+} // namespace finterm::relmap

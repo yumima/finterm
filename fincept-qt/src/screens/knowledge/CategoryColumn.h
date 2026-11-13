@@ -8,7 +8,7 @@
 class QComboBox;
 class QLabel;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 class EntryBodyView;
 
@@ -51,4 +51,4 @@ class CategoryColumn : public QWidget {
     QLabel* header_label_ = nullptr;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

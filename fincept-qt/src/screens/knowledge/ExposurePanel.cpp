@@ -14,7 +14,7 @@
 #include <cmath>
 #include <limits>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 
@@ -251,4 +251,4 @@ void ExposurePanel::render_results(int total, const QStringList& matching, const
                      unknown_note);
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

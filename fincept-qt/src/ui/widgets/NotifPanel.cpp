@@ -10,9 +10,9 @@
 #include <QShowEvent>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
-using namespace fincept::notifications;
+using namespace finterm::notifications;
 
 NotifPanel::NotifPanel(QWidget* parent) : QFrame(parent, Qt::Popup | Qt::FramelessWindowHint) {
     setFixedSize(PANEL_W, PANEL_H);
@@ -165,4 +165,4 @@ void NotifPanel::anchor_to(QWidget* ref_widget) {
     move(x, y);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

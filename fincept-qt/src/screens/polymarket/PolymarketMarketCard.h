@@ -6,7 +6,7 @@
 #include <QAbstractListModel>
 #include <QStyledItemDelegate>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 /// Model for market/event list items. Consumes unified prediction::*
 /// types so Polymarket and Kalshi rows render identically.
@@ -20,22 +20,22 @@ class PolymarketMarketCardModel : public QAbstractListModel {
     int rowCount(const QModelIndex& parent = {}) const override;
     QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const override;
 
-    void set_markets(const QVector<fincept::services::prediction::PredictionMarket>& markets);
-    void set_events(const QVector<fincept::services::prediction::PredictionEvent>& events);
+    void set_markets(const QVector<finterm::services::prediction::PredictionMarket>& markets);
+    void set_events(const QVector<finterm::services::prediction::PredictionEvent>& events);
     void set_view_mode(const QString& mode); // "markets" or "events"
     void set_presentation(const ExchangePresentation& p);
 
     /// Replace a single market by key.market_id without rebuilding the
     /// whole list. Returns true if the row existed and was updated.
-    bool update_market(const fincept::services::prediction::PredictionMarket& market);
+    bool update_market(const finterm::services::prediction::PredictionMarket& market);
 
-    const fincept::services::prediction::PredictionMarket* market_at(int row) const;
-    const fincept::services::prediction::PredictionEvent* event_at(int row) const;
+    const finterm::services::prediction::PredictionMarket* market_at(int row) const;
+    const finterm::services::prediction::PredictionEvent* event_at(int row) const;
     const ExchangePresentation& presentation() const { return presentation_; }
 
   private:
-    QVector<fincept::services::prediction::PredictionMarket> markets_;
-    QVector<fincept::services::prediction::PredictionEvent> events_;
+    QVector<finterm::services::prediction::PredictionMarket> markets_;
+    QVector<finterm::services::prediction::PredictionEvent> events_;
     QString view_mode_ = "markets";
     ExchangePresentation presentation_ = ExchangePresentation::for_polymarket();
 };
@@ -53,4 +53,4 @@ class PolymarketMarketCardDelegate : public QStyledItemDelegate {
     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

@@ -6,7 +6,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::services {
+namespace finterm::services {
 
 struct NewsMonitor {
     QString id;
@@ -42,4 +42,4 @@ class NewsMonitorService : public QObject {
     void remove_from_db(const QString& id);
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

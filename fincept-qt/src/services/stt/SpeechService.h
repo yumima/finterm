@@ -22,7 +22,7 @@
 #include <atomic>
 #include <memory>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Abstract base for STT providers. Both providers share the Python-QProcess
 /// + JSON-lines parsing plumbing; subclasses only contribute the script path
@@ -92,4 +92,4 @@ class SpeechService : public QObject {
     std::atomic<bool> listening_{false};
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -8,7 +8,7 @@
 class QDoubleSpinBox;
 class QLabel;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// Tiny interactive formula widget for "ratio" entries. Two numeric inputs
 /// produce a live result. Supports result formats "ratio" / "percent" /
@@ -28,4 +28,4 @@ class CalculatorPanel : public QWidget {
     QLabel* result_label_ = nullptr;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

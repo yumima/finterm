@@ -15,7 +15,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class CredentialsSection;
 class StoredCredentialsSection;
@@ -147,4 +147,4 @@ class SettingsScreen : public QWidget, public IStatefulScreen {
     bool save_provider_fields(const QString& provider_id, const ProviderWidgets& pw);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

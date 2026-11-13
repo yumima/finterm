@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Left panel: searchable, filterable list of private companies.
 /// Each card shows name, sector, valuation badge, and IPO status badge.
@@ -56,4 +56,4 @@ class CompanyListPanel : public QWidget {
     QString selected_id_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -53,7 +53,7 @@ hub registrant for `ws:<exchange>:*`.
 Topic shape: `broker:<broker_id>:<account_id>:<channel>[:<sym>]`. When a
 caller has no explicit account id, it passes `default` — single-account
 and multi-account code paths share one format. Build topics via
-`fincept::trading::broker_topic()` in `src/trading/BrokerTopic.h`.
+`finterm::trading::broker_topic()` in `src/trading/BrokerTopic.h`.
 
 | Pattern | Producer | TTL | Min interval | Notes |
 |---|---|---|---|---|

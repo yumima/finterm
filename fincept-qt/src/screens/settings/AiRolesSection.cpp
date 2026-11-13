@@ -15,7 +15,7 @@
 #include <QUuid>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 constexpr const char* TAG = "AiRolesSection";
@@ -260,4 +260,4 @@ void AiRolesSection::apply_binding(const QString& role_id, const QString& provid
     emit bindings_changed();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

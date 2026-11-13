@@ -7,7 +7,7 @@
 #include <QUndoStack>
 #include <QWidget>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 class NodeCanvas;
 class NodeScene;
@@ -19,7 +19,7 @@ class MiniMap;
 class ExecutionResultsPanel;
 
 /// Main node editor screen — 3-panel layout with toolbar.
-class NodeEditorScreen : public QWidget, public fincept::screens::IStatefulScreen {
+class NodeEditorScreen : public QWidget, public finterm::screens::IStatefulScreen {
     Q_OBJECT
   public:
     explicit NodeEditorScreen(QWidget* parent = nullptr);
@@ -72,9 +72,9 @@ class NodeEditorScreen : public QWidget, public fincept::screens::IStatefulScree
     QVector<EdgeDef> clipboard_edges_;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow
 
 // Convenience alias used in MainWindow
 namespace screens {
-using NodeEditorScreen = fincept::workflow::NodeEditorScreen;
+using NodeEditorScreen = finterm::workflow::NodeEditorScreen;
 }

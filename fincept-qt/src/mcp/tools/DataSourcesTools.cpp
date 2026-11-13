@@ -15,9 +15,9 @@
 #include <QTcpSocket>
 #include <QUuid>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
-using namespace fincept::screens::datasources;
+using namespace finterm::screens::datasources;
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -689,4 +689,4 @@ std::vector<ToolDef> get_data_sources_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

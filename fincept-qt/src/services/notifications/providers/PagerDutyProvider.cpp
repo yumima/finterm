@@ -5,7 +5,7 @@
 #include <QJsonObject>
 #include <QUuid>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void PagerDutyProvider::load_fields(SettingsRepository& r, const QString& cat) {
     routing_key_ = get_str(r, cat + ".routing_key");
@@ -61,4 +61,4 @@ void PagerDutyProvider::send(const NotificationRequest& req, std::function<void(
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

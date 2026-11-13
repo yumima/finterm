@@ -13,7 +13,7 @@
 class QListWidget;
 class QLabel;
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 class NewsCategoryWidget : public BaseWidget {
     Q_OBJECT
@@ -43,4 +43,4 @@ class NewsCategoryWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

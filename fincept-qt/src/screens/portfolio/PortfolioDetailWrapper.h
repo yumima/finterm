@@ -9,7 +9,7 @@
 
 #include <functional>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Container for full-screen detail views with a 36px header bar (back button + title).
 /// Detail view widgets are lazily constructed on first navigation (P2 principle).
@@ -53,4 +53,4 @@ class PortfolioDetailWrapper : public QWidget {
     QVector<portfolio::PortfolioSnapshot> current_snapshots_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

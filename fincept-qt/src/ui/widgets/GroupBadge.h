@@ -6,7 +6,7 @@
 
 class QLabel;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Small coloured letter pill shown in the top-left of any dock widget
 /// whose screen implements IGroupLinked. Mirrors Bloomberg Launchpad's
@@ -36,7 +36,7 @@ class GroupBadge : public QWidget {
     static QColor color_for_group(SymbolGroup g);
 
   signals:
-    void group_change_requested(fincept::SymbolGroup g);
+    void group_change_requested(finterm::SymbolGroup g);
 
   protected:
     void mousePressEvent(QMouseEvent* e) override;
@@ -48,4 +48,4 @@ class GroupBadge : public QWidget {
     SymbolGroup group_ = SymbolGroup::None;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

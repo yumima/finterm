@@ -12,7 +12,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Market scanner — find symbols matching condition rules.
 class ScannerPanel : public QWidget {
@@ -40,4 +40,4 @@ class ScannerPanel : public QWidget {
     QLabel* status_label_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

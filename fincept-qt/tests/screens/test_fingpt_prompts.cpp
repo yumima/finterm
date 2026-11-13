@@ -11,9 +11,9 @@
 
 #include <QtTest/QtTest>
 
-using namespace fincept::screens::fingpt;
-using fincept::services::equity::Candle;
-using fincept::services::equity::StockInfo;
+using namespace finterm::screens::fingpt;
+using finterm::services::equity::Candle;
+using finterm::services::equity::StockInfo;
 
 namespace {
 

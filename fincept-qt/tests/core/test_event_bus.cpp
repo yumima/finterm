@@ -21,7 +21,7 @@
 
 #include <atomic>
 
-using fincept::EventBus;
+using finterm::EventBus;
 
 class EventBusTest : public QObject {
     Q_OBJECT

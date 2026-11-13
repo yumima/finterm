@@ -19,7 +19,7 @@
 class QAbstractItemView;
 class QTimer;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 class TickFlashDelegate : public QStyledItemDelegate {
     Q_OBJECT
@@ -68,4 +68,4 @@ class TickFlashDelegate : public QStyledItemDelegate {
     int key_column_ = 0;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

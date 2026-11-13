@@ -11,7 +11,7 @@
 #include <QPlainTextEdit>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 constexpr int kColId = 0;
@@ -225,4 +225,4 @@ void SchedulerSection::show_status(const QString& msg, bool error) {
     status_lbl_->setStyleSheet(error ? QStringLiteral("color: #c33;") : QStringLiteral("color: #393;"));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

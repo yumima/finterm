@@ -2,7 +2,7 @@
 
 #include "core/config/AppIdentity.h"
 
-namespace fincept {
+namespace finterm {
 
 AppConfig& AppConfig::instance() {
     static AppConfig s;
@@ -37,4 +37,4 @@ int AppConfig::refresh_interval_ms() const {
     return settings_.value("data/refresh_interval_ms", 30000).toInt();
 }
 
-} // namespace fincept
+} // namespace finterm

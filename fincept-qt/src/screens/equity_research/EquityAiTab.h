@@ -39,7 +39,7 @@ class QStackedWidget;
 class QTableWidget;
 class QTextEdit;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Pure-paint overlay of the AI's predicted path against the real price line.
 /// Each prediction is drawn as a segment from (made-on, price-then) to
@@ -159,4 +159,4 @@ class EquityAiTab : public QWidget {
     PredictionChart* chart_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -51,10 +51,10 @@
 #include <limits>
 #include <tuple>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 // Pure parse/format helpers, extracted so they can be unit-tested.
-namespace fmt = fincept::pre_ipo::fmt;
+namespace fmt = finterm::pre_ipo::fmt;
 
 namespace {
 // Time-window threshold helpers (days).
@@ -200,7 +200,7 @@ IpoWatchView::IpoWatchView(QWidget* parent) : QWidget(parent) {
     // (PRIVATE / SIGNALS / private WATCHLIST rows). The calendar lenses
     // render from entries_, loaded by refresh() above.
     connect(&services::PreIpoService::instance(), &services::PreIpoService::data_loaded, this,
-            [this](fincept::pre_ipo::PreIpoSummary) { render(); });
+            [this](finterm::pre_ipo::PreIpoSummary) { render(); });
 
     // An on-demand per-company fetch (currently SEC XBRL financials, opened
     // from the FUNDAMENTALS pane) lands asynchronously. Without this the data
@@ -3784,7 +3784,7 @@ QString IpoWatchView::starred_key(const Entry& e) {
 }
 
 void IpoWatchView::load_starred() {
-    auto r = fincept::SettingsRepository::instance().get("ipo_watch.starred");
+    auto r = finterm::SettingsRepository::instance().get("ipo_watch.starred");
     if (r.is_err())
         return;
     const QString raw = r.value();
@@ -3806,7 +3806,7 @@ void IpoWatchView::save_starred() {
     for (const auto& k : starred_)
         arr.append(k);
     const QString json = QString::fromUtf8(QJsonDocument(arr).toJson(QJsonDocument::Compact));
-    auto r = fincept::SettingsRepository::instance().set("ipo_watch.starred", json, "ipo_watch");
+    auto r = finterm::SettingsRepository::instance().set("ipo_watch.starred", json, "ipo_watch");
     if (r.is_err())
         LOG_WARN("IpoWatch", "failed to persist ipo_watch.starred");
 }
@@ -5349,4 +5349,4 @@ double IpoWatchView::parse_shares(const QString& shares) {
     return ok ? n : 0;
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

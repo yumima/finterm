@@ -10,7 +10,7 @@
 #include <algorithm>
 #include <atomic>
 
-namespace fincept {
+namespace finterm {
 
 PortfolioRepository& PortfolioRepository::instance() {
     static PortfolioRepository s;
@@ -328,4 +328,4 @@ Result<QVector<portfolio::PortfolioSnapshot>> PortfolioRepository::get_snapshots
         {portfolio_id, cutoff}, map_snapshot);
 }
 
-} // namespace fincept
+} // namespace finterm

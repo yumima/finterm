@@ -5,7 +5,7 @@
 
 #include <functional>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 /// Central auth state machine.
 /// Manages local login/signup (username + PIN), session persistence, and validation.
@@ -81,4 +81,4 @@ class AuthManager : public QObject {
     bool is_logging_out_ = false;
 };
 
-} // namespace fincept::auth
+} // namespace finterm::auth

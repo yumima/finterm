@@ -9,7 +9,7 @@
 #include <QRandomGenerator>
 #include <QRegularExpression>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 void register_utility_nodes(NodeRegistry& registry) {
     // ── DateTime ───────────────────────────────────────────────────
@@ -1208,4 +1208,4 @@ void register_utility_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

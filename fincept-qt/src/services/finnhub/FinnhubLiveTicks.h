@@ -6,7 +6,7 @@
 #include <QSet>
 #include <QString>
 
-namespace fincept::services::finnhub {
+namespace finterm::services::finnhub {
 
 /// Streams live trade ticks from Finnhub's free WebSocket
 /// (wss://ws.finnhub.io?token=KEY). Used by ER to push price updates in
@@ -60,4 +60,4 @@ class FinnhubLiveTicks : public QObject {
     bool want_open_ = false;
 };
 
-} // namespace fincept::services::finnhub
+} // namespace finterm::services::finnhub

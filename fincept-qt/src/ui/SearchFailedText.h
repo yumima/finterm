@@ -10,7 +10,7 @@
 #include <QJsonObject>
 #include <QString>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 inline QString search_failed_text(bool transient = true) {
     return transient ? QStringLiteral("Search failed — no answer. Try again.") : QStringLiteral("Search failed.");
@@ -34,4 +34,4 @@ inline SearchReply read_search_reply(bool ok, const QJsonObject& result) {
     return r;
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

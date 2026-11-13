@@ -10,7 +10,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Formula-aware cell item ──────────────────────────────────────────────────
 
@@ -96,4 +96,4 @@ class SpreadsheetWidget : public QWidget {
     bool updating_formula_bar_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

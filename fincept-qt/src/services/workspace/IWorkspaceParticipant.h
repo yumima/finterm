@@ -1,7 +1,7 @@
 #pragma once
 #include <QJsonObject>
 
-namespace fincept {
+namespace finterm {
 
 /// Opt-in interface for screens that have in-memory state worth saving
 /// into a workspace snapshot.
@@ -31,4 +31,4 @@ class IWorkspaceParticipant {
     virtual void restore_state(const QJsonObject& state) = 0;
 };
 
-} // namespace fincept
+} // namespace finterm

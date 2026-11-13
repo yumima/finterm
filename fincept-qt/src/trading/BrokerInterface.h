@@ -7,7 +7,7 @@
 
 #include <memory>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // ============================================================================
 // BrokerProfile — single source of truth for per-broker UI/config
@@ -258,4 +258,4 @@ class IBroker {
 
 using BrokerPtr = std::unique_ptr<IBroker>;
 
-} // namespace fincept::trading
+} // namespace finterm::trading

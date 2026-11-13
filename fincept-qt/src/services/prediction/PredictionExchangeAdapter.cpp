@@ -5,6 +5,6 @@
 // qt_metacast, qt_metacall, staticMetaObject). The class has no
 // implementation of its own; concrete subclasses provide all behaviour.
 
-namespace fincept::services::prediction {
+namespace finterm::services::prediction {
 // Intentionally empty.
-} // namespace fincept::services::prediction
+} // namespace finterm::services::prediction

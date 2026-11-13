@@ -12,7 +12,7 @@
 
 #include <QCoreApplication>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 std::vector<ToolDef> get_system_tools() {
     std::vector<ToolDef> tools;
@@ -100,4 +100,4 @@ std::vector<ToolDef> get_system_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

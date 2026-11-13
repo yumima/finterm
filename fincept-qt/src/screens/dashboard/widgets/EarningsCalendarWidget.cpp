@@ -25,7 +25,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 namespace {
 
@@ -1098,4 +1098,4 @@ void EarningsCalendarWidget::on_theme_changed() {
         populate(); // rows carry inline colours — rebuild them
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

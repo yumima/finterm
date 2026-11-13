@@ -10,7 +10,7 @@
 
 #include <QVariantMap>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "SettingsTools";
 
@@ -177,4 +177,4 @@ std::vector<ToolDef> get_settings_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

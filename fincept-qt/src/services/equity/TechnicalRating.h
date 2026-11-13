@@ -6,7 +6,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::services::equity {
+namespace finterm::services::equity {
 
 /// The STRONG BUY … STRONG SELL read under the ER Technicals tab.
 ///
@@ -158,4 +158,4 @@ RatingVerdict aggregate(const QVector<TechIndicator>& scored, const RatingInput&
 
 } // namespace technical_rating
 
-} // namespace fincept::services::equity
+} // namespace finterm::services::equity

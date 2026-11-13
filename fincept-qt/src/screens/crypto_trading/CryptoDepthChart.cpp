@@ -11,7 +11,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 namespace {
 inline QColor kBgBase() {
@@ -250,4 +250,4 @@ void CryptoDepthChart::rebuild_cache() {
     cache_dirty_ = false;
 }
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

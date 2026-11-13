@@ -11,7 +11,7 @@
 #include <QStackedWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class GovDataScreen : public QWidget, public IStatefulScreen {
     Q_OBJECT
@@ -54,4 +54,4 @@ class GovDataScreen : public QWidget, public IStatefulScreen {
     bool initial_load_done_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

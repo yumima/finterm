@@ -6,7 +6,7 @@
 
 #include <cmath>
 
-namespace fincept::services::equity {
+namespace finterm::services::equity {
 
 // ── IndicatorRow ─────────────────────────────────────────────────────────────
 
@@ -487,4 +487,4 @@ RatingVerdict aggregate(const QVector<TechIndicator>& scored, const RatingInput&
 
 } // namespace technical_rating
 
-} // namespace fincept::services::equity
+} // namespace finterm::services::equity

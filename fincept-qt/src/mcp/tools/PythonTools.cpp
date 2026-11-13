@@ -10,7 +10,7 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "PythonTools";
 
@@ -140,4 +140,4 @@ std::vector<ToolDef> get_python_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

@@ -7,7 +7,7 @@
 #include <QSqlQuery>
 #include <QUuid>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 static Result<void> sql(QSqlDatabase& db, const char* stmt) {
@@ -154,4 +154,4 @@ void register_migration_v006() {
     MigrationRunner::register_migration({6, "portfolio_multi", apply_v006});
 }
 
-} // namespace fincept
+} // namespace finterm

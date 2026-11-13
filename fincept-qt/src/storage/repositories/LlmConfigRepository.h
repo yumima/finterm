@@ -1,7 +1,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 struct LlmConfig {
     QString provider;
@@ -59,4 +59,4 @@ class LlmConfigRepository : public BaseRepository<LlmConfig> {
     static LlmModelConfig map_model(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

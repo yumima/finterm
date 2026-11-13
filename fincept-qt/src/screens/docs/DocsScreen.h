@@ -7,7 +7,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Comprehensive in-app documentation browser for all terminal features.
 /// Organized by category with skill-level guidance (Beginner → Pro).
@@ -97,4 +97,4 @@ class DocsScreen : public QWidget {
     QMap<QString, int> page_index_; // section_id → stacked widget index
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -29,7 +29,7 @@
 
 #include <atomic>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 class McpHttpClient : public McpClientBase {
     Q_OBJECT
@@ -85,4 +85,4 @@ class McpHttpClient : public McpClientBase {
     QStringList log_lines_;
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

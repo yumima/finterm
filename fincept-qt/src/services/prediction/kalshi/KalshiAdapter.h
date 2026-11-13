@@ -11,7 +11,7 @@
 #include <functional>
 #include <memory>
 
-namespace fincept::services::prediction::kalshi_ns {
+namespace finterm::services::prediction::kalshi_ns {
 
 class KalshiRestClient;
 class KalshiWsClient;
@@ -24,7 +24,7 @@ class KalshiWsClient;
 ///
 /// Phase 4 implements public read endpoints. Phase 7 wires RSA-PSS signed
 /// trading methods via a Python bridge (py `cryptography` package).
-class KalshiAdapter : public fincept::services::prediction::PredictionExchangeAdapter {
+class KalshiAdapter : public finterm::services::prediction::PredictionExchangeAdapter {
     Q_OBJECT
   public:
     explicit KalshiAdapter(QObject* parent = nullptr);
@@ -33,18 +33,18 @@ class KalshiAdapter : public fincept::services::prediction::PredictionExchangeAd
     // Identity
     QString id() const override;
     QString display_name() const override;
-    fincept::services::prediction::ExchangeCapabilities capabilities() const override;
+    finterm::services::prediction::ExchangeCapabilities capabilities() const override;
 
     // Read
     void list_markets(const QString& category, const QString& sort_by, int limit, int offset) override;
     void list_events(const QString& category, const QString& sort_by, int limit, int offset) override;
     void search(const QString& query, int limit) override;
     void list_tags() override;
-    void fetch_market(const fincept::services::prediction::MarketKey& key) override;
-    void fetch_event(const fincept::services::prediction::MarketKey& key) override;
+    void fetch_market(const finterm::services::prediction::MarketKey& key) override;
+    void fetch_event(const finterm::services::prediction::MarketKey& key) override;
     void fetch_order_book(const QString& asset_id) override;
     void fetch_price_history(const QString& asset_id, const QString& interval, int fidelity) override;
-    void fetch_recent_trades(const fincept::services::prediction::MarketKey& key, int limit) override;
+    void fetch_recent_trades(const finterm::services::prediction::MarketKey& key, int limit) override;
 
     // WebSocket
     void subscribe_market(const QStringList& asset_ids) override;
@@ -58,9 +58,9 @@ class KalshiAdapter : public fincept::services::prediction::PredictionExchangeAd
     void fetch_positions() override;
     void fetch_open_orders() override;
     void fetch_user_activity(int limit) override;
-    void place_order(const fincept::services::prediction::OrderRequest& req) override;
+    void place_order(const finterm::services::prediction::OrderRequest& req) override;
     void cancel_order(const QString& order_id) override;
-    void cancel_all_for_market(const fincept::services::prediction::MarketKey& key, const QString& asset_id) override;
+    void cancel_all_for_market(const finterm::services::prediction::MarketKey& key, const QString& asset_id) override;
 
     void ensure_registered_with_hub() override;
 
@@ -103,18 +103,18 @@ class KalshiAdapter : public fincept::services::prediction::PredictionExchangeAd
   signals:
     // Kalshi-specific extensions (not on the base adapter interface).
     // Consumers cast to KalshiAdapter* to connect.
-    void ws_trade_received(const fincept::services::prediction::PredictionTrade& trade);
+    void ws_trade_received(const finterm::services::prediction::PredictionTrade& trade);
     void ws_market_lifecycle_changed(const QString& ticker, const QString& status);
 
     void exchange_status_ready(const QJsonObject& status);
     void exchange_schedule_ready(const QJsonObject& schedule);
-    void batch_candles_ready(const QHash<QString, fincept::services::prediction::PriceHistory>& histories);
+    void batch_candles_ready(const QHash<QString, finterm::services::prediction::PriceHistory>& histories);
     void series_detail_ready(const QString& series_ticker, const QJsonObject& series);
 
-    void historical_markets_ready(const QVector<fincept::services::prediction::PredictionMarket>& markets,
+    void historical_markets_ready(const QVector<finterm::services::prediction::PredictionMarket>& markets,
                                   const QString& next_cursor);
-    void historical_candles_ready(const fincept::services::prediction::PriceHistory& history, const QString& ticker);
-    void historical_trades_ready(const QVector<fincept::services::prediction::PredictionTrade>& trades,
+    void historical_candles_ready(const finterm::services::prediction::PriceHistory& history, const QString& ticker);
+    void historical_trades_ready(const QVector<finterm::services::prediction::PredictionTrade>& trades,
                                  const QString& next_cursor);
 
     void order_amended(const QString& order_id, bool ok, const QString& error);
@@ -160,4 +160,4 @@ class KalshiAdapter : public fincept::services::prediction::PredictionExchangeAd
     QHash<QString, QJsonObject> series_cache_;
 };
 
-} // namespace fincept::services::prediction::kalshi_ns
+} // namespace finterm::services::prediction::kalshi_ns

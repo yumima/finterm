@@ -8,7 +8,7 @@ class QGridLayout;
 class QLabel;
 class QScrollArea;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Full IPO pipeline view — every active S-1/F-1 filer with amendment cadence
 /// and days-since-first-file. Surfaces "pricing imminent" candidates via the
@@ -47,4 +47,4 @@ class PipelineView : public QWidget {
     static constexpr int kColumns = 3;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

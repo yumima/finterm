@@ -2,7 +2,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 struct CustomIndexConstituent {
     QString symbol;
@@ -54,4 +54,4 @@ class CustomIndexRepository : public BaseRepository<CustomIndex> {
     static QVector<CustomIndexConstituent> json_to_constituents(const QString& json);
 };
 
-} // namespace fincept
+} // namespace finterm

@@ -2,7 +2,7 @@
 
 #include <QSettings>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
@@ -188,4 +188,4 @@ SymbolGroup SymbolGroupRegistry::next_enabled(SymbolGroup current) const {
     return enabled_list.at(idx + 1);
 }
 
-} // namespace fincept
+} // namespace finterm

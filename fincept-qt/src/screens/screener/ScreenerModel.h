@@ -23,9 +23,9 @@
 #include <cmath>
 #include <optional>
 
-namespace fincept::screens::screener {
+namespace finterm::screens::screener {
 
-namespace fmt = fincept::ui::formatting;
+namespace fmt = finterm::ui::formatting;
 
 inline std::optional<double> num(const QJsonObject& o, const QString& key) {
     const QJsonValue v = o.value(key);
@@ -383,4 +383,4 @@ inline QVector<OverviewRow> overview(const ScanResult& r, int min_screens = 2) {
     return out;
 }
 
-} // namespace fincept::screens::screener
+} // namespace finterm::screens::screener

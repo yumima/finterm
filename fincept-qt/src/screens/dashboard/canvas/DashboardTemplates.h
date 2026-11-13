@@ -4,7 +4,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 struct DashboardTemplate {
     QString id;
@@ -16,4 +16,4 @@ struct DashboardTemplate {
 /// Returns all 6 built-in dashboard templates (12-column grid).
 QVector<DashboardTemplate> all_dashboard_templates();
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -8,7 +8,7 @@ class QStackedWidget;
 class QToolButton;
 class QButtonGroup;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// One of the three top-level cockpit panes (BASICS, PRACTICE, …).
 /// Hosts a header with segmented sub-tab buttons and a QStackedWidget
@@ -59,4 +59,4 @@ class GroupedPane : public QWidget {
     QWidget* btn_row_ = nullptr;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

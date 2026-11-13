@@ -4,7 +4,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept {
+namespace finterm {
 
 /// Metadata describing a single "component" (screen) that can be discovered,
 /// browsed, and spawned via the Component Browser (Phase 6 — Bloomberg
@@ -48,4 +48,4 @@ struct ComponentMeta {
     }
 };
 
-} // namespace fincept
+} // namespace finterm

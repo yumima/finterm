@@ -18,7 +18,7 @@
 #include <QSplitter>
 #include <QVBoxLayout>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 
@@ -362,4 +362,4 @@ void KnowledgeScreen::on_search(const QString& /*query*/) {
     // dropdown of matches on focus.
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

@@ -11,10 +11,10 @@
 #include <QScrollArea>
 #include <QtConcurrent/QtConcurrent>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
-using namespace fincept::ui;
-using namespace fincept::trading;
+using namespace finterm::ui;
+using namespace finterm::trading;
 
 BroadcastOrderDialog::BroadcastOrderDialog(const trading::UnifiedOrder& order, QWidget* parent)
     : QDialog(parent), order_(order) {
@@ -247,4 +247,4 @@ void BroadcastOrderDialog::show_results(const QVector<UnifiedTrading::BroadcastR
     connect(place_btn_, &QPushButton::clicked, this, &QDialog::accept);
 }
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

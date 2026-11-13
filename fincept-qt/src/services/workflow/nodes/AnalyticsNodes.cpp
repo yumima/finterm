@@ -10,11 +10,11 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
-using fincept::python::extract_json;
-using fincept::python::PythonResult;
-using fincept::python::PythonRunner;
+using finterm::python::extract_json;
+using finterm::python::PythonResult;
+using finterm::python::PythonRunner;
 
 namespace {
 
@@ -987,4 +987,4 @@ void register_analytics_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

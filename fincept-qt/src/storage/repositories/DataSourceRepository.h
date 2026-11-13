@@ -1,7 +1,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 struct DataSource {
     QString id;
@@ -33,4 +33,4 @@ class DataSourceRepository : public BaseRepository<DataSource> {
     static DataSource map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

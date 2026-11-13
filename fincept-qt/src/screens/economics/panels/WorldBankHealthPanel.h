@@ -8,7 +8,7 @@
 
 #include <QComboBox>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class WorldBankHealthPanel : public EconPanelBase {
     Q_OBJECT
@@ -30,4 +30,4 @@ class WorldBankHealthPanel : public EconPanelBase {
     QComboBox* country_combo_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

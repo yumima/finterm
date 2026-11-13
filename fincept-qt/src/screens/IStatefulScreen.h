@@ -1,7 +1,7 @@
 #pragma once
 #include <QVariantMap>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Opt-in interface for screens that want to persist lightweight UI state
 /// (active tab index, last searched symbol, selected region, etc.) across
@@ -35,4 +35,4 @@ class IStatefulScreen {
     virtual int state_version() const { return 1; }
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

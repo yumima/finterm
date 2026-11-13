@@ -6,7 +6,7 @@
 class QLabel;
 class QChartView;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// Mini sparkline chart of a primary ticker's price history (1y daily).
 /// Shown in the rail alongside live values. The metric label clarifies
@@ -26,4 +26,4 @@ class HistoryChartPanel : public QWidget {
     QLabel* status_ = nullptr;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

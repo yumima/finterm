@@ -2,7 +2,7 @@
 
 #include <QUuid>
 
-namespace fincept {
+namespace finterm {
 
 ChatRepository& ChatRepository::instance() {
     static ChatRepository s;
@@ -104,4 +104,4 @@ Result<void> ChatRepository::delete_messages(const QString& session_id) {
     return exec_write("DELETE FROM chat_messages WHERE session_id = ?", {session_id});
 }
 
-} // namespace fincept
+} // namespace finterm

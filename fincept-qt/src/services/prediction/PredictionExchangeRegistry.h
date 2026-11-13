@@ -7,7 +7,7 @@
 #include <memory>
 #include <vector>
 
-namespace fincept::services::prediction {
+namespace finterm::services::prediction {
 
 class PredictionExchangeAdapter;
 
@@ -53,4 +53,4 @@ class PredictionExchangeRegistry : public QObject {
     QString active_id_;
 };
 
-} // namespace fincept::services::prediction
+} // namespace finterm::services::prediction

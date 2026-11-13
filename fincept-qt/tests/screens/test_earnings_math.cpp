@@ -18,7 +18,7 @@
 
 #include <QtTest/QtTest>
 
-using namespace fincept::screens::widgets::earnings;
+using namespace finterm::screens::widgets::earnings;
 
 class TestEarningsMath : public QObject {
     Q_OBJECT

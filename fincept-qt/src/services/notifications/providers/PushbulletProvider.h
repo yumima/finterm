@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 class PushbulletProvider final : public BaseProvider {
   public:
@@ -21,4 +21,4 @@ class PushbulletProvider final : public BaseProvider {
     QString channel_tag_; // optional — push to channel instead of all devices
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

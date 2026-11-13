@@ -9,7 +9,7 @@
 
 #include <QtTest/QtTest>
 
-using namespace fincept::portfolio::csv;
+using namespace finterm::portfolio::csv;
 
 namespace {
 

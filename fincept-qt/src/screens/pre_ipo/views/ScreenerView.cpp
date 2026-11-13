@@ -11,10 +11,10 @@
 #include <QTableWidget>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
-using namespace fincept::pre_ipo;
+using namespace finterm::ui;
+using namespace finterm::pre_ipo;
 
 ScreenerView::ScreenerView(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -289,4 +289,4 @@ void ScreenerView::rebuild_table() {
     table_->setSortingEnabled(true);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

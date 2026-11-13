@@ -13,7 +13,7 @@ class QTableWidget;
 class QTabWidget;
 class QVBoxLayout;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Analytics & Sectors detail view.
 ///
@@ -101,4 +101,4 @@ class AnalyticsSectorsView : public QWidget {
     bool corr_ready_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

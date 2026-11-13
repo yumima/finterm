@@ -6,7 +6,7 @@
 #include <QJsonValue>
 #include <QString>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Routing target for parameter values.
 enum class ParamRoute { None, Header, Query, Body, Path };
@@ -51,4 +51,4 @@ class ParameterProcessor {
     static QJsonValue extract_path(const QJsonObject& obj, const QString& path);
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

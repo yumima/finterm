@@ -4,7 +4,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Where today's price sits in its own recent history — and what that is, and
 /// is not, evidence for.
@@ -72,4 +72,4 @@ class PriceRangeStrip : public QWidget {
     QString ccy_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

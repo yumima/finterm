@@ -23,7 +23,7 @@
 #include <optional>
 #include <utility>
 
-namespace fincept::services {
+namespace finterm::services {
 
 class LiveQuoteFollower : public QObject {
   public:
@@ -71,4 +71,4 @@ class LiveQuoteFollower : public QObject {
     QSet<QString> subs_;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -4,7 +4,7 @@
 
 class QWidget;
 
-namespace fincept::util {
+namespace finterm::util {
 
 /// A QTimer that automatically pauses while its watched widget isn't visible.
 ///
@@ -63,4 +63,4 @@ class VisibilityAwareTimer : public QObject {
     bool wanted_active_ = false;
 };
 
-} // namespace fincept::util
+} // namespace finterm::util

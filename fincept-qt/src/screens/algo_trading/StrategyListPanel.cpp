@@ -14,9 +14,9 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::algo;
+using namespace finterm::services::algo;
 
 // ── Constructor ──────────────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ void StrategyListPanel::connect_service() {
 // ── Build UI ─────────────────────────────────────────────────────────────────
 
 void StrategyListPanel::build_ui() {
-    using namespace fincept::ui;
+    using namespace finterm::ui;
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);
@@ -191,7 +191,7 @@ void StrategyListPanel::build_ui() {
 // ── Render page ──────────────────────────────────────────────────────────────
 
 void StrategyListPanel::render_page() {
-    using namespace fincept::ui;
+    using namespace finterm::ui;
 
     table_->setSortingEnabled(false);
     table_->setRowCount(0);
@@ -327,4 +327,4 @@ void StrategyListPanel::on_error(const QString& context, const QString& msg) {
     LOG_ERROR("AlgoTrading", QString("StrategyList error [%1]: %2").arg(context, msg));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

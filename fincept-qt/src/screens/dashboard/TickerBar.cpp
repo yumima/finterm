@@ -18,7 +18,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 static constexpr int kItemSpacing = 40;
 static constexpr int kSegmentGap = 8;
@@ -117,7 +117,7 @@ void TickerBar::load_symbols() {
     const QStringList defaults =
         services::MarketDataService::indices_symbols() + services::MarketDataService::mover_symbols();
 
-    auto result = fincept::SettingsRepository::instance().get(kSettingsKey);
+    auto result = finterm::SettingsRepository::instance().get(kSettingsKey);
     QStringList loaded;
     if (result.is_ok() && !result.value().isEmpty()) {
         for (const QString& s : result.value().split(',')) {
@@ -131,7 +131,7 @@ void TickerBar::load_symbols() {
 }
 
 void TickerBar::save_symbols() {
-    fincept::SettingsRepository::instance().set(kSettingsKey, symbols_.join(","), kSettingsCategory);
+    finterm::SettingsRepository::instance().set(kSettingsKey, symbols_.join(","), kSettingsCategory);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -326,4 +326,4 @@ void TickerBar::mousePressEvent(QMouseEvent* event) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

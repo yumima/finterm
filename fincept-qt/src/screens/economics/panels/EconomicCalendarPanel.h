@@ -9,7 +9,7 @@
 #include <QComboBox>
 #include <QDateEdit>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EconomicCalendarPanel : public EconPanelBase {
     Q_OBJECT
@@ -27,4 +27,4 @@ class EconomicCalendarPanel : public EconPanelBase {
     QComboBox* filter_combo_ = nullptr; // filter by impact level
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

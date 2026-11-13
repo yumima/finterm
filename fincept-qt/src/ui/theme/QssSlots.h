@@ -14,7 +14,7 @@
 #include <QStringList>
 #include <QtGlobal>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 struct QssSlotFill {
     QString text;
@@ -88,4 +88,4 @@ inline QString fill_qss_checked(const char* what, const QString& tmpl, const QSt
     return std::move(fill.text);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

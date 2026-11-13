@@ -1,6 +1,6 @@
 #include "storage/repositories/McpServerRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 McpServerRepository& McpServerRepository::instance() {
     static McpServerRepository s;
@@ -67,4 +67,4 @@ Result<void> McpServerRepository::set_enabled(const QString& id, bool enabled) {
                       {enabled ? 1 : 0, id});
 }
 
-} // namespace fincept
+} // namespace finterm

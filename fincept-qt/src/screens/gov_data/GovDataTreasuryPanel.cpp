@@ -15,11 +15,11 @@
 #include <QJsonObject>
 #include <QVBoxLayout>
 
-namespace fmt = fincept::ui::formatting;
+namespace fmt = finterm::ui::formatting;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const QString kGovDataTreasuryColor = "#3B82F6";
 static const QString kGovDataTreasuryScript = "government_us_data.py";
@@ -457,7 +457,7 @@ void GovDataTreasuryPanel::populate_auctions(const QJsonObject& json) {
             if (!y.isDouble())
                 y = r["highInvestmentRate"];
             auto* it = new QTableWidgetItem(y.isDouble() ? QString::number(y.toDouble() * 100.0, 'f', 3)
-                                                         : fincept::ui::formatting::placeholder());
+                                                         : finterm::ui::formatting::placeholder());
             it->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
             auctions_table_->setItem(i, 4, it);
         }
@@ -536,4 +536,4 @@ void GovDataTreasuryPanel::on_export_csv() {
     export_table_to_csv(table, "treasury_data.csv", this);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

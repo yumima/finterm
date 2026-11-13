@@ -107,7 +107,7 @@ QVector<QPair<double, QString>> daily_seq_labels(const QVector<QDate>& dates, co
 }
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── CrosshairChartView ────────────────────────────────────────────────────────
 
@@ -1769,4 +1769,4 @@ void PortfolioPerfChart::refresh_theme() {
     update_chart();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

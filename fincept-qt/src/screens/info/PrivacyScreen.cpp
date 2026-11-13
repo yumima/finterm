@@ -11,9 +11,9 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const char* MF = "font-family:'Consolas','Courier New',monospace;";
 
@@ -180,4 +180,4 @@ PrivacyScreen::PrivacyScreen(QWidget* parent) : QWidget(parent) {
     root->addWidget(scroll, 1);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

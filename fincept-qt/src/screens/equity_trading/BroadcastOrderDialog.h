@@ -12,7 +12,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 class BroadcastOrderDialog : public QDialog {
     Q_OBJECT
@@ -39,4 +39,4 @@ class BroadcastOrderDialog : public QDialog {
     QVBoxLayout* results_layout_ = nullptr;
 };
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

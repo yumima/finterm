@@ -6,7 +6,7 @@
 #include <QStackedWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Local login: pick a user from the list (sourced from the local auth.db),
 /// then punch in their 4-6 digit PIN. No email, no MFA, no remote auth.
@@ -58,4 +58,4 @@ class LoginScreen : public QWidget {
     void on_login_failed(const QString& error);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

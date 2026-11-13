@@ -1,7 +1,7 @@
 // API & Streaming connectors (10): REST API, GraphQL, WebSocket, gRPC, SOAP, OData, MQTT, Kafka, RabbitMQ, NATS
 #include "screens/data_sources/ConnectorRegistry.h"
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 static QVector<ConnectorConfig> api_configs() {
     return {
@@ -222,4 +222,4 @@ static bool registered = [] {
     return true;
 }();
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

@@ -5,7 +5,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::portfolio::csv {
+namespace finterm::portfolio::csv {
 
 namespace {
 
@@ -496,4 +496,4 @@ ParseResult to_transactions(const Table& table, const QHash<int, Field>& mapping
     return out;
 }
 
-} // namespace fincept::portfolio::csv
+} // namespace finterm::portfolio::csv

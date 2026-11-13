@@ -1,7 +1,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 struct RecordedContext {
     QString id;
@@ -31,4 +31,4 @@ class ContextRecordingRepository : public BaseRepository<RecordedContext> {
     static RecordedContext map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

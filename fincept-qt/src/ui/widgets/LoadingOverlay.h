@@ -6,7 +6,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Loading overlay with pulsing bar animation.
 /// Colors update automatically when the theme changes.
@@ -40,4 +40,4 @@ class LoadingOverlay : public QWidget {
     static constexpr int ANIM_INTERVAL_MS = 100;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

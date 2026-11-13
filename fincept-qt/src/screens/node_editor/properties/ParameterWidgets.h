@@ -14,7 +14,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Creates the appropriate editor widget for a parameter definition.
 class ParameterWidgetFactory {
@@ -27,4 +27,4 @@ class ParameterWidgetFactory {
                            QWidget* parent = nullptr);
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

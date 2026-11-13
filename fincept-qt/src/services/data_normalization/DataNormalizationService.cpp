@@ -13,7 +13,7 @@
 #include <QTimeZone>
 #include <QUuid>
 
-namespace fincept::services {
+namespace finterm::services {
 
 static const QString TAG = "DataNormalization";
 
@@ -354,4 +354,4 @@ void DataNormalizationService::apply_auth(const DataMapping& mapping) {
     // Basic Auth and None require no setup on HttpClient
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

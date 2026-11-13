@@ -19,10 +19,10 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ownership;
-using namespace fincept::screens::ownership_ui;
+using namespace finterm::ownership;
+using namespace finterm::screens::ownership_ui;
 
 namespace {
 
@@ -731,4 +731,4 @@ void LargestFundsPanel::render() {
                        "filings; ·EDGAR marks a quarter pulled straight from EDGAR ahead of the bulk index."));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

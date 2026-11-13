@@ -3,7 +3,7 @@
 #include <QEvent>
 #include <QWidget>
 
-namespace fincept::util {
+namespace finterm::util {
 
 VisibilityAwareTimer::VisibilityAwareTimer(QWidget* watched) : QObject(watched), watched_(watched) {
     // Forward the QTimer's timeout to our public signal. No queued
@@ -56,4 +56,4 @@ bool VisibilityAwareTimer::eventFilter(QObject* obj, QEvent* event) {
     return QObject::eventFilter(obj, event);
 }
 
-} // namespace fincept::util
+} // namespace finterm::util

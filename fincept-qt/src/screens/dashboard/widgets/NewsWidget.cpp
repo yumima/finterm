@@ -12,7 +12,7 @@
 #include <QLocale>
 #include <QSet>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 namespace {
 constexpr int kRefreshTimeoutMs = 25'000; // PythonWorker network timeout is similar; we want slightly larger
@@ -259,4 +259,4 @@ void NewsWidget::populate(const QJsonArray& articles) {
     }
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

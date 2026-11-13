@@ -21,11 +21,11 @@
 
 #include <memory>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "MAAnalyticsTools";
 
-using MaSvc = fincept::services::ma::MAAnalyticsService;
+using MaSvc = finterm::services::ma::MAAnalyticsService;
 
 // Every M&A tool is async: the provider's watchdog (default_timeout_ms) fails
 // the call with a visible timeout error if the script never reports back,
@@ -877,4 +877,4 @@ std::vector<ToolDef> get_ma_analytics_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

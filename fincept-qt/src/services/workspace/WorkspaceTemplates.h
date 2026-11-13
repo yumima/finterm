@@ -3,7 +3,7 @@
 
 #include <QVector>
 
-namespace fincept {
+namespace finterm {
 
 /// Built-in workspace templates. Stateless, returns pre-configured WorkspaceDef objects.
 /// Metadata id/name/timestamps are filled in by WorkspaceManager::new_workspace().
@@ -27,4 +27,4 @@ class WorkspaceTemplates {
     static WorkspaceDef macro_economist();
 };
 
-} // namespace fincept
+} // namespace finterm

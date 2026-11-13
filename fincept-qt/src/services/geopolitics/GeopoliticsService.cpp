@@ -16,7 +16,7 @@
 #include <QUrlQuery>
 #include <QVariant>
 
-namespace fincept::services::geo {
+namespace finterm::services::geo {
 
 // Geopolitics stub endpoint removed. fetch_events/countries/categories/cities
 // report "unavailable" via error_occurred rather than an empty success.
@@ -32,15 +32,15 @@ QString GeopoliticsService::conflict_monitor_unavailable_message() {
 
 namespace {
 inline void publish_to_hub(const QString& topic, const QVariant& value) {
-    fincept::datahub::DataHub::instance().publish(topic, value);
+    finterm::datahub::DataHub::instance().publish(topic, value);
 }
 
 // Persistent on-disk cache so the geopolitics panels hydrate from the most
 // recent dataset on cold start. One file per category — HDX (per subtype),
 // trade analysis (per direction), and geolocation. Sanitized to alnum-only
 // basenames so user-supplied country/topic strings can't escape the dir.
-fincept::services::util::DiskCache& disk_cache() {
-    static fincept::services::util::DiskCache c(QStringLiteral("geopolitics"));
+finterm::services::util::DiskCache& disk_cache() {
+    static finterm::services::util::DiskCache c(QStringLiteral("geopolitics"));
     return c;
 }
 
@@ -270,7 +270,7 @@ void GeopoliticsService::fetch_events(const QString& country, const QString& cit
         cached_root["events"] = cached_arr;
         cached_root["total"] = total;
         const QString cache_key = QString("geo:events:%1:%2:%3:%4").arg(country, city, category).arg(limit);
-        fincept::CacheManager::instance().put(cache_key,
+        finterm::CacheManager::instance().put(cache_key,
                                               QVariant(QJsonDocument(cached_root).toJson(QJsonDocument::Compact)),
                                               kEventsTtlSec, "geopolitics");
         LOG_INFO("Geopolitics", QString("Loaded %1 events").arg(events.size()));
@@ -286,7 +286,7 @@ void GeopoliticsService::fetch_unique_countries() {
         return;
     }
     // Cache hit — deserialize and emit, otherwise go to network.
-    const QVariant cached = fincept::CacheManager::instance().get("geo:countries");
+    const QVariant cached = finterm::CacheManager::instance().get("geo:countries");
     if (!cached.isNull()) {
         const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
         QVector<UniqueCountry> countries;
@@ -324,7 +324,7 @@ void GeopoliticsService::fetch_unique_countries() {
                 entry["event_count"] = count;
                 to_cache.append(entry);
             }
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 "geo:countries", QVariant(QString::fromUtf8(QJsonDocument(to_cache).toJson(QJsonDocument::Compact))),
                 kRefDataTtlSec, "geopolitics");
             emit self->countries_loaded(countries);
@@ -338,7 +338,7 @@ void GeopoliticsService::fetch_unique_categories() {
         emit error_occurred("categories", conflict_monitor_unavailable_message());
         return;
     }
-    const QVariant cached = fincept::CacheManager::instance().get("geo:categories");
+    const QVariant cached = finterm::CacheManager::instance().get("geo:categories");
     if (!cached.isNull()) {
         const QJsonArray arr = QJsonDocument::fromJson(cached.toString().toUtf8()).array();
         QVector<UniqueCategory> cats;
@@ -375,7 +375,7 @@ void GeopoliticsService::fetch_unique_categories() {
             entry["event_count"] = count;
             to_cache.append(entry);
         }
-        fincept::CacheManager::instance().put(
+        finterm::CacheManager::instance().put(
             "geo:categories", QVariant(QString::fromUtf8(QJsonDocument(to_cache).toJson(QJsonDocument::Compact))),
             kRefDataTtlSec, "geopolitics");
         emit self->categories_loaded(cats);
@@ -648,17 +648,17 @@ int GeopoliticsService::max_requests_per_sec() const {
 void GeopoliticsService::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
     // Events — 2 min TTL (matches kEventsTtlSec), 30s min_interval.
-    fincept::datahub::TopicPolicy events_policy;
+    finterm::datahub::TopicPolicy events_policy;
     events_policy.ttl_ms = kEventsTtlSec * 1000;
     events_policy.min_interval_ms = 30 * 1000;
     hub.set_policy_pattern(QStringLiteral("geopolitics:events"), events_policy);
 
     // Reference data (countries/categories/cities) — 10 min TTL.
-    fincept::datahub::TopicPolicy ref_policy;
+    finterm::datahub::TopicPolicy ref_policy;
     ref_policy.ttl_ms = kRefDataTtlSec * 1000;
     ref_policy.min_interval_ms = 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("geopolitics:countries"), ref_policy);
@@ -666,14 +666,14 @@ void GeopoliticsService::ensure_registered_with_hub() {
     hub.set_policy_pattern(QStringLiteral("geopolitics:cities"), ref_policy);
 
     // HDX datasets — 1 hour TTL (humanitarian data refresh cadence).
-    fincept::datahub::TopicPolicy hdx_policy;
+    finterm::datahub::TopicPolicy hdx_policy;
     hdx_policy.ttl_ms = 60 * 60 * 1000;
     hdx_policy.min_interval_ms = 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("geopolitics:hdx:*"), hdx_policy);
 
     // Trade analysis + geolocation — user-invoked, treat as push-only so the
     // hub caches the most recent result without scheduling a refresh.
-    fincept::datahub::TopicPolicy push_policy;
+    finterm::datahub::TopicPolicy push_policy;
     push_policy.push_only = true;
     push_policy.ttl_ms = 15 * 60 * 1000;
     hub.set_policy_pattern(QStringLiteral("geopolitics:trade:*"), push_policy);
@@ -683,4 +683,4 @@ void GeopoliticsService::ensure_registered_with_hub() {
     LOG_INFO("GeopoliticsService", "Registered with DataHub (geopolitics:*)");
 }
 
-} // namespace fincept::services::geo
+} // namespace finterm::services::geo

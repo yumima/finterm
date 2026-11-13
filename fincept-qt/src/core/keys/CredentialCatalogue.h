@@ -24,7 +24,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::keys {
+namespace finterm::keys {
 
 struct CredentialDef {
     const char* env_name;  ///< e.g. "FRED_API_KEY"
@@ -204,6 +204,6 @@ inline const QStringList& env_names() {
     return kNames;
 }
 
-} // namespace fincept::keys
+} // namespace finterm::keys
 
 // clang-format on

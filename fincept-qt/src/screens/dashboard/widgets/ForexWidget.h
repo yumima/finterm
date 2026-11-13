@@ -1,7 +1,7 @@
 #pragma once
 #include "screens/dashboard/widgets/QuoteTableWidget.h"
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Forex major pairs widget — fetches 8 pairs via yfinance.
 inline QuoteTableWidget* create_forex_widget(QWidget* parent = nullptr) {
@@ -13,4 +13,4 @@ inline QuoteTableWidget* create_forex_widget(QWidget* parent = nullptr) {
                                 "#9D4EDD", parent);
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

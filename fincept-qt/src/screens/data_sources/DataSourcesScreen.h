@@ -18,9 +18,9 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
-class DataSourcesScreen : public QWidget, public fincept::screens::IStatefulScreen {
+class DataSourcesScreen : public QWidget, public finterm::screens::IStatefulScreen {
     Q_OBJECT
   public:
     explicit DataSourcesScreen(QWidget* parent = nullptr);
@@ -162,8 +162,8 @@ class DataSourcesScreen : public QWidget, public fincept::screens::IStatefulScre
     QMap<QString, QPair<bool, QString>> live_status_cache_;
 };
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources
 
-namespace fincept::screens {
+namespace finterm::screens {
 using DataSourcesScreen = datasources::DataSourcesScreen;
 }

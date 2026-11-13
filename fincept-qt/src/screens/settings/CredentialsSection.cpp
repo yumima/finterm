@@ -17,7 +17,7 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -387,4 +387,4 @@ void CredentialsSection::toggle_reveal(const QString& key) {
     c.reveal->setText(tr("Hide"));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

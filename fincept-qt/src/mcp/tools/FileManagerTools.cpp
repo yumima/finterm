@@ -10,7 +10,7 @@
 #include <QFileInfo>
 #include <QTextStream>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 std::vector<ToolDef> get_file_manager_tools() {
     std::vector<ToolDef> tools;
@@ -256,4 +256,4 @@ std::vector<ToolDef> get_file_manager_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

@@ -11,7 +11,7 @@
 
 #include <cmath>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 QuoteTableWidget::QuoteTableWidget(const QString& title, const QStringList& symbols,
                                    const QMap<QString, QString>& label_map, int price_decimals,
@@ -369,4 +369,4 @@ void QuoteTableWidget::render_from_cache() {
         schedule_fit();
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

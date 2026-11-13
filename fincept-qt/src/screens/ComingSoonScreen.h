@@ -2,7 +2,7 @@
 #include <QLabel>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Placeholder screen for tabs not yet implemented.
 class ComingSoonScreen : public QWidget {
@@ -11,4 +11,4 @@ class ComingSoonScreen : public QWidget {
     explicit ComingSoonScreen(const QString& tab_name, QWidget* parent = nullptr);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -28,10 +28,10 @@
 #include <QVBoxLayout>
 #include <QtConcurrent/QtConcurrent>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::trading;
-using namespace fincept::screens::crypto;
+using namespace finterm::trading;
+using namespace finterm::screens::crypto;
 
 static const QString TAG = "CryptoTrading";
 
@@ -50,7 +50,7 @@ CryptoTradingScreen::~CryptoTradingScreen() {
     LOG_INFO(TAG, "Destroying CryptoTradingScreen");
     // Drop hub subscriptions owned by this screen. DataHub::unsubscribe is
     // also safe if no sub exists (e.g. constructor threw before init).
-    fincept::datahub::DataHub::instance().unsubscribe(this);
+    finterm::datahub::DataHub::instance().unsubscribe(this);
 }
 
 // ============================================================================
@@ -389,7 +389,7 @@ void CryptoTradingScreen::update_clock() {
 // ============================================================================
 
 void CryptoTradingScreen::hub_subscribe_topics() {
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
 
     // Always drop our prior subscriptions wholesale before re-subscribing —
     // cheaper than deltas and leaves no room for stale topics to leak.
@@ -403,9 +403,9 @@ void CryptoTradingScreen::hub_subscribe_topics() {
     const QString ticker_topic = QStringLiteral("ws:") + exch + QStringLiteral(":ticker:") + primary;
     QPointer<CryptoTradingScreen> self = this;
     hub.subscribe(this, ticker_topic, [self, primary](const QVariant& v) {
-        if (!self || !v.canConvert<fincept::trading::TickerData>())
+        if (!self || !v.canConvert<finterm::trading::TickerData>())
             return;
-        const auto t = v.value<fincept::trading::TickerData>();
+        const auto t = v.value<finterm::trading::TickerData>();
         self->pending_tickers_[t.symbol.isEmpty() ? primary : t.symbol] = t;
         if (self->selected_symbol_ == primary) {
             self->pending_primary_ticker_ = t;
@@ -418,9 +418,9 @@ void CryptoTradingScreen::hub_subscribe_topics() {
     hub.subscribe(this, ob_topic, [self, primary](const QVariant& v) {
         if (!self || self->selected_symbol_ != primary)
             return;
-        if (!v.canConvert<fincept::trading::OrderBookData>())
+        if (!v.canConvert<finterm::trading::OrderBookData>())
             return;
-        self->pending_orderbook_ = v.value<fincept::trading::OrderBookData>();
+        self->pending_orderbook_ = v.value<finterm::trading::OrderBookData>();
         self->has_pending_orderbook_ = true;
     });
 
@@ -429,9 +429,9 @@ void CryptoTradingScreen::hub_subscribe_topics() {
     hub.subscribe(this, trades_topic, [self, primary](const QVariant& v) {
         if (!self || self->selected_symbol_ != primary)
             return;
-        if (!v.canConvert<fincept::trading::TradeData>())
+        if (!v.canConvert<finterm::trading::TradeData>())
             return;
-        const auto td = v.value<fincept::trading::TradeData>();
+        const auto td = v.value<finterm::trading::TradeData>();
         crypto::TradeEntry e;
         e.side = td.side;
         e.price = td.price;
@@ -445,9 +445,9 @@ void CryptoTradingScreen::hub_subscribe_topics() {
     //    harmless (pending_tickers_ is latest-wins per symbol).
     const QString ticker_pattern = QStringLiteral("ws:") + exch + QStringLiteral(":ticker:*");
     hub.subscribe_pattern(this, ticker_pattern, [self](const QString& /*topic*/, const QVariant& v) {
-        if (!self || !v.canConvert<fincept::trading::TickerData>())
+        if (!self || !v.canConvert<finterm::trading::TickerData>())
             return;
-        const auto t = v.value<fincept::trading::TickerData>();
+        const auto t = v.value<finterm::trading::TickerData>();
         if (t.symbol.isEmpty())
             return;
         self->pending_tickers_[t.symbol] = t;
@@ -462,16 +462,16 @@ void CryptoTradingScreen::hub_subscribe_topics() {
     hub.subscribe_pattern(this, ohlc_pattern, [self, primary](const QString& /*topic*/, const QVariant& v) {
         if (!self || self->selected_symbol_ != primary)
             return;
-        if (!v.canConvert<fincept::trading::Candle>())
+        if (!v.canConvert<finterm::trading::Candle>())
             return;
-        self->pending_candles_.append(v.value<fincept::trading::Candle>());
+        self->pending_candles_.append(v.value<finterm::trading::Candle>());
     });
 
     LOG_INFO(TAG, QString("DataHub subscriptions attached: %1 / %2").arg(exch, primary));
 }
 
 void CryptoTradingScreen::hub_unsubscribe_topics() {
-    fincept::datahub::DataHub::instance().unsubscribe(this);
+    finterm::datahub::DataHub::instance().unsubscribe(this);
     LOG_INFO(TAG, "DataHub subscriptions detached");
 }
 
@@ -791,7 +791,7 @@ void CryptoTradingScreen::on_order_submitted(const QString& side, const QString&
                 // placeholder. Reject when no live price is available.
                 if (!(ticker.last > 0)) {
                     LOG_WARN(TAG, "Paper market order rejected: no market price available for " + selected_symbol_);
-                    fincept::ui::ToastService::instance().post(fincept::ui::ToastService::Severity::Warning,
+                    finterm::ui::ToastService::instance().post(finterm::ui::ToastService::Severity::Warning,
                                                                "No market price available — cannot fill market order",
                                                                "crypto_trading");
                     return;
@@ -1360,4 +1360,4 @@ void CryptoTradingScreen::restore_state(const QVariantMap& state) {
         on_symbol_selected(sym);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

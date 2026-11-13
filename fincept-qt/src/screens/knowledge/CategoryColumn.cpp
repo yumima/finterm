@@ -12,7 +12,7 @@
 #include <QSettings>
 #include <QVBoxLayout>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
@@ -138,4 +138,4 @@ bool CategoryColumn::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

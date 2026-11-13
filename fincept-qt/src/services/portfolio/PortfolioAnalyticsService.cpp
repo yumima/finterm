@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-namespace fincept::services {
+namespace finterm::services {
 
 PortfolioAnalyticsService& PortfolioAnalyticsService::instance() {
     static PortfolioAnalyticsService s;
@@ -64,8 +64,8 @@ void PortfolioAnalyticsService::run_ffn(const QStringList& symbols, const QJsonO
 }
 
 void PortfolioAnalyticsService::run_script(const QString& script, const QString& args_json, AnalyticsCallback cb) {
-    fincept::python::PythonRunner::instance().run(
-        script, {args_json}, [cb = std::move(cb), script](const fincept::python::PythonResult& result) {
+    finterm::python::PythonRunner::instance().run(
+        script, {args_json}, [cb = std::move(cb), script](const finterm::python::PythonResult& result) {
             AnalyticsResult out;
             if (!result.success || result.output.trimmed().isEmpty()) {
                 out.error =
@@ -99,4 +99,4 @@ void PortfolioAnalyticsService::run_script(const QString& script, const QString&
         });
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

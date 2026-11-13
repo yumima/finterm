@@ -23,7 +23,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 static Result<void> sql(QSqlDatabase& db, const char* stmt) {
@@ -58,4 +58,4 @@ void register_migration_v021() {
     MigrationRunner::register_migration({21, "max_tokens_default", apply_v021});
 }
 
-} // namespace fincept
+} // namespace finterm

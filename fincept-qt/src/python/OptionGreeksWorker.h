@@ -10,7 +10,7 @@
 
 #include <functional>
 
-namespace fincept::python {
+namespace finterm::python {
 
 /// Persistent option-Greeks worker — long-lived Python process running
 /// `option_greeks_daemon.py --daemon`. Sibling to `PythonWorker` (which is
@@ -72,4 +72,4 @@ class OptionGreeksWorker : public QObject {
     QTimer ready_watchdog_;
 };
 
-} // namespace fincept::python
+} // namespace finterm::python

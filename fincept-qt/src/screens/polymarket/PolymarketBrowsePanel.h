@@ -8,7 +8,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 class PolymarketMarketCardModel;
 class PolymarketMarketCardDelegate;
@@ -21,22 +21,22 @@ class PolymarketBrowsePanel : public QWidget {
   public:
     explicit PolymarketBrowsePanel(QWidget* parent = nullptr);
 
-    void set_markets(const QVector<fincept::services::prediction::PredictionMarket>& markets);
-    void set_events(const QVector<fincept::services::prediction::PredictionEvent>& events);
+    void set_markets(const QVector<finterm::services::prediction::PredictionMarket>& markets);
+    void set_events(const QVector<finterm::services::prediction::PredictionEvent>& events);
     void set_loading(bool loading);
     void clear();
 
     /// Replace a single market row in place (e.g. after a Kalshi lifecycle
     /// event refetched one market). No-op if the ticker isn't in the list.
-    void update_market_row(const fincept::services::prediction::PredictionMarket& market);
+    void update_market_row(const finterm::services::prediction::PredictionMarket& market);
 
     /// Forwarded to the model so the delegate paints with the active
     /// exchange's accent and price formatter.
     void set_presentation(const ExchangePresentation& p);
 
   signals:
-    void market_selected(const fincept::services::prediction::PredictionMarket& market);
-    void event_selected(const fincept::services::prediction::PredictionEvent& event);
+    void market_selected(const finterm::services::prediction::PredictionMarket& market);
+    void event_selected(const finterm::services::prediction::PredictionEvent& event);
 
   private slots:
     void on_item_clicked(const QModelIndex& index);
@@ -59,4 +59,4 @@ class PolymarketBrowsePanel : public QWidget {
     static constexpr int PAGE_SIZE = 20;
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

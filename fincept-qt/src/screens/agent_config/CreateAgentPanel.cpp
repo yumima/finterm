@@ -22,7 +22,7 @@
 
 namespace {
 
-using namespace fincept::ui::colors;
+using namespace finterm::ui::colors;
 
 // ── Shared style helpers ─────────────────────────────────────────────────────
 
@@ -62,7 +62,7 @@ static QLabel* field_lbl(const QString& text) {
 
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 CreateAgentPanel::CreateAgentPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("CreateAgentPanel");
@@ -1032,4 +1032,4 @@ void CreateAgentPanel::showEvent(QShowEvent* event) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

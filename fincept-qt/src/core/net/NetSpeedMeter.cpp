@@ -30,7 +30,7 @@
 #    include <QTextStream>
 #endif
 
-namespace fincept::net {
+namespace finterm::net {
 
 NetSpeedMeter::NetSpeedMeter(QObject* parent) : QObject(parent) {
     timer_ = new QTimer(this);
@@ -222,4 +222,4 @@ bool NetSpeedMeter::read_counters(quint64&, quint64&) const {
 
 #endif
 
-} // namespace fincept::net
+} // namespace finterm::net

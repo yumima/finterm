@@ -4,7 +4,7 @@
 
 #include <algorithm>
 
-namespace fincept {
+namespace finterm {
 
 // ── Static migration registry ────────────────────────────────────────────────
 
@@ -123,4 +123,4 @@ int MigrationRunner::read_current_version() {
     return q.value(0).toInt(); // returns 0 if NULL
 }
 
-} // namespace fincept
+} // namespace finterm

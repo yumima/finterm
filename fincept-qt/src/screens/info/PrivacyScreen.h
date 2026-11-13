@@ -1,7 +1,7 @@
 #pragma once
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Privacy Policy — scrollable legal document with data collection details.
 class PrivacyScreen : public QWidget {
@@ -15,4 +15,4 @@ class PrivacyScreen : public QWidget {
     void navigate_contact();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -14,7 +14,7 @@
 #include <QTextEdit>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// PLANNER view — generate and execute multi-step agent plans.
 /// Left: templates + history. Center: plan steps editor. Right: step results.
@@ -82,4 +82,4 @@ class PlannerViewPanel : public QWidget {
     QString pending_request_id_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

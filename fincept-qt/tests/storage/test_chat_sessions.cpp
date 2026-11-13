@@ -18,8 +18,8 @@
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 
-using fincept::ChatRepository;
-using fincept::Database;
+using finterm::ChatRepository;
+using finterm::Database;
 
 class TestChatSessions : public QObject {
     Q_OBJECT
@@ -35,9 +35,9 @@ class TestChatSessions : public QObject {
 
 void TestChatSessions::initTestCase() {
     QVERIFY(dir_.isValid());
-    fincept::register_migration_v002();
-    fincept::register_migration_v043();
-    fincept::register_migration_v055();
+    finterm::register_migration_v002();
+    finterm::register_migration_v043();
+    finterm::register_migration_v055();
     auto opened = Database::instance().open(dir_.filePath(QStringLiteral("test.db")));
     QVERIFY2(opened.is_ok(), opened.is_err() ? opened.error().c_str() : "");
 }

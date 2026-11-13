@@ -8,7 +8,7 @@
 #include <QString>
 #include <QVariantMap>
 
-namespace fincept {
+namespace finterm {
 
 /// Manages session state: uptime, last-used tabs, window geometry, etc.
 class SessionManager : public QObject {
@@ -85,4 +85,4 @@ class SessionManager : public QObject {
     mutable QSettings settings_{AppIdentity::kOrg, AppIdentity::kApp};
 };
 
-} // namespace fincept
+} // namespace finterm

@@ -19,7 +19,7 @@
 // ── Stylesheet ──────────────────────────────────────────────────────────────
 
 namespace {
-using namespace fincept::ui;
+using namespace finterm::ui;
 static const QString kStyle =
     QStringLiteral("#dmScreen { background: %1; }"
 
@@ -136,9 +136,9 @@ static const QString kStyle =
     ;
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Schema definitions ──────────────────────────────────────────────────────
 
@@ -1781,8 +1781,8 @@ void DataMappingScreen::on_run_mapping() {
     LOG_INFO("DataMapping", "Running mapping: " + dm.name);
 
     QPointer<DataMappingScreen> self = this;
-    fincept::services::DataNormalizationService::instance().fetch_and_normalize(
-        dm, [self, dm](bool ok, fincept::services::NormalizedRecord rec) {
+    finterm::services::DataNormalizationService::instance().fetch_and_normalize(
+        dm, [self, dm](bool ok, finterm::services::NormalizedRecord rec) {
             if (!self)
                 return;
             if (ok) {
@@ -1923,4 +1923,4 @@ void DataMappingScreen::restore_state(const QVariantMap& state) {
         on_view_changed(view);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

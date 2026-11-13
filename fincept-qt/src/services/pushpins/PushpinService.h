@@ -4,7 +4,7 @@
 #include <QList>
 #include <QObject>
 
-namespace fincept {
+namespace finterm {
 
 /// Singleton model backing the persistent symbol chip strip (Bloomberg
 /// "Pushpins" equivalent). Pins are user-scoped — they follow the user
@@ -42,4 +42,4 @@ class PushpinService : public QObject {
     QList<SymbolRef> pins_;
 };
 
-} // namespace fincept
+} // namespace finterm

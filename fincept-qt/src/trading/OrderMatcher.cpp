@@ -12,7 +12,7 @@
 
 #include <algorithm>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 OrderMatcher& OrderMatcher::instance() {
     static OrderMatcher inst;
@@ -393,4 +393,4 @@ void OrderMatcher::check_sl_tp_triggers(const QString& portfolio_id, const QStri
     }
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

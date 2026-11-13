@@ -17,7 +17,7 @@
 
 #include <limits>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Singleton service managing portfolio data, live quotes, and computed metrics.
 /// Screens connect to signals — never call DB or market data directly.
@@ -490,4 +490,4 @@ class PortfolioService : public QObject {
     qint64 correlation_epoch_ = 0; // newest fetch_correlation request
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

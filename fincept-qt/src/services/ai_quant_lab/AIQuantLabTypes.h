@@ -5,7 +5,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::services::quant {
+namespace finterm::services::quant {
 
 // ── Module definitions ──────────────────────────────────────────────────────
 
@@ -85,4 +85,4 @@ inline QStringList quant_categories() {
     return {"CORE", "AI_ML", "ADVANCED", "ANALYTICS"};
 }
 
-} // namespace fincept::services::quant
+} // namespace finterm::services::quant

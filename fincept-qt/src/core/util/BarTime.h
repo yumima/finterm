@@ -27,7 +27,7 @@
 ///
 /// Prefer `Candle::date()` over calling this directly — it is shorter, it reads
 /// better, and it cannot be pointed at the wrong kind of stamp.
-namespace fincept::core::bartime {
+namespace finterm::core::bartime {
 
 /// Calendar date of a bar stamped at midnight in its exchange's zone.
 ///
@@ -93,4 +93,4 @@ inline QDate market_today_et() {
     return market_date_et(QDateTime::currentDateTime());
 }
 
-} // namespace fincept::core::bartime
+} // namespace finterm::core::bartime

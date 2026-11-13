@@ -16,7 +16,7 @@
 /// rules can be tested against real daemon payloads without standing up a UI —
 /// this arithmetic has produced two visibly wrong numbers on screen (a sign
 /// inversion and a stale reference), and neither was catchable by reading it.
-namespace fincept::screens::widgets::exthours {
+namespace finterm::screens::widgets::exthours {
 
 /// One symbol's extended-hours reading, already reduced to what the cell needs.
 struct ExtQuote {
@@ -155,7 +155,7 @@ inline QString ext_side_label(ExtSide s) {
 inline std::optional<ExtSide> live_ext_side(int market_hours, double regular, double price, double change) {
     if (market_hours != 0 && market_hours != 2 && market_hours != 4)
         return std::nullopt;
-    if (!fincept::services::tick_pairs_with(regular, price, change))
+    if (!finterm::services::tick_pairs_with(regular, price, change))
         return std::nullopt;
     return market_hours == 0 ? ExtSide::Pre : market_hours == 2 ? ExtSide::Post : ExtSide::Overnight;
 }
@@ -220,4 +220,4 @@ inline std::optional<ExtFromTick> ext_for_holding(bool held, bool declined, int 
     return ext_from_tick(market_hours, price, change, tick_ms);
 }
 
-} // namespace fincept::screens::widgets::exthours
+} // namespace finterm::screens::widgets::exthours

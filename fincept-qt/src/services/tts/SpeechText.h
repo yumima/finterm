@@ -21,7 +21,7 @@
 
 #include <algorithm>
 
-namespace fincept::services::speech {
+namespace finterm::services::speech {
 
 /// A line the voice will read as its own sentence: one that doesn't already
 /// end on a stop or a clause mark gets a full stop. "Top stories:" keeps its
@@ -227,4 +227,4 @@ inline QStringList split_for_speech(const QString& text, int first_chunk, int se
     return chunks;
 }
 
-} // namespace fincept::services::speech
+} // namespace finterm::services::speech

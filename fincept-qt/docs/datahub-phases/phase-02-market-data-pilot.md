@@ -20,7 +20,7 @@ The point is not breadth — it is to validate that a production data path actua
 ## Deliverables
 
 ### Producer conversion — `MarketDataService`
-- Implements `fincept::datahub::Producer` interface:
+- Implements `finterm::datahub::Producer` interface:
   - `topic_patterns()` → `{"market:quote:*"}`
   - `max_requests_per_sec()` → returns the existing Python runner cadence
     cap so the hub scheduler cannot outpace it (derive from

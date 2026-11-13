@@ -9,7 +9,7 @@
 
 #include <QVariant>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 namespace {
 constexpr const char* DSM_TAG = "DataStreamManager";
@@ -180,40 +180,40 @@ int DataStreamManager::max_requests_per_sec() const {
 void DataStreamManager::ensure_registered_with_hub() {
     if (hub_registered_)
         return;
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     hub.register_producer(this);
 
     // broker:<id>:<account>:positions — TTL 5s
     // broker:<id>:<account>:orders    — TTL 5s
     // broker:<id>:<account>:balance   — TTL 30s
     // broker:<id>:<account>:ticks:*   — push-only, coalesce 100ms
-    fincept::datahub::TopicPolicy positions_policy;
+    finterm::datahub::TopicPolicy positions_policy;
     positions_policy.ttl_ms = 5 * 1000;
     positions_policy.min_interval_ms = 3 * 1000; // portfolio_timer cadence
     hub.set_policy_pattern(QStringLiteral("broker:*:*:positions"), positions_policy);
 
-    fincept::datahub::TopicPolicy orders_policy;
+    finterm::datahub::TopicPolicy orders_policy;
     orders_policy.ttl_ms = 5 * 1000;
     orders_policy.min_interval_ms = 3 * 1000;
     hub.set_policy_pattern(QStringLiteral("broker:*:*:orders"), orders_policy);
 
-    fincept::datahub::TopicPolicy balance_policy;
+    finterm::datahub::TopicPolicy balance_policy;
     balance_policy.ttl_ms = 30 * 1000;
     balance_policy.min_interval_ms = 10 * 1000;
     hub.set_policy_pattern(QStringLiteral("broker:*:*:balance"), balance_policy);
 
-    fincept::datahub::TopicPolicy ticks_policy;
+    finterm::datahub::TopicPolicy ticks_policy;
     ticks_policy.push_only = true;
     ticks_policy.coalesce_within_ms = 100;
     hub.set_policy_pattern(QStringLiteral("broker:*:*:ticks:*"), ticks_policy);
 
     // Also cover holdings + single-symbol quote snapshots.
-    fincept::datahub::TopicPolicy holdings_policy;
+    finterm::datahub::TopicPolicy holdings_policy;
     holdings_policy.ttl_ms = 30 * 1000;
     holdings_policy.min_interval_ms = 10 * 1000;
     hub.set_policy_pattern(QStringLiteral("broker:*:*:holdings"), holdings_policy);
 
-    fincept::datahub::TopicPolicy quote_policy;
+    finterm::datahub::TopicPolicy quote_policy;
     quote_policy.ttl_ms = 5 * 1000;
     quote_policy.min_interval_ms = 1 * 1000;
     hub.set_policy_pattern(QStringLiteral("broker:*:*:quote:*"), quote_policy);
@@ -243,7 +243,7 @@ void DataStreamManager::on_positions_for_hub(const QString& account_id, const QV
     if (!stream)
         return;
     const QString topic = broker_topic(stream->broker_id(), account_id, QStringLiteral("positions"));
-    fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(positions));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(positions));
 }
 
 void DataStreamManager::on_holdings_for_hub(const QString& account_id, const QVector<BrokerHolding>& holdings) {
@@ -253,7 +253,7 @@ void DataStreamManager::on_holdings_for_hub(const QString& account_id, const QVe
     if (!stream)
         return;
     const QString topic = broker_topic(stream->broker_id(), account_id, QStringLiteral("holdings"));
-    fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(holdings));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(holdings));
 }
 
 void DataStreamManager::on_orders_for_hub(const QString& account_id, const QVector<BrokerOrderInfo>& orders) {
@@ -263,7 +263,7 @@ void DataStreamManager::on_orders_for_hub(const QString& account_id, const QVect
     if (!stream)
         return;
     const QString topic = broker_topic(stream->broker_id(), account_id, QStringLiteral("orders"));
-    fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(orders));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(orders));
 }
 
 void DataStreamManager::on_funds_for_hub(const QString& account_id, const BrokerFunds& funds) {
@@ -273,7 +273,7 @@ void DataStreamManager::on_funds_for_hub(const QString& account_id, const Broker
     if (!stream)
         return;
     const QString topic = broker_topic(stream->broker_id(), account_id, QStringLiteral("balance"));
-    fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(funds));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(funds));
 }
 
 void DataStreamManager::on_quote_for_hub(const QString& account_id, const QString& symbol, const BrokerQuote& quote) {
@@ -283,7 +283,7 @@ void DataStreamManager::on_quote_for_hub(const QString& account_id, const QStrin
     if (!stream)
         return;
     const QString topic = broker_topic(stream->broker_id(), account_id, QStringLiteral("quote"), symbol);
-    fincept::datahub::DataHub::instance().publish(topic, QVariant::fromValue(quote));
+    finterm::datahub::DataHub::instance().publish(topic, QVariant::fromValue(quote));
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

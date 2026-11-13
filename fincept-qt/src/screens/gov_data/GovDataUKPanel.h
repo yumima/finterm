@@ -13,7 +13,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class GovDataUKPanel : public QWidget {
     Q_OBJECT
@@ -87,4 +87,4 @@ class GovDataUKPanel : public QWidget {
     QJsonArray current_resources_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

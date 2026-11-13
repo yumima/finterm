@@ -5,7 +5,7 @@
 #include <QGridLayout>
 #include <QLabel>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Single stock quote card — fetches real-time data via yfinance.
 /// Shows price, change, high/low/open/volume in a detail layout.
@@ -61,4 +61,4 @@ class StockQuoteWidget : public BaseWidget {
     bool hub_active_ = false;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

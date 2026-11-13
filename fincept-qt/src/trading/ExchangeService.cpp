@@ -17,7 +17,7 @@
 #include <QPointer>
 #include <QtConcurrent/QtConcurrent>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 namespace {
 const QString kServiceTag = "ExchangeService";
@@ -297,4 +297,4 @@ TickerData ExchangeService::get_cached_price(const QString& symbol) const {
     return active_session()->get_cached_price(symbol);
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

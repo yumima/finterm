@@ -13,7 +13,7 @@
 
 #include <functional>
 
-namespace fincept::python {
+namespace finterm::python {
 
 /// Persistent yfinance worker — long-lived Python process running
 /// `yfinance_data.py --daemon --socket <path>`. Avoids the 2–3 second
@@ -123,4 +123,4 @@ class PythonWorker : public QObject {
     QTimer ready_watchdog_;
 };
 
-} // namespace fincept::python
+} // namespace finterm::python

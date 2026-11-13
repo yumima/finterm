@@ -15,9 +15,9 @@
 #include <QSplitter>
 #include <QTabWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::services::maritime;
+using namespace finterm::services::maritime;
 
 // ── Style helpers (live tokens) ───────────────────────────────────────────────
 
@@ -398,10 +398,10 @@ QWidget* MaritimeScreen::build_center_panel() {
     splitter->setHandleWidth(2);
     splitter->setStyleSheet(QString("QSplitter::handle { background:%1; }").arg(ui::colors::BORDER_DIM()));
 
-    map_widget_ = new fincept::ui::WorldMapWidget(splitter);
+    map_widget_ = new finterm::ui::WorldMapWidget(splitter);
     map_widget_->setMinimumHeight(160);
 
-    QVector<fincept::ui::MapPin> port_pins;
+    QVector<finterm::ui::MapPin> port_pins;
     for (const auto& port : preset_ports())
         port_pins.append({port.lat, port.lng, port.name, ui::colors::CYAN, 6.0});
     map_widget_->set_pins(port_pins);
@@ -456,7 +456,7 @@ QWidget* MaritimeScreen::build_right_panel() {
     imo_edit_->setStyleSheet(input_ss());
     connect(imo_edit_, &QLineEdit::returnPressed, this, &MaritimeScreen::on_search_vessel);
     connect(imo_edit_, &QLineEdit::textChanged, this,
-            [this](const QString&) { fincept::ScreenStateManager::instance().notify_changed(this); });
+            [this](const QString&) { finterm::ScreenStateManager::instance().notify_changed(this); });
     vl->addWidget(imo_edit_);
 
     auto* track_btn = new QPushButton("TRACK", content);
@@ -804,7 +804,7 @@ void MaritimeScreen::update_intelligence(int vessel_count) {
 }
 
 void MaritimeScreen::update_map(const QVector<VesselData>& vessels) {
-    QVector<fincept::ui::MapPin> pins;
+    QVector<finterm::ui::MapPin> pins;
     for (const auto& port : preset_ports())
         pins.append({port.lat, port.lng, port.name, ui::colors::CYAN, 6.0});
     for (const auto& v : vessels) {
@@ -822,7 +822,7 @@ void MaritimeScreen::on_vessel_history(QVector<VesselData> history) {
         return;
     }
 
-    QVector<fincept::ui::MapPin> pins;
+    QVector<finterm::ui::MapPin> pins;
     pins.reserve(history.size());
 
     QString vessel_name = history.first().name;
@@ -915,4 +915,4 @@ void MaritimeScreen::restore_state(const QVariantMap& state) {
         area_max_lng_->setValue(state.value("max_lng").toDouble());
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -10,7 +10,7 @@
 
 #include "ai_chat/Degeneracy.h"
 
-using fincept::ai_chat::looks_degenerate;
+using finterm::ai_chat::looks_degenerate;
 
 namespace {
 
@@ -118,7 +118,7 @@ private slots:
             "pricing in the automotive book, where two competitors have added capacity and "
             "the renewal calendar is unusually heavy.");
         QVERIFY(para.split(QLatin1Char(' '), Qt::SkipEmptyParts).size()
-                > fincept::ai_chat::kMaxSaneLineWords);
+                > finterm::ai_chat::kMaxSaneLineWords);
         QVERIFY(!looks_degenerate(para));
     }
 
@@ -136,7 +136,7 @@ private slots:
             "margin, and no obvious catalyst on the calendar before Friday's payrolls "
             "print, which most desks now expect to land soft.");
         QVERIFY(s.split(QLatin1Char(' '), Qt::SkipEmptyParts).size()
-                > fincept::ai_chat::kMaxUnpunctuatedRun);
+                > finterm::ai_chat::kMaxUnpunctuatedRun);
         QVERIFY(!looks_degenerate(s));
     }
 
@@ -162,7 +162,7 @@ private slots:
             "- Weekly claims came in above every forecast in the survey range\n"
             "- Regional manufacturing surveys stayed below the expansion line for a fifth month\n");
         QVERIFY(bullets.split(QLatin1Char(' '), Qt::SkipEmptyParts).size()
-                > fincept::ai_chat::kMaxUnpunctuatedRun);
+                > finterm::ai_chat::kMaxUnpunctuatedRun);
         QVERIFY(!looks_degenerate(bullets));
     }
 
@@ -185,7 +185,7 @@ private slots:
             "• defensive sectors caught a modest bid into the close "
             "• the volatility surface flattened for a third consecutive session");
         QVERIFY(one_line.split(QLatin1Char(' '), Qt::SkipEmptyParts).size()
-                > fincept::ai_chat::kMaxUnpunctuatedRun);
+                > finterm::ai_chat::kMaxUnpunctuatedRun);
         QVERIFY(!looks_degenerate(one_line));
     }
 

@@ -7,7 +7,7 @@
 #include <QMetaType>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 constexpr const char* TAG = "AgentTraceRepository";
@@ -143,4 +143,4 @@ Result<std::optional<AgentTraceRow>> AgentTraceRepository::get(const QString& re
     return Result<std::optional<AgentTraceRow>>::ok(std::nullopt);
 }
 
-} // namespace fincept
+} // namespace finterm

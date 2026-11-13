@@ -7,7 +7,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// Singleton service holding the "active security" for each symbol group
 /// (Bloomberg Launchpad equivalent). Panels published via IGroupLinked
@@ -48,8 +48,8 @@ class SymbolContext : public QObject {
     /// `source` is whatever QObject* the caller passed into set_group_symbol;
     /// may be nullptr. Subscribers that are also publishers should compare
     /// `source == this` and skip re-publishing.
-    void group_symbol_changed(fincept::SymbolGroup g, fincept::SymbolRef ref, QObject* source);
-    void active_symbol_changed(fincept::SymbolRef ref, QObject* source);
+    void group_symbol_changed(finterm::SymbolGroup g, finterm::SymbolRef ref, QObject* source);
+    void active_symbol_changed(finterm::SymbolRef ref, QObject* source);
 
   private:
     SymbolContext();
@@ -57,4 +57,4 @@ class SymbolContext : public QObject {
     SymbolRef active_;
 };
 
-} // namespace fincept
+} // namespace finterm

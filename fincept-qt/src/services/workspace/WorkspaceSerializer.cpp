@@ -5,7 +5,7 @@
 #include <QJsonObject>
 #include <QUuid>
 
-namespace fincept {
+namespace finterm {
 
 // ── Serialize ─────────────────────────────────────────────────────────────────
 
@@ -192,4 +192,4 @@ Result<WorkspaceSummary> WorkspaceSerializer::summary_from_file(const QString& p
     return Result<WorkspaceSummary>::ok(std::move(s));
 }
 
-} // namespace fincept
+} // namespace finterm

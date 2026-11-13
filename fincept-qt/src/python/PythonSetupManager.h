@@ -15,7 +15,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept::python {
+namespace finterm::python {
 
 /// Status returned by check_status()
 struct SetupStatus {
@@ -123,4 +123,4 @@ class PythonSetupManager : public QObject {
     mutable QMap<QString, QString> cached_req_hashes_; // filename → SHA-256 hex
 };
 
-} // namespace fincept::python
+} // namespace finterm::python

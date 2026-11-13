@@ -24,7 +24,7 @@
 #include <algorithm>
 #include <atomic>
 
-namespace fincept::python {
+namespace finterm::python {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Singleton
@@ -42,7 +42,7 @@ PythonSetupManager::PythonSetupManager(QObject* parent) : QObject(parent) {}
 // ─────────────────────────────────────────────────────────────────────────────
 
 QString PythonSetupManager::install_dir() const {
-    return fincept::AppPaths::root();
+    return finterm::AppPaths::root();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1148,4 +1148,4 @@ void PythonSetupManager::emit_progress(const QString& step, int pct, const QStri
     QMetaObject::invokeMethod(this, [this, p]() { emit progress_changed(p); }, Qt::QueuedConnection);
 }
 
-} // namespace fincept::python
+} // namespace finterm::python

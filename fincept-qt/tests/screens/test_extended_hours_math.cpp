@@ -12,7 +12,7 @@
 
 #include <QtTest/QtTest>
 
-using namespace fincept::screens::widgets::exthours;
+using namespace finterm::screens::widgets::exthours;
 
 namespace {
 

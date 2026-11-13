@@ -3,7 +3,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// Tracks how often each screen (component) has been navigated to. Used by
 /// the Component Browser to surface frequently-used components at the top
@@ -44,4 +44,4 @@ class PopularityTracker : public QObject {
     QHash<QString, int> counts_;
 };
 
-} // namespace fincept
+} // namespace finterm

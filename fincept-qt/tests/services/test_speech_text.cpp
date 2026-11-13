@@ -10,7 +10,7 @@
 
 #include "services/tts/SpeechText.h"
 
-using namespace fincept::services::speech;
+using namespace finterm::services::speech;
 
 class TestSpeechText : public QObject {
     Q_OBJECT

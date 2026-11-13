@@ -36,7 +36,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -254,7 +254,7 @@ void NewsScreen::connect_signals() {
             side_panel_->show_digest(QStringLiteral("No headlines yet. Refresh the feed and try again."));
             return;
         }
-        if (!fincept::ai_chat::LlmService::instance().is_configured()) {
+        if (!finterm::ai_chat::LlmService::instance().is_configured()) {
             side_panel_->show_digest(QStringLiteral("LLM not configured. Open Settings -> AI Chat to add an API key."));
             return;
         }
@@ -289,7 +289,7 @@ void NewsScreen::connect_signals() {
                 // "the local model isn't running", "it timed out" and "it
                 // returned nothing", and the reason was only ever logged.
                 digest_self->side_panel_->show_digest(
-                    fincept::ai_chat::LlmService::instance().is_configured()
+                    finterm::ai_chat::LlmService::instance().is_configured()
                         ? QStringLiteral("**Digest unavailable.** The model returned nothing — "
                                          "check that hearth is running and the chat model is loaded.")
                         : QStringLiteral("**Digest unavailable.** No LLM is configured. "
@@ -313,9 +313,9 @@ void NewsScreen::connect_signals() {
     // Detail reading pane (permanent right pane)
     connect(detail_panel_, &NewsDetailPanel::analyze_requested, this, &NewsScreen::on_analyze_requested);
     connect(detail_panel_, &NewsDetailPanel::bookmark_requested, this, [this](const services::NewsArticle& article) {
-        auto r = fincept::NewsArticleRepository::instance().toggle_saved(article.id);
+        auto r = finterm::NewsArticleRepository::instance().toggle_saved(article.id);
         if (r.is_ok()) {
-            auto saved_r = fincept::NewsArticleRepository::instance().load_saved();
+            auto saved_r = finterm::NewsArticleRepository::instance().load_saved();
             if (saved_r.is_ok())
                 side_panel_->update_saved(saved_r.value());
         }
@@ -370,7 +370,7 @@ void NewsScreen::connect_signals() {
         QPointer<NewsScreen> self = this;
         (void)QtConcurrent::run([ids, self]() {
             for (const auto& id : ids)
-                fincept::NewsArticleRepository::instance().mark_seen(id);
+                finterm::NewsArticleRepository::instance().mark_seen(id);
             if (self) {
                 QMetaObject::invokeMethod(
                     self,
@@ -464,7 +464,7 @@ void NewsScreen::connect_signals() {
                 // isn't running", "it timed out" and "it returned nothing" — the
                 // reason was logged but never shown, so the one person who could
                 // act on it never saw it.
-                const QString why = fincept::ai_chat::LlmService::instance().is_configured()
+                const QString why = finterm::ai_chat::LlmService::instance().is_configured()
                                         ? QStringLiteral("The local model returned nothing — check that hearth is "
                                                          "running and the chat model is loaded.")
                                         : QStringLiteral("No LLM is configured. Open Settings -> AI Chat.");
@@ -555,17 +555,17 @@ void NewsScreen::showEvent(QShowEvent* e) {
     if (first_show_) {
         first_show_ = false;
 
-        fincept::NewsArticleRepository::instance().ensure_seen_column();
-        fincept::NewsArticleRepository::instance().ensure_saved_column();
+        finterm::NewsArticleRepository::instance().ensure_seen_column();
+        finterm::NewsArticleRepository::instance().ensure_saved_column();
 
         int64_t since_ts = QDateTime::currentSecsSinceEpoch() - (30LL * 86400);
-        auto seen_result = fincept::NewsArticleRepository::instance().load_seen_ids(since_ts);
+        auto seen_result = finterm::NewsArticleRepository::instance().load_seen_ids(since_ts);
         if (seen_result.is_ok()) {
             for (const auto& id : seen_result.value())
                 feed_panel_->model()->mark_seen(id);
         }
 
-        auto saved_result = fincept::NewsArticleRepository::instance().load_saved();
+        auto saved_result = finterm::NewsArticleRepository::instance().load_saved();
         if (saved_result.is_ok())
             side_panel_->update_saved(saved_result.value());
 
@@ -969,11 +969,11 @@ void NewsScreen::apply_filters_async() {
         };
 
         if (!search_lower.isEmpty()) {
-            auto fts_result = fincept::NewsArticleRepository::instance().search_fts(search_lower, cutoff, 1000);
+            auto fts_result = finterm::NewsArticleRepository::instance().search_fts(search_lower, cutoff, 1000);
             if (fts_result.is_ok())
                 merge_into(fts_result.value());
         } else {
-            auto db_result = fincept::NewsArticleRepository::instance().load_recent(cutoff, {}, 5000);
+            auto db_result = finterm::NewsArticleRepository::instance().load_recent(cutoff, {}, 5000);
             if (db_result.is_ok())
                 merge_into(db_result.value());
         }
@@ -1041,8 +1041,8 @@ void NewsScreen::apply_filters_async() {
             }
 
             // Region filter: every category, restricted to one region.
-            if (fincept::news::is_region_code(category)) {
-                if (!fincept::news::in_region(category, a.region, a.headline, a.summary)) {
+            if (finterm::news::is_region_code(category)) {
+                if (!finterm::news::in_region(category, a.region, a.headline, a.summary)) {
                     ++rejected_category;
                     continue;
                 }
@@ -1338,13 +1338,13 @@ void NewsScreen::update_ui_from_filtered(int /*generation*/, const QVector<servi
         // must not play over an old headline.
         feed_panel_->show_breaking(fresh + rest, !fresh.isEmpty());
 
-        auto& repo = fincept::SettingsRepository::instance();
+        auto& repo = finterm::SettingsRepository::instance();
         auto get_bool = [&](const QString& key, bool def) -> bool {
             auto r = repo.get(key);
             return r.is_ok() && !r.value().isEmpty() ? (r.value() == "1") : def;
         };
         if (get_bool("notifications.news_breaking", true)) {
-            using namespace fincept::notifications;
+            using namespace finterm::notifications;
             for (const auto& cluster : fresh) {
                 NotificationRequest req;
                 req.title = QString("BREAKING: %1").arg(cluster.lead_article.headline.left(80));
@@ -1408,13 +1408,13 @@ void NewsScreen::update_monitors() {
     command_bar_->update_monitor_summary(monitors.size(), total_alerts);
 
     // Notifications
-    auto& repo = fincept::SettingsRepository::instance();
+    auto& repo = finterm::SettingsRepository::instance();
     auto get_bool = [&](const QString& key, bool def) -> bool {
         auto r = repo.get(key);
         return r.is_ok() && !r.value().isEmpty() ? (r.value() == "1") : def;
     };
     if (get_bool("notifications.news_monitors", true)) {
-        using namespace fincept::notifications;
+        using namespace finterm::notifications;
         for (const auto& monitor : monitors) {
             if (!monitor.enabled)
                 continue;
@@ -1559,14 +1559,14 @@ void NewsScreen::compute_deviations() {
     command_bar_->update_deviations(deviations); // intel strip
 
     // Notifications
-    auto& repo = fincept::SettingsRepository::instance();
+    auto& repo = finterm::SettingsRepository::instance();
     auto get_bool = [&](const QString& key, bool def) -> bool {
         auto r = repo.get(key);
         return r.is_ok() && !r.value().isEmpty() ? (r.value() == "1") : def;
     };
 
     if (get_bool("notifications.news_deviations", true)) {
-        using namespace fincept::notifications;
+        using namespace finterm::notifications;
         for (const auto& [category, z_score] : deviations) {
             if (notified_deviations_.contains(category))
                 continue;
@@ -1585,7 +1585,7 @@ void NewsScreen::compute_deviations() {
 
     // FLASH articles
     if (get_bool("notifications.news_flash", true)) {
-        using namespace fincept::notifications;
+        using namespace finterm::notifications;
         for (const auto& article : filtered_articles_) {
             if (article.priority != services::Priority::FLASH)
                 continue;
@@ -1631,11 +1631,11 @@ void NewsScreen::reload_portfolio_holdings() {
     // table is unused by current flows. Reading the union here means the
     // filter works the moment a user adds a position, with no extra signal.
     portfolio_tickers_.clear();
-    auto pf_list = fincept::PortfolioRepository::instance().list_portfolios();
+    auto pf_list = finterm::PortfolioRepository::instance().list_portfolios();
     if (!pf_list.is_ok())
         return;
     for (const auto& pf : pf_list.value()) {
-        auto assets = fincept::PortfolioRepository::instance().get_assets(pf.id);
+        auto assets = finterm::PortfolioRepository::instance().get_assets(pf.id);
         if (!assets.is_ok())
             continue;
         for (const auto& a : assets.value()) {
@@ -1671,4 +1671,4 @@ void NewsScreen::restore_state(const QVariantMap& state) {
         command_bar_->set_active_category(active_category_);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

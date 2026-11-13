@@ -8,7 +8,7 @@
 
 #include <QRegularExpression>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 namespace {
 
@@ -182,4 +182,4 @@ int ModelCatalog::output_cap(const QString& provider, const QString& model) {
     return 0;
 }
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

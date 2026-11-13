@@ -3,7 +3,7 @@
 #include <QTableWidget>
 #include <QVector>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Reusable data table with alternating rows.
 class DataTable : public QTableWidget {
@@ -30,4 +30,4 @@ class DataTable : public QTableWidget {
     void set_cell_color(int row, int col, const QString& color);
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

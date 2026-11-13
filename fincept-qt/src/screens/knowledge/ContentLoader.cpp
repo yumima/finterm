@@ -14,7 +14,7 @@
 
 #include <algorithm>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 ContentLoader& ContentLoader::instance() {
     static ContentLoader inst;
@@ -360,4 +360,4 @@ QString ContentLoader::load_body(const QString& entry_id) const {
     return body;
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

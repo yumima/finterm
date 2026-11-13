@@ -10,7 +10,7 @@
 
 #include <functional>
 
-namespace fincept::services::equity {
+namespace finterm::services::equity {
 
 /// QueryStore errors are plain strings; an info fetch the vendor REFUSED
 /// (the daemon's {"transient": true} — a 401 burst, a timeout) is marked so a
@@ -149,21 +149,21 @@ class EquityResearchService : public QObject {
 
   signals:
     /// `query` lets a listener drop a late answer to an older query.
-    void search_results_loaded(QVector<fincept::services::equity::SearchResult> results, QString query);
+    void search_results_loaded(QVector<finterm::services::equity::SearchResult> results, QString query);
     /// search_symbols(query) could not get an answer (Yahoo refused, timeout).
     void search_failed(QString query, QString error, bool transient);
-    void quote_loaded(fincept::services::equity::QuoteData quote);
-    void info_loaded(fincept::services::equity::StockInfo info);
+    void quote_loaded(finterm::services::equity::QuoteData quote);
+    void info_loaded(finterm::services::equity::StockInfo info);
     // period is one of "1mo", "3mo", "6mo", "1y", "5y" — receivers must
     // filter to ignore stale emissions from a different period than the
     // one currently selected (e.g. a refresh-timer reload that uses the
     // default "1y" must not overwrite a chart the user has just switched
     // to "1mo").
-    void historical_loaded(QString symbol, QString period, QVector<fincept::services::equity::Candle> candles);
-    void financials_loaded(fincept::services::equity::FinancialsData data);
-    void technicals_loaded(fincept::services::equity::TechnicalsData data);
-    void peers_loaded(QString symbol, QVector<fincept::services::equity::PeerData> peers);
-    void news_loaded(QString symbol, QVector<fincept::services::equity::NewsArticle> articles);
+    void historical_loaded(QString symbol, QString period, QVector<finterm::services::equity::Candle> candles);
+    void financials_loaded(finterm::services::equity::FinancialsData data);
+    void technicals_loaded(finterm::services::equity::TechnicalsData data);
+    void peers_loaded(QString symbol, QVector<finterm::services::equity::PeerData> peers);
+    void news_loaded(QString symbol, QVector<finterm::services::equity::NewsArticle> articles);
     void talipp_result(QString indicator, QVector<double> values, QVector<qint64> timestamps);
     void error_occurred(QString symbol, QString context, QString message);
 
@@ -250,4 +250,4 @@ class EquityResearchService : public QObject {
     QString pending_query_;
 };
 
-} // namespace fincept::services::equity
+} // namespace finterm::services::equity

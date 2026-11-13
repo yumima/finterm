@@ -29,7 +29,7 @@
 
 #include <optional>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// One entry in the agent_schedule table.  `last_run_at` is empty
 /// until the first successful fire.
@@ -102,4 +102,4 @@ class AgentScheduler : public QObject {
     void run_entry(ScheduleEntry& e);
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

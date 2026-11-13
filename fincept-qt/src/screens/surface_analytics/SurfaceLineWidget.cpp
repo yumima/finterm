@@ -11,9 +11,9 @@
 #include <cmath>
 #include <limits>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 SurfaceLineWidget::SurfaceLineWidget(QWidget* parent) : QWidget(parent) {
     setMinimumSize(320, 240);
@@ -204,4 +204,4 @@ void SurfaceLineWidget::paintEvent(QPaintEvent* /*event*/) {
     }
 }
 
-} // namespace fincept::surface
+} // namespace finterm::surface

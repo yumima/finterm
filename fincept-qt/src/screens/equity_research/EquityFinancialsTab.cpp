@@ -32,7 +32,7 @@
 #include <cmath>
 #include <limits>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Static helpers ────────────────────────────────────────────────────────────
 
@@ -1345,4 +1345,4 @@ QString EquityFinancialsTab::fmt_ratio(double v) {
     return QString::number(v, 'f', 2);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

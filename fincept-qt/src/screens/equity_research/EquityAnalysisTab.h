@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EquityAnalysisTab : public QWidget {
     Q_OBJECT
@@ -61,4 +61,4 @@ class EquityAnalysisTab : public QWidget {
     ui::LoadingOverlay* loading_overlay_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

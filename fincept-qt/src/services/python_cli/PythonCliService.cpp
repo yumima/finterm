@@ -6,7 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonParseError>
 
-namespace fincept::services::python_cli {
+namespace finterm::services::python_cli {
 
 PythonCliService& PythonCliService::instance() {
     static PythonCliService s;
@@ -14,8 +14,8 @@ PythonCliService& PythonCliService::instance() {
 }
 
 void PythonCliService::run(const QString& script, const QStringList& args, CliCallback cb) {
-    fincept::python::PythonRunner::instance().run(
-        script, args, [cb = std::move(cb), script](const fincept::python::PythonResult& result) {
+    finterm::python::PythonRunner::instance().run(
+        script, args, [cb = std::move(cb), script](const finterm::python::PythonResult& result) {
             CliResult out;
             if (!result.success) {
                 out.error = result.error.isEmpty() ? QStringLiteral("Python process failed") : result.error;
@@ -25,7 +25,7 @@ void PythonCliService::run(const QString& script, const QStringList& args, CliCa
                 return;
             }
 
-            const QString json_str = fincept::python::extract_json(result.output);
+            const QString json_str = finterm::python::extract_json(result.output);
             if (json_str.isEmpty()) {
                 out.error = QStringLiteral("No JSON output from %1").arg(script);
                 if (cb)
@@ -63,4 +63,4 @@ void PythonCliService::run(const QString& script, const QStringList& args, CliCa
         });
 }
 
-} // namespace fincept::services::python_cli
+} // namespace finterm::services::python_cli

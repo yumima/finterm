@@ -9,7 +9,7 @@
 
 #include <cmath>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
@@ -99,4 +99,4 @@ void CalculatorPanel::recompute() {
     result_label_->setText(format_result(n / d, calc_.result_format));
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

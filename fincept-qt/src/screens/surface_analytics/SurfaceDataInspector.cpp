@@ -18,9 +18,9 @@
 #include <QTextStream>
 #include <QVBoxLayout>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 namespace {
 
@@ -333,4 +333,4 @@ void SurfaceDataInspector::on_export_csv_clicked() {
         out << r.join(",") << "\n";
 }
 
-} // namespace fincept::surface
+} // namespace finterm::surface

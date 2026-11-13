@@ -8,7 +8,7 @@
 class QGVMap;
 class QGVLayer;
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// A map pin to plot on the world map.
 struct MapPin {
@@ -50,4 +50,4 @@ class WorldMapWidget : public QWidget {
     bool map_ready_ = false;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

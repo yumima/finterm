@@ -18,7 +18,7 @@ class QWebSocket;
 #include <cstdint>
 #include <functional>
 
-namespace fincept::services {
+namespace finterm::services {
 
 // ── Data types ──────────────────────────────────────────────────────────────
 
@@ -124,7 +124,7 @@ struct HeadlineSummary {
 /// `news:category:*`, `news:cluster:*`. Existing `articles_updated`
 /// / `articles_partial` Qt signals remain live in parallel with hub
 /// publishes so consumers can migrate incrementally.
-class NewsService : public QObject, public fincept::datahub::Producer {
+class NewsService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     using ArticlesCallback = std::function<void(bool ok, QVector<NewsArticle>)>;
@@ -140,7 +140,7 @@ class NewsService : public QObject, public fincept::datahub::Producer {
     /// Called from main.cpp after `datahub::register_metatypes()`.
     void ensure_registered_with_hub();
 
-    // ── fincept::datahub::Producer ────────────────────────────────────────
+    // ── finterm::datahub::Producer ────────────────────────────────────────
     QStringList topic_patterns() const override;
     /// Refresh splits by prefix: `news:general` → fetch_all_news(true);
     /// `news:symbol:<sym>` / `news:category:<cat>` derive from the
@@ -286,8 +286,8 @@ Priority priority_from_string(const QString& s);
 Sentiment sentiment_from_string(const QString& s);
 Impact impact_from_string(const QString& s);
 
-} // namespace fincept::services
+} // namespace finterm::services
 
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::services::NewsArticle)
-Q_DECLARE_METATYPE(QVector<fincept::services::NewsArticle>)
+Q_DECLARE_METATYPE(finterm::services::NewsArticle)
+Q_DECLARE_METATYPE(QVector<finterm::services::NewsArticle>)

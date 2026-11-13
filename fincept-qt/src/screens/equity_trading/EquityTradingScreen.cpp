@@ -55,10 +55,10 @@
 
 #include <memory>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::trading;
-using namespace fincept::screens::equity;
+using namespace finterm::trading;
+using namespace finterm::screens::equity;
 
 static const QString TAG = "EquityTrading";
 
@@ -1217,11 +1217,11 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
     sync_mode();
 
     // Load existing portfolios asynchronously.
-    auto& ps = fincept::services::PortfolioService::instance();
+    auto& ps = finterm::services::PortfolioService::instance();
     QPointer<QComboBox> combo_guard = existing_combo;
     QPointer<QRadioButton> existing_guard = mode_existing;
-    auto conn = QObject::connect(&ps, &fincept::services::PortfolioService::portfolios_loaded, &dlg,
-                                 [combo_guard, existing_guard](const QVector<fincept::portfolio::Portfolio>& list) {
+    auto conn = QObject::connect(&ps, &finterm::services::PortfolioService::portfolios_loaded, &dlg,
+                                 [combo_guard, existing_guard](const QVector<finterm::portfolio::Portfolio>& list) {
                                      if (!combo_guard)
                                          return;
                                      combo_guard->clear();
@@ -1271,7 +1271,7 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
     }
 
     auto do_add_assets = [rows](const QString& portfolio_id) {
-        auto& svc = fincept::services::PortfolioService::instance();
+        auto& svc = finterm::services::PortfolioService::instance();
         const QString today = QDate::currentDate().toString(Qt::ISODate);
         for (const auto& row : rows) {
             if (row.quantity <= 0 || row.symbol.isEmpty())
@@ -1291,8 +1291,8 @@ void EquityTradingScreen::on_import_holdings_requested(const QVector<trading::Br
         QPointer<EquityTradingScreen> self = this;
         auto once = std::make_shared<QMetaObject::Connection>();
         const int count = rows.size();
-        *once = connect(&ps, &fincept::services::PortfolioService::portfolio_created, this,
-                        [self, once, do_add_assets, name, count](const fincept::portfolio::Portfolio& p) {
+        *once = connect(&ps, &finterm::services::PortfolioService::portfolio_created, this,
+                        [self, once, do_add_assets, name, count](const finterm::portfolio::Portfolio& p) {
                             if (!self || p.name != name)
                                 return;
                             QObject::disconnect(*once);
@@ -1328,4 +1328,4 @@ SymbolRef EquityTradingScreen::current_symbol() const {
     return SymbolRef::equity(selected_symbol_, selected_exchange_);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

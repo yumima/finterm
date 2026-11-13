@@ -6,7 +6,7 @@
 
 #include <QDateTime>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 class GenericBroker : public IBroker {
   public:
@@ -50,4 +50,4 @@ class GenericBroker : public IBroker {
     static int64_t now_ts() { return QDateTime::currentSecsSinceEpoch(); }
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

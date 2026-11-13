@@ -5,7 +5,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept {
+namespace finterm {
 
 /// Per-category storage statistics.
 struct StorageCategoryInfo {
@@ -63,4 +63,4 @@ class StorageManager : public QObject {
     Result<void> delete_from(const QString& table, const QString& where = {});
 };
 
-} // namespace fincept
+} // namespace finterm

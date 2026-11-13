@@ -17,7 +17,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kEconomicCalendarScript = "economic_calendar.py";
@@ -130,4 +130,4 @@ void EconomicCalendarPanel::on_result(const QString& request_id, const services:
     LOG_INFO("EconomicCalendarPanel", QString("Displayed %1 events for %2").arg(events.size()).arg(date_str));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

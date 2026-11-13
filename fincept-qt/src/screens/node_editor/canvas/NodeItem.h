@@ -6,7 +6,7 @@
 #include <QPixmap>
 #include <QVector>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 class PortItem;
 
@@ -70,4 +70,4 @@ class NodeItem : public QGraphicsObject {
     static constexpr qreal kMinBodyHeight = 20.0;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

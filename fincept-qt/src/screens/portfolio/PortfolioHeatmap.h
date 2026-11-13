@@ -15,7 +15,7 @@
 #include <QStringList>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// 220px left sidebar with color-coded holding blocks, risk gauge, and top movers.
 class PortfolioHeatmap : public QWidget {
@@ -104,7 +104,7 @@ class PortfolioHeatmap : public QWidget {
     QHash<QString, AftQuote> aft_quotes_;
     QSet<QString> aft_declined_; ///< the fetch declined the pairing: never built from a print
     /// Live extended-hours prints → aft_quotes_ (AFT mode, on screen only).
-    void on_stream_ticks(const QVector<fincept::services::StreamTick>& ticks);
+    void on_stream_ticks(const QVector<finterm::services::StreamTick>& ticks);
     void sync_aft_stream();
     quint64 aft_gen_ = 0;        // supersedes in-flight stale requests
     bool aft_in_flight_ = false; // suppresses duplicate refetches
@@ -179,4 +179,4 @@ class PortfolioHeatmap : public QWidget {
     QString currency_ = "USD";
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

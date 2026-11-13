@@ -81,7 +81,7 @@ Scripts are invoked from the Qt/C++ application via `PythonRunner`:
 // Scripts are called via src/python/PythonRunner.cpp
 
 // Example: Fetch market data
-fincept::python::PythonRunner::instance().run(
+finterm::python::PythonRunner::instance().run(
     "yfinance_data",
     {"get_historical_data", "AAPL", "1y"},
     [](const QString& json_result) {

@@ -8,7 +8,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 static QString deploy_input_style() {
     return QString("background: %1; color: %2; border: 1px solid %3;"
@@ -126,4 +126,4 @@ void DeployDialog::build_ui(const QString& current_name) {
     root->addLayout(btn_row);
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -16,9 +16,9 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Stylesheet constants (applied once at screen level) ─────────────────────
 
@@ -723,7 +723,7 @@ void DerivativesScreen::on_instrument_changed(int index) {
     status_instrument_->setText("INSTRUMENT: " + names[index]);
     LOG_INFO("Derivatives", "Switched to: " + names[index]);
 
-    fincept::ScreenStateManager::instance().notify_changed(this);
+    finterm::ScreenStateManager::instance().notify_changed(this);
 }
 
 void DerivativesScreen::on_calculate() {
@@ -882,7 +882,7 @@ void DerivativesScreen::run_pricing(const QString& command, const QStringList& a
 
     // Pricing is deterministic — cache 10 min
     const QString cache_key = "deriv:" + full_args.join(":");
-    const QVariant cached = fincept::CacheManager::instance().get(cache_key);
+    const QVariant cached = finterm::CacheManager::instance().get(cache_key);
     if (!cached.isNull()) {
         auto doc = QJsonDocument::fromJson(cached.toString().toUtf8());
         if (!doc.isNull() && doc.isObject()) {
@@ -911,7 +911,7 @@ void DerivativesScreen::run_pricing(const QString& command, const QStringList& a
 
             const QJsonObject obj = r.data;
 
-            fincept::CacheManager::instance().put(
+            finterm::CacheManager::instance().put(
                 cache_key, QVariant(QString::fromUtf8(QJsonDocument(obj).toJson(QJsonDocument::Compact))), 10 * 60,
                 "derivatives");
 
@@ -1124,4 +1124,4 @@ void DerivativesScreen::restore_state(const QVariantMap& state) {
     on_instrument_changed(idx);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

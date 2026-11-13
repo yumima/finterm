@@ -55,7 +55,7 @@
 #include <functional>
 #include <memory>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 class AsyncDispatch {
   public:
@@ -95,4 +95,4 @@ class AsyncDispatch {
     }
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

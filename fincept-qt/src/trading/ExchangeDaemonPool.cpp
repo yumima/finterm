@@ -10,13 +10,13 @@
 #include <QThread>
 #include <QTimer>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 namespace {
 const QString kPoolTag = "ExchangeDaemonPool";
 
 QString pool_resolve_script_path(const QString& relative) {
-    const QString dir = fincept::python::PythonRunner::instance().scripts_dir();
+    const QString dir = finterm::python::PythonRunner::instance().scripts_dir();
     if (dir.isEmpty())
         return {};
     return dir + "/" + relative;
@@ -248,4 +248,4 @@ QJsonObject ExchangeDaemonPool::call(const QString& exchange, const QString& met
     return {{"error", QString("Daemon call timed out: %1/%2").arg(exchange, method)}};
 }
 
-} // namespace fincept::trading
+} // namespace finterm::trading

@@ -10,7 +10,7 @@
 #include <QJsonObject>
 #include <QPointer>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 IpoCalendarWidget::IpoCalendarWidget(QWidget* parent) : BaseWidget("IPO CALENDAR", parent, ui::colors::AMBER()) {
     auto* vl = content_layout();
@@ -304,4 +304,4 @@ void IpoCalendarWidget::populate() {
     list_layout_->addStretch();
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

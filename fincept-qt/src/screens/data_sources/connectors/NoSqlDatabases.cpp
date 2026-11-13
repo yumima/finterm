@@ -2,7 +2,7 @@
 // Memcached, RethinkDB, Firestore, HBase, ScyllaDB, OrientDB, CosmosDB, etcd
 #include "screens/data_sources/ConnectorRegistry.h"
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 static QVector<ConnectorConfig> nosql_configs() {
     return {
@@ -219,4 +219,4 @@ static bool registered = [] {
     return true;
 }();
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

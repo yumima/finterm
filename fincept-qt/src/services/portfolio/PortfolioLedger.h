@@ -40,7 +40,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::portfolio {
+namespace finterm::portfolio {
 
 struct LedgerPosition {
     double quantity = 0;        // shares currently held
@@ -90,4 +90,4 @@ class LedgerCursor {
     LedgerPosition pos_;
 };
 
-} // namespace fincept::portfolio
+} // namespace finterm::portfolio

@@ -19,7 +19,7 @@
 #include <QTreeWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Data Mapping configuration screen.
 /// 5-step wizard: API Config → Schema Select → Field Mapping → Cache → Test & Save.
@@ -166,4 +166,4 @@ class DataMappingScreen : public QWidget, public IStatefulScreen {
     QJsonObject test_result_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

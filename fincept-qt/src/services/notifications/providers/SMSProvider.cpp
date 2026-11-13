@@ -4,7 +4,7 @@
 
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void SMSProvider::load_fields(SettingsRepository& r, const QString& cat) {
     account_sid_ = get_str(r, cat + ".account_sid");
@@ -45,4 +45,4 @@ void SMSProvider::send(const NotificationRequest& req, std::function<void(bool, 
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

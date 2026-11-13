@@ -4,7 +4,7 @@
 
 #include <QRandomGenerator>
 
-namespace fincept {
+namespace finterm {
 
 #ifdef HAS_QT_WEBSOCKETS
 
@@ -101,4 +101,4 @@ bool WebSocketClient::is_connected() const {
 
 #endif
 
-} // namespace fincept
+} // namespace finterm

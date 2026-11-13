@@ -3,7 +3,7 @@
 #include <string>
 #include <variant>
 
-namespace fincept {
+namespace finterm {
 
 /// Lightweight Result<T> for error handling without exceptions.
 template <typename T>
@@ -56,4 +56,4 @@ class Result<void> {
     explicit Result(std::string e) : ok_(false), error_(std::move(e)) {}
 };
 
-} // namespace fincept
+} // namespace finterm

@@ -13,7 +13,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 DBnomicsDataTable::DBnomicsDataTable(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -196,4 +196,4 @@ void DBnomicsDataTable::set_data(const QVector<services::DbnDataPoint>& series) 
     table_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

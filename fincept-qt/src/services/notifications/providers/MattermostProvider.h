@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 class MattermostProvider final : public BaseProvider {
   public:
@@ -22,4 +22,4 @@ class MattermostProvider final : public BaseProvider {
     QString username_;
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

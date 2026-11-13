@@ -11,7 +11,7 @@
 #include <QLabel>
 #include <QSpinBox>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 AgentErrorsWidget::AgentErrorsWidget(const QJsonObject& cfg, QWidget* parent) : BaseWidget("AGENT ERRORS", parent) {
     auto* vl = content_layout();
@@ -141,4 +141,4 @@ void AgentErrorsWidget::apply_styles() {
                  ui::colors::TEXT_SECONDARY()));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

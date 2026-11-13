@@ -11,7 +11,7 @@
 #include <QLabel>
 #include <QStackedWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EiaPanel : public EconPanelBase {
     Q_OBJECT
@@ -32,4 +32,4 @@ class EiaPanel : public EconPanelBase {
     QLabel* apikey_notice_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -19,7 +19,7 @@
 #include <chrono>
 #include <functional>
 
-namespace fincept::datahub {
+namespace finterm::datahub {
 
 /// Coarse freshness state of a topic — opt-in for widgets that want to
 /// render a "loading…" / "refreshing…" / "error" affordance instead of
@@ -247,7 +247,7 @@ class DataHub : public QObject {
     /// so a flurry of publishes inside the same state generates one
     /// signal, not N. Opt-in: widgets that don't connect this slot pay
     /// nothing. See the enum's doc-comment for state semantics.
-    void topic_state_changed(const QString& topic, fincept::datahub::SubscriptionState state);
+    void topic_state_changed(const QString& topic, finterm::datahub::SubscriptionState state);
 
   private:
     DataHub();
@@ -400,4 +400,4 @@ class DataHub : public QObject {
     void flush_coalesced_requests();
 };
 
-} // namespace fincept::datahub
+} // namespace finterm::datahub

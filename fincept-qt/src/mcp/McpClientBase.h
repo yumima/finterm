@@ -24,7 +24,7 @@
 
 #include <vector>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 /// Configuration for one MCP server row.
 ///
@@ -163,4 +163,4 @@ class McpClientBase : public QObject {
     ServerRequestHandler server_request_handler_;
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

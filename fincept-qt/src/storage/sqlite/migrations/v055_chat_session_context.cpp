@@ -15,7 +15,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 Result<void> apply_v055(QSqlDatabase& db) {
@@ -42,4 +42,4 @@ void register_migration_v055() {
     MigrationRunner::register_migration({55, "chat_session_context", apply_v055});
 }
 
-} // namespace fincept
+} // namespace finterm

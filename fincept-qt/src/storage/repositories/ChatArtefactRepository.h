@@ -15,7 +15,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 struct ChatArtefactRow {
     QString id;
@@ -103,4 +103,4 @@ class ChatArtefactRepository {
     ChatArtefactRepository() = default;
 };
 
-} // namespace fincept
+} // namespace finterm

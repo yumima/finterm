@@ -10,7 +10,7 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PlanningView::PlanningView(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -338,4 +338,4 @@ void PlanningView::recalculate() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

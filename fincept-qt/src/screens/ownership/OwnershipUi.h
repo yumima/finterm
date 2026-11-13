@@ -17,9 +17,9 @@
 
 #include <optional>
 
-namespace fincept::screens::ownership_ui {
+namespace finterm::screens::ownership_ui {
 
-namespace fmt = fincept::ui::formatting;
+namespace fmt = finterm::ui::formatting;
 
 /// The amber caps label every section starts with, with an optional right
 /// side for the section's own "as of" line — the date is part of the title
@@ -135,4 +135,4 @@ inline QFrame* rule() {
     return f;
 }
 
-} // namespace fincept::screens::ownership_ui
+} // namespace finterm::screens::ownership_ui

@@ -5,7 +5,7 @@
 #include <unordered_map>
 #include <utility>
 
-namespace fincept::util {
+namespace finterm::util {
 
 /// A simple bounded LRU map. O(1) put/get/erase via a `std::list` ordering
 /// pair list plus an `std::unordered_map<Key, list_iterator>` index.
@@ -94,4 +94,4 @@ class LruMap {
     std::unordered_map<Key, ListIt> index_;
 };
 
-} // namespace fincept::util
+} // namespace finterm::util

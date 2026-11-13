@@ -14,7 +14,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "PortfolioTools";
 
@@ -777,4 +777,4 @@ std::vector<Resource> get_portfolio_resources() {
     return resources;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

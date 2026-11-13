@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 /// Generic HTTP webhook — posts a JSON payload to any URL.
 class WebhookProvider final : public BaseProvider {
@@ -22,4 +22,4 @@ class WebhookProvider final : public BaseProvider {
     QString method_; // POST, PUT, PATCH
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

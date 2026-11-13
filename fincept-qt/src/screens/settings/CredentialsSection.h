@@ -20,7 +20,7 @@ class QLineEdit;
 class QPushButton;
 class QVBoxLayout;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class CredentialsSection : public QWidget {
     Q_OBJECT
@@ -70,4 +70,4 @@ class CredentialsSection : public QWidget {
     QHash<QString, QVBoxLayout*> group_layouts_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

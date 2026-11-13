@@ -22,9 +22,9 @@
 
 #include <cmath>
 
-namespace fincept::relmap {
+namespace finterm::relmap {
 
-namespace fmt = fincept::ui::formatting;
+namespace fmt = finterm::ui::formatting;
 
 // Missing values arrive as NaN (JSON null) and render as "—". Money uses the
 // reported currency; with no reported currency no symbol is invented.
@@ -702,4 +702,4 @@ void RelationshipGraphView::mouseMoveEvent(QMouseEvent* event) {
     QGraphicsView::mouseMoveEvent(event);
 }
 
-} // namespace fincept::relmap
+} // namespace finterm::relmap

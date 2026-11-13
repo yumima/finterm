@@ -17,9 +17,9 @@
 #include <cmath>
 #include <numeric>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SpreadsheetItem — formula-aware cell
@@ -616,4 +616,4 @@ void SpreadsheetWidget::delete_selected_cols() {
     setup_headers(table_->columnCount());
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -27,8 +27,8 @@
 #include <QTemporaryDir>
 #include <QtTest/QtTest>
 
-using fincept::CacheManager;
-using fincept::CacheDatabase;
+using finterm::CacheManager;
+using finterm::CacheDatabase;
 
 class TestCacheAged : public QObject {
     Q_OBJECT

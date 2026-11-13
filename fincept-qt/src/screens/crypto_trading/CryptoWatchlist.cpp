@@ -10,9 +10,9 @@
 
 #include <algorithm>
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Color accessors (theme-aware) ───────────────────────────────────────────
 namespace {
@@ -329,4 +329,4 @@ void CryptoWatchlist::rebuild_table() {
     table_->setUpdatesEnabled(true);
 }
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

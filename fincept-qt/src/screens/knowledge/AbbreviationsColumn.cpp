@@ -12,7 +12,7 @@
 
 #include <algorithm>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
@@ -131,4 +131,4 @@ void AbbreviationsColumn::rebuild_list(const QString& filter) {
     }
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

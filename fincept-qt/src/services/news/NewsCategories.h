@@ -20,7 +20,7 @@
 
 #include <iterator>
 
-namespace fincept::news {
+namespace finterm::news {
 
 /// Separates the top summary from the per-category detail in a model brief.
 ///
@@ -223,4 +223,4 @@ inline QStringList categories_in_heading(const QString& heading) {
     return out;
 }
 
-} // namespace fincept::news
+} // namespace finterm::news

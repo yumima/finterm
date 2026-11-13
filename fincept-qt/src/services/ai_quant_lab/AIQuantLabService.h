@@ -7,7 +7,7 @@
 
 #include <functional>
 
-namespace fincept::services::quant {
+namespace finterm::services::quant {
 
 /// Singleton service for AI Quant Lab — dispatches to 18+ Python modules.
 class AIQuantLabService : public QObject {
@@ -165,4 +165,4 @@ class AIQuantLabService : public QObject {
     QHash<QString, QString> script_map_;
 };
 
-} // namespace fincept::services::quant
+} // namespace finterm::services::quant

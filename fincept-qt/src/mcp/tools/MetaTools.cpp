@@ -18,7 +18,7 @@
 
 #include <atomic>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 // Name suffixed per file so the unity build doesn't trip on duplicates
 // when it groups multiple tools' file-scope statics into one TU.
@@ -229,7 +229,7 @@ std::vector<ToolDef> get_meta_tools() {
             }
             QJsonObject external_section{{"servers", servers}};
 
-            const auto hub_stats = fincept::datahub::DataHub::instance().stats();
+            const auto hub_stats = finterm::datahub::DataHub::instance().stats();
             int subscriber_total = 0;
             qint64 publishes_total = 0;
             for (const auto& s : hub_stats) {
@@ -257,4 +257,4 @@ std::vector<ToolDef> get_meta_tools() {
     return tools;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

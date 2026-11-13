@@ -16,7 +16,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kFederalReserveScript = "federal_reserve_data.py";
@@ -171,4 +171,4 @@ void FederalReservePanel::on_result(const QString& request_id, const services::E
     LOG_INFO("FederalReservePanel", QString("Displayed %1 rows: %2").arg(clean.size()).arg(title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

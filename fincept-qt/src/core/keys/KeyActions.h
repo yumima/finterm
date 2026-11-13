@@ -1,7 +1,7 @@
 // src/core/keys/KeyActions.h
 #pragma once
 
-namespace fincept {
+namespace finterm {
 
 enum class KeyAction {
     // Global (MainWindow)
@@ -73,4 +73,4 @@ enum class KeyAction {
     LockNow,
 };
 
-} // namespace fincept
+} // namespace finterm

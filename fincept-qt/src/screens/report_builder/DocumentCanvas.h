@@ -6,14 +6,14 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // Re-export the canonical types under the screens namespace so existing
-// implementation code (which qualifies them as fincept::screens::Report*)
+// implementation code (which qualifies them as finterm::screens::Report*)
 // keeps compiling unchanged.
-using ReportComponent = ::fincept::report::ReportComponent;
-using ReportMetadata = ::fincept::report::ReportMetadata;
-using ReportTheme = ::fincept::report::ReportTheme;
+using ReportComponent = ::finterm::report::ReportComponent;
+using ReportMetadata = ::finterm::report::ReportMetadata;
+using ReportTheme = ::finterm::report::ReportTheme;
 
 /// Center panel — paginated A4 document canvas.
 /// Each page is a separate QTextEdit with visible gap between pages,
@@ -48,4 +48,4 @@ class DocumentCanvas : public QWidget {
     void clear_pages();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

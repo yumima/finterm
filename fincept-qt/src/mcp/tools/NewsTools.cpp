@@ -22,11 +22,11 @@
 
 #include <cmath>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 static constexpr const char* TAG = "NewsTools";
 
-using namespace fincept::services;
+using namespace finterm::services;
 
 // Synchronously fetch articles with a timeout.
 //
@@ -905,9 +905,9 @@ std::vector<Resource> get_news_resources() {
                     {"source", a.source},
                     {"category", a.category},
                     {"region", a.region},
-                    {"priority", fincept::services::priority_string(a.priority)},
-                    {"sentiment", fincept::services::sentiment_string(a.sentiment)},
-                    {"impact", fincept::services::impact_string(a.impact)},
+                    {"priority", finterm::services::priority_string(a.priority)},
+                    {"sentiment", finterm::services::sentiment_string(a.sentiment)},
+                    {"impact", finterm::services::impact_string(a.impact)},
                     {"tickers", tickers_arr},
                     {"link", a.link},
                 });
@@ -928,4 +928,4 @@ std::vector<Resource> get_news_resources() {
     return resources;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

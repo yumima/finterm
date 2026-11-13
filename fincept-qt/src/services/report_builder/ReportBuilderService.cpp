@@ -16,7 +16,7 @@
 
 #include <utility>
 
-namespace fincept::services {
+namespace finterm::services {
 
 static constexpr const char* RB_SVC_TAG = "ReportBuilderService";
 static constexpr int kAutosaveIntervalMs = 60'000;
@@ -668,4 +668,4 @@ void ReportBuilderService::apply_template(const QString& name) {
     apply_template_to_service(this, name);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

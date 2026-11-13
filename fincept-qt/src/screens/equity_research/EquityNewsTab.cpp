@@ -13,7 +13,7 @@
 #include <QTimer>
 #include <QUrl>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 EquityNewsTab::EquityNewsTab(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -253,4 +253,4 @@ void EquityNewsTab::apply_news_state(const services::query::QueryStore::State& s
     populate(articles);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

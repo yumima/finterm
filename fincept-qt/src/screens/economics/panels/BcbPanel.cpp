@@ -15,7 +15,7 @@
 #include <QJsonObject>
 #include <QLabel>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kBcbScript = "bcb_data.py";
@@ -138,4 +138,4 @@ void BcbPanel::on_result(const QString& request_id, const services::EconomicsRes
     LOG_INFO("BcbPanel", QString("Displayed %1 records: %2").arg(rows.size()).arg(title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

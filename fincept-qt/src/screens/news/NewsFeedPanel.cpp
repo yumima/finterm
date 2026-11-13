@@ -15,7 +15,7 @@
 #    include <windows.h>
 #endif
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 NewsFeedPanel::NewsFeedPanel(QWidget* parent) : QWidget(parent) {
     setObjectName("newsFeedPanel");
@@ -449,4 +449,4 @@ void NewsFeedPanel::check_scroll_position() {
         emit near_bottom();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

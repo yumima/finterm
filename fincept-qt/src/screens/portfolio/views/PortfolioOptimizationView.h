@@ -12,7 +12,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Portfolio Optimization view — 9 tabs.
 /// OPTIMIZE: run Python optimizer (max_sharpe / min_vol / risk_parity / HRP etc.)
@@ -80,4 +80,4 @@ class PortfolioOptimizationView : public QWidget {
     bool running_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

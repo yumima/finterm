@@ -10,7 +10,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // News reading palette — matches the Knowledge body so the news feed reads
 // like a book at length (warm cream on warm-dark brown). The global theme
@@ -410,4 +410,4 @@ void NewsFeedDelegate::paint_cluster_card(QPainter* painter, const QRect& rect, 
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

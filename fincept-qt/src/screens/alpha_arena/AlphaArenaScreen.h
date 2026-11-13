@@ -18,7 +18,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Lightweight descriptor for a user-configured LLM model entry.
 /// Populated from LlmConfigRepository providers and LlmProfileRepository profiles.
@@ -149,4 +149,4 @@ class AlphaArenaScreen : public QWidget, public IStatefulScreen {
     QLabel* status_info_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

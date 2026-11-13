@@ -19,7 +19,7 @@
 
 #include <QtTest/QtTest>
 
-using fincept::services::query::QueryStore;
+using finterm::services::query::QueryStore;
 
 class TestQueryStore : public QObject {
     Q_OBJECT

@@ -23,7 +23,7 @@
 
 #include <optional>
 
-namespace fincept::ownership {
+namespace finterm::ownership {
 
 /// How an insider's filing history looks over multiple years.
 ///
@@ -544,4 +544,4 @@ struct OwnershipCalendar {
     bool loaded = false;
 };
 
-} // namespace fincept::ownership
+} // namespace finterm::ownership

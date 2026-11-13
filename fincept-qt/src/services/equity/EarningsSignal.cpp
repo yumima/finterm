@@ -9,7 +9,7 @@
 #include <array>
 #include <cmath>
 
-namespace fincept::services::equity {
+namespace finterm::services::equity {
 namespace {
 
 // ── Calibration ──────────────────────────────────────────────────────────────
@@ -553,4 +553,4 @@ int days_to_next_earnings(const EarningsAnalysis& a, const QDateTime& now) {
     return static_cast<int>(today.daysTo(report));
 }
 
-} // namespace fincept::services::equity
+} // namespace finterm::services::equity

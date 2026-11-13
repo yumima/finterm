@@ -14,6 +14,6 @@
 //   Source: financialdatasets.ai free-tier signup
 //   The tools fail with a clear error when the key isn't configured.
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 std::vector<ToolDef> get_financial_datasets_tools();
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

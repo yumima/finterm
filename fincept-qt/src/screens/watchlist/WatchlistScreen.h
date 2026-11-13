@@ -17,13 +17,13 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Full-screen Watchlist — manage multiple watchlists with live quotes.
 /// Layout: Watchlist Sidebar | Stock Table + Controls
 class WatchlistScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     Q_OBJECT
-    Q_INTERFACES(fincept::IGroupLinked)
+    Q_INTERFACES(finterm::IGroupLinked)
   public:
     explicit WatchlistScreen(QWidget* parent = nullptr);
 
@@ -67,8 +67,8 @@ class WatchlistScreen : public QWidget, public IStatefulScreen, public IGroupLin
     void rebuild_from_cache();
 
     // Data
-    QVector<fincept::Watchlist> watchlists_;
-    QVector<fincept::WatchlistStock> stocks_;
+    QVector<finterm::Watchlist> watchlists_;
+    QVector<finterm::WatchlistStock> stocks_;
     /// Ownership columns arrive after the quotes, from the local stores, and
     /// are re-applied whenever the quote rows are rebuilt.
     void request_ownership_columns();
@@ -118,4 +118,4 @@ class WatchlistScreen : public QWidget, public IStatefulScreen, public IGroupLin
     ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

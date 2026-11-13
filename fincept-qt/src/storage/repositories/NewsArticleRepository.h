@@ -4,21 +4,21 @@
 
 #include <cstdint>
 
-namespace fincept {
+namespace finterm {
 
 /// Persists NewsArticle records to the news_articles SQLite table.
 /// INSERT OR IGNORE keeps the first-seen enriched copy; duplicates are skipped.
-class NewsArticleRepository : public BaseRepository<fincept::services::NewsArticle> {
+class NewsArticleRepository : public BaseRepository<finterm::services::NewsArticle> {
   public:
     static NewsArticleRepository& instance();
 
     /// Insert a batch of articles; ignores duplicates (same id).
     /// Call this off the UI thread — wraps in a single transaction for speed.
-    Result<void> upsert_batch(const QVector<fincept::services::NewsArticle>& articles);
+    Result<void> upsert_batch(const QVector<finterm::services::NewsArticle>& articles);
 
     /// Load articles newer than since_ts (unix seconds).
     /// Optional category filter ("" = all). Ordered newest-first.
-    Result<QVector<fincept::services::NewsArticle>> load_recent(int64_t since_ts, const QString& category = {},
+    Result<QVector<finterm::services::NewsArticle>> load_recent(int64_t since_ts, const QString& category = {},
                                                                 int limit = 2000) const;
 
     /// Total number of stored articles.
@@ -42,7 +42,7 @@ class NewsArticleRepository : public BaseRepository<fincept::services::NewsArtic
     Result<bool> toggle_saved(const QString& id);
 
     /// Return all bookmarked articles, newest first.
-    Result<QVector<fincept::services::NewsArticle>> load_saved() const;
+    Result<QVector<finterm::services::NewsArticle>> load_saved() const;
 
     /// Ensure the saved column exists (idempotent ALTER TABLE).
     void ensure_saved_column();
@@ -50,12 +50,12 @@ class NewsArticleRepository : public BaseRepository<fincept::services::NewsArtic
     /// Full-text search over headline + summary using the FTS5 index.
     /// Returns matching articles ordered by FTS rank (best match first).
     /// Falls back to LIKE scan if FTS table is unavailable.
-    Result<QVector<fincept::services::NewsArticle>> search_fts(const QString& query, int64_t since_ts = 0,
+    Result<QVector<finterm::services::NewsArticle>> search_fts(const QString& query, int64_t since_ts = 0,
                                                                int limit = 500) const;
 
   private:
     NewsArticleRepository() = default;
-    static fincept::services::NewsArticle map_row(QSqlQuery& q);
+    static finterm::services::NewsArticle map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

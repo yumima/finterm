@@ -3,7 +3,7 @@
 
 #include <QUuid>
 
-namespace fincept {
+namespace finterm {
 
 struct Watchlist {
     QString id;
@@ -50,4 +50,4 @@ class WatchlistRepository : public BaseRepository<Watchlist> {
     static WatchlistStock map_stock(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

@@ -18,7 +18,7 @@
 ///
 /// Neither failed loudly; both produced a figure that looked right. That is
 /// the argument for keeping them pure and pinned by tests.
-namespace fincept::pre_ipo::fmt {
+namespace finterm::pre_ipo::fmt {
 
 /// Compact money ("$1.25B", "$350M", "$12K"). Em-dash for non-positive.
 inline QString money(double dollars) {
@@ -110,4 +110,4 @@ inline double price_mid(const QString& price_range, bool* ok_out = nullptr) {
     return (lo + hi) / 2.0;
 }
 
-} // namespace fincept::pre_ipo::fmt
+} // namespace finterm::pre_ipo::fmt

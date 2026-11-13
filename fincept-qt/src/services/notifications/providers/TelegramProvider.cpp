@@ -4,7 +4,7 @@
 
 #include <QJsonObject>
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 void TelegramProvider::load_fields(SettingsRepository& r, const QString& cat) {
     bot_token_ = get_str(r, cat + ".bot_token");
@@ -53,4 +53,4 @@ void TelegramProvider::send(const NotificationRequest& req, std::function<void(b
     });
 }
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

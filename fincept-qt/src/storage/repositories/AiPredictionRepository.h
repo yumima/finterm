@@ -2,7 +2,7 @@
 #pragma once
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 /// One AI stock forecast. The prediction fields are write-once; only the
 /// resolution fields are filled later (see AiPredictionRepository::resolve).
@@ -63,4 +63,4 @@ class AiPredictionRepository : public BaseRepository<AiPrediction> {
     static AiPrediction map_row(QSqlQuery& q);
 };
 
-} // namespace fincept
+} // namespace finterm

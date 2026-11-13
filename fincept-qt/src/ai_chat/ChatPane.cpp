@@ -23,11 +23,11 @@
 
 #include <algorithm>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 static constexpr const char* kChatPaneTag = "ChatPane";
-namespace col = fincept::ui::colors;
-namespace fnt = fincept::ui::fonts;
+namespace col = finterm::ui::colors;
+namespace fnt = finterm::ui::fonts;
 
 // A tagged thread persists and grows for as long as the user keeps a symbol or
 // portfolio, so both ends must be bounded: the turns kept in memory / shipped
@@ -646,4 +646,4 @@ void ChatPane::set_input_enabled(bool enabled) {
     }
 }
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

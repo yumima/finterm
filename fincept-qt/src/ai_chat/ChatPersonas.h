@@ -6,7 +6,7 @@
 
 #include <vector>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 /// A chat "persona": a focused system prompt + a curated tool allow-list (glob
 /// patterns over the wire name `<server>__<tool>`, e.g. `int__get_portfolio*`).
@@ -115,4 +115,4 @@ inline const ChatPersona* find_persona(const QString& id) {
     return nullptr;
 }
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

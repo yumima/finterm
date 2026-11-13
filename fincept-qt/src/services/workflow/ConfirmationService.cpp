@@ -5,7 +5,7 @@
 
 #include <QUuid>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 ConfirmationService& ConfirmationService::instance() {
     static ConfirmationService s;
@@ -61,4 +61,4 @@ void ConfirmationService::resolve(const QString& id, bool approved, const QStrin
     LOG_INFO("Confirmation", QString("%1: %2").arg(approved ? "Approved" : "Rejected", entry.request.title));
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -24,7 +24,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 Result<void> apply_v050(QSqlDatabase& db) {
@@ -58,4 +58,4 @@ void register_migration_v050() {
     MigrationRunner::register_migration({50, "llm_assignment_dedupe", apply_v050});
 }
 
-} // namespace fincept
+} // namespace finterm

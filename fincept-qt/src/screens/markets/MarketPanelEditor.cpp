@@ -21,7 +21,7 @@
 #include <QUuid>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 static constexpr int kDebounceMs = 300;
 static constexpr int kMaxResults = 15;
@@ -244,7 +244,7 @@ void MarketPanelEditor::fire_search(const QString& query) {
                 return; // stale response
             // A failed search says so (read_search_reply) — not the last query's
             // matches, and not an empty list that reads as "no such ticker".
-            const auto reply = fincept::ui::read_search_reply(ok, result);
+            const auto reply = finterm::ui::read_search_reply(ok, result);
             self->on_search_results(reply.results, reply.failure);
         },
         python::PythonWorker::kNetworkActionTimeoutMs);
@@ -312,4 +312,4 @@ MarketPanelConfig MarketPanelEditor::result_config() const {
     return config_;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

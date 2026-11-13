@@ -26,7 +26,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constructor
@@ -908,4 +908,4 @@ void DBnomicsScreen::restore_state(const QVariantMap& state) {
         on_series_selected(prov, ds, ser);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

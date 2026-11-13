@@ -8,7 +8,7 @@
 #include <QToolTip>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 // ---------------------------------------------------------------------------
 // Built-in theme preset definitions
@@ -623,4 +623,4 @@ QString ThemeManager::build_ads_qss() const {
     return qss;
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -4,7 +4,7 @@
 
 #include <QObject>
 
-namespace fincept::services::backtest {
+namespace finterm::services::backtest {
 
 /// Singleton service dispatching backtesting commands to Python providers.
 class BacktestingService : public QObject {
@@ -32,4 +32,4 @@ class BacktestingService : public QObject {
     Q_DISABLE_COPY(BacktestingService)
 };
 
-} // namespace fincept::services::backtest
+} // namespace finterm::services::backtest

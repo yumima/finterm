@@ -16,7 +16,7 @@
 
 #include <atomic>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 class McpClient : public McpClientBase {
     Q_OBJECT
@@ -81,4 +81,4 @@ class McpClient : public McpClientBase {
     void on_finished(int exit_code, QProcess::ExitStatus status);
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

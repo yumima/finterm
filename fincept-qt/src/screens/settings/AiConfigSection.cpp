@@ -10,7 +10,7 @@
 
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 AiConfigSection::AiConfigSection(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
@@ -48,4 +48,4 @@ AiConfigSection::AiConfigSection(QWidget* parent) : QWidget(parent) {
     root->addWidget(tabs_);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

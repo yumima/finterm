@@ -11,7 +11,7 @@
 #include <QMetaObject>
 #include <QProcessEnvironment>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 static constexpr const char* TAG = "McpClient";
 
@@ -539,4 +539,4 @@ void McpClient::on_finished(int exit_code, QProcess::ExitStatus) {
     rpc_cond_.wakeAll();
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

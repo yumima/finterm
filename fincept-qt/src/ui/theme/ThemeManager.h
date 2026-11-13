@@ -6,7 +6,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Central theming singleton.
 /// Owns the active ThemeTokens, builds the global QSS string, and notifies
@@ -55,7 +55,7 @@ class ThemeManager : public QObject {
   signals:
     /// Emitted after every successful apply_theme / apply_density call.
     /// Custom paintEvent widgets connect to this to invalidate caches and call update().
-    void theme_changed(const fincept::ui::ThemeTokens& tokens);
+    void theme_changed(const finterm::ui::ThemeTokens& tokens);
 
   private:
     ThemeManager();
@@ -69,4 +69,4 @@ class ThemeManager : public QObject {
     mutable QString cached_qss_; // last built QSS — skip rebuild if tokens unchanged
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

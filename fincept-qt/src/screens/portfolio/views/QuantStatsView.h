@@ -16,7 +16,7 @@
 #include <QValueAxis>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// QuantStats analytics view — 5 tabs: METRICS, RETURNS, DRAWDOWN, ROLLING, MONTE CARLO.
 /// Calls quantstats_analysis.py automatically on set_data(), and quantstats_monte_carlo.py
@@ -86,4 +86,4 @@ class QuantStatsView : public QWidget {
     bool mc_running_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

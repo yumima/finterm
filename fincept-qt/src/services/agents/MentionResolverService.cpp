@@ -4,7 +4,7 @@
 
 #include <QRegularExpression>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -136,4 +136,4 @@ ResolvedMentions MentionResolverService::resolve(const QString& input) {
     return out;
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

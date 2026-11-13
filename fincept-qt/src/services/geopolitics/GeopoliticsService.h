@@ -8,10 +8,10 @@
 
 #include <functional>
 
-namespace fincept::services::geo {
+namespace finterm::services::geo {
 
 /// Singleton service for geopolitics data — news events API + HDX Python + trade analysis.
-class GeopoliticsService : public QObject, public fincept::datahub::Producer {
+class GeopoliticsService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static GeopoliticsService& instance();
@@ -19,7 +19,7 @@ class GeopoliticsService : public QObject, public fincept::datahub::Producer {
     /// Register with the hub + install geopolitics:* policies. Idempotent.
     void ensure_registered_with_hub();
 
-    // ── fincept::datahub::Producer ─────────────────────────────────────────
+    // ── finterm::datahub::Producer ─────────────────────────────────────────
     QStringList topic_patterns() const override;
     void refresh(const QStringList& topics) override;
     int max_requests_per_sec() const override;
@@ -57,11 +57,11 @@ class GeopoliticsService : public QObject, public fincept::datahub::Producer {
     void extract_geolocations(const QStringList& headlines);
 
   signals:
-    void events_loaded(QVector<fincept::services::geo::NewsEvent> events, int total);
-    void countries_loaded(QVector<fincept::services::geo::UniqueCountry> countries);
-    void categories_loaded(QVector<fincept::services::geo::UniqueCategory> categories);
+    void events_loaded(QVector<finterm::services::geo::NewsEvent> events, int total);
+    void countries_loaded(QVector<finterm::services::geo::UniqueCountry> countries);
+    void categories_loaded(QVector<finterm::services::geo::UniqueCategory> categories);
     void cities_loaded(QStringList cities);
-    void hdx_results_loaded(QString context, QVector<fincept::services::geo::HDXDataset> datasets);
+    void hdx_results_loaded(QString context, QVector<finterm::services::geo::HDXDataset> datasets);
     void trade_result_ready(QString context, QJsonObject data);
     void geolocation_ready(QJsonObject data);
     void error_occurred(QString context, QString message);
@@ -82,8 +82,8 @@ class GeopoliticsService : public QObject, public fincept::datahub::Producer {
     static constexpr int kEventsTtlSec = 120;
     static constexpr int kRefDataTtlSec = 600;
 
-    void publish_hdx_result(const QString& context, const QVector<fincept::services::geo::HDXDataset>& datasets);
+    void publish_hdx_result(const QString& context, const QVector<finterm::services::geo::HDXDataset>& datasets);
     bool hub_registered_ = false;
 };
 
-} // namespace fincept::services::geo
+} // namespace finterm::services::geo

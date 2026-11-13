@@ -6,7 +6,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class PortfolioStatusBar : public QWidget {
     Q_OBJECT
@@ -34,4 +34,4 @@ class PortfolioStatusBar : public QWidget {
     QTimer* clock_timer_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

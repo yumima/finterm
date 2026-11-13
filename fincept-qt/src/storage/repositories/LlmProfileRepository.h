@@ -12,7 +12,7 @@
 
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 // ── Data types ────────────────────────────────────────────────────────────────
 
@@ -107,4 +107,4 @@ class LlmProfileRepository : public BaseRepository<LlmProfile> {
     ResolvedLlmProfile legacy_fallback() const;
 };
 
-} // namespace fincept
+} // namespace finterm

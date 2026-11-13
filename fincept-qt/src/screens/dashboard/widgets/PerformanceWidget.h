@@ -6,7 +6,7 @@
 #include <QHash>
 #include <QLabel>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Performance tracker widget — fetches a basket of symbols (SPY, QQQ, DIA, IWM, etc.)
 /// and computes real YTD/daily performance metrics from yfinance data.
@@ -48,4 +48,4 @@ class PerformanceWidget : public BaseWidget {
     ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

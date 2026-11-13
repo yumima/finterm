@@ -6,7 +6,7 @@
 
 #include <functional>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Confirmation types that require user approval.
 enum class ConfirmationType {
@@ -66,4 +66,4 @@ class ConfirmationService : public QObject {
     void resolve(const QString& id, bool approved, const QString& notes = {});
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

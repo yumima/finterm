@@ -13,7 +13,7 @@
 
 #include "screens/screener/ScreenerModel.h"
 
-using namespace fincept::screens::screener;
+using namespace finterm::screens::screener;
 
 namespace {
 
@@ -100,11 +100,11 @@ class TestScreenerModel : public QObject {
         const QJsonObject hrb = r.rows.value("HRB");
         const auto* roic = column_def("roic");
         QVERIFY(roic);
-        QCOMPARE(format_value(roic->kind, num(hrb, "roic")), fincept::ui::formatting::placeholder());
+        QCOMPARE(format_value(roic->kind, num(hrb, "roic")), finterm::ui::formatting::placeholder());
         QVERIFY(colour_for(Kind::PctSigned, std::nullopt).isEmpty());
         // a name with no fundamentals row at all reads absent, not zero
         const QJsonObject nf = r.rows.value("NOFUND");
-        QCOMPARE(format_value(Kind::Pct, num(nf, "earnings_yield")), fincept::ui::formatting::placeholder());
+        QCOMPARE(format_value(Kind::Pct, num(nf, "earnings_yield")), finterm::ui::formatting::placeholder());
     }
 
     void formats() {

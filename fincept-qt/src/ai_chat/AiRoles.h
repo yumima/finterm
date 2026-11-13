@@ -22,7 +22,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 struct AiRole {
     QString id;    ///< context_type stored in llm_profile_assignments
@@ -73,4 +73,4 @@ inline QString ai_role_label(const QString& id) {
     return id;
 }
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

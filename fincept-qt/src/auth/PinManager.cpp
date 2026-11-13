@@ -9,7 +9,7 @@
 
 #include <climits>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 namespace {
 
@@ -401,4 +401,4 @@ void PinManager::reset_lockout() {
     SecurityAuditLog::instance().record("lockout_cleared");
 }
 
-} // namespace fincept::auth
+} // namespace finterm::auth

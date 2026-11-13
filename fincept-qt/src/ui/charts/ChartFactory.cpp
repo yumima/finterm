@@ -5,7 +5,7 @@
 #include <QtCharts/QBarCategoryAxis>
 #include <QtCharts/QValueAxis>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 void ChartFactory::apply_theme(QChart* chart) {
     const auto& t = ThemeManager::instance().tokens();
@@ -107,4 +107,4 @@ QChartView* ChartFactory::sparkline(const QVector<double>& data, const QString& 
     return view;
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

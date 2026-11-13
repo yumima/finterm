@@ -2,7 +2,7 @@
 #include <QJsonObject>
 #include <QString>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 // ── Response types ───────────────────────────────────────────────────────────
 
@@ -93,4 +93,4 @@ inline QString displayable_email(const QString& email) {
     return email;
 }
 
-} // namespace fincept::auth
+} // namespace finterm::auth

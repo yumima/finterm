@@ -10,7 +10,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 Result<void> apply_v015(QSqlDatabase& /*db*/) {
@@ -48,4 +48,4 @@ void register_migration_v015() {
     MigrationRunner::register_migration({15, "screen_state", apply_v015});
 }
 
-} // namespace fincept
+} // namespace finterm

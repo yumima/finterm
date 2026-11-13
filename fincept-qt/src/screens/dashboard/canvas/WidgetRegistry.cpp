@@ -35,7 +35,7 @@
 #include "screens/dashboard/widgets/WatchlistWidget.h"
 #include "screens/dashboard/widgets/WebScraperWidget.h"
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 WidgetRegistry& WidgetRegistry::instance() {
     static WidgetRegistry inst;
@@ -207,4 +207,4 @@ QVector<WidgetMeta> WidgetRegistry::by_category(const QString& category) const {
     return result;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -11,7 +11,7 @@
 
 class QStackedWidget;
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Reusable widget container — title bar with accent color, close/refresh/config buttons.
 ///
@@ -100,4 +100,4 @@ class BaseWidget : public QFrame {
     QString accent_color_;
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

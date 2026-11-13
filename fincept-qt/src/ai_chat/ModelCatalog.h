@@ -26,7 +26,7 @@
 
 #include <QString>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 class ModelCatalog {
   public:
@@ -39,4 +39,4 @@ class ModelCatalog {
     static int output_cap(const QString& provider, const QString& model);
 };
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

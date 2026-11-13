@@ -9,7 +9,7 @@
 #include <QJsonObject>
 #include <QSqlQuery>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 constexpr const char* kBudgetTag = "BudgetService";
@@ -107,4 +107,4 @@ Result<void> BudgetService::check_dispatch(const QString& agent_id) {
     return Result<void>::ok();
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

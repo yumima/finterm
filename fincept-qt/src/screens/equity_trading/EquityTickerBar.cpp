@@ -7,7 +7,7 @@
 
 #include <cmath>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 EquityTickerBar::EquityTickerBar(QWidget* parent) : QWidget(parent) {
     setObjectName("eqPriceRibbon");
@@ -76,7 +76,7 @@ void EquityTickerBar::update_quote(double ltp, double change, double change_pct,
     if (positive != last_positive_) {
         change_label_->setStyleSheet(
             QString("color: %1; font-size: 12px; font-weight: 700; background: transparent; border: none;")
-                .arg(positive ? fincept::ui::colors::POSITIVE() : fincept::ui::colors::NEGATIVE()));
+                .arg(positive ? finterm::ui::colors::POSITIVE() : finterm::ui::colors::NEGATIVE()));
         last_positive_ = positive;
     }
 
@@ -102,4 +102,4 @@ void EquityTickerBar::update_quote(double ltp, double change, double change_pct,
         volume_label_->setText(QString("Vol:%1").arg(volume, 0, 'f', 0));
 }
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

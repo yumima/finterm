@@ -10,12 +10,12 @@
 
 #include <optional>
 
-namespace fincept::services::polymarket {
+namespace finterm::services::polymarket {
 class PolymarketService;
 class PolymarketWebSocket;
-} // namespace fincept::services::polymarket
+} // namespace finterm::services::polymarket
 
-namespace fincept::services::prediction::polymarket_ns {
+namespace finterm::services::prediction::polymarket_ns {
 
 /// Polymarket exchange adapter.
 ///
@@ -31,7 +31,7 @@ namespace fincept::services::prediction::polymarket_ns {
 ///
 /// Authenticated endpoints are stubbed here and implemented in Phase 6
 /// via the py_clob_client Python bridge.
-class PolymarketAdapter : public fincept::services::prediction::PredictionExchangeAdapter {
+class PolymarketAdapter : public finterm::services::prediction::PredictionExchangeAdapter {
     Q_OBJECT
   public:
     explicit PolymarketAdapter(QObject* parent = nullptr);
@@ -40,19 +40,19 @@ class PolymarketAdapter : public fincept::services::prediction::PredictionExchan
     // Identity
     QString id() const override;
     QString display_name() const override;
-    fincept::services::prediction::ExchangeCapabilities capabilities() const override;
+    finterm::services::prediction::ExchangeCapabilities capabilities() const override;
 
     // Read
     void list_markets(const QString& category, const QString& sort_by, int limit, int offset) override;
     void list_events(const QString& category, const QString& sort_by, int limit, int offset) override;
     void search(const QString& query, int limit) override;
     void list_tags() override;
-    void fetch_market(const fincept::services::prediction::MarketKey& key) override;
-    void fetch_event(const fincept::services::prediction::MarketKey& key) override;
+    void fetch_market(const finterm::services::prediction::MarketKey& key) override;
+    void fetch_event(const finterm::services::prediction::MarketKey& key) override;
     void fetch_order_book(const QString& asset_id) override;
     void fetch_price_history(const QString& asset_id, const QString& interval, int fidelity) override;
-    void fetch_recent_trades(const fincept::services::prediction::MarketKey& key, int limit) override;
-    void fetch_top_holders(const fincept::services::prediction::MarketKey& key, int limit) override;
+    void fetch_recent_trades(const finterm::services::prediction::MarketKey& key, int limit) override;
+    void fetch_top_holders(const finterm::services::prediction::MarketKey& key, int limit) override;
     void fetch_leaderboard(int limit) override;
 
     // WebSocket
@@ -67,9 +67,9 @@ class PolymarketAdapter : public fincept::services::prediction::PredictionExchan
     void fetch_positions() override;
     void fetch_open_orders() override;
     void fetch_user_activity(int limit) override;
-    void place_order(const fincept::services::prediction::OrderRequest& req) override;
+    void place_order(const finterm::services::prediction::OrderRequest& req) override;
     void cancel_order(const QString& order_id) override;
-    void cancel_all_for_market(const fincept::services::prediction::MarketKey& key, const QString& asset_id) override;
+    void cancel_all_for_market(const finterm::services::prediction::MarketKey& key, const QString& asset_id) override;
 
     void ensure_registered_with_hub() override;
 
@@ -79,19 +79,19 @@ class PolymarketAdapter : public fincept::services::prediction::PredictionExchan
 
   private slots:
     // From PolymarketService
-    void on_markets(const QVector<fincept::services::polymarket::Market>& markets);
-    void on_events(const QVector<fincept::services::polymarket::Event>& events);
-    void on_tags(const QVector<fincept::services::polymarket::Tag>& tags);
-    void on_market_detail(const fincept::services::polymarket::Market& market);
-    void on_event_detail(const fincept::services::polymarket::Event& event);
-    void on_order_book(const fincept::services::polymarket::OrderBook& book);
-    void on_price_history(const fincept::services::polymarket::PriceHistory& history);
-    void on_trades(const QVector<fincept::services::polymarket::Trade>& trades);
+    void on_markets(const QVector<finterm::services::polymarket::Market>& markets);
+    void on_events(const QVector<finterm::services::polymarket::Event>& events);
+    void on_tags(const QVector<finterm::services::polymarket::Tag>& tags);
+    void on_market_detail(const finterm::services::polymarket::Market& market);
+    void on_event_detail(const finterm::services::polymarket::Event& event);
+    void on_order_book(const finterm::services::polymarket::OrderBook& book);
+    void on_price_history(const finterm::services::polymarket::PriceHistory& history);
+    void on_trades(const QVector<finterm::services::polymarket::Trade>& trades);
     void on_service_error(const QString& ctx, const QString& msg);
 
     // From PolymarketWebSocket
     void on_ws_price(const QString& asset_id, double price);
-    void on_ws_orderbook(const QString& asset_id, const fincept::services::polymarket::OrderBook& book);
+    void on_ws_orderbook(const QString& asset_id, const finterm::services::polymarket::OrderBook& book);
     void on_ws_status(bool connected);
 
   private:
@@ -103,14 +103,14 @@ class PolymarketAdapter : public fincept::services::prediction::PredictionExchan
     /// if not. Returns the creds (with api_key populated) or nullopt on
     /// failure. `then` fires on the main thread with the creds or the
     /// error emitted via error_occurred().
-    void ensure_api_creds(std::function<void(const fincept::services::prediction::PolymarketCredentials&)> then,
+    void ensure_api_creds(std::function<void(const finterm::services::prediction::PolymarketCredentials&)> then,
                           const QString& ctx);
     void run_py(const QString& command, const QJsonObject& payload, std::function<void(const QJsonObject&)> on_ok,
                 const QString& ctx);
-    QJsonObject creds_to_json(const fincept::services::prediction::PolymarketCredentials& c) const;
+    QJsonObject creds_to_json(const finterm::services::prediction::PolymarketCredentials& c) const;
 
-    fincept::services::polymarket::PolymarketService* service_ = nullptr; // singleton ptr, not owned
-    fincept::services::polymarket::PolymarketWebSocket* ws_ = nullptr;    // singleton ptr, not owned
+    finterm::services::polymarket::PolymarketService* service_ = nullptr; // singleton ptr, not owned
+    finterm::services::polymarket::PolymarketWebSocket* ws_ = nullptr;    // singleton ptr, not owned
 
     // Per-request context kept between service callback and our signal.
     QString last_history_asset_id_;
@@ -118,8 +118,8 @@ class PolymarketAdapter : public fincept::services::prediction::PredictionExchan
     bool hub_registered_ = false;
 
     // Authenticated-path state.
-    std::optional<fincept::services::prediction::PolymarketCredentials> creds_;
+    std::optional<finterm::services::prediction::PolymarketCredentials> creds_;
     QString cached_wallet_address_; // derived once from private key
 };
 
-} // namespace fincept::services::prediction::polymarket_ns
+} // namespace finterm::services::prediction::polymarket_ns

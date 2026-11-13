@@ -8,7 +8,7 @@
 #include <QSqlQuery>
 #include <QUuid>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 AuditLogger& AuditLogger::instance() {
     static AuditLogger s;
@@ -20,7 +20,7 @@ AuditLogger::AuditLogger() : QObject(nullptr) {
 }
 
 void AuditLogger::ensure_table() {
-    auto r = fincept::Database::instance().exec("CREATE TABLE IF NOT EXISTS workflow_audit_log ("
+    auto r = finterm::Database::instance().exec("CREATE TABLE IF NOT EXISTS workflow_audit_log ("
                                                 "  id          INTEGER PRIMARY KEY AUTOINCREMENT,"
                                                 "  action      TEXT NOT NULL,"
                                                 "  workflow_id TEXT DEFAULT '',"
@@ -34,14 +34,14 @@ void AuditLogger::ensure_table() {
     if (r.is_err())
         LOG_ERROR("AuditLogger", QString("Failed to create audit table: %1").arg(QString::fromStdString(r.error())));
 
-    fincept::Database::instance().exec("CREATE INDEX IF NOT EXISTS idx_audit_ts ON workflow_audit_log(timestamp)");
-    fincept::Database::instance().exec("CREATE INDEX IF NOT EXISTS idx_audit_action ON workflow_audit_log(action)");
-    fincept::Database::instance().exec("CREATE INDEX IF NOT EXISTS idx_audit_wf ON workflow_audit_log(workflow_id)");
+    finterm::Database::instance().exec("CREATE INDEX IF NOT EXISTS idx_audit_ts ON workflow_audit_log(timestamp)");
+    finterm::Database::instance().exec("CREATE INDEX IF NOT EXISTS idx_audit_action ON workflow_audit_log(action)");
+    finterm::Database::instance().exec("CREATE INDEX IF NOT EXISTS idx_audit_wf ON workflow_audit_log(workflow_id)");
 }
 
 void AuditLogger::log(AuditAction action, const QString& workflow_id, const QString& node_id, const QString& symbol,
                       const QString& details, const QJsonObject& metadata, bool paper_trading) {
-    auto& db = fincept::Database::instance();
+    auto& db = finterm::Database::instance();
     auto r =
         db.execute("INSERT INTO workflow_audit_log (action, workflow_id, node_id, symbol, details, metadata, paper) "
                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -64,7 +64,7 @@ Result<QVector<AuditEntry>> AuditLogger::query(const QDateTime& from, const QDat
     }
     sql += " ORDER BY timestamp DESC";
 
-    auto r = fincept::Database::instance().execute(sql, params);
+    auto r = finterm::Database::instance().execute(sql, params);
     if (r.is_err())
         return Result<QVector<AuditEntry>>::err(r.error());
 
@@ -76,7 +76,7 @@ Result<QVector<AuditEntry>> AuditLogger::query(const QDateTime& from, const QDat
 }
 
 Result<QVector<AuditEntry>> AuditLogger::by_workflow(const QString& workflow_id) const {
-    auto r = fincept::Database::instance().execute(
+    auto r = finterm::Database::instance().execute(
         "SELECT id, action, workflow_id, node_id, symbol, details, metadata, paper, timestamp "
         "FROM workflow_audit_log WHERE workflow_id = ? ORDER BY timestamp DESC",
         {workflow_id});
@@ -91,7 +91,7 @@ Result<QVector<AuditEntry>> AuditLogger::by_workflow(const QString& workflow_id)
 }
 
 Result<QVector<AuditEntry>> AuditLogger::recent(int limit) const {
-    auto r = fincept::Database::instance().execute(
+    auto r = finterm::Database::instance().execute(
         "SELECT id, action, workflow_id, node_id, symbol, details, metadata, paper, timestamp "
         "FROM workflow_audit_log ORDER BY timestamp DESC LIMIT ?",
         {limit});
@@ -106,7 +106,7 @@ Result<QVector<AuditEntry>> AuditLogger::recent(int limit) const {
 }
 
 int AuditLogger::count() const {
-    auto r = fincept::Database::instance().execute("SELECT COUNT(*) FROM workflow_audit_log", {});
+    auto r = finterm::Database::instance().execute("SELECT COUNT(*) FROM workflow_audit_log", {});
     if (r.is_err())
         return 0;
     auto& q = r.value();
@@ -219,4 +219,4 @@ AuditAction AuditLogger::string_to_action(const QString& s) {
     return AuditAction::WorkflowStarted;
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

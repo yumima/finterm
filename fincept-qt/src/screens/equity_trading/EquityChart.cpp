@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 // ── CandleCanvas ─────────────────────────────────────────────────────────────
 
@@ -250,4 +250,4 @@ void EquityChart::set_active_tf(int idx) {
     emit timeframe_changed(TF_LABELS[idx]);
 }
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

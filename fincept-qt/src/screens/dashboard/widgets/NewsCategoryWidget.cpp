@@ -17,7 +17,7 @@
 #include <QListWidget>
 #include <QSpinBox>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 NewsCategoryWidget::NewsCategoryWidget(const QJsonObject& cfg, QWidget* parent)
     : BaseWidget("NEWS — CATEGORY", parent) {
@@ -116,9 +116,9 @@ void NewsCategoryWidget::hideEvent(QHideEvent* e) {
 }
 
 void NewsCategoryWidget::on_articles(const QVariant& v) {
-    if (!v.canConvert<QVector<fincept::services::NewsArticle>>())
+    if (!v.canConvert<QVector<finterm::services::NewsArticle>>())
         return;
-    const auto articles = v.value<QVector<fincept::services::NewsArticle>>();
+    const auto articles = v.value<QVector<finterm::services::NewsArticle>>();
 
     list_->clear();
     int n = std::min<int>(max_rows_, articles.size());
@@ -186,4 +186,4 @@ void NewsCategoryWidget::apply_styles() {
                              .arg(ui::colors::TEXT_PRIMARY(), ui::colors::BORDER_DIM()));
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

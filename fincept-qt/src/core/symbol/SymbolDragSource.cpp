@@ -15,7 +15,7 @@
 #include <QPixmap>
 #include <QWidget>
 
-namespace fincept::symbol_dnd {
+namespace finterm::symbol_dnd {
 
 static QPixmap make_drag_pixmap(const SymbolRef& ref) {
     // Amber pill with the ticker. Small enough not to block the drop target.
@@ -155,4 +155,4 @@ SymbolDragFilter* installDragSource(QWidget* source, SymbolDragFilter::RefProvid
     return f;
 }
 
-} // namespace fincept::symbol_dnd
+} // namespace finterm::symbol_dnd

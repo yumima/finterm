@@ -13,7 +13,7 @@ class QCandlestickSeries;
 class QDateTimeAxis;
 class QValueAxis;
 
-namespace fincept::screens::crypto {
+namespace finterm::screens::crypto {
 
 class CryptoChart : public QWidget {
     Q_OBJECT
@@ -66,4 +66,4 @@ class CryptoChart : public QWidget {
     QString pending_tf_;
 };
 
-} // namespace fincept::screens::crypto
+} // namespace finterm::screens::crypto

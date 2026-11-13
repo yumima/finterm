@@ -8,7 +8,7 @@
 
 #include <functional>
 
-namespace fincept {
+namespace finterm {
 
 /// WebSocket client with auto-reconnect for real-time market data.
 class WebSocketClient : public QObject {
@@ -49,4 +49,4 @@ class WebSocketClient : public QObject {
     static constexpr int MAX_RECONNECT_ATTEMPTS = 10;
 };
 
-} // namespace fincept
+} // namespace finterm

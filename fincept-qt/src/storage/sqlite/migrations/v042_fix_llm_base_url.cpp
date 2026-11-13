@@ -23,7 +23,7 @@
 #include <QSqlQuery>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 constexpr const char* kMig042Tag = "Migration042";
@@ -109,4 +109,4 @@ void register_migration_v042() {
     MigrationRunner::register_migration({42, "fix_llm_base_url", apply_v042});
 }
 
-} // namespace fincept
+} // namespace finterm

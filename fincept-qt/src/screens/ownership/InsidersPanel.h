@@ -7,7 +7,7 @@ class QCheckBox;
 class QLabel;
 class QTableWidget;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class InsiderTimeline;
 
@@ -44,4 +44,4 @@ class InsidersPanel : public QWidget {
     QLabel* foot_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

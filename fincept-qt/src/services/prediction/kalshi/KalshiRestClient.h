@@ -15,7 +15,7 @@ class QJsonDocument;
 class QJsonObject;
 class QNetworkAccessManager;
 
-namespace fincept::services::prediction::kalshi_ns {
+namespace finterm::services::prediction::kalshi_ns {
 
 /// Public (unsigned) REST client for the Kalshi v2 API.
 ///
@@ -100,17 +100,17 @@ class KalshiRestClient : public QObject {
 
   signals:
     // Each signal carries (markets, cursor) so callers can paginate.
-    void markets_ready(const QVector<fincept::services::prediction::PredictionMarket>& markets,
+    void markets_ready(const QVector<finterm::services::prediction::PredictionMarket>& markets,
                        const QString& next_cursor);
-    void market_detail_ready(const fincept::services::prediction::PredictionMarket& market);
-    void events_ready(const QVector<fincept::services::prediction::PredictionEvent>& events,
+    void market_detail_ready(const finterm::services::prediction::PredictionMarket& market);
+    void events_ready(const QVector<finterm::services::prediction::PredictionEvent>& events,
                       const QString& next_cursor);
-    void event_detail_ready(const fincept::services::prediction::PredictionEvent& event);
+    void event_detail_ready(const finterm::services::prediction::PredictionEvent& event);
     void tags_ready(const QStringList& series_tickers);
-    void order_book_ready(const fincept::services::prediction::PredictionOrderBook& yes_book,
-                          const fincept::services::prediction::PredictionOrderBook& no_book, const QString& ticker);
-    void price_history_ready(const fincept::services::prediction::PriceHistory& yes_history, const QString& ticker);
-    void trades_ready(const QVector<fincept::services::prediction::PredictionTrade>& trades);
+    void order_book_ready(const finterm::services::prediction::PredictionOrderBook& yes_book,
+                          const finterm::services::prediction::PredictionOrderBook& no_book, const QString& ticker);
+    void price_history_ready(const finterm::services::prediction::PriceHistory& yes_history, const QString& ticker);
+    void trades_ready(const QVector<finterm::services::prediction::PredictionTrade>& trades);
 
     // Exchange / series / search metadata — raw JSON pass-through since
     // these are low-use endpoints without a frontend struct yet.
@@ -122,14 +122,14 @@ class KalshiRestClient : public QObject {
     void search_filters_ready(const QJsonObject& filters);
 
     // Batch candlesticks: map of ticker → history.
-    void batch_candlesticks_ready(const QHash<QString, fincept::services::prediction::PriceHistory>& histories);
+    void batch_candlesticks_ready(const QHash<QString, finterm::services::prediction::PriceHistory>& histories);
 
     // Historical (matches the live counterparts).
-    void historical_markets_ready(const QVector<fincept::services::prediction::PredictionMarket>& markets,
+    void historical_markets_ready(const QVector<finterm::services::prediction::PredictionMarket>& markets,
                                   const QString& next_cursor);
-    void historical_candlesticks_ready(const fincept::services::prediction::PriceHistory& history,
+    void historical_candlesticks_ready(const finterm::services::prediction::PriceHistory& history,
                                        const QString& ticker);
-    void historical_trades_ready(const QVector<fincept::services::prediction::PredictionTrade>& trades,
+    void historical_trades_ready(const QVector<finterm::services::prediction::PredictionTrade>& trades,
                                  const QString& next_cursor);
 
     void request_error(const QString& context, const QString& message);
@@ -143,4 +143,4 @@ class KalshiRestClient : public QObject {
     bool demo_ = false;
 };
 
-} // namespace fincept::services::prediction::kalshi_ns
+} // namespace finterm::services::prediction::kalshi_ns

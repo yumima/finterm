@@ -29,7 +29,7 @@
 
 class QTimer;
 
-namespace fincept::services {
+namespace finterm::services {
 
 class OwnershipService : public QObject {
     Q_OBJECT
@@ -207,4 +207,4 @@ class OwnershipService : public QObject {
     mutable QString index_status_;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

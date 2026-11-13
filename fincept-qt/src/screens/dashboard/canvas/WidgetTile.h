@@ -5,7 +5,7 @@
 #include <QString>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Transparent overlay that captures mouse events in the resize handle zone.
 /// Sits in the bottom-right corner of WidgetTile, on top of all content.
@@ -86,4 +86,4 @@ class WidgetTile : public QWidget {
     static constexpr int kEdgeZone = 8; // px from right/bottom edge for resize
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

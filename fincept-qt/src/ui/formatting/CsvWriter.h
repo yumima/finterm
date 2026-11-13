@@ -3,7 +3,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::ui::formatting {
+namespace finterm::ui::formatting {
 
 /// RFC 4180 CSV writer with UTF-8 BOM, CRLF terminators, and error tracking.
 ///
@@ -79,4 +79,4 @@ class CsvWriter {
     QString error_;
 };
 
-} // namespace fincept::ui::formatting
+} // namespace finterm::ui::formatting

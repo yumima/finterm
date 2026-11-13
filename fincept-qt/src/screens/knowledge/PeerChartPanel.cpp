@@ -16,7 +16,7 @@
 
 #include <cmath>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
@@ -167,4 +167,4 @@ void PeerChartPanel::load() {
     }
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

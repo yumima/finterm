@@ -14,10 +14,10 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ownership;
-using namespace fincept::screens::ownership_ui;
+using namespace finterm::ownership;
+using namespace finterm::screens::ownership_ui;
 
 /// Bars, oldest left, one per settlement date. Height is shares short as a
 /// share of float when the float is known, else shares short; the axis
@@ -284,4 +284,4 @@ void ShortInterestPanel::set_snapshot(const OwnershipSnapshot& s, bool loading) 
                                   "business days after that, so a reading is two to four weeks old on screen."));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -16,9 +16,9 @@
 
 #include <cmath>
 
-namespace fincept::services::prediction::kalshi_ns {
+namespace finterm::services::prediction::kalshi_ns {
 
-namespace pr = fincept::services::prediction;
+namespace pr = finterm::services::prediction;
 
 static const QString kProdBase = QStringLiteral("https://api.elections.kalshi.com/trade-api/v2");
 static const QString kDemoBase = QStringLiteral("https://demo-api.kalshi.co/trade-api/v2");
@@ -715,4 +715,4 @@ void KalshiRestClient::fetch_search_filters_by_sport(const QString& sport) {
         QStringLiteral("Kalshi.fetch_search_filters_by_sport"));
 }
 
-} // namespace fincept::services::prediction::kalshi_ns
+} // namespace finterm::services::prediction::kalshi_ns

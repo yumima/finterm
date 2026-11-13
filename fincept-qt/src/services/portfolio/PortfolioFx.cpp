@@ -3,7 +3,7 @@
 
 #include <limits>
 
-namespace fincept::portfolio {
+namespace finterm::portfolio {
 
 QPair<QString, double> fx_price_factor(const QString& currency) {
     const QString trimmed = currency.trimmed();
@@ -54,4 +54,4 @@ double FxRates::rate_for(const QString& symbol, const QString& date) const {
     return strict_ ? std::numeric_limits<double>::quiet_NaN() : 1.0;
 }
 
-} // namespace fincept::portfolio
+} // namespace finterm::portfolio

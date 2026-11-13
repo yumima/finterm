@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 class PushoverProvider final : public BaseProvider {
   public:
@@ -21,4 +21,4 @@ class PushoverProvider final : public BaseProvider {
     QString user_key_;
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

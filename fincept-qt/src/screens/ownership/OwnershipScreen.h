@@ -11,7 +11,7 @@ class QTabWidget;
 class QTimer;
 class QListWidget;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class InsiderBuysPanel;
 class MoversPanel;
@@ -72,4 +72,4 @@ class OwnershipScreen : public QWidget, public IStatefulScreen {
     bool shown_once_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

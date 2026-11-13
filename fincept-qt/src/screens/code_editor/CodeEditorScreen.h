@@ -19,7 +19,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // -- Cell data ----------------------------------------------------------------
 
@@ -208,4 +208,4 @@ class CodeEditorScreen : public QWidget, public IStatefulScreen {
     bool sidebar_visible_ = true;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

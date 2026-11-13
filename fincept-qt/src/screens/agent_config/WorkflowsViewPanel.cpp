@@ -14,7 +14,7 @@
 #include <QSplitter>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Workflow catalog definition ───────────────────────────────────────────────
 
@@ -552,4 +552,4 @@ void WorkflowsViewPanel::showEvent(QShowEvent* event) {
     QWidget::showEvent(event);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

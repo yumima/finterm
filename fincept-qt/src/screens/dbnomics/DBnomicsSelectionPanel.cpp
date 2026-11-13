@@ -10,7 +10,7 @@
 #include <QSizePolicy>
 
 // ── Shared constants ─────────────────────────────────────────────────────────
-namespace col = fincept::ui::colors;
+namespace col = finterm::ui::colors;
 
 namespace {
 
@@ -55,7 +55,7 @@ static QString kLoadMoreStyle() {
 
 } // namespace
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 static QLabel* make_spin_label(const QString& text, QWidget* parent) {
     auto* lbl = new QLabel(text, parent);
@@ -740,4 +740,4 @@ void DBnomicsSelectionPanel::update_slot_series(int slot_index, const QVector<se
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

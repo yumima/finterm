@@ -2,7 +2,7 @@
 #include "screens/dashboard/canvas/GridLayout.h"
 #include "storage/repositories/BaseRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 class DashboardLayoutRepository : public BaseRepository<screens::GridItem> {
   public:
@@ -21,4 +21,4 @@ class DashboardLayoutRepository : public BaseRepository<screens::GridItem> {
     DashboardLayoutRepository() = default;
 };
 
-} // namespace fincept
+} // namespace finterm

@@ -32,7 +32,7 @@
 
 #include <vector>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 /// One ranked retrieval result.
 struct ToolMatch {
@@ -100,4 +100,4 @@ class ToolRetriever {
     static bool is_stop_word(const QString& token);
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

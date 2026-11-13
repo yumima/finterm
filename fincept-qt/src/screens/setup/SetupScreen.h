@@ -10,19 +10,19 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::python {
+namespace finterm::python {
 struct SetupProgress;
 }
 
-namespace fincept::net {
+namespace finterm::net {
 class NetSpeedMeter;
 }
 
-namespace fincept::ui {
+namespace finterm::ui {
 class SpeedSparkline;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class SetupScreen : public QWidget {
     Q_OBJECT
@@ -34,7 +34,7 @@ class SetupScreen : public QWidget {
 
   private slots:
     void on_begin_setup();
-    void on_progress(const fincept::python::SetupProgress& progress);
+    void on_progress(const finterm::python::SetupProgress& progress);
     void on_setup_done(bool success, const QString& error);
     void on_skip_clicked();  // user-initiated skip
     void on_setup_timeout(); // overall 15-min timeout fired
@@ -63,8 +63,8 @@ class SetupScreen : public QWidget {
     QLabel* down_lbl_ = nullptr;
     QLabel* up_lbl_ = nullptr;
     QLabel* elapsed_lbl_ = nullptr;
-    fincept::ui::SpeedSparkline* sparkline_ = nullptr;
-    fincept::net::NetSpeedMeter* net_meter_ = nullptr;
+    finterm::ui::SpeedSparkline* sparkline_ = nullptr;
+    finterm::net::NetSpeedMeter* net_meter_ = nullptr;
     QTimer* elapsed_timer_ = nullptr;
     qint64 setup_started_ms_ = 0;
 
@@ -80,4 +80,4 @@ class SetupScreen : public QWidget {
     QMap<QString, StepUI> steps_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

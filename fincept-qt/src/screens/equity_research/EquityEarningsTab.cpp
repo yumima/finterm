@@ -19,7 +19,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 using services::equity::EarningsAnalysis;
 using services::equity::EarningsOutlook;
@@ -1360,4 +1360,4 @@ void EquityEarningsTab::fill_estimates(const EarningsAnalysis& a) {
     fit_table_height(estimates_table_);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

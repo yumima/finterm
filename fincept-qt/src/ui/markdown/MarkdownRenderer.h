@@ -2,7 +2,7 @@
 #pragma once
 #include <QString>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Converts a Markdown string to styled HTML suitable for display in QTextEdit/QTextBrowser.
 /// Uses md4c (CommonMark-compliant) for parsing and wraps the output in a dark-theme
@@ -17,4 +17,4 @@ class MarkdownRenderer {
     static QString wrap_html(const QString& body_html);
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

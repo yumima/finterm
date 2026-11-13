@@ -7,7 +7,7 @@
 
 #include <algorithm>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 InlineSparkline::InlineSparkline(QWidget* parent) : QWidget(parent) {
     setMinimumHeight(16);
@@ -52,4 +52,4 @@ void InlineSparkline::paintEvent(QPaintEvent* /*event*/) {
     p.drawPath(path);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

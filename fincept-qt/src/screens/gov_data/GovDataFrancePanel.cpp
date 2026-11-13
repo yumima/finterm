@@ -14,13 +14,13 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 static constexpr const char* kGovDataFranceScript = "french_gov_api.py";
 static constexpr const char* kGovDataFranceColor = "#2563EB";
 } // namespace
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ── Constructor ───────────────────────────────────────────────────────────────
 
@@ -587,4 +587,4 @@ void GovDataFrancePanel::on_export_csv() {
     export_table_to_csv(table, def_name, this);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

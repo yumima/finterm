@@ -2,7 +2,7 @@
 #include "screens/dashboard/widgets/QuoteTableWidget.h"
 #include "ui/theme/Theme.h"
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Cryptocurrency widget — fetches top 9 cryptos via yfinance.
 inline QuoteTableWidget* create_crypto_widget(QWidget* parent = nullptr) {
@@ -14,4 +14,4 @@ inline QuoteTableWidget* create_crypto_widget(QWidget* parent = nullptr) {
                                 ui::colors::AMBER(), parent);
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

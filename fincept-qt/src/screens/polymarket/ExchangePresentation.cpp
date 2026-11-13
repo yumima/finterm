@@ -7,9 +7,9 @@
 
 #include <cmath>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-namespace pred = fincept::services::prediction;
+namespace pred = finterm::services::prediction;
 
 // ── Formatters ──────────────────────────────────────────────────────────────
 
@@ -19,7 +19,7 @@ QString ExchangePresentation::format_price(double prob) const {
     // Kalshi cent-prices divided by 100 by the type map). The presentation
     // decides how to render it. NaN = no real price (e.g. empty Kalshi book).
     if (!std::isfinite(prob))
-        return fincept::ui::formatting::placeholder();
+        return finterm::ui::formatting::placeholder();
     switch (price_style) {
         case PriceStyle::ProbabilityCents:
             return QStringLiteral("%1\u00A2").arg(qRound(prob * 100.0)); // "52¢"
@@ -51,7 +51,7 @@ QString ExchangePresentation::format_liquidity(double v) const {
 
 ExchangePresentation::StatusBadge ExchangePresentation::status_badge(const pred::PredictionMarket& market) const {
 
-    using namespace fincept::ui;
+    using namespace finterm::ui;
 
     // Kalshi v2 statuses (Apr 2026): unopened, open, paused, closed, settled.
     // The adapter stashes the raw status string in extras["status"]. Polymarket
@@ -104,7 +104,7 @@ ExchangePresentation::StatusBadge ExchangePresentation::status_badge(const pred:
 // ── Factories ───────────────────────────────────────────────────────────────
 
 ExchangePresentation ExchangePresentation::for_polymarket() {
-    using namespace fincept::ui;
+    using namespace finterm::ui;
     ExchangePresentation p;
     p.exchange_id = QStringLiteral("polymarket");
     p.display_name = QStringLiteral("Polymarket");
@@ -167,4 +167,4 @@ ExchangePresentation ExchangePresentation::for_id(const QString& exchange_id) {
     return for_polymarket();
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

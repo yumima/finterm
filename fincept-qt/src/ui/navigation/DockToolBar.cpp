@@ -1,6 +1,6 @@
 #include "ui/navigation/DockToolBar.h"
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 DockToolBar::DockToolBar(QWidget* parent) : QToolBar("Main Toolbar", parent) {
     // Stable objectName is required by QMainWindow::saveState / restoreState
@@ -20,4 +20,4 @@ DockToolBar::DockToolBar(QWidget* parent) : QToolBar("Main Toolbar", parent) {
     addWidget(inner_);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

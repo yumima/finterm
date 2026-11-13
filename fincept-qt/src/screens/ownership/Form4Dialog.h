@@ -3,7 +3,7 @@
 
 #include <QDialog>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// One Form 4, rendered.
 ///
@@ -23,4 +23,4 @@ class Form4Dialog : public QDialog {
     Form4Dialog(const QVector<ownership::InsiderTransaction>& filing, const QString& issuer, QWidget* parent = nullptr);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

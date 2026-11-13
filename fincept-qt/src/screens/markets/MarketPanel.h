@@ -11,7 +11,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Single market category panel — resizable workstation tile.
 /// Fills all height given by parent QSplitter.
@@ -109,4 +109,4 @@ class MarketPanel : public QWidget {
     ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

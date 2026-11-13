@@ -7,7 +7,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Reports & PME detail view with transaction history, performance attribution, and export.
 class ReportsView : public QWidget {
@@ -39,4 +39,4 @@ class ReportsView : public QWidget {
     QString currency_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

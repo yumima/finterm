@@ -1,6 +1,6 @@
 #include "storage/repositories/DataSourceRepository.h"
 
-namespace fincept {
+namespace finterm {
 
 DataSourceRepository& DataSourceRepository::instance() {
     static DataSourceRepository s;
@@ -54,4 +54,4 @@ Result<void> DataSourceRepository::set_enabled(const QString& id, bool enabled) 
                       {enabled ? 1 : 0, id});
 }
 
-} // namespace fincept
+} // namespace finterm

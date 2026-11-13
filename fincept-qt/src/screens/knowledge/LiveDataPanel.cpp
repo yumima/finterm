@@ -10,7 +10,7 @@
 
 #include <cmath>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 namespace {
 constexpr const char* MONO = "font-family: 'Consolas','Courier New',monospace;";
@@ -153,4 +153,4 @@ QString LiveDataPanel::format_metric(const QString& metric, double v) {
     return QString::number(v, 'f', 2);
 }
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

@@ -17,7 +17,7 @@
 
 #include <utility>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 Result<void> add_column(QSqlDatabase& db, const char* column, const char* type) {
@@ -50,4 +50,4 @@ void register_migration_v052() {
     MigrationRunner::register_migration({52, "earnings_outlook", apply_v052});
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -23,7 +23,7 @@
 #include <memory>
 #include <vector>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 namespace agents_internal {
 
@@ -257,4 +257,4 @@ void register_repos_tools(std::vector<ToolDef>& tools);
 
 } // namespace agents_internal
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

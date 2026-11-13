@@ -34,7 +34,7 @@ between the existing `P15` and `Security` sections:
   All Python-backed data flows through a Producer registered with
   `DataHub`.
 - **D2.** Services that fetch external data (HTTP, Python, WS)
-  must implement `fincept::datahub::Producer` and publish results
+  must implement `finterm::datahub::Producer` and publish results
   via `DataHub::publish(...)`.
 - **D3.** Widgets never own a data-refresh `QTimer`. The hub
   scheduler owns cadence. Widgets subscribe in `showEvent`,

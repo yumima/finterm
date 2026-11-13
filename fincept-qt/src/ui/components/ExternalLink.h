@@ -15,7 +15,7 @@
 #include <QString>
 #include <QUrl>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Open @p url in the user's browser. Returns false without doing anything
 /// when the URL is empty, malformed, or not http/https.
@@ -36,4 +36,4 @@ inline bool open_external_link(const QString& url) {
     return QDesktopServices::openUrl(parsed);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

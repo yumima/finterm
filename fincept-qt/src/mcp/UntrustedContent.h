@@ -35,7 +35,7 @@
 
 #include <QString>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 class UntrustedContent {
   public:
@@ -50,4 +50,4 @@ class UntrustedContent {
     static constexpr const char* kCloseTag = "</untrusted>";
 };
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

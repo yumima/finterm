@@ -10,7 +10,7 @@
 #include <QPainter>
 #include <QPainterPath>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 EdgeItem::EdgeItem(const QString& id, PortItem* source, PortItem* target, QGraphicsItem* parent)
     : QGraphicsPathItem(parent), id_(id), source_(source), target_(target) {
@@ -126,4 +126,4 @@ QVariant EdgeItem::itemChange(GraphicsItemChange change, const QVariant& value) 
     return QGraphicsPathItem::itemChange(change, value);
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

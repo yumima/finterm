@@ -8,7 +8,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class DBnomicsDataTable : public QWidget {
     Q_OBJECT
@@ -29,4 +29,4 @@ class DBnomicsDataTable : public QWidget {
     int frame_ = 0;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

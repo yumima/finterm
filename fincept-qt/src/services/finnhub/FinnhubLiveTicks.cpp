@@ -9,7 +9,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace fincept::services::finnhub {
+namespace finterm::services::finnhub {
 
 FinnhubLiveTicks& FinnhubLiveTicks::instance() {
     static FinnhubLiveTicks inst;
@@ -53,7 +53,7 @@ void FinnhubLiveTicks::ensure_connected() {
     if (want_open_ && socket_.is_connected())
         return;
 
-    auto r = fincept::SecureStorage::instance().retrieve(QStringLiteral("FINNHUB_API_KEY"));
+    auto r = finterm::SecureStorage::instance().retrieve(QStringLiteral("FINNHUB_API_KEY"));
     if (!r.is_ok() || r.value().isEmpty()) {
         // No key configured — silent no-op. ER's REST refresh remains the
         // primary path; this service exists purely to push faster updates
@@ -134,4 +134,4 @@ void FinnhubLiveTicks::send_op(const QString& op, const QString& symbol) {
     socket_.send(QString::fromUtf8(QJsonDocument(frame).toJson(QJsonDocument::Compact)));
 }
 
-} // namespace fincept::services::finnhub
+} // namespace finterm::services::finnhub

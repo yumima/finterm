@@ -68,7 +68,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Construction ──────────────────────────────────────────────────────────────
 
@@ -187,7 +187,7 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     // Wire Voice config changes → reload STT service (picks up provider / API key / model)
     if (auto* voice = qobject_cast<VoiceConfigSection*>(sections_->widget(13))) {
         connect(voice, &VoiceConfigSection::config_changed, this,
-                []() { fincept::services::SpeechService::instance().reload_config(); });
+                []() { finterm::services::SpeechService::instance().reload_config(); });
     }
 
     connect(&ui::ThemeManager::instance(), &ui::ThemeManager::theme_changed, this,
@@ -271,7 +271,7 @@ QWidget* SettingsScreen::build_appearance() {
                                   "QScrollBar:vertical { background: %1; width: 6px; }"
                                   "QScrollBar::handle:vertical { background: %2; }"
                                   "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
-                              .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_MED()));
+                              .arg(finterm::ui::colors::BG_SURFACE(), finterm::ui::colors::BORDER_MED()));
 
     auto* page = new QWidget(this);
     auto* vl = new QVBoxLayout(page);
@@ -289,7 +289,7 @@ QWidget* SettingsScreen::build_appearance() {
     vl->addSpacing(8);
 
     app_density_ = new QComboBox;
-    app_density_->addItems(fincept::ui::ThemeManager::available_densities());
+    app_density_->addItems(finterm::ui::ThemeManager::available_densities());
     app_density_->setCurrentText("Default");
     app_density_->setStyleSheet(settings_style::combo_ss());
     vl->addWidget(make_row("Content Density", app_density_, "Controls padding and spacing throughout the UI."));
@@ -299,7 +299,7 @@ QWidget* SettingsScreen::build_appearance() {
     appearance_debounce_->setSingleShot(true);
     appearance_debounce_->setInterval(300);
     connect(appearance_debounce_, &QTimer::timeout, this,
-            [this]() { fincept::ui::ThemeManager::instance().apply_density(app_density_->currentText()); });
+            [this]() { finterm::ui::ThemeManager::instance().apply_density(app_density_->currentText()); });
     connect(app_density_, &QComboBox::currentTextChanged, this, [this]() { appearance_debounce_->start(); });
 
     vl->addSpacing(8);
@@ -336,7 +336,7 @@ QWidget* SettingsScreen::build_appearance() {
     apply_btn->setStyleSheet(settings_style::btn_primary_ss());
     connect(apply_btn, &QPushButton::clicked, this, [this]() {
         auto& repo = SettingsRepository::instance();
-        auto& tm = fincept::ui::ThemeManager::instance();
+        auto& tm = finterm::ui::ThemeManager::instance();
 
         // Persist all values
         repo.set("appearance.density", app_density_->currentText(), "appearance");
@@ -534,7 +534,7 @@ const QVector<ProviderDef>& provider_defs() {
 } // anonymous namespace
 
 QWidget* SettingsScreen::build_notifications() {
-    using namespace fincept::notifications;
+    using namespace finterm::notifications;
 
     auto* scroll = new QScrollArea;
     scroll->setWidgetResizable(true);
@@ -542,7 +542,7 @@ QWidget* SettingsScreen::build_notifications() {
                                   "QScrollBar:vertical { background: %1; width: 6px; }"
                                   "QScrollBar::handle:vertical { background: %2; border-radius: 3px; }"
                                   "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }")
-                              .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_MED()));
+                              .arg(finterm::ui::colors::BG_SURFACE(), finterm::ui::colors::BORDER_MED()));
 
     auto* page = new QWidget(this);
     auto* vl = new QVBoxLayout(page);
@@ -562,7 +562,7 @@ QWidget* SettingsScreen::build_notifications() {
         // Card outer frame
         auto* card = new QFrame;
         card->setStyleSheet(QString("QFrame { background: %1; border: 1px solid %2; border-radius: 3px; }")
-                                .arg(fincept::ui::colors::BG_RAISED(), fincept::ui::colors::BORDER_DIM()));
+                                .arg(finterm::ui::colors::BG_RAISED(), finterm::ui::colors::BORDER_DIM()));
         auto* cvl = new QVBoxLayout(card);
         cvl->setContentsMargins(0, 0, 0, 0);
         cvl->setSpacing(0);
@@ -578,12 +578,12 @@ QWidget* SettingsScreen::build_notifications() {
 
         auto* arrow_lbl = new QLabel("▶");
         arrow_lbl->setStyleSheet(
-            QString("color: %1; background: transparent;").arg(fincept::ui::colors::TEXT_SECONDARY()));
+            QString("color: %1; background: transparent;").arg(finterm::ui::colors::TEXT_SECONDARY()));
         hl->addWidget(arrow_lbl);
 
         auto* icon_lbl = new QLabel(def.icon + "  " + def.name.toUpper());
         icon_lbl->setStyleSheet(
-            QString("color: %1; font-weight: bold; background: transparent;").arg(fincept::ui::colors::TEXT_PRIMARY()));
+            QString("color: %1; font-weight: bold; background: transparent;").arg(finterm::ui::colors::TEXT_PRIMARY()));
         hl->addWidget(icon_lbl, 1);
 
         pw.enabled = new QCheckBox;
@@ -595,7 +595,7 @@ QWidget* SettingsScreen::build_notifications() {
         // ── Body (credential fields + test button) ─────────────────────────────
         pw.body_frame = new QFrame;
         pw.body_frame->setStyleSheet(QString("QFrame { background: %1; border-top: 1px solid %2; }")
-                                         .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_DIM()));
+                                         .arg(finterm::ui::colors::BG_SURFACE(), finterm::ui::colors::BORDER_DIM()));
         auto* bvl = new QVBoxLayout(pw.body_frame);
         bvl->setContentsMargins(12, 10, 12, 10);
         bvl->setSpacing(6);
@@ -795,7 +795,7 @@ QWidget* SettingsScreen::build_notifications() {
 }
 
 void SettingsScreen::load_notifications() {
-    using namespace fincept::notifications;
+    using namespace finterm::notifications;
 
     if (provider_widgets_.isEmpty())
         return;
@@ -2921,4 +2921,4 @@ QWidget* SettingsScreen::build_developer() {
     return page;
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

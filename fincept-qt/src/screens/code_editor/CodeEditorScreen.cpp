@@ -36,9 +36,9 @@
 #include <QUuid>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 // ═════════════════════════════════════════════════════════════════════════════
 // CodeTextEdit — editor with keyboard shortcuts
@@ -1497,4 +1497,4 @@ void CodeEditorScreen::restore_state(const QVariantMap& state) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

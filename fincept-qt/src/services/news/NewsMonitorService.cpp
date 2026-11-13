@@ -6,7 +6,7 @@
 #include <QRegularExpression>
 #include <QUuid>
 
-namespace fincept::services {
+namespace finterm::services {
 
 const QStringList& monitor_colors() {
     static const QStringList colors = {
@@ -27,7 +27,7 @@ NewsMonitorService::NewsMonitorService() {
 
 void NewsMonitorService::load_from_db() {
     monitors_.clear();
-    auto result = fincept::NewsMonitorRepository::instance().list_all();
+    auto result = finterm::NewsMonitorRepository::instance().list_all();
     if (result.is_err())
         return;
     for (const auto& row : result.value()) {
@@ -42,12 +42,12 @@ void NewsMonitorService::load_from_db() {
 }
 
 void NewsMonitorService::save_to_db(const NewsMonitor& m) {
-    fincept::NewsMonitorRow row{m.id, m.label, m.keywords, m.color, m.enabled};
-    fincept::NewsMonitorRepository::instance().upsert(row);
+    finterm::NewsMonitorRow row{m.id, m.label, m.keywords, m.color, m.enabled};
+    finterm::NewsMonitorRepository::instance().upsert(row);
 }
 
 void NewsMonitorService::remove_from_db(const QString& id) {
-    fincept::NewsMonitorRepository::instance().remove(id);
+    finterm::NewsMonitorRepository::instance().remove(id);
 }
 
 QVector<NewsMonitor> NewsMonitorService::get_monitors() const {
@@ -122,4 +122,4 @@ QMap<QString, QVector<NewsArticle>> NewsMonitorService::scan_monitors(const QVec
     return result;
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

@@ -4,7 +4,7 @@
 #include <QMetaType>
 #include <QString>
 
-namespace fincept {
+namespace finterm {
 
 /// Symbol link groups (Bloomberg Launchpad "Security Groups" equivalent).
 /// A panel can be assigned to a group; all panels in the same group share
@@ -108,6 +108,6 @@ inline SymbolGroup next_symbol_group(SymbolGroup g) {
     return SymbolGroup::None;
 }
 
-} // namespace fincept
+} // namespace finterm
 
-Q_DECLARE_METATYPE(fincept::SymbolGroup)
+Q_DECLARE_METATYPE(finterm::SymbolGroup)

@@ -8,7 +8,7 @@ class QLineEdit;
 class QTableWidget;
 class QPushButton;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Universe screener — sortable, filterable table for the Scan workflow.
 /// Every row is a private company with derived metrics: readiness score,
@@ -40,4 +40,4 @@ class ScreenerView : public QWidget {
     QString search_text_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

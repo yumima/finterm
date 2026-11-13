@@ -8,7 +8,7 @@ class QLabel;
 class QPushButton;
 class QScrollArea;
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class FirmDetailPanel;
 class HoldersTable;
@@ -68,4 +68,4 @@ class StockOwnershipPanel : public QWidget {
     class QStackedWidget* stack_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

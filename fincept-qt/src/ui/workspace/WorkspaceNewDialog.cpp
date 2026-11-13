@@ -11,7 +11,7 @@
 #include <QPushButton>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 static const char* DLG_SS =
     "QDialog{background:#0a0a0a;color:#e5e5e5;}"
@@ -149,4 +149,4 @@ QString WorkspaceNewDialog::selected_template_id() const {
     return template_list_->currentItem()->data(Qt::UserRole).toString();
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

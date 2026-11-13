@@ -3,7 +3,7 @@
 #include "core/logging/Logger.h"
 #include "storage/sqlite/migrations/MigrationRunner.h"
 
-namespace fincept {
+namespace finterm {
 
 Database& Database::instance() {
     static Database s;
@@ -156,4 +156,4 @@ Result<void> Database::apply_pragmas() {
     return Result<void>::ok();
 }
 
-} // namespace fincept
+} // namespace finterm

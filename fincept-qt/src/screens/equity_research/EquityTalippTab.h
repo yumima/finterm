@@ -12,7 +12,7 @@
 #include <QScrollArea>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class EquityTalippTab : public QWidget {
     Q_OBJECT
@@ -71,4 +71,4 @@ class EquityTalippTab : public QWidget {
     ui::LoadingOverlay* loading_overlay_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

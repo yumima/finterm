@@ -15,7 +15,7 @@
 
 #include <atomic>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class NewsCommandBar;
 class NewsSidePanel;
@@ -33,7 +33,7 @@ class NewsTickerStrip;
 ///   4. Ticker strip (22px) — scrolling breaking headlines
 class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     Q_OBJECT
-    Q_INTERFACES(fincept::IGroupLinked)
+    Q_INTERFACES(finterm::IGroupLinked)
   public:
     explicit NewsScreen(QWidget* parent = nullptr);
 
@@ -245,4 +245,4 @@ class NewsScreen : public QWidget, public IStatefulScreen, public IGroupLinked {
     bool analyze_in_flight_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -5,7 +5,7 @@
 
 #include <QEvent>
 
-namespace fincept::auth {
+namespace finterm::auth {
 
 InactivityGuard& InactivityGuard::instance() {
     static InactivityGuard s;
@@ -102,4 +102,4 @@ bool InactivityGuard::eventFilter(QObject* obj, QEvent* event) {
     return QObject::eventFilter(obj, event);
 }
 
-} // namespace fincept::auth
+} // namespace finterm::auth

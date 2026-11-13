@@ -7,7 +7,7 @@
 #include <optional>
 #include <vector>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 // --- Portfolio ---
 PtPortfolio pt_create_portfolio(const QString& name, double balance, const QString& currency = "USD",
@@ -37,4 +37,4 @@ void pt_update_position_price(const QString& portfolio_id, const QString& symbol
 QVector<PtTrade> pt_get_trades(const QString& portfolio_id, int64_t limit = 100);
 PtStats pt_get_stats(const QString& portfolio_id);
 
-} // namespace fincept::trading
+} // namespace finterm::trading

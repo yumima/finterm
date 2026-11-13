@@ -22,10 +22,10 @@
 #include <QSizePolicy>
 #include <QTextOption>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-namespace col = fincept::ui::colors;
-namespace fnt = fincept::ui::fonts;
+namespace col = finterm::ui::colors;
+namespace fnt = finterm::ui::fonts;
 
 // ── Style helpers ─────────────────────────────────────────────────────────────
 
@@ -996,4 +996,4 @@ void AgentChatPanel::clear_chat() {
     update_llm_status();
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

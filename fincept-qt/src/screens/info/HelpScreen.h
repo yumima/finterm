@@ -1,7 +1,7 @@
 #pragma once
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Help Center — FAQ, quick actions, contact info, support ticket link.
 class HelpScreen : public QWidget {
@@ -14,4 +14,4 @@ class HelpScreen : public QWidget {
     void navigate_register();
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

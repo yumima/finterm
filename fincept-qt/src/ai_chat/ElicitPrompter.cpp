@@ -8,7 +8,7 @@
 #include <QJsonArray>
 #include <QMessageBox>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 void ElicitPrompter::ensure_mounted() {
     // One live subscriber per process, owned by qApp rather than a window: a
@@ -25,18 +25,18 @@ void ElicitPrompter::ensure_mounted() {
 ElicitPrompter::ElicitPrompter() {
     // Queued: requests originate on McpProvider's worker pool; the bridge
     // blocks that worker until resolve() is called from the modal below.
-    connect(&fincept::services::ElicitBridge::instance(), &fincept::services::ElicitBridge::request_received, this,
+    connect(&finterm::services::ElicitBridge::instance(), &finterm::services::ElicitBridge::request_received, this,
             &ElicitPrompter::on_request, Qt::QueuedConnection);
 }
 
-void ElicitPrompter::on_request(const QString& token, const fincept::mcp::ElicitRequest& req) {
+void ElicitPrompter::on_request(const QString& token, const finterm::mcp::ElicitRequest& req) {
     // Modal shape based on the request's JSON-Schema. Three common shapes are
     // recognised; everything else falls back to free text that the schema
     // validator on the caller's side enforces. Anchored to whichever window is
     // active NOW — the prompter belongs to the process, not to a window.
     QWidget* anchor = QApplication::activeWindow();
     const QString type = req.schema.value(QStringLiteral("type")).toString();
-    fincept::mcp::ElicitResponse response;
+    finterm::mcp::ElicitResponse response;
 
     if (type == QStringLiteral("boolean")) {
         const auto btn =
@@ -67,7 +67,7 @@ void ElicitPrompter::on_request(const QString& token, const fincept::mcp::Elicit
             response.value = text;
     }
 
-    fincept::services::ElicitBridge::instance().resolve(token, response);
+    finterm::services::ElicitBridge::instance().resolve(token, response);
 }
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

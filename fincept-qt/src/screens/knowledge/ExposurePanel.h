@@ -11,7 +11,7 @@
 class QLabel;
 class QVBoxLayout;
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// "Your portfolio exposure" — pulls active holdings from PortfolioHoldings
 /// and flags those matching the entry's exposure criterion (e.g. "P/E > 30").
@@ -33,4 +33,4 @@ class ExposurePanel : public QWidget {
     QLabel* status_ = nullptr;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

@@ -36,7 +36,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::portfolio {
+namespace finterm::portfolio {
 
 struct PeriodReturn {
     double twr_pct = 0;           // chained time-weighted return over the window, %
@@ -143,4 +143,4 @@ QVector<double> segment_flows(const QVector<NavPoint>& path, const QVector<Trans
 /// NaN.
 QVector<double> twr_index(const QVector<NavPoint>& path, const QVector<Transaction>& txns, const FxRates& fx = {});
 
-} // namespace fincept::portfolio
+} // namespace finterm::portfolio

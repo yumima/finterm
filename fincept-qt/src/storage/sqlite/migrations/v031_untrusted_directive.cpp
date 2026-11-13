@@ -22,7 +22,7 @@
 #include <QSqlQuery>
 #include <QVariant>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 constexpr const char* kTag = "Migration031";
@@ -104,4 +104,4 @@ void register_migration_v031() {
     MigrationRunner::register_migration({31, "untrusted_directive", apply_v031});
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -7,7 +7,7 @@
 #include <QPointer>
 #include <QVector>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Executes a WorkflowDef as a DAG — topological sort, cycle detection,
 /// parallel per-level execution with signal-driven progress.
@@ -84,4 +84,4 @@ class WorkflowExecutor : public QObject {
     qint64 start_time_ms_ = 0;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

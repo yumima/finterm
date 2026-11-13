@@ -2,7 +2,7 @@
 
 #include <limits>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
 namespace {
 
@@ -137,4 +137,4 @@ PcaResult compute_pca(const PriceTable& prices, int max_factors) {
     return res;
 }
 
-} // namespace fincept::surface
+} // namespace finterm::surface

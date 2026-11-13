@@ -16,7 +16,7 @@
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 PortfolioDetailWrapper::PortfolioDetailWrapper(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -254,4 +254,4 @@ QString PortfolioDetailWrapper::view_title(portfolio::DetailView view) const {
     return "DETAIL VIEW";
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

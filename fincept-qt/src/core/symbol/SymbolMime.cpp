@@ -3,7 +3,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
-namespace fincept::symbol_mime {
+namespace finterm::symbol_mime {
 
 QMimeData* pack(const SymbolRef& ref, SymbolGroup source_group) {
     QJsonObject o = ref.to_json();
@@ -43,4 +43,4 @@ bool has_symbol(const QMimeData* mime) {
     return mime && mime->hasFormat(kMimeType);
 }
 
-} // namespace fincept::symbol_mime
+} // namespace finterm::symbol_mime

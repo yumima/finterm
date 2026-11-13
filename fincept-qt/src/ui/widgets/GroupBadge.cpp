@@ -13,7 +13,7 @@
 #include <QPainterPath>
 #include <QPointer>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 GroupBadge::GroupBadge(QWidget* parent) : QWidget(parent) {
     setCursor(Qt::PointingHandCursor);
@@ -147,4 +147,4 @@ QSize GroupBadge::sizeHint() const {
     return QSize(18, 18);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -8,7 +8,7 @@
 
 #include <cmath>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 static bool s_rtl = false;
 
@@ -40,4 +40,4 @@ void apply_global_stylesheet() {
     ThemeManager::instance().apply_theme("Obsidian");
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

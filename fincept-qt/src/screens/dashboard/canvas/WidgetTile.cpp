@@ -8,7 +8,7 @@
 #include <QPen>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── ResizeGrip ────────────────────────────────────────────────────────────────
 
@@ -262,12 +262,12 @@ void WidgetTile::mouseReleaseEvent(QMouseEvent* e) {
     QWidget::mouseReleaseEvent(e);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens
 
 // ── Event filter for title bar drag ───────────────────────────────────────────
 // Defined outside the class body but still in the .cpp, after the namespace
 
-bool fincept::screens::WidgetTile::eventFilter(QObject* obj, QEvent* event) {
+bool finterm::screens::WidgetTile::eventFilter(QObject* obj, QEvent* event) {
     if (event->type() == QEvent::MouseButtonPress) {
         auto* me = static_cast<QMouseEvent*>(event);
         if (me->button() == Qt::LeftButton) {

@@ -17,7 +17,7 @@
 #include <QResizeEvent>
 #include <QScreen>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 static QString menu_ss() {
     return QString("QMenuBar{background:transparent;color:%1;border:none;spacing:0;}"
@@ -482,4 +482,4 @@ QMenu* ToolBar::build_help_menu() {
     return m;
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

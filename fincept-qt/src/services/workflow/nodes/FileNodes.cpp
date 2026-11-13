@@ -2,7 +2,7 @@
 
 #include "services/workflow/NodeRegistry.h"
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 void register_file_nodes(NodeRegistry& registry) {
     registry.register_type({
@@ -80,4 +80,4 @@ void register_file_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

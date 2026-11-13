@@ -3,7 +3,7 @@
 #include <QGraphicsPathItem>
 #include <QPointF>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 class PortItem;
 
@@ -19,4 +19,4 @@ class TempEdge : public QGraphicsPathItem {
     PortItem* source_ = nullptr;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

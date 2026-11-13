@@ -8,7 +8,7 @@
 
 #include <cmath>
 
-namespace fincept::ui::formatting {
+namespace finterm::ui::formatting {
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Shared number / money / percent / date formatting
@@ -60,7 +60,7 @@ inline QString placeholder() {
 /// NOT for announcement/event timestamps (earnings prints carry a real time of
 /// day) — those need a real timezone, not this midnight-stamp decode.
 inline QDate bar_date(qint64 unix_secs) {
-    return fincept::core::bartime::bar_date(unix_secs);
+    return finterm::core::bartime::bar_date(unix_secs);
 }
 
 /// Compact magnitude: K / M / B / T with a single decimal convention.
@@ -214,4 +214,4 @@ inline QString format_date(const QDate& d) {
     return d.toString(QStringLiteral("yyyy-MM-dd"));
 }
 
-} // namespace fincept::ui::formatting
+} // namespace finterm::ui::formatting

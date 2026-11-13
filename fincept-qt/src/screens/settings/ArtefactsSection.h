@@ -23,7 +23,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class ArtefactsSection : public QWidget {
     Q_OBJECT
@@ -57,4 +57,4 @@ class ArtefactsSection : public QWidget {
     Result<ChatArtefactRow> selected_artefact() const;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

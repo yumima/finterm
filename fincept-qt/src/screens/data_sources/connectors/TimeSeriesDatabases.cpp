@@ -2,7 +2,7 @@
 // VictoriaMetrics, OpenTSDB, kdb+, ClickHouse
 #include "screens/data_sources/ConnectorRegistry.h"
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 static QVector<ConnectorConfig> timeseries_configs() {
     return {
@@ -121,4 +121,4 @@ static bool registered = [] {
     return true;
 }();
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

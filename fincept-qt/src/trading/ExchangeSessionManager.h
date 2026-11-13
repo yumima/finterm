@@ -20,9 +20,9 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
-class ExchangeSessionManager : public QObject, public fincept::datahub::Producer {
+class ExchangeSessionManager : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static ExchangeSessionManager& instance();
@@ -64,4 +64,4 @@ class ExchangeSessionManager : public QObject, public fincept::datahub::Producer
     QHash<QString, ExchangeSession*> sessions_;
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

@@ -16,7 +16,7 @@
 #include <QScrollArea>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── KeyCaptureDialog ──────────────────────────────────────────────────────────
 
@@ -232,4 +232,4 @@ bool KeybindingsSection::eventFilter(QObject* obj, QEvent* event) {
     return QWidget::eventFilter(obj, event);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -18,7 +18,7 @@
 
 #include <QObject>
 
-namespace fincept::ai_chat {
+namespace finterm::ai_chat {
 
 class ElicitPrompter : public QObject {
     Q_OBJECT
@@ -29,10 +29,10 @@ class ElicitPrompter : public QObject {
     static void ensure_mounted();
 
   private slots:
-    void on_request(const QString& token, const fincept::mcp::ElicitRequest& req);
+    void on_request(const QString& token, const finterm::mcp::ElicitRequest& req);
 
   private:
     ElicitPrompter();
 };
 
-} // namespace fincept::ai_chat
+} // namespace finterm::ai_chat

@@ -11,7 +11,7 @@
 
 #include <algorithm>
 
-namespace fincept::datahub {
+namespace finterm::datahub {
 
 namespace {
 qint64 now_ms() {
@@ -1117,4 +1117,4 @@ QList<QObject*> DataHub::subscribers(const QString& topic) const {
     return out;
 }
 
-} // namespace fincept::datahub
+} // namespace finterm::datahub

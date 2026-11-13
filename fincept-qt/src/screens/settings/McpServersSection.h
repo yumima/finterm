@@ -8,7 +8,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class McpServersSection : public QWidget {
     Q_OBJECT
@@ -53,4 +53,4 @@ class McpServersSection : public QWidget {
     QString selected_server_id_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

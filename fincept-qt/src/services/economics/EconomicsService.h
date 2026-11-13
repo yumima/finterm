@@ -11,7 +11,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept::services {
+namespace finterm::services {
 
 struct EconomicsResult {
     bool success = false;
@@ -26,7 +26,7 @@ struct EconomicsResult {
 /// tuple. Panels can migrate to `hub.subscribe("econ:fred:gdp_quarterly",
 /// ...)` and the service fans out dual — hub publish + legacy signal —
 /// so migration is incremental.
-class EconomicsService : public QObject, public fincept::datahub::Producer {
+class EconomicsService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     static EconomicsService& instance();
@@ -46,7 +46,7 @@ class EconomicsService : public QObject, public fincept::datahub::Producer {
     /// Register with the hub + install econ:* policies. Idempotent.
     void ensure_registered_with_hub();
 
-    // ── fincept::datahub::Producer ────────────────────────────────────────
+    // ── finterm::datahub::Producer ────────────────────────────────────────
     /// Patterns: `econ:*`. Individual series topic shape is
     /// `econ:<source>:<request_id>` (request_id is caller-assigned and
     /// usually carries the series id or query hash).
@@ -59,7 +59,7 @@ class EconomicsService : public QObject, public fincept::datahub::Producer {
     int max_requests_per_sec() const override; // 2 — Python spawn pacing
 
   signals:
-    void result_ready(const QString& request_id, const fincept::services::EconomicsResult& result);
+    void result_ready(const QString& request_id, const finterm::services::EconomicsResult& result);
 
   private:
     explicit EconomicsService(QObject* parent = nullptr);
@@ -83,7 +83,7 @@ class EconomicsService : public QObject, public fincept::datahub::Producer {
     bool hub_registered_ = false;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services
 
 #include <QMetaType>
-Q_DECLARE_METATYPE(fincept::services::EconomicsResult)
+Q_DECLARE_METATYPE(finterm::services::EconomicsResult)

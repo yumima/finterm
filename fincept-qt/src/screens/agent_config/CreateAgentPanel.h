@@ -14,7 +14,7 @@
 #include <QTextEdit>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// CREATE view — 3-column layout: saved agents | config form | live test panel.
 class CreateAgentPanel : public QWidget {
@@ -126,4 +126,4 @@ class CreateAgentPanel : public QWidget {
     bool data_loaded_ = false;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

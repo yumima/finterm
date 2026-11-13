@@ -10,7 +10,7 @@
 #include <atomic>
 #include <optional>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 class UnifiedTrading : public QObject {
     Q_OBJECT
@@ -67,4 +67,4 @@ class UnifiedTrading : public QObject {
     std::atomic<bool> bridge_running_{false};
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

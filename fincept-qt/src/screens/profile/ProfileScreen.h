@@ -6,7 +6,7 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Settings → Account. finterm is local-only: the account is a row in
 /// auth.db on this machine, so the page shows only what is stored there
@@ -59,4 +59,4 @@ class ProfileScreen : public QWidget {
     void on_section_changed(int index);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

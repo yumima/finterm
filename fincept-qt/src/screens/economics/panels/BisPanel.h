@@ -9,7 +9,7 @@
 #include <QComboBox>
 #include <QLineEdit>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class BisPanel : public EconPanelBase {
     Q_OBJECT
@@ -31,4 +31,4 @@ class BisPanel : public EconPanelBase {
     QLineEdit* end_input_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

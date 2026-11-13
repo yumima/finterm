@@ -8,12 +8,12 @@
 
 // Forward declarations — avoids pulling notification headers into every TU
 // that includes DashboardStatusBar.h
-namespace fincept::ui {
+namespace finterm::ui {
 class NotifBell;
 class NotifPanel;
-} // namespace fincept::ui
+} // namespace finterm::ui
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Bottom status bar — session uptime, feed indicators, system status,
 /// and notification bell with unread badge (right side).
@@ -40,8 +40,8 @@ class DashboardStatusBar : public QWidget {
     QLabel* feeds_label_ = nullptr;
     QLabel* latency_label_ = nullptr;
 
-    fincept::ui::NotifBell* notif_bell_ = nullptr;
-    fincept::ui::NotifPanel* notif_panel_ = nullptr;
+    finterm::ui::NotifBell* notif_bell_ = nullptr;
+    finterm::ui::NotifPanel* notif_panel_ = nullptr;
 
     QTimer uptime_timer_;
     QTimer ping_timer_;
@@ -52,4 +52,4 @@ class DashboardStatusBar : public QWidget {
     bool connected_ = true;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

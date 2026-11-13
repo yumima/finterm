@@ -10,7 +10,7 @@
 #include <QLabel>
 #include <QStackedWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class CftcPanel : public EconPanelBase {
     Q_OBJECT
@@ -45,4 +45,4 @@ class CftcPanel : public EconPanelBase {
     QStackedWidget* content_stack_ = nullptr; // 0=base table, 1=sentiment
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

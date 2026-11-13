@@ -12,7 +12,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept {
+namespace finterm {
 
 struct ToolKillswitchEntry {
     QString tool_name;   ///< wire-form: `<server_id>__<tool_name>`
@@ -50,4 +50,4 @@ class ToolKillswitchRepository {
     ToolKillswitchRepository() = default;
 };
 
-} // namespace fincept
+} // namespace finterm

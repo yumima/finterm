@@ -7,7 +7,7 @@
 
 /// Pure helpers behind the Earnings Calendar widget's numbers. Kept free of Qt
 /// widget types so the rules can be tested without standing up a UI.
-namespace fincept::screens::widgets::earnings {
+namespace finterm::screens::widgets::earnings {
 
 /// Nasdaq money strings: "$1.88", "($0.12)" for negatives, "" when absent.
 /// Returns false when the field carries no usable number.
@@ -66,4 +66,4 @@ inline Growth growth_verdict(double estimate, double year_ago) {
     return rel > 0 ? Growth::Up : Growth::Down;
 }
 
-} // namespace fincept::screens::widgets::earnings
+} // namespace finterm::screens::widgets::earnings

@@ -13,7 +13,7 @@
 #include <QString>
 #include <QTimer>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Dialog for creating a new portfolio.
 class CreatePortfolioDialog : public QDialog {
@@ -180,4 +180,4 @@ class ImportPortfolioDialog : public QDialog {
     QLabel* status_label_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

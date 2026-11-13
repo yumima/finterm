@@ -38,11 +38,11 @@ class QMenu;
 #    include <QtWebEngineWidgets/QWebEngineView>
 #endif
 
-namespace fincept::services::video {
+namespace finterm::services::video {
 class LiveHlsProxy;
 }
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 #ifdef HAS_QT_MULTIMEDIA
 /// Video display surface — plain QWidget + QPainter.
@@ -563,7 +563,7 @@ class VideoPlayerWidget : public BaseWidget {
     // Local HLS trimming proxy for live streams. Null when no live
     // playback is active. Owned (parented) by this widget — also gets
     // cleaned up automatically on destruction.
-    fincept::services::video::LiveHlsProxy* hls_proxy_ = nullptr;
+    finterm::services::video::LiveHlsProxy* hls_proxy_ = nullptr;
     // Sticky flag set on play_url() entry: tells on_ytdlp_finished() whether
     // to route the resolved stream URL through the proxy (live) or
     // directly to QMediaPlayer (VOD, no proxy needed).
@@ -575,4 +575,4 @@ inline BaseWidget* create_video_player_widget() {
     return new VideoPlayerWidget;
 }
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

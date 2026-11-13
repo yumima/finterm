@@ -23,9 +23,9 @@
 #include <algorithm>
 #include <memory>
 
-namespace fincept {
+namespace finterm {
 
-namespace col = fincept::ui::colors;
+namespace col = finterm::ui::colors;
 
 // Override Qt's default blue palette on QTextEdit to match Obsidian theme.
 // Without this, links render blue and selection highlights are blue.
@@ -39,7 +39,7 @@ static void apply_obsidian_palette(QTextEdit* edit) {
     p.setColor(QPalette::Text, QColor(col::TEXT_PRIMARY()));
     edit->setPalette(p);
 }
-namespace fnt = fincept::ui::fonts;
+namespace fnt = finterm::ui::fonts;
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 static constexpr int PANEL_W = 320;
@@ -1060,4 +1060,4 @@ bool AiChatBubble::eventFilter(QObject* obj, QEvent* e) {
     return QWidget::eventFilter(obj, e);
 }
 
-} // namespace fincept
+} // namespace finterm

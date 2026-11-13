@@ -48,7 +48,7 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Source registry ───────────────────────────────────────────────────────────
 // { id, display label, accent color }
@@ -320,4 +320,4 @@ void EconomicsScreen::restore_state(const QVariantMap& state) {
         switch_to(id);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

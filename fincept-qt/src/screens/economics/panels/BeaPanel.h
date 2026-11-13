@@ -14,7 +14,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class BeaPanel : public EconPanelBase {
     Q_OBJECT
@@ -49,4 +49,4 @@ class BeaPanel : public EconPanelBase {
     QList<IndicatorDef> current_indicators_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

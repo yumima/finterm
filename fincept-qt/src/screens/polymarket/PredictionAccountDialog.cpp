@@ -20,10 +20,10 @@
 #include <QTextEdit>
 #include <QVBoxLayout>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
-namespace pr = fincept::services::prediction;
-namespace ks = fincept::services::prediction::kalshi_ns;
+namespace pr = finterm::services::prediction;
+namespace ks = finterm::services::prediction::kalshi_ns;
 
 // ── Construction ────────────────────────────────────────────────────────────
 
@@ -309,4 +309,4 @@ void PredictionAccountDialog::on_load_kalshi_pem() {
     ks_status_->setText(tr("Loaded PEM from %1.").arg(QFileInfo(path).fileName()));
 }
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

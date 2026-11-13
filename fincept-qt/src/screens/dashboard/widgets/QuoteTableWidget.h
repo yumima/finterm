@@ -11,7 +11,7 @@
 
 #include <functional>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Reusable quote-table widget. Fetches symbols via MarketDataService and
 /// displays them in a DataTable with customizable formatting.
@@ -67,7 +67,7 @@ class QuoteTableWidget : public BaseWidget {
     /// Per-symbol latest quote, keyed by raw symbol. Used to rebuild the
     /// table preserving the declared symbol order when any one row
     /// updates.
-    QHash<QString, fincept::services::QuoteData> row_cache_;
+    QHash<QString, finterm::services::QuoteData> row_cache_;
     bool hub_active_ = false;
 
     void fetch_futures();
@@ -78,7 +78,7 @@ class QuoteTableWidget : public BaseWidget {
     bool fit_pending_ = false;
     void set_fut_header(const QString& suffix, const QString& extra_tip = {});
     bool fut_enabled_ = false;
-    QHash<QString, fincept::services::IndexFutureQuote> fut_;
+    QHash<QString, finterm::services::IndexFutureQuote> fut_;
     QTimer* fut_timer_ = nullptr;
     bool fut_in_flight_ = false;
     bool fut_failed_ = false;
@@ -88,4 +88,4 @@ class QuoteTableWidget : public BaseWidget {
     ui::RenderCoalescer quote_render_{this, [this]() { render_from_cache(); }};
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

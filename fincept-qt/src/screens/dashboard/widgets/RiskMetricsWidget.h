@@ -6,7 +6,7 @@
 #include <QHash>
 #include <QLabel>
 
-namespace fincept::screens::widgets {
+namespace finterm::screens::widgets {
 
 /// Risk Metrics Widget — displays VIX (fear gauge), estimated beta for key stocks,
 /// 52-week range positions, and correlation proxies. All data from yfinance.
@@ -71,4 +71,4 @@ class RiskMetricsWidget : public BaseWidget {
     ui::RenderCoalescer quote_render_{this, [this]() { rebuild_from_cache(); }};
 };
 
-} // namespace fincept::screens::widgets
+} // namespace finterm::screens::widgets

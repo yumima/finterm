@@ -11,21 +11,21 @@
 #include <QRegularExpressionValidator>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
 QString panel_style() {
     return QString("QWidget#authPanel { background:%1; border:1px solid %2; border-radius:6px; }")
-        .arg(fincept::ui::colors::BG_SURFACE(), fincept::ui::colors::BORDER_MED());
+        .arg(finterm::ui::colors::BG_SURFACE(), finterm::ui::colors::BORDER_MED());
 }
 
 QString input_style() {
     return QString("QLineEdit { background:%1; color:%2; border:1px solid %3; border-radius:3px;"
                    "  padding:8px 12px; font-size:14px; }"
                    "QLineEdit:focus { border:1px solid %4; }")
-        .arg(fincept::ui::colors::BG_BASE(), fincept::ui::colors::TEXT_PRIMARY(), fincept::ui::colors::BORDER_MED(),
-             fincept::ui::colors::AMBER());
+        .arg(finterm::ui::colors::BG_BASE(), finterm::ui::colors::TEXT_PRIMARY(), finterm::ui::colors::BORDER_MED(),
+             finterm::ui::colors::AMBER());
 }
 
 QString primary_btn_style() {
@@ -33,15 +33,15 @@ QString primary_btn_style() {
                    "  padding:10px 20px; font-size:13px; font-weight:700; letter-spacing:0.6px; }"
                    "QPushButton:hover { background:%2; }"
                    "QPushButton:disabled { background:%3; color:%4; }")
-        .arg(fincept::ui::colors::AMBER(), fincept::ui::colors::AMBER_DIM(), fincept::ui::colors::BG_RAISED(),
-             fincept::ui::colors::TEXT_TERTIARY());
+        .arg(finterm::ui::colors::AMBER(), finterm::ui::colors::AMBER_DIM(), finterm::ui::colors::BG_RAISED(),
+             finterm::ui::colors::TEXT_TERTIARY());
 }
 
 QString link_btn_style() {
     return QString("QPushButton { background:transparent; color:%1; border:none;"
                    "  padding:8px; font-size:12px; }"
                    "QPushButton:hover { color:%2; text-decoration:underline; }")
-        .arg(fincept::ui::colors::TEXT_SECONDARY(), fincept::ui::colors::AMBER());
+        .arg(finterm::ui::colors::TEXT_SECONDARY(), finterm::ui::colors::AMBER());
 }
 
 } // namespace
@@ -60,7 +60,7 @@ RegisterScreen::RegisterScreen(QWidget* parent) : QWidget(parent) {
 
 void RegisterScreen::paintEvent(QPaintEvent*) {
     QPainter p(this);
-    p.fillRect(rect(), QColor(fincept::ui::colors::BG_BASE()));
+    p.fillRect(rect(), QColor(finterm::ui::colors::BG_BASE()));
 }
 
 void RegisterScreen::hideEvent(QHideEvent* event) {
@@ -92,14 +92,14 @@ void RegisterScreen::build_form() {
     auto* title = new QLabel(QStringLiteral("Create local account"), panel);
     title->setAlignment(Qt::AlignCenter);
     title->setStyleSheet(QString("color:%1; font-size:18px; font-weight:700; letter-spacing:0.4px;")
-                             .arg(fincept::ui::colors::TEXT_PRIMARY()));
+                             .arg(finterm::ui::colors::TEXT_PRIMARY()));
 
     auto* subtitle = new QLabel(QStringLiteral("Pick a username and a 4\xe2\x80\x936 digit PIN. "
                                                "Everything stays on this machine."),
                                 panel);
     subtitle->setAlignment(Qt::AlignCenter);
     subtitle->setWordWrap(true);
-    subtitle->setStyleSheet(QString("color:%1; font-size:12px;").arg(fincept::ui::colors::TEXT_SECONDARY()));
+    subtitle->setStyleSheet(QString("color:%1; font-size:12px;").arg(finterm::ui::colors::TEXT_SECONDARY()));
 
     username_ = new QLineEdit(panel);
     username_->setPlaceholderText(QStringLiteral("Username"));
@@ -126,7 +126,7 @@ void RegisterScreen::build_form() {
 
     error_label_ = new QLabel(panel);
     error_label_->setStyleSheet(
-        QString("color:%1; font-size:12px; padding:4px 0;").arg(fincept::ui::colors::NEGATIVE()));
+        QString("color:%1; font-size:12px; padding:4px 0;").arg(finterm::ui::colors::NEGATIVE()));
     error_label_->setWordWrap(true);
     error_label_->hide();
 
@@ -187,4 +187,4 @@ void RegisterScreen::on_create() {
     auth::AuthManager::instance().signup_local(user, pin);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

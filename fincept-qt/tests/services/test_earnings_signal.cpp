@@ -14,7 +14,7 @@
 
 #include <QtTest/QtTest>
 
-using namespace fincept::services::equity;
+using namespace finterm::services::equity;
 
 namespace {
 

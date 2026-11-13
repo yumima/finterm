@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`20260a553`](https://github.com/yumima/finterm/commit/20260a553) trim: experimental screens hidden by default; upstream strategy fixtures removed
 - [`a08b118ee`](https://github.com/yumima/finterm/commit/a08b118ee) portfolio: import holdings from a broker CSV export
 - [`225e7b1cc`](https://github.com/yumima/finterm/commit/225e7b1cc) account: local-only — the upstream SaaS account layer is gone
 - [`09d9de90f`](https://github.com/yumima/finterm/commit/09d9de90f) remove dead upstream cloud features: Forum, Support, hosted LLM provider

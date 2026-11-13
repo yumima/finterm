@@ -7,7 +7,7 @@
 #include <QPainter>
 #include <QScrollBar>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 MiniMap::MiniMap(NodeScene* scene, QGraphicsView* main_view, QWidget* parent)
     : QGraphicsView(scene, parent), main_view_(main_view), update_timer_(new QTimer(this)) {
@@ -94,4 +94,4 @@ void MiniMap::center_main_view_on(const QPoint& mini_pos) {
     viewport()->update();
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

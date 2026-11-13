@@ -2,7 +2,7 @@
 // Vertica
 #include "screens/data_sources/ConnectorRegistry.h"
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 static const FieldDef F_HOST = {"host", "Host", FieldType::Text, "localhost", true, "", {}};
 static const FieldDef F_USERNAME = {"username", "Username", FieldType::Text, "", true, "", {}};
@@ -122,4 +122,4 @@ static bool registered = [] {
     return true;
 }();
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

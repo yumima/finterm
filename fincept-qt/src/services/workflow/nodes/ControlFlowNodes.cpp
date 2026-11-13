@@ -6,7 +6,7 @@
 #include <QJsonArray>
 #include <QTimer>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 void register_control_flow_nodes(NodeRegistry& registry) {
     // ── Switch ─────────────────────────────────────────────────────
@@ -197,4 +197,4 @@ void register_control_flow_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

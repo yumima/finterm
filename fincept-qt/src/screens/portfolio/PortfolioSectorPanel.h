@@ -7,7 +7,7 @@
 #include <QLabel>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Sector allocation donut chart + NxN correlation matrix.
 class PortfolioSectorPanel : public QWidget {
@@ -50,4 +50,4 @@ class PortfolioSectorPanel : public QWidget {
     QHash<QString, double> corr_matrix_; // real Pearson matrix, key="SYM1|SYM2"
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

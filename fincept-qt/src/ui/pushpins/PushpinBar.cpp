@@ -8,7 +8,7 @@
 #include <QLabel>
 #include <QScrollArea>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 PushpinBar::PushpinBar(QWidget* parent) : QWidget(parent) {
     setObjectName("pushpinBar");
@@ -72,4 +72,4 @@ void PushpinBar::rebuild() {
     strip_layout_->addStretch(1);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

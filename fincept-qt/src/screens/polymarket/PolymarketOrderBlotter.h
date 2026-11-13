@@ -7,7 +7,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 /// Open-orders blotter with inline controls (amend price / refresh / cancel).
 ///
@@ -21,10 +21,10 @@ class PolymarketOrderBlotter : public QWidget {
   public:
     explicit PolymarketOrderBlotter(QWidget* parent = nullptr);
 
-    void set_orders(const QVector<fincept::services::prediction::OpenOrder>& orders);
+    void set_orders(const QVector<finterm::services::prediction::OpenOrder>& orders);
     /// Replace a single row in place by order_id. If the order_id is not
     /// present, appends as a new row. Used by the single-order-refresh flow.
-    void update_order(const fincept::services::prediction::OpenOrder& order);
+    void update_order(const finterm::services::prediction::OpenOrder& order);
     void clear();
 
     /// Exchange presentation drives column-visibility (amend hidden on
@@ -53,13 +53,13 @@ class PolymarketOrderBlotter : public QWidget {
 
   private:
     void rebuild_rows();
-    void install_row_controls(int row, const fincept::services::prediction::OpenOrder& order);
+    void install_row_controls(int row, const finterm::services::prediction::OpenOrder& order);
 
     QTableWidget* table_ = nullptr;
-    QVector<fincept::services::prediction::OpenOrder> orders_;
+    QVector<finterm::services::prediction::OpenOrder> orders_;
     ExchangePresentation presentation_ = ExchangePresentation::for_polymarket();
     bool supports_amend_ = false;
     bool supports_batch_cancel_ = false;
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

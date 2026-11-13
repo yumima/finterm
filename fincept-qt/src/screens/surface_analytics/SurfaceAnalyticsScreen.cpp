@@ -37,9 +37,9 @@
 #include <cstdlib>
 #include <ctime>
 
-namespace fincept::surface {
+namespace finterm::surface {
 
-using namespace fincept::ui;
+using namespace finterm::ui;
 
 static const char* MONO = "'Consolas','Courier New',monospace";
 
@@ -116,11 +116,11 @@ float SurfaceAnalyticsScreen::spot_for(const QString& sym) const {
     if (it != spot_cache_.constEnd())
         return it.value();
     // Best-effort hub lookup; if no quote published yet, returns invalid QVariant.
-    auto& hub = fincept::datahub::DataHub::instance();
+    auto& hub = finterm::datahub::DataHub::instance();
     QVariant v = hub.peek(QString("market:quote:%1").arg(sym));
     if (v.isValid()) {
-        if (v.canConvert<fincept::services::QuoteData>()) {
-            auto q = v.value<fincept::services::QuoteData>();
+        if (v.canConvert<finterm::services::QuoteData>()) {
+            auto q = v.value<finterm::services::QuoteData>();
             if (q.price > 0.0)
                 return (float)q.price;
         }
@@ -1268,7 +1268,7 @@ void SurfaceAnalyticsScreen::on_category_clicked(int index) {
     update_chart();
     update_metrics();
     update_inspector_lineage();
-    fincept::ScreenStateManager::instance().notify_changed(this);
+    finterm::ScreenStateManager::instance().notify_changed(this);
 }
 
 void SurfaceAnalyticsScreen::on_surface_clicked(int cat, int surf_index) {
@@ -1491,7 +1491,7 @@ void SurfaceAnalyticsScreen::dispatch_csv(const QString& path) {
 }
 
 // ── Databento slots ───────────────────────────────────────────────────────────
-void SurfaceAnalyticsScreen::on_vol_surface_received(const fincept::DatabentoVolSurfaceResult& r) {
+void SurfaceAnalyticsScreen::on_vol_surface_received(const finterm::DatabentoVolSurfaceResult& r) {
     if (!r.success) {
         if (data_inspector_) {
             data_inspector_->set_status("Vol fetch failed", false);
@@ -1575,7 +1575,7 @@ void SurfaceAnalyticsScreen::on_vol_surface_received(const fincept::DatabentoVol
     update_inspector_lineage();
 }
 
-void SurfaceAnalyticsScreen::on_ohlcv_received(const fincept::DatabentoOhlcvResult& r) {
+void SurfaceAnalyticsScreen::on_ohlcv_received(const finterm::DatabentoOhlcvResult& r) {
     if (data_inspector_) {
         data_inspector_->set_status(r.success ? "OHLCV loaded" : "OHLCV fetch failed", r.success);
         if (!r.success)
@@ -1747,7 +1747,7 @@ bool fill_grid(const QJsonObject& payload, const std::vector<FredSeriesSpec>& sp
 } // namespace
 
 void SurfaceAnalyticsScreen::load_rates_from_fred() {
-    auto& econ = fincept::services::EconomicsService::instance();
+    auto& econ = finterm::services::EconomicsService::instance();
     const QString start = QDate::currentDate().addDays(-180).toString(Qt::ISODate);
     const QString end = QDate::currentDate().toString(Qt::ISODate);
 
@@ -1767,7 +1767,7 @@ void SurfaceAnalyticsScreen::load_rates_from_fred() {
     }
 }
 
-void SurfaceAnalyticsScreen::on_fred_result(const QString& request_id, const fincept::services::EconomicsResult& r) {
+void SurfaceAnalyticsScreen::on_fred_result(const QString& request_id, const finterm::services::EconomicsResult& r) {
     if (!r.success) {
         // FRED needs a key. Say which surfaces are empty because of it rather
         // than leaving three panels blank with no reason.
@@ -1871,8 +1871,8 @@ void SurfaceAnalyticsScreen::build_forward_rates() {
 // These five were drawn by SurfaceDemoData's generators while the bars needed
 // to compute them were being fetched and dropped into the inspector table. The
 // data was there; nothing joined it to the chart.
-void SurfaceAnalyticsScreen::compute_equity_surfaces(const fincept::DatabentoOhlcvResult& r) {
-    using namespace fincept::surface;
+void SurfaceAnalyticsScreen::compute_equity_surfaces(const finterm::DatabentoOhlcvResult& r) {
+    using namespace finterm::surface;
     PriceTable prices;
     for (auto it = r.data.constBegin(); it != r.data.constEnd(); ++it) {
         // Bars arrive newest-last from the provider, but sort on the date the
@@ -2030,7 +2030,7 @@ void SurfaceAnalyticsScreen::compute_equity_surfaces(const fincept::DatabentoOhl
     }
 }
 
-void SurfaceAnalyticsScreen::on_futures_received(const fincept::DatabentoFuturesResult& r) {
+void SurfaceAnalyticsScreen::on_futures_received(const finterm::DatabentoFuturesResult& r) {
     if (data_inspector_) {
         data_inspector_->set_status(r.success ? "Futures curve loaded" : "Futures fetch failed", r.success);
         if (!r.success)
@@ -2051,7 +2051,7 @@ void SurfaceAnalyticsScreen::on_futures_received(const fincept::DatabentoFutures
     update_inspector_lineage();
 }
 
-void SurfaceAnalyticsScreen::on_surface_received(const fincept::DatabentoSurfaceResult& r) {
+void SurfaceAnalyticsScreen::on_surface_received(const finterm::DatabentoSurfaceResult& r) {
     if (data_inspector_) {
         data_inspector_->set_status(r.success ? "Surface loaded" : "Surface fetch failed", r.success);
         if (!r.success)
@@ -2179,7 +2179,7 @@ void SurfaceAnalyticsScreen::showEvent(QShowEvent* e) {
             Qt::UniqueConnection);
     connect(&svc, &DatabentoService::raw_response, this, &SurfaceAnalyticsScreen::on_db_raw_response,
             Qt::UniqueConnection);
-    connect(&fincept::services::EconomicsService::instance(), &fincept::services::EconomicsService::result_ready, this,
+    connect(&finterm::services::EconomicsService::instance(), &finterm::services::EconomicsService::result_ready, this,
             &SurfaceAnalyticsScreen::on_fred_result, Qt::UniqueConnection);
     load_rates_from_fred();
     refresh_provider_status();
@@ -2248,7 +2248,7 @@ void SurfaceAnalyticsScreen::restore_state(const QVariantMap& state) {
 
 // ── IGroupLinked ─────────────────────────────────────────────────────────────
 
-void SurfaceAnalyticsScreen::on_group_symbol_changed(const fincept::SymbolRef& ref) {
+void SurfaceAnalyticsScreen::on_group_symbol_changed(const finterm::SymbolRef& ref) {
     if (!ref.is_valid() || !control_panel_)
         return;
     // Push the linked symbol into the control panel; surface reset + chart rebuild
@@ -2261,13 +2261,13 @@ void SurfaceAnalyticsScreen::on_group_symbol_changed(const fincept::SymbolRef& r
     on_control_symbol_changed(cs.symbol);
 }
 
-fincept::SymbolRef SurfaceAnalyticsScreen::current_symbol() const {
+finterm::SymbolRef SurfaceAnalyticsScreen::current_symbol() const {
     if (!control_panel_)
         return {};
     QString s = control_panel_->state().symbol;
     if (s.isEmpty())
         return {};
-    return fincept::SymbolRef::equity(s);
+    return finterm::SymbolRef::equity(s);
 }
 
-} // namespace fincept::surface
+} // namespace finterm::surface

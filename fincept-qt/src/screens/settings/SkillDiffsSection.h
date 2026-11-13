@@ -22,7 +22,7 @@
 #include <QTableWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 class SkillDiffsSection : public QWidget {
     Q_OBJECT
@@ -68,4 +68,4 @@ class SkillDiffsSection : public QWidget {
     Paths paths_for_row(int row);
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

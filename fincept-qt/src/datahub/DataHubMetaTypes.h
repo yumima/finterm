@@ -33,17 +33,17 @@
 
 // Types that are not declared in a dedicated type header above — declare
 // them here so consumers only need to include DataHubMetaTypes.h.
-Q_DECLARE_METATYPE(fincept::services::QuoteData)
-Q_DECLARE_METATYPE(fincept::services::HistoryPoint)
-Q_DECLARE_METATYPE(fincept::services::InfoData)
-Q_DECLARE_METATYPE(QVector<fincept::services::HistoryPoint>)
-Q_DECLARE_METATYPE(fincept::trading::TickerData)
-Q_DECLARE_METATYPE(fincept::trading::OrderBookData)
-Q_DECLARE_METATYPE(fincept::trading::Candle)
-Q_DECLARE_METATYPE(fincept::trading::TradeData)
-Q_DECLARE_METATYPE(fincept::datahub::SubscriptionState)
+Q_DECLARE_METATYPE(finterm::services::QuoteData)
+Q_DECLARE_METATYPE(finterm::services::HistoryPoint)
+Q_DECLARE_METATYPE(finterm::services::InfoData)
+Q_DECLARE_METATYPE(QVector<finterm::services::HistoryPoint>)
+Q_DECLARE_METATYPE(finterm::trading::TickerData)
+Q_DECLARE_METATYPE(finterm::trading::OrderBookData)
+Q_DECLARE_METATYPE(finterm::trading::Candle)
+Q_DECLARE_METATYPE(finterm::trading::TradeData)
+Q_DECLARE_METATYPE(finterm::datahub::SubscriptionState)
 
-namespace fincept::datahub {
+namespace finterm::datahub {
 
 /// Registers every hub payload type with Qt's meta-type system so they
 /// can flow through QVariant-based topic values and cross-thread queued
@@ -51,4 +51,4 @@ namespace fincept::datahub {
 /// QApplication is constructed but before any producer/subscriber runs.
 void register_metatypes();
 
-} // namespace fincept::datahub
+} // namespace finterm::datahub

@@ -1668,7 +1668,7 @@ set_source_files_properties(
     src/screens/surface_analytics/SurfaceTableWidget.cpp
     src/screens/trade_viz/TradeVizScreen.cpp
     src/screens/watchlist/WatchlistScreen.cpp
-    # Storage repositories — each defines kCols in namespace fincept
+    # Storage repositories — each defines kCols in namespace finterm
     src/storage/repositories/AgentConfigRepository.cpp
     src/storage/repositories/AgentTraceRepository.cpp
     src/storage/repositories/TeamRepository.cpp
@@ -1899,7 +1899,7 @@ target_include_directories(FinceptTerminal PRIVATE
 
 # ── Emitted artifact name ─────────────────────────────────────────────────────
 # The CMake target token "FinceptTerminal" is an internal handle — never seen in
-# any shipped artifact (like the C++ namespace fincept). Only the produced
+# any shipped artifact (like the C++ namespace finterm). Only the produced
 # binary carries the brand:
 #   Linux -> finterm.bin    Windows -> finterm.exe    macOS -> finterm.app
 if(WIN32)

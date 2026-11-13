@@ -15,11 +15,11 @@
 #include <QVBoxLayout>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 class WorldMapWidget;
 }
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Maritime Intelligence screen — vessel tracking, trade routes, search.
 /// Layout: Left stats panel | Center content (tabs) | Right detail panel
@@ -81,7 +81,7 @@ class MaritimeScreen : public QWidget, public IStatefulScreen {
     QLabel* threat_badge_ = nullptr;
 
     // Center
-    fincept::ui::WorldMapWidget* map_widget_ = nullptr;
+    finterm::ui::WorldMapWidget* map_widget_ = nullptr;
     QTableWidget* vessels_table_ = nullptr;
     QTableWidget* routes_table_ = nullptr;
 
@@ -121,4 +121,4 @@ class MaritimeScreen : public QWidget, public IStatefulScreen {
     QVector<services::maritime::TradeRoute> routes_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -9,7 +9,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Trade Flow visualization.
 /// Chord diagram showing bilateral trade flows + partner ranking table.
@@ -51,4 +51,4 @@ class TradeVizScreen : public QWidget, public IStatefulScreen {
     QTimer* clock_timer_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -19,7 +19,7 @@
 
 #include <cmath>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 NodeCanvas::NodeCanvas(NodeScene* scene, QWidget* parent) : QGraphicsView(scene, parent), node_scene_(scene) {
     setRenderHint(QPainter::Antialiasing, false);
@@ -272,4 +272,4 @@ void NodeCanvas::resizeEvent(QResizeEvent* event) {
     }
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

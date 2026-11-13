@@ -9,7 +9,7 @@
 
 class QWidget;
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// Lightweight, thread-safe snapshot of "what the user is currently looking at"
 /// — the security in focus and the active portfolio. Producers (the equity and
@@ -79,4 +79,4 @@ class AppContextService {
     QString last_shown_base_;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

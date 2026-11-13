@@ -15,10 +15,10 @@
 
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ownership;
-using namespace fincept::screens::ownership_ui;
+using namespace finterm::ownership;
+using namespace finterm::screens::ownership_ui;
 
 namespace {
 
@@ -268,4 +268,4 @@ void HoldersTable::render() {
     foot_->setText(notes.join(QStringLiteral(" · ")));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

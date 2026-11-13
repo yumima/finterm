@@ -9,7 +9,7 @@
 
 #include <algorithm>
 
-namespace fincept {
+namespace finterm {
 
 namespace {
 
@@ -272,4 +272,4 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_lineage_for(const 
     return Out::ok(std::move(rows));
 }
 
-} // namespace fincept
+} // namespace finterm

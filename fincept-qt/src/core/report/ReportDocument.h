@@ -14,7 +14,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::report {
+namespace finterm::report {
 
 // ── Component ────────────────────────────────────────────────────────────────
 //
@@ -227,4 +227,4 @@ struct ReportDocument {
     int allocate_id() { return next_id++; }
 };
 
-} // namespace fincept::report
+} // namespace finterm::report

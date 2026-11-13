@@ -3,7 +3,7 @@
 
 #include <QVector>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Persists user-configured market panels via SettingsRepository.
 /// Falls back to the 9 built-in defaults on first run.
@@ -28,4 +28,4 @@ class MarketPanelStore {
     static constexpr const char* kCategory = "markets_panels";
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

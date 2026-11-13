@@ -8,7 +8,7 @@
 #include <QSqlError>
 #include <QSqlQuery>
 
-namespace fincept {
+namespace finterm {
 namespace {
 
 static Result<void> sql(QSqlDatabase& db, const char* stmt) {
@@ -41,4 +41,4 @@ void register_migration_v043() {
     MigrationRunner::register_migration({43, "chat_session_persona", apply_v043});
 }
 
-} // namespace fincept
+} // namespace finterm

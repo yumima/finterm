@@ -8,7 +8,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 /// Custom-painted order book with depth visualization.
 /// Caches to QPixmap, max 20fps repaint via coalescing timer (P9).
@@ -17,7 +17,7 @@ class PolymarketOrderBook : public QWidget {
   public:
     explicit PolymarketOrderBook(QWidget* parent = nullptr);
 
-    void set_data(const fincept::services::prediction::PredictionOrderBook& book);
+    void set_data(const finterm::services::prediction::PredictionOrderBook& book);
     void clear();
 
   signals:
@@ -33,8 +33,8 @@ class PolymarketOrderBook : public QWidget {
   private:
     void rebuild_cache();
 
-    QVector<fincept::services::prediction::OrderLevel> bids_;
-    QVector<fincept::services::prediction::OrderLevel> asks_;
+    QVector<finterm::services::prediction::OrderLevel> bids_;
+    QVector<finterm::services::prediction::OrderLevel> asks_;
     double spread_ = 0.0;
     QMutex mutex_;
     QPixmap cache_;
@@ -45,4 +45,4 @@ class PolymarketOrderBook : public QWidget {
     static constexpr int HEADER_HEIGHT = 28;
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket

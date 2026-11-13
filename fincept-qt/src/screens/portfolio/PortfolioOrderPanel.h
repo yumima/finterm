@@ -6,7 +6,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// 200px order-entry sidebar for BUY/SELL, docked to the right of the heatmap.
 class PortfolioOrderPanel : public QWidget {
@@ -50,4 +50,4 @@ class PortfolioOrderPanel : public QWidget {
     const portfolio::HoldingWithQuote* holding_ = nullptr;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

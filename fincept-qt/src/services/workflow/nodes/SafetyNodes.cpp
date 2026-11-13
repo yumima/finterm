@@ -10,7 +10,7 @@
 #include <cmath>
 #include <optional>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 namespace {
 
@@ -513,4 +513,4 @@ void register_safety_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

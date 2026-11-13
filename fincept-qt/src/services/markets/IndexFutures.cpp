@@ -14,7 +14,7 @@
 
 #include <cmath>
 
-namespace fincept::services {
+namespace finterm::services {
 
 namespace {
 
@@ -155,4 +155,4 @@ QString index_future_unavailable_tooltip(const QString& index, const QString& la
         .arg(label);
 }
 
-} // namespace fincept::services
+} // namespace finterm::services

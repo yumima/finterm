@@ -27,7 +27,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace fincept::mcp::tools::detail {
+namespace finterm::mcp::tools::detail {
 
 // ── run_on_target_thread_sync ────────────────────────────────────────────────
 //
@@ -171,4 +171,4 @@ void run_async_wait(QObject* target, Start&& start) {
         w->cv.wait(&w->m);
 }
 
-} // namespace fincept::mcp::tools::detail
+} // namespace finterm::mcp::tools::detail

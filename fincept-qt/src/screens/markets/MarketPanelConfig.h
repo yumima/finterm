@@ -3,7 +3,7 @@
 #include <QStringList>
 #include <QUuid>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Returns the full list of available column identifiers for MarketPanel.
 inline QStringList all_market_columns() {
@@ -30,4 +30,4 @@ struct MarketPanelConfig {
     }
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

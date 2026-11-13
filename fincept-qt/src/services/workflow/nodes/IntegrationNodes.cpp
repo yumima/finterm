@@ -4,13 +4,13 @@
 #include "python/PythonRunner.h"
 #include "services/workflow/NodeRegistry.h"
 
-using fincept::python::PythonRunner;
+using finterm::python::PythonRunner;
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QUrl>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 void register_integration_nodes(NodeRegistry& registry) {
     // ── MCP Tool Call ──────────────────────────────────────────────
@@ -124,12 +124,12 @@ void register_integration_nodes(NodeRegistry& registry) {
                 QString args_json = QString::fromUtf8(QJsonDocument(args).toJson(QJsonDocument::Compact));
 
                 PythonRunner::instance().run(
-                    "spreadsheet.py", {"--args", args_json}, [cb](const fincept::python::PythonResult& res) {
+                    "spreadsheet.py", {"--args", args_json}, [cb](const finterm::python::PythonResult& res) {
                         if (!res.success) {
                             cb(false, {}, res.error.isEmpty() ? "spreadsheet.py failed" : res.error);
                             return;
                         }
-                        QString out = fincept::python::extract_json(res.output).trimmed();
+                        QString out = finterm::python::extract_json(res.output).trimmed();
                         auto doc = QJsonDocument::fromJson(out.toUtf8());
                         if (doc.isNull()) {
                             cb(false, {}, "Invalid JSON from spreadsheet.py: " + res.output.left(200));
@@ -170,4 +170,4 @@ void register_integration_nodes(NodeRegistry& registry) {
     });
 }
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

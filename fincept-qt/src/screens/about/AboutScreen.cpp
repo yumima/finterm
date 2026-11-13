@@ -14,7 +14,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 // ── Style constants ───────────────────────────────────────────────────────────
 
@@ -290,4 +290,4 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
     root->addWidget(scroll, 1);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

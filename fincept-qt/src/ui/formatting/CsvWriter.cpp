@@ -1,6 +1,6 @@
 #include "ui/formatting/CsvWriter.h"
 
-namespace fincept::ui::formatting {
+namespace finterm::ui::formatting {
 
 namespace {
 constexpr const char kUtf8Bom[] = "\xEF\xBB\xBF";
@@ -122,4 +122,4 @@ void CsvWriter::set_error(const QString& msg) {
     ok_ = false;
 }
 
-} // namespace fincept::ui::formatting
+} // namespace finterm::ui::formatting

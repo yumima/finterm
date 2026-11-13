@@ -20,7 +20,7 @@
 
 #include <atomic>
 
-namespace fincept::trading {
+namespace finterm::trading {
 
 class AccountDataStream : public QObject {
     Q_OBJECT
@@ -122,7 +122,7 @@ class AccountDataStream : public QObject {
     // browsed quotes — every symbol ever fetched stayed in memory for the
     // life of the session. 500 entries comfortably covers a typical
     // watchlist + active-symbol working set with hours of headroom.
-    fincept::util::LruMap<QString, BrokerQuote> quote_cache_{500};
+    finterm::util::LruMap<QString, BrokerQuote> quote_cache_{500};
 
     // Fetch guards
     std::atomic<bool> quote_fetching_{false};
@@ -130,4 +130,4 @@ class AccountDataStream : public QObject {
     std::atomic<bool> portfolio_fetching_{false};
 };
 
-} // namespace fincept::trading
+} // namespace finterm::trading

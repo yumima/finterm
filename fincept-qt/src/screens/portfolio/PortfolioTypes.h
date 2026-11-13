@@ -8,7 +8,7 @@
 
 #include <optional>
 
-namespace fincept::portfolio {
+namespace finterm::portfolio {
 
 // ── Core entities ────────────────────────────────────────────────────────────
 
@@ -467,4 +467,4 @@ struct ImportResult {
     QStringList errors;
 };
 
-} // namespace fincept::portfolio
+} // namespace finterm::portfolio

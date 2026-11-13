@@ -3,7 +3,7 @@
 #include <QLabel>
 #include <QWidget>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 /// Bottom status bar — version, feed indicators, ready status.
 class StatusBar : public QWidget {
@@ -17,4 +17,4 @@ class StatusBar : public QWidget {
     QLabel* ready_label_ = nullptr;
 };
 
-} // namespace fincept::ui
+} // namespace finterm::ui

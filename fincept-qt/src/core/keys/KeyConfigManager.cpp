@@ -6,7 +6,7 @@
 
 #include <optional>
 
-namespace fincept {
+namespace finterm {
 
 // Storage key format: "key.refresh", "key.toggle_chat", etc.
 static QString storage_key(KeyAction a) {
@@ -438,4 +438,4 @@ std::optional<KeyAction> KeyConfigManager::find_conflict(const QKeySequence& seq
     return std::nullopt;
 }
 
-} // namespace fincept
+} // namespace finterm

@@ -5,7 +5,7 @@
 #include <QString>
 #include <QVector>
 
-namespace fincept::services::ma {
+namespace finterm::services::ma {
 
 // ── Module definitions ──────────────────────────────────────────────────────
 
@@ -130,4 +130,4 @@ struct GenericResult {
     QJsonObject data;
 };
 
-} // namespace fincept::services::ma
+} // namespace finterm::services::ma

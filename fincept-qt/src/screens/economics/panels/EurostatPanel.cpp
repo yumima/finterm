@@ -25,7 +25,7 @@
 #include <QSet>
 #include <QVector>
 
-namespace fincept::screens {
+namespace finterm::screens {
 namespace {
 
 static constexpr const char* kEurostatScript = "eurostat_extra_data.py";
@@ -226,4 +226,4 @@ void EurostatPanel::on_result(const QString& request_id, const services::Economi
     LOG_INFO("EurostatPanel", QString("Displayed %1 rows for %2").arg(rows.size()).arg(title));
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

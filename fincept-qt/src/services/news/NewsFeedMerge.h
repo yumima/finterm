@@ -45,7 +45,7 @@
 
 #include <algorithm>
 
-namespace fincept::news {
+namespace finterm::news {
 
 // Words are letter/digit runs; each CJK character counts as one (no spaces).
 inline constexpr int kMinCrossSourceWords = 5; // "Here's the latest" is 4 (here, s, the, latest)
@@ -254,4 +254,4 @@ inline void merge_feed_batch(QVector<services::NewsArticle>& all, FeedMergeIndex
     }
 }
 
-} // namespace fincept::news
+} // namespace finterm::news

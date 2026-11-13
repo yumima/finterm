@@ -12,7 +12,7 @@
 
 #include <algorithm>
 
-namespace fincept::mcp::tools {
+namespace finterm::mcp::tools {
 
 std::vector<ToolDef> get_notes_tools() {
     std::vector<ToolDef> tools;
@@ -282,4 +282,4 @@ std::vector<Prompt> get_notes_prompts() {
     return prompts;
 }
 
-} // namespace fincept::mcp::tools
+} // namespace finterm::mcp::tools

@@ -2,76 +2,76 @@
 
 #include "core/logging/Logger.h"
 
-namespace fincept::datahub {
+namespace finterm::datahub {
 
 void register_metatypes() {
-    qRegisterMetaType<fincept::services::QuoteData>("fincept::services::QuoteData");
-    qRegisterMetaType<fincept::services::HistoryPoint>("fincept::services::HistoryPoint");
-    qRegisterMetaType<fincept::services::InfoData>("fincept::services::InfoData");
-    qRegisterMetaType<fincept::services::NewsArticle>("fincept::services::NewsArticle");
-    qRegisterMetaType<fincept::services::EconomicsResult>("fincept::services::EconomicsResult");
-    qRegisterMetaType<QVector<fincept::services::HistoryPoint>>("QVector<fincept::services::HistoryPoint>");
-    qRegisterMetaType<QVector<fincept::services::NewsArticle>>("QVector<fincept::services::NewsArticle>");
+    qRegisterMetaType<finterm::services::QuoteData>("finterm::services::QuoteData");
+    qRegisterMetaType<finterm::services::HistoryPoint>("finterm::services::HistoryPoint");
+    qRegisterMetaType<finterm::services::InfoData>("finterm::services::InfoData");
+    qRegisterMetaType<finterm::services::NewsArticle>("finterm::services::NewsArticle");
+    qRegisterMetaType<finterm::services::EconomicsResult>("finterm::services::EconomicsResult");
+    qRegisterMetaType<QVector<finterm::services::HistoryPoint>>("QVector<finterm::services::HistoryPoint>");
+    qRegisterMetaType<QVector<finterm::services::NewsArticle>>("QVector<finterm::services::NewsArticle>");
     qRegisterMetaType<QVector<double>>("QVector<double>");
-    qRegisterMetaType<fincept::trading::TickerData>("fincept::trading::TickerData");
-    qRegisterMetaType<fincept::trading::OrderBookData>("fincept::trading::OrderBookData");
-    qRegisterMetaType<fincept::trading::Candle>("fincept::trading::Candle");
-    qRegisterMetaType<fincept::trading::TradeData>("fincept::trading::TradeData");
-    qRegisterMetaType<fincept::datahub::SubscriptionState>("fincept::datahub::SubscriptionState");
-    qRegisterMetaType<fincept::services::polymarket::OrderBook>("fincept::services::polymarket::OrderBook");
+    qRegisterMetaType<finterm::trading::TickerData>("finterm::trading::TickerData");
+    qRegisterMetaType<finterm::trading::OrderBookData>("finterm::trading::OrderBookData");
+    qRegisterMetaType<finterm::trading::Candle>("finterm::trading::Candle");
+    qRegisterMetaType<finterm::trading::TradeData>("finterm::trading::TradeData");
+    qRegisterMetaType<finterm::datahub::SubscriptionState>("finterm::datahub::SubscriptionState");
+    qRegisterMetaType<finterm::services::polymarket::OrderBook>("finterm::services::polymarket::OrderBook");
 
     // Prediction Markets (Polymarket, Kalshi, …)
-    qRegisterMetaType<fincept::services::prediction::MarketKey>("fincept::services::prediction::MarketKey");
-    qRegisterMetaType<fincept::services::prediction::PredictionMarket>(
-        "fincept::services::prediction::PredictionMarket");
-    qRegisterMetaType<fincept::services::prediction::PredictionEvent>("fincept::services::prediction::PredictionEvent");
-    qRegisterMetaType<fincept::services::prediction::PredictionOrderBook>(
-        "fincept::services::prediction::PredictionOrderBook");
-    qRegisterMetaType<fincept::services::prediction::PriceHistory>("fincept::services::prediction::PriceHistory");
-    qRegisterMetaType<fincept::services::prediction::PredictionTrade>("fincept::services::prediction::PredictionTrade");
-    qRegisterMetaType<fincept::services::prediction::PredictionPosition>(
-        "fincept::services::prediction::PredictionPosition");
-    qRegisterMetaType<fincept::services::prediction::OpenOrder>("fincept::services::prediction::OpenOrder");
-    qRegisterMetaType<fincept::services::prediction::OrderResult>("fincept::services::prediction::OrderResult");
-    qRegisterMetaType<fincept::services::prediction::AccountBalance>("fincept::services::prediction::AccountBalance");
-    qRegisterMetaType<QVector<fincept::services::prediction::PredictionMarket>>(
-        "QVector<fincept::services::prediction::PredictionMarket>");
-    qRegisterMetaType<QVector<fincept::services::prediction::PredictionEvent>>(
-        "QVector<fincept::services::prediction::PredictionEvent>");
-    qRegisterMetaType<QVector<fincept::services::prediction::PredictionTrade>>(
-        "QVector<fincept::services::prediction::PredictionTrade>");
-    qRegisterMetaType<QVector<fincept::services::prediction::PredictionPosition>>(
-        "QVector<fincept::services::prediction::PredictionPosition>");
-    qRegisterMetaType<QVector<fincept::services::prediction::OpenOrder>>(
-        "QVector<fincept::services::prediction::OpenOrder>");
-    qRegisterMetaType<fincept::services::DbnDataPoint>("fincept::services::DbnDataPoint");
-    qRegisterMetaType<fincept::services::GovDataResult>("fincept::services::GovDataResult");
-    qRegisterMetaType<fincept::trading::BrokerPosition>("fincept::trading::BrokerPosition");
-    qRegisterMetaType<fincept::trading::BrokerHolding>("fincept::trading::BrokerHolding");
-    qRegisterMetaType<fincept::trading::BrokerOrderInfo>("fincept::trading::BrokerOrderInfo");
-    qRegisterMetaType<fincept::trading::BrokerQuote>("fincept::trading::BrokerQuote");
-    qRegisterMetaType<fincept::trading::BrokerFunds>("fincept::trading::BrokerFunds");
-    qRegisterMetaType<QVector<fincept::trading::BrokerPosition>>("QVector<fincept::trading::BrokerPosition>");
-    qRegisterMetaType<QVector<fincept::trading::BrokerHolding>>("QVector<fincept::trading::BrokerHolding>");
-    qRegisterMetaType<QVector<fincept::trading::BrokerOrderInfo>>("QVector<fincept::trading::BrokerOrderInfo>");
-    qRegisterMetaType<QVector<fincept::trading::BrokerQuote>>("QVector<fincept::trading::BrokerQuote>");
+    qRegisterMetaType<finterm::services::prediction::MarketKey>("finterm::services::prediction::MarketKey");
+    qRegisterMetaType<finterm::services::prediction::PredictionMarket>(
+        "finterm::services::prediction::PredictionMarket");
+    qRegisterMetaType<finterm::services::prediction::PredictionEvent>("finterm::services::prediction::PredictionEvent");
+    qRegisterMetaType<finterm::services::prediction::PredictionOrderBook>(
+        "finterm::services::prediction::PredictionOrderBook");
+    qRegisterMetaType<finterm::services::prediction::PriceHistory>("finterm::services::prediction::PriceHistory");
+    qRegisterMetaType<finterm::services::prediction::PredictionTrade>("finterm::services::prediction::PredictionTrade");
+    qRegisterMetaType<finterm::services::prediction::PredictionPosition>(
+        "finterm::services::prediction::PredictionPosition");
+    qRegisterMetaType<finterm::services::prediction::OpenOrder>("finterm::services::prediction::OpenOrder");
+    qRegisterMetaType<finterm::services::prediction::OrderResult>("finterm::services::prediction::OrderResult");
+    qRegisterMetaType<finterm::services::prediction::AccountBalance>("finterm::services::prediction::AccountBalance");
+    qRegisterMetaType<QVector<finterm::services::prediction::PredictionMarket>>(
+        "QVector<finterm::services::prediction::PredictionMarket>");
+    qRegisterMetaType<QVector<finterm::services::prediction::PredictionEvent>>(
+        "QVector<finterm::services::prediction::PredictionEvent>");
+    qRegisterMetaType<QVector<finterm::services::prediction::PredictionTrade>>(
+        "QVector<finterm::services::prediction::PredictionTrade>");
+    qRegisterMetaType<QVector<finterm::services::prediction::PredictionPosition>>(
+        "QVector<finterm::services::prediction::PredictionPosition>");
+    qRegisterMetaType<QVector<finterm::services::prediction::OpenOrder>>(
+        "QVector<finterm::services::prediction::OpenOrder>");
+    qRegisterMetaType<finterm::services::DbnDataPoint>("finterm::services::DbnDataPoint");
+    qRegisterMetaType<finterm::services::GovDataResult>("finterm::services::GovDataResult");
+    qRegisterMetaType<finterm::trading::BrokerPosition>("finterm::trading::BrokerPosition");
+    qRegisterMetaType<finterm::trading::BrokerHolding>("finterm::trading::BrokerHolding");
+    qRegisterMetaType<finterm::trading::BrokerOrderInfo>("finterm::trading::BrokerOrderInfo");
+    qRegisterMetaType<finterm::trading::BrokerQuote>("finterm::trading::BrokerQuote");
+    qRegisterMetaType<finterm::trading::BrokerFunds>("finterm::trading::BrokerFunds");
+    qRegisterMetaType<QVector<finterm::trading::BrokerPosition>>("QVector<finterm::trading::BrokerPosition>");
+    qRegisterMetaType<QVector<finterm::trading::BrokerHolding>>("QVector<finterm::trading::BrokerHolding>");
+    qRegisterMetaType<QVector<finterm::trading::BrokerOrderInfo>>("QVector<finterm::trading::BrokerOrderInfo>");
+    qRegisterMetaType<QVector<finterm::trading::BrokerQuote>>("QVector<finterm::trading::BrokerQuote>");
 
     // Phase 8 — Geopolitics / Maritime / RelationshipMap
-    qRegisterMetaType<fincept::services::geo::NewsEvent>("fincept::services::geo::NewsEvent");
-    qRegisterMetaType<fincept::services::geo::HDXDataset>("fincept::services::geo::HDXDataset");
-    qRegisterMetaType<fincept::services::geo::UniqueCountry>("fincept::services::geo::UniqueCountry");
-    qRegisterMetaType<fincept::services::geo::UniqueCategory>("fincept::services::geo::UniqueCategory");
-    qRegisterMetaType<QVector<fincept::services::geo::NewsEvent>>("QVector<fincept::services::geo::NewsEvent>");
-    qRegisterMetaType<QVector<fincept::services::geo::HDXDataset>>("QVector<fincept::services::geo::HDXDataset>");
-    qRegisterMetaType<QVector<fincept::services::geo::UniqueCountry>>("QVector<fincept::services::geo::UniqueCountry>");
-    qRegisterMetaType<QVector<fincept::services::geo::UniqueCategory>>(
-        "QVector<fincept::services::geo::UniqueCategory>");
-    qRegisterMetaType<fincept::services::maritime::VesselData>("fincept::services::maritime::VesselData");
-    qRegisterMetaType<QVector<fincept::services::maritime::VesselData>>(
-        "QVector<fincept::services::maritime::VesselData>");
-    qRegisterMetaType<fincept::relmap::RelationshipData>("fincept::relmap::RelationshipData");
+    qRegisterMetaType<finterm::services::geo::NewsEvent>("finterm::services::geo::NewsEvent");
+    qRegisterMetaType<finterm::services::geo::HDXDataset>("finterm::services::geo::HDXDataset");
+    qRegisterMetaType<finterm::services::geo::UniqueCountry>("finterm::services::geo::UniqueCountry");
+    qRegisterMetaType<finterm::services::geo::UniqueCategory>("finterm::services::geo::UniqueCategory");
+    qRegisterMetaType<QVector<finterm::services::geo::NewsEvent>>("QVector<finterm::services::geo::NewsEvent>");
+    qRegisterMetaType<QVector<finterm::services::geo::HDXDataset>>("QVector<finterm::services::geo::HDXDataset>");
+    qRegisterMetaType<QVector<finterm::services::geo::UniqueCountry>>("QVector<finterm::services::geo::UniqueCountry>");
+    qRegisterMetaType<QVector<finterm::services::geo::UniqueCategory>>(
+        "QVector<finterm::services::geo::UniqueCategory>");
+    qRegisterMetaType<finterm::services::maritime::VesselData>("finterm::services::maritime::VesselData");
+    qRegisterMetaType<QVector<finterm::services::maritime::VesselData>>(
+        "QVector<finterm::services::maritime::VesselData>");
+    qRegisterMetaType<finterm::relmap::RelationshipData>("finterm::relmap::RelationshipData");
 
     LOG_INFO("DataHub", "Registered 51 payload meta-types");
 }
 
-} // namespace fincept::datahub
+} // namespace finterm::datahub

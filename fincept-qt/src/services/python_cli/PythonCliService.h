@@ -16,7 +16,7 @@
 
 #include <functional>
 
-namespace fincept::services::python_cli {
+namespace finterm::services::python_cli {
 
 struct CliResult {
     bool success = false;
@@ -43,4 +43,4 @@ class PythonCliService : public QObject {
     PythonCliService() = default;
 };
 
-} // namespace fincept::services::python_cli
+} // namespace finterm::services::python_cli

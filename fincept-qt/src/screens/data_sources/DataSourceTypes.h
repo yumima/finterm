@@ -5,7 +5,7 @@
 #include <QStringList>
 #include <QVector>
 
-namespace fincept::screens::datasources {
+namespace finterm::screens::datasources {
 
 // ── Field types for dynamic forms ──────────────────────────────────────────
 
@@ -119,4 +119,4 @@ enum class ConnStatus { Connected, Disconnected, Error, Testing };
 
 enum class ViewMode { Gallery, Connections };
 
-} // namespace fincept::screens::datasources
+} // namespace finterm::screens::datasources

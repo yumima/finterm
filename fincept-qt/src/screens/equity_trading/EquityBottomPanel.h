@@ -12,7 +12,7 @@
 #include <QVector>
 #include <QWidget>
 
-namespace fincept::screens::equity {
+namespace finterm::screens::equity {
 
 class EquityBottomPanel : public QWidget {
     Q_OBJECT
@@ -90,4 +90,4 @@ class EquityBottomPanel : public QWidget {
     bool is_paper_ = true;
 };
 
-} // namespace fincept::screens::equity
+} // namespace finterm::screens::equity

@@ -13,7 +13,7 @@
 #include <functional>
 #include <limits>
 
-namespace fincept::services {
+namespace finterm::services {
 
 /// "The vendor did not supply this number." Distinct from a real 0.
 inline constexpr double kUnknownNum = std::numeric_limits<double>::quiet_NaN();
@@ -156,7 +156,7 @@ struct StreamTick {
     qint64 time_ms = 0;
 };
 
-class MarketDataService : public QObject, public fincept::datahub::Producer {
+class MarketDataService : public QObject, public finterm::datahub::Producer {
     Q_OBJECT
   public:
     using QuoteCallback = std::function<void(bool, QVector<QuoteData>)>;
@@ -168,7 +168,7 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
     /// Called from main.cpp after `datahub::register_metatypes()`.
     void ensure_registered_with_hub();
 
-    // ── fincept::datahub::Producer ────────────────────────────────────────
+    // ── finterm::datahub::Producer ────────────────────────────────────────
     QStringList topic_patterns() const override;
     void refresh(const QStringList& topics) override;
     int max_requests_per_sec() const override;
@@ -384,7 +384,7 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
   signals:
     /// Every push-stream print of a tick batch (fast-lane quotes excluded),
     /// all sessions, at most once per flush (~4/s).
-    void stream_ticks(const QVector<fincept::services::StreamTick>& ticks);
+    void stream_ticks(const QVector<finterm::services::StreamTick>& ticks);
 
   private:
     MarketDataService();
@@ -576,4 +576,4 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
     QVector<std::function<void(bool)>> sec_cik_waiters_;
 };
 
-} // namespace fincept::services
+} // namespace finterm::services

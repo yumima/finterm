@@ -7,7 +7,7 @@
 #include <md4c-html.h>
 #include <string>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 // ── md4c callback ─────────────────────────────────────────────────────────────
 
@@ -82,4 +82,4 @@ QString MarkdownRenderer::render(const QString& markdown) {
     return wrap_html(QString::fromUtf8(output.data(), static_cast<int>(output.size())));
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

@@ -7,7 +7,7 @@
 #include <QString>
 #include <QStringList>
 
-namespace fincept {
+namespace finterm {
 
 /// Catalogue of all user-discoverable screens (components). The data lives
 /// in resources/component_catalog.json and is loaded once at startup.
@@ -60,4 +60,4 @@ class ComponentCatalog : public QObject {
     QStringList categories_in_order_;
 };
 
-} // namespace fincept
+} // namespace finterm

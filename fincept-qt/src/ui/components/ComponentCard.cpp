@@ -8,7 +8,7 @@
 #include <QMimeData>
 #include <QVBoxLayout>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 namespace {
 
@@ -192,4 +192,4 @@ void ComponentCard::leaveEvent(QEvent* e) {
     QFrame::leaveEvent(e);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

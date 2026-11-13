@@ -17,7 +17,7 @@
 #include <QSet>
 #include <QVBoxLayout>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 namespace {
 
@@ -192,4 +192,4 @@ void StoredCredentialsSection::reload() {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

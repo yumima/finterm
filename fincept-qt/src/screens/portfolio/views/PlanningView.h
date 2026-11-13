@@ -8,7 +8,7 @@
 #include <QTabWidget>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Financial Planning view with retirement planning, goal-based allocation,
 /// and savings rate analysis.
@@ -48,4 +48,4 @@ class PlanningView : public QWidget {
     QString currency_;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

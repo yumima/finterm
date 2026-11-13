@@ -14,7 +14,7 @@
 #include <algorithm>
 #include <cmath>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 using services::equity::EarningsPoint;
 using services::equity::ReactionMetric;
@@ -520,4 +520,4 @@ void EarningsReactionChart::paintEvent(QPaintEvent*) {
     }
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

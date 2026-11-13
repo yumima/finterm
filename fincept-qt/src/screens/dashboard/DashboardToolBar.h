@@ -6,7 +6,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 /// Top toolbar for dashboard — terminal identity, clock, connection status, widget count, actions.
 class DashboardToolBar : public QWidget {
@@ -44,4 +44,4 @@ class DashboardToolBar : public QWidget {
     bool pulse_visible_ = true;
 };
 
-} // namespace fincept::screens
+} // namespace finterm::screens

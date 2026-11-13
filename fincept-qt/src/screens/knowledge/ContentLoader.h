@@ -6,7 +6,7 @@
 #include <QObject>
 #include <QString>
 
-namespace fincept::knowledge {
+namespace finterm::knowledge {
 
 /// Loads the  KNOWLEDGE content tree from disk and provides lookup, search,
 /// and lazy markdown body loading. Singleton — owned by main app.
@@ -57,4 +57,4 @@ class ContentLoader : public QObject {
     mutable QHash<QString, QString> body_cache_;
 };
 
-} // namespace fincept::knowledge
+} // namespace finterm::knowledge

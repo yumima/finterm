@@ -16,7 +16,7 @@
 #include <QTimer>
 #include <QWidget>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
 struct GovProviderOptions {
     QString watermark_text;         // if non-empty, show a bottom status bar with this text
@@ -117,4 +117,4 @@ bool export_table_to_csv(QTableWidget* table, const QString& default_name, QWidg
 // (QSpinBox, QComboBox, QTextBrowser, etc.) that are not in the shared set.
 QString make_gov_panel_style(const QString& provider_color, const QString& extra_qss = {});
 
-} // namespace fincept::screens
+} // namespace finterm::screens

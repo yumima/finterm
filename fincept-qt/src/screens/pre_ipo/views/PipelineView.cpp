@@ -16,10 +16,10 @@
 
 #include <algorithm>
 
-namespace fincept::screens {
+namespace finterm::screens {
 
-using namespace fincept::ui;
-using namespace fincept::pre_ipo;
+using namespace finterm::ui;
+using namespace finterm::pre_ipo;
 
 PipelineView::PipelineView(QWidget* parent) : QWidget(parent) {
     build_ui();
@@ -275,4 +275,4 @@ bool PipelineView::eventFilter(QObject* watched, QEvent* event) {
     return QWidget::eventFilter(watched, event);
 }
 
-} // namespace fincept::screens
+} // namespace finterm::screens

@@ -4,7 +4,7 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 
-namespace fincept::workflow {
+namespace finterm::workflow {
 
 /// Dialog for deploying or saving a workflow as a draft.
 class DeployDialog : public QDialog {
@@ -24,4 +24,4 @@ class DeployDialog : public QDialog {
     bool deploy_ = false;
 };
 
-} // namespace fincept::workflow
+} // namespace finterm::workflow

@@ -1,7 +1,7 @@
 #pragma once
 #include "services/notifications/providers/BaseProvider.h"
 
-namespace fincept::notifications {
+namespace finterm::notifications {
 
 class PagerDutyProvider final : public BaseProvider {
   public:
@@ -20,4 +20,4 @@ class PagerDutyProvider final : public BaseProvider {
     QString routing_key_;
 };
 
-} // namespace fincept::notifications
+} // namespace finterm::notifications

@@ -5,7 +5,7 @@
 
 #include <QHeaderView>
 
-namespace fincept::ui {
+namespace finterm::ui {
 
 DataTable::DataTable(QWidget* parent) : QTableWidget(parent) {
     setAlternatingRowColors(true);
@@ -100,4 +100,4 @@ void DataTable::set_cell_color(int row, int col, const QString& color) {
         it->setForeground(c);
 }
 
-} // namespace fincept::ui
+} // namespace finterm::ui

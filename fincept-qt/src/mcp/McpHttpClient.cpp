@@ -14,7 +14,7 @@
 #include <QTimer>
 #include <QUrl>
 
-namespace fincept::mcp {
+namespace finterm::mcp {
 
 namespace {
 constexpr const char* TAG = "McpHttpClient";
@@ -409,4 +409,4 @@ void McpHttpClient::append_log(const QString& line) {
         log_lines_.removeFirst();
 }
 
-} // namespace fincept::mcp
+} // namespace finterm::mcp

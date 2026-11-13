@@ -8,7 +8,7 @@
 #include <QPushButton>
 #include <QWidget>
 
-namespace fincept::screens::polymarket {
+namespace finterm::screens::polymarket {
 
 /// Top command bar: view pills, category filters, search, sort, refresh, WS status.
 /// Visual identity (accent colors, view pill set, category display mode)
@@ -84,4 +84,4 @@ class PolymarketCommandBar : public QWidget {
     QStringList current_tags_;
 };
 
-} // namespace fincept::screens::polymarket
+} // namespace finterm::screens::polymarket
