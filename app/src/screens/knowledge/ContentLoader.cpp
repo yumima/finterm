@@ -1,7 +1,5 @@
 #include "screens/knowledge/ContentLoader.h"
 
-#include "core/config/ScreenVisibility.h"
-
 #include "core/logging/Logger.h"
 
 #include <QDir>
@@ -33,8 +31,7 @@ static QString live_screen_id(const QString& raw) {
         id = QStringLiteral("markets"); // the Markets FOREX panel
     else if (id == QLatin1String("futures"))
         return {}; // the Futures board was removed
-    // A screen the user's setting hides is not linked to either.
-    return ScreenVisibility::listed(id) ? id : QString();
+    return id;
 }
 
 static QString read_file(const QString& path) {

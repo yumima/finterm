@@ -1,7 +1,5 @@
 #include "ui/navigation/CommandBar.h"
 
-#include "core/config/ScreenVisibility.h"
-
 #include "core/events/EventBus.h"
 #include "core/keys/KeyConfigManager.h"
 #include "core/session/ScreenStateManager.h"
@@ -398,10 +396,6 @@ void CommandBar::build_commands() {
         // Community / Info
         {"about", "About", "About finterm", {"about", "info", "version"}, "", {"about", "information", "version"}},
     };
-    // Experimental screens are offered only when the user opted in.
-    commands_.erase(std::remove_if(commands_.begin(), commands_.end(),
-                                   [](const ScreenCommand& c) { return !ScreenVisibility::listed(c.id); }),
-                    commands_.end());
 }
 
 // ── asset type registry ──────────────────────────────────────────────────────

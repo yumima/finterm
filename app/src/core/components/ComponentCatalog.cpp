@@ -1,7 +1,5 @@
 #include "core/components/ComponentCatalog.h"
 
-#include "core/config/ScreenVisibility.h"
-
 #include "core/components/PopularityTracker.h"
 #include "core/logging/Logger.h"
 
@@ -74,10 +72,7 @@ QList<ComponentMeta> ComponentCatalog::all() const {
 }
 
 QList<ComponentMeta> ComponentCatalog::list_for_ui() const {
-    QList<ComponentMeta> out;
-    for (const ComponentMeta& m : entries_)
-        if (ScreenVisibility::listed(m.id)) // experimental screens only when opted in
-            out.append(m);
+    QList<ComponentMeta> out = entries_;
     auto& tracker = PopularityTracker::instance();
     for (ComponentMeta& m : out)
         m.popularity = tracker.use_count(m.id);
@@ -99,15 +94,7 @@ QList<ComponentMeta> ComponentCatalog::by_category(const QString& category) cons
 }
 
 QStringList ComponentCatalog::categories() const {
-    // Only categories that still offer something.
-    QStringList out;
-    for (const QString& c : categories_in_order_)
-        for (const ComponentMeta& m : entries_)
-            if (m.category == c && ScreenVisibility::listed(m.id)) {
-                out << c;
-                break;
-            }
-    return out;
+    return categories_in_order_;
 }
 
 ComponentMeta ComponentCatalog::by_id(const QString& id) const {

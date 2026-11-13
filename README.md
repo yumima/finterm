@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`243296cc0`](https://github.com/yumima/finterm/commit/243296cc0) install: free installers documented per platform; updates only on request
 - [`1d43e33fd`](https://github.com/yumima/finterm/commit/1d43e33fd) tooltips: bounded everywhere, and cut to what a reader needs
 - [`0191b5b7e`](https://github.com/yumima/finterm/commit/0191b5b7e) data: your own price source — Tiingo, Polygon/Massive, Alpaca, Finnhub, FMP
 - [`07c4255e7`](https://github.com/yumima/finterm/commit/07c4255e7) news: drawer headlines shrink again when the drawer narrows

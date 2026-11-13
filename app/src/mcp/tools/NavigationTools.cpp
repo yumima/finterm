@@ -2,8 +2,6 @@
 
 #include "mcp/tools/NavigationTools.h"
 
-#include "core/config/ScreenVisibility.h"
-
 #include "app/DockScreenRouter.h"
 #include "core/events/EventBus.h"
 #include "core/logging/Logger.h"
@@ -59,16 +57,15 @@ static constexpr int TAB_COUNT = static_cast<int>(sizeof(TAB_MAP) / sizeof(TAB_M
 static int find_tab_index(const QString& name) {
     QString lower = name.toLower();
 
-    // Screens hidden by the user's setting are not reachable by agents either.
     // Exact match on id
     for (int i = 0; i < TAB_COUNT; ++i) {
-        if (lower == TAB_MAP[i].name && ScreenVisibility::listed(TAB_MAP[i].name))
+        if (lower == TAB_MAP[i].name)
             return TAB_MAP[i].index;
     }
 
     // Partial match on display name
     for (int i = 0; i < TAB_COUNT; ++i) {
-        if (QString(TAB_MAP[i].display_name).toLower().contains(lower) && ScreenVisibility::listed(TAB_MAP[i].name))
+        if (QString(TAB_MAP[i].display_name).toLower().contains(lower))
             return TAB_MAP[i].index;
     }
 
@@ -106,8 +103,6 @@ std::vector<ToolDef> get_navigation_tools() {
             if (idx < 0) {
                 QString valid;
                 for (int i = 0; i < TAB_COUNT; ++i) {
-                    if (!ScreenVisibility::listed(TAB_MAP[i].name))
-                        continue;
                     if (!valid.isEmpty())
                         valid += ", ";
                     valid += TAB_MAP[i].name;
@@ -134,8 +129,6 @@ std::vector<ToolDef> get_navigation_tools() {
         t.handler = [](const QJsonObject&) -> ToolResult {
             QJsonArray tabs;
             for (int i = 0; i < TAB_COUNT; ++i) {
-                if (!ScreenVisibility::listed(TAB_MAP[i].name))
-                    continue; // hidden by the user's setting — not offered to agents either
                 tabs.append(QJsonObject{
                     {"name", TAB_MAP[i].name}, {"display_name", TAB_MAP[i].display_name}, {"index", TAB_MAP[i].index}});
             }

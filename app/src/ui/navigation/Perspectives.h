@@ -1,10 +1,7 @@
 #pragma once
 // Perspectives.h — the Quick Switch layouts: which screens each one opens.
 // The first screen leads (opens exclusive); the rest fill the grid. Shared by
-// the View menu (which lists a layout only when its lead screen is offered,
-// see ScreenVisibility) and MainWindow (which opens the offered screens).
-
-#include "core/config/ScreenVisibility.h"
+// the View menu and MainWindow, so the two can't disagree.
 
 #include <QMap>
 #include <QString>
@@ -31,19 +28,6 @@ inline const QMap<QString, QStringList>& perspective_layouts() {
         {"perspective_tools", {"code_editor", "node_editor"}},
     };
     return layouts;
-}
-
-/// The screens `action` opens that are offered now; empty when its lead
-/// screen is hidden (the layout is then not offered at all).
-inline QStringList perspective_screens(const QString& action) {
-    const QStringList all = perspective_layouts().value(action);
-    if (all.isEmpty() || !ScreenVisibility::listed(all.first()))
-        return {};
-    QStringList out;
-    for (const QString& id : all)
-        if (ScreenVisibility::listed(id))
-            out << id;
-    return out;
 }
 
 } // namespace finterm::ui

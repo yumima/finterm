@@ -1,8 +1,6 @@
 #include "ui/navigation/ToolBar.h"
 
-#include "core/config/ScreenVisibility.h"
 #include "ui/navigation/Perspectives.h"
-
 #include "auth/AuthManager.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -230,30 +228,6 @@ void ToolBar::refresh_user_display() {
     user_label_->setToolTip(name);
 }
 
-namespace {
-
-// Drop what hidden screens leave behind (ScreenVisibility): submenus with no
-// items, and separators that end up doubled or at the edges.
-void prune_empty_submenus(QMenu* menu) {
-    for (QAction* a : menu->actions())
-        if (a->menu() && a->menu()->actions().isEmpty())
-            menu->removeAction(a);
-    bool prev_sep = true; // a leading separator counts as doubled
-    QAction* last = nullptr;
-    for (QAction* a : menu->actions()) {
-        if (a->isSeparator() && prev_sep) {
-            menu->removeAction(a);
-            continue;
-        }
-        prev_sep = a->isSeparator();
-        last = a;
-    }
-    if (last && last->isSeparator())
-        menu->removeAction(last);
-}
-
-} // namespace
-
 QMenu* ToolBar::build_file_menu() {
     auto* m = new QMenu("File", this);
     m->setStyleSheet(popup_ss());
@@ -319,10 +293,8 @@ QMenu* ToolBar::build_navigate_menu() {
         return sub;
     };
 
-    // Experimental screens are left out unless the user opted in (ScreenVisibility).
     auto nav = [this](QMenu* menu, const QString& label, const QString& id) {
-        if (ScreenVisibility::listed(id))
-            menu->addAction(label, this, [this, id]() { emit navigate_to(id); });
+        menu->addAction(label, this, [this, id]() { emit navigate_to(id); });
     };
 
     // Markets & Data
@@ -370,7 +342,6 @@ QMenu* ToolBar::build_navigate_menu() {
     nav(m, "Docs", "docs");
     nav(m, "About", "about");
 
-    prune_empty_submenus(m);
     return m;
 }
 
@@ -400,27 +371,23 @@ QMenu* ToolBar::build_view_menu() {
     panels->addAction("Portfolio", this, [this]() { emit action_triggered("panel_portfolio"); });
     panels->addAction("Markets", this, [this]() { emit action_triggered("panel_markets"); });
     panels->addSeparator();
-    if (ScreenVisibility::listed("crypto_trading"))
-        panels->addAction("Crypto Trading", this, [this]() { emit action_triggered("panel_crypto"); });
-    if (ScreenVisibility::listed("equity_trading"))
-        panels->addAction("Equity Trading", this, [this]() { emit action_triggered("panel_equity"); });
-    if (ScreenVisibility::listed("algo_trading"))
-        panels->addAction("Algo Trading", this, [this]() { emit action_triggered("panel_algo"); });
+    panels->addAction("Crypto Trading", this, [this]() { emit action_triggered("panel_crypto"); });
+    panels->addAction("Equity Trading", this, [this]() { emit action_triggered("panel_equity"); });
+    panels->addAction("Algo Trading", this, [this]() { emit action_triggered("panel_algo"); });
     panels->addSeparator();
     panels->addAction("Equity Research", this, [this]() { emit action_triggered("panel_research"); });
-    if (ScreenVisibility::listed("economics"))
-        panels->addAction("Economics", this, [this]() { emit action_triggered("panel_economics"); });
-    if (ScreenVisibility::listed("geopolitics"))
-        panels->addAction("Geopolitics", this, [this]() { emit action_triggered("panel_geopolitics"); });
-    prune_empty_submenus(panels);
+    panels->addAction("Economics", this, [this]() { emit action_triggered("panel_economics"); });
+    panels->addAction("Geopolitics", this, [this]() { emit action_triggered("panel_geopolitics"); });
     m->addSeparator();
 
     // Quick Switch — jump to a preset screen layout
     auto* persp = m->addMenu("Quick Switch");
-    // A layout is offered only when its lead screen is (see Perspectives.h).
+    // Every entry must name a layout in Perspectives.h — the table MainWindow
+    // opens from — so a renamed or mistyped action fails loudly here instead
+    // of becoming a menu item that does nothing.
     auto add_persp = [this](QMenu* menu, const QString& label, const QString& action) {
-        if (!perspective_screens(action).isEmpty())
-            menu->addAction(label, this, [this, action]() { emit action_triggered(action); });
+        Q_ASSERT_X(perspective_layouts().contains(action), "ToolBar", "Quick Switch action has no layout");
+        menu->addAction(label, this, [this, action]() { emit action_triggered(action); });
     };
     persp->setStyleSheet(popup_ss());
     persp->addAction("Save Workspace", this, [this]() { emit action_triggered("perspective_save"); });
@@ -462,7 +429,6 @@ QMenu* ToolBar::build_view_menu() {
 
     // Tools
     add_persp(persp, "Tools View", "perspective_tools");
-    prune_empty_submenus(persp);
     m->addSeparator();
 
     m->addAction("Refresh Screen\tF5", this, [this]() { emit action_triggered("refresh"); });

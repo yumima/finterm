@@ -673,7 +673,7 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         } else if (action.startsWith("perspective_")) {
             // Quick Switch — navigate directly to a preset screen layout
             // 2 screens = 1:1 side-by-side, 4 screens = 2x2 grid
-            const QStringList screens = ui::perspective_screens(action);
+            const QStringList screens = ui::perspective_layouts().value(action);
             if (!screens.isEmpty() && dock_router_) {
                 dock_router_->navigate(screens[0], true); // first exclusive
                 for (int i = 1; i < screens.size(); ++i)

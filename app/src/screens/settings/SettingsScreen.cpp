@@ -6,8 +6,6 @@
 
 #include "screens/settings/PriceSourceSection.h"
 
-#include "core/config/ScreenVisibility.h"
-
 #include "ai_chat/LlmService.h"
 #include "auth/InactivityGuard.h"
 #include "auth/PinManager.h"
@@ -2907,23 +2905,6 @@ QWidget* SettingsScreen::build_developer() {
 
     vl->addWidget(new devtools::DataHubInspector(page), 1);
 
-    // Screens hidden by default (ScreenVisibility): unaudited upstream code.
-    auto* exp_title = new QLabel("Experimental screens");
-    exp_title->setStyleSheet(settings_style::section_title_ss());
-    vl->addWidget(exp_title);
-    auto* exp_desc = new QLabel("Derivatives, crypto and equity trading, algo trading and backtesting, the macro "
-                                "and government data catalogues, geopolitics, and the general-purpose editors came "
-                                "with the original code and have not been checked the way the main screens have — "
-                                "their numbers may be wrong. They are hidden from menus unless you turn this on. "
-                                "Takes effect on the next start.");
-    exp_desc->setWordWrap(true);
-    exp_desc->setStyleSheet(QString("color:%1;font-size:12px;").arg(ui::colors::TEXT_SECONDARY()));
-    vl->addWidget(exp_desc);
-    auto* exp_box = new QCheckBox("Show experimental screens");
-    exp_box->setChecked(AppConfig::instance().get(ScreenVisibility::kSettingKey, false).toBool());
-    connect(exp_box, &QCheckBox::toggled, this,
-            [](bool on) { AppConfig::instance().set(ScreenVisibility::kSettingKey, on); });
-    vl->addWidget(exp_box);
     return page;
 }
 
