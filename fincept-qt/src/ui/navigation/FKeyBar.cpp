@@ -37,7 +37,6 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
         {"code_editor", "CODE"},
         {"ai_quant_lab", "QUANT LAB"},
         {"quantlib", "QUANTLIB"},
-        {"forum", "FORUM"},
         {"knowledge", "KNOWLEDGE"},
         // SETTINGS and PROFILE deliberately absent: they merged into one screen
         // reached from the "Settings" button in the top bar, next to the user

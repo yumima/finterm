@@ -217,7 +217,6 @@ void CommandBar::build_commands() {
          {"settings", "prefs", "config"},
          "",
          {"settings", "preferences"}},
-        {"forum", "Forum", "Community forum", {"forum", "community"}, "", {"forum", "community", "discuss"}},
         // Trading & Portfolio
         {"equity_trading",
          "Equity Trading",
@@ -395,12 +394,6 @@ void CommandBar::build_commands() {
          {"trade", "visualization", "flow"}},
         // Community / Info
         {"about", "About", "About finterm", {"about", "info", "version"}, "", {"about", "information", "version"}},
-        {"support",
-         "Support",
-         "Support tickets",
-         {"support", "ticket", "help"},
-         "",
-         {"support", "ticket", "assistance"}},
     };
 }
 

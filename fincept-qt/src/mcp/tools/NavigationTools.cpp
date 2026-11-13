@@ -38,7 +38,6 @@ static const TabEntry TAB_MAP[] = {
     {"profile", "Profile", 9},
     {"settings", "Settings", 10},
     {"about", "About", 11},
-    {"support", "Support", 12},
     {"agent_config", "Agent Studio", 14},
     {"economics", "Economics", 15},
     {"geopolitics", "Geopolitics", 16},
@@ -50,7 +49,6 @@ static const TabEntry TAB_MAP[] = {
     {"ma_analytics", "M&A Analytics", 22},
     {"data_sources", "Data Sources", 23},
     {"gov_data", "Government Data", 24},
-    {"forum", "Forum", 25},
     {"docs", "Documentation", 26},
 };
 

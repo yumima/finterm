@@ -808,7 +808,6 @@ set(MCP_SOURCES
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
     src/mcp/tools/DataSourcesTools.cpp
-    src/mcp/tools/ForumTools.cpp
     src/mcp/tools/ProfileTools.cpp
     src/mcp/tools/SettingsTools.cpp
     src/mcp/tools/PythonTools.cpp
@@ -1045,11 +1044,9 @@ set(SCREEN_SOURCES
     src/screens/settings/AiSystemSection.cpp
     src/screens/settings/SchedulerSection.cpp
     src/screens/settings/ArtefactsSection.cpp
-    src/screens/settings/ForumConfigSection.cpp
     src/screens/settings/ActivityPanelSection.cpp
     src/screens/settings/SkillDiffsSection.cpp
     src/screens/about/AboutScreen.cpp
-    src/screens/support/SupportScreen.cpp
     src/screens/trade_viz/TradeVizScreen.cpp
     src/screens/docs/DocsScreen.cpp
     src/screens/ComingSoonScreen.cpp
@@ -1142,13 +1139,6 @@ set(SCREEN_SOURCES
     src/screens/news/NewsFeedDelegate.cpp
     src/screens/news/NewsDetailPanel.cpp
     src/screens/news/NewsTickerStrip.cpp
-    src/screens/forum/ForumScreen.cpp
-    src/screens/forum/ForumFeedPanel.cpp
-    src/screens/forum/ForumSidebarPanel.cpp
-    src/screens/forum/ForumPostListPanel.cpp
-    src/screens/forum/ForumPostReaderPanel.cpp
-    src/screens/forum/ForumThreadPanel.cpp
-    src/services/forum/ForumService.cpp
     src/screens/crypto_trading/CryptoTradingScreen.cpp
     src/screens/crypto_trading/CryptoTickerBar.cpp
     src/screens/crypto_trading/CryptoWatchlist.cpp
@@ -1569,12 +1559,6 @@ set_source_files_properties(
     src/screens/excel/ExcelScreen.cpp
     src/screens/excel/SpreadsheetWidget.cpp
     src/screens/file_manager/FileManagerScreen.cpp
-    src/screens/forum/ForumFeedPanel.cpp
-    src/screens/forum/ForumPostListPanel.cpp
-    src/screens/forum/ForumPostReaderPanel.cpp
-    src/screens/forum/ForumScreen.cpp
-    src/screens/forum/ForumSidebarPanel.cpp
-    src/screens/forum/ForumThreadPanel.cpp
     src/screens/geopolitics/ConflictMonitorPanel.cpp
     src/screens/geopolitics/GeopoliticsScreen.cpp
     src/screens/geopolitics/HDXDataPanel.cpp
@@ -1679,7 +1663,6 @@ set_source_files_properties(
     src/screens/settings/McpServersSection.cpp
     src/screens/settings/SettingsScreen.cpp
     src/screens/setup/SetupScreen.cpp
-    src/screens/support/SupportScreen.cpp
     src/screens/surface_analytics/Surface3DWidget.cpp
     src/screens/surface_analytics/SurfaceAnalyticsScreen.cpp
     src/screens/surface_analytics/SurfaceControlPanel.cpp
@@ -1820,7 +1803,6 @@ set_source_files_properties(
     src/mcp/tools/MAAnalyticsTools.cpp
     src/mcp/tools/AltInvestmentsTools.cpp
     src/mcp/tools/DataSourcesTools.cpp
-    src/mcp/tools/ForumTools.cpp
     src/mcp/tools/ProfileTools.cpp
     src/mcp/tools/SettingsTools.cpp
     src/mcp/tools/PythonTools.cpp

@@ -20,7 +20,6 @@
 #include "screens/settings/AiConfigSection.h"
 #include "screens/settings/ArtefactsSection.h"
 #include "screens/settings/CredentialsSection.h"
-#include "screens/settings/ForumConfigSection.h"
 #include "screens/settings/KeybindingsSection.h"
 #include "screens/settings/LlmConfigSection.h"
 #include "screens/settings/PythonEnvSection.h"
@@ -115,7 +114,7 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     sections_->addWidget(new QWidget);              // 14 (retired)
     sections_->addWidget(new SchedulerSection);     // 15
     sections_->addWidget(new ArtefactsSection);     // 16
-    sections_->addWidget(new ForumConfigSection);   // 17
+    sections_->addWidget(new QWidget);              // 17 (retired: Forum)
     sections_->addWidget(new ActivityPanelSection); // 18
     sections_->addWidget(new SkillDiffsSection);    // 19
     sections_->addWidget(new ProfileScreen);        // 20 Account
@@ -165,7 +164,6 @@ SettingsScreen::SettingsScreen(QWidget* parent) : QWidget(parent) {
     make_btn(tr("Storage & Data"), 3);
     make_btn(tr("Logging"), 7);
     make_btn(tr("Python Env"), 11);
-    make_btn(tr("Forum"), 17);
     make_btn(tr("Developer"), 12);
 
     // Open on Account with its button lit. The highlight and the visible

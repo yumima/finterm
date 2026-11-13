@@ -2049,11 +2049,6 @@ static QString provider_probe_url(const QString& provider_id, const QJsonObject&
         return "https://api.pitchbook.com/";
     if (provider_id == "nasdaq-totalview")
         return "https://api.nasdaq.com/api/quote/AAPL/info?assetClass=stocks";
-    if (provider_id == "fincept") {
-        // host+port handled by TCP fallback — no HTTP probe
-        return {};
-    }
-
     // ── Crypto ────────────────────────────────────────────────────────────────
     if (provider_id == "binance")
         return "https://api.binance.com/api/v3/ping";

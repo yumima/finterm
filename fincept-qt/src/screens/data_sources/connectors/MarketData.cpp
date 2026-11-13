@@ -178,18 +178,6 @@ static QVector<ConnectorConfig> market_configs() {
          true,
          {{"apiKey", "API Key", FieldType::Password, "your-api-key", true, "", {}}}},
 
-        {"fincept",
-         "finterm Data API",
-         "fincept",
-         Category::MarketData,
-         "F",
-         "#F58025",
-         "finterm Data API",
-         true,
-         true,
-         {{"host", "Host", FieldType::Text, "localhost", true, "", {}},
-          {"port", "Port", FieldType::Number, "8194", true, "8194", {}}}},
-
         {"reuters",
          "Refinitiv/Reuters",
          "reuters",

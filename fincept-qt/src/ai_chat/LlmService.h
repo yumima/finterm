@@ -1,7 +1,7 @@
 #pragma once
 // LlmService.h — Multi-provider LLM API client (Qt port)
 // Supports OpenAI-compatible APIs (OpenAI, Groq, DeepSeek, OpenRouter, Ollama),
-// Anthropic, Google Gemini, and Fincept's own endpoint.
+// Anthropic, Google Gemini, and the local engine (hearth).
 // Streaming via QNetworkReply::readyRead + SSE parsing.
 
 #include "core/result/Result.h"
@@ -49,11 +49,11 @@ inline QString canonical_provider(const QString& provider) {
 inline bool provider_supports_streaming(const QString& provider) {
     return provider == "openai" || provider == "anthropic" || provider == "gemini" || provider == "google" ||
            provider == "groq" || provider == "deepseek" || provider == "openrouter" || provider == "minimax" ||
-           provider == "kimi" || is_hearth_provider(provider) || provider == "xai" || provider == "fincept";
+           provider == "kimi" || is_hearth_provider(provider) || provider == "xai";
 }
 
 inline bool provider_requires_api_key(const QString& provider) {
-    return !is_hearth_provider(provider) && provider != "fincept";
+    return !is_hearth_provider(provider);
 }
 
 /// Map a provider string to its target agent runtime (R1, R3).
@@ -386,8 +386,6 @@ class LlmService : public QObject {
 
     QJsonObject build_gemini_request(bool use_tools, const QString& user_message,
                                      const std::vector<ConversationMessage>& history, const PersonaScope& persona = {});
-    QJsonObject build_fincept_request(const QString& user_message, const std::vector<ConversationMessage>& history,
-                                      bool with_tools);
 
     QString get_endpoint_url(const PersonaScope& persona = {}) const;
 
@@ -467,12 +465,9 @@ class LlmService : public QObject {
                                     int timeout_ms = 120000);
     static HttpResult blocking_get(const QString& url, const QMap<QString, QString>& headers, int timeout_ms = 30000);
 
-    // QEventLoop-based HTTP for Cloudflare-protected endpoints (Fincept)
+    // QEventLoop-based HTTP for Cloudflare-protected endpoints
     static HttpResult eventloop_request(const QString& method, const QString& url, const QByteArray& body,
                                         const QMap<QString, QString>& headers, int timeout_ms = 30000);
-
-    // Fincept async path: POST /research/llm/async → poll /research/llm/status/{id}
-    LlmResponse fincept_async_request(const QString& user_message, const std::vector<ConversationMessage>& history);
 };
 
 } // namespace fincept::ai_chat

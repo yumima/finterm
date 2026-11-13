@@ -46,10 +46,8 @@
     { "id": "file_manager",      "title": "File Manager",       "category": "Tools",       "description": "Project-local file browser",                              "tags": ["files","browser"] },
     { "id": "notes",             "title": "Notes",              "category": "Tools",       "description": "Markdown scratchpad with live preview",                   "tags": ["notes","markdown"] },
 
-    { "id": "forum",             "title": "Forum",              "category": "Community",   "description": "Community discussion threads",                            "tags": ["forum","community"] },
     { "id": "profile",           "title": "Profile",            "category": "Community",   "description": "User profile and account",                                "tags": ["profile","account"] },
     { "id": "settings",          "title": "Settings",           "category": "Community",   "description": "Preferences, keybindings, themes, voice, LLM",            "tags": ["settings","preferences"] },
-    { "id": "support",           "title": "Support",            "category": "Community",   "description": "Ticket + support",                                        "tags": ["support","help"] },
     { "id": "docs",              "title": "Docs",               "category": "Community",   "description": "In-app documentation",                                    "tags": ["docs","documentation"] },
     { "id": "about",             "title": "About",              "category": "Community",   "description": "Version, license, credits",                               "tags": ["about","version"] }
   ]

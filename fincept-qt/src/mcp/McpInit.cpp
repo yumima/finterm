@@ -18,7 +18,6 @@
 #include "mcp/tools/EquityResearchTools.h"
 #include "mcp/tools/FileManagerTools.h"
 #include "mcp/tools/FinancialDatasetsTools.h"
-#include "mcp/tools/ForumTools.h"
 #include "mcp/tools/GeopoliticsTools.h"
 #include "mcp/tools/GovDataTools.h"
 #include "mcp/tools/MAAnalyticsTools.h"
@@ -103,8 +102,6 @@ void initialize_all_tools() {
     // data sources tab
     provider.register_tools(tools::get_data_sources_tools());
 
-    // forum tab
-    provider.register_tools(tools::get_forum_tools());
 
     // profile tab
     provider.register_tools(tools::get_profile_tools());

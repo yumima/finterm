@@ -124,7 +124,7 @@
       "description": "External text wrapped with <untrusted> markers; system prompt tells the model not to follow.",
       "anthropic": "supported",
       "local": "supported",
-      "ui_surface": ["NewsTools", "ForumTools", "v031 system-prompt directive"]
+      "ui_surface": ["NewsTools", "v031 system-prompt directive"]
     },
     {
       "id": "kill_switch",

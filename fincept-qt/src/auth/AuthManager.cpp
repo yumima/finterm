@@ -5,7 +5,6 @@
 #include "core/logging/Logger.h"
 #include "network/http/HttpClient.h"
 #include "services/notifications/NotificationFieldStore.h"
-#include "storage/repositories/LlmConfigRepository.h"
 #include "storage/repositories/SettingsRepository.h"
 #include "storage/secure/SecureStorage.h"
 
@@ -120,7 +119,6 @@ void AuthManager::clear_session(bool wipe_device_pin) {
     // automatic SessionGuard logout) into a forced PIN re-creation.
     if (wipe_device_pin)
         PinManager::instance().clear_pin();
-    LlmConfigRepository::instance().delete_provider("fincept");
 }
 
 bool AuthManager::needs_pin_setup() const {
@@ -229,7 +227,6 @@ void AuthManager::complete_auth_flow(std::function<void()> on_done) {
         }
     }
     save_session();
-    auto_configure_fincept_llm();
     set_loading(false);
     if (on_done)
         on_done();
@@ -563,13 +560,6 @@ void AuthManager::refresh_user_data() {
         return;
     // fetch_user_profile chains into fetch_user_subscription automatically
     fetch_user_profile([this] { emit subscription_fetched(); });
-}
-
-// ── Auto-configure Fincept LLM provider ──────────────────────────────────────
-
-void AuthManager::auto_configure_fincept_llm() {
-    // Fincept cloud LLM is disabled in this local build (stub server removed).
-    // Users configure their own provider via Settings → LLM.
 }
 
 } // namespace fincept::auth

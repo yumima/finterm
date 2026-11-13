@@ -42,7 +42,6 @@ static constexpr const char* TAG = "LlmConfigSection";
 //
 // ollama first: the default, and the only entry that keeps prompts on-box
 // unless hearth itself has a role bound to a cloud backend.
-// "fincept" was retired in R17.
 const QStringList LlmConfigSection::KNOWN_PROVIDERS = {
     "hearth",    // local — the gateway on 127.0.0.1:11435 (role aliases)
     "anthropic", // claude-agent-sdk runtime
@@ -71,7 +70,6 @@ QString LlmConfigSection::default_base_url(const QString& provider) {
         return "http://127.0.0.1:11435"; // hearth's default loopback (no /v1 — LlmService appends it)
     if (p == "xai")
         return {};
-    // "fincept" is retired (R17). v041 migration rewrites the DB row to ollama.
     return {};
 }
 
@@ -956,13 +954,6 @@ void LlmConfigSection::on_test_connection() {
         return;
     }
 
-    if (provider == "fincept") {
-        // Legacy retired provider — v041/v042 migrations rewrite it to ollama.
-        // Guide the user if migration somehow hasn't run yet.
-        show_status("Legacy provider — delete this row and add ollama with Base URL http://127.0.0.1:11435", true);
-        return;
-    }
-
     if (!ai_chat::is_hearth_provider(provider)) {
         if (api_key_edit_->text().trimmed().isEmpty()) {
             show_status("API key required for test", true);
@@ -998,11 +989,6 @@ void LlmConfigSection::on_fetch_models() {
     QString provider = provider_edit_->text().trimmed().toLower();
     if (provider.isEmpty()) {
         show_status("Select a provider first", true);
-        return;
-    }
-
-    if (provider == "fincept") {
-        show_status("finterm manages models automatically", false);
         return;
     }
 

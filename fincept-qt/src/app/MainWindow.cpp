@@ -43,7 +43,6 @@
 #include "screens/equity_trading/EquityTradingScreen.h"
 #include "screens/excel/ExcelScreen.h"
 #include "screens/file_manager/FileManagerScreen.h"
-#include "screens/forum/ForumScreen.h"
 #include "screens/geopolitics/GeopoliticsScreen.h"
 #include "screens/gov_data/GovDataScreen.h"
 #include "screens/info/ContactScreen.h"
@@ -69,7 +68,6 @@
 #include "screens/report_builder/ReportBuilderScreen.h"
 #include "screens/screener/ScreenerScreen.h"
 #include "screens/settings/SettingsScreen.h"
-#include "screens/support/SupportScreen.h"
 #include "screens/surface_analytics/SurfaceAnalyticsScreen.h"
 #include "screens/trade_viz/TradeVizScreen.h"
 #include "screens/watchlist/WatchlistScreen.h"
@@ -1105,7 +1103,6 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("markets", []() { return new screens::MarketsScreen; });
     dock_router_->register_factory("crypto_trading", []() { return new screens::CryptoTradingScreen; });
     dock_router_->register_factory("news", []() { return new screens::NewsScreen; });
-    dock_router_->register_factory("forum", []() { return new screens::ForumScreen; });
     dock_router_->register_factory("watchlist", []() { return new screens::WatchlistScreen; });
 
     // Lazily constructed on first navigation — deferred to avoid startup cost.
@@ -1115,7 +1112,6 @@ void MainWindow::setup_dock_screens() {
     dock_router_->register_factory("profile", []() { return new screens::SettingsScreen; });
     dock_router_->register_factory("settings", []() { return new screens::SettingsScreen; });
     dock_router_->register_factory("about", []() { return new screens::AboutScreen; });
-    dock_router_->register_factory("support", []() { return new screens::SupportScreen; });
     dock_router_->register_factory("notes", []() { return new screens::NotesScreen; });
 
     dock_router_->register_factory("portfolio", []() { return new screens::PortfolioScreen; });

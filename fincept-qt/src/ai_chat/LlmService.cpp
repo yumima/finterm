@@ -1,5 +1,5 @@
 // LlmService.cpp — Multi-provider LLM API client (Qt port)
-// Translated from fincept-cpp llm_service.cpp:
+// Originally translated from a C++ llm_service.cpp:
 //   libcurl  → QNetworkAccessManager + QEventLoop (blocking on bg thread)
 //   std::future → QtConcurrent::run + signal
 //   nlohmann/json → QJsonObject/QJsonArray
@@ -196,18 +196,6 @@ void LlmService::ensure_config() const {
         }
     }
 
-    // Legacy 'fincept' rows: the hosted endpoint is retired (R17). If the
-    // loaded provider is fincept, clear it so the no-key fallback below
-    // kicks in and the user sees the local-profile path instead of indirect
-    // endpoint failures from build_fincept_request etc.
-    if (provider_ == "fincept") {
-        LOG_WARN(TAG, "Legacy 'fincept' provider in config — falling back to local profile");
-        provider_.clear();
-        api_key_.clear();
-        base_url_.clear();
-        model_.clear();
-    }
-
     // No-key fallback: local OpenAI-compatible service (R17). Defaults to
     // Ollama-style http://localhost:11434/v1 — Track 2 #5 will expose this
     // as a configurable "Local LLM service" field. If the local server is
@@ -319,7 +307,7 @@ namespace {
 /// chat ("/chat/completions", Anthropic "/messages") and speech
 /// ("/audio/speech") alike, so a provider's default lives in ONE place. A
 /// configured base wins. Empty for providers without an OpenAI-shape root
-/// (Gemini's native API, fincept).
+/// (Gemini's native API).
 QString api_root(const QString& p, const QString& cfg_base) {
     if (!cfg_base.trimmed().isEmpty())
         return normalize_llm_base(cfg_base) + QStringLiteral("/v1");
@@ -612,12 +600,6 @@ QString LlmService::get_endpoint_url(const PersonaScope& persona) const {
     // Called with mutex_ held
     const QString p = eff_provider(persona);
 
-    // Fincept cloud LLM: disabled in this local build (stub server removed).
-    // Users should configure their own provider (Anthropic, OpenAI, Ollama, etc.)
-    // via Settings → LLM.
-    if (p == "fincept")
-        return {};
-
     const QString cfg_base = eff_base_url(persona);
     // Gemini's native API puts the model in the PATH, not the body, so a
     // per-role model override has to reach the URL builder or it silently
@@ -644,15 +626,6 @@ QMap<QString, QString> LlmService::get_headers(const PersonaScope& persona) cons
     } else if (p == "gemini" || p == "google") {
         if (!api_key_eff.isEmpty())
             h["x-goog-api-key"] = api_key_eff;
-    } else if (p == "fincept") {
-        // api_key_eff already resolved from session by ensure_config()
-        if (!api_key_eff.isEmpty())
-            h["X-API-Key"] = api_key_eff;
-        auto tok = SettingsRepository::instance().get("session_token");
-        if (tok.is_ok() && !tok.value().isEmpty())
-            h["X-Session-Token"] = tok.value();
-        // Cloudflare requires a User-Agent header
-        h["User-Agent"] = "finterm/4.0";
     } else {
         // OpenAI-compatible
         if (!api_key_eff.isEmpty())
@@ -1172,25 +1145,6 @@ QJsonObject LlmService::build_gemini_request(bool use_tools, const QString& user
     return req;
 }
 
-QJsonObject LlmService::build_fincept_request(const QString& user_message,
-                                              const std::vector<ConversationMessage>& history, bool with_tools) {
-    // Fincept /research/chat uses the OpenAI messages array format
-    QJsonArray messages;
-    messages.append(QJsonObject{{"role", "system"}, {"content", compose_system_prompt({}, false, false)}});
-    for (const auto& m : history)
-        messages.append(QJsonObject{{"role", m.role}, {"content", m.content}});
-    messages.append(QJsonObject{{"role", "user"}, {"content", user_message}});
-
-    QJsonObject req;
-    req["messages"] = messages;
-    // Pass model if set to a real model name (not the legacy placeholder)
-    if (!model_.isEmpty() && model_ != "fincept-llm")
-        req["model"] = model_;
-
-    Q_UNUSED(with_tools) // Fincept /research/chat does not support tools yet
-    return req;
-}
-
 // ============================================================================
 // Blocking HTTP POST (runs on background thread, uses its own NAM + event loop)
 // ============================================================================
@@ -1375,143 +1329,6 @@ static QString build_tool_catalog_for_prompt() {
     return catalog;
 }
 
-LlmResponse LlmService::fincept_async_request(const QString& user_message,
-                                              const std::vector<ConversationMessage>& history) {
-    LlmResponse resp;
-
-    // Build prompt string for the async endpoint (it takes a plain prompt, not messages)
-    QString prompt;
-    prompt += compose_system_prompt({}, false, false) + "\n\n";
-
-    // Inject tool catalog so the model can emit text-based tool calls
-    if (tools_enabled_) {
-        QString tool_catalog = build_tool_catalog_for_prompt();
-        if (!tool_catalog.isEmpty())
-            prompt += tool_catalog + "\n";
-    }
-
-    for (const auto& m : history) {
-        if (m.role == "user")
-            prompt += "User: " + m.content + "\n\n";
-        else if (m.role == "assistant")
-            prompt += "Assistant: " + m.content + "\n\n";
-    }
-    prompt += "User: " + user_message;
-
-    QJsonObject submit_body;
-    submit_body["prompt"] = prompt;
-    submit_body["max_tokens"] = resolved_max_tokens();
-    // Temperature intentionally omitted — Fincept backend uses its own default.
-
-    auto hdr = get_headers();
-    // Fincept async LLM disabled in this local build.
-    const QString async_url = {};
-    const QString status_base = {};
-
-    LOG_INFO(TAG, QString("finterm async: submitting to %1 (api_key=%2, prompt_len=%3)")
-                      .arg(async_url)
-                      .arg(api_key_.isEmpty() ? "EMPTY" : "set")
-                      .arg(prompt.length()));
-
-    QByteArray json_data = QJsonDocument(submit_body).toJson(QJsonDocument::Compact);
-    auto submit = eventloop_request("POST", async_url, json_data, hdr, 30000);
-    if (!submit.success) {
-        resp.error = "finterm async submit failed: " + submit.error;
-        LOG_ERROR(TAG, resp.error);
-        return resp;
-    }
-
-    auto submit_doc = QJsonDocument::fromJson(submit.body);
-    if (submit_doc.isNull()) {
-        resp.error = "finterm async: failed to parse submit response";
-        return resp;
-    }
-
-    // Response can nest task_id at top level or inside data
-    QJsonObject sj = submit_doc.object();
-    QString task_id = sj["task_id"].toString();
-    if (task_id.isEmpty())
-        task_id = sj["data"].toObject()["task_id"].toString();
-    if (task_id.isEmpty()) {
-        resp.error = "finterm async: no task_id in submit response";
-        return resp;
-    }
-    LOG_INFO(TAG, "finterm async task_id: " + task_id);
-
-    // Poll every 3 seconds, up to 120 seconds total
-    const QString poll_url = status_base + task_id;
-    constexpr int MAX_POLLS = 40;
-    for (int i = 0; i < MAX_POLLS; ++i) {
-        QThread::msleep(3000);
-
-        auto poll = eventloop_request("GET", poll_url, {}, hdr, 15000);
-        if (!poll.success) {
-            LOG_WARN(TAG, "finterm async poll failed: " + poll.error);
-            continue;
-        }
-
-        auto poll_doc = QJsonDocument::fromJson(poll.body);
-        if (poll_doc.isNull())
-            continue;
-
-        QJsonObject pj = poll_doc.object();
-        QString status = pj["status"].toString();
-        QJsonObject data_obj = pj["data"].toObject();
-        if (status.isEmpty())
-            status = data_obj["status"].toString();
-
-        LOG_INFO(TAG, QString("finterm async poll %1 status=%2").arg(i + 1).arg(status));
-
-        if (status == "completed") {
-            // data.data.response
-            QString response = data_obj["data"].toObject()["response"].toString();
-            if (response.isEmpty())
-                response = data_obj["response"].toString();
-            if (response.isEmpty()) {
-                resp.error = "finterm async completed but response is empty";
-                LOG_WARN(TAG, "finterm async task completed with empty response field");
-                return resp;
-            }
-            resp.content = response;
-            resp.success = true;
-
-            QJsonObject usage = data_obj["data"].toObject()["usage"].toObject();
-            if (!usage.isEmpty()) {
-                resp.prompt_tokens = usage["input_tokens"].toInt();
-                resp.completion_tokens = usage["output_tokens"].toInt();
-                resp.total_tokens = usage["total_tokens"].toInt();
-            }
-
-            // Check for text-based tool calls in the response.
-            // The model may have emitted <tool_call>...</tool_call> blocks.
-            if (!resp.content.isEmpty()) {
-                LOG_INFO(TAG, "finterm: checking response for text-based tool calls");
-                // Use the sync /research/chat endpoint for follow-up after tool execution
-                QString followup_url = get_endpoint_url();
-                auto followup_hdr = get_headers();
-                auto tool_result =
-                    try_extract_and_execute_text_tool_calls(resp.content, user_message, followup_url, followup_hdr);
-                if (tool_result.has_value()) {
-                    LOG_INFO(TAG, "finterm: text tool calls detected and executed");
-                    return tool_result.value();
-                }
-            }
-            return resp;
-        }
-
-        if (status == "failed") {
-            QString err = pj["error"].toString();
-            if (err.isEmpty())
-                err = data_obj["error"].toString();
-            resp.error = "finterm async task failed: " + (err.isEmpty() ? "unknown error" : err);
-            return resp;
-        }
-    }
-
-    resp.error = "finterm async timed out waiting for response";
-    return resp;
-}
-
 // ============================================================================
 // Non-streaming request
 // ============================================================================
@@ -1556,15 +1373,6 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
         req_body = build_gemini_request(use_tools, user_message, history, persona);
         // Auth goes via x-goog-api-key header (set by get_headers(persona)).
         // Do not append ?key= to URL — it leaks the key into access logs.
-    } else if (eff_provider(persona) == "fincept") {
-        // Fincept hosted endpoint retired (R17). reload() should already
-        // have rewritten the provider — this branch only fires if a caller
-        // bypassed reload(). Surface a clear error rather than letting the
-        // dead routing path fail indirectly.
-        LlmResponse resp;
-        resp.error = "finterm hosted endpoint is retired — configure a local or external provider in Settings → LLM.";
-        LOG_WARN(TAG, resp.error);
-        return resp;
     } else {
         req_body = build_openai_request(user_message, history, false, use_tools, persona);
     }
@@ -1812,20 +1620,6 @@ LlmResponse LlmService::do_request(const QString& user_message, const std::vecto
                 // parts excluded; an empty result is reported below).
                 resp.content = extract_gemini_parts_text(parts);
             }
-        }
-
-    } else if (eff_provider(persona) == "fincept") {
-        // /research/chat returns OpenAI-compatible choices array:
-        // {"success":true,"data":{"choices":[{"message":{"role":"assistant","content":"..."}}],...}}
-        QJsonObject data = rj.contains("data") ? rj["data"].toObject() : rj;
-        QJsonArray choices = data["choices"].toArray();
-        if (!choices.isEmpty())
-            resp.content = extract_openai_message_text(choices[0].toObject()["message"].toObject());
-        // API returned success=true but empty response text — treat as soft error
-        if (resp.content.isEmpty()) {
-            resp.error = "finterm LLM returned an empty response. Please try again.";
-            LOG_WARN(TAG, "finterm /research/chat returned empty choices or content");
-            return resp;
         }
 
     } else {
@@ -2265,14 +2059,6 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
         follow_body["max_tokens"] = resolved_max_tokens(persona);
         // Temperature intentionally omitted — Anthropic default.
         follow_body["system"] = compose_system_prompt(persona, false, true);
-    } else if (eff_provider(persona) == "fincept") {
-        // /research/chat uses messages array
-        QJsonArray msgs;
-        msgs.append(QJsonObject{{"role", "system"}, {"content", compose_system_prompt(persona, false, true)}});
-        msgs.append(QJsonObject{{"role", "user"}, {"content", follow_prompt}});
-        follow_body["messages"] = msgs;
-        if (!eff_model(persona).isEmpty() && eff_model(persona) != "fincept-llm")
-            follow_body["model"] = eff_model(persona);
     } else {
         // OpenAI-compatible
         QJsonArray msgs;
@@ -2305,12 +2091,6 @@ std::optional<LlmResponse> LlmService::try_extract_and_execute_text_tool_calls(c
     // Extract text from follow-up response (provider-aware)
     if (eff_provider(persona) == "anthropic") {
         resp.content = extract_anthropic_content_text(fu_rj["content"].toArray());
-    } else if (eff_provider(persona) == "fincept") {
-        // /research/chat: {"success":true,"data":{"choices":[{"message":{"content":"..."}}]}}
-        QJsonObject data = fu_rj.contains("data") ? fu_rj["data"].toObject() : fu_rj;
-        QJsonArray fu_choices = data["choices"].toArray();
-        if (!fu_choices.isEmpty())
-            resp.content = extract_openai_message_text(fu_choices[0].toObject()["message"].toObject());
     } else {
         QJsonArray choices = fu_rj["choices"].toArray();
         if (!choices.isEmpty())
@@ -2381,8 +2161,8 @@ QString LlmService::get_models_url(const QString& provider, const QString& api_k
     Q_UNUSED(api_key) // Auth goes via headers (see get_models_headers()), URL is provider-based.
     const QString p = provider.toLower();
 
-    // Custom base_url (except fincept)
-    if (!base_url.isEmpty() && p != "fincept") {
+    // Custom base_url
+    if (!base_url.isEmpty()) {
         const QString base = normalize_llm_base(base_url);
         if (p == "anthropic")
             return base + "/v1/models?limit=1000";
@@ -2413,8 +2193,6 @@ QString LlmService::get_models_url(const QString& provider, const QString& api_k
         return "https://api.x.ai/v1/models";
     if (p == "kimi")
         return "https://api.moonshot.ai/v1/models";
-    if (p == "fincept")
-        return {}; // disabled in local build
     // minimax: no public /v1/models endpoint — fallback models used instead
     return {};
 }
@@ -2433,16 +2211,6 @@ QMap<QString, QString> LlmService::get_models_headers(const QString& provider, c
             h["x-goog-api-key"] = api_key;
     } else if (is_hearth_provider(p)) {
         // No auth needed
-    } else if (p == "fincept") {
-        // Resolve API key from session (same logic as ensure_config)
-        QString resolved_key = api_key;
-        if (resolved_key.isEmpty()) {
-            auto stored = SettingsRepository::instance().get("fincept_api_key");
-            if (stored.is_ok() && !stored.value().isEmpty())
-                resolved_key = stored.value();
-        }
-        if (!resolved_key.isEmpty())
-            h["X-API-Key"] = resolved_key;
     } else {
         // OpenAI-compatible: OpenAI, Groq, DeepSeek, OpenRouter
         if (!api_key.isEmpty())
@@ -2500,23 +2268,6 @@ QStringList LlmService::parse_models_response(const QString& provider, const QBy
                     models.append(name);
             }
         }
-    } else if (p == "fincept") {
-        // {"success":true,"data":{"models":["MiniMax-M2.7",...]}}
-        // or {"success":true,"data":["model1","model2",...]}
-        QJsonValue data_val = root["data"];
-        QJsonArray arr;
-        if (data_val.isObject())
-            arr = data_val.toObject()["models"].toArray();
-        else if (data_val.isArray())
-            arr = data_val.toArray();
-        for (const auto& v : arr) {
-            QString id = v.isString() ? v.toString() : v.toObject()["id"].toString();
-            if (!id.isEmpty())
-                models.append(id);
-        }
-        // If API doesn't expose a models endpoint yet, fall back to known models
-        if (models.isEmpty())
-            models = {"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5"};
     } else {
         // OpenAI-compatible: OpenAI, Anthropic, Groq, DeepSeek, OpenRouter
         // {"data": [{"id": "model-id", ...}]}
@@ -2533,13 +2284,6 @@ QStringList LlmService::parse_models_response(const QString& provider, const QBy
 }
 
 void LlmService::fetch_models(const QString& provider, const QString& api_key, const QString& base_url) {
-    // Fincept has no public /models listing endpoint — return known models immediately.
-    if (provider.toLower() == "fincept") {
-        emit models_fetched(provider,
-                            {"MiniMax-M2.7", "MiniMax-M2.7-highspeed", "MiniMax-M2.5", "MiniMax-M2.5-highspeed"}, {});
-        return;
-    }
-
     QString url = get_models_url(provider, api_key, base_url);
     if (url.isEmpty()) {
         emit models_fetched(provider, {}, "Unknown provider: " + provider);

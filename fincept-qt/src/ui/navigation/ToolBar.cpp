@@ -375,9 +375,7 @@ QMenu* ToolBar::build_navigate_menu() {
     m->addSeparator();
 
     // Direct items (no submenu)
-    nav(m, "Forum", "forum");
     nav(m, "Docs", "docs");
-    nav(m, "Support", "support");
     nav(m, "About", "about");
 
     return m;

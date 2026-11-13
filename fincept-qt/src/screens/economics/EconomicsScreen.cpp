@@ -313,7 +313,7 @@ QVariantMap EconomicsScreen::save_state() const {
 void EconomicsScreen::restore_state(const QVariantMap& state) {
     const QString id = state.value("source_id").toString();
     // A layout can name a source that has since been removed (the old
-    // "Proprietary Macro" tab, id "fincept"); switching to it would deselect
+    // "Proprietary Macro" tab); switching to it would deselect
     // every badge and show no panel. Keep the default source instead.
     const bool known = std::any_of(sources_.cbegin(), sources_.cend(), [&](const auto& e) { return e.id == id; });
     if (known)

@@ -85,7 +85,6 @@ class AuthManager : public QObject {
     void fetch_user_profile(std::function<void()> on_done = {});
     void fetch_user_subscription(std::function<void()> on_done = {});
     void complete_auth_flow(std::function<void()> on_done);
-    void auto_configure_fincept_llm();
     QString generate_device_id() const;
     QJsonObject unwrap_data(const QJsonObject& raw) const;
 
