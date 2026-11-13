@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`f5db7c57d`](https://github.com/yumima/finterm/commit/f5db7c57d) read-aloud: headings and bullets get their own pause
 - [`517e64a22`](https://github.com/yumima/finterm/commit/517e64a22) read-aloud: speed setting (tts.engine_speed), picker in Settings → Voice
 - [`8b780a6c6`](https://github.com/yumima/finterm/commit/8b780a6c6) live everywhere, streamed not polled: movers, screener, IPO, sparklines, Polymarket
 - [`233eb7891`](https://github.com/yumima/finterm/commit/233eb7891) live: extended hours, index futures, indices and ROOT=F stream too

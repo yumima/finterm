@@ -125,7 +125,8 @@ NewsDetailPanel::NewsDetailPanel(QWidget* parent) : QWidget(parent) {
     root->addWidget(header);
     tldr_listen_ = new ui::ReadAloudToggle(
         tldr_listen_btn_,
-        {QStringLiteral("Listen"), QStringLiteral("Stop"), QStringLiteral("Preparing"), /*icons=*/true},
+        {QStringLiteral("Listen"), QStringLiteral("Pause"), QStringLiteral("Resume"), QStringLiteral("Stop"),
+         QStringLiteral("Preparing"), /*icons=*/true},
         QStringLiteral("Read the TL;DR aloud (voice from the configured LLM engine)"));
     // A prewarm that finds the engine dead (or route-less) lands after the
     // brief rendered on a cache hit: re-check, so the speaker goes away rather
@@ -361,7 +362,7 @@ QWidget* NewsDetailPanel::build_content_view() {
         emit analyze_requested(current_article_.link);
     });
     listen_toggle_ = new ui::ReadAloudToggle(
-        listen_btn_, {QStringLiteral("LISTEN"), QStringLiteral("STOP")},
+        listen_btn_, {QStringLiteral("LISTEN"), QStringLiteral("PAUSE"), QStringLiteral("RESUME"), QStringLiteral("STOP")},
         QStringLiteral("Read the article aloud (voice from the configured LLM engine, else the on-device voice)"));
     connect(listen_btn_, &QPushButton::clicked, this, [this]() {
         if (!has_article_ && !listen_toggle_->active())

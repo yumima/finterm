@@ -79,6 +79,16 @@ class TtsService : public QObject {
     /// Stop any in-flight playback.  Idempotent.
     void stop();
 
+    /// Hold the current reading where it is — mid-word, mid-chunk, or before
+    /// its first audio — keeping everything needed to carry on. A reading
+    /// paused while still preparing stays silent when its audio arrives.
+    /// Engine chunks keep synthesising into the buffer meanwhile, so resume
+    /// is instant. False if there is no reading or it is already paused.
+    bool pause();
+    /// Carry on from where pause() held it. False if nothing is paused.
+    bool resume();
+    bool is_paused() const { return paused_; }
+
     /// A voice the configured engine can read with. key() — "model:id", e.g.
     /// "kokoro:af_heart" — is what set_engine_voice() stores.
     struct EngineVoice {
@@ -113,7 +123,9 @@ class TtsService : public QObject {
     /// A reading is in progress: from speak()/speak_via_engine() launching it —
     /// "preparing" included — until it ends. Unlike state_changed, it does not
     /// drop between back-to-back readings (speak()'s internal stop() is hidden).
-    bool is_reading() const { return reading_; }
+    /// A PAUSED reading doesn't count: it may stay paused indefinitely, and
+    /// the TV it muted gets its sound back until resume().
+    bool is_reading() const { return reading_ && !paused_; }
 
   signals:
     /// Any reading (legacy, session-blind): for consumers that mirror ALL
@@ -124,12 +136,15 @@ class TtsService : public QObject {
     /// fires once per reading (not per engine chunk).
     void session_state(int session, bool is_speaking);
     void session_error(int session, const QString& message);
+    /// pause()/resume() of that reading. Its end (stop, finish, error) arrives
+    /// as session_state(false) whether or not it was paused.
+    void session_paused(int session, bool paused);
     /// An engine was found unusable (404 / unreachable): speaker buttons
     /// gated on engine_or_local_available() should re-check.
     void availability_changed();
     /// engine_voices() or the chosen voice changed.
     void engine_voices_changed();
-    /// is_reading() flipped. For consumers that must yield to read-aloud for
+    /// is_reading() flipped (pause/resume included). For consumers that must yield to read-aloud for
     /// its whole span (the TV mutes), not just while audio is audible.
     void reading_changed(bool reading);
 
@@ -150,6 +165,9 @@ class TtsService : public QObject {
     /// Emit state_changed + session_state; true at most once per reading.
     void set_speaking(bool speaking);
     bool reading_ = false;
+    bool paused_ = false; ///< pause(): the player is held / the stream pipeline is SIGSTOPped
+    /// SIGSTOP/SIGCONT the streaming Piper pipeline's process group.
+    void signal_stream(bool hold);
     bool restarting_ = false; ///< inside begin_reading()'s stop(): keep reading_ up
     void set_reading(bool reading);
     /// stop() the previous reading + open a new session, with reading_ held true.

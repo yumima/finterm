@@ -616,6 +616,10 @@ bool TtsService::start_piper(const QString& text) {
     // utterance (and output). The pauses survive as the stops SpeechText adds.
     proc_->write(text.simplified().toUtf8());
     proc_->closeWriteChannel();
+    // The engine fell back here after the user paused while it prepared:
+    // the new streaming pipeline must start held too.
+    if (paused_)
+        signal_stream(true);
     // NB: state_changed(true) is intentionally NOT emitted here. In BUFFERED mode
     // synthesis takes ~20s; signalling "speaking" now would flip the UI to "STOP"
     // while still silent. It's emitted from on_proc_finished() at PlayingState
@@ -626,7 +630,61 @@ bool TtsService::start_piper(const QString& text) {
     return true;
 }
 
+bool TtsService::pause() {
+    if (!reading_ || paused_)
+        return false;
+    paused_ = true;
+    if (player_)
+        player_->pause(); // keeps the position; a clip not yet started stays loaded
+    // Streaming Piper: what the sound server already buffered (≲1 s) still
+    // plays out — the fallback path's limit; the engine path stops dead.
+    signal_stream(true);
+    LOG_INFO(kTtsTag, QStringLiteral("reading paused"));
+    emit reading_changed(false); // is_reading() just turned false: the TV may speak
+    emit session_paused(session_, true);
+    return true;
+}
+
+bool TtsService::resume() {
+    if (!paused_)
+        return false;
+    paused_ = false;
+    if (player_)
+        player_->play();
+    signal_stream(false);
+    // Engine reading paused while starved (no clip loaded): nothing to do —
+    // the next clip's arrival starts playback, now that paused_ is down.
+    LOG_INFO(kTtsTag, QStringLiteral("reading resumed"));
+    emit reading_changed(true);
+    emit session_paused(session_, false);
+    return true;
+}
+
+void TtsService::signal_stream(bool hold) {
+#if defined(Q_OS_UNIX)
+    // The streaming pipeline (python → bash → piper → player) IS the playback:
+    // freezing its process group holds synthesis and the sink together, and
+    // SIGCONT carries on from the same sample. The buffered path has no
+    // process to hold once playing — QMediaPlayer covers it.
+    if (proc_ && stream_mode_ && proc_->processId() > 0)
+        ::kill(static_cast<pid_t>(-proc_->processId()), hold ? SIGSTOP : SIGCONT);
+#else
+    Q_UNUSED(hold);
+#endif
+}
+
 void TtsService::stop() {
+    // A frozen pipeline can't act on SIGTERM: thaw it so it dies promptly
+    // instead of costing kill_process_group its full wait + SIGKILL.
+    const bool was_paused = paused_;
+    if (paused_)
+        signal_stream(false);
+    paused_ = false;
+    // A paused reading had given the TV its sound back; one being replaced
+    // (begin_reading) keeps reading_ up without set_reading() firing, so
+    // re-mute here. An ending one gets set_reading(false) below.
+    if (was_paused && restarting_ && reading_)
+        emit reading_changed(true);
     end_engine_session(); // also aborts an in-flight chunk request
     if (proc_) {
         // Disconnect first so on_proc_finished doesn't fire and try to play the
@@ -724,7 +782,11 @@ void TtsService::start_playback() {
         teardown_playback();
     });
     player_->setSource(QUrl::fromLocalFile(pending_wav_path_));
-    player_->play();
+    // Paused before the audio arrived: load it and hold, so resume() starts it.
+    if (paused_)
+        player_->pause();
+    else
+        player_->play();
 }
 
 void TtsService::teardown_playback() {
@@ -739,7 +801,10 @@ void TtsService::teardown_playback() {
     if (eng_session_ && player_ && !eng_ready_.isEmpty()) {
         pending_wav_path_ = eng_ready_.takeFirst();
         player_->setSource(QUrl::fromLocalFile(pending_wav_path_));
-        player_->play();
+        if (paused_)
+            player_->pause();
+        else
+            player_->play();
         engine_fetch_next(); // a buffer slot just freed up
         return;
     }
