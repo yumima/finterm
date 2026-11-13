@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`225e7b1cc`](https://github.com/yumima/finterm/commit/225e7b1cc) account: local-only — the upstream SaaS account layer is gone
 - [`09d9de90f`](https://github.com/yumima/finterm/commit/09d9de90f) remove dead upstream cloud features: Forum, Support, hosted LLM provider
 - [`42b960aee`](https://github.com/yumima/finterm/commit/42b960aee) identity: data, settings and keyring move off the old com.fincept names
 - [`e5c33d835`](https://github.com/yumima/finterm/commit/e5c33d835) license: full AGPL text, NOTICE carries the one required attribution

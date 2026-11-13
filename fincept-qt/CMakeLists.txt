@@ -884,6 +884,7 @@ set(SERVICE_SOURCES
     src/services/algo_trading/AlgoTradingService.cpp
     src/services/portfolio/PortfolioFx.cpp
     src/services/portfolio/PortfolioLedger.cpp
+    src/services/portfolio/BrokerCsv.cpp
     src/services/portfolio/PortfolioReturns.cpp
     src/services/portfolio/PortfolioService.cpp
     src/services/portfolio/PortfolioAnalyticsService.cpp
@@ -1341,6 +1342,7 @@ set(SCREEN_SOURCES
     src/screens/portfolio/PortfolioStatsRibbon.cpp
     src/screens/portfolio/PortfolioStatusBar.cpp
     src/screens/portfolio/PortfolioDialogs.cpp
+    src/screens/portfolio/BrokerCsvDialog.cpp
     src/screens/portfolio/PortfolioHeatmap.cpp
     src/screens/portfolio/PortfolioPerfChart.cpp
     src/screens/portfolio/PortfolioSectorPanel.cpp
@@ -1620,6 +1622,7 @@ set_source_files_properties(
     src/screens/portfolio/PortfolioCommandBar.cpp
     src/screens/portfolio/PortfolioDetailWrapper.cpp
     src/screens/portfolio/PortfolioDialogs.cpp
+    src/screens/portfolio/BrokerCsvDialog.cpp
     src/screens/portfolio/PortfolioFFNView.cpp
     src/screens/portfolio/PortfolioFuturesView.cpp
     src/screens/portfolio/PortfolioHeatmap.cpp

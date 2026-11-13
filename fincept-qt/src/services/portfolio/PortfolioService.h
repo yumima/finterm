@@ -170,6 +170,12 @@ class PortfolioService : public QObject {
     void export_csv(const QString& portfolio_id, const QString& file_path);
     void export_json(const QString& portfolio_id, const QString& file_path);
     void import_json(const QString& file_path, portfolio::ImportMode mode, const QString& merge_target_id = {});
+    /// Record `records` into a new portfolio called `name` (mode New) or into
+    /// `merge_target_id`, replay the touched positions, resolve sectors and
+    /// backfill history. The shared tail of every import (JSON, broker CSV).
+    void import_records(const QString& name, const QString& owner, const QString& currency,
+                        const QVector<portfolio::ImportRecord>& records, const QHash<QString, QString>& sector_hints,
+                        portfolio::ImportMode mode, const QString& merge_target_id = {});
 
     // ── Snapshots (performance history) ─────────────────────────────────────
     // Default window matches the perf chart's deepest period (ALL = 10y). A

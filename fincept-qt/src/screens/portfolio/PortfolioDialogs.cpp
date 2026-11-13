@@ -660,7 +660,7 @@ ImportPortfolioDialog::ImportPortfolioDialog(const QVector<portfolio::Portfolio>
     // File picker
     auto* file_row = new QHBoxLayout;
     file_edit_ = new QLineEdit;
-    file_edit_->setPlaceholderText("Select JSON file...");
+    file_edit_->setPlaceholderText("A broker CSV export (positions or activity) or a finterm JSON export");
     file_edit_->setReadOnly(true);
     file_row->addWidget(file_edit_, 1);
 
@@ -737,7 +737,9 @@ ImportPortfolioDialog::ImportPortfolioDialog(const QVector<portfolio::Portfolio>
 }
 
 void ImportPortfolioDialog::browse_file() {
-    QString path = QFileDialog::getOpenFileName(this, "Select Portfolio JSON", QString(), "JSON Files (*.json)");
+    QString path = QFileDialog::getOpenFileName(this, "Select a portfolio file", QString(),
+                                                "Broker CSV or finterm JSON (*.csv *.json);;"
+                                                "Broker CSV export (*.csv);;finterm JSON (*.json)");
     if (!path.isEmpty()) {
         file_edit_->setText(path);
         status_label_->setText("File selected: " + QFileInfo(path).fileName());

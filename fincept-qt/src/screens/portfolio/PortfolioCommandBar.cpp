@@ -235,7 +235,7 @@ void PortfolioCommandBar::build_portfolio_selector() {
     };
     make_io("EXPORT CSV", dd_export_csv_btn_, &PortfolioCommandBar::export_csv_requested);
     make_io("EXPORT JSON", dd_export_json_btn_, &PortfolioCommandBar::export_json_requested);
-    make_io("IMPORT JSON", dd_import_json_btn_, &PortfolioCommandBar::import_requested);
+    make_io("IMPORT", dd_import_json_btn_, &PortfolioCommandBar::import_requested);
     dd_layout->addLayout(io_row);
 
     apply_dropdown_styles();

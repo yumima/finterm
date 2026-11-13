@@ -450,6 +450,16 @@ struct PortfolioExportData {
 
 enum class ImportMode { New, Merge };
 
+/// One transaction to import, whatever the file it came from.
+struct ImportRecord {
+    QString date; // ISO; empty = now
+    QString symbol;
+    QString type; // BUY / SELL / DIVIDEND / SPLIT
+    double quantity = 0;
+    double price = 0;
+    QString notes;
+};
+
 struct ImportResult {
     QString portfolio_id;
     QString portfolio_name;

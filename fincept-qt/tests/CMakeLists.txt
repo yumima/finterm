@@ -388,6 +388,16 @@ set_target_properties(test_portfolio_ledger PROPERTIES
 
 add_test(NAME portfolio_ledger COMMAND test_portfolio_ledger)
 
+# ── Broker CSV import (positions / activity exports → transactions) ──────────
+add_executable(test_broker_csv
+    services/test_broker_csv.cpp
+    ../src/services/portfolio/BrokerCsv.cpp
+)
+target_include_directories(test_broker_csv PRIVATE ../src)
+target_link_libraries(test_broker_csv PRIVATE Qt6::Core Qt6::Test)
+set_target_properties(test_broker_csv PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME broker_csv COMMAND test_broker_csv)
+
 # ── Portfolio totals: whole book, or say what is left out ────────────────────
 # A sum over part of the book showed as "≈" — "NAV ≈0.00" for a $905 position
 # whose currency was unknown. Header-only rules every total display uses.

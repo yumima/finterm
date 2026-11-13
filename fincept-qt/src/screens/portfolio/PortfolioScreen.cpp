@@ -9,6 +9,7 @@
 #include "screens/portfolio/PortfolioBlotter.h"
 #include "screens/portfolio/PortfolioCommandBar.h"
 #include "screens/portfolio/PortfolioDetailWrapper.h"
+#include "screens/portfolio/BrokerCsvDialog.h"
 #include "screens/portfolio/PortfolioDialogs.h"
 #include "screens/portfolio/PortfolioFFNView.h"
 #include "screens/portfolio/PortfolioHeatmap.h"
@@ -354,9 +355,22 @@ void PortfolioScreen::build_ui() {
     });
     connect(command_bar_, &PortfolioCommandBar::import_requested, this, [this]() {
         ImportPortfolioDialog dlg(portfolios_, this);
-        if (dlg.exec() == QDialog::Accepted) {
+        if (dlg.exec() != QDialog::Accepted)
+            return;
+        if (!dlg.file_path().endsWith(QLatin1String(".csv"), Qt::CaseInsensitive)) {
             services::PortfolioService::instance().import_json(dlg.file_path(), dlg.mode(), dlg.merge_target_id());
+            return;
         }
+        // A broker export: confirm the column mapping before anything is written.
+        BrokerCsvDialog csv_dlg(dlg.file_path(), dlg.mode() == portfolio::ImportMode::New, this);
+        if (!csv_dlg.ok()) {
+            QMessageBox::warning(this, QStringLiteral("Import"), csv_dlg.error());
+            return;
+        }
+        if (csv_dlg.exec() == QDialog::Accepted)
+            services::PortfolioService::instance().import_records(csv_dlg.portfolio_name(), {}, QStringLiteral("USD"),
+                                                                  csv_dlg.records(), {}, dlg.mode(),
+                                                                  dlg.merge_target_id());
     });
     auto open_insights = [this](PortfolioInsightsPanel::Tab tab) {
         if (!summary_loaded_)

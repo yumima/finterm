@@ -2398,6 +2398,19 @@ void PortfolioService::import_json(const QString& file_path, portfolio::ImportMo
             sector_hints.insert(sym, sec);
     }
 
+    QVector<portfolio::ImportRecord> records;
+    for (const auto& val : txn_arr) {
+        const auto obj = val.toObject();
+        records.append({obj["date"].toString().trimmed(), obj["symbol"].toString(), obj["type"].toString(),
+                        obj["quantity"].toDouble(), obj["price"].toDouble(), obj["notes"].toString()});
+    }
+    import_records(name, owner, currency, records, sector_hints, mode, merge_target_id);
+}
+
+void PortfolioService::import_records(const QString& name, const QString& owner, const QString& currency,
+                                      const QVector<portfolio::ImportRecord>& records,
+                                      const QHash<QString, QString>& sector_hints, portfolio::ImportMode mode,
+                                      const QString& merge_target_id) {
     auto& repo = PortfolioRepository::instance();
     QString target_id;
 
@@ -2425,27 +2438,26 @@ void PortfolioService::import_json(const QString& file_path, portfolio::ImportMo
     // split factor and dividend income out of every total. Order within the
     // file doesn't matter: the replay sorts chronologically.
     QSet<QString> touched;
-    for (const auto& val : txn_arr) {
-        auto obj = val.toObject();
-        const QString type = obj["type"].toString();
+    for (const auto& rec : records) {
+        const QString& type = rec.type;
         if (type != "BUY" && type != "SELL" && type != "DIVIDEND" && type != "SPLIT") {
-            errors.append(QString("%1 %2: unsupported type").arg(type, obj["symbol"].toString()));
+            errors.append(QString("%1 %2: unsupported type").arg(type, rec.symbol));
             continue;
         }
-        const QString sym = obj["symbol"].toString();
-        const double qty = obj["quantity"].toDouble();
-        const double price = obj["price"].toDouble();
+        const QString sym = rec.symbol;
+        const double qty = rec.quantity;
+        const double price = rec.price;
         // An empty date would string-sort before every dated row and replay
         // first — an undated SELL would clamp against zero held. Default to
         // now, matching what the recording paths do.
-        QString date = obj["date"].toString().trimmed();
+        QString date = rec.date;
         if (date.isEmpty())
             date = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
         if (sym.trimmed().isEmpty() || qty <= 0) {
             errors.append(QString("%1 %2: missing symbol or non-positive quantity").arg(type, sym));
             continue;
         }
-        auto r = repo.add_transaction(target_id, sym, type, qty, price, date, obj["notes"].toString());
+        auto r = repo.add_transaction(target_id, sym, type, qty, price, date, rec.notes);
         if (r.is_err()) {
             errors.append(QString("%1 %2: %3").arg(type, sym, QString::fromStdString(r.error())));
             continue;
