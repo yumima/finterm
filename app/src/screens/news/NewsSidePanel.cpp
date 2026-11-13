@@ -188,7 +188,9 @@ void NewsSidePanel::resizeEvent(QResizeEvent* e) {
     // immediately instead of waiting for the next feed update to repopulate.
     if (e->oldSize().width() == e->size().width())
         return;
-    reelide_rows();
+    // Deferred: the rows are resized by the layout AFTER this event, so
+    // measuring them now reads the old width.
+    schedule_reelide();
 }
 
 void NewsSidePanel::reelide_rows() {
@@ -324,6 +326,10 @@ void NewsSidePanel::update_top_stories(const QVector<services::NewsArticle>& top
         const auto& article = top[i];
         auto* btn = new QPushButton(this);
         btn->setObjectName("newsTopStoryBtn");
+        // The layout sets the width, not the text: a button showing a long
+        // headline otherwise reports that width as its minimum, and the drawer
+        // could never narrow it again (nor re-elide it shorter).
+        btn->setSizePolicy(QSizePolicy::Ignored, btn->sizePolicy().verticalPolicy());
         btn->setCursor(Qt::PointingHandCursor);
 
         QString pcolor = services::priority_color(article.priority);
@@ -566,6 +572,10 @@ void NewsSidePanel::update_saved(const QVector<services::NewsArticle>& saved) {
         const auto& a = saved[i];
         auto* btn = new QPushButton(a.headline, this);
         btn->setObjectName("newsTopStoryBtn");
+        // The layout sets the width, not the text: a button showing a long
+        // headline otherwise reports that width as its minimum, and the drawer
+        // could never narrow it again (nor re-elide it shorter).
+        btn->setSizePolicy(QSizePolicy::Ignored, btn->sizePolicy().verticalPolicy());
         btn->setProperty(kFullTextProp, a.headline);
         btn->setToolTip(a.headline + "\n" + a.source);
         btn->setFlat(true);

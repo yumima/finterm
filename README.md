@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`d195c3201`](https://github.com/yumima/finterm/commit/d195c3201) rename: fincept-qt/ → app/
 - [`3c2b0e3c8`](https://github.com/yumima/finterm/commit/3c2b0e3c8) rename: product names, IDs and file names off "fincept"
 - [`ca8b5235f`](https://github.com/yumima/finterm/commit/ca8b5235f) tools: weekly brief — insider-buying clusters and the IPO pipeline as Markdown
 - [`4dabec3dc`](https://github.com/yumima/finterm/commit/4dabec3dc) ipo: a $10.00 unit ticker marks a SPAC even when EDGAR's SIC isn't 6770
@@ -114,7 +115,23 @@ One process runs when you launch:
 
 Nothing talks to anything outside `localhost` except the data scripts and any LLM provider you explicitly configure.
 
-## How to run
+## Install
+
+Download the file for your system from the [latest release](https://github.com/yumima/finterm/releases/latest). Everything is free — including the installers, which is why they aren't signed with a paid certificate and the first launch needs one extra click.
+
+| System | File | First launch |
+|---|---|---|
+| **Linux** (x86-64) | `finterm-<version>-linux-x64-setup.run` — an **AppImage**: one self-contained file, no root, no install, any mainstream distro | `chmod +x finterm-*.run && ./finterm-*.run`. On Ubuntu 22.04+ install FUSE 2 once: `sudo apt install libfuse2` (or add `--appimage-extract-and-run`). |
+| **Windows** 10/11 (x64) | `finterm-<version>-windows-x64-setup.exe` | Run it. If SmartScreen says *"Windows protected your PC"*: **More info → Run anyway**. |
+| **macOS** 13+ (Apple Silicon) | `finterm-<version>-macos-arm64-setup.dmg` | Open, drag **finterm** to Applications. The first time, **right-click the app → Open → Open** (or System Settings → Privacy & Security → **Open Anyway**). |
+
+The first start sets up finterm's Python environment — about 5–15 minutes, once. Updates: **Help › Check for Updates** (finterm never checks on its own).
+
+Why AppImage on Linux: it runs unchanged across distributions and needs no package manager, store review or root. A Flatpak's sandbox would get in the way of what finterm does by design — its own Python environments, the desktop keyring for API keys, and a local AI engine.
+
+Why the extra click: Windows and macOS trust installers signed with a certificate that costs money every year (Apple's notarization requires a paid developer membership). The installers are built in this repository's public CI from this source; the click is the only difference.
+
+## Build from source
 
 ### Platform support
 
