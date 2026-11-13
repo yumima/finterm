@@ -65,9 +65,9 @@ static void clear_tokens() {
 
 // ── Session persistence (SQLite via SettingsRepository) ──────────────────────
 
-void AuthManager::save_session() {
+bool AuthManager::save_session() {
     if (session_.api_key.isEmpty())
-        return;
+        return false;
     QJsonDocument doc(session_.to_json());
     const QString json = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
     // Persist to auth.db (always open) so load_session() can read it before
@@ -75,8 +75,11 @@ void AuthManager::save_session() {
     AuthService::instance().save_session(session_.api_key, json);
     // Also keep in OS-native SecureStorage as the durable credential.
     auto sr = fincept::SecureStorage::instance().store("api_key", session_.api_key);
-    if (sr.is_err())
+    if (sr.is_err()) {
         LOG_WARN("Auth", "SecureStorage: failed to persist api_key");
+        return false;
+    }
+    return true;
 }
 
 void AuthManager::load_session() {
@@ -115,8 +118,8 @@ void AuthManager::clear_session(bool wipe_device_pin) {
     AuthService::instance().remove_session(api_key);
     fincept::SecureStorage::instance().remove("api_key");
     // The device PIN survives an ordinary sign-out: wiping it here is what
-    // used to turn every logout (including a stray toolbar click or an
-    // automatic SessionGuard logout) into a forced PIN re-creation.
+    // used to turn every logout (including a stray toolbar click) into a
+    // forced PIN re-creation.
     if (wipe_device_pin)
         PinManager::instance().clear_pin();
 }
@@ -154,13 +157,13 @@ void AuthManager::validate_saved_session() {
     // the permanent credential. A stale session_token would cause a false 401.
     //
     // Flow:
-    //   api_key valid (200) → fetch subscription → mark authenticated → save
+    //   api_key valid (200) → mark authenticated → save
     //   api_key rejected (401/403) → show login but KEEP stored secrets —
     //       auto-validation must never destroy credentials on a transient or
     //       stale rejection; only an explicit user logout clears them
     //   network error → trust cached session data (offline-friendly)
     LOG_INFO("Auth", "Validating saved session via profile fetch (api_key only, no session_token)");
-    fetch_user_profile([this] { emit subscription_fetched(); });
+    fetch_user_profile();
 }
 
 void AuthManager::fetch_user_profile(std::function<void()> on_done) {
@@ -189,20 +192,15 @@ void AuthManager::fetch_user_profile(std::function<void()> on_done) {
                 LOG_WARN("Auth", "Profile fetch failed — using cached data");
                 session_.authenticated = !session_.api_key.isEmpty();
             }
-            fetch_user_subscription(std::move(on_done));
+            complete_auth_flow(std::move(on_done));
         });
 }
 
 // ── Shared post-auth completion ───────────────────────────────────────────────
-// Fetches subscription, syncs state, saves session, then calls on_done().
-// Used by login / verify_otp / verify_mfa / session restore.
+// Syncs state, saves session, then calls on_done().
+// Used by login_local / session restore.
 
 void AuthManager::complete_auth_flow(std::function<void()> on_done) {
-    // Local build: no subscription server — every user gets full access.
-    session_.subscription.account_type = "local";
-    session_.has_subscription = true;
-    session_.user_info.account_type = "local";
-
     if (!session_.api_key.isEmpty()) {
         session_.authenticated = true;
         // open_user_db is idempotent: skips reopen if the correct path is
@@ -231,86 +229,6 @@ void AuthManager::complete_auth_flow(std::function<void()> on_done) {
     if (on_done)
         on_done();
     emit auth_state_changed();
-}
-
-void AuthManager::fetch_user_subscription(std::function<void()> on_done) {
-    complete_auth_flow(std::move(on_done));
-}
-
-// ── Login ────────────────────────────────────────────────────────────────────
-
-void AuthManager::login(const QString& email, const QString& password, bool force_login) {
-    set_loading(true);
-
-    LoginRequest req;
-    req.email = sanitize_input(email).toLower();
-    req.password = password;
-    req.force_login = force_login;
-
-    AuthService::instance().login(req, [this](ApiResponse r) {
-        if (!r.success) {
-            set_loading(false);
-            emit login_failed(r.error.isEmpty() ? "Login failed" : r.error);
-            return;
-        }
-
-        const auto data = unwrap_data(r.data);
-
-        if (data["active_session"].toBool()) {
-            set_loading(false);
-            emit login_active_session(data["message"].toString("You are already logged in on another device."));
-            return;
-        }
-
-        if (data["mfa_required"].toBool()) {
-            set_loading(false);
-            emit login_mfa_required();
-            return;
-        }
-
-        const QString api_key = data["api_key"].toString();
-        if (api_key.isEmpty()) {
-            set_loading(false);
-            emit login_failed("No API key returned from server");
-            return;
-        }
-
-        const QString session_token = data["session_token"].toString();
-
-        // Set tokens on HttpClient — all subsequent API calls will use them
-        apply_tokens(api_key, session_token);
-
-        session_.authenticated = true;
-        session_.api_key = api_key;
-        session_.session_token = session_token;
-        session_.device_id = generate_device_id();
-
-        // Fetch profile then subscription; on_done emits login_succeeded
-        fetch_user_profile([this] { emit login_succeeded(); });
-    });
-}
-
-// ── Signup ───────────────────────────────────────────────────────────────────
-
-void AuthManager::signup(const QString& username, const QString& email, const QString& password, const QString& phone,
-                         const QString& country, const QString& country_code) {
-    set_loading(true);
-
-    RegisterRequest req;
-    req.username = sanitize_input(username).toLower();
-    req.email = sanitize_input(email).toLower();
-    req.password = password;
-    req.phone = phone;
-    req.country = country;
-    req.country_code = country_code;
-
-    AuthService::instance().register_user(req, [this](ApiResponse r) {
-        set_loading(false);
-        if (r.success)
-            emit signup_succeeded();
-        else
-            emit signup_failed(r.error.isEmpty() ? "Registration failed" : r.error);
-    });
 }
 
 // ── Local (no email, no OTP) ─────────────────────────────────────────────────
@@ -357,12 +275,15 @@ QVector<QJsonObject> AuthManager::list_local_users() const {
     return AuthService::instance().list_local_users();
 }
 
-void AuthManager::delete_local_user(const QString& username) {
-    AuthService::instance().delete_local_user(username, [username](ApiResponse r) {
+void AuthManager::delete_local_user(const QString& username, std::function<void(bool, const QString&)> on_done) {
+    AuthService::instance().delete_local_user(username, [username, on_done = std::move(on_done)](ApiResponse r) {
         // Only once the user row is really gone: a failed delete leaves a
         // live user whose channels and device PIN must keep working.
-        if (!r.success)
+        if (!r.success) {
+            if (on_done)
+                on_done(false, r.error.isEmpty() ? QStringLiteral("Could not delete user.") : r.error);
             return;
+        }
         notifications::remove_user_secrets(username);
         // "Reset this user" is the forgotten-credentials recovery path: the
         // deleted user's device PIN must not gate a future account re-created
@@ -372,116 +293,8 @@ void AuthManager::delete_local_user(const QString& username) {
             PinManager::instance().clear_pin();
             fincept::SecureStorage::instance().remove("pin_owner");
         }
-    });
-}
-
-// ── OTP verification ─────────────────────────────────────────────────────────
-
-void AuthManager::verify_otp(const QString& email, const QString& otp) {
-    set_loading(true);
-
-    VerifyOtpRequest req;
-    req.email = sanitize_input(email).toLower();
-    req.otp = sanitize_input(otp);
-
-    AuthService::instance().verify_otp(req, [this](ApiResponse r) {
-        if (!r.success) {
-            set_loading(false);
-            emit otp_failed(r.error.isEmpty() ? "Verification failed" : r.error);
-            return;
-        }
-
-        const auto data = unwrap_data(r.data);
-        const QString api_key = data["api_key"].toString();
-        if (api_key.isEmpty()) {
-            set_loading(false);
-            emit otp_failed("No API key returned");
-            return;
-        }
-
-        const QString session_token = data["session_token"].toString();
-        apply_tokens(api_key, session_token);
-
-        session_.authenticated = true;
-        session_.api_key = api_key;
-        session_.session_token = session_token;
-        session_.device_id = generate_device_id();
-
-        LOG_INFO("Auth", "OTP verified successfully");
-        fetch_user_profile([this] { emit otp_verified(); });
-    });
-}
-
-// ── MFA verification ─────────────────────────────────────────────────────────
-
-void AuthManager::verify_mfa(const QString& email, const QString& otp) {
-    set_loading(true);
-
-    // Local build: MFA is treated as a second OTP — same accept-any-6-digits logic.
-    VerifyOtpRequest mfa_req;
-    mfa_req.email = sanitize_input(email).toLower();
-    mfa_req.otp = sanitize_input(otp);
-    AuthService::instance().verify_otp(mfa_req, [this](ApiResponse r) {
-        if (!r.success) {
-            set_loading(false);
-            emit mfa_failed(r.error.isEmpty() ? "MFA verification failed" : r.error);
-            return;
-        }
-
-        const auto data = unwrap_data(r.data);
-        const QString api_key = data["api_key"].toString();
-        if (api_key.isEmpty()) {
-            set_loading(false);
-            emit mfa_failed("No API key returned");
-            return;
-        }
-
-        const QString session_token = data["session_token"].toString();
-        apply_tokens(api_key, session_token);
-
-        session_.authenticated = true;
-        session_.api_key = api_key;
-        session_.session_token = session_token;
-        session_.device_id = generate_device_id();
-
-        LOG_INFO("Auth", "MFA verified successfully");
-        fetch_user_profile([this] { emit mfa_verified(); });
-    });
-}
-
-// ── Forgot password ──────────────────────────────────────────────────────────
-
-void AuthManager::forgot_password(const QString& email) {
-    set_loading(true);
-
-    ForgotPasswordRequest req;
-    req.email = sanitize_input(email).toLower();
-
-    AuthService::instance().forgot_password(req, [this](ApiResponse r) {
-        set_loading(false);
-        if (r.success)
-            emit forgot_password_sent();
-        else
-            emit forgot_password_failed(r.error.isEmpty() ? "Failed to send reset code" : r.error);
-    });
-}
-
-// ── Reset password ───────────────────────────────────────────────────────────
-
-void AuthManager::reset_password(const QString& email, const QString& otp, const QString& new_password) {
-    set_loading(true);
-
-    ResetPasswordRequest req;
-    req.email = sanitize_input(email).toLower();
-    req.otp = sanitize_input(otp);
-    req.new_password = new_password;
-
-    AuthService::instance().reset_password(req, [this](ApiResponse r) {
-        set_loading(false);
-        if (r.success)
-            emit password_reset_succeeded();
-        else
-            emit password_reset_failed(r.error.isEmpty() ? "Password reset failed" : r.error);
+        if (on_done)
+            on_done(true, {});
     });
 }
 
@@ -503,63 +316,81 @@ void AuthManager::logout(bool wipe_device_pin) {
     emit auth_state_changed();
 }
 
-// ── Session recovery ─────────────────────────────────────────────────────────
-// Called by SessionGuard when it gets 401. Instead of immediately logging out,
-// we strip the stale session_token and re-validate with api_key only.
-// If the api_key is still valid → session recovered, no disruption.
-// If api_key is also invalid → truly expired, must re-login.
-
-void AuthManager::attempt_session_recovery(std::function<void(bool)> cb) {
-    if (session_.api_key.isEmpty()) {
-        if (cb)
-            cb(false);
-        return;
-    }
-
-    LOG_INFO("Auth", "Attempting session recovery with api_key only");
-
-    // Temporarily strip session_token so the validation request doesn't 401
-    fincept::HttpClient::instance().clear_session_token();
-
-    AuthService::instance().get_user_profile(session_.api_key, [this, cb = std::move(cb)](ApiResponse r) mutable {
-        if (r.success) {
-            LOG_INFO("Auth", "Session recovery succeeded — api_key is valid");
-            const auto data = unwrap_data(r.data);
-            session_.user_info = UserProfile::from_json(data);
-            session_.authenticated = true;
-
-            // The old session_token was stale. Clear it from our saved state.
-            // The app continues with api_key-only auth. A fresh session_token
-            // will be obtained on the next explicit login.
-            session_.session_token.clear();
-            save_session();
-
-            // Don't restore session_token — operate with api_key only
-            if (cb)
-                cb(true);
-        } else if (r.status_code == 401 || r.status_code == 403) {
-            LOG_WARN("Auth", "Session recovery failed — api_key is invalid");
-            if (cb)
-                cb(false);
-        } else {
-            // Network error — don't force logout, assume transient
-            LOG_WARN("Auth", "Session recovery: network error — keeping session alive");
-            // Restore session_token since we can't determine if it's stale
-            if (!session_.session_token.isEmpty())
-                fincept::HttpClient::instance().set_session_token(session_.session_token);
-            if (cb)
-                cb(true);
-        }
-    });
-}
-
 // ── Refresh user data ────────────────────────────────────────────────────────
+// A light re-read of the profile row from auth.db. Unlike the login path
+// (fetch_user_profile → complete_auth_flow) it writes nothing: no session row,
+// no keyring — those calls are slow on the GUI thread and nothing here changes
+// the credentials.
 
 void AuthManager::refresh_user_data() {
     if (!session_.authenticated || session_.api_key.isEmpty())
         return;
-    // fetch_user_profile chains into fetch_user_subscription automatically
-    fetch_user_profile([this] { emit subscription_fetched(); });
+    AuthService::instance().get_user_profile(session_.api_key, [this](ApiResponse r) {
+        if (!r.success) {
+            LOG_WARN("Auth", "Profile refresh failed: " + r.error);
+            return;
+        }
+        session_.user_info = UserProfile::from_json(unwrap_data(r.data));
+        emit auth_state_changed();
+    });
+}
+
+// ── Regenerate API key ───────────────────────────────────────────────────────
+
+void AuthManager::regenerate_api_key(std::function<void(bool, const QString&)> on_done) {
+    auto done = [on_done](bool ok, const QString& err) {
+        if (on_done)
+            on_done(ok, err);
+    };
+    if (!session_.authenticated || session_.api_key.isEmpty()) {
+        done(false, QStringLiteral("Not signed in."));
+        return;
+    }
+    const QString old_key = session_.api_key;
+    AuthService::instance().regenerate_api_key(old_key, [this, old_key, done](ApiResponse r) {
+        const QString new_key = r.data["api_key"].toString();
+        if (!r.success || new_key.isEmpty()) {
+            done(false, r.error.isEmpty() ? QStringLiteral("Could not regenerate the API key.") : r.error);
+            return;
+        }
+        // auth.db now only knows the new key. The keyring copy is what the
+        // next launch signs in with, so it must take the new key too —
+        // otherwise roll auth.db back so keyring, auth.db and the session
+        // keep agreeing on the old key.
+        session_.api_key = new_key;
+        if (!save_session()) {
+            session_.api_key = old_key;
+            AuthService::instance().remove_session(new_key);
+            bool rolled_back = false;
+            AuthService::instance().replace_api_key(new_key, old_key,
+                                                    [&rolled_back](ApiResponse rb) { rolled_back = rb.success; });
+            if (!rolled_back) {
+                // auth.db holds the new key and the keyring the old one: keep
+                // this session on the key auth.db accepts; the next launch
+                // will ask for the PIN, and that login re-saves the keyring.
+                LOG_ERROR("Auth", "API key regenerated but neither the keyring save nor the rollback succeeded");
+                session_.api_key = new_key;
+                apply_tokens(new_key, session_.session_token);
+                AuthService::instance().remove_session(old_key);
+                save_session();
+                done(false, QStringLiteral("The new key could not be saved to the system keyring, and the old key "
+                                           "could not be restored. This session uses the new key; you will be "
+                                           "asked for your PIN at the next launch."));
+                return;
+            }
+            AuthService::instance().save_session(old_key, QString::fromUtf8(QJsonDocument(session_.to_json())
+                                                                                 .toJson(QJsonDocument::Compact)));
+            LOG_WARN("Auth", "API key regeneration rolled back: keyring save failed");
+            done(false, QStringLiteral("The new key could not be saved to the system keyring, so the old key "
+                                       "was kept."));
+            return;
+        }
+        apply_tokens(new_key, session_.session_token);
+        AuthService::instance().remove_session(old_key);
+        LOG_INFO("Auth", "API key regenerated and adopted by the session");
+        done(true, {});
+        refresh_user_data();
+    });
 }
 
 } // namespace fincept::auth

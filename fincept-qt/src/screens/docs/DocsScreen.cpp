@@ -301,11 +301,11 @@ QWidget* DocsScreen::page_getting_started() {
     vl->addWidget(sep);
 
     vl->addWidget(make_section_panel("1", "LAUNCH & LOGIN",
-                                     "When you first launch finterm, you'll see the login screen. "
-                                     "You can either:\n\n"
-                                     "■  Register a new account with email and password\n"
-                                     "■  Continue as Guest (limited features)\n"
-                                     "■  Log in with existing credentials\n\n"
+                                     "finterm accounts are local to this machine — no email, no online "
+                                     "sign-up. On the login screen you can:\n\n"
+                                     "■  Create a local user with a username and PIN\n"
+                                     "■  Pick an existing user and unlock it with its PIN\n"
+                                     "■  Reset a user you can no longer unlock (deletes its data)\n\n"
                                      "After login, you'll land on the Dashboard — your home base.",
                                      ui::colors::POSITIVE));
 
@@ -324,14 +324,6 @@ QWidget* DocsScreen::page_getting_started() {
                                      "F10  — Focus mode (hide tab/status bars for maximum screen space)\n"
                                      "F5   — Refresh current screen\n"
                                      "Ctrl+P — Take screenshot (saved to home directory)",
-                                     ui::colors::AMBER));
-
-    vl->addWidget(make_section_panel("4", "SUBSCRIPTION PLANS",
-                                     "finterm offers tiered access:\n\n"
-                                     "■  FREE — Basic market data, limited screens, paper trading\n"
-                                     "■  PRO — Full market data, all screens, real trading, AI chat\n"
-                                     "■  ENTERPRISE — Everything + API access, priority support\n\n"
-                                     "Manage your plan from Settings or the Pricing screen.",
                                      ui::colors::AMBER));
 
     vl->addWidget(
@@ -1324,23 +1316,18 @@ QWidget* DocsScreen::page_settings() {
 }
 
 QWidget* DocsScreen::page_profile() {
-    return make_page("PROFILE", "User account, subscription, and usage tracking",
+    return make_page("PROFILE", "Your local account on this machine",
                      {
-                         {"OVERVIEW", "The Profile screen displays your account information, subscription status, "
-                                      "usage statistics, and billing history."},
-                         {"KEY FEATURES", "■  Account details — Name, email, registration date\n"
-                                          "■  Subscription status — Current plan, expiry, features\n"
-                                          "■  Usage statistics — API calls, data consumed, trades placed\n"
-                                          "■  Credit balance — Remaining AI/compute credits\n"
-                                          "■  Billing history — Past invoices and payments"},
-                         {"REAL-WORLD USAGE", "■  Monitor your subscription and credit usage\n"
-                                              "■  Upgrade or change your plan\n"
-                                              "■  Track API usage to stay within limits\n"
-                                              "■  Download billing records for expense tracking"},
-                         {"SKILL LEVELS", "BEGINNER: Check your account status and plan\n"
-                                          "INTERMEDIATE: Monitor credit usage, plan API call budget\n"
-                                          "ADVANCED: Optimize usage patterns for cost efficiency\n"
-                                          "PRO: Enterprise account management, team usage tracking"},
+                         {"OVERVIEW", "Settings → Account shows the local user you are signed in as. finterm has "
+                                      "no online account: the user exists only in this install's auth.db, and "
+                                      "every feature is available to it."},
+                         {"KEY FEATURES", "■  Account details — Username and member-since date\n"
+                                          "■  This install — Active data profile and the data folder\n"
+                                          "■  Local API key — Show, copy or regenerate\n"
+                                          "■  Session — Sign out, or delete the local account and its data"},
+                         {"REAL-WORLD USAGE", "■  Find where your data lives before a backup\n"
+                                              "■  Rotate the local API key\n"
+                                              "■  Remove a user you no longer need"},
                      });
 }
 

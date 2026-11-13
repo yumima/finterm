@@ -66,6 +66,8 @@ class MainWindow : public QMainWindow {
   private:
     QStackedWidget* stack_ = nullptr;
     QStackedWidget* auth_stack_ = nullptr;
+    QWidget* login_page_ = nullptr;    ///< auth_stack_ page: LoginScreen
+    QWidget* register_page_ = nullptr; ///< auth_stack_ page: RegisterScreen
 
     int window_id_ = 0;
 
@@ -88,7 +90,6 @@ class MainWindow : public QMainWindow {
                                     ///< re-locking the terminal. Reset on lock / logout.
     bool boot_prefetched_ = false;  ///< guard: the boot cache-warm runs once, after unlock.
     AiChatBubble* chat_bubble_ = nullptr;
-    QTimer* user_refresh_timer_ = nullptr;
 
     // Debounced persistence of dock layout on add/replace/remove via command bar.
     // Without this, layout changes only survive clean shutdown (closeEvent),
@@ -126,9 +127,9 @@ class MainWindow : public QMainWindow {
     void update_window_title();
     /// Show or hide the toolbar/status bar shell (hidden during auth screens).
     void set_shell_visible(bool visible);
-    /// Show the auth stack at the given index and hide the privileged shell.
-    /// All login/register/forgot/pricing/info transitions go through here.
-    void enter_auth_stack(int auth_index);
+    /// Show the given auth_stack_ page and hide the privileged shell.
+    /// All login/register/info transitions go through here.
+    void enter_auth_stack(QWidget* page);
 
     // Info screens stack (Contact, Terms, Privacy, Trademarks, Help)
     QStackedWidget* info_stack_ = nullptr;
@@ -136,8 +137,6 @@ class MainWindow : public QMainWindow {
   private slots:
     void show_login();
     void show_register();
-    void show_forgot_password();
-    void show_pricing();
     void show_info_contact();
     void show_info_terms();
     void show_info_privacy();

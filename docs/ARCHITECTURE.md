@@ -88,7 +88,6 @@ fincept-qt/src/
 │   ├── tables/DataTable.cpp/h      # Reusable data table
 │   ├── charts/ChartFactory.cpp/h   # Qt6 Charts factory
 │   └── navigation/
-│       ├── NavigationBar.cpp/h     # Left sidebar navigation
 │       ├── FKeyBar.cpp/h           # Function key shortcuts bar
 │       ├── StatusBar.cpp/h         # Bottom status bar
 │       └── ToolBar.cpp/h           # Top toolbar
@@ -113,10 +112,10 @@ fincept-qt/src/
 │       └── ...
 │
 ├── auth/
-│   ├── AuthManager.cpp/h           # Login, JWT, guest mode
-│   ├── AuthApi.cpp/h               # Auth API calls
-│   ├── UserApi.cpp/h               # User API calls
-│   ├── SessionGuard.cpp/h          # Auto-logout on 401
+│   ├── AuthManager.cpp/h           # Session state: local login, sign-out, API key
+│   ├── AuthService.cpp/h           # Local users in auth.db (username + PIN), per-user DB
+│   ├── PinManager.cpp/h            # Device PIN, lockout
+│   ├── InactivityGuard.cpp/h       # Auto-lock after idle
 │   └── AuthTypes.h                 # Shared auth types
 │
 ├── python/
@@ -144,7 +143,7 @@ fincept-qt/src/
 │       └── NewsMonitorService.cpp/h
 │
 └── screens/                        # Terminal screens
-    ├── auth/                       # Login, Register, ForgotPassword, Pricing
+    ├── auth/                       # Login, Register, Lock
     ├── dashboard/                  # Dashboard + 13 widgets
     ├── markets/                    # Market data
     ├── news/                       # News aggregation + clustering
@@ -263,7 +262,7 @@ Data returned to calling service/screen
 - **Input sanitization** at system boundaries
 - **Qt TLS** for all HTTPS connections
 - **No secrets in source** — environment-based configuration
-- **SessionGuard** automatically logs out on 401 responses
+- **Local accounts only** — users live in `auth.db` on this machine (username + PIN); there is no account server
 
 ---
 

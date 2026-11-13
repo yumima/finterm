@@ -11,7 +11,7 @@
 namespace fincept::ui {
 
 /// Combined toolbar: File/Navigate/View/Help menus + branding + clock + user info + logout.
-/// Replaces both ToolBar and NavigationBar in a single row.
+/// A single row.
 class ToolBar : public QWidget {
     Q_OBJECT
   public:
@@ -24,7 +24,6 @@ class ToolBar : public QWidget {
     void dock_command(const QString& action, const QString& primary, const QString& secondary);
     void action_triggered(const QString& action);
     void logout_clicked();
-    void plan_clicked();
     void workbench_toggled();
 
   protected:
@@ -37,13 +36,11 @@ class ToolBar : public QWidget {
     QMenuBar* menu_bar_ = nullptr;
     QLabel* clock_label_ = nullptr;
     QLabel* user_label_ = nullptr;
-    QLabel* credits_label_ = nullptr;
     QLabel* subtitle_label_ = nullptr;
     QLabel* branding_label_ = nullptr;
     QLabel* live_dot_ = nullptr;
     QLabel* live_label_ = nullptr;
     QPushButton* settings_btn_ = nullptr;
-    QPushButton* plan_btn_ = nullptr;
     QPushButton* workbench_btn_ = nullptr;
     QPushButton* logout_btn_ = nullptr;
     QTimer* clock_timer_ = nullptr;

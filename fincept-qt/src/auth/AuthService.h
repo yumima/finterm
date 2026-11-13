@@ -13,11 +13,11 @@ namespace fincept::auth {
 /// Replaces the external stub server that used to run on :8765 (since deleted).
 /// All users are stored in AppPaths::data()/auth.db — nothing leaves this machine.
 ///
-/// Password storage: SHA-256 with random salt ("salt_hex:hash_hex").
-/// API keys:         UUIDs issued at OTP verification, permanent credentials.
-/// Session tokens:   UUIDs generated at each login, passed to HttpClient for
-///                   compatibility with existing token-clearing logic.
-/// OTP verification: any 6-digit string accepted (mirrors stub behaviour).
+/// Users are local: username + PIN, no email, OTP or MFA.
+/// PIN storage:    SHA-256 with random salt ("salt_hex:hash_hex").
+/// API keys:       UUIDs issued when the user is created; regenerable.
+/// Session tokens: UUIDs generated at each login, passed to HttpClient for
+///                 compatibility with existing token-clearing logic.
 class AuthService : public QObject {
     Q_OBJECT
   public:
@@ -41,11 +41,6 @@ class AuthService : public QObject {
     /// Close the per-user DB (called at logout). Safe to call when not open.
     void close_user_db();
 
-    // ── Unauthenticated ───────────────────────────────────────────────────────
-    void register_user(const RegisterRequest& req, Callback cb);
-    void login(const LoginRequest& req, Callback cb);
-    void verify_otp(const VerifyOtpRequest& req, Callback cb);
-
     // ── Local multi-user (username + PIN, no email/OTP/MFA) ──────────────────
     /// Listed for the LoginScreen user picker. Each entry is { "username":
     /// QString, "last_login_at": QString (ISO) }. Empty list → first launch.
@@ -57,20 +52,19 @@ class AuthService : public QObject {
     /// Log in by username + PIN. Mirrors the email-based login response so
     /// AuthManager can stay agnostic.
     void login_local(const QString& username, const QString& pin, Callback cb);
-    /// Remove a local user and the per-user DB at users/<username>.db.
-    /// Used by the LoginScreen "forgot PIN" reset path.
+    /// Remove a local user and the per-user DB at users/<username>.db (plus
+    /// its WAL/SHM files). Fails, changing nothing, when the DB file cannot be
+    /// moved out of the way. Used by LoginScreen "reset user" and Settings →
+    /// Account "delete local account" (which closes the DB first).
     void delete_local_user(const QString& username, Callback cb);
-
-    /// Local reset: logs a console message ("use any 6-digit OTP"), returns success.
-    void forgot_password(const ForgotPasswordRequest& req, Callback cb);
-    /// Accepts any 6-digit OTP; updates the stored password hash.
-    void reset_password(const ResetPasswordRequest& req, Callback cb);
 
     // ── Authenticated (api_key identifies the caller) ─────────────────────────
     void logout(const QString& api_key, Callback cb);
     void get_user_profile(const QString& api_key, Callback cb);
-    void update_user_profile(const QString& api_key, const QJsonObject& data, Callback cb);
     void regenerate_api_key(const QString& api_key, Callback cb);
+    /// Set the user holding old_key to new_key. Used by regenerate_api_key
+    /// and to roll a regeneration back. Response data: { "api_key": new_key }.
+    void replace_api_key(const QString& old_key, const QString& new_key, Callback cb);
 
   private:
     AuthService() = default;

@@ -38,6 +38,7 @@ class Database {
   private:
     Database() = default;
     Result<void> apply_pragmas();
+    void close_locked(); ///< close db_; caller holds mutex_
 
     QSqlDatabase db_;
     // Serialises access to db_ across threads.

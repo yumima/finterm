@@ -625,9 +625,6 @@ set(DATAHUB_SOURCES
 set(AUTH_SOURCES
     src/auth/AuthManager.cpp
     src/auth/AuthService.cpp
-    src/auth/AuthApi.cpp
-    src/auth/UserApi.cpp
-    src/auth/SessionGuard.cpp
     src/auth/PinManager.cpp
     src/auth/InactivityGuard.cpp
     src/auth/SecurityAuditLog.cpp
@@ -1004,7 +1001,6 @@ set(UI_SOURCES
     src/ui/tables/TickFlashDelegate.cpp
     src/ui/charts/ChartFactory.cpp
     src/ui/charts/InlineSparkline.cpp
-    src/ui/navigation/NavigationBar.cpp
     src/ui/navigation/FKeyBar.cpp
     src/ui/navigation/StatusBar.cpp
     src/ui/navigation/ToolBar.cpp
@@ -1026,8 +1022,6 @@ set(UI_SOURCES
 set(SCREEN_SOURCES
     src/screens/auth/LoginScreen.cpp
     src/screens/auth/RegisterScreen.cpp
-    src/screens/auth/ForgotPasswordScreen.cpp
-    src/screens/auth/PricingScreen.cpp
     src/screens/auth/LockScreen.cpp
     src/screens/devtools/DataHubInspector.cpp
     src/screens/profile/ProfileScreen.cpp
@@ -1451,10 +1445,8 @@ set_source_files_properties(
     src/services/ownership/OwnershipService.cpp
     src/services/pre_ipo/PreIpoService.cpp
     src/screens/asia_markets/AsiaMarketsScreen.cpp
-    src/screens/auth/ForgotPasswordScreen.cpp
     src/screens/auth/LockScreen.cpp
     src/screens/auth/LoginScreen.cpp
-    src/screens/auth/PricingScreen.cpp
     src/screens/auth/RegisterScreen.cpp
     src/screens/backtesting/BacktestingScreen.cpp
     src/screens/code_editor/CodeEditorScreen.cpp

@@ -5,7 +5,6 @@
 #include "auth/AuthService.h"
 #include "auth/InactivityGuard.h"
 #include "auth/PinManager.h"
-#include "auth/SessionGuard.h"
 #include "core/components/ComponentCatalog.h"
 #include "core/config/AppConfig.h"
 #include "core/config/AppIdentity.h"
@@ -518,9 +517,6 @@ int main(int argc, char* argv[]) {
             });
         }
     }
-
-    // Session guard — auto-logout on 401
-    fincept::auth::SessionGuard session_guard;
 
     // Initialize PinManager — loads PIN state from SecureStorage
     (void)fincept::auth::PinManager::instance();

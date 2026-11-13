@@ -19,9 +19,6 @@ class LoginScreen : public QWidget {
 
   signals:
     void navigate_register();
-    /// Deprecated in the local-only flow but kept so MainWindow's existing
-    /// wiring compiles. Never emitted in normal use.
-    void navigate_forgot_password();
 
   protected:
     void paintEvent(QPaintEvent* event) override;

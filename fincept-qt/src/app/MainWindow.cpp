@@ -24,10 +24,8 @@
 #include "screens/alpha_arena/AlphaArenaScreen.h"
 #include "screens/alt_investments/AltInvestmentsScreen.h"
 #include "screens/asia_markets/AsiaMarketsScreen.h"
-#include "screens/auth/ForgotPasswordScreen.h"
 #include "screens/auth/LockScreen.h"
 #include "screens/auth/LoginScreen.h"
-#include "screens/auth/PricingScreen.h"
 #include "screens/auth/RegisterScreen.h"
 #include "screens/backtesting/BacktestingScreen.h"
 #include "screens/code_editor/CodeEditorScreen.h"
@@ -80,7 +78,6 @@
 #include "ui/navigation/DockStatusBar.h"
 #include "ui/navigation/DockToolBar.h"
 #include "ui/navigation/FKeyBar.h"
-#include "ui/navigation/NavigationBar.h"
 #include "ui/navigation/StatusBar.h"
 #include "ui/navigation/ToolBar.h"
 #include "ui/pushpins/PushpinBar.h"
@@ -780,10 +777,6 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
     // Toolbar logout
     connect(toolbar, &ui::ToolBar::logout_clicked, this, &MainWindow::confirm_and_logout);
 
-    // Plan label is a no-op in the localhost-only fork — all features are
-    // locally available; there's nowhere to upgrade.
-    connect(toolbar, &ui::ToolBar::plan_clicked, this, []() {});
-
     // Auth state
     connect(&auth::AuthManager::instance(), &auth::AuthManager::auth_state_changed, this,
             &MainWindow::on_auth_state_changed);
@@ -921,23 +914,11 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         on_auth_state_changed();
     }
 
-    // Periodic refresh of user credits/plan (every 3 minutes)
-    user_refresh_timer_ = new QTimer(this);
-    user_refresh_timer_->setInterval(3 * 60 * 1000);
-    connect(user_refresh_timer_, &QTimer::timeout, this, []() {
-        auto& auth = auth::AuthManager::instance();
-        if (auth.is_authenticated())
-            auth.refresh_user_data();
-    });
-    user_refresh_timer_->start();
-
     // Confetti overlay (parented to central widget so it covers the whole app)
-    // Refresh user data when app regains focus (updates toolbar credits/plan)
+    // Profile data is local (auth.db) and only this app changes it, so there
+    // is no periodic or focus-driven profile refresh.
     connect(qApp, &QApplication::applicationStateChanged, this, [](Qt::ApplicationState state) {
         if (state == Qt::ApplicationActive) {
-            auto& auth = auth::AuthManager::instance();
-            if (auth.is_authenticated())
-                auth.refresh_user_data();
             // Resume-from-sleep lock: QTimer pauses during OS suspend, so a
             // 5-minute timer can carry 4:59 of remaining time across a
             // 30-minute nap. Ask the guard to check wall-clock delta and
@@ -986,10 +967,7 @@ void MainWindow::toggle_workbench() {
 }
 
 void MainWindow::setup_auth_screens() {
-    // Localhost-only fork: no email = no email-recovery flow, and no payment
-    // backend means no pricing wall. ForgotPasswordScreen + PricingScreen
-    // stay in the source tree (their files compile cleanly) but are never
-    // mounted in the auth stack, so the user can't reach them.
+    // Local accounts only (username + PIN): login, register and info pages.
     auto* login = new screens::LoginScreen;
     auto* reg = new screens::RegisterScreen;
 
@@ -1007,15 +985,12 @@ void MainWindow::setup_auth_screens() {
     info_stack_->addWidget(trademarks); // index 3
     info_stack_->addWidget(help);       // index 4
 
-    auth_stack_->addWidget(login); // index 0
-    auth_stack_->addWidget(reg);   // index 1
-    // index 2 / 3 were ForgotPasswordScreen + PricingScreen — removed in
-    // the localhost-only flow. Add placeholder widgets so existing
-    // setCurrentIndex(...) calls don't go out of range; show_forgot_password
-    // / show_pricing now just route back to login.
-    auth_stack_->addWidget(new QWidget(this)); // index 2 (was forgot)
-    auth_stack_->addWidget(new QWidget(this)); // index 3 (was pricing)
-    auth_stack_->addWidget(info_stack_);       // index 4
+    // Pages are addressed by widget (enter_auth_stack), never by index.
+    login_page_ = login;
+    register_page_ = reg;
+    auth_stack_->addWidget(login);
+    auth_stack_->addWidget(reg);
+    auth_stack_->addWidget(info_stack_);
 
     // ── Auth navigation ──────────────────────────────────────────────────────
     connect(login, &screens::LoginScreen::navigate_register, this, &MainWindow::show_register);
@@ -1033,7 +1008,6 @@ void MainWindow::setup_auth_screens() {
     connect(trademarks, &screens::TrademarksScreen::navigate_back, this, &MainWindow::show_login);
     connect(help, &screens::HelpScreen::navigate_back, this, &MainWindow::show_login);
     connect(help, &screens::HelpScreen::navigate_register, this, &MainWindow::show_register);
-    // help::navigate_forgot_password is unused in the localhost-only flow.
 }
 
 void MainWindow::setup_docking_mode() {
@@ -1269,9 +1243,8 @@ void MainWindow::on_auth_state_changed() {
         // cleared yet (auth completed while loading state showed dashboard early).
         //
         // pin_gate_cleared_ is critical: once the user has entered their PIN this
-        // session, subsequent auth_state_changed events (periodic refresh_user_data,
-        // focus-driven applicationStateChanged refresh, subscription_fetched, etc.)
-        // must NOT re-lock the terminal. Without this guard, any auth refresh
+        // session, subsequent auth_state_changed events (Account-page refresh,
+        // API key regeneration, etc.) must NOT re-lock the terminal. Without this guard, any auth refresh
         // while the user is working on the dashboard will re-show the PIN prompt.
         if (stack_->currentIndex() == 1 || stack_->currentIndex() == 2) {
             if (!pin_gate_cleared_) {
@@ -1298,8 +1271,6 @@ void MainWindow::on_auth_state_changed() {
                                         .arg(pin_gate_cleared_));
             return;
         }
-        // Pricing screen exception removed: the localhost-only fork no
-        // longer routes users to a paywall.
 
         // ── PIN gate: require PIN setup or PIN unlock before proceeding ──
         // On first login (no PIN configured): show mandatory PIN setup.
@@ -1324,61 +1295,37 @@ void MainWindow::on_auth_state_changed() {
             }
         }
 
-        if (auth.session().has_paid_plan()) {
-            // Defensive: at this point the PIN gate above must have either
-            // routed us to the lock screen (and returned) or confirmed
-            // pin_gate_cleared_. If we are about to show the shell while
-            // still locked or ungated, log a warning so the regression is
-            // visible rather than leaking the dashboard for one frame.
-            if (locked_ || !pin_gate_cleared_) {
-                LOG_WARN("MainWindow", QString("on_auth_state_changed: shell would become visible while "
-                                               "locked=%1 gate_cleared=%2 — forcing lock screen")
-                                           .arg(locked_)
-                                           .arg(pin_gate_cleared_));
-                if (auth::PinManager::instance().has_pin())
-                    lock_screen_->show_unlock();
-                else
-                    lock_screen_->show_setup();
-                locked_ = true;
-                set_shell_visible(false);
-                show_lock_overlay();
-                return;
-            }
-
-            // Paid user → straight to dashboard
-            set_shell_visible(true);
-            stack_->setCurrentIndex(1);
-            WorkspaceManager::instance().load_last_workspace();
-            // Trigger silent update check after login (delayed so UI settles first).
-            // UpdateService de-dupes silent checks across the session, so the
-            // post-PIN-unlock path below won't fire a second request.
-            QTimer::singleShot(3000, this, [this]() {
-                services::UpdateService::instance().set_dialog_parent(this);
-                services::UpdateService::instance().check_for_updates(true);
-            });
-        } else {
-            // Localhost-only fork: no paywall. Honor the same PIN-gate
-            // guard as the paid branch — without it, on_auth_state_changed
-            // can briefly flash the dashboard for users whose PIN setup or
-            // unlock hasn't been cleared yet.
-            if (locked_ || !pin_gate_cleared_) {
-                LOG_WARN("MainWindow", QString("on_auth_state_changed (no-plan): shell would become visible while "
-                                               "locked=%1 gate_cleared=%2 — forcing lock screen")
-                                           .arg(locked_)
-                                           .arg(pin_gate_cleared_));
-                if (auth::PinManager::instance().has_pin())
-                    lock_screen_->show_unlock();
-                else
-                    lock_screen_->show_setup();
-                locked_ = true;
-                set_shell_visible(false);
-                show_lock_overlay();
-                return;
-            }
-            set_shell_visible(true);
-            stack_->setCurrentIndex(1);
-            WorkspaceManager::instance().load_last_workspace();
+        // Defensive: at this point the PIN gate above must have either
+        // routed us to the lock screen (and returned) or confirmed
+        // pin_gate_cleared_. If we are about to show the shell while
+        // still locked or ungated, log a warning so the regression is
+        // visible rather than leaking the dashboard for one frame.
+        if (locked_ || !pin_gate_cleared_) {
+            LOG_WARN("MainWindow", QString("on_auth_state_changed: shell would become visible while "
+                                           "locked=%1 gate_cleared=%2 — forcing lock screen")
+                                       .arg(locked_)
+                                       .arg(pin_gate_cleared_));
+            if (auth::PinManager::instance().has_pin())
+                lock_screen_->show_unlock();
+            else
+                lock_screen_->show_setup();
+            locked_ = true;
+            set_shell_visible(false);
+            show_lock_overlay();
+            return;
         }
+
+        // Signed in and past the PIN gate → straight to dashboard
+        set_shell_visible(true);
+        stack_->setCurrentIndex(1);
+        WorkspaceManager::instance().load_last_workspace();
+        // Trigger silent update check after login (delayed so UI settles first).
+        // UpdateService de-dupes silent checks across the session, so the
+        // post-PIN-unlock path below won't fire a second request.
+        QTimer::singleShot(3000, this, [this]() {
+            services::UpdateService::instance().set_dialog_parent(this);
+            services::UpdateService::instance().check_for_updates(true);
+        });
     } else {
         // Disable inactivity guard when logged out and drop the locked flag
         // so a subsequent login is not immediately router-blocked.
@@ -1387,55 +1334,46 @@ void MainWindow::on_auth_state_changed() {
         pin_gate_cleared_ = false;
         set_shell_visible(false);
         stack_->setCurrentIndex(0);
-        auth_stack_->setCurrentIndex(0);
+        auth_stack_->setCurrentWidget(login_page_);
     }
 }
 
 // Centralised transition into the auth stack. Any path that shows a login /
-// register / forgot / pricing / info screen must go through here so the
+// register / info screen must go through here so the
 // privileged shell (menus, command bar, CHAT, LOGOUT, status ticker) cannot
 // be seen by an unauthenticated user. Title is also reset by set_shell_visible
 // so the last-visited screen name does not leak.
-void MainWindow::enter_auth_stack(int auth_index) {
+void MainWindow::enter_auth_stack(QWidget* page) {
     set_shell_visible(false);
     stack_->setCurrentIndex(0);
-    auth_stack_->setCurrentIndex(auth_index);
+    auth_stack_->setCurrentWidget(page);
 }
 
 void MainWindow::show_login() {
-    enter_auth_stack(0);
+    enter_auth_stack(login_page_);
 }
 void MainWindow::show_register() {
-    enter_auth_stack(1);
-}
-void MainWindow::show_forgot_password() {
-    // Localhost-only fork: no forgot-password flow. Surface the login picker.
-    enter_auth_stack(0);
-}
-void MainWindow::show_pricing() {
-    // Localhost-only fork: no paywall. Surface the dashboard instead.
-    set_shell_visible(true);
-    stack_->setCurrentIndex(1);
+    enter_auth_stack(register_page_);
 }
 void MainWindow::show_info_contact() {
     info_stack_->setCurrentIndex(0);
-    enter_auth_stack(4);
+    enter_auth_stack(info_stack_);
 }
 void MainWindow::show_info_terms() {
     info_stack_->setCurrentIndex(1);
-    enter_auth_stack(4);
+    enter_auth_stack(info_stack_);
 }
 void MainWindow::show_info_privacy() {
     info_stack_->setCurrentIndex(2);
-    enter_auth_stack(4);
+    enter_auth_stack(info_stack_);
 }
 void MainWindow::show_info_trademarks() {
     info_stack_->setCurrentIndex(3);
-    enter_auth_stack(4);
+    enter_auth_stack(info_stack_);
 }
 void MainWindow::show_info_help() {
     info_stack_->setCurrentIndex(4);
-    enter_auth_stack(4);
+    enter_auth_stack(info_stack_);
 }
 
 void MainWindow::try_boot_prefetch() {
@@ -1565,28 +1503,22 @@ void MainWindow::on_terminal_unlocked() {
     // Reset PIN lockout on successful unlock
     auth::PinManager::instance().reset_lockout();
 
-    if (auth.session().has_paid_plan()) {
-        set_shell_visible(true);
-        hide_lock_overlay();
-        if (chat_bubble_) {
-            auto r = SettingsRepository::instance().get("appearance.show_chat_bubble");
-            bool show = !r.is_ok() || r.value() != "false";
-            chat_bubble_->setVisible(show);
-            if (show) {
-                chat_bubble_->reposition();
-                chat_bubble_->raise();
-            }
+    set_shell_visible(true);
+    hide_lock_overlay();
+    if (chat_bubble_) {
+        auto r = SettingsRepository::instance().get("appearance.show_chat_bubble");
+        bool show = !r.is_ok() || r.value() != "false";
+        chat_bubble_->setVisible(show);
+        if (show) {
+            chat_bubble_->reposition();
+            chat_bubble_->raise();
         }
-        WorkspaceManager::instance().load_last_workspace();
-        QTimer::singleShot(3000, this, [this]() {
-            services::UpdateService::instance().set_dialog_parent(this);
-            services::UpdateService::instance().check_for_updates(true);
-        });
-    } else {
-        set_shell_visible(true);
-        hide_lock_overlay();
-        WorkspaceManager::instance().load_last_workspace();
     }
+    WorkspaceManager::instance().load_last_workspace();
+    QTimer::singleShot(3000, this, [this]() {
+        services::UpdateService::instance().set_dialog_parent(this);
+        services::UpdateService::instance().check_for_updates(true);
+    });
 
     // Now that the user is in, kick the deferred cache warm (no-op if it already
     // ran on the no-PIN path). Async — returns immediately, won't block the UI.

@@ -6,6 +6,7 @@
 #include "core/config/AppIdentity.h"
 #include "core/logging/Logger.h"
 #include "mcp/McpProvider.h"
+#include "mcp/tools/ThreadHelper.h"
 #include "python/PythonRunner.h"
 #include "storage/cache/CacheManager.h"
 
@@ -23,18 +24,22 @@ std::vector<ToolDef> get_system_tools() {
         t.description = "Check if the user is logged in and get basic account info.";
         t.category = "system";
         t.handler = [](const QJsonObject&) -> ToolResult {
-            auto& am = auth::AuthManager::instance();
-            if (!am.is_authenticated()) {
+            // Tool handlers run on a worker; the session belongs to the main
+            // thread, so copy it there.
+            bool authenticated = false;
+            QString username, email;
+            detail::run_on_target_thread_sync(&auth::AuthManager::instance(), [&]() {
+                const auto& s = auth::AuthManager::instance().session();
+                authenticated = s.authenticated;
+                username = s.user_info.username;
+                email = auth::displayable_email(s.user_info.email);
+            });
+            if (!authenticated)
                 return ToolResult::ok_data(QJsonObject{{"authenticated", false}, {"user_type", "none"}});
-            }
-            const auto& s = am.session();
-            return ToolResult::ok_data(QJsonObject{{"authenticated", true},
-                                                   {"username", s.user_info.username},
-                                                   {"email", s.user_info.email},
-                                                   {"account_type", s.account_type()},
-                                                   {"is_verified", s.user_info.is_verified},
-                                                   {"credit_balance", s.user_info.credit_balance},
-                                                   {"has_subscription", s.has_subscription}});
+            QJsonObject out{{"authenticated", true}, {"username", username}};
+            if (!email.isEmpty())
+                out["email"] = email;
+            return ToolResult::ok_data(out);
         };
         tools.push_back(std::move(t));
     }

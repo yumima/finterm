@@ -8,6 +8,7 @@
 #include <QIntValidator>
 #include <QListWidgetItem>
 #include <QMessageBox>
+#include <QPointer>
 #include <QPainter>
 #include <QShowEvent>
 #include <QStackedWidget>
@@ -318,10 +319,22 @@ void LoginScreen::on_delete_user() {
                                     QMessageBox::Yes | QMessageBox::Cancel, QMessageBox::Cancel);
     if (ans != QMessageBox::Yes)
         return;
-    auth::AuthManager::instance().delete_local_user(active_username_);
-    active_username_.clear();
-    show_picker();
-    refresh_user_list();
+    const QString who = active_username_;
+    QPointer<LoginScreen> self(this);
+    auth::AuthManager::instance().delete_local_user(who, [self, who](bool ok, const QString& error) {
+        if (!self)
+            return;
+        if (!ok) {
+            // Nothing was changed (the delete restores what it moved): say so
+            // instead of quietly showing the same user again.
+            QMessageBox::warning(self, QStringLiteral("Reset user"),
+                                 QStringLiteral("Could not reset \"%1\": %2").arg(who, error));
+            return;
+        }
+        self->active_username_.clear();
+        self->show_picker();
+        self->refresh_user_list();
+    });
 }
 
 void LoginScreen::on_login_succeeded() {

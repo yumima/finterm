@@ -114,17 +114,6 @@ ToolBar::ToolBar(QWidget* parent) : QWidget(parent) {
     connect(settings_btn_, &QPushButton::clicked, this, [this]() { emit navigate_to(QStringLiteral("settings")); });
     hl->addWidget(settings_btn_);
     sep();
-    credits_label_ = mk("---");
-    credits_label_->setMaximumWidth(100);
-    hl->addWidget(credits_label_);
-    sep();
-    plan_btn_ = new QPushButton("---");
-    plan_btn_->setCursor(Qt::PointingHandCursor);
-    plan_btn_->setToolTip("View Plans & Pricing");
-    plan_btn_->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    connect(plan_btn_, &QPushButton::clicked, this, &ToolBar::plan_clicked);
-    hl->addWidget(plan_btn_);
-    sep();
 
     workbench_btn_ = new QPushButton(QString::fromUtf8("⬡ WORK"));
     workbench_btn_->setFixedHeight(20);
@@ -184,13 +173,7 @@ void ToolBar::refresh_theme() {
     lbl(live_label_, colors::POSITIVE(), true);
     lbl(clock_label_, colors::TEXT_PRIMARY());
     lbl(user_label_, colors::AMBER());
-    lbl(credits_label_, colors::POSITIVE());
     // Buttons
-    if (plan_btn_)
-        plan_btn_->setStyleSheet(QString("QPushButton{color:%1;background:transparent;border:none;padding:0 2px;}"
-                                         "QPushButton:hover{color:%2;}")
-                                     .arg(colors::TEXT_PRIMARY())
-                                     .arg(colors::AMBER()));
     if (logout_btn_)
         logout_btn_->setStyleSheet(QString("QPushButton{background:transparent;color:%1;border:1px solid %1;"
                                            "padding:0 8px;font-weight:700;}"
@@ -209,13 +192,11 @@ void ToolBar::apply_responsive_layout(int w) {
     // >= 1200: everything visible
     // >= 1000: hide subtitle
     //  >= 800: also hide clock, LIVE label
-    //  >= 650: also hide credits
-    //  <  650: minimal — menus + branding + user + plan + logout
+    //  <  800: minimal — menus + branding + user + settings + logout
 
     bool show_subtitle = (w >= 1200);
     bool show_clock = (w >= 800);
     bool show_live = (w >= 800);
-    bool show_credits = (w >= 650);
 
     if (subtitle_label_)
         subtitle_label_->setVisible(show_subtitle);
@@ -225,12 +206,6 @@ void ToolBar::apply_responsive_layout(int w) {
         live_dot_->setVisible(show_live);
     if (live_label_)
         live_label_->setVisible(show_live);
-    if (credits_label_)
-        credits_label_->setVisible(show_credits);
-
-    // Hide the separator adjacent to a hidden credits label.
-    if (separators_.size() >= 3)
-        separators_[2]->setVisible(show_credits); // sep before credits
 }
 
 void ToolBar::update_clock() {
@@ -242,8 +217,6 @@ void ToolBar::refresh_user_display() {
     const auto& s = auth::AuthManager::instance().session();
     if (!s.authenticated) {
         user_label_->setText("---");
-        credits_label_->setText("---");
-        plan_btn_->setText("---");
         return;
     }
 
@@ -252,16 +225,6 @@ void ToolBar::refresh_user_display() {
     QFontMetrics fm(user_label_->font());
     user_label_->setText(fm.elidedText(name, Qt::ElideRight, user_label_->maximumWidth() - 4));
     user_label_->setToolTip(name);
-
-    // Credits — compact format
-    int credits = static_cast<int>(s.user_info.credit_balance);
-    credits_label_->setText(QString("%1 CR").arg(credits));
-    credits_label_->setStyleSheet(
-        QString("color:%1;background:transparent;")
-            .arg(s.user_info.credit_balance > 0 ? colors::POSITIVE.get() : colors::NEGATIVE.get()));
-
-    QString plan_text = s.account_type().toUpper();
-    plan_btn_->setText(plan_text.isEmpty() ? "FREE" : plan_text);
 }
 
 QMenu* ToolBar::build_file_menu() {

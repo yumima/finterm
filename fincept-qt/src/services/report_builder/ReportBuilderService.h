@@ -137,7 +137,7 @@ class ReportBuilderService : public QObject {
     void current_file_changed(const QString& path);
 
     // Emitted when an LLM-driven mutation is about to happen and the report
-    // builder is not currently visible. Listeners (NavigationBar) can react
+    // builder is not currently visible. Listeners can react
     // to bring the tab into view.
     void navigate_requested();
 

@@ -113,7 +113,7 @@ std::vector<ToolDef> get_navigation_tools() {
                 return ToolResult::fail("Unknown tab '" + tab + "'. Valid tabs: " + valid);
             }
 
-            // Publish event — NavigationBar listens for this
+            // Publish event for listeners of nav.switch_screen
             EventBus::instance().publish("nav.switch_screen",
                                          QVariantMap{{"screen_id", find_tab_name(idx)}, {"tab_index", idx}});
 

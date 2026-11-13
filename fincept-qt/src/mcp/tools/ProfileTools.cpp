@@ -1,62 +1,34 @@
-// ProfileTools.cpp — Profile tab MCP tools (14 tools)
-// Covers: profile, session, security, usage, billing, notifications.
+// ProfileTools.cpp — Profile tab MCP tools (7 tools)
+// Covers: local account profile, session, local API key, notifications.
+// finterm is local-only: the account lives in auth.db (AuthService), so there
+// is no usage, credits, subscription, billing, login-history or MFA to expose.
 
 #include "mcp/tools/ProfileTools.h"
 
 #include "auth/AuthManager.h"
+#include "auth/AuthService.h"
 #include "auth/AuthTypes.h"
-#include "auth/UserApi.h"
-#include "core/logging/Logger.h"
+#include "core/config/ProfileManager.h"
+#include "mcp/tools/ThreadHelper.h"
 #include "services/notifications/NotificationService.h"
 
-#include <QEventLoop>
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QTimer>
 
 namespace fincept::mcp::tools {
 
 using namespace fincept::auth;
 
-static constexpr int kTimeoutMs = 15000;
-
-// ── Sync helper for UserApi callbacks ────────────────────────────────────────
-
-static ToolResult run_user_api(std::function<void(UserApi::Callback)> trigger) {
-    bool ok = false;
-    QString err;
-    QJsonObject data;
-    bool fired = false;
-
-    QEventLoop loop;
-    QTimer::singleShot(kTimeoutMs, &loop, &QEventLoop::quit);
-
-    trigger([&](ApiResponse resp) {
-        fired = true;
-        ok = resp.success;
-        data = resp.data;
-        err = resp.error;
-        loop.quit();
-    });
-
-    if (!fired)
-        loop.exec();
-
-    if (!ok)
-        return ToolResult::fail(err.isEmpty() ? "API request failed" : err);
-
-    // Return array or object depending on what's in data
-    if (data.isEmpty())
-        return ToolResult::ok("OK");
-
-    // If data has a single array-valued key, unwrap it
-    if (data.size() == 1) {
-        auto it = data.begin();
-        if (it.value().isArray())
-            return ToolResult::ok_data(it.value().toArray());
-    }
-
-    return ToolResult::ok_data(data);
+// The fields worth reporting from AuthService's profile JSON.
+static QJsonObject local_profile_fields(const QJsonObject& p) {
+    QJsonObject out;
+    out["username"] = p["username"];
+    const QString email = displayable_email(p["email"].toString());
+    if (!email.isEmpty())
+        out["email"] = email;
+    out["created_at"] = p["created_at"];
+    out["last_login_at"] = p["last_login_at"];
+    return out;
 }
 
 // ── Tool registration ─────────────────────────────────────────────────────────
@@ -68,41 +40,25 @@ std::vector<ToolDef> get_profile_tools() {
     {
         ToolDef t;
         t.name = "profile_get";
-        t.description = "Get the current user's full profile: username, email, account type, "
-                        "credit balance, verification status, MFA status, phone, country, "
-                        "created_at, last_login_at.";
+        t.description = "Get the signed-in local user's profile: username, email (if one is stored), "
+                        "created_at, last_login_at, and the active data profile.";
         t.category = "profile";
         t.input_schema.properties = QJsonObject{};
         t.handler = [](const QJsonObject&) -> ToolResult {
-            return run_user_api([](auto cb) { UserApi::instance().get_user_profile(cb); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── profile_update ───────────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "profile_update";
-        t.description = "Update the current user's profile fields. "
-                        "Only include fields you want to change (username, phone, country).";
-        t.category = "profile";
-        t.input_schema.properties = QJsonObject{
-            {"username", QJsonObject{{"type", "string"}, {"description", "New username"}}},
-            {"phone", QJsonObject{{"type", "string"}, {"description", "Phone number"}}},
-            {"country", QJsonObject{{"type", "string"}, {"description", "Country name"}}},
-        };
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            QJsonObject body;
-            if (args.contains("username") && !args["username"].toString().isEmpty())
-                body["username"] = args["username"].toString();
-            if (args.contains("phone"))
-                body["phone"] = args["phone"].toString();
-            if (args.contains("country"))
-                body["country"] = args["country"].toString();
-            if (body.isEmpty())
-                return ToolResult::fail("No fields provided to update");
-
-            return run_user_api([body](auto cb) { UserApi::instance().update_user_profile(body, cb); });
+            ApiResponse resp{false, {}, QStringLiteral("Not authenticated"), 401};
+            // auth.db's connection belongs to the main thread; tool handlers
+            // run on a worker. AuthService answers synchronously.
+            detail::run_on_target_thread_sync(&AuthService::instance(), [&resp]() {
+                const auto& sess = AuthManager::instance().session();
+                if (!sess.authenticated)
+                    return;
+                AuthService::instance().get_user_profile(sess.api_key, [&resp](ApiResponse r) { resp = r; });
+            });
+            if (!resp.success)
+                return ToolResult::fail(resp.error.isEmpty() ? "Could not read the local profile" : resp.error);
+            QJsonObject out = local_profile_fields(resp.data);
+            out["data_profile"] = fincept::ProfileManager::instance().active();
+            return ToolResult::ok_data(out);
         };
         tools.push_back(std::move(t));
     }
@@ -111,15 +67,28 @@ std::vector<ToolDef> get_profile_tools() {
     {
         ToolDef t;
         t.name = "profile_get_session";
-        t.description = "Get current session information: authentication state, username, "
-                        "email, account type, credit balance, subscription details, MFA status.";
+        t.description = "Get current session information: whether a local user is signed in, "
+                        "their username and email (if stored), and the active data profile.";
         t.category = "profile";
         t.input_schema.properties = QJsonObject{};
         t.handler = [](const QJsonObject&) -> ToolResult {
-            const auto& sess = AuthManager::instance().session();
-            if (!sess.authenticated)
+            QJsonObject out;
+            bool authenticated = false;
+            detail::run_on_target_thread_sync(&AuthManager::instance(), [&]() {
+                const auto& sess = AuthManager::instance().session();
+                authenticated = sess.authenticated;
+                QJsonObject p;
+                p["username"] = sess.user_info.username;
+                p["email"] = sess.user_info.email;
+                p["created_at"] = sess.user_info.created_at;
+                p["last_login_at"] = sess.user_info.last_login_at;
+                out = local_profile_fields(p);
+            });
+            if (!authenticated)
                 return ToolResult::fail("Not authenticated");
-            return ToolResult::ok_data(sess.to_json());
+            out["authenticated"] = true;
+            out["data_profile"] = fincept::ProfileManager::instance().active();
+            return ToolResult::ok_data(out);
         };
         tools.push_back(std::move(t));
     }
@@ -128,16 +97,24 @@ std::vector<ToolDef> get_profile_tools() {
     {
         ToolDef t;
         t.name = "profile_get_api_key";
-        t.description = "Get the current user's API key from the active session.";
+        t.description = "Get the signed-in user's local API key from the active session.";
         t.category = "profile";
         t.input_schema.properties = QJsonObject{};
         t.handler = [](const QJsonObject&) -> ToolResult {
-            const auto& sess = AuthManager::instance().session();
-            if (!sess.authenticated)
+            // The session is owned by the main thread (regenerate_api_key
+            // rewrites it there); copy what we need on that thread.
+            bool authenticated = false;
+            QString api_key;
+            detail::run_on_target_thread_sync(&AuthManager::instance(), [&]() {
+                const auto& sess = AuthManager::instance().session();
+                authenticated = sess.authenticated;
+                api_key = sess.api_key;
+            });
+            if (!authenticated)
                 return ToolResult::fail("Not authenticated");
-            if (sess.api_key.isEmpty())
+            if (api_key.isEmpty())
                 return ToolResult::fail("No API key in session");
-            return ToolResult::ok_data(QJsonObject{{"api_key", sess.api_key}});
+            return ToolResult::ok_data(QJsonObject{{"api_key", api_key}});
         };
         tools.push_back(std::move(t));
     }
@@ -146,121 +123,25 @@ std::vector<ToolDef> get_profile_tools() {
     {
         ToolDef t;
         t.name = "profile_regenerate_api_key";
-        t.description = "Regenerate the API key. WARNING: the current API key will be "
-                        "immediately invalidated. Returns the new API key.";
+        t.description = "Regenerate the local API key. WARNING: the current API key stops working "
+                        "immediately. Returns the new API key.";
         t.category = "profile";
         t.input_schema.properties = QJsonObject{};
         t.handler = [](const QJsonObject&) -> ToolResult {
-            return run_user_api([](auto cb) { UserApi::instance().regenerate_api_key(cb); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── profile_get_login_history ────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "profile_get_login_history";
-        t.description = "Get login history entries (timestamp, IP address, status). "
-                        "Useful for security auditing.";
-        t.category = "profile";
-        t.input_schema.properties = QJsonObject{
-            {"limit", QJsonObject{{"type", "integer"}, {"description", "Max entries to return (default: 20)"}}},
-            {"offset", QJsonObject{{"type", "integer"}, {"description", "Offset for pagination (default: 0)"}}},
-        };
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            int limit = args["limit"].toInt(20);
-            int offset = args["offset"].toInt(0);
-            return run_user_api([limit, offset](auto cb) { UserApi::instance().get_login_history(limit, offset, cb); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── profile_enable_mfa ───────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "profile_enable_mfa";
-        t.description = "Enable two-factor authentication (MFA/2FA) for the account.";
-        t.category = "profile";
-        t.input_schema.properties = QJsonObject{};
-        t.handler = [](const QJsonObject&) -> ToolResult {
-            return run_user_api([](auto cb) { UserApi::instance().enable_mfa(cb); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── profile_disable_mfa ──────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "profile_disable_mfa";
-        t.description = "Disable two-factor authentication (MFA/2FA) for the account.";
-        t.category = "profile";
-        t.input_schema.properties = QJsonObject{};
-        t.handler = [](const QJsonObject&) -> ToolResult {
-            return run_user_api([](auto cb) { UserApi::instance().disable_mfa(cb); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── profile_get_usage ────────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "profile_get_usage";
-        t.description = "Get API usage statistics for the specified number of days. "
-                        "Returns summary (total requests, credits used, avg response time), "
-                        "daily breakdown, and top endpoints by usage.";
-        t.category = "profile";
-        t.input_schema.properties = QJsonObject{
-            {"days", QJsonObject{{"type", "integer"}, {"description", "Number of days to look back (default: 30)"}}},
-        };
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            int days = args["days"].toInt(30);
-            return run_user_api([days](auto cb) { UserApi::instance().get_user_usage(days, cb); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── profile_get_credits ──────────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "profile_get_credits";
-        t.description = "Get the current credit balance for the account.";
-        t.category = "profile";
-        t.input_schema.properties = QJsonObject{};
-        t.handler = [](const QJsonObject&) -> ToolResult {
-            return run_user_api([](auto cb) { UserApi::instance().get_user_credits(cb); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── profile_get_subscription ─────────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "profile_get_subscription";
-        t.description = "Get the current subscription details: plan/account type, "
-                        "credit balance, credits expiry, support type.";
-        t.category = "profile";
-        t.input_schema.properties = QJsonObject{};
-        t.handler = [](const QJsonObject&) -> ToolResult {
-            return run_user_api([](auto cb) { UserApi::instance().get_user_subscription(cb); });
-        };
-        tools.push_back(std::move(t));
-    }
-
-    // ── profile_get_payment_history ──────────────────────────────────────────
-    {
-        ToolDef t;
-        t.name = "profile_get_payment_history";
-        t.description = "Get payment transaction history: date, plan name, amount (USD), "
-                        "credits purchased, status.";
-        t.category = "profile";
-        t.input_schema.properties = QJsonObject{
-            {"page", QJsonObject{{"type", "integer"}, {"description", "Page number (default: 1)"}}},
-            {"limit", QJsonObject{{"type", "integer"}, {"description", "Items per page (default: 20)"}}},
-        };
-        t.handler = [](const QJsonObject& args) -> ToolResult {
-            int page = args["page"].toInt(1);
-            int limit = args["limit"].toInt(20);
-            return run_user_api([page, limit](auto cb) { UserApi::instance().get_payment_history(page, limit, cb); });
+            bool ok = false;
+            QString err;
+            QString new_key;
+            detail::run_on_target_thread_sync(&AuthManager::instance(), [&]() {
+                AuthManager::instance().regenerate_api_key([&](bool success, const QString& e) {
+                    ok = success;
+                    err = e;
+                    if (success)
+                        new_key = AuthManager::instance().session().api_key;
+                });
+            });
+            if (!ok)
+                return ToolResult::fail(err.isEmpty() ? "Could not regenerate the API key" : err);
+            return ToolResult::ok_data(QJsonObject{{"api_key", new_key}});
         };
         tools.push_back(std::move(t));
     }

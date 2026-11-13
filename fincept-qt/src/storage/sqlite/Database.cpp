@@ -11,10 +11,15 @@ Database& Database::instance() {
 }
 
 Result<void> Database::open(const QString& path) {
-    db_ = QSqlDatabase::addDatabase("QSQLITE", "fincept_main");
-    db_.setDatabaseName(path);
-    if (!db_.open()) {
-        return Result<void>::err(db_.lastError().text().toStdString());
+    {
+        // Workers in execute()/exec() read db_ under mutex_; swap it under
+        // the same lock. Released before apply_pragmas(), which takes it.
+        QMutexLocker lock(&mutex_);
+        db_ = QSqlDatabase::addDatabase("QSQLITE", "fincept_main");
+        db_.setDatabaseName(path);
+        if (!db_.open()) {
+            return Result<void>::err(db_.lastError().text().toStdString());
+        }
     }
     LOG_INFO("DB", "Opened database: " + path);
 
@@ -28,6 +33,17 @@ Result<void> Database::open(const QString& path) {
 }
 
 void Database::close() {
+    // Under mutex_ so a worker inside execute()/exec() finishes the statement
+    // it is running before the connection goes away, and none starts against
+    // a half-closed handle. It does NOT cover a QSqlQuery a caller keeps
+    // iterating after execute() returned (the lock is released by then):
+    // like reopen(), call this only at login/logout/account boundaries.
+    // Nothing that holds mutex_ calls close(), so this cannot self-deadlock.
+    QMutexLocker lock(&mutex_);
+    close_locked();
+}
+
+void Database::close_locked() {
     if (db_.isOpen())
         db_.close();
 }
@@ -37,14 +53,18 @@ Result<void> Database::reopen(const QString& path) {
     // executing. QSqlDatabase::removeDatabase() is undefined if any
     // QSqlQuery objects still hold a reference to the connection; callers
     // must ensure all queries are finished before calling reopen().
-    close();
-    db_ = QSqlDatabase(); // release the handle before removing the connection
-    if (QSqlDatabase::contains("fincept_main"))
-        QSqlDatabase::removeDatabase("fincept_main");
+    {
+        QMutexLocker lock(&mutex_);
+        close_locked();
+        db_ = QSqlDatabase(); // release the handle before removing the connection
+        if (QSqlDatabase::contains("fincept_main"))
+            QSqlDatabase::removeDatabase("fincept_main");
+    }
     return open(path);
 }
 
 bool Database::is_open() const {
+    QMutexLocker lock(&mutex_); // db_ is swapped under this lock by open()/reopen()
     return db_.isOpen();
 }
 
