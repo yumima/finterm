@@ -24,6 +24,8 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <cmath>
+
 namespace fincept::screens {
 
 static constexpr const char* TAG = "VoiceConfigSection";
@@ -401,6 +403,27 @@ void VoiceConfigSection::build_tts_ui(QVBoxLayout* parent_layout) {
     ev_hl->addWidget(tts_engine_voice_combo_, 1);
     ev_hl->addWidget(tts_engine_preview_btn_);
     form->addRow(QStringLiteral("Read-aloud voice"), ev_row);
+
+    // Reading pace — synthesised at that speed by the engine (no pitch change).
+    auto* speed_combo = new QComboBox;
+    for (const double v : {0.9, 1.0, 1.1, 1.2, 1.3, 1.5})
+        speed_combo->addItem(QStringLiteral("%1×").arg(v, 0, 'f', 1), v);
+    {
+        auto r = SettingsRepository::instance().get(QStringLiteral("tts.engine_speed"), QStringLiteral("1.0"));
+        const double cur = r.is_ok() ? r.value().toDouble() : 1.0;
+        int best = 1;
+        for (int i = 0; i < speed_combo->count(); ++i)
+            if (std::abs(speed_combo->itemData(i).toDouble() - cur) < 1e-6)
+                best = i;
+        speed_combo->setCurrentIndex(best);
+    }
+    speed_combo->setToolTip(QStringLiteral("How fast news is read aloud. Applies from the next reading."));
+    connect(speed_combo, &QComboBox::activated, this, [speed_combo](int i) {
+        SettingsRepository::instance().set(QStringLiteral("tts.engine_speed"),
+                                           QString::number(speed_combo->itemData(i).toDouble(), 'f', 2),
+                                           QStringLiteral("voice"));
+    });
+    form->addRow(QStringLiteral("Read-aloud speed"), speed_combo);
     auto& tts_svc = services::TtsService::instance();
     connect(&tts_svc, &services::TtsService::engine_voices_changed, this, &VoiceConfigSection::fill_engine_voices);
     connect(tts_engine_voice_combo_, &QComboBox::activated, this, [this](int i) {

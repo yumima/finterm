@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`8b780a6c6`](https://github.com/yumima/finterm/commit/8b780a6c6) live everywhere, streamed not polled: movers, screener, IPO, sparklines, Polymarket
 - [`233eb7891`](https://github.com/yumima/finterm/commit/233eb7891) live: extended hours, index futures, indices and ROOT=F stream too
 - [`506e91d4b`](https://github.com/yumima/finterm/commit/506e91d4b) live prices: review fixes — in-place tables, signed flashes, no stale baselines
 - [`d76f9b7b6`](https://github.com/yumima/finterm/commit/d76f9b7b6) live prices: Yahoo push stream drives every quote surface, ticks flash

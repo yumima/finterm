@@ -354,6 +354,15 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
     }();
     const QString pref_model = pref.section(QLatin1Char(':'), 0, 0);
     const QString pref_id = pref.section(QLatin1Char(':'), 1);
+    // Reading speed (tts.engine_speed, 1.0 = the voice's natural pace). The
+    // engine synthesises at that pace — not a faster playback of normal-speed
+    // audio, which would raise the pitch.
+    const double speed = [] {
+        auto r = SettingsRepository::instance().get(QStringLiteral("tts.engine_speed"));
+        bool ok = false;
+        const double v = r.is_ok() ? r.value().toDouble(&ok) : 1.0;
+        return ok && v >= 0.5 && v <= 2.0 ? v : 1.0;
+    }();
 
     QMutexLocker lock(&mutex_);
     ensure_config();
@@ -379,6 +388,8 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
         const QString model = picked ? pref_model : QStringLiteral("kokoro");
         const QString voice = picked ? pref_id : QStringLiteral("af_heart");
         ep.body = QJsonObject{{"model", model}, {"voice", voice}, {"response_format", "wav"}};
+        if (speed != 1.0)
+            ep.body.insert(QStringLiteral("speed"), speed);
         if (model == "kokoro") {
             ep.first_chunk = 130;
             ep.second_chunk = 350;
@@ -394,6 +405,8 @@ std::optional<LlmService::SpeechEndpoint> LlmService::speech_endpoint() const {
                               {"instructions", "Read in a soft, warm, natural voice at a calm, unhurried pace, "
                                                "like a friendly newsreader."},
                               {"response_format", "wav"}};
+        if (speed != 1.0)
+            ep.body.insert(QStringLiteral("speed"), speed); // OpenAI: 0.25–4.0
     } else {
         return std::nullopt;
     }
