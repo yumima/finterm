@@ -2,6 +2,7 @@
 
 #include "core/logging/Logger.h"
 #include "services/file_manager/FileManagerService.h"
+#include "services/tts/SpeechText.h"
 #include "services/tts/TtsService.h"
 #include "storage/repositories/NewsArticleRepository.h"
 #include "ui/ReadAloudToggle.h"
@@ -366,12 +367,11 @@ QWidget* NewsDetailPanel::build_content_view() {
         if (!has_article_ && !listen_toggle_->active())
             return;
         listen_toggle_->toggle([this]() {
-            QString text = current_article_.headline;
-            if (!current_article_.summary.isEmpty())
-                text += ". " + current_article_.summary;
-            const QString body = body_label_ ? body_label_->toPlainText().trimmed() : QString();
-            if (!body.isEmpty())
-                text += "\n\n" + body;
+            // One line per paragraph, each closed with a stop, so the headline
+            // and every body paragraph get their own pause (SpeechText.h).
+            const QString text = services::speech::from_paragraphs(
+                current_article_.headline, current_article_.summary,
+                body_label_ ? body_label_->toPlainText() : QString());
             // The engine's natural voice; falls back to on-device Piper itself.
             return services::TtsService::instance().speak_via_engine(text);
         });
@@ -1261,9 +1261,9 @@ QString NewsDetailPanel::spoken_text(const QString& markdown) {
     // The brief is markdown; read the rendered words, not "hash hash star".
     // The click and both prewarms go through here — the warm clip is matched
     // on the first chunk of the result.
-    QTextDocument doc;
-    doc.setMarkdown(markdown);
-    return doc.toPlainText().trimmed();
+    // Headings and bullets come back as their own sentences, one per line, so
+    // "### DEFENSE" doesn't run into its first bullet (SpeechText.h).
+    return services::speech::from_markdown(markdown);
 }
 
 QString NewsDetailPanel::tldr_plain_text() const {

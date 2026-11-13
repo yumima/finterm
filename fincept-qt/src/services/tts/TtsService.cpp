@@ -1,5 +1,7 @@
 #include "services/tts/TtsService.h"
 
+#include "services/tts/SpeechText.h"
+
 #include "ai_chat/LlmService.h"
 #include "core/logging/Logger.h"
 #include "storage/repositories/SettingsRepository.h"
@@ -188,73 +190,9 @@ bool TtsService::engine_or_local_available() const {
 }
 
 namespace {
-/// Split text for chunked synthesis on sentence ends. The FIRST chunk is kept
-/// short so audio starts within a couple of seconds; later chunks are larger
-/// (fewer seams) and are synthesised while the previous one plays. No chunk
-/// exceeds `cap`, the engine's input limit — so a long brief is read in full
-/// rather than truncated (OpenAI rejects input past 4096 chars).
+/// Chunked synthesis at the engine's own ramp (SpeechText.h has the rules).
 QStringList split_for_speech(const QString& text, const ai_chat::LlmService::SpeechEndpoint& ep) {
-    // Sizes ramp up: a short first chunk starts the audio fast, a medium second
-    // one is synthesised while the first plays (so no gap after it), and the
-    // rest are long to keep the seams few. The engine sets the ramp: a slower,
-    // more natural voice needs a shorter first chunk.
-    const int kFirst = ep.first_chunk, kSecond = ep.second_chunk, kRest = ep.rest_chunk;
-    int cap = ep.max_input;
-    // Chunk 0 closes at the first paragraph end only once it holds this much —
-    // a one-line opener ("Markets rallied.") alone would play in a second and
-    // leave silence while chunk 1 synthesises.
-    constexpr int kMinFirst = 80;
-    cap = cap > 0 ? cap : 4096;
-    static const QRegularExpression kSentenceEnd(QStringLiteral("(?<=[.!?:;])\\s+"));
-    // Pieces = sentences, each tagged with whether it ends a paragraph.
-    struct Piece {
-        QString text;
-        bool para_end;
-    };
-    QList<Piece> pieces;
-    for (const QString& para : text.split(QLatin1Char('\n'), Qt::SkipEmptyParts)) {
-        const QStringList sents = para.split(kSentenceEnd, Qt::SkipEmptyParts);
-        for (int i = 0; i < sents.size(); ++i) {
-            const QString t = sents[i].simplified();
-            if (!t.isEmpty())
-                pieces.append({t, false});
-        }
-        if (!pieces.isEmpty())
-            pieces.last().para_end = true;
-    }
-    QStringList chunks;
-    QString cur;
-    for (int i = 0; i < pieces.size(); ++i) {
-        const int target = std::min(chunks.isEmpty() ? kFirst : chunks.size() == 1 ? kSecond : kRest, cap);
-        Piece pc = pieces[i];
-        // A run-on piece longer than this chunk's target is cut on whitespace
-        // and the rest goes back in line — so even a punctuation-free opening
-        // yields a short chunk 0 and audio in ~2s.
-        if (cur.isEmpty() && pc.text.size() > target) {
-            int cut = pc.text.lastIndexOf(QLatin1Char(' '), target);
-            if (cut <= 0)
-                cut = target;
-            pieces.insert(i + 1, {pc.text.mid(cut).trimmed(), pc.para_end});
-            pc = {pc.text.left(cut), false};
-        }
-        if (!cur.isEmpty() && cur.size() + 1 + pc.text.size() > target) {
-            chunks << cur;
-            cur.clear();
-            --i; // re-place this piece against the next chunk's target
-            continue;
-        }
-        cur = cur.isEmpty() ? pc.text : cur + QLatin1Char(' ') + pc.text;
-        // Chunk 0 ends at a paragraph end (or at kFirst), so it depends ONLY on
-        // the brief's opening paragraphs: a prewarm from the top half (breakdown
-        // still being written) speaks the same chunk 0 as the finished brief.
-        if (chunks.isEmpty() && pc.para_end && cur.size() >= kMinFirst) {
-            chunks << cur;
-            cur.clear();
-        }
-    }
-    if (!cur.isEmpty())
-        chunks << cur;
-    return chunks;
+    return speech::split_for_speech(text, ep.first_chunk, ep.second_chunk, ep.rest_chunk, ep.max_input);
 }
 
 /// What a synthesised clip depends on: where it was made, with which
@@ -674,7 +612,9 @@ bool TtsService::start_piper(const QString& text) {
         stream_mode_ = false;
         return false;
     }
-    proc_->write(text.toUtf8());
+    // One line: Piper's file mode may treat each stdin line as its own
+    // utterance (and output). The pauses survive as the stops SpeechText adds.
+    proc_->write(text.simplified().toUtf8());
     proc_->closeWriteChannel();
     // NB: state_changed(true) is intentionally NOT emitted here. In BUFFERED mode
     // synthesis takes ~20s; signalling "speaking" now would flip the UI to "STOP"

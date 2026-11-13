@@ -725,6 +725,20 @@ target_link_libraries(test_news_brief_format PRIVATE Qt6::Core Qt6::Test)
 set_target_properties(test_news_brief_format PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
 add_test(NAME news_brief_format COMMAND test_news_brief_format)
 
+# ── Read-aloud text (headings, bullets, pauses) ──────────────────────────────
+# A brief's "### DEFENSE" heading ran into its first bullet ("...rates defense
+# France ordered...") because the layout's line breaks were flattened away
+# before the voice saw them. Pins the sentence-closing and the breaks that
+# must survive chunking.
+add_executable(test_speech_text
+    services/test_speech_text.cpp
+)
+target_include_directories(test_speech_text PRIVATE ../src)
+target_link_libraries(test_speech_text PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+set_target_properties(test_speech_text PROPERTIES UNITY_BUILD OFF AUTOMOC ON)
+add_test(NAME speech_text COMMAND test_speech_text)
+set_tests_properties(speech_text PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # ── News brief story selection ───────────────────────────────────────────────
 # What the brief is written FROM, which is where its two shipped failures
 # lived: six outlets carrying one story ate six of the sample's slots, and a
