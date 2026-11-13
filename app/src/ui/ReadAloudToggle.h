@@ -68,7 +68,7 @@ inline QIcon read_aloud_icon(ReadAloudGlyph g, int px = 16) {
     pm.fill(Qt::transparent);
     QPainter p(&pm);
     p.setRenderHint(QPainter::Antialiasing);
-    QColor c = QColor(colors::AMBER);
+    QColor c = QColor(colors::AMBER());
     if (g == ReadAloudGlyph::Preparing)
         c.setAlphaF(0.45);
     const qreal s = px / 16.0;

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`259f40edb`](https://github.com/yumima/finterm/commit/259f40edb) **ci:** compile without Qt WebEngine; standard __VA_OPT__; wincred include order
 - [`ea9ff379a`](https://github.com/yumima/finterm/commit/ea9ff379a) **ci:** builds clean under -Werror again; Windows IP-helper include order
 - [`645fdc12c`](https://github.com/yumima/finterm/commit/645fdc12c) screens: every screen listed again — the hiding switch is gone
 - [`243296cc0`](https://github.com/yumima/finterm/commit/243296cc0) install: free installers documented per platform; updates only on request

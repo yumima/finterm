@@ -1178,7 +1178,7 @@ void EquityTechnicalsTab::apply_technicals_state(const services::query::QuerySto
             warning_label_->setText(QString("Refresh failed — showing previously loaded data. (%1)").arg(s.error));
             warning_label_->setVisible(true);
             if (!as_of_base_.isEmpty()) {
-                as_of_label_->setText(as_of_base_ + QStringLiteral(" \xc2\xb7 STALE \xe2\x80\x94 refresh failed"));
+                as_of_label_->setText(as_of_base_ + QStringLiteral(" \u00b7 STALE \u2014 refresh failed"));
                 as_of_label_->setVisible(true);
             }
         } else {
@@ -1283,11 +1283,11 @@ void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& p
     }
     // Remember the line without the STALE suffix: if the refetch this suffix
     // promises then fails, the error path re-renders it as "refresh failed".
-    as_of_base_ = bits.join(QStringLiteral(" \xc2\xb7 "));
+    as_of_base_ = bits.join(QStringLiteral(" \u00b7 "));
     if (s.is_stale)
-        bits << QStringLiteral("STALE \xe2\x80\x94 refreshing\xe2\x80\xa6");
+        bits << QStringLiteral("STALE \u2014 refreshing\u2026");
 
-    as_of_label_->setText(bits.join(QStringLiteral(" \xc2\xb7 ")));
+    as_of_label_->setText(bits.join(QStringLiteral(" \u00b7 ")));
     as_of_label_->setToolTip("Which bar the verdict describes and when the data was fetched. During market hours "
                              "the latest bar is still forming, so the verdict can move. STALE: cached, refetching.");
     as_of_label_->setVisible(!bits.isEmpty());

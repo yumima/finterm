@@ -134,7 +134,7 @@ void LoginScreen::build_picker_page() {
     connect(user_list_, &QListWidget::itemActivated, this, &LoginScreen::on_user_selected);
     connect(user_list_, &QListWidget::itemClicked, this, &LoginScreen::on_user_selected);
 
-    picker_empty_ = new QLabel(QStringLiteral("No local users yet \xe2\x80\x94 create one to get started."), panel);
+    picker_empty_ = new QLabel(QStringLiteral("No local users yet \u2014 create one to get started."), panel);
     picker_empty_->setAlignment(Qt::AlignCenter);
     picker_empty_->setWordWrap(true);
     picker_empty_->setStyleSheet(QString("color:%1; font-size:12px; padding:24px; border:1px dashed %2;"
@@ -187,7 +187,7 @@ void LoginScreen::build_pin_page() {
     hint->setStyleSheet(QString("color:%1; font-size:12px;").arg(finterm::ui::colors::TEXT_SECONDARY()));
 
     pin_input_ = new QLineEdit(panel);
-    pin_input_->setPlaceholderText(QStringLiteral("\xe2\x80\xa2 \xe2\x80\xa2 \xe2\x80\xa2 \xe2\x80\xa2"));
+    pin_input_->setPlaceholderText(QStringLiteral("\u2022 \u2022 \u2022 \u2022"));
     pin_input_->setEchoMode(QLineEdit::Password);
     pin_input_->setMaxLength(6);
     pin_input_->setValidator(new QIntValidator(0, 999999, this));
@@ -206,7 +206,7 @@ void LoginScreen::build_pin_page() {
     connect(pin_unlock_btn_, &QPushButton::clicked, this, &LoginScreen::on_unlock);
     connect(pin_input_, &QLineEdit::returnPressed, this, &LoginScreen::on_unlock);
 
-    pin_back_btn_ = new QPushButton(QStringLiteral("\xe2\x86\x90  Different user"), panel);
+    pin_back_btn_ = new QPushButton(QStringLiteral("\u2190  Different user"), panel);
     pin_back_btn_->setStyleSheet(secondary_btn_style());
     pin_back_btn_->setCursor(Qt::PointingHandCursor);
     connect(pin_back_btn_, &QPushButton::clicked, this, [this]() { show_picker(); });

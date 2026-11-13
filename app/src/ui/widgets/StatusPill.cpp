@@ -13,7 +13,7 @@ StatusPill::StatusPill(QWidget* parent) : QWidget(parent) {
     hl->setContentsMargins(0, 0, 0, 0);
     hl->setSpacing(6);
 
-    dot_ = new QLabel(QStringLiteral("\xe2\x80\xa2")); // • bullet
+    dot_ = new QLabel(QStringLiteral("\u2022")); // • bullet
     dot_->setFixedWidth(8);
     hl->addWidget(dot_);
 
@@ -22,7 +22,7 @@ StatusPill::StatusPill(QWidget* parent) : QWidget(parent) {
         QString("color:%1;font-size:11px;font-family:'Consolas',monospace;").arg(colors::TEXT_SECONDARY()));
     hl->addWidget(label_, 1);
 
-    auto* rb = new QPushButton(QStringLiteral("\xe2\x86\xbb")); // ↻ refresh
+    auto* rb = new QPushButton(QStringLiteral("\u21bb")); // ↻ refresh
     rb->setFixedSize(18, 18);
     rb->setCursor(Qt::PointingHandCursor);
     rb->setToolTip("Retry");

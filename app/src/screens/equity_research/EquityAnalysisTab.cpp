@@ -95,7 +95,7 @@ void EquityAnalysisTab::set_symbol(const QString& symbol) {
 
 void EquityAnalysisTab::reset_values() {
     displayed_symbol_.clear();
-    static const QString dash = QStringLiteral("\xe2\x80\x94");
+    static const QString dash = QStringLiteral("\u2014");
     for (QLabel* l :
          {cash_val_, debt_val_, fcf_val_, ocf_val_, ev_val_, ev_rev_val_, ev_ebitda_val_, book_val_, rev_val_,
           rev_share_val_, gp_val_, ebitda_m_val_, pe_val_, peg_val_, roe_val_, roa_val_, beta_val_, short_rat_val_}) {

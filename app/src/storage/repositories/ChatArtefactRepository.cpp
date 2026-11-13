@@ -179,7 +179,7 @@ Result<QVector<ChatArtefactRow>> ChatArtefactRepository::list_lineage_for(const 
     // an explicit supersedes_id chain, prefer that.  Walk both
     // directions (back via supersedes_id, forward via "who supersedes
     // me?") so the seed isn't required to be the head of the chain.
-    auto has_supersedes = [this](const ChatArtefactRow& row) { return !row.supersedes_id.isEmpty(); };
+    auto has_supersedes = [](const ChatArtefactRow& row) { return !row.supersedes_id.isEmpty(); };
     if (has_supersedes(a)) {
         // Walk backward through supersedes_id pointers, then forward
         // by finding rows that point at any link in the chain.  In

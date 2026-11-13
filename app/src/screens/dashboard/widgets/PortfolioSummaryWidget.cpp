@@ -703,12 +703,12 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         // positions of different sizes. Needs a cost basis and a live price —
         // a position with either missing would otherwise read as −100%.
         QString pnl_str = QStringLiteral("--");
-        QString pnl_color = QString(ui::colors::TEXT_SECONDARY);
+        QString pnl_color = QString(ui::colors::TEXT_SECONDARY());
         QString pnl_tip = QStringLiteral("No average cost recorded for this position.");
         if (cost > 0 && price > 0) {
             const double pnl_pct = pnl / cost * 100.0;
             pnl_str = QString("%1%2%").arg(pnl_pct >= 0 ? "+" : "").arg(pnl_pct, 0, 'f', 2);
-            pnl_color = pnl_pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
+            pnl_color = pnl_pct >= 0 ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE());
             pnl_tip = QString("%1 on a $%2 cost basis (avg $%3 per share)")
                           .arg(pnl >= 0 ? QString("+$%1").arg(pnl, 0, 'f', 2) : QString("-$%1").arg(-pnl, 0, 'f', 2))
                           .arg(cost, 0, 'f', 2)
@@ -721,17 +721,17 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         QString chg_pct_color;
         if (q && std::isfinite(q->change_pct)) {
             chg_pct_str = QString("%1%2%").arg(q->change_pct >= 0 ? "+" : "").arg(q->change_pct, 0, 'f', 2);
-            chg_pct_color = q->change_pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
+            chg_pct_color = q->change_pct >= 0 ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE());
         } else {
             chg_pct_str = "--";
-            chg_pct_color = QString(ui::colors::TEXT_SECONDARY);
+            chg_pct_color = QString(ui::colors::TEXT_SECONDARY());
         }
         cell(kColDayChg, chg_pct_str, chg_pct_color);
 
         // AFT% — the extended-hours move, from a different feed than the rest
         // of the row and blank whenever there is no extended print to show.
         QString aft_str = QStringLiteral("--");
-        QString aft_color = QString(ui::colors::TEXT_SECONDARY);
+        QString aft_color = QString(ui::colors::TEXT_SECONDARY());
         QString aft_tip = QStringLiteral("No extended-hours trades in this name since the "
                                          "last close.");
         // Soundness was settled when the quote was parsed, so anything still
@@ -742,7 +742,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
         const auto it = aft_.constFind(h.symbol);
         if (it != aft_.constEnd()) {
             aft_str = QString("%1%2%").arg(it->pct >= 0 ? "+" : "").arg(it->pct, 0, 'f', 2);
-            aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE) : QString(ui::colors::NEGATIVE);
+            aft_color = it->pct >= 0 ? QString(ui::colors::POSITIVE()) : QString(ui::colors::NEGATIVE());
             aft_tip = QString("%1-market $%2 against the $%3 close, as of %5%4")
                           .arg(it->session == QLatin1String("PRE")         ? QStringLiteral("Pre")
                                : it->session == QLatin1String("OVERNIGHT") ? QStringLiteral("Overnight")

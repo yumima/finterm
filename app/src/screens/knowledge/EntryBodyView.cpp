@@ -39,9 +39,7 @@ constexpr const char* HEAD_TEXT = "#f0e8d0";  ///< brighter cream — title, hea
 constexpr const char* MUTED_TEXT = "#a89878"; ///< muted warm tan (subtitles, blockquote, captions)
 constexpr const char* CODE_TEXT = "#d4a878";  ///< warm tan for inline code
 constexpr const char* CODE_BG = "#2a221a";    ///< warm-dark chip background
-constexpr const char* PRE_BG = "#15110d";     ///< slightly darker than body for code blocks
 constexpr const char* LINK_COLOR = "#6dc1c9"; ///< muted cyan link
-constexpr const char* RULE_COLOR = "#3a2e22"; ///< warm border / hr / h2 separator
 
 struct DiffStyle {
     const char* label;

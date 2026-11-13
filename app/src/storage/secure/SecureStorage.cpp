@@ -118,10 +118,17 @@ SecureStorage& SecureStorage::instance() {
 // libsecret's SecretSchema has eight private trailing `reserved` /
 // `reserved1`..`reserved7` slots that the documentation explicitly says
 // to leave default-zeroed. Designated initializers express this clearly
-// but gcc still emits -Wmissing-field-initializers in C++ for the
-// unnamed trailing fields (long-standing quirk; gcc bug 39589 family).
+// but gcc and clang still warn about the unnamed trailing fields
+// (gcc: -Wmissing-field-initializers, gcc bug 39589 family; clang 19+:
+// -Wmissing-designated-field-initializers; older clang: the gcc name).
 // Suppress just here — it's not a bug we can fix on the libsecret side.
-#        if defined(__GNUC__) && !defined(__clang__)
+#        if defined(__clang__)
+#            pragma clang diagnostic push
+#            pragma clang diagnostic ignored "-Wmissing-field-initializers"
+#            if __has_warning("-Wmissing-designated-field-initializers")
+#                pragma clang diagnostic ignored "-Wmissing-designated-field-initializers"
+#            endif
+#        elif defined(__GNUC__)
 #            pragma GCC diagnostic push
 #            pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 #        endif
@@ -136,7 +143,9 @@ static SecretSchema make_schema(const KeyringIdentity& id) {
             },
     };
 }
-#        if defined(__GNUC__) && !defined(__clang__)
+#        if defined(__clang__)
+#            pragma clang diagnostic pop
+#        elif defined(__GNUC__)
 #            pragma GCC diagnostic pop
 #        endif
 

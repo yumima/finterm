@@ -16,7 +16,6 @@
 
 namespace finterm::mcp::tools {
 
-static constexpr int kTimeoutMs = 30000;
 static constexpr int kAltTtlSec = 10 * 60; // 10 min — deterministic given same inputs
 
 // ── Shared async helper ──────────────────────────────────────────────────────

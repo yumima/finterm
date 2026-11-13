@@ -17,7 +17,10 @@ namespace finterm::ui {
 // Supports all usage patterns:
 //   .arg(colors::BG_BASE)              — implicit const char* via operator const char*
 //   .arg(colors::BG_BASE, colors::X)   — multi-arg via operator const char* (Qt6 variadic)
-//   QColor(colors::BG_BASE)            — via operator QColor (Qt accepts QString ctor)
+//   QColor(colors::BG_BASE())          — call it: QColor(const char*). Write the (),
+//                                        not QColor(colors::BG_BASE) / QString(colors::X):
+//                                        MSVC finds those ambiguous (operator const char*
+//                                        and operator QString/QColor both apply)
 //   cond ? colors::A : colors::B       — same type, works natively
 //   colors::BG_BASE()                  — explicit call via operator()
 //   QString var = colors::X            — via operator const char* -> QString(const char*)

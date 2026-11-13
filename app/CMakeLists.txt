@@ -192,7 +192,13 @@ if(MSVC)
     #                code that would break on GCC/Clang (two-phase lookup, etc.)
     # /W4          : level-4 warnings (highest practical without /Wall noise)
     # /WX only in CI so local iteration isn't blocked by new warnings
-    add_compile_options(/Z7 /Oi /bigobj /permissive- /W4)
+    # /Zc:preprocessor: the conforming preprocessor — __VA_OPT__ (logging and
+    #   SlowOpTimer macros) is C++20 and the legacy MSVC one rejects it.
+    # /wd4456-4459: name-shadowing warnings. GCC and Clang builds here don't
+    #   enable -Wshadow, so these fired on Windows only, and under CI's /WX
+    #   made code that builds everywhere else fail. /wd4305: double→float
+    #   literal truncation in Qt float APIs (setAlphaF and friends).
+    add_compile_options(/Z7 /Oi /bigobj /permissive- /W4 /Zc:preprocessor /wd4456 /wd4457 /wd4458 /wd4459 /wd4305)
     if(DEFINED ENV{CI})
         add_compile_options(/WX)
     endif()

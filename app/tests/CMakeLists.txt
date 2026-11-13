@@ -999,6 +999,12 @@ if(Python3_Interpreter_FOUND)
     # Vendor price sources → the daemon's payload (NY-midnight bars, total-return
     # basis, Yahoo fallback). Runs the daemon-merge case only where yfinance is
     # importable; the venv interpreter is preferred when present (see _TALIPP_TEST_PY).
+    # QStringLiteral is UTF-16: a \xNN escape is one code unit, so UTF-8 byte
+    # escapes there render as garbage. Guards every source file.
+    add_test(
+        NAME qstringliteral_escapes
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_qstringliteral_escapes.py
+    )
     add_test(
         NAME price_sources
         COMMAND ${_TALIPP_TEST_PY} ${CMAKE_CURRENT_SOURCE_DIR}/scripts/test_price_sources.py

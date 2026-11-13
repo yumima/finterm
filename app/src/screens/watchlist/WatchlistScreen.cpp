@@ -520,14 +520,14 @@ void WatchlistScreen::apply_ownership_columns() {
                                   .arg(*r.delta_holders > 0 ? QStringLiteral("+") : QString())
                                   .arg(loc.toString(*r.delta_holders))
                             : fmt::placeholder(),
-            r.delta_holders ? (*r.delta_holders > 0   ? QString(colors::POSITIVE)
-                               : *r.delta_holders < 0 ? QString(colors::NEGATIVE)
+            r.delta_holders ? (*r.delta_holders > 0   ? QString(colors::POSITIVE())
+                               : *r.delta_holders < 0 ? QString(colors::NEGATIVE())
                                                       : dim)
                             : dim);
         put(10, r.sirio ? QString::number(*r.sirio, 'f', 3) : fmt::placeholder(),
-            r.sirio && *r.sirio >= 0.2 ? QString(colors::WARNING) : QString());
+            r.sirio && *r.sirio >= 0.2 ? QString(colors::WARNING()) : QString());
         put(11, r.days_to_cover ? QString::number(*r.days_to_cover, 'f', 1) : fmt::placeholder(),
-            r.days_to_cover && *r.days_to_cover >= 5.0 ? QString(colors::WARNING) : QString());
+            r.days_to_cover && *r.days_to_cover >= 5.0 ? QString(colors::WARNING()) : QString());
         // Absent means the Form 4 store has not read this window yet — a
         // dash, not a zero the store cannot vouch for.
         put(12,
@@ -538,7 +538,7 @@ void WatchlistScreen::apply_ownership_columns() {
                                         .arg(fmt::format_compact(r.insider_buy_value))
                                   : QStringLiteral("0"),
             !r.insider_buys         ? dim
-            : r.insider_buyers >= 2 ? QString(colors::POSITIVE)
+            : r.insider_buyers >= 2 ? QString(colors::POSITIVE())
             : *r.insider_buys > 0   ? QString()
                                     : dim);
     }

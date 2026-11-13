@@ -94,7 +94,7 @@ void RegisterScreen::build_form() {
     title->setStyleSheet(QString("color:%1; font-size:18px; font-weight:700; letter-spacing:0.4px;")
                              .arg(finterm::ui::colors::TEXT_PRIMARY()));
 
-    auto* subtitle = new QLabel(QStringLiteral("Pick a username and a 4\xe2\x80\x936 digit PIN. "
+    auto* subtitle = new QLabel(QStringLiteral("Pick a username and a 4\u2013" "6 digit PIN. "
                                                "Everything stays on this machine."),
                                 panel);
     subtitle->setAlignment(Qt::AlignCenter);
@@ -111,7 +111,7 @@ void RegisterScreen::build_form() {
     username_->setValidator(new QRegularExpressionValidator(QRegularExpression("^[a-zA-Z0-9_-]{2,32}$"), this));
 
     pin_ = new QLineEdit(panel);
-    pin_->setPlaceholderText(QStringLiteral("PIN (4\xe2\x80\x936 digits)"));
+    pin_->setPlaceholderText(QStringLiteral("PIN (4\u2013" "6 digits)"));
     pin_->setEchoMode(QLineEdit::Password);
     pin_->setMaxLength(6);
     pin_->setValidator(new QIntValidator(0, 999999, this));
@@ -135,7 +135,7 @@ void RegisterScreen::build_form() {
     create_btn_->setCursor(Qt::PointingHandCursor);
     connect(create_btn_, &QPushButton::clicked, this, &RegisterScreen::on_create);
 
-    back_btn_ = new QPushButton(QStringLiteral("\xe2\x86\x90  Back to login"), panel);
+    back_btn_ = new QPushButton(QStringLiteral("\u2190  Back to login"), panel);
     back_btn_->setStyleSheet(link_btn_style());
     back_btn_->setCursor(Qt::PointingHandCursor);
     connect(back_btn_, &QPushButton::clicked, this, &RegisterScreen::navigate_login);

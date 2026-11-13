@@ -120,7 +120,7 @@ int EarningsSignalRepository::resolve(const QString& symbol, qint64 report_ts, s
         // HOLD is not a directional call, so it is neither hit nor miss —
         // scoring it either way would flatter or punish the engine for
         // declining to take a side, which is a legitimate answer.
-        QVariant hit(QMetaType(QMetaType::Int));
+        QVariant hit{QMetaType(QMetaType::Int)}; // braces: MSVC parses the () form as a function declaration
         if (row.verdict == QLatin1String("BUY"))
             hit = actual_move_pct > 0 ? 1 : 0;
         else if (row.verdict == QLatin1String("SELL"))

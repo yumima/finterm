@@ -56,7 +56,7 @@ void HistoryChartPanel::load() {
                 return;
             }
             auto* line = new QLineSeries;
-            QPen pen(QColor(ui::colors::AMBER()));
+            QPen pen{QColor(ui::colors::AMBER())}; // braces: MSVC parses the () form as a function declaration
             pen.setWidth(2);
             line->setPen(pen);
             double lo = std::numeric_limits<double>::infinity();

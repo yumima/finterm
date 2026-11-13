@@ -2034,7 +2034,7 @@ void IpoWatchView::render_kpis() {
     // SIGNALS lens: count the derived-signal feed by kind.
     if (active_lens_ == LensSignals) {
         const auto sigs = services::PreIpoService::instance().signal_list();
-        int moves = 0, amend = 0, ready = 0, pulled = 0;
+        int moves = 0, amend = 0, pulled = 0;
         QSet<QString> cos;
         for (const auto& s : sigs) {
             if (s.kind == pre_ipo::SignalKind::MarkUp || s.kind == pre_ipo::SignalKind::MarkDown)
@@ -2043,8 +2043,6 @@ void IpoWatchView::render_kpis() {
                 ++amend;
             else if (s.kind == pre_ipo::SignalKind::Withdrawn)
                 ++pulled;
-            else if (s.kind == pre_ipo::SignalKind::ReadinessJump)
-                ++ready;
             if (!s.company_id.isEmpty())
                 cos.insert(s.company_id);
         }
@@ -2069,8 +2067,7 @@ void IpoWatchView::render_kpis() {
 
     const QDate today = QDate::currentDate();
     int week_n = 0, month_n = 0;
-    double week_$ = 0, month_$ = 0;
-    int priced_30 = 0;
+    double week_dollars = 0, month_dollars = 0;
     double pop_sum = 0;
     int n_priced_with_pop = 0;
     // Above/in/below range — for priced entries we'd need filed range AND
@@ -2095,21 +2092,20 @@ void IpoWatchView::render_kpis() {
             if (d <= kDaysWeek) {
                 if (firm) {
                     ++week_n;
-                    week_$ += e.deal_size_dollars;
+                    week_dollars += e.deal_size_dollars;
                 } else
                     ++week_est;
             }
             if (d <= kDays30) {
                 if (firm) {
                     ++month_n;
-                    month_$ += e.deal_size_dollars;
+                    month_dollars += e.deal_size_dollars;
                 } else
                     ++month_est;
             }
         } else if (e.status == "priced" && e.date.isValid()) {
             const qint64 d = e.date.daysTo(today);
             if (d >= 0 && d <= kDays30) {
-                ++priced_30;
                 if (e.perf_fetched && std::isfinite(e.pop_pct)) {
                     pop_sum += e.pop_pct;
                     ++n_priced_with_pop;
@@ -2135,12 +2131,12 @@ void IpoWatchView::render_kpis() {
         return n > 0 ? QString(" <span style='color:%1;'>+%2 est.</span>").arg(TEXT_SECONDARY()).arg(n) : QString();
     };
     if (kpi_week_) {
-        kpi_week_->setText(QString("<b>NEXT 7 DAYS</b><br>%1%2").arg(fmt(week_n, week_$), est(week_est)));
+        kpi_week_->setText(QString("<b>NEXT 7 DAYS</b><br>%1%2").arg(fmt(week_n, week_dollars), est(week_est)));
         kpi_week_->setToolTip(QStringLiteral("Firm = Nasdaq-scheduled or imminent on EDGAR (8-A / CERT / EFFECT). "
                                              "est. = comparables estimate; not in the $ total."));
     }
     if (kpi_month_) {
-        kpi_month_->setText(QString("<b>NEXT 30 DAYS</b><br>%1%2").arg(fmt(month_n, month_$), est(month_est)));
+        kpi_month_->setText(QString("<b>NEXT 30 DAYS</b><br>%1%2").arg(fmt(month_n, month_dollars), est(month_est)));
         kpi_month_->setToolTip(kpi_week_ ? kpi_week_->toolTip() : QString());
     }
     if (kpi_pop_) {
@@ -2149,7 +2145,7 @@ void IpoWatchView::render_kpis() {
                                                          .arg(pop_sum / n_priced_with_pop >= 0 ? "+" : "")
                                                          .arg(pop_sum / n_priced_with_pop, 0, 'f', 1);
         const QString color =
-            (n_priced_with_pop == 0) ? QString(TEXT_SECONDARY) : (pop_sum >= 0 ? QString(POSITIVE) : QString(NEGATIVE));
+            (n_priced_with_pop == 0) ? QString(TEXT_SECONDARY()) : (pop_sum >= 0 ? QString(POSITIVE()) : QString(NEGATIVE()));
         kpi_pop_->setText(QString("<b>30D AVG SINCE IPO</b><br><span style='color:%1;'>%2</span>").arg(color, s));
     }
     if (kpi_above_)
@@ -4321,7 +4317,7 @@ QString IpoWatchView::build_fundamentals_html(const services::InfoData& info, bo
         // financial rows — revenue can be zero on shell IPOs and net income
         // is often negative for fresh listings. Preserve the sign and color
         // negatives so losses are visually distinct.
-        auto fmt_signed_money = [this](double v) -> QString {
+        auto fmt_signed_money = [](double v) -> QString {
             if (std::abs(v) < 1e-9)
                 return QStringLiteral("$0");
             const QString abs_s = format_money(std::abs(v));

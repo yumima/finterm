@@ -26,6 +26,12 @@ namespace finterm::screens {
 /// spawns duplicate xdg_toplevels under Mutter.
 class EarningsReactionChart : public QWidget {
     Q_OBJECT
+  protected:
+    // metric() below is this chart's own accessor; keep QWidget's paint-device
+    // metric(PaintDeviceMetric) visible (and protected, as in QWidget)
+    // rather than hidden by the name.
+    using QWidget::metric;
+
   public:
     explicit EarningsReactionChart(QWidget* parent = nullptr);
 

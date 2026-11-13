@@ -229,7 +229,7 @@ QWidget* NewsDetailPanel::build_content_view() {
         pal.setColor(QPalette::LinkVisited, QColor(ui::colors::TEXT_PRIMARY()));
         headline_label_->setPalette(pal);
     }
-    connect(headline_label_, &QLabel::linkActivated, this, [this](const QString& url) {
+    connect(headline_label_, &QLabel::linkActivated, this, [](const QString& url) {
         if (!url.isEmpty())
             QDesktopServices::openUrl(QUrl(url));
     });

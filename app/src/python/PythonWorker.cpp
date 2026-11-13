@@ -396,7 +396,7 @@ void PythonWorker::on_process_finished(int exit_code, QProcess::ExitStatus statu
     // in_flight_ mid-iteration).
     auto lost = std::move(in_flight_);
     in_flight_.clear();
-    auto answer_lost = [this, &lost, &reason]() {
+    auto answer_lost = [&lost, &reason]() {
         for (auto it = lost.begin(); it != lost.end(); ++it) {
             if (it.value().deadline)
                 it.value().deadline->deleteLater();

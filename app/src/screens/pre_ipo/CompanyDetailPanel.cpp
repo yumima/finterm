@@ -89,7 +89,7 @@ class MarkTimeline : public QWidget {
         QPolygonF line;
         for (int i = 0; i < n; ++i)
             line << QPointF(X(i), Y(mid_[i]));
-        QPen linep(QColor(colors::AMBER()));
+        QPen linep{QColor(colors::AMBER())}; // braces: MSVC parses the () form as a function declaration
         linep.setWidthF(1.6);
         p.setPen(linep);
         p.setBrush(Qt::NoBrush);

@@ -2093,7 +2093,7 @@ void EquityOverviewTab::clear_info_panels() {
 void EquityOverviewTab::set_info_loading(bool on) {
     for (auto* o : info_overlays_) {
         if (on)
-            o->show_loading(QStringLiteral("LOADING\xe2\x80\xa6"));
+            o->show_loading(QStringLiteral("LOADING\u2026"));
         else
             o->hide_loading();
     }
@@ -2182,7 +2182,7 @@ void EquityOverviewTab::apply_info_state(const services::query::QueryStore::Stat
             set_info_loading(true);
         } else if (!s.error.isEmpty()) {
             const QString msg = services::equity::is_transient_error(s.error)
-                                    ? QStringLiteral("PROFILE DID NOT LOAD\nYahoo refused \xe2\x80\x94 will retry")
+                                    ? QStringLiteral("PROFILE DID NOT LOAD\nYahoo refused \u2014 will retry")
                                     : QStringLiteral("NO PROFILE DATA\n") + s.error.section(QStringLiteral(" ("), 0, 0);
             for (auto* o : info_overlays_)
                 o->show_message(msg);
