@@ -79,9 +79,9 @@ TrademarksScreen::TrademarksScreen(QWidget* parent) : QWidget(parent) {
     pvl->setSpacing(6);
 
     pvl->addWidget(heading("1", "ABOUT THIS PROJECT"));
-    pvl->addWidget(body("finterm is a community fork of an upstream project, distributed under AGPL-3.0. "
-                        "There is no commercial entity behind it and no associated trademarks claimed by this fork. "
-                        "Upstream attribution and the upstream project's marks are noted in the README."));
+    pvl->addWidget(body("finterm is an independent open-source project, distributed under AGPL-3.0. "
+                        "There is no commercial entity behind it and no trademarks are claimed. "
+                        "Copyright notices for third-party code it incorporates are in the NOTICE file."));
 
     pvl->addWidget(heading("2", "THIRD-PARTY TRADEMARKS"));
     pvl->addWidget(body("The following are trademarks of their respective owners and are referenced in the app for "

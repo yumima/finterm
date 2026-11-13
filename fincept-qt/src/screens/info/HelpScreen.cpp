@@ -336,7 +336,7 @@ HelpScreen::HelpScreen(QWidget* parent) : QWidget(parent) {
         vl->addWidget(section_header("WHERE TO GO FROM HERE"));
         vl->addSpacing(8);
 
-        auto* card = new QLabel("finterm is an open-source community fork. There is no commercial support. "
+        auto* card = new QLabel("finterm is an independent open-source project. There is no commercial support. "
                                 "For bugs, feature requests, and questions, file an issue or discussion on the GitHub "
                                 "repository (URL in the project README).");
         card->setWordWrap(true);

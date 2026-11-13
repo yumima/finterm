@@ -147,7 +147,7 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
         pvl->addWidget(body);
 
         // Footer bar
-        auto* foot = new QLabel("© 2024–2026 finterm contributors · AGPL-3.0 · See README for upstream attribution.");
+        auto* foot = new QLabel("© 2025–2026 finterm contributors · AGPL-3.0 · Third-party attribution in NOTICE.");
         foot->setStyleSheet(QString("color: %1; font-size: 11px; background: %2; "
                                     "padding: 6px 14px; border-top: 1px solid %3; "
                                     "font-family: 'Consolas','Courier New',monospace;")
@@ -208,8 +208,8 @@ AboutScreen::AboutScreen(QWidget* parent) : QWidget(parent) {
             auto* bvl = new QVBoxLayout(body);
             bvl->setContentsMargins(14, 10, 14, 10);
             bvl->setSpacing(6);
-            bvl->addWidget(makeBullet("Community fork — no commercial entity"));
-            bvl->addWidget(makeBullet("Derived from upstream project (see README)"));
+            bvl->addWidget(makeBullet("Independent project — no commercial entity"));
+            bvl->addWidget(makeBullet("Third-party notices: see NOTICE"));
             bvl->addWidget(makeBullet("Patches and PRs are the path to fixes"));
             bvl->addWidget(makeBullet("AGPL-3.0 — modifications must share-alike"));
             pvl->addWidget(body);

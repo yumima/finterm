@@ -140,7 +140,7 @@ ContactScreen::ContactScreen(QWidget* parent) : QWidget(parent) {
 
         pvl->addWidget(make_header("?", "ABOUT THIS PROJECT", colors::CYAN));
 
-        auto* body = new QLabel("finterm is a community fork of an open-source terminal, distributed under AGPL-3.0. "
+        auto* body = new QLabel("finterm is an independent open-source project, distributed under AGPL-3.0. "
                                 "There is no commercial entity behind it, no email support, no phone, no SLA. "
                                 "The maintainer(s) review GitHub issues and PRs as time permits. "
                                 "Patches are the most reliable way to get something fixed.");

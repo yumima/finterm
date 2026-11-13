@@ -8,7 +8,9 @@ That means:
 - **No SaaS / network-service exception.** If you run a modified version of finterm as a network service (web app, hosted dashboard, API behind a frontend), the AGPL requires you to make your modified source available to your users (sections 6 and 13 of the license).
 - **No paid tiers, no enterprise edition, no priority-support contract.**
 
-If you need a non-AGPL license for a closed-source commercial deployment, you would need to negotiate that with the upstream rights holder of the original codebase — see the README's attribution section for the upstream link. This fork itself doesn't grant non-AGPL rights.
+Part of the code is derived from a third-party AGPL/MIT project; its copyright notice is kept in [`NOTICE`](../NOTICE), as both licenses require. Because of that, finterm as a whole can only be distributed under the AGPL — a closed-source build would need the third-party portions removed or separately licensed.
+
+Earlier copies of `LICENSE` carried a "no commercial use" rider. Under AGPL section 7 such further restrictions may be removed, and they have been; the binding terms are the plain AGPL text in `LICENSE`.
 
 ## Data sources
 
@@ -17,6 +19,7 @@ The market-data APIs the app calls (Yahoo Finance, Stooq, akshare, FRED, etc.) h
 ## Read the license
 
 - [`LICENSE`](../LICENSE) — full AGPL-3.0 text (binding)
+- [`NOTICE`](../NOTICE) — copyright and third-party attribution
 - [GNU AGPL-3.0 official text](https://www.gnu.org/licenses/agpl-3.0.html)
 
 For the practical TL;DR of what AGPL-3.0 actually requires, the in-app **Terms** screen has a plain-English summary.

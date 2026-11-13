@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`5dd3c1183`](https://github.com/yumima/finterm/commit/5dd3c1183) chat: untagged sessions bind '' not NULL — bubble "Session error" fixed
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 
