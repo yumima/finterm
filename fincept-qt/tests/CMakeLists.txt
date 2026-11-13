@@ -303,6 +303,37 @@ set_target_properties(test_portfolio_snapshots PROPERTIES
 
 add_test(NAME portfolio_snapshots COMMAND test_portfolio_snapshots)
 
+# ── Chat session context tag ─────────────────────────────────────────────────
+# An untagged session must bind '' not NULL: the NOT NULL DEFAULT '' column
+# rejected every chat-bubble session ("Session error — please restart").
+add_executable(test_chat_sessions
+    storage/test_chat_sessions.cpp
+    ../src/storage/sqlite/Database.cpp
+    ../src/storage/sqlite/migrations/MigrationRunner.cpp
+    ../src/storage/sqlite/migrations/v002_llm_chat.cpp
+    ../src/storage/sqlite/migrations/v043_chat_session_persona.cpp
+    ../src/storage/sqlite/migrations/v055_chat_session_context.cpp
+    ../src/storage/repositories/ChatRepository.cpp
+    ../src/core/logging/Logger.cpp
+)
+
+target_include_directories(test_chat_sessions PRIVATE
+    ../src
+)
+
+target_link_libraries(test_chat_sessions PRIVATE
+    Qt6::Core
+    Qt6::Sql
+    Qt6::Test
+)
+
+set_target_properties(test_chat_sessions PROPERTIES
+    UNITY_BUILD OFF
+    AUTOMOC ON
+)
+
+add_test(NAME chat_sessions COMMAND test_chat_sessions)
+
 # ── Cache age derivation ─────────────────────────────────────────────────────
 # "How old is this value" must come from the cache row, not from a field a
 # writer has to remember to stamp. A forgotten stamp silently disabled quote

@@ -2,19 +2,10 @@
 
 A local-first, **AI-native**, **offline-capable** financial-research terminal. Qt6/C++ desktop app + a thin Python data layer, with an agent / MCP / skill stack wired into the primary surfaces. No SaaS account, no cloud round-trips, no telemetry — only the public market-data APIs (and the LLM provider) you explicitly use.
 
-## Today's commits (2026-11-12)
+## Today's commits (2026-11-13)
 
 Latest first.
 
-- [`f5db7c57d`](https://github.com/yumima/finterm/commit/f5db7c57d) read-aloud: headings and bullets get their own pause
-- [`517e64a22`](https://github.com/yumima/finterm/commit/517e64a22) read-aloud: speed setting (tts.engine_speed), picker in Settings → Voice
-- [`8b780a6c6`](https://github.com/yumima/finterm/commit/8b780a6c6) live everywhere, streamed not polled: movers, screener, IPO, sparklines, Polymarket
-- [`233eb7891`](https://github.com/yumima/finterm/commit/233eb7891) live: extended hours, index futures, indices and ROOT=F stream too
-- [`506e91d4b`](https://github.com/yumima/finterm/commit/506e91d4b) live prices: review fixes — in-place tables, signed flashes, no stale baselines
-- [`d76f9b7b6`](https://github.com/yumima/finterm/commit/d76f9b7b6) live prices: Yahoo push stream drives every quote surface, ticks flash
-- [`9e49cc1eb`](https://github.com/yumima/finterm/commit/9e49cc1eb) news: survive Ticker.news outage; Market News times in local time
-- [`e759032d3`](https://github.com/yumima/finterm/commit/e759032d3) read-aloud mute: review fixes, a visible muted cue that fits
-- [`895114e14`](https://github.com/yumima/finterm/commit/895114e14) live TV: mute the stream while read-aloud reads
 
 [See all commits →](https://github.com/yumima/finterm/commits/main)
 

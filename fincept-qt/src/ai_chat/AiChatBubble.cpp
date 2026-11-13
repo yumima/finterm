@@ -458,6 +458,9 @@ void AiChatBubble::on_new_session() {
 
     if (res.is_ok()) {
         active_session_id_ = res.value().id;
+        // A previous failed attempt disabled input; a successful retry must undo it.
+        if (input_box_)
+            input_box_->setEnabled(true);
         // Show a placeholder hint
         auto* hint = new QLabel("How can I help you?");
         hint->setAlignment(Qt::AlignCenter);

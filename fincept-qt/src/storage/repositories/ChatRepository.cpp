@@ -23,9 +23,13 @@ ChatMessage ChatRepository::map_message(QSqlQuery& q) {
 Result<ChatSession> ChatRepository::create_session(const QString& title, const QString& provider, const QString& model,
                                                    const QString& persona_id, const QString& context_tag) {
     QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    // context_tag is NOT NULL DEFAULT '' (v055), but the DEFAULT only applies
+    // when the column is omitted — a null QString (the `{}` default) binds as
+    // SQL NULL and the INSERT fails. Bind "" for "no context" explicitly.
+    const QString tag = context_tag.isNull() ? QStringLiteral("") : context_tag;
     auto r = exec_write("INSERT INTO chat_sessions (id, title, provider, model, persona_id, context_tag) "
                         "VALUES (?, ?, ?, ?, ?, ?)",
-                        {id, title, provider, model, persona_id, context_tag});
+                        {id, title, provider, model, persona_id, tag});
     if (r.is_err())
         return Result<ChatSession>::err(r.error());
     return get_session(id);
