@@ -76,6 +76,19 @@ void QuoteTableWidget::enable_futures() {
         table_->viewport()->installEventFilter(this);
     }
     set_fut_header(QString());
+    // Live prints of the pinned contracts between fetches (FUT% only moves on
+    // a print measured against its own previous close — apply_future_tick).
+    connect(&services::MarketDataService::instance(), &services::MarketDataService::stream_ticks, this,
+            [this](const QVector<services::StreamTick>& ticks) {
+                if (fut_.isEmpty() || !isVisible())
+                    return;
+                bool moved = false;
+                for (const auto& t : ticks)
+                    for (auto& f : fut_)
+                        moved = services::apply_future_tick(f, t.symbol, t.price, t.change, t.time_ms) || moved;
+                if (moved)
+                    quote_render_.request();
+            });
     fut_timer_ = new QTimer(this);
     fut_timer_->setInterval(kFutRefreshMs);
     connect(fut_timer_, &QTimer::timeout, this, [this] { fetch_futures(); });
@@ -178,12 +191,22 @@ void QuoteTableWidget::fetch_futures() {
                 fut_failed_ = true;
                 set_fut_header(QStringLiteral(" !"),
                                QStringLiteral("The last fetch failed: %1\nRetrying shortly.").arg(err));
+                sync_fut_stream(); // the quotes kept on screen still take live prints
                 return;
             }
             fut_failed_ = false;
             // Replace, don't merge: a row that lost its sound reading goes
             // back to a dash rather than keeping a quote against an old settle.
+            // A live print newer than the fetched quote (the daemon caches the
+            // answer) stays — same contract, same previous close.
+            for (auto it = fresh.begin(); it != fresh.end(); ++it) {
+                const auto cur = fut_.constFind(it.key());
+                if (cur != fut_.constEnd() && cur->contract == it->contract && cur->ref_price == it->ref_price &&
+                    cur->ts > it->ts)
+                    it.value() = cur.value();
+            }
             fut_ = fresh;
+            sync_fut_stream();
             set_fut_header(QString());
             render_from_cache();
         });
@@ -205,6 +228,7 @@ void QuoteTableWidget::showEvent(QShowEvent* e) {
         fut_timer_->start();
         fetch_futures();
     }
+    sync_fut_stream();
 }
 
 void QuoteTableWidget::hideEvent(QHideEvent* e) {
@@ -213,6 +237,16 @@ void QuoteTableWidget::hideEvent(QHideEvent* e) {
         hub_unsubscribe_all();
     if (fut_timer_)
         fut_timer_->stop();
+    sync_fut_stream();
+}
+
+void QuoteTableWidget::sync_fut_stream() {
+    // The pinned contracts behind FUT% stream while the table is on screen.
+    QStringList contracts;
+    if (fut_enabled_ && isVisible())
+        for (const auto& f : std::as_const(fut_))
+            contracts << f.contract;
+    services::MarketDataService::instance().set_stream_extras(this, contracts);
 }
 
 void QuoteTableWidget::refresh_data() {

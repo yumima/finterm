@@ -1,6 +1,7 @@
 #pragma once
 #include "screens/portfolio/PortfolioTypes.h"
 #include "services/markets/MarketDataService.h"
+#include "ui/RenderCoalescer.h"
 
 #include <QDateTime>
 #include <QHash>
@@ -50,12 +51,15 @@ class PortfolioFuturesView : public QWidget {
         double ext_change_pct = 0;
         QString session; // "REGULAR" / "PRE" / "POST" / "CLOSED"
         bool has_ext = false;
+        qint64 ext_ts = 0; ///< when ext_price printed (0 = unknown)
     };
 
     void build_ui();
     void populate_futures();
     void populate_extended();
     void refresh_extended_hours();
+    /// Stream every holding's prints while the view is on screen.
+    void sync_ext_stream();
     void resubscribe_futures();
     /// The feed symbol a futures holding is priced from (ROOT=F).
     static QString quote_symbol(const QString& symbol);
@@ -97,6 +101,7 @@ class PortfolioFuturesView : public QWidget {
     // when the view isn't on screen.
     QTimer* ext_refresh_timer_ = nullptr;
     static constexpr int kExtRefreshIntervalMs = 20'000;
+    ui::RenderCoalescer ext_render_{this, [this]() { populate_extended(); }};
 };
 
 } // namespace fincept::screens

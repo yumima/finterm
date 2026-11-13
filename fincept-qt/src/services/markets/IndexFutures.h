@@ -1,5 +1,7 @@
 // src/services/markets/IndexFutures.h
 #pragma once
+#include "services/markets/LivePrice.h"
+
 #include <QDate>
 #include <QHash>
 #include <QObject>
@@ -38,7 +40,7 @@ struct IndexFutureQuote {
     double change = 0; // since the previous close
     double pct = 0;
     double ref_price = 0; // the contract's previous close (Yahoo's own "previous close")
-    QDate ref_date;       // the CME trading day that close ended
+    QDate session_date;   // the CME trading day of the last print — the close is the one before it
     qint64 ts = 0;        // end of the last bar
 };
 
@@ -49,6 +51,25 @@ struct IndexFutureQuote {
 /// that came back with a sound number.
 void fetch_index_futures(const QStringList& indices, QObject* ctx,
                          std::function<void(bool ok, QHash<QString, IndexFutureQuote>, QString error)> cb);
+
+/// Lay a live print of `contract` on `q`: true when it moved it. Only a
+/// print of the quoted contract, measured against the quote's own previous
+/// close (services::tick_pairs_with) — after the CME day rolls at 18:00 ET
+/// the stream's close moves on and its prints wait for the next fetch.
+inline bool apply_future_tick(IndexFutureQuote& q, const QString& contract, double price, double change,
+                              qint64 time_ms) {
+    if (contract != q.contract || price == q.price || !tick_pairs_with(q.ref_price, price, change))
+        return false;
+    const qint64 ts = time_ms / 1000;
+    if (ts > 0 && ts < q.ts)
+        return false; // older than what is shown
+    q.price = price;
+    q.change = price - q.ref_price;
+    q.pct = q.change / q.ref_price * 100.0;
+    if (ts > 0)
+        q.ts = ts;
+    return true;
+}
 
 /// "ESZ26" from "ESZ26.CME".
 QString contract_label(const IndexFutureQuote& q);

@@ -5,6 +5,7 @@
 #include "datahub/DataHubMetaTypes.h"
 #include "python/PythonWorker.h"
 #include "screens/dashboard/widgets/ExtendedHoursMath.h"
+#include "services/markets/MarketDataService.h"
 #include "services/portfolio/PortfolioService.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
@@ -185,6 +186,30 @@ PortfolioSummaryWidget::PortfolioSummaryWidget(QWidget* parent)
     aft_timer_->setInterval(kAftRefreshMs);
     connect(aft_timer_, &QTimer::timeout, this, [this] { fetch_aft(); });
 
+    // Live extended-hours prints between the slow fetches: each moves a
+    // symbol's AFT% only when it pairs with the close that quote is already
+    // measured against (exthours::live_ext_side).
+    connect(&services::MarketDataService::instance(), &services::MarketDataService::stream_ticks, this,
+            [this](const QVector<services::StreamTick>& ticks) {
+                if (!isVisible() || aft_.isEmpty())
+                    return;
+                bool changed = false;
+                for (const auto& t : ticks) {
+                    auto it = aft_.find(t.symbol);
+                    if (it == aft_.end())
+                        continue;
+                    const auto pre = exthours::apply_ext_tick(it->regular, it->price, it->pct, it->print_ts,
+                                                              t.market_hours, t.price, t.change, t.time_ms);
+                    if (!pre)
+                        continue;
+                    it->session = *pre ? QStringLiteral("PRE") : QStringLiteral("POST");
+                    it->fetched_at = it->print_ts > 0 ? it->print_ts : QDateTime::currentSecsSinceEpoch();
+                    changed = true;
+                }
+                if (changed)
+                    quote_render_.request();
+            });
+
     // Stay in sync with the real portfolio backend the Portfolio screen uses.
     auto& svc = services::PortfolioService::instance();
     connect(&svc, &services::PortfolioService::portfolios_loaded, this, &PortfolioSummaryWidget::on_portfolios_loaded);
@@ -218,6 +243,7 @@ void PortfolioSummaryWidget::hideEvent(QHideEvent* e) {
     if (hub_active_)
         hub_unsubscribe_all();
     aft_timer_->stop();
+    services::MarketDataService::instance().set_stream_extras(this, {});
     // Supersede anything in flight: an off-screen tile shouldn't repaint, and
     // by the time it is shown again the numbers would be stale anyway.
     ++aft_gen_;
@@ -425,11 +451,15 @@ void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
 void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
     if (last_holdings_.isEmpty()) {
         aft_.clear();
+        services::MarketDataService::instance().set_stream_extras(this, {});
         return;
     }
     QStringList symbols;
     for (const auto& h : last_holdings_)
         symbols << h.symbol;
+    // Keep the book's extended-hours prints streaming while this is on screen.
+    if (isVisible())
+        services::MarketDataService::instance().set_stream_extras(this, symbols);
 
     // During the regular session the extended-hours numbers are frozen: the
     // pre-market window has closed and the post-market one hasn't opened, so
@@ -510,7 +540,7 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
                     continue;
                 fresh.insert(sym, AftQuote{q->pct, q->price, q->regular,
                                            q->from_pre ? QStringLiteral("PRE") : QStringLiteral("POST"),
-                                           QDateTime::currentSecsSinceEpoch()});
+                                           QDateTime::currentSecsSinceEpoch(), q->ext_ts});
             }
             // Merge, never replace. Yahoo's multi-symbol intraday download
             // returns a different subset of the book from one call to the
@@ -518,8 +548,15 @@ void PortfolioSummaryWidget::fetch_aft(bool is_retry) {
             // vanish on every refresh even though nothing about the position
             // had changed. A symbol keeps its last known extended-hours move
             // until a newer one arrives for that same symbol.
-            for (auto it = fresh.constBegin(); it != fresh.constEnd(); ++it)
+            for (auto it = fresh.constBegin(); it != fresh.constEnd(); ++it) {
+                // A live print newer than the fetched one stays (the fetch is
+                // served from bars that can trail the tape).
+                const auto cur = guard->aft_.constFind(it.key());
+                if (cur != guard->aft_.constEnd() && cur->regular == it->regular && it->print_ts > 0 &&
+                    cur->print_ts > it->print_ts)
+                    continue;
                 guard->aft_.insert(it.key(), it.value());
+            }
             // Positions that left the book are the one thing that does get
             // dropped — otherwise a sold holding's move would linger in the
             // map and reappear if it were ever bought back.
@@ -699,7 +736,7 @@ void PortfolioSummaryWidget::render(const QVector<Holding>& holdings, const QVec
                                                   : QString("-$%1").arg(
                                                         -(it->price - it->regular) * h.shares * h.fx_rate, 0, 'f', 2))
                                    : QString())
-                          // EVENT-STAMP: when we fetched — a real moment, shown as a clock time.
+                          // EVENT-STAMP: when it last arrived — a fetch, or a live print's own time.
                           .arg(QDateTime::fromSecsSinceEpoch(it->fetched_at).toString("HH:mm:ss"));
         }
         cell(kColAft, aft_str, aft_color)->setToolTip(aft_tip);

@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`506e91d4b`](https://github.com/yumima/finterm/commit/506e91d4b) live prices: review fixes — in-place tables, signed flashes, no stale baselines
 - [`d76f9b7b6`](https://github.com/yumima/finterm/commit/d76f9b7b6) live prices: Yahoo push stream drives every quote surface, ticks flash
 - [`9e49cc1eb`](https://github.com/yumima/finterm/commit/9e49cc1eb) news: survive Ticker.news outage; Market News times in local time
 - [`e759032d3`](https://github.com/yumima/finterm/commit/e759032d3) read-aloud mute: review fixes, a visible muted cue that fits

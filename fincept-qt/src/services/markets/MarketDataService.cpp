@@ -381,20 +381,28 @@ void MarketDataService::publish_quote_to_hub(const QuoteData& q_in, bool polled)
     QuoteData q = q_in;
     if (polled) {
         polled_syms_.insert(q.symbol);
-        if (auto it = last_tick_.constFind(q.symbol);
-            it != last_tick_.constEnd() && QDateTime::currentMSecsSinceEpoch() - it->seen_ms < kTickWinsOverPollMs)
-            q = with_live_price(q, it->price, it->volume);
+        if (auto it = last_tick_.constFind(q.symbol); it != last_tick_.constEnd()) {
+            const qint64 age = QDateTime::currentMSecsSinceEpoch() - it->seen_ms;
+            const double snap_prev = age < kSnapshotPrevMs ? it->prev_close : qQNaN();
+            if (age < kTickWinsOverPollMs)
+                q = with_live_price(q, it->price, it->volume, snap_prev);
+            else if (std::isfinite(snap_prev)) // poll's price, the snapshot's baseline (no CHG flip)
+                q = with_live_price(q, q.price, qQNaN(), snap_prev);
+        }
     }
     datahub::DataHub::instance().publish(QStringLiteral("market:quote:") + q.symbol, QVariant::fromValue(q));
 }
 
 // ── Push price stream ───────────────────────────────────────────────────────
 
-QuoteData MarketDataService::with_live_price(QuoteData q, double price, double volume) {
+QuoteData MarketDataService::with_live_price(QuoteData q, double price, double volume, double prev_close) {
     // Store one number (the price), derive the rest from the quote's own
     // previous close — never mix in the stream's change, whose baseline may
-    // differ from the one this quote was polled against.
-    const double prev = (std::isfinite(q.change) && std::isfinite(q.price) && q.price > 0) ? q.price - q.change : qQNaN();
+    // differ from the one this quote was polled against. A fast-lane snapshot
+    // brings its own close (same snapshot as its price) and uses that.
+    const double prev = (std::isfinite(prev_close) && prev_close > 0) ? prev_close
+                        : (std::isfinite(q.change) && std::isfinite(q.price) && q.price > 0) ? q.price - q.change
+                                                                                             : qQNaN();
     apply_live_price(q, prev, price, volume);
     return q;
 }
@@ -442,6 +450,33 @@ void MarketDataService::init_stream() {
         sync_stream(true);
 }
 
+void MarketDataService::set_stream_extras(QObject* owner, const QStringList& symbols) {
+    if (!owner)
+        return;
+    QStringList syms = symbols;
+    syms.removeAll(QString());
+    syms.sort();
+    syms.removeDuplicates();
+    const auto it = stream_extras_.constFind(owner);
+    if (it != stream_extras_.constEnd() ? *it == syms : syms.isEmpty())
+        return;
+    if (syms.isEmpty()) {
+        stream_extras_.remove(owner);
+    } else {
+        if (!extras_watched_.contains(owner)) { // once per owner, however often it re-sets
+            extras_watched_.insert(owner);
+            connect(owner, &QObject::destroyed, this, [this, owner]() {
+                extras_watched_.remove(owner);
+                if (stream_extras_.remove(owner) && stream_sync_timer_)
+                    stream_sync_timer_->start();
+            });
+        }
+        stream_extras_.insert(owner, syms);
+    }
+    if (stream_sync_timer_)
+        stream_sync_timer_->start(); // debounced, like a topic going active/idle
+}
+
 void MarketDataService::sync_stream(bool force) {
     if (stream_unavailable_)
         return;
@@ -450,13 +485,18 @@ void MarketDataService::sync_stream(bool force) {
         if (st.subscriber_count > 0 && st.topic.startsWith(QLatin1String("market:quote:")))
             syms << st.topic.mid(13);
     }
+    for (const auto& extra : std::as_const(stream_extras_))
+        syms += extra;
     syms.sort();
+    syms.removeDuplicates();
     if (!force && syms == stream_syms_)
         return;
     stream_syms_ = syms;
     // Symbols that left the stream must not keep overriding polls.
     for (auto it = last_tick_.begin(); it != last_tick_.end();)
         it = syms.contains(it.key()) ? std::next(it) : last_tick_.erase(it);
+    for (auto it = last_raw_ms_.begin(); it != last_raw_ms_.end();)
+        it = syms.contains(it.key()) ? std::next(it) : last_raw_ms_.erase(it);
     QJsonObject payload;
     payload[QStringLiteral("symbols")] = QJsonArray::fromStringList(syms);
     QPointer<MarketDataService> self = this;
@@ -488,25 +528,45 @@ void MarketDataService::sync_stream(bool force) {
 void MarketDataService::apply_ticks(const QJsonArray& ticks) {
     auto& hub = datahub::DataHub::instance();
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
+    QVector<StreamTick> raw;
+    raw.reserve(ticks.size());
     for (const auto& tv : ticks) {
         const QJsonObject t = tv.toObject();
-        // Regular session only. Extended-hours ticks belong to the AFT%/FUT%
-        // surfaces, whose session pairing is different (and a pre-market tick's
-        // market_hours is 0 — proto3 omits it, so absence is not "regular").
-        if (t.value(QStringLiteral("market_hours")).toInt(-1) != 1)
-            continue;
         const QString sym = t.value(QStringLiteral("id")).toString();
         const double price = t.value(QStringLiteral("price")).toDouble(qQNaN());
         if (sym.isEmpty() || !std::isfinite(price) || price <= 0)
             continue;
         // int64 proto fields arrive as JSON strings.
         const qint64 tms = t.value(QStringLiteral("time")).toVariant().toLongLong();
+        // Proto3 omits a 0, so an absent market_hours IS pre-market.
+        const int mh = t.value(QStringLiteral("market_hours")).toInt(0);
+        // A fast-lane quote (indices, ROOT=F) carries its snapshot's previous
+        // close; a push-stream print carries Yahoo's change instead.
+        const bool snapshot = t.value(QStringLiteral("source")).toString() == QLatin1String("quote");
+        const double snap_prev = snapshot ? t.value(QStringLiteral("prev_close")).toDouble(qQNaN()) : qQNaN();
+        if (!snapshot) {
+            // Every session, in order: a reconnect can replay older prints,
+            // and last_tick_ below only orders the regular session's.
+            qint64& last_raw = last_raw_ms_[sym];
+            if (tms > 0 && tms < last_raw)
+                continue;
+            last_raw = std::max(last_raw, tms);
+            // Proto3 omits a zero, so a print AT the previous close carries no
+            // change field: absent is 0, not unknown (a non-number stays NaN).
+            const QJsonValue cv = t.value(QStringLiteral("change"));
+            const double chg = cv.isUndefined() ? 0.0 : cv.isDouble() ? cv.toDouble() : qQNaN();
+            raw.append(StreamTick{sym, price, chg, mh, tms});
+        }
+        // Regular session only. Extended-hours prints belong to the AFT%/FUT%
+        // surfaces (stream_ticks), whose session pairing is different.
+        if (mh != 1)
+            continue;
         const QJsonValue vv = t.value(QStringLiteral("day_volume"));
         const double vol = vv.isUndefined() ? qQNaN() : vv.toVariant().toDouble();
         LastTick& lt = last_tick_[sym];
         if (tms > 0 && tms < lt.time_ms)
             continue; // out of order
-        lt = LastTick{price, vol, tms, now};
+        lt = LastTick{price, vol, tms, now, snap_prev};
 
         // Only on a quote polled this process: a hydrated one may be a prior
         // session's, and its baseline (price − change) that session's previous
@@ -518,11 +578,13 @@ void MarketDataService::apply_ticks(const QJsonArray& ticks) {
         if (!cur.canConvert<QuoteData>())
             continue;
         const QuoteData was = cur.value<QuoteData>();
-        const QuoteData now_q = with_live_price(was, price, vol);
+        const QuoteData now_q = with_live_price(was, price, vol, snap_prev);
         if (now_q == was)
             continue;
         hub.publish_live(topic, QVariant::fromValue(now_q)); // poll cadence unchanged
     }
+    if (!raw.isEmpty())
+        emit stream_ticks(raw);
 }
 
 void MarketDataService::publish_history_to_hub(const QString& symbol, const QString& period, const QString& interval,

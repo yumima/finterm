@@ -99,12 +99,12 @@ void fetch_index_futures(const QStringList& indices, QObject* ctx,
                 q.change = o.value(QStringLiteral("change")).toDouble();
                 q.pct = o.value(QStringLiteral("pct")).toDouble();
                 q.ref_price = o.value(QStringLiteral("ref_price")).toDouble();
-                q.ref_date = QDate::fromString(o.value(QStringLiteral("ref_date")).toString(), Qt::ISODate);
+                q.session_date = QDate::fromString(o.value(QStringLiteral("session_date")).toString(), Qt::ISODate);
                 q.ts = static_cast<qint64>(o.value(QStringLiteral("ts")).toDouble());
                 // The daemon already refuses stale prints and missing closes;
                 // this only guards the shape. A last print from the future
                 // would be a clock or decode bug, not a quote.
-                if (!std::isfinite(q.pct) || q.price <= 0 || q.ref_price <= 0 || !q.ref_date.isValid() || q.ts <= 0 ||
+                if (!std::isfinite(q.pct) || q.price <= 0 || q.ref_price <= 0 || !q.session_date.isValid() || q.ts <= 0 ||
                     q.ts > now + 600)
                     continue;
                 out.insert(q.index, q);
@@ -118,10 +118,10 @@ QString index_future_tooltip(const IndexFutureQuote& q, const QString& label) {
     const auto* f = index_future_for(q.index);
     QString s = QStringLiteral("%1 futures — %2 (%3)\n\n"
                                "Last %4 at %5\n"
-                               "Previous close %6 (%7)\n"
+                               "Previous close %6 (before the %7 session)\n"
                                "Change %8%9 (%10%11%)")
                     .arg(label, contract_label(q), f ? f->name : q.contract, px(q.price), when_et(q.ts),
-                         px(q.ref_price), q.ref_date.toString(QStringLiteral("ddd d MMM")), q.change >= 0 ? "+" : "−")
+                         px(q.ref_price), q.session_date.toString(QStringLiteral("ddd d MMM")), q.change >= 0 ? "+" : "−")
                     .arg(px(std::abs(q.change)), q.pct >= 0 ? "+" : "−", QString::number(std::abs(q.pct), 'f', 2));
     if (q.index == QLatin1String("^IXIC"))
         s += QStringLiteral("\n\nThe Composite has no future; the Nasdaq-100 future stands in for it.");
@@ -133,10 +133,11 @@ QString index_future_tooltip(const IndexFutureQuote& q, const QString& label) {
         s += QStringLiteral("\n\nAfter the 16:00 ET cash close this is the index's after-hours move; "
                             "during the session it runs alongside CHG% (futures carry a small premium "
                             "to the index, so the two differ slightly).");
-    s += QStringLiteral("\n\nLive day and night. The previous close is the contract's own (Yahoo's "
-                        "\"previous close\"), so half-days and holidays need no calendar. One "
-                        "contract month is quoted throughout, so a quarterly roll can't show up as a "
-                        "move. Yahoo's futures data runs about 10 minutes behind.");
+    s += QStringLiteral("\n\nLive day and night, print by print. The previous close is the contract's own "
+                        "(Yahoo's \"previous close\", read in the same snapshot as the price), so "
+                        "half-days and holidays need no calendar. One contract month is quoted "
+                        "throughout, so a quarterly roll can't show up as a move. Yahoo's futures "
+                        "data runs about 10 minutes behind.");
     return s;
 }
 

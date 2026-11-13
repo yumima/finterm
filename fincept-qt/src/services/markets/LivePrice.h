@@ -28,4 +28,19 @@ void apply_live_price(Quote& q, double prev_close, double price, double volume) 
         q.volume = volume;
 }
 
+/// Whether a streamed print is measured against `close`. A push-stream tick
+/// carries Yahoo's change against Yahoo's own previous close, so price −
+/// change IS the close it was paired with; it may move a number measured
+/// against `close` only when that is the same close. This is what keeps a
+/// live print from crossing a session boundary the surface hasn't: the 16:00
+/// bell (post-market prints pair with TODAY's close while an AFT% quote still
+/// holds yesterday's), a CME day roll at 18:00 ET, an ex-dividend reference.
+/// The tolerance covers the stream's float32 encoding (~1e-7) — far below
+/// one cent on a stock or one tick on an index future.
+inline bool tick_pairs_with(double close, double price, double change) {
+    if (!std::isfinite(close) || close <= 0 || !std::isfinite(price) || price <= 0 || !std::isfinite(change))
+        return false;
+    return std::abs((price - change) - close) <= 1e-5 * close;
+}
+
 } // namespace fincept::services

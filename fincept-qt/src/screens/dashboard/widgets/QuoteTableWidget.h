@@ -71,6 +71,7 @@ class QuoteTableWidget : public BaseWidget {
     bool hub_active_ = false;
 
     void fetch_futures();
+    void sync_fut_stream();
     void apply_fut_columns();
     void fit_columns();
     void schedule_fit();

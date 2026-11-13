@@ -1,12 +1,15 @@
 // src/screens/portfolio/PortfolioHeatmap.h
 #pragma once
 #include "screens/portfolio/PortfolioTypes.h"
+#include "services/markets/MarketDataService.h"
 
 #include <QHash>
+#include <QHideEvent>
 #include <QLabel>
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QShowEvent>
 #include <QString>
 #include <QStringList>
 #include <QWidget>
@@ -51,6 +54,10 @@ class PortfolioHeatmap : public QWidget {
     void edit_transaction_requested(QString symbol);
     void delete_position_requested(QString symbol);
 
+  protected:
+    void showEvent(QShowEvent* e) override;
+    void hideEvent(QHideEvent* e) override;
+
   private:
     void build_ui();
     /// Re-build the grid structure. Only called when the symbol set or order
@@ -83,9 +90,20 @@ class PortfolioHeatmap : public QWidget {
 
     // AFT cache — populated on demand via the yfinance daemon's
     // `extended_hours` action when the user enters AFT mode. Map of
-    // symbol → post/pre-market percent change. Missing-key vs zero-value
-    // is meaningful — missing renders neutral gray in block_color().
-    QHash<QString, double> aft_quotes_;
+    // symbol → post/pre-market percent change, with the close it is measured
+    // against (a live print may move it only when it pairs with that close).
+    // Missing-key vs zero-value is meaningful — missing renders neutral gray
+    // in block_color().
+    struct AftQuote {
+        double pct = 0;
+        double regular = 0;
+        double price = 0;
+        qint64 print_ts = 0;
+    };
+    QHash<QString, AftQuote> aft_quotes_;
+    /// Live extended-hours prints → aft_quotes_ (AFT mode, on screen only).
+    void on_stream_ticks(const QVector<fincept::services::StreamTick>& ticks);
+    void sync_aft_stream();
     quint64 aft_gen_ = 0;        // supersedes in-flight stale requests
     bool aft_in_flight_ = false; // suppresses duplicate refetches
     // Symbol set the last (or in-flight) AFT fetch covered. set_holdings

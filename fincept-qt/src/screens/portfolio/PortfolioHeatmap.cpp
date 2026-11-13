@@ -24,6 +24,8 @@
 namespace fincept::screens {
 
 PortfolioHeatmap::PortfolioHeatmap(QWidget* parent) : QWidget(parent) {
+    connect(&services::MarketDataService::instance(), &services::MarketDataService::stream_ticks, this,
+            &PortfolioHeatmap::on_stream_ticks);
     setMinimumWidth(180);
     setMaximumWidth(220);
     build_ui();
@@ -97,6 +99,7 @@ void PortfolioHeatmap::build_ui() {
         day_btn_->setChecked(m == portfolio::HeatmapMode::DayChange);
         aft_btn_->setChecked(m == portfolio::HeatmapMode::Aft);
         aft_status_->setVisible(m == portfolio::HeatmapMode::Aft);
+        sync_aft_stream();
         if (m == portfolio::HeatmapMode::Aft) {
             fetch_aft_quotes();
         } else {
@@ -296,6 +299,7 @@ void PortfolioHeatmap::set_holdings(const QVector<portfolio::HoldingWithQuote>& 
     // the tiles on screen. Re-fetch only when the symbol set differs from what
     // the last fetch covered, so the 20 s refresh tick doesn't re-download on
     // every quote update.
+    sync_aft_stream();
     if (mode_ == portfolio::HeatmapMode::Aft && !aft_in_flight_ && holding_symbols() != aft_fetched_symbols_)
         fetch_aft_quotes();
 }
@@ -350,7 +354,7 @@ QColor PortfolioHeatmap::block_color(const portfolio::HoldingWithQuote& h) const
             auto it = aft_quotes_.find(h.symbol);
             if (it == aft_quotes_.end())
                 return QColor(45, 45, 48);
-            val = it.value();
+            val = it->pct;
             break;
         }
     }
@@ -503,7 +507,7 @@ void PortfolioHeatmap::update_block_appearance(QPushButton* block, const portfol
             if (it == aft_quotes_.end()) {
                 chg_str = QStringLiteral("—"); // matches gray tile from block_color
             } else {
-                const double v = it.value();
+                const double v = it->pct;
                 chg_str = QString("%1%2%").arg(v >= 0 ? "+" : "").arg(QString::number(v, 'f', 1));
             }
             break;
@@ -939,7 +943,7 @@ void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
                 const auto q = exthours::quote_from_row(o, in_pre);
                 if (!q || !exthours::pairing_is_sound(*q, now_secs))
                     continue;
-                guard->aft_quotes_.insert(sym, q->pct);
+                guard->aft_quotes_.insert(sym, AftQuote{q->pct, q->regular, q->price, q->ext_ts});
             }
             guard->set_aft_status(guard->aft_quotes_.isEmpty()
                                       ? QStringLiteral("no extended-hours quotes")
@@ -948,6 +952,51 @@ void PortfolioHeatmap::fetch_aft_quotes(bool is_retry) {
             guard->refresh_block_appearances();
         },
         kAftFetchTimeoutMs);
+}
+
+void PortfolioHeatmap::sync_aft_stream() {
+    // The book's extended-hours prints stream only while AFT tiles are shown.
+    QStringList syms;
+    if (mode_ == portfolio::HeatmapMode::Aft && isVisible())
+        syms = holding_symbols();
+    services::MarketDataService::instance().set_stream_extras(this, syms);
+}
+
+void PortfolioHeatmap::showEvent(QShowEvent* e) {
+    QWidget::showEvent(e);
+    sync_aft_stream();
+}
+
+void PortfolioHeatmap::hideEvent(QHideEvent* e) {
+    QWidget::hideEvent(e);
+    sync_aft_stream();
+}
+
+void PortfolioHeatmap::on_stream_ticks(const QVector<services::StreamTick>& ticks) {
+    if (mode_ != portfolio::HeatmapMode::Aft || aft_quotes_.isEmpty() || !isVisible())
+        return;
+    namespace exthours = fincept::screens::widgets::exthours;
+    QSet<QString> moved;
+    for (const auto& t : ticks) {
+        auto it = aft_quotes_.find(t.symbol);
+        if (it == aft_quotes_.end())
+            continue;
+        // Only a newer print measured against this tile's own close.
+        if (exthours::apply_ext_tick(it->regular, it->price, it->pct, it->print_ts, t.market_hours, t.price,
+                                     t.change, t.time_ms))
+            moved.insert(t.symbol);
+    }
+    if (moved.isEmpty())
+        return;
+    // Restyle only the tiles that moved: a stylesheet per tile per tick batch
+    // across the whole grid is the expensive part.
+    for (const auto& h : holdings_) {
+        if (!moved.contains(h.symbol))
+            continue;
+        const auto b = block_widgets_.constFind(h.symbol);
+        if (b != block_widgets_.constEnd() && b.value())
+            update_block_appearance(b.value(), h);
+    }
 }
 
 } // namespace fincept::screens

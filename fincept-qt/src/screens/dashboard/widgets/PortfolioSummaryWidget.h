@@ -143,6 +143,7 @@ class PortfolioSummaryWidget : public BaseWidget {
         // refreshes that don't mention them, so the row has to be able to say
         // how old the number it is showing actually is.
         qint64 fetched_at = 0;
+        qint64 print_ts = 0; ///< when the extended price printed (0 = unknown)
     };
     QHash<QString, AftQuote> aft_;
     // Bumped per fetch so a reply that lands after a portfolio switch can't

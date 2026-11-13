@@ -308,6 +308,17 @@ MarketChartDialog::MarketChartDialog(QWidget* parent) : QDialog(parent) {
     fut_timer_ = new QTimer(this);
     fut_timer_->setInterval(60'000);
     connect(fut_timer_, &QTimer::timeout, this, [this]() { fetch_futures(); });
+    // Live prints of the quoted contract between fetches.
+    connect(&services::MarketDataService::instance(), &services::MarketDataService::stream_ticks, this,
+            [this](const QVector<services::StreamTick>& ticks) {
+                if (!fut_quote_ || !isVisible())
+                    return;
+                bool moved = false;
+                for (const auto& t : ticks)
+                    moved = services::apply_future_tick(*fut_quote_, t.symbol, t.price, t.change, t.time_ms) || moved;
+                if (moved)
+                    paint_fut();
+            });
     sync_buttons();
 }
 
@@ -319,6 +330,8 @@ void MarketChartDialog::update_fut_visibility() {
     if (!on) {
         fut_timer_->stop();
         ++fut_seq_; // drop any reply still in flight
+        fut_quote_.reset();
+        sync_fut_stream();
         fut_->clear();
         fut_->hide();
         return;
@@ -329,14 +342,17 @@ void MarketChartDialog::update_fut_visibility() {
     fetch_futures();
 }
 
+namespace {
+/// The FUT readout's style — one string for every state it is painted in.
+QString fut_style(const QString& color) {
+    return QString("color:%1;font-size:14px;font-weight:700;font-family:monospace;background:transparent;").arg(color);
+}
+} // namespace
+
 void MarketChartDialog::fetch_futures() {
     const int seq = ++fut_seq_;
     const QString sym = symbol_;
-    auto paint = [this](const QString& color) {
-        fut_->setStyleSheet(QString("color:%1;font-size:14px;font-weight:700;font-family:monospace;"
-                                    "background:transparent;")
-                                .arg(color));
-    };
+    auto paint = [this](const QString& color) { ui::set_style_if_changed(fut_, fut_style(color)); };
     if (fut_->text().isEmpty()) {
         const auto* f = services::index_future_for(sym);
         fut_->setText(QStringLiteral("%1 …").arg(f ? f->root : QStringLiteral("FUT")));
@@ -360,15 +376,47 @@ void MarketChartDialog::fetch_futures() {
                 fut_->setToolTip(services::index_future_unavailable_tooltip(sym, label_));
                 paint(ui::colors::TEXT_TERTIARY());
             } else {
-                // "ESZ26 7,740.75 +38.00 (+0.49%)"
-                fut_->setText(QStringLiteral("%1 %2 %3%4 (%5)")
-                                  .arg(services::contract_label(*it), price_text(it->price),
-                                       it->change >= 0 ? "+" : "−", price_text(std::abs(it->change)),
-                                       ui::formatting::format_percent(it->pct, 2, true)));
-                fut_->setToolTip(services::index_future_tooltip(*it, label_));
-                paint(it->pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE());
+                // A live print newer than the fetched quote stays.
+                const bool keep = fut_quote_ && fut_quote_->contract == it->contract &&
+                                  fut_quote_->ref_price == it->ref_price && fut_quote_->ts > it->ts;
+                if (!keep)
+                    fut_quote_ = *it;
+                paint_fut();
+                sync_fut_stream();
+                return;
             }
+            fut_quote_.reset();
+            sync_fut_stream();
         });
+}
+
+void MarketChartDialog::paint_fut() {
+    if (!fut_quote_)
+        return;
+    const auto& q = *fut_quote_;
+    // "ESZ26 7,740.75 +38.00 (+0.49%)"
+    fut_->setText(QStringLiteral("%1 %2 %3%4 (%5)")
+                      .arg(services::contract_label(q), price_text(q.price), q.change >= 0 ? "+" : "−",
+                           price_text(std::abs(q.change)), ui::formatting::format_percent(q.pct, 2, true)));
+    fut_->setToolTip(services::index_future_tooltip(q, label_));
+    ui::set_style_if_changed(fut_, fut_style(q.pct >= 0 ? ui::colors::POSITIVE() : ui::colors::NEGATIVE()));
+}
+
+void MarketChartDialog::sync_fut_stream() {
+    QStringList contracts;
+    if (fut_quote_ && isVisible() && prefs().fut)
+        contracts << fut_quote_->contract;
+    services::MarketDataService::instance().set_stream_extras(this, contracts);
+}
+
+void MarketChartDialog::showEvent(QShowEvent* e) {
+    QDialog::showEvent(e);
+    sync_fut_stream();
+}
+
+void MarketChartDialog::hideEvent(QHideEvent* e) {
+    QDialog::hideEvent(e);
+    sync_fut_stream();
 }
 
 void MarketChartDialog::sync_buttons() {
@@ -397,6 +445,8 @@ void MarketChartDialog::set_symbol(const QString& symbol, const QString& label) 
     if (auto* er = findChild<QPushButton*>(QStringLiteral("er")))
         er->setVisible(has_research_page(symbol_));
     if (changed) {
+        fut_quote_.reset();
+        sync_fut_stream();
         fut_->clear();
         fut_->setToolTip({});
         load();

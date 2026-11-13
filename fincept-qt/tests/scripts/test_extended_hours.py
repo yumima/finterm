@@ -493,67 +493,59 @@ def test_pre_session_falls_back_to_the_prior_post_market():
 # restamped: +0.00% for ever. The FUT% column is the index future's quote
 # instead: last price against the previous settle, read from one contract.
 
-def _bars(points):
-    """Close series of 1m bars from [(tz-aware start, price), ...]."""
-    idx = pd.DatetimeIndex([t for t, _ in points]).tz_convert("UTC")
-    return pd.Series([v for _, v in points], index=idx, dtype=float)
-
-
-def _daily(points):
-    """Daily Close series from [(date, price), ...], stamped at ET midnight like Yahoo's."""
-    idx = pd.DatetimeIndex([pd.Timestamp(d).tz_localize(ET) for d, _ in points])
-    return pd.Series([v for _, v in points], index=idx, dtype=float)
-
-
 def _day(offset):
     return (_et(0, 0, day_offset=offset)).date()
 
 
+def _q(price, prev, t):
+    """A batch-quote row for a contract: last price, previous close, time of the price."""
+    return {"symbol": "ESZ26.CME", "regularMarketPrice": price, "regularMarketPreviousClose": prev,
+            "regularMarketTime": int(t.timestamp())}
+
+
 def test_index_future_is_measured_from_the_previous_close():
-    """Mid-session: last print against the PREVIOUS trading day's close."""
-    daily = _daily([(_day(-1), 7700.0), (_day(0), 7777.0)])
-    r, why = yd._index_future_row(_bars([(_et(11, 0), 7777.0)]), daily, _et(11, 5))
+    """Mid-session: last price against the contract's previous close, one snapshot."""
+    r, why = yd._index_future_row(_q(7777.0, 7700.0, _et(11, 0)), _et(11, 5))
     check("future measured", r is not None, why)
-    check("against yesterday's close", r and abs(r["pct"] - 1.0) < 1e-9, f"got {r}")
-    check("price is the last print", r and r["price"] == 7777.0, f"got {r}")
+    check("against the previous close", r and abs(r["pct"] - 1.0) < 1e-9, f"got {r}")
+    check("price is the last print", r and r["price"] == 7777.0 and r["change"] == 77.0, f"got {r}")
+    check("session is today's", r and r["session_date"] == _day(0).isoformat(), f"got {r}")
 
 
-def test_index_future_evening_session_is_the_next_trading_day():
-    """19:00 ET: the reopened session belongs to tomorrow, so the reference is TODAY's close."""
-    daily = _daily([(_day(-1), 7600.0), (_day(0), 7700.0), (_day(1), 7777.0)])
-    r, why = yd._index_future_row(_bars([(_et(19, 0), 7777.0)]), daily, _et(19, 5))
-    check("evening measured from today's close", r and abs(r["pct"] - 1.0) < 1e-9, f"got {r} {why}")
+def test_index_future_evening_is_not_measured_against_itself():
+    """19:00 ET, the reopened session. Yahoo stamps it with the date it OPENED
+    (today), so the old "last daily bar before the print's trading day" lookup
+    picked the in-progress bar and paired the live price with itself: +0.00%
+    on every index from 18:00 ET to midnight. The quote's own previous close
+    is today's settle."""
+    r, why = yd._index_future_row(_q(7636.5, 7615.25, _et(19, 0)), _et(19, 5))
+    check("evening measured from today's close", r and abs(r["change"] - 21.25) < 1e-9, f"got {r} {why}")
+    check("evening session belongs to the next trading day",
+          r and r["session_date"] == _day(1).isoformat(), f"got {r}")
 
 
-def test_index_future_half_day_and_bank_holiday_need_no_calendar():
-    """A 13:15 half-day close and a Columbus-Day session are just daily bars.
-
-    The earlier calendar-based version counted Columbus Day as closed and
-    measured Monday evening from Friday — a two-day move as the day's change.
-    """
-    daily = _daily([(_day(-3), 7500.0), (_day(0), 7700.0)])   # the bars ARE the calendar
-    r, why = yd._index_future_row(_bars([(_et(20, 0), 7777.0)]), daily, _et(20, 5))
-    check("previous close is the last bar before the print's day",
-          r and r["ref_price"] == 7700.0, f"got {r} {why}")
-
-
-def test_index_future_lagging_bars_keep_the_days_change():
-    """18:03 with the newest bar from 16:55: still the day that just closed, vs yesterday."""
-    daily = _daily([(_day(-1), 7700.0), (_day(0), 7777.0)])
-    r, why = yd._index_future_row(_bars([(_et(16, 55), 7777.0)]), daily, _et(18, 3))
-    check("lagging bars still give the day's change", r and abs(r["pct"] - 1.0) < 1e-9, f"got {r} {why}")
+def test_index_future_reopen_waits_for_the_new_sessions_print():
+    """18:03 ET: Yahoo's ~10-minute delay still shows the 16:55 print while the
+    previous close may already be that session's own settle — ~0.00%. No number
+    until the reopened session prints."""
+    r, why = yd._index_future_row(_q(7640.5, 7640.5, _et(16, 55)), _et(18, 3))
+    check("lagging price across the reopen → no number",
+          r is None and "reopened session" in (why or ""), f"got {r} {why}")
+    r, why = yd._index_future_row(_q(7641.0, 7640.5, _et(18, 1)), _et(18, 12))
+    check("first print of the new session → measured", r is not None and r["change"] == 0.5, f"got {r} {why}")
 
 
 def test_index_future_dead_feed_is_a_dash_not_old_news():
     """Globex open on a weekday, last print hours ago: not today's quote."""
-    daily = _daily([(_day(-2), 7700.0), (_day(-1), 7777.0)])
-    r, why = yd._index_future_row(_bars([(_et(15, 0, day_offset=-1), 7777.0)]), daily, _et(11, 0))
+    r, why = yd._index_future_row(_q(7777.0, 7700.0, _et(15, 0, day_offset=-1)), _et(11, 0))
     check("stale contract → no number", r is None and "no prints since" in (why or ""), f"got {r} {why}")
 
 
 def test_index_future_missing_contract_says_so():
-    r, why = yd._index_future_row(None, None, _et(11, 0))
-    check("missing data is reported as missing", r is None and "no intraday data" in why, why)
+    r, why = yd._index_future_row(None, _et(11, 0))
+    check("missing quote is reported as missing", r is None and "no quote" in why, why)
+    r, why = yd._index_future_row(_q(7777.0, None, _et(11, 0)), _et(11, 5))
+    check("no previous close → no number, never a 0.00%", r is None and "previous close" in why, why)
 
 
 def test_index_future_contract_is_pinned_across_the_roll():
@@ -569,6 +561,32 @@ def test_index_future_contract_is_pinned_across_the_roll():
           yd._index_future_contract("ES=F", date(2026, 12, 10)))
     check("Dow trades on CBOT", yd._index_future_contract("YM=F", date(2026, 10, 19)) == "YMZ26.CBT", "")
     check("unknown roots pass through", yd._index_future_contract("CL=F", date(2026, 10, 19)) == "CL=F", "")
+
+
+def test_quote_streamer_fast_lane():
+    """Indices and ROOT=F aliases never tick on the push feed, so they ride the
+    batch-quote fast lane — with the snapshot's own previous close, never a
+    price paired with some other source's close."""
+    QS = yd._QuoteStreamer
+    check("index → fast lane", QS.fast_lane("^GSPC"), "")
+    check("continuous future → fast lane", QS.fast_lane("GC=F"), "")
+    check("dated contract → push feed (it ticks)", not QS.fast_lane("ESZ26.CME"), "")
+    check("stock / FX / coin → push feed",
+          not any(QS.fast_lane(x) for x in ("AAPL", "EURUSD=X", "BTC-USD")), "")
+
+    row = {"symbol": "GC=F", "regularMarketPrice": 3916.9, "regularMarketPreviousClose": 3885.3,
+           "regularMarketTime": 1794537746, "regularMarketVolume": 120345, "marketState": "REGULAR"}
+    t = QS.fast_tick(row)
+    check("snapshot tick carries its own previous close",
+          t and t["price"] == 3916.9 and t["prev_close"] == 3885.3 and t["source"] == "quote", t)
+    check("time in ms as a string, like the push feed's int64s", t and t["time"] == "1794537746000", t)
+    check("regular-session tick", t and t["market_hours"] == 1, t)
+    check("volume carried", t and t["day_volume"] == "120345", t)
+    for bad, why in ((dict(row, regularMarketPreviousClose=None), "no previous close"),
+                     (dict(row, regularMarketPreviousClose=0), "zero previous close"),
+                     (dict(row, regularMarketPrice=None), "no price"),
+                     (dict(row, symbol=None), "no symbol")):
+        check(f"no tick without a sound pair: {why}", QS.fast_tick(bad) is None, QS.fast_tick(bad))
 
 
 def main():

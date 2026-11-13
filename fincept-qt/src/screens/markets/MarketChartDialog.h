@@ -1,10 +1,13 @@
 // src/screens/markets/MarketChartDialog.h
 #pragma once
 #include "services/equity/EquityResearchModels.h"
+#include "services/markets/IndexFutures.h"
 
 #include <QDialog>
 #include <QHash>
 #include <QPointer>
+
+#include <optional>
 
 class QLabel;
 class QPushButton;
@@ -46,6 +49,8 @@ class MarketChartDialog : public QDialog {
 
   protected:
     void keyPressEvent(QKeyEvent* e) override;
+    void showEvent(QShowEvent* e) override;
+    void hideEvent(QHideEvent* e) override;
 
   private:
     explicit MarketChartDialog(QWidget* parent);
@@ -59,6 +64,10 @@ class MarketChartDialog : public QDialog {
     /// future on the feed.
     void fetch_futures();
     void update_fut_visibility();
+    /// The FUT readout from fut_quote_ (a fetch, then live prints of its contract).
+    void paint_fut();
+    /// Stream fut_quote_'s contract while the readout is on screen.
+    void sync_fut_stream();
 
     QString symbol_;
     QString label_;
@@ -76,6 +85,7 @@ class MarketChartDialog : public QDialog {
     QLabel* fut_ = nullptr;
     QTimer* fut_timer_ = nullptr;
     int fut_seq_ = 0;
+    std::optional<services::IndexFutureQuote> fut_quote_;
     QHash<QString, QPushButton*> period_btns_;
     QHash<int, QPushButton*> style_btns_;
     QHash<QString, QPushButton*> toggle_btns_;

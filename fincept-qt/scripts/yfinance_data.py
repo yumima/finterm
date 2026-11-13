@@ -5760,54 +5760,74 @@ def _futures_is_trading(now_utc):
 _FUTURES_STALE_MIN = 90
 
 
-def _index_future_row(minute_closes, daily_closes, now_utc):
-    """Last price and change-since-previous-close for one futures contract.
+_V7_QUOTE_URL = "https://query1.finance.yahoo.com/v7/finance/quote"
 
-    `minute_closes`: the contract's 1m Close series (tz-aware bar STARTS) for
-    the last print and its time. `daily_closes`: its daily Close series, one
-    bar per CME trading day, dated by that day.
 
-    The reference is the close of the trading day BEFORE the one the last
-    print belongs to — exactly Yahoo's own "previous close" for the contract.
-    Taking it from the contract's own bars rather than a calendar is what makes
-    half-days (13:15 ET closes), holidays the market trades through (Columbus,
-    Veterans Day) and the Nikkei contract come out right with no table to keep.
-    It is anchored on the last print's trading day, not the clock, so the ~10
-    minutes Yahoo's futures data lags can't pair a print with its own day.
+def _v7_quotes(symbols, fields, chunk=50):
+    """Yahoo's batch quote endpoint — one request per `chunk` symbols, the one
+    Yahoo's own pages poll. Each row's price and previous close are ONE
+    snapshot, so a change derived from the pair is always self-consistent.
+    Not under _DOWNLOAD_LOCK: the crumb hazard (yf.download swapping YfData's
+    session) is closed by the session pin (_install_session_pin) and the
+    serializer handing download the live session — holding the lock across a
+    network round trip would stall every quote download behind this poll."""
+    from yfinance.data import YfData
+    rows = []
+    for i in range(0, len(symbols), chunk):
+        r = YfData().get_raw_json(_V7_QUOTE_URL, timeout=10, params={
+            "symbols": ",".join(symbols[i:i + chunk]), "formatted": "false", "fields": fields})
+        rows += ((r or {}).get("quoteResponse") or {}).get("result") or []
+    return rows
 
-    Returns (row, None) or (None, reason).
+
+def _index_future_row(quote, now_utc):
+    """Last price and change-since-previous-close for one futures contract,
+    from its batch-quote row.
+
+    The reference is Yahoo's own previous close for the contract
+    (regularMarketPreviousClose) from the SAME snapshot as the price — never
+    one picked out of daily bars: Yahoo stamps a futures session with the date
+    it OPENS, so from the 18:00 ET reopen to midnight the in-progress session
+    carries today's date, and a "bar before today's trading day" lookup paired
+    the live price with itself (+0.00% every evening). The pair also needs no
+    holiday calendar (half-days, Columbus/Veterans Day trading) and is what the
+    push feed's live prints are measured against, so they can extend it.
+
+    `session_date` is the CME trading day of the last print — the session the
+    previous close comes before. Returns (row, None) or (None, reason).
     """
-    if minute_closes is None or minute_closes.dropna().empty:
-        return None, "no intraday data for the contract"
-    if daily_closes is None or daily_closes.dropna().empty:
-        return None, "no daily data for the contract"
-    one_min = pd.Timedelta(minutes=1)
-    m = minute_closes.dropna()
-    m.index = m.index.tz_convert("UTC")
-    last_start = m.index[-1]
+    if not quote:
+        return None, "no quote for the contract"
+    price = quote.get("regularMarketPrice")
+    ref = quote.get("regularMarketPreviousClose")
+    t = quote.get("regularMarketTime")
+    if not isinstance(price, (int, float)) or price <= 0:
+        return None, "no last price"
+    if not isinstance(ref, (int, float)) or ref <= 0:
+        return None, "no previous close"
+    if not isinstance(t, (int, float)) or t <= 0:
+        return None, "no time for the last price"
+    last = pd.Timestamp(int(t), unit="s", tz="UTC")
     now_utc = pd.Timestamp(now_utc).tz_convert("UTC")
+    trading = _futures_is_trading(now_utc)
     # A contract that stopped printing while Globex is open is a dead feed or a
     # wrong symbol; its last change is not today's.
-    if _futures_is_trading(now_utc) and now_utc - (last_start + one_min) > pd.Timedelta(minutes=_FUTURES_STALE_MIN):
-        return None, f"no prints since {last_start.tz_convert('America/New_York'):%a %H:%M} ET"
-    day = _futures_trading_day(last_start)
-    d = daily_closes.dropna()
-    dates = [pd.Timestamp(i).date() for i in d.index]
-    prior = [i for i, dd in enumerate(dates) if dd < day]
-    if not prior:
-        return None, "no previous close in the window"
-    ref_i = prior[-1]
-    ref_price = float(d.iloc[ref_i])
-    last = float(m.iloc[-1])
-    if ref_price <= 0:
-        return None, "bad previous close"
+    if trading and now_utc - last > pd.Timedelta(minutes=_FUTURES_STALE_MIN):
+        return None, f"no prints since {last.tz_convert('America/New_York'):%a %H:%M} ET"
+    # The reopen: Yahoo's futures prices run ~10 minutes behind, so for a few
+    # minutes after 18:00 ET the newest price is still the closed session's
+    # while the previous close may already have rolled to that session's own
+    # settle — a pair that reads ~0.00%. Wait for the new session's first print.
+    if trading and _futures_trading_day(last) < _futures_trading_day(now_utc):
+        return None, "waiting for the reopened session's first print"
+    price, ref = float(price), float(ref)
     return {
-        "price": last,
-        "change": last - ref_price,
-        "pct": (last - ref_price) / ref_price * 100.0,
-        "ref_price": ref_price,
-        "ref_date": dates[ref_i].isoformat(),
-        "ts": int((last_start + one_min).timestamp()),   # end of the last bar
+        "price": price,
+        "change": price - ref,
+        "pct": (price - ref) / ref * 100.0,
+        "ref_price": ref,
+        "session_date": _futures_trading_day(last).isoformat(),
+        "ts": int(t),
     }, None
 
 
@@ -5819,8 +5839,6 @@ def get_index_futures(pairs):
     _index_future_contract). Every requested index gets a row; `pct` is null
     when there is no honest number, and `reason` says why.
     """
-    import io
-    import contextlib
     from zoneinfo import ZoneInfo
     pairs = [p for p in (pairs or []) if p.get("index") and p.get("proxy")]
     if not pairs:
@@ -5829,47 +5847,18 @@ def get_index_futures(pairs):
     cme_today = now_utc.astimezone(ZoneInfo("America/Chicago")).date()
     contract = {p["proxy"]: _index_future_contract(p["proxy"], cme_today) for p in pairs}
     symbols = sorted(set(contract.values()))
-    with contextlib.redirect_stdout(io.StringIO()):
-        try:
-            # 2d of 1m covers the current trading day and the one before it,
-            # whatever side of the evening reopen it is.
-            minute = yf.download(symbols, period="2d", interval="1m", prepost=True,
-                                 group_by="ticker", progress=False, threads=True,
-                                 auto_adjust=False)
-            # 10d of daily bars reaches the previous close across a long weekend.
-            daily = yf.download(symbols, period="10d", interval="1d",
-                                group_by="ticker", progress=False, threads=True,
-                                auto_adjust=False)
-        except Exception as e:
-            raise RuntimeError(f"index futures download failed: {e}") from e
-
-    def _closes(frame, sym):
-        try:
-            if frame is None or getattr(frame, "empty", True):
-                return None
-            if isinstance(frame.columns, pd.MultiIndex):
-                if sym not in frame.columns.get_level_values(0):
-                    return None
-                s = frame[sym]["Close"]
-            elif len(symbols) == 1:
-                s = frame["Close"]
-            else:
-                return None
-            s = s.dropna()
-            if s.empty:
-                return None
-            if s.index.tz is None:
-                s.index = s.index.tz_localize("UTC")
-            return s
-        except Exception:
-            return None
+    try:
+        quotes = {q.get("symbol"): q for q in _v7_quotes(
+            symbols, "regularMarketPrice,regularMarketPreviousClose,regularMarketTime")}
+    except Exception as e:
+        raise RuntimeError(f"index futures quote failed: {e}") from e
 
     rows = []
     for p in pairs:
         fut = contract[p["proxy"]]
         row = {"symbol": p["index"], "proxy": p["proxy"], "contract": fut, "pct": None, "reason": ""}
         try:
-            r, why = _index_future_row(_closes(minute, fut), _closes(daily, fut), now_utc)
+            r, why = _index_future_row(quotes.get(fut), now_utc)
             if r is None:
                 row["reason"] = f"{fut}: {why}"
             else:
@@ -5933,6 +5922,15 @@ class _QuoteStreamer:
 
     HEARTBEAT_S = 15.0
     FLUSH_S = 0.25
+    # Fast lane: Yahoo's push feed never ticks cash indices (^GSPC) or the
+    # continuous futures aliases (ES=F — only dated contracts like ESZ26.CME
+    # tick). Those are read from the batch quote endpoint instead — ONE request
+    # for all of them, the same one Yahoo's own pages poll — every
+    # FAST_POLL_S while any of them is in session, FAST_IDLE_S otherwise.
+    FAST_POLL_S = 5.0
+    FAST_IDLE_S = 30.0
+    FAST_RESEND_S = 300.0  # < the host's kSnapshotPrevMs (10 min)
+    FAST_CHUNK = 50
 
     def __init__(self, send):
         self._send = send  # callable(dict) — the daemon's locked frame writer
@@ -5940,18 +5938,89 @@ class _QuoteStreamer:
         self._want = set()
         self._pending = {}
         self._started = False
+        self._fast_last = {}  # symbol -> ((price, prev_close), sent_at): unchanged quotes aren't re-sent...
+        self._fast_wake = threading.Event()  # set_symbols: a newly shown symbol shouldn't wait out an idle sleep
+
+    @staticmethod
+    def fast_lane(symbol):
+        """Symbols the push feed never ticks: cash indices and ROOT=F aliases."""
+        return symbol.startswith("^") or symbol.endswith("=F")
 
     def set_symbols(self, symbols):
         from yfinance.live import BaseWebSocket  # raises on a yfinance without the live feed
         with self._lock:
             self._want = {str(x) for x in symbols if x}
             self._pending = {k: v for k, v in self._pending.items() if k in self._want}
+            self._fast_last = {k: v for k, v in self._fast_last.items() if k in self._want}
+            if any(self.fast_lane(x) and x not in self._fast_last for x in self._want):
+                self._fast_wake.set()
             if not self._started:
                 self._decode = BaseWebSocket(verbose=False)._decode_message
                 self._started = True
                 threading.Thread(target=self._conn_loop, name="yf-stream", daemon=True).start()
                 threading.Thread(target=self._flush_loop, name="yf-stream-flush", daemon=True).start()
+                threading.Thread(target=self._fast_loop, name="yf-fastpoll", daemon=True).start()
         return len(self._want)
+
+    @staticmethod
+    def fast_tick(q):
+        """A batch-quote row as a tick, or None. `prev_close` travels with the
+        price: both come from the same snapshot, so the host derives the change
+        from them as a pair — never this price against another source's close."""
+        sym = q.get("symbol")
+        price = q.get("regularMarketPrice")
+        prev = q.get("regularMarketPreviousClose")
+        t = q.get("regularMarketTime")
+        if not sym or not isinstance(price, (int, float)) or price <= 0:
+            return None
+        if not isinstance(prev, (int, float)) or prev <= 0:
+            return None
+        tick = {"id": sym, "price": float(price), "prev_close": float(prev), "source": "quote",
+                "market_hours": 1}
+        if isinstance(t, (int, float)) and t > 0:
+            tick["time"] = str(int(t) * 1000)  # ms, as a string like the push feed's int64s
+        vol = q.get("regularMarketVolume")
+        if isinstance(vol, (int, float)) and vol > 0:
+            tick["day_volume"] = str(int(vol))
+        return tick
+
+    def _fast_loop(self):
+        backoff = 0.0
+        while True:
+            want = sorted(s for s in self._wanted() if self.fast_lane(s))
+            if not want:
+                time.sleep(1.0)
+                continue
+            live = False
+            try:
+                rows = _v7_quotes(want, "regularMarketPrice,regularMarketPreviousClose,regularMarketTime,"
+                                        "regularMarketVolume,marketState", self.FAST_CHUNK)
+                backoff = 0.0
+                for q in rows:
+                    live = live or q.get("marketState") == "REGULAR"
+                    tick = self.fast_tick(q)
+                    if tick is None:
+                        continue
+                    key = (tick["price"], tick["prev_close"])
+                    now = time.monotonic()
+                    with self._lock:
+                        if tick["id"] not in self._want:
+                            continue
+                        last = self._fast_last.get(tick["id"])
+                        # ...except every FAST_RESEND_S: the host keeps a snapshot's
+                        # previous close as the baseline only while it is fresh
+                        # (kSnapshotPrevMs), and a quiet index or a halted future
+                        # must not fall back to the poll's own baseline (CHG flip).
+                        if last and last[0] == key and now - last[1] < self.FAST_RESEND_S:
+                            continue
+                        self._fast_last[tick["id"]] = (key, now)
+                        self._pending[tick["id"]] = tick
+            except Exception as e:
+                backoff = min(max(backoff * 2, self.FAST_POLL_S * 2), 120.0)
+                print(f"[yf-fastpoll] quote poll failed: {e} — retry in {backoff:.0f}s", file=sys.stderr,
+                      flush=True)
+            self._fast_wake.wait(backoff or (self.FAST_POLL_S if live else self.FAST_IDLE_S))
+            self._fast_wake.clear()
 
     def _wanted(self):
         with self._lock:
@@ -5961,8 +6030,8 @@ class _QuoteStreamer:
         from websockets.sync.client import connect
         backoff = 1.0
         while True:
-            if not self._wanted():
-                time.sleep(1.0)  # nothing on screen: no connection held open
+            if not any(not self.fast_lane(x) for x in self._wanted()):
+                time.sleep(1.0)  # nothing to stream: no connection held open
                 continue
             try:
                 ws = connect(_STREAM_URL, open_timeout=10, close_timeout=2)
@@ -5976,7 +6045,7 @@ class _QuoteStreamer:
             idle_close = False
             try:
                 while True:
-                    want = self._wanted()
+                    want = {x for x in self._wanted() if not self.fast_lane(x)}
                     if not want:
                         idle_close = True  # our own close: nothing on screen
                         break

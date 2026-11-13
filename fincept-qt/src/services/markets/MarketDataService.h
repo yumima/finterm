@@ -142,6 +142,20 @@ struct RegionalMarket {
 ///   - Quote caching: returns cached data immediately, refreshes in background
 ///   - DataHub producer: owns the `market:quote:*` topic family. Phase 2 —
 ///     see fincept-qt/docs/datahub-phases/phase-02-market-data-pilot.md.
+/// One trade print from the push price stream, as it arrived — every session.
+/// MarketDataService lays REGULAR-session prints on market:quote:* itself;
+/// extended-hours and futures-contract prints are for the surfaces that own
+/// those pairings (AFT%, FUT%), which take them through stream_ticks().
+struct StreamTick {
+    QString symbol;
+    double price = 0;
+    double change = kUnknownNum; ///< Yahoo's change vs ITS previous close; price − change = that close
+    /// 0 pre-market, 1 regular (futures: any Globex hours), 2 post-market,
+    /// 4 overnight. Proto3 omits 0, so an absent field reads as pre-market.
+    int market_hours = 0;
+    qint64 time_ms = 0;
+};
+
 class MarketDataService : public QObject, public fincept::datahub::Producer {
     Q_OBJECT
   public:
@@ -356,6 +370,18 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
     static QStringList mover_symbols();
     static QStringList global_snapshot_symbols();
 
+    /// Stream `symbols` while `owner` lives (or until it sets another list;
+    /// an empty list withdraws). For prints that are not market:quote:*
+    /// topics — e.g. the pinned contract behind an index's FUT% — and for
+    /// extended-hours surfaces that must keep streaming whatever else is on
+    /// screen. Ticks arrive through stream_ticks().
+    void set_stream_extras(QObject* owner, const QStringList& symbols);
+
+  signals:
+    /// Every push-stream print of a tick batch (fast-lane quotes excluded),
+    /// all sessions, at most once per flush (~4/s).
+    void stream_ticks(const QVector<fincept::services::StreamTick>& ticks);
+
   private:
     MarketDataService();
     void flush_batch();
@@ -464,14 +490,23 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
         double volume = 0;   ///< NaN when the tick carried none
         qint64 time_ms = 0;  ///< exchange timestamp of the tick (ordering)
         qint64 seen_ms = 0;  ///< when it arrived (freshness vs a poll)
+        /// Fast-lane quotes only (indices, ROOT=F): the previous close from the
+        /// SAME snapshot as the price, so the change is derived from that pair.
+        /// NaN for push-stream prints (they ride the polled quote's baseline).
+        double prev_close = std::numeric_limits<double>::quiet_NaN();
     };
     void init_stream();
     void sync_stream(bool force);
     void apply_ticks(const QJsonArray& ticks);
     /// `q` with `price` as its last price: change / change_pct re-derived from
-    /// q's OWN baseline (price − change = previous close), high/low extended.
-    static QuoteData with_live_price(QuoteData q, double price, double volume);
+    /// `prev_close` when given, else from q's OWN baseline (price − change =
+    /// previous close); high/low extended.
+    static QuoteData with_live_price(QuoteData q, double price, double volume,
+                                     double prev_close = std::numeric_limits<double>::quiet_NaN());
+    QHash<QObject*, QStringList> stream_extras_;
+    QSet<QObject*> extras_watched_; ///< owners whose destroyed() is connected
     QHash<QString, LastTick> last_tick_;
+    QHash<QString, qint64> last_raw_ms_; ///< newest push print per symbol, any session (ordering)
     QSet<QString> polled_syms_; ///< hub holds a quote polled THIS process (tick baseline)
     /// fetch_quotes() answers from the poll cache, which ticks never touch:
     /// for a symbol streaming now, hand out the hub's tick-refined quote
@@ -482,6 +517,11 @@ class MarketDataService : public QObject, public fincept::datahub::Producer {
     QTimer* stream_sync_timer_ = nullptr;  ///< debounces topic_active/topic_idle bursts
     bool stream_unavailable_ = false;      ///< this daemon can't stream; retried on restart
     static constexpr int kTickWinsOverPollMs = 15'000;
+    /// A fast-lane snapshot's previous close stays the baseline for a poll of
+    /// the same symbol this long (it is re-sent only when it changes, and a
+    /// poll's own baseline — e.g. ROOT=F's daily-bar close vs Yahoo's settle —
+    /// can differ from it: the change must not flip between the two).
+    static constexpr qint64 kSnapshotPrevMs = 10 * 60'000;
 
     // ── Caching — delegated to CacheManager (SQLite-backed, so entries
     // persist across app restarts). Two parallel keys per symbol:

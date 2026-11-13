@@ -4,6 +4,7 @@
 #include "datahub/DataHub.h"
 #include "datahub/DataHubMetaTypes.h"
 #include "python/PythonWorker.h"
+#include "screens/dashboard/widgets/ExtendedHoursMath.h"
 #include "ui/formatting/NumberFormat.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -221,6 +222,32 @@ PortfolioFuturesView::PortfolioFuturesView(QWidget* parent) : QWidget(parent) {
             return;
         refresh_extended_hours();
     });
+    // Live extended-hours prints between the 20 s fetches. Each moves a row
+    // only when it pairs with the close that row is measured against
+    // (exthours::live_ext_side) — a disk-cached or pre-bell row whose close
+    // the print isn't measured against waits for the next fetch.
+    connect(&services::MarketDataService::instance(), &services::MarketDataService::stream_ticks, this,
+            [this](const QVector<services::StreamTick>& ticks) {
+                if (!isVisible())
+                    return;
+                namespace exthours = fincept::screens::widgets::exthours;
+                bool changed = false;
+                for (const auto& t : ticks) {
+                    auto it = ext_quotes_.find(t.symbol);
+                    if (it == ext_quotes_.end() || !it->has_ext)
+                        continue;
+                    const auto pre = exthours::apply_ext_tick(it->regular, it->ext_price, it->ext_change_pct,
+                                                              it->ext_ts, t.market_hours, t.price, t.change,
+                                                              t.time_ms);
+                    if (!pre)
+                        continue;
+                    it->ext_change = it->ext_price - it->regular;
+                    it->session = *pre ? QStringLiteral("PRE") : QStringLiteral("POST");
+                    changed = true;
+                }
+                if (changed)
+                    ext_render_.request();
+            });
     // Hydrate ext_quotes_ from the disk snapshot so the table paints
     // with stale-but-real values on first paint, instead of "—"
     // everywhere until the first 20 s refresh returns.
@@ -232,6 +259,7 @@ void PortfolioFuturesView::showEvent(QShowEvent* event) {
     // Live futures quotes only while the view is visible, so the hub's
     // subscriber count stays honest.
     resubscribe_futures();
+    sync_ext_stream();
     // Start the extended-hours refresh tick while visible. set_summary
     // (which runs whenever the parent emits a new summary) still fires
     // an immediate refresh; this timer keeps it ticking even when no
@@ -245,6 +273,7 @@ void PortfolioFuturesView::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
     datahub::DataHub::instance().unsubscribe(this);
     fut_subscribed_.clear();
+    services::MarketDataService::instance().set_stream_extras(this, {});
     if (ext_refresh_timer_)
         ext_refresh_timer_->stop();
 }
@@ -316,8 +345,10 @@ void PortfolioFuturesView::set_summary(const portfolio::PortfolioSummary& summar
     populate_extended();
     refresh_extended_hours();
     // The futures holdings may have changed with the summary.
-    if (isVisible())
+    if (isVisible()) {
         resubscribe_futures();
+        sync_ext_stream();
+    }
 }
 
 void PortfolioFuturesView::resubscribe_futures() {
@@ -438,13 +469,20 @@ void PortfolioFuturesView::populate_extended() {
         const QString session = have ? it->session : QString("—");
         const double mv_delta = have ? (chg * h.quantity) : 0.0;
 
+        // Reuse the row's items: live prints re-run this up to 4×/s.
         auto add = [&](int col, const QString& text, const QString& color = QString()) {
-            auto* widg = new QTableWidgetItem(text);
-            if (!color.isEmpty())
-                widg->setForeground(QColor(color));
-            if (col >= 1)
-                widg->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
-            extended_table_->setItem(i, col, widg);
+            auto* widg = extended_table_->item(i, col);
+            if (!widg) {
+                widg = new QTableWidgetItem;
+                if (col >= 1)
+                    widg->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+                extended_table_->setItem(i, col, widg);
+            }
+            if (widg->text() != text)
+                widg->setText(text);
+            const QColor fg = color.isEmpty() ? QColor(ui::colors::TEXT_PRIMARY()) : QColor(color);
+            if (widg->foreground().color() != fg)
+                widg->setForeground(fg);
         };
         add(0, h.symbol);
         add(1, fmt_num(regular, 2));
@@ -454,6 +492,13 @@ void PortfolioFuturesView::populate_extended() {
         add(5, session);
         add(6, have ? fmt_signed(mv_delta, 2) : QString("—"), color_for_change(mv_delta));
     }
+}
+
+void PortfolioFuturesView::sync_ext_stream() {
+    QStringList syms;
+    for (const auto& h : summary_.holdings)
+        syms << h.symbol;
+    services::MarketDataService::instance().set_stream_extras(this, syms);
 }
 
 void PortfolioFuturesView::refresh_extended_hours() {
@@ -504,8 +549,14 @@ void PortfolioFuturesView::refresh_extended_hours() {
                     q.ext_price = ext_val.toDouble();
                     q.ext_change = o.value("ext_change").toDouble();
                     q.ext_change_pct = o.value("ext_change_pct").toDouble();
+                    q.ext_ts = static_cast<qint64>(o.value("ext_ts").toDouble());
                 }
                 q.session = o.value("session").toString();
+                // A live print newer than the fetched one stays.
+                const auto cur = ext_quotes_.constFind(o.value("symbol").toString());
+                if (q.has_ext && cur != ext_quotes_.constEnd() && cur->has_ext && cur->regular == q.regular &&
+                    q.ext_ts > 0 && cur->ext_ts > q.ext_ts)
+                    continue;
                 ext_quotes_.insert(o.value("symbol").toString(), q);
             }
             extended_status_->setText(QString("yfinance · %1").arg(QDateTime::currentDateTime().toString("HH:mm:ss")));
