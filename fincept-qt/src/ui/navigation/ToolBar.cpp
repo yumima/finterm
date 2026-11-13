@@ -1,5 +1,8 @@
 #include "ui/navigation/ToolBar.h"
 
+#include "core/config/ScreenVisibility.h"
+#include "ui/navigation/Perspectives.h"
+
 #include "auth/AuthManager.h"
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
@@ -227,6 +230,30 @@ void ToolBar::refresh_user_display() {
     user_label_->setToolTip(name);
 }
 
+namespace {
+
+// Drop what hidden screens leave behind (ScreenVisibility): submenus with no
+// items, and separators that end up doubled or at the edges.
+void prune_empty_submenus(QMenu* menu) {
+    for (QAction* a : menu->actions())
+        if (a->menu() && a->menu()->actions().isEmpty())
+            menu->removeAction(a);
+    bool prev_sep = true; // a leading separator counts as doubled
+    QAction* last = nullptr;
+    for (QAction* a : menu->actions()) {
+        if (a->isSeparator() && prev_sep) {
+            menu->removeAction(a);
+            continue;
+        }
+        prev_sep = a->isSeparator();
+        last = a;
+    }
+    if (last && last->isSeparator())
+        menu->removeAction(last);
+}
+
+} // namespace
+
 QMenu* ToolBar::build_file_menu() {
     auto* m = new QMenu("File", this);
     m->setStyleSheet(popup_ss());
@@ -292,8 +319,10 @@ QMenu* ToolBar::build_navigate_menu() {
         return sub;
     };
 
+    // Experimental screens are left out unless the user opted in (ScreenVisibility).
     auto nav = [this](QMenu* menu, const QString& label, const QString& id) {
-        menu->addAction(label, this, [this, id]() { emit navigate_to(id); });
+        if (ScreenVisibility::listed(id))
+            menu->addAction(label, this, [this, id]() { emit navigate_to(id); });
     };
 
     // Markets & Data
@@ -341,6 +370,7 @@ QMenu* ToolBar::build_navigate_menu() {
     nav(m, "Docs", "docs");
     nav(m, "About", "about");
 
+    prune_empty_submenus(m);
     return m;
 }
 
@@ -370,17 +400,28 @@ QMenu* ToolBar::build_view_menu() {
     panels->addAction("Portfolio", this, [this]() { emit action_triggered("panel_portfolio"); });
     panels->addAction("Markets", this, [this]() { emit action_triggered("panel_markets"); });
     panels->addSeparator();
-    panels->addAction("Crypto Trading", this, [this]() { emit action_triggered("panel_crypto"); });
-    panels->addAction("Equity Trading", this, [this]() { emit action_triggered("panel_equity"); });
-    panels->addAction("Algo Trading", this, [this]() { emit action_triggered("panel_algo"); });
+    if (ScreenVisibility::listed("crypto_trading"))
+        panels->addAction("Crypto Trading", this, [this]() { emit action_triggered("panel_crypto"); });
+    if (ScreenVisibility::listed("equity_trading"))
+        panels->addAction("Equity Trading", this, [this]() { emit action_triggered("panel_equity"); });
+    if (ScreenVisibility::listed("algo_trading"))
+        panels->addAction("Algo Trading", this, [this]() { emit action_triggered("panel_algo"); });
     panels->addSeparator();
     panels->addAction("Equity Research", this, [this]() { emit action_triggered("panel_research"); });
-    panels->addAction("Economics", this, [this]() { emit action_triggered("panel_economics"); });
-    panels->addAction("Geopolitics", this, [this]() { emit action_triggered("panel_geopolitics"); });
+    if (ScreenVisibility::listed("economics"))
+        panels->addAction("Economics", this, [this]() { emit action_triggered("panel_economics"); });
+    if (ScreenVisibility::listed("geopolitics"))
+        panels->addAction("Geopolitics", this, [this]() { emit action_triggered("panel_geopolitics"); });
+    prune_empty_submenus(panels);
     m->addSeparator();
 
     // Quick Switch — jump to a preset screen layout
     auto* persp = m->addMenu("Quick Switch");
+    // A layout is offered only when its lead screen is (see Perspectives.h).
+    auto add_persp = [this](QMenu* menu, const QString& label, const QString& action) {
+        if (!perspective_screens(action).isEmpty())
+            menu->addAction(label, this, [this, action]() { emit action_triggered(action); });
+    };
     persp->setStyleSheet(popup_ss());
     persp->addAction("Save Workspace", this, [this]() { emit action_triggered("perspective_save"); });
     persp->addSeparator();
@@ -388,39 +429,40 @@ QMenu* ToolBar::build_view_menu() {
     // Trading
     auto* qs_trading = persp->addMenu("Trading");
     qs_trading->setStyleSheet(popup_ss());
-    qs_trading->addAction("Crypto Trading", this, [this]() { emit action_triggered("perspective_trading"); });
-    qs_trading->addAction("Equity Trading", this, [this]() { emit action_triggered("perspective_equity"); });
-    qs_trading->addAction("Algo Trading", this, [this]() { emit action_triggered("perspective_algo"); });
+    add_persp(qs_trading, "Crypto Trading", "perspective_trading");
+    add_persp(qs_trading, "Equity Trading", "perspective_equity");
+    add_persp(qs_trading, "Algo Trading", "perspective_algo");
 
     // Research
     auto* qs_research = persp->addMenu("Research");
     qs_research->setStyleSheet(popup_ss());
-    qs_research->addAction("Equity Research", this, [this]() { emit action_triggered("perspective_research"); });
-    qs_research->addAction("Derivatives", this, [this]() { emit action_triggered("perspective_derivatives"); });
-    qs_research->addAction("M&&A Analytics", this, [this]() { emit action_triggered("perspective_ma"); });
+    add_persp(qs_research, "Equity Research", "perspective_research");
+    add_persp(qs_research, "Derivatives", "perspective_derivatives");
+    add_persp(qs_research, "M&&A Analytics", "perspective_ma");
 
     // Portfolio & Markets
-    persp->addAction("Portfolio View", this, [this]() { emit action_triggered("perspective_portfolio"); });
-    persp->addAction("Markets View", this, [this]() { emit action_triggered("perspective_markets"); });
-    persp->addAction("News View", this, [this]() { emit action_triggered("perspective_news"); });
+    add_persp(persp, "Portfolio View", "perspective_portfolio");
+    add_persp(persp, "Markets View", "perspective_markets");
+    add_persp(persp, "News View", "perspective_news");
 
     // Economics & Data
     auto* qs_econ = persp->addMenu("Economics && Data");
     qs_econ->setStyleSheet(popup_ss());
-    qs_econ->addAction("Economics", this, [this]() { emit action_triggered("perspective_economics"); });
-    qs_econ->addAction("Data Sources", this, [this]() { emit action_triggered("perspective_data"); });
+    add_persp(qs_econ, "Economics", "perspective_economics");
+    add_persp(qs_econ, "Data Sources", "perspective_data");
 
     // Geopolitics
-    persp->addAction("Geopolitics View", this, [this]() { emit action_triggered("perspective_geopolitics"); });
+    add_persp(persp, "Geopolitics View", "perspective_geopolitics");
 
     // AI & Quant
     auto* qs_ai = persp->addMenu("AI && Quant");
     qs_ai->setStyleSheet(popup_ss());
-    qs_ai->addAction("Quant Lab", this, [this]() { emit action_triggered("perspective_quant"); });
-    qs_ai->addAction("Agents + Research", this, [this]() { emit action_triggered("perspective_ai"); });
+    add_persp(qs_ai, "Quant Lab", "perspective_quant");
+    add_persp(qs_ai, "Agents + Research", "perspective_ai");
 
     // Tools
-    persp->addAction("Tools View", this, [this]() { emit action_triggered("perspective_tools"); });
+    add_persp(persp, "Tools View", "perspective_tools");
+    prune_empty_submenus(persp);
     m->addSeparator();
 
     m->addAction("Refresh Screen\tF5", this, [this]() { emit action_triggered("refresh"); });

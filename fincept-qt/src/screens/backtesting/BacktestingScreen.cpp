@@ -1597,17 +1597,33 @@ void BacktestingScreen::on_error(const QString& context, const QString& message)
 // ── IStatefulScreen ───────────────────────────────────────────────────────────
 
 QVariantMap BacktestingScreen::save_state() const {
-    return {
-        {"provider", active_provider_},
-        {"command", active_command_},
-    };
+    QVariantMap state{{"provider", active_provider_}, {"command", active_command_}};
+    // By name too: the index shifts whenever a provider is added or removed.
+    if (active_provider_ >= 0 && active_provider_ < providers_.size())
+        state.insert("provider_slug", providers_[active_provider_].slug);
+    return state;
 }
 
 void BacktestingScreen::restore_state(const QVariantMap& state) {
-    const int prov = state.value("provider", 0).toInt();
-    const int cmd = state.value("command", 0).toInt();
+    int prov = -1;
+    const QString slug = state.value("provider_slug").toString();
+    if (!slug.isEmpty()) {
+        for (int i = 0; i < providers_.size(); ++i)
+            if (providers_[i].slug == slug)
+                prov = i;
+    } else {
+        // Older layouts saved only the index — from a provider list that had a
+        // sixth entry (since removed). An index past the end names a provider
+        // that no longer exists.
+        prov = state.value("provider", 0).toInt();
+        if (prov < 0 || prov >= providers_.size())
+            prov = -1;
+    }
+    if (prov < 0)
+        return; // provider gone: keep the defaults rather than a command meant for another provider
     if (prov != active_provider_)
         on_provider_changed(prov);
+    const int cmd = state.value("command", 0).toInt();
     if (cmd != active_command_)
         on_command_changed(cmd);
 }

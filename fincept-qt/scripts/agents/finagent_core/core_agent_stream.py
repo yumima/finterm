@@ -80,7 +80,7 @@ class StreamingCoreAgent:
     def _resolve_provider_from_keys(self) -> str:
         """Derive provider from api_keys instead of defaulting to openai."""
         keys = self.api_keys or {}
-        preferred = ["fincept", "ollama", "anthropic", "google", "groq",
+        preferred = ["ollama", "anthropic", "google", "groq",
                      "deepseek", "openai", "openrouter"]
         for provider in preferred:
             if keys.get(provider) or keys.get(f"{provider.upper()}_API_KEY"):
@@ -115,7 +115,7 @@ class StreamingCoreAgent:
 
         # Providers that support native streaming
         streaming_providers = ["openai", "anthropic", "groq", "together", "fireworks", "ollama",
-                               "fincept", "google", "deepseek", "openrouter"]
+                               "google", "deepseek", "openrouter"]
 
         if provider in streaming_providers:
             # Use native streaming

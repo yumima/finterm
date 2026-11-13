@@ -80,7 +80,7 @@ class KnowledgeModule:
         # Resolve embedder provider from api_keys if not explicitly set
         if not embedder_provider:
             _keys = api_keys or {}
-            _preferred = ["fincept", "ollama", "anthropic", "google", "groq", "deepseek", "openai"]
+            _preferred = ["ollama", "anthropic", "google", "groq", "deepseek", "openai"]
             embedder_provider = next(
                 (p for p in _preferred if _keys.get(p) or _keys.get(f"{p.upper()}_API_KEY")),
                 "openai"

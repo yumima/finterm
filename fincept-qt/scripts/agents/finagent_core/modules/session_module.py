@@ -481,7 +481,7 @@ class SessionModule:
             if model is None and api_keys:
                 try:
                     from finagent_core.registries import ModelsRegistry
-                    preferred = ["fincept", "ollama", "anthropic", "google", "groq",
+                    preferred = ["ollama", "anthropic", "google", "groq",
                                  "deepseek", "openai", "openrouter"]
                     provider = next(
                         (p for p in preferred if api_keys.get(p) or api_keys.get(f"{p.upper()}_API_KEY")),

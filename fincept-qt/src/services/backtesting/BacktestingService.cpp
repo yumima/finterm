@@ -139,23 +139,4 @@ void BacktestingService::load_command_options(const QString& provider) {
         });
 }
 
-void BacktestingService::list_strategies() {
-    // fincept_provider.py exposes the catalog under "get_strategies" and requires
-    // a JSON args payload (sys.argv[2]) — pass an empty object.
-    QPointer<BacktestingService> self = this;
-    python::PythonRunner::instance().run("Analytics/backtesting/fincept/fincept_provider.py", {"get_strategies", "{}"},
-                                         [self](python::PythonResult result) {
-                                             if (!self)
-                                                 return;
-                                             if (!result.success) {
-                                                 emit self->error_occurred("list_strategies", result.error);
-                                                 return;
-                                             }
-                                             auto doc =
-                                                 QJsonDocument::fromJson(python::extract_json(result.output).toUtf8());
-                                             if (!doc.isNull())
-                                                 emit self->strategies_loaded(doc.object());
-                                         });
-}
-
 } // namespace fincept::services::backtest

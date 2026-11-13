@@ -436,7 +436,7 @@ class SuperAgent:
     def _resolve_model_config_from_keys(self, api_keys: Dict[str, Any]) -> Dict[str, Any]:
         """Derive provider + base_url from available api_keys instead of hardcoding openai."""
         keys = api_keys or {}
-        preferred = ["fincept", "ollama", "anthropic", "google", "groq",
+        preferred = ["ollama", "anthropic", "google", "groq",
                      "deepseek", "openai", "openrouter"]
         for provider in preferred:
             if keys.get(provider) or keys.get(f"{provider.upper()}_API_KEY"):

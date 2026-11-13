@@ -1,5 +1,7 @@
 #include "ui/navigation/FKeyBar.h"
 
+#include "core/config/ScreenVisibility.h"
+
 #include "ui/theme/Theme.h"
 #include "ui/theme/ThemeManager.h"
 
@@ -43,7 +45,8 @@ TabBar::TabBar(QWidget* parent) : QWidget(parent) {
         // name. Two tabs for "my account and my setup" was the redundancy.
     };
     for (const auto& def : tabs)
-        add_tab(def);
+        if (ScreenVisibility::listed(def.id))
+            add_tab(def);
     scroll_area->setWidget(container);
     auto* root = new QHBoxLayout(this);
     root->setContentsMargins(0, 0, 0, 0);

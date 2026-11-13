@@ -63,11 +63,11 @@ void StrategyListPanel::build_ui() {
                                     .arg(fonts::DATA_FAMILY(), colors::BORDER_BRIGHT()));
     top_hl->addWidget(search_edit_, 2);
 
-    // Category filter
+    // Timeframe filter
     cat_combo_ = new QComboBox(top_bar);
     cat_combo_->setFixedHeight(28);
     cat_combo_->setFixedWidth(150);
-    cat_combo_->addItem("All Categories");
+    cat_combo_->addItem("All Timeframes");
     const QString combo_style = QString("QComboBox { background:%1; color:%2; border:1px solid %3;"
                                         " padding:2px 6px; font-size:%4px; font-family:%5; }"
                                         "QComboBox::drop-down { border:none; }"
@@ -91,7 +91,7 @@ void StrategyListPanel::build_ui() {
     sort_combo_ = new QComboBox(top_bar);
     sort_combo_->setFixedHeight(28);
     sort_combo_->setFixedWidth(120);
-    sort_combo_->addItems({"Name A→Z", "Name Z→A", "Category"});
+    sort_combo_->addItems({"Name A→Z", "Name Z→A", "Timeframe"});
     sort_combo_->setStyleSheet(combo_style);
     top_hl->addWidget(sort_combo_);
 
@@ -107,8 +107,8 @@ void StrategyListPanel::build_ui() {
 
     // ── Table ────────────────────────────────────────────────────────────────
     table_ = new QTableWidget(this);
-    table_->setColumnCount(4); // #, NAME, CATEGORY, ID
-    table_->setHorizontalHeaderLabels({"#", "STRATEGY NAME", "CATEGORY", "ID"});
+    table_->setColumnCount(4); // #, NAME, TIMEFRAME, ID
+    table_->setHorizontalHeaderLabels({"#", "STRATEGY NAME", "TIMEFRAME", "ID"});
     table_->verticalHeader()->setVisible(false);
     table_->setSelectionBehavior(QAbstractItemView::SelectRows);
     table_->setSelectionMode(QAbstractItemView::SingleSelection);
@@ -219,8 +219,9 @@ void StrategyListPanel::render_page() {
         name_item->setForeground(QColor(colors::AMBER()));
         table_->setItem(row, 1, name_item);
 
-        // Col 2: category (description field)
-        auto* cat_item = new QTableWidgetItem(s.description);
+        // Col 2: timeframe (saved strategies carry free-text descriptions, not categories)
+        auto* cat_item = new QTableWidgetItem(s.timeframe);
+        cat_item->setToolTip(s.description);
         cat_item->setForeground(QColor(colors::CYAN()));
         cat_item->setTextAlignment(Qt::AlignCenter);
         table_->setItem(row, 2, cat_item);
@@ -263,7 +264,7 @@ void StrategyListPanel::on_filter_changed(const QString&) {
     for (const auto& s : strategies_) {
         if (!text.isEmpty() && !s.name.toLower().contains(text) && !s.description.toLower().contains(text))
             continue;
-        if (!cat.isEmpty() && s.description != cat)
+        if (!cat.isEmpty() && s.timeframe != cat)
             continue;
         filtered_.append(s);
     }
@@ -281,7 +282,7 @@ void StrategyListPanel::on_sort_changed(int index) {
                   [](const AlgoStrategy& a, const AlgoStrategy& b) { return a.name > b.name; });
     } else if (index == 2) { // Category
         std::sort(filtered_.begin(), filtered_.end(), [](const AlgoStrategy& a, const AlgoStrategy& b) {
-            return a.description < b.description || (a.description == b.description && a.name < b.name);
+            return a.timeframe < b.timeframe || (a.timeframe == b.timeframe && a.name < b.name);
         });
     }
     current_page_ = 0;
@@ -293,15 +294,15 @@ void StrategyListPanel::on_sort_changed(int index) {
 void StrategyListPanel::on_strategies_loaded(QVector<AlgoStrategy> strategies) {
     strategies_ = std::move(strategies);
 
-    // Populate category combo from unique categories
+    // Populate the timeframe filter from the timeframes in use
     const QString prev_cat = cat_combo_->currentIndex() > 0 ? cat_combo_->currentText() : QString();
     cat_combo_->blockSignals(true);
     cat_combo_->clear();
-    cat_combo_->addItem("All Categories");
+    cat_combo_->addItem("All Timeframes");
     QStringList cats;
     for (const auto& s : strategies_)
-        if (!cats.contains(s.description))
-            cats.append(s.description);
+        if (!s.timeframe.isEmpty() && !cats.contains(s.timeframe))
+            cats.append(s.timeframe);
     cats.sort();
     for (const auto& c : cats)
         cat_combo_->addItem(c);

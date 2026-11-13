@@ -32,7 +32,6 @@ inline QVector<Provider> all_providers() {
          QColor("#FF3B8E"),
          {"backtest", "optimize", "walk_forward", "indicator", "indicator_signals"}},
         {"bt", "BT", QColor("#FF6B35"), {"backtest", "optimize", "walk_forward", "indicator", "indicator_signals"}},
-        {"fincept", "finterm", QColor("#d97706"), {"backtest", "optimize", "walk_forward"}},
     };
 }
 
@@ -172,7 +171,7 @@ inline QVector<Indicator> all_indicators() {
 // ── Command options ─────────────────────────────────────────────────────────
 // These are compile-time fallbacks used ONLY when a provider does not support
 // the "get_command_options" command (e.g. FastTrade, Zipline).
-// Real providers (bt, vectorbt, backtestingpy, fincept) override these at
+// Real providers (bt, vectorbt, backtestingpy) override these at
 // runtime via BacktestingService::execute(provider, "get_command_options", {})
 // → result_ready → BacktestingScreen::on_command_options_loaded().
 

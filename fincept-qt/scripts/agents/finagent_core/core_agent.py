@@ -228,7 +228,7 @@ class CoreAgent:
     def _resolve_model_config(self) -> Dict[str, Any]:
         """Derive provider from api_keys passed at runtime instead of hardcoding openai."""
         keys = self.api_keys or {}
-        preferred = ["fincept", "ollama", "anthropic", "google", "groq",
+        preferred = ["ollama", "anthropic", "google", "groq",
                      "deepseek", "openai", "openrouter"]
         for provider in preferred:
             if keys.get(provider) or keys.get(f"{provider.upper()}_API_KEY"):

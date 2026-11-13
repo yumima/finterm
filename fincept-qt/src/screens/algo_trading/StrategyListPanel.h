@@ -12,7 +12,7 @@
 
 namespace fincept::screens {
 
-/// Strategy list — compact table with pagination, loads from registry_index.json in <50ms.
+/// Strategy list — the user's saved strategies, compact table with pagination.
 class StrategyListPanel : public QWidget {
     Q_OBJECT
   public:

@@ -17,9 +17,7 @@
 
 namespace fincept::services::algo {
 
-static constexpr int kStrategiesTtlSec = 30;
 static constexpr int kDeploymentsTtlSec = 30;
-static constexpr const char* kStrategiesCacheKey = "algo:strategies:registry";
 static constexpr const char* kDeploymentsCacheKey = "algo:deployments";
 
 // ── DB path helper ────────────────────────────────────────────────────────────
@@ -104,7 +102,7 @@ void AlgoTradingService::save_strategy(const AlgoStrategy& strategy) {
                        emit error_occurred("save_strategy", out);
                        return;
                    }
-                   fincept::CacheManager::instance().remove(kStrategiesCacheKey);
+                   list_strategies(); // show the change at once
                    emit strategy_saved(obj["id"].toString());
                });
 }
@@ -134,29 +132,21 @@ static QVector<AlgoStrategy> parse_strategies(const QJsonArray& arr) {
 }
 
 void AlgoTradingService::list_strategies() {
-    // Fast path: read pre-generated registry_index.json directly — no Python spawn needed
-    const QString json_path = python::PythonRunner::instance().scripts_dir() + "/strategies/registry_index.json";
-    QFile f(json_path);
-    if (f.open(QIODevice::ReadOnly)) {
-        auto doc = QJsonDocument::fromJson(f.readAll());
-        f.close();
-        if (!doc.isNull()) {
-            LOG_INFO("AlgoTrading", QString("Loaded registry from %1").arg(json_path));
-            emit strategies_loaded(parse_strategies(doc.object()["strategies"].toArray()));
-            return;
-        }
-    }
-
-    // Fallback: run Python to regenerate the index
-    LOG_WARN("AlgoTrading", "registry_index.json missing — falling back to Python");
-    run_python("algo_trading/backtest_engine.py", {"list_registry"}, "list_strategies",
+    // The strategies the user built and saved (algo_strategies in the algo DB).
+    run_python("algo_trading/backtest_engine.py", {"list_strategies", "--db", algo_db_path()}, "list_strategies",
                [this](bool ok, const QString& out) {
                    if (!ok) {
                        emit error_occurred("list_strategies", out);
                        return;
                    }
-                   auto doc = QJsonDocument::fromJson(python::extract_json(out).toUtf8());
-                   auto obj = doc.object();
+                   const auto obj = QJsonDocument::fromJson(python::extract_json(out).toUtf8()).object();
+                   // The script reports a DB failure as {success:false} with exit 0:
+                   // an error, not an empty list.
+                   if (!obj.value("success").toBool(false)) {
+                       emit error_occurred("list_strategies",
+                                           obj.value("error").toString(QStringLiteral("could not read saved strategies")));
+                       return;
+                   }
                    emit strategies_loaded(parse_strategies(obj["strategies"].toArray()));
                });
 }
@@ -168,7 +158,7 @@ void AlgoTradingService::delete_strategy(const QString& id) {
                        emit error_occurred("delete_strategy", out);
                        return;
                    }
-                   fincept::CacheManager::instance().remove(kStrategiesCacheKey);
+                   list_strategies(); // show the change at once
                    emit strategy_deleted(id);
                });
 }

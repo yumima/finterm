@@ -34,7 +34,7 @@ def _today() -> str:
 
 def _resolve_provider(api_keys: Dict[str, str]) -> str:
     """Pick first configured provider from api_keys."""
-    preferred = ["fincept", "ollama", "anthropic", "google", "groq",
+    preferred = ["ollama", "anthropic", "google", "groq",
                  "deepseek", "openai", "openrouter"]
     for p in preferred:
         if api_keys.get(p) or api_keys.get(f"{p.upper()}_API_KEY"):

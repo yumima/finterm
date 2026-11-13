@@ -1,5 +1,7 @@
 #include "app/MainWindow.h"
 
+#include "ui/navigation/Perspectives.h"
+
 #include "ai_chat/AiChatBubble.h"
 #include "ai_chat/ElicitPrompter.h"
 #include "app/DockScreenRouter.h"
@@ -671,39 +673,11 @@ MainWindow::MainWindow(int window_id, QWidget* parent) : QMainWindow(parent), wi
         } else if (action.startsWith("perspective_")) {
             // Quick Switch — navigate directly to a preset screen layout
             // 2 screens = 1:1 side-by-side, 4 screens = 2x2 grid
-            static const QMap<QString, QStringList> view_screens = {
-                // Trading
-                {"perspective_trading", {"crypto_trading", "watchlist", "markets", "news"}},
-                {"perspective_equity", {"equity_trading", "watchlist"}},
-                {"perspective_algo", {"algo_trading", "backtesting"}},
-                // Research
-                {"perspective_research", {"equity_research", "markets", "screener", "news"}},
-                {"perspective_derivatives", {"derivatives", "surface_analytics"}},
-                {"perspective_ma", {"ma_analytics", "news"}},
-                // Portfolio
-                {"perspective_portfolio", {"portfolio", "markets", "watchlist", "news"}},
-                // News & Markets
-                {"perspective_news", {"news", "markets"}},
-                {"perspective_markets", {"markets", "watchlist"}},
-                // Economics & Data
-                {"perspective_economics", {"economics", "dbnomics", "gov_data", "asia_markets"}},
-                {"perspective_data", {"data_sources", "data_mapping"}},
-                // Geopolitics
-                {"perspective_geopolitics", {"geopolitics", "maritime", "relationship_map", "news"}},
-                // AI & Quant
-                {"perspective_quant", {"ai_quant_lab", "quantlib", "backtesting", "markets"}},
-                {"perspective_ai", {"agent_config", "equity_research"}},
-                // Tools
-                {"perspective_tools", {"code_editor", "node_editor"}},
-            };
-            const auto it = view_screens.find(action);
-            if (it != view_screens.end() && dock_router_) {
-                const QStringList& screens = it.value();
-                if (!screens.isEmpty()) {
-                    dock_router_->navigate(screens[0], true); // first exclusive
-                    for (int i = 1; i < screens.size(); ++i)
-                        dock_router_->navigate(screens[i]); // fill grid
-                }
+            const QStringList screens = ui::perspective_screens(action);
+            if (!screens.isEmpty() && dock_router_) {
+                dock_router_->navigate(screens[0], true); // first exclusive
+                for (int i = 1; i < screens.size(); ++i)
+                    dock_router_->navigate(screens[i]); // fill grid
                 LOG_INFO("MainWindow", QString("Quick Switch: %1 (%2 panels)").arg(action).arg(screens.size()));
             }
         } else if (action == "logout") {

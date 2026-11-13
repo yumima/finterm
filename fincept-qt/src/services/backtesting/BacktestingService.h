@@ -21,12 +21,9 @@ class BacktestingService : public QObject {
     /// Load command option lists (label_types, splitter_types, etc.) for a provider
     void load_command_options(const QString& provider);
 
-    /// Legacy: load strategies from fincept provider only
-    void list_strategies();
 
   signals:
     void result_ready(QString provider, QString command, QJsonObject data);
-    void strategies_loaded(QJsonObject strategies);
     void command_options_loaded(QString provider, QJsonObject options);
     void error_occurred(QString context, QString message);
 

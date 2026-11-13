@@ -1,5 +1,7 @@
 #include "screens/knowledge/ContentLoader.h"
 
+#include "core/config/ScreenVisibility.h"
+
 #include "core/logging/Logger.h"
 
 #include <QDir>
@@ -23,14 +25,16 @@ ContentLoader& ContentLoader::instance() {
 /// renamed. A link to a dead id navigates nowhere; a link to a retired screen
 /// via an alias lands somewhere that doesn't have what the label promises. Map
 /// the renamed ones and return empty for the removed ones, which drops the link.
-static QString live_screen_id(const QString& id) {
+static QString live_screen_id(const QString& raw) {
+    QString id = raw;
     if (id == QLatin1String("crypto"))
-        return QStringLiteral("crypto_trading");
-    if (id == QLatin1String("fx"))
-        return QStringLiteral("markets"); // the Markets FOREX panel
-    if (id == QLatin1String("futures"))
+        id = QStringLiteral("crypto_trading");
+    else if (id == QLatin1String("fx"))
+        id = QStringLiteral("markets"); // the Markets FOREX panel
+    else if (id == QLatin1String("futures"))
         return {}; // the Futures board was removed
-    return id;
+    // A screen the user's setting hides is not linked to either.
+    return ScreenVisibility::listed(id) ? id : QString();
 }
 
 static QString read_file(const QString& path) {
