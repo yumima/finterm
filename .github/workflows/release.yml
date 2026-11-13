@@ -70,7 +70,7 @@ jobs:
       # ── Configure + Build ─────────────────────────────────────────────────
       - name: Configure CMake
         shell: bash
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           cmake -B build \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -82,13 +82,13 @@ jobs:
 
       - name: Build
         shell: bash
-        working-directory: fincept-qt
+        working-directory: app
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel 4
 
       # ── Verify ───────────────────────────────────────────────────────────
       - name: Verify binary
         shell: bash
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           BINARY="build/Release/${{ env.APP_NAME }}.exe"
           [ -f "$BINARY" ] || { echo "::error::Binary not found"; exit 1; }
@@ -102,7 +102,7 @@ jobs:
       # it's redundant — a 10MB larger installer is better than a crashing app.
       - name: Deploy Qt DLLs (windeployqt)
         shell: bash
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euo pipefail
           BUILD_DIR="build/Release"
@@ -209,7 +209,7 @@ jobs:
       # ── Generate Installer ────────────────────────────────────────────────
       - name: Generate Installer (CPack IFW)
         shell: bash
-        working-directory: fincept-qt/build
+        working-directory: app/build
         run: |
           set -euo pipefail
           export PATH="${QT_IFW_DIR}/bin:${PATH}"
@@ -225,7 +225,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: finterm-Windows-x64-installer
-          path: fincept-qt/build/finterm-*-windows-x64-setup.exe
+          path: app/build/finterm-*-windows-x64-setup.exe
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -299,7 +299,7 @@ jobs:
       # No FINTERM_BUILD_INSTALLER / no QtIFW on Linux — we ship an AppImage
       # instead (see "Build AppImage" step below).
       - name: Configure CMake
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -310,12 +310,12 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        working-directory: fincept-qt
+        working-directory: app
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel $(nproc)
 
       # ── Verify ───────────────────────────────────────────────────────────
       - name: Verify binary
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           BINARY="build/${{ env.APP_NAME }}.bin"
           [ -f "$BINARY" ] || { echo "::error::Binary not found"; exit 1; }
@@ -335,7 +335,7 @@ jobs:
       # regex in update-manifest (AppImage is just a self-mounting executable
       # — the updater's "chmod +x and launch" path works identically).
       - name: Build AppImage
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euo pipefail
           APPDIR="build/AppDir"
@@ -502,8 +502,8 @@ jobs:
         with:
           name: finterm-Linux-x64-installer
           path: |
-            fincept-qt/build/finterm-*-linux-x64-setup.run
-            fincept-qt/build/finterm-*-linux-x64-setup.run.zsync
+            app/build/finterm-*-linux-x64-setup.run
+            app/build/finterm-*-linux-x64-setup.run.zsync
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -544,7 +544,7 @@ jobs:
 
       # ── Icon ──────────────────────────────────────────────────────────────
       - name: Generate .icns icon
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           ICO="resources/finterm.ico"
           ICNS="resources/finterm.icns"
@@ -578,7 +578,7 @@ jobs:
       # No FINTERM_BUILD_INSTALLER on macOS — we ship a DMG built from the
       # post-processed bundle (see "Generate Installer (DMG)" step below).
       - name: Configure CMake
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -590,12 +590,12 @@ jobs:
             -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
 
       - name: Build
-        working-directory: fincept-qt
+        working-directory: app
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j $(sysctl -n hw.logicalcpu)
 
       # ── Verify ───────────────────────────────────────────────────────────
       - name: Verify binary
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           if [ -f "build/${{ env.APP_NAME }}" ]; then
             BINARY="build/${{ env.APP_NAME }}"
@@ -615,7 +615,7 @@ jobs:
       # macOS 14+ kills the process with SIGKILL (Code Signature Invalid)
       # because the added framework pages have no signature. See issue #139.
       - name: Stage .app bundle contents
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euxo pipefail
           BUILD_DIR="build"
@@ -829,7 +829,7 @@ jobs:
       # it touches. It must run AFTER Python.framework + resources are in place
       # so those get correct rpath treatment.
       - name: Run macdeployqt
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euo pipefail
           APP_BUNDLE="build/${{ env.APP_NAME }}.app"
@@ -911,7 +911,7 @@ jobs:
       # users will still see "unidentified developer" on first launch and
       # must right-click → Open (or `xattr -d com.apple.quarantine`).
       - name: Deep ad-hoc codesign bundle
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euxo pipefail
           APP_BUNDLE="build/${{ env.APP_NAME }}.app"
@@ -965,7 +965,7 @@ jobs:
 
       # ── Copy signed bundle to dist/ ───────────────────────────────────────
       - name: Finalize dist
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -980,7 +980,7 @@ jobs:
       # tracked in issue #139. A plain hdiutil DMG over `dist/` (which
       # contains the signed bundle) gives users a working drag-to-Apps DMG.
       - name: Generate Installer (DMG)
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euo pipefail
           # Parse project() VERSION so the DMG filename matches the regex in
@@ -1009,7 +1009,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: finterm-macOS-arm64-installer
-          path: fincept-qt/build/finterm-*-macos-arm64-setup.dmg
+          path: app/build/finterm-*-macos-arm64-setup.dmg
           retention-days: 30
 
 # ═════════════════════════════════════════════════════════════════════════════

@@ -8,7 +8,7 @@ TradingView's "Finance") and 4900-4999 (utilities).
 import json, os, pickle, sys, time, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "fincept-qt", "scripts"))
+sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "app", "scripts"))
 from finterm_identity import user_agent
 
 D = os.path.join(HERE, "data")

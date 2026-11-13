@@ -4,7 +4,7 @@ S&P 500 panel lacks. SURVIVORSHIP-BIASED by construction (only names alive
 today): it flatters any long strategy, so it is used as a second read only.
 """
 import os, pickle, sys
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "fincept-qt", "scripts"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "..", "app", "scripts"))
 import screener_data as sd
 import yfinance as yf
 

@@ -23,7 +23,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/clang-format clang-format /usr/bin/clang-format-18 100
 
       - name: Check formatting
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           # Parentheses required: without them -o has lower precedence than the
           # implicit -print, so only .h files get piped to xargs.
@@ -57,7 +57,7 @@ jobs:
           sudo update-alternatives --install /usr/bin/clang-tidy clang-tidy /usr/bin/clang-tidy-18 100
 
       - name: Configure (generate compile_commands.json)
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           cmake -B build \
             -G Ninja \
@@ -68,7 +68,7 @@ jobs:
             -DDEPLOY_QT=OFF
 
       - name: Run clang-tidy
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           find src -name "*.cpp" | grep -v "/moc_" | grep -v "/qrc_" | sort | \
             xargs clang-tidy \
@@ -79,7 +79,7 @@ jobs:
           echo "clang-tidy complete."
 
   # ── datahub-discipline ───────────────────────────────────────────────────────
-  # Enforces DataHub rules D1 and D4 (see fincept-qt/DATAHUB_ARCHITECTURE.md §4):
+  # Enforces DataHub rules D1 and D4 (see app/DATAHUB_ARCHITECTURE.md §4):
   #   D1 — screens must not spawn Python directly.
   #   D4 — consumers must not call service fetch_* callbacks.
   # A call site may opt out with `// D1-exempt: <reason>` / `// D4-exempt:
@@ -88,7 +88,7 @@ jobs:
   # `X::instance()` from `.fetch_y(` once the line passes 120 columns — a
   # line-based grep never saw those calls at all.
   # If this step fails, route the offending code through DataHub. See
-  # fincept-qt/DATAHUB_ARCHITECTURE.md §4 for the producer + topic you should
+  # app/DATAHUB_ARCHITECTURE.md §4 for the producer + topic you should
   # be using instead.
   datahub-discipline:
     name: datahub-discipline
@@ -97,7 +97,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check screens/ does not call PythonRunner directly
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           # Prints `file:line: <call>(<rest of that line>)` per call site.
           violations=$(find src/screens \( -name '*.cpp' -o -name '*.h' \) -print0 | sort -z | \
@@ -109,13 +109,13 @@ jobs:
             echo ""
             echo "::error::D1 violation — screens must not call PythonRunner directly."
             echo "Route through a Producer registered with DataHub."
-            echo "See fincept-qt/DATAHUB_ARCHITECTURE.md §4."
+            echo "See app/DATAHUB_ARCHITECTURE.md §4."
             exit 1
           fi
           echo "D1 — screens are clean."
 
       - name: Check screens/ does not call deprecated service fetch_* APIs
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           # D4 exempts one-shot lookups that have no hub topic:
           #   MarketDataService::fetch_info / fetch_news / fetch_company_profiles /
@@ -139,7 +139,7 @@ jobs:
             echo ""
             echo "::error::D4 violation — consumers must not call streaming fetch_* APIs."
             echo "Use DataHub::subscribe() for live data, DataHub::peek() for snapshots."
-            echo "See fincept-qt/DATAHUB_ARCHITECTURE.md §4."
+            echo "See app/DATAHUB_ARCHITECTURE.md §4."
             exit 1
           fi
           echo "D4 — screens are clean."
@@ -157,7 +157,7 @@ jobs:
           sudo apt-get install -y cppcheck
 
       - name: Run cppcheck
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           cppcheck \
             --enable=warning,performance,portability \

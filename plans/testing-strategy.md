@@ -55,7 +55,7 @@ What it verifies (per-PR, every commit):
 - `LlmProfileRepository` resolution order; `SecureStorage`
   migration idempotence; runtime selection by profile.
 
-Lives under `fincept-qt/tests/` (C++ Qt Test) and
+Lives under `app/tests/` (C++ Qt Test) and
 `scripts/agents/tests/` (Python pytest) — alongside the code they
 test, not in a separate tree.
 

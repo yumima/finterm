@@ -4,7 +4,7 @@ Companion to the SCREENER tab. Scripts and raw output in
 `plans/research/screener_backtest/` (`collect.py` → prices, `collect_raw.py` →
 split-only closes, `fund_collect.py` → SEC XBRL frames; then `backtest.py`,
 `fund_backtest.py`, and `export_evidence.py`, which writes the tab's evidence
-card to `fincept-qt/scripts/screener_evidence.json`; output in
+card to `app/scripts/screener_evidence.json`; output in
 `results_2026-10-19.txt` and `fund_results_2026-10-19.txt`).
 
 ## Bottom line

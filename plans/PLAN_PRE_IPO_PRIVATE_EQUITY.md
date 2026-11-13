@@ -54,7 +54,7 @@ Key insight: a significant amount of the foundational data is **free and public*
 
 ### Data Script Plan
 
-New scripts to create under `fincept-qt/scripts/`:
+New scripts to create under `app/scripts/`:
 
 ```
 sec_form_d_data.py        — Poll EDGAR for new Form D filings; parse XML
@@ -173,7 +173,7 @@ Live feed of new SEC Form D filings:
 ### New files to create
 
 ```
-fincept-qt/src/screens/pre_ipo/
+app/src/screens/pre_ipo/
 ├── PreIpoScreen.h/.cpp          — Main screen widget, layout, tab/panel management
 ├── PreIpoTypes.h                — PrivateCompany, FundingRound, SecondaryPrice, IpoFiling structs
 ├── CompanyListPanel.h/.cpp      — Left watchlist + universe browser
@@ -186,7 +186,7 @@ fincept-qt/src/screens/pre_ipo/
 
 New service:
 ```
-fincept-qt/src/services/pre_ipo/
+app/src/services/pre_ipo/
 ├── PreIpoService.h/.cpp         — Data orchestrator; calls Python scripts, caches results
 └── PreIpoDataHub.h/.cpp         — DataHub producer for pre_ipo: topic family
 ```

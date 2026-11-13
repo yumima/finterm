@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Copy the repo's fincept-qt/scripts/ tree to a target directory, excluding
+# Copy the repo's app/scripts/ tree to a target directory, excluding
 # dev-only junk that must never ship (it bloats installers and can cause
 # macOS codesign to reject bundles with "unrecognized" members).
 #
 # Usage: sync_scripts.sh <source-dir> <dest-dir>
 #
-# Exclusions (kept in sync with fincept-qt/cmake/prune_scripts_junk.cmake
+# Exclusions (kept in sync with app/cmake/prune_scripts_junk.cmake
 # and the install(DIRECTORY ... REGEX EXCLUDE) rule in CMakeLists.txt):
 #   __pycache__, *.pyc, .pytest_cache, .benchmarks,
 #   .venv, venv, env,

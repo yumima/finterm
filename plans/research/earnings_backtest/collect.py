@@ -5,7 +5,7 @@ ER Earnings tab computes. Adds: market-adjusted (SPY) reaction, longer history.
 """
 import sys, json, time, os, concurrent.futures as cf
 from pathlib import Path
-sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "fincept-qt" / "scripts"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[3] / "app" / "scripts"))
 import yfinance_data as yd
 import yfinance as yf
 import pandas as pd

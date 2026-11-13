@@ -2,7 +2,7 @@
 
     python backtest.py && python fund_backtest.py && python export_evidence.py
 
-Writes fincept-qt/scripts/screener_evidence.json, which screener_data.py
+Writes app/scripts/screener_evidence.json, which screener_data.py
 reads. The numbers on the card are therefore never hand-copied — a first
 draft carried a mistyped sub-period, and the Magic Formula's row measured an
 inverted rank; both would have been caught had the card been generated.
@@ -16,7 +16,7 @@ import pandas as pd
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 D = os.path.join(HERE, "data")
-OUT = os.path.join(HERE, "..", "..", "..", "fincept-qt", "scripts", "screener_evidence.json")
+OUT = os.path.join(HERE, "..", "..", "..", "app", "scripts", "screener_evidence.json")
 
 PERIODS = [("2010-01", "2014-12"), ("2015-01", "2019-12"), ("2020-01", "2022-12"), ("2023-01", "2026-12")]
 

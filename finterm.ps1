@@ -24,7 +24,7 @@ $ErrorActionPreference = 'Stop'
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
 $RepoDir     = $PSScriptRoot
-$AppDir      = Join-Path $RepoDir 'fincept-qt'
+$AppDir      = Join-Path $RepoDir 'app'
 $BuildPreset = 'win-release'
 $BuildDir    = Join-Path $AppDir "build\$BuildPreset"
 $Bin         = Join-Path $BuildDir 'finterm.exe'

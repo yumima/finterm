@@ -228,16 +228,16 @@ The `AITutorPanel` exists. Extend it:
 
 | Component | Path |
 |---|---|
-| Content JSON indexes | `fincept-qt/resources/knowledge/*/` |
-| Entry markdown bodies | `fincept-qt/resources/knowledge/*/` |
-| ContentLoader | `fincept-qt/src/screens/knowledge/ContentLoader.h/.cpp` |
-| KnowledgeTypes | `fincept-qt/src/screens/knowledge/KnowledgeTypes.h` |
-| KnowledgeScreen | `fincept-qt/src/screens/knowledge/KnowledgeScreen.h/.cpp` |
-| RailWidget | `fincept-qt/src/screens/knowledge/RailWidget.h/.cpp` |
-| AITutorPanel | `fincept-qt/src/screens/knowledge/AITutorPanel.h/.cpp` |
-| GroupedPane | `fincept-qt/src/screens/knowledge/GroupedPane.h/.cpp` |
-| HelpHint | `fincept-qt/src/screens/knowledge/HelpHint.h/.cpp` |
-| Dashboard widget target | `fincept-qt/src/screens/dashboard/` |
+| Content JSON indexes | `app/resources/knowledge/*/` |
+| Entry markdown bodies | `app/resources/knowledge/*/` |
+| ContentLoader | `app/src/screens/knowledge/ContentLoader.h/.cpp` |
+| KnowledgeTypes | `app/src/screens/knowledge/KnowledgeTypes.h` |
+| KnowledgeScreen | `app/src/screens/knowledge/KnowledgeScreen.h/.cpp` |
+| RailWidget | `app/src/screens/knowledge/RailWidget.h/.cpp` |
+| AITutorPanel | `app/src/screens/knowledge/AITutorPanel.h/.cpp` |
+| GroupedPane | `app/src/screens/knowledge/GroupedPane.h/.cpp` |
+| HelpHint | `app/src/screens/knowledge/HelpHint.h/.cpp` |
+| Dashboard widget target | `app/src/screens/dashboard/` |
 
 ---
 

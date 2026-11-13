@@ -30,7 +30,7 @@ while [ -h "$_src" ]; do
     [[ "$_src" != /* ]] && _src="$_dir/$_src"
 done
 REPO_DIR="$(cd -P "$(dirname "$_src")" && pwd)"
-APP_DIR="$REPO_DIR/fincept-qt"
+APP_DIR="$REPO_DIR/app"
 
 case "$(uname -s)" in
     Darwin*) FINTERM_OS="macos" ;;
@@ -38,7 +38,7 @@ case "$(uname -s)" in
 esac
 
 # Per-OS build preset, binary, and state dirs. State dirs mirror the app's
-# AppPaths::root() / QSettings locations (see fincept-qt/src/core/config/AppPaths.cpp).
+# AppPaths::root() / QSettings locations (see app/src/core/config/AppPaths.cpp).
 if [[ "$FINTERM_OS" == "macos" ]]; then
     BUILD_PRESET="macos-release"
     BUILD_DIR="$APP_DIR/build/$BUILD_PRESET"
@@ -858,7 +858,7 @@ cmd_setup() {
     ok
 
     # ── Step 7/8: Configure ─────────────────────────────────────
-    [ -d "$APP_DIR" ] || fail "fincept-qt directory not found at $APP_DIR. Ensure you cloned the full repository."
+    [ -d "$APP_DIR" ] || fail "app directory not found at $APP_DIR. Ensure you cloned the full repository."
     cd "$APP_DIR"
 
     echo "[7/8] Configuring (preset: $PRESET)..."

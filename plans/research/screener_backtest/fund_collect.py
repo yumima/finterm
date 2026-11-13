@@ -10,7 +10,7 @@ filed value for a period, so restatements leak a little — noted, not fixed.
 import json, os, sys, time, pickle, urllib.request, urllib.error
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "fincept-qt", "scripts"))
+sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "app", "scripts"))
 from finterm_identity import user_agent
 
 OUT = os.path.join(HERE, "data", "frames.pkl")

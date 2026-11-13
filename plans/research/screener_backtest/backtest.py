@@ -40,7 +40,7 @@ spy = close.pop("SPY")
 high = high.drop(columns="SPY"); low = low.drop(columns="SPY"); vol = vol.drop(columns="SPY")
 
 # --- signals: the SHIPPED definitions (scripts/screener_data.py) -------------
-sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "fincept-qt", "scripts"))
+sys.path.insert(0, os.path.join(HERE, "..", "..", "..", "app", "scripts"))
 import screener_data as sd
 
 S = sd.price_signals(close, high, low)

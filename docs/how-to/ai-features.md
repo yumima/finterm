@@ -231,9 +231,9 @@ table](capabilities.md)** generated from the same source the C++
 gating layer reads.
 
 Source of truth:
-[`fincept-qt/resources/ai/capabilities.json`](../../fincept-qt/resources/ai/capabilities.json).
+[`app/resources/ai/capabilities.json`](../../app/resources/ai/capabilities.json).
 When a runtime adds a capability, change the JSON, re-run
-`fincept-qt/scripts/gen_capabilities_doc.py`, commit both — UI
+`app/scripts/gen_capabilities_doc.py`, commit both — UI
 gating + docs update together.
 
 ## 9. Configure once vs configure-per-agent
@@ -400,7 +400,7 @@ that don't exist locally yet.
 
 ## 15. Acceptance checks before relying on a new setup
 
-Run through `fincept-qt/tests/ui/acceptance_checklist.md` after
+Run through `app/tests/ui/acceptance_checklist.md` after
 any LLM-Config / MCP-Servers / Voice change.  It's a 14-item
 manual list (A1–A4 local-only, B1–B5 Anthropic, C1–C7 always-on,
 S1–S4 safety spot-checks).  Sign-off template at the bottom.

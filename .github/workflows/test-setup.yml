@@ -52,8 +52,8 @@ jobs:
       - name: Configure CMake
         run: |
           QT_ROOT="$HOME/Qt/${{ env.QT_VERSION }}/macos"
-          cmake -B fincept-qt/build \
-            -S fincept-qt \
+          cmake -B app/build \
+            -S app \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_PREFIX_PATH="${QT_ROOT}" \
@@ -66,17 +66,17 @@ jobs:
       # Step 4 — build (mirrors build_script in .cirrus.yml)
       - name: Build
         run: |
-          cmake --build fincept-qt/build \
+          cmake --build app/build \
             --config Release \
             --parallel $(sysctl -n hw.logicalcpu)
 
       - name: Verify binary
         run: |
-          EXE="fincept-qt/build/finterm.bin"
-          if [ ! -f "$EXE" ] && [ ! -d "fincept-qt/build/finterm.app" ]; then
+          EXE="app/build/finterm.bin"
+          if [ ! -f "$EXE" ] && [ ! -d "app/build/finterm.app" ]; then
             echo "ERROR: binary not found"
-            find fincept-qt/build -maxdepth 3 -name "finterm*" || true
+            find app/build -maxdepth 3 -name "finterm*" || true
             exit 1
           fi
           echo "Build succeeded"
-          file "$EXE" 2>/dev/null || file "fincept-qt/build/finterm.app/Contents/MacOS/finterm"
+          file "$EXE" 2>/dev/null || file "app/build/finterm.app/Contents/MacOS/finterm"

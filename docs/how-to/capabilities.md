@@ -1,6 +1,6 @@
 # AI capability matrix
 
-Generated from [`fincept-qt/resources/ai/capabilities.json`](../../fincept-qt/resources/ai/capabilities.json) by `fincept-qt/scripts/gen_capabilities_doc.py`.  Don't edit this file directly — change the JSON, re-run the generator, commit both.
+Generated from [`app/resources/ai/capabilities.json`](../../app/resources/ai/capabilities.json) by `app/scripts/gen_capabilities_doc.py`.  Don't edit this file directly — change the JSON, re-run the generator, commit both.
 
 Glyphs:
 - **✓** supported

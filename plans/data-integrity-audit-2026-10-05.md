@@ -1,6 +1,6 @@
 # finterm data-integrity audit — 2026-10-05
 
-Read-only audit (6 parallel auditors + spot verification). Paths relative to `fincept-qt/`.
+Read-only audit (6 parallel auditors + spot verification). Paths relative to `app/`.
 ✔ = re-verified by reading the code after the auditor reported it.
 
 ## Tier 1 — fabricated data shown as real

@@ -118,7 +118,7 @@ A profile points at either `runtime: local` (with
 
 ### 3.1 Internal tools (32 families)
 
-Internal tools live in `fincept-qt/src/mcp/tools/*` and register
+Internal tools live in `app/src/mcp/tools/*` and register
 through `McpInit::initialize_all_tools` into `McpProvider`. Wire-
 form name is `int__<tool_name>`. Coverage today:
 
@@ -220,7 +220,7 @@ content as data, not instructions (Track 14 #40 / R23).
 
 ### 4.2 Skills library
 
-`fincept-qt/scripts/agents/finagent_core/skills/<vertical>/<name>/SKILL.md`.
+`app/scripts/agents/finagent_core/skills/<vertical>/<name>/SKILL.md`.
 Anthropic SKILL.md grammar verbatim — no fork.
 
 Three shipped today (finterm-original methodology, not upstream-
@@ -303,7 +303,7 @@ forces an immediate tick.
 
 ### 5.1 Acceptance checklist
 
-`fincept-qt/tests/ui/acceptance_checklist.md` covers:
+`app/tests/ui/acceptance_checklist.md` covers:
 
 - **Flavour A** — Local-only: A1 probe, A2 chat (no outbound),
   A3 banner on server-down (no silent failover), A4 `/comps`
@@ -571,5 +571,5 @@ Companion docs in this repo:
   requirements (separate repo concern).
 - `plans/testing-strategy.md` — three-layer test plan (unit +
   integration + UI).
-- `fincept-qt/tests/ui/acceptance_checklist.md` — manual
+- `app/tests/ui/acceptance_checklist.md` — manual
   sign-off list for AI releases.

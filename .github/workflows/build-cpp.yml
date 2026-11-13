@@ -151,7 +151,7 @@ jobs:
       # ---- Configure CMake ----
       - name: Configure CMake (Linux)
         if: runner.os == 'Linux'
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           cmake -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
@@ -162,7 +162,7 @@ jobs:
       - name: Configure CMake (Windows x64 / macOS x64 / macOS arm64)
         if: (runner.os == 'Windows' && matrix.arch == 'x64') || runner.os == 'macOS'
         shell: bash
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           OPENSSL_ARG=""
           if [ -n "${OPENSSL_ROOT_DIR:-}" ]; then
@@ -178,7 +178,7 @@ jobs:
       - name: Configure CMake (Windows ARM64)
         if: runner.os == 'Windows' && matrix.arch == 'arm64'
         shell: bash
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           HOST_QT="${{ runner.temp }}/qt-host/Qt/${{ env.QT_VERSION }}/msvc2022_64"
           OPENSSL_ARG=""
@@ -196,13 +196,13 @@ jobs:
       # ---- Build ----
       - name: Build
         shell: bash
-        working-directory: fincept-qt
+        working-directory: app
         run: cmake --build build --config ${{ env.BUILD_TYPE }} --parallel $(nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 3)
 
       # ---- Verify binary ----
       - name: Verify build output
         shell: bash
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           if [ "${{ runner.os }}" == "Windows" ]; then
             BINARY="build/Release/${{ matrix.exe }}"
@@ -231,7 +231,7 @@ jobs:
       - name: Package (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -521,7 +521,7 @@ jobs:
       # upload-artifact strips execute bits (zip limitation) so we tar dist/.
       - name: Package (macOS)
         if: runner.os == 'macOS'
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euo pipefail
           mkdir -p dist
@@ -623,7 +623,7 @@ jobs:
       # ---- Package: Linux (AppImage) ----
       - name: Package (Linux)
         if: runner.os == 'Linux'
-        working-directory: fincept-qt
+        working-directory: app
         run: |
           set -euo pipefail
 
@@ -733,7 +733,7 @@ jobs:
         with:
           name: ${{ matrix.artifact }}
           # macOS: upload the tar to preserve execute permissions; others upload dist/ directly
-          path: ${{ runner.os == 'macOS' && 'fincept-qt/dist.tar.gz' || 'fincept-qt/dist/' }}
+          path: ${{ runner.os == 'macOS' && 'app/dist.tar.gz' || 'app/dist/' }}
           retention-days: 30
 
   # ---- macOS Universal Binary ----

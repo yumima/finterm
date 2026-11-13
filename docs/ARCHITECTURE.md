@@ -61,7 +61,7 @@ This document provides a comprehensive overview of finterm v4's architecture —
 ## Source Architecture
 
 ```
-fincept-qt/src/
+app/src/
 ├── app/
 │   ├── main.cpp                    # Entry point, QApplication setup
 │   ├── MainWindow.cpp/h            # Main window, layout, screen hosting

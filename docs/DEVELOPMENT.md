@@ -23,7 +23,7 @@ The `finterm` CLI wraps everything (`finterm build`, `finterm build
 --tests`). Under the hood these are CMake presets:
 
 ```bash
-cd fincept-qt
+cd app
 cmake --preset linux-release          # or linux-debug / macos-* / win-*
 cmake --build --preset linux-release -j"$(nproc)"
 ./build/linux-release/finterm.bin
@@ -41,7 +41,7 @@ credentials (PIN + API keys) are global across `--profile`s.
 ## Layout
 
 ```
-fincept-qt/
+app/
   src/
     app/         MainWindow, DockScreenRouter — shell + navigation
     screens/     one directory per screen (equity_research, portfolio, …)

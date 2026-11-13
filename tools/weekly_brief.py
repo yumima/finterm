@@ -29,7 +29,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-SCRIPTS = Path(__file__).resolve().parent.parent / "fincept-qt" / "scripts"
+SCRIPTS = Path(__file__).resolve().parent.parent / "app" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 CONTACT_KEY = "FINTERM_CONTACT_EMAIL"

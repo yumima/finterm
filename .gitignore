@@ -2,10 +2,10 @@
 # ============================================================
 
 # ── CMake build output ───────────────────────────────────────
-fincept-qt/build/
-fincept-qt/build-*/
-fincept-qt/build_*/
-fincept-qt/tmpqt/
+app/build/
+app/build-*/
+app/build_*/
+app/tmpqt/
 tmpqt/
 CMakeCache.txt
 CMakeFiles/
@@ -108,8 +108,6 @@ session.txt
 *.7z
 
 # ── Legacy / non-C++ build artifacts (defensive ignores) ─────
-fincept-terminal-desktop/
-fincept-cpp/
 **/target/
 *.rlib
 *.rmeta
@@ -119,33 +117,33 @@ dist-ssr/
 # ── Claude Code — never commit ───────────────────────────────
 .claude/settings.local.json
 CLAUDE.md
-fincept-qt/DESIGN_SYSTEM.md
+app/DESIGN_SYSTEM.md
 
 # ── Build output (uitest) ─────────────────────────────────────
-fincept-qt/uitest/build/
+app/uitest/build/
 
 # ── ML training artifacts ─────────────────────────────────────
 lightning_logs/
 *.ckpt
 *.yaml
 # Eval fixtures are version-controlled YAML — exempt the harness tree.
-!fincept-qt/scripts/agents/evals/**/*.yaml
+!app/scripts/agents/evals/**/*.yaml
 
 # ── Shell tree output files ───────────────────────────────────
 **/tree
 
 # ── Duplicate nested agents folder ───────────────────────────
-fincept-qt/scripts/agents/agents/
+app/scripts/agents/agents/
 
 # ── Firecrawl research artifacts ─────────────────────────────
 .firecrawl/
 
 # ── Clangd cache ─────────────────────────────────────────────
 .cache/
-fincept-qt/.cache/
+app/.cache/
 
 # ── Exchange runtime cache ────────────────────────────────────
-fincept-qt/scripts/exchange/.cache/
+app/scripts/exchange/.cache/
 
 # ── Python test + bench caches ────────────────────────────────
 .pytest_cache/
@@ -163,7 +161,7 @@ fincept-qt/scripts/exchange/.cache/
 *.sqlite3
 
 # ── Internal planning docs ────────────────────────────────────
-fincept-qt/docs/superpowers/
+app/docs/superpowers/
 docs/superpowers/
 
 # ── Stray runtime artifact ────────────────────────────────────

@@ -1,8 +1,8 @@
-fincept-qt/build/
-fincept-qt/build-*/
-fincept-qt/uitest/
-fincept-qt/.vs/
-fincept-qt/cmake-build-*/
+app/build/
+app/build-*/
+app/uitest/
+app/.vs/
+app/cmake-build-*/
 build/
 build-*/
 out/

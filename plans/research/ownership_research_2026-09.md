@@ -6,7 +6,7 @@ Companion to `plans/PLAN_OWNERSHIP_REDESIGN.md`. Compiled by a research pass ove
 
 # Equity Ownership: How Terminals Present It, and What the Evidence Says
 
-Research report for fincept-qt. Consolidated from seven parallel research streams plus direct
+Research report for app. Consolidated from seven parallel research streams plus direct
 primary-source verification. Corrections from both addenda are folded in inline — where an earlier
 claim was wrong, the retraction is stated at the point the claim appears.
 

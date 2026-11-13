@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`3c2b0e3c8`](https://github.com/yumima/finterm/commit/3c2b0e3c8) rename: product names, IDs and file names off "fincept"
 - [`ca8b5235f`](https://github.com/yumima/finterm/commit/ca8b5235f) tools: weekly brief — insider-buying clusters and the IPO pipeline as Markdown
 - [`4dabec3dc`](https://github.com/yumima/finterm/commit/4dabec3dc) ipo: a $10.00 unit ticker marks a SPAC even when EDGAR's SIC isn't 6770
 - [`4587eabbf`](https://github.com/yumima/finterm/commit/4587eabbf) rename: FINCEPT_* macros, build options and env vars → FINTERM_*
@@ -97,7 +98,7 @@ finterm/
 ├── finterm.sh                      ← one-stop CLI (Linux/macOS): setup / start / build / repair / reset / install / …
 ├── finterm.ps1                     ← same CLI for native Windows (PowerShell)
 ├── setup.sh                        ← deprecated shim → `finterm.sh setup`
-├── fincept-qt/                     ← Qt6/C++ application
+├── app/                     ← Qt6/C++ application
 │   ├── src/auth/AuthService.cpp    ← in-process auth (users stored in auth.db)
 │   ├── src/                        ← C++ source
 │   ├── scripts/                    ← Python data layer (yfinance, akshare, …)
