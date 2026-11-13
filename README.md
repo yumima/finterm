@@ -6,7 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
-- [`92970b021`](https://github.com/yumima/finterm/commit/92970b021) rename: FINCEPT_* macros, build options and env vars → FINTERM_*
+- [`4587eabbf`](https://github.com/yumima/finterm/commit/4587eabbf) rename: FINCEPT_* macros, build options and env vars → FINTERM_*
 - [`0f6918c80`](https://github.com/yumima/finterm/commit/0f6918c80) rename: C++ namespace fincept → finterm
 - [`20260a553`](https://github.com/yumima/finterm/commit/20260a553) trim: experimental screens hidden by default; upstream strategy fixtures removed
 - [`a08b118ee`](https://github.com/yumima/finterm/commit/a08b118ee) portfolio: import holdings from a broker CSV export
@@ -157,7 +157,7 @@ finterm help
 | `finterm` *(or `finterm start`)* | Launch the Qt app (auth is in-process; no stub needed). |
 | `finterm build` | Incremental cmake/ninja build. |
 | `finterm build --clean` | Clean rebuild. |
-| `finterm build --tests` | Configure with `-DFINCEPT_BUILD_TESTS=ON`. |
+| `finterm build --tests` | Configure with `-DFINTERM_BUILD_TESTS=ON`. |
 | `finterm repair` | **Fix a misbehaving app, keeping all your data.** Clears caches + transient state + stale window/dock layout, and rebuilds the Python venv only if a health check finds it broken. Keeps portfolio, API keys, GUI layout, data-source, workspaces. Takes an insurance snapshot first. |
 | `finterm reset` | **Wipe everything to a clean install.** Confirms first (`-y` skips), snapshots your data to `~/.local/share/finterm-backups/` and prints copy-back commands, then clears config + share. |
 | `finterm install` | Create a `.desktop` launcher (pinnable to your dock). |

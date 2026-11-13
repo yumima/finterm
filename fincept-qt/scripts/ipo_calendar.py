@@ -144,15 +144,31 @@ def parse_range(s):
 
 def is_spac(name, ticker=None, price=None, sic=None):
     """Blank-check companies price on a different clock and have no 180-day
-    lock-up, so they are kept out of operating-company comparables. SIC 6770
-    is authoritative when EDGAR is known; otherwise $10.00 units ("…U") or the
-    name."""
-    if sic:
-        return str(sic) == "6770"
+    lock-up, so they are kept out of operating-company comparables.
+
+    SIC 6770 says yes. $10.00 units ("…U") say yes even when EDGAR's SIC says
+    otherwise: a new blank-check often files its S-1 under the sponsor's or a
+    generic code before 6770 is assigned (Churchill Capital Corp XIV, CXIVU at
+    $10.00, filed under a non-6770 SIC and was counted as an operating company).
+    The name is the fallback only when EDGAR has no SIC at all — an operating
+    company can be called "... Acquisition"."""
+    if sic and str(sic) == "6770":
+        return True
     t = (ticker or "").upper()
     if price is not None and abs(price - 10.0) < 1e-9 and len(t) >= 4 and t.endswith("U"):
         return True
+    if sic:
+        return False
     return bool(_SPAC_NAME.search(name or ""))
+
+
+def _unit_price(d):
+    """$10.00 when the deal is priced or ranged at exactly $10.00 — the unit
+    price blank-checks use — else None."""
+    if d.get("final_price") is not None:
+        return d["final_price"]
+    r = parse_range(d.get("price_range"))
+    return r[0] if r and r[0] == r[1] else None
 
 
 # ── cache ─────────────────────────────────────────────────────────────────────
@@ -658,7 +674,7 @@ def apply_submissions(d, sub, today):
         return
     if sub.get("sic"):
         d["sic"] = sub["sic"]
-        d["spac"] = is_spac(d["company"], sic=sub["sic"])
+        d["spac"] = is_spac(d["company"], d.get("ticker"), _unit_price(d), sic=sub["sic"])
     # No filing date in the window (first filed >13 months ago; only the
     # upcoming row is here): bound the ladder anyway, or an old 424B4 from an
     # earlier offering reads as this deal having priced.

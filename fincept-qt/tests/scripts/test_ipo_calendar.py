@@ -84,6 +84,11 @@ def test_spac_classification():
     assert ic.is_spac("BHAV Acquisition Corp II")
     assert ic.is_spac("Cantor Equity Partners VII", ticker="CEPVU", price=10.0)
     assert not ic.is_spac("OPAY Ltd", ticker="OPAY", price=20.0)
+    # $10.00 units outrank a non-6770 SIC: new blank-checks file under other codes.
+    assert ic.is_spac("Churchill Capital Corp XIV", ticker="CXIVU", price=10.0, sic="6199")
+    assert not ic.is_spac("Churchill Capital Corp XIV", ticker="CXIV", price=None, sic="6199")
+    assert ic._unit_price({"final_price": None, "price_range": "10.00"}) == 10.0
+    assert ic._unit_price({"final_price": None, "price_range": "9.00-11.00"}) is None
 
 
 def sub(rows, sic="7372"):
