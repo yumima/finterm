@@ -345,8 +345,7 @@ void ScreenerScreen::build_ui() {
     }
     passing_btn_->setToolTip(QStringLiteral("The names that pass every rule today"));
     setup_btn_->setToolTip(
-        QStringLiteral("Setting up: the names next in line, with the rule each misses and how far it is — the "
-                       "closest to qualifying next. See the write-up for how such a list did."));
+        QStringLiteral("Setting up: the names next in line, with the rule each misses and how far it is."));
     auto* views = new QButtonGroup(this);
     views->setExclusive(true);
     views->addButton(passing_btn_);
@@ -870,8 +869,7 @@ void ScreenerScreen::apply_result(const screener::ScanResult& r, bool provisiona
                      mark(r.above50, r.above50 ? QStringLiteral("above 50D") : QStringLiteral("below 50D")),
                      mark(r.above200, r.above200 ? QStringLiteral("above 200D") : QStringLiteral("below 200D"))));
         market_->setToolTip(
-            QStringLiteral("CAN SLIM's \"M\" and Minervini's market filter. Shown, not applied: moving to cash on it "
-                           "made every screen it was tried on worse over 2010-2026 (see Overview)."));
+            QStringLiteral("CAN SLIM's \"M\" market filter. Shown, not applied to the screens."));
     } else {
         market_->clear();
     }
@@ -939,8 +937,7 @@ void ScreenerScreen::update_view_toggle() {
     setup_btn_->setToolTip(
         s->setups_from == current_id_
             ? QStringLiteral("Next in line: %1 — with the rule each misses and how far it is").arg(s->setup_desc)
-            : QStringLiteral("Names one rule from the Trend Template (whose top 25 by RS this "
-                             "list is), with the rule and how far they are"));
+            : QStringLiteral("Names one rule from the Trend Template, with the rule and how far they are"));
     const QSignalBlocker b1(passing_btn_), b2(setup_btn_);
     (setting_up_ ? setup_btn_ : passing_btn_)->setChecked(true); // the group unchecks the other
 }
@@ -1156,8 +1153,7 @@ void ScreenerScreen::fill_table() {
                 h->setToolTip(QStringLiteral("The one rule it fails today"));
             else if (cols[c].col == Col::Gap)
                 h->setToolTip(QStringLiteral(
-                    "How far that rule's measure must still move. A close is one day's move; a slow average "
-                    "rising takes weeks — sort within the same rule"));
+                    "How far that rule's measure must still move — compare within the same rule"));
         }
     }
     table_->setRowCount(symbols.size());

@@ -94,8 +94,7 @@ void BrokerCsvDialog::build_ui(const QString& file_path, bool new_portfolio) {
     as_of_edit_->setCalendarPopup(true);
     as_of_edit_->setDisplayFormat(QStringLiteral("yyyy-MM-dd"));
     as_of_edit_->setToolTip(QStringLiteral("A positions file has no trade dates: each holding is recorded as one "
-                                           "purchase on this date, at its average cost. Performance before it is "
-                                           "not known."));
+                                           "purchase on this date, at its average cost."));
     kind_row->addWidget(as_of_edit_);
     layout->addLayout(kind_row);
 

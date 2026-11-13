@@ -134,14 +134,12 @@ FirmDetailPanel::FirmDetailPanel(QWidget* parent) : QWidget(parent) {
         "Shares held at quarter end.",
         "Market value at quarter end, as filed.",
         "What the fund did since its previous filing: new, added, trimmed, held (within 1%), "
-        "or exited — with the change in shares. Sorts by the percentage change in the stake: "
-        "new positions first, exits last.",
+        "or exited — with the change in shares.",
         "The stock's price change from the quarter end the filing describes to today. Part of "
-        "this window predates the filing (13Fs are due 45 days after the quarter), so it is "
-        "not a return anyone could have copied.",
+        "this window predates the filing, so it is not a return anyone could have copied.",
         "The stock's price change over the last three months, to today.",
-        "The stock's price change over the last six months, to today — the stock's own "
-        "performance, not the fund's trading. Only the book's largest ~120 names are priced.",
+        "The stock's price change over the last six months, to today. Only the book's largest "
+        "~120 names are priced.",
     };
     for (int c = 0; c < positions_->columnCount() && c < int(std::size(header_tips)); ++c)
         if (auto* h = positions_->horizontalHeaderItem(c))

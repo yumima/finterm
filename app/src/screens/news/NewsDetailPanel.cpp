@@ -320,7 +320,6 @@ QWidget* NewsDetailPanel::build_content_view() {
     bookmark_btn_ = new QPushButton("BOOKMARK", content);
     bookmark_btn_->setObjectName("newsDetailSaveBtn");
     bookmark_btn_->setFixedHeight(24);
-    bookmark_btn_->setToolTip("Bookmark article");
     bookmark_btn_->setCheckable(true);
 
     // Translate button

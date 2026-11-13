@@ -152,10 +152,8 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
         }
         institutions_.note->setText(n);
         institutions_.note->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("Institutional shares summed from the filings of filers whose equity book passes "
-                           "the size and position-count floors noted below, divided by the vendor's share "
-                           "count (and float). The vendor's own percentage is shown beside it for comparison; "
-                           "it is institutions ÷ float in practice and the two can differ by a quarter of drift.")));
+            QStringLiteral("Institutional shares from 13F filers above a size floor, divided by the vendor's share "
+                           "count. The vendor's own percentage is shown beside it and can differ.")));
     }
 
     // ── Insiders ────────────────────────────────────────────────────────────
@@ -187,8 +185,7 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
         insiders_.note->setText(n);
         insiders_.note->setToolTip(ui::tooltip_wrap(
             QStringLiteral("Open-market transactions only (codes P and S). Buys exclude 10% owners and "
-                           "10b5-1 plan trades — the two exclusions the evidence turns on. Sells are counted "
-                           "but never scored: insiders sell for a dozen reasons and buy for one.")));
+                           "10b5-1 plan trades. Sells are counted but never scored.")));
     }
 
     // ── Top 10 ──────────────────────────────────────────────────────────────
@@ -203,9 +200,8 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
                                                  .arg(pct_or_dash(h.broad_share, 0))
                                            : QString());
         top10_.note->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("Concentration, over every filer. A broad book (a thousand or more names) or a named "
-                           "passive complex rebalances rather than decides; the share of value they hold says how "
-                           "much of the register moves with index flow.")));
+            QStringLiteral("Concentration over every filer. Index and broad books (a thousand or more names) "
+                           "move with index flow rather than decide.")));
     }
 
     // ── Quarter change ──────────────────────────────────────────────────────
@@ -224,8 +220,7 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
         change_.note->clear();
     }
     change_.note->setToolTip(ui::tooltip_wrap(
-        QStringLiteral("Bloomberg OWN's buyers/sellers count. A filer that stopped filing has not sold and "
-                       "one that started has not bought — only filers present in both quarters are compared.")));
+        QStringLiteral("Counts of filers, not shares. Only filers present in both quarters are compared.")));
 
     // ── Short ───────────────────────────────────────────────────────────────
     {
@@ -261,8 +256,7 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
         shorts_.note->setText(n);
         shorts_.note->setToolTip(ui::tooltip_wrap(
             QStringLiteral("Settled short position from FINRA, twice a month, published about ten business days "
-                           "after settlement. SI ÷ 13F shares is the borrow-fee proxy of Drechsler & Drechsler; "
-                           "days to cover is the measure that survived post-2000 (Hong et al.).")));
+                           "after settlement. SI ÷ 13F shares is a proxy for the borrow fee.")));
     }
 
     // ── 5% stakes ───────────────────────────────────────────────────────────
@@ -289,9 +283,8 @@ void OwnershipHeader::set_snapshot(const OwnershipSnapshot& s, bool loading) {
                                         .arg(s.window_months)
                                   : QString());
         stakes_.note->setToolTip(ui::tooltip_wrap(
-            QStringLiteral("13D declares intent to influence and is due within five business days — a dated "
-                           "catalyst. 13G is the passive equivalent. The percentage lives in the filing body "
-                           "and is not extracted; the filing is one click away on the holder row.")));
+            QStringLiteral("13D declares intent to influence (due within five business days); 13G is the passive "
+                           "equivalent. The stake percentage is in the filing, one click away on the holder row.")));
     }
 
     // ── Flags ───────────────────────────────────────────────────────────────

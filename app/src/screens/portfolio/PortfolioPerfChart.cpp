@@ -389,9 +389,8 @@ void PortfolioPerfChart::build_ui() {
 
     live_bidask_label_ = new QLabel;
     live_bidask_label_->setStyleSheet(live_cyan);
-    live_bidask_label_->setToolTip(QStringLiteral("Bid x Ask — best-effort live order-book snapshot. May be delayed; "
-                                                  "zero / dash outside regular trading hours or for illiquid tickers. "
-                                                  "Not a real order book."));
+    live_bidask_label_->setToolTip(QStringLiteral("Bid x Ask — best-effort snapshot, may be delayed; dash outside "
+                                                  "regular hours or for illiquid tickers."));
     info_bar->addWidget(live_bidask_label_);
 
     live_range_label_ = new QLabel;
@@ -1392,7 +1391,7 @@ void PortfolioPerfChart::update_chart() {
         const double total_pnl =
             summary_.total_unrealized_pnl + summary_.total_realized_pnl + summary_.total_dividend_income;
         total_return_label_->setToolTip(
-            tr("Unrealized return of open positions vs their average cost.\n\n"
+            tr("Unrealized return of open positions vs their average cost.\n"
                "Unrealized P&L: %1 %2\nRealized P&L: %1 %3\nDividends: %1 %4\n"
                "Total P&L (unrealized + realized + dividends): %1 %5%6")
                 .arg(currency_)
@@ -1465,8 +1464,7 @@ void PortfolioPerfChart::update_chart() {
         period_change_label_->setStyleSheet(
             QString("color:%1; font-size:12px; font-weight:600;").arg(ui::colors::TEXT_SECONDARY()));
         period_change_label_->setToolTip(tr("Fewer than two daily NAV snapshots fall in this period.\n"
-                                            "The history grows one point per day; a backfill from the\n"
-                                            "transaction log fills it when price history is available."));
+                                            "The history grows one point per day."));
         fill_total_labels();
         return;
     }
@@ -1719,8 +1717,8 @@ void PortfolioPerfChart::update_chart() {
         // and the figure is already exact here (TWR's gain_value, net of
         // flows) — so it goes in the tooltip beside the return it explains.
         period_change_label_->setToolTip(
-            (period_ret.valid ? tr("Time-weighted return from %1 to now.\nDeposits and withdrawals change the "
-                                   "portfolio's size, not this number%2")
+            (period_ret.valid ? tr("Time-weighted return from %1 to now; deposits and withdrawals don't move "
+                                   "it%2")
                                     .arg(filtered.first().snapshot_date.left(10))
                                     .arg(period_ret.net_external_flow != 0.0
                                              ? tr(" (net external flow this period: %1 %2).")
@@ -1728,7 +1726,7 @@ void PortfolioPerfChart::update_chart() {
                                                    .arg(QString::number(period_ret.net_external_flow, 'f', 2))
                                              : QStringLiteral("."))
                               : QString()) +
-            tr("\n\nGain over the period: %1 %2").arg(currency_).arg(QString::number(period_pnl, 'f', 2)));
+            tr("\nGain over the period: %1 %2").arg(currency_).arg(QString::number(period_pnl, 'f', 2)));
     }
 
     fill_total_labels();

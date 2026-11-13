@@ -88,8 +88,7 @@ void PortfolioHeatmap::build_ui() {
     day_btn_ = make_mode_btn("DAY");
     aft_btn_ = make_mode_btn("AFT");
     aft_btn_->setToolTip(QStringLiteral("After-hours / pre-market change for each symbol. "
-                                        "Live from the yfinance daemon — refreshed each time you switch "
-                                        "to AFT mode. Click AFT again to re-fetch."));
+                                        "Click AFT again to re-fetch."));
     pnl_btn_->setChecked(true);
 
     auto set_mode = [this](portfolio::HeatmapMode m) {

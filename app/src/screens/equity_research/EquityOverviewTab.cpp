@@ -1657,14 +1657,10 @@ void EquityOverviewTab::update_primary_stats_row(int hover_idx) {
         // Which basis this actually used depends on whether the loaded window
         // spans a year; say the one that was used rather than assuming.
         primary_52w_lbl_->setToolTip(
-            derived_hi > 0.0 ? QStringLiteral("Distance from the 52-week high of the ADJUSTED series drawn on "
-                                              "this chart — basis-consistent with the crosshair's close.\n"
-                                              "The 52 WEEK RANGE panel quotes the raw band instead, to match "
-                                              "the quote header and the analyst targets.")
-                             : QStringLiteral("The loaded window is shorter than a year, so this uses the "
-                                              "vendor's RAW 52-week high — measured against an adjusted "
-                                              "close, and identical to the 52 WEEK RANGE panel.\n"
-                                              "Select 1Y or longer for a basis-consistent figure."));
+            derived_hi > 0.0 ? QStringLiteral("Distance from the 52-week high of the adjusted series on this chart. "
+                                              "The 52 WEEK RANGE panel uses raw prices.")
+                             : QStringLiteral("Window shorter than a year: uses the vendor's raw 52-week high, "
+                                              "against an adjusted close. Select 1Y or longer for a consistent figure."));
         // Green when close to the high (within 5%), dim otherwise. Always
         // negative for normal data so we don't bother with a "+" prefix.
         set_fg(primary_52w_lbl_,
@@ -1900,24 +1896,10 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
     // What was missing is that only the technical badge said so: the gauge
     // prints its own hit rates, this one asserted a verdict with no horizon
     // and no provenance at all, and the asymmetry read as a contradiction.
-    p->setToolTip(QStringLiteral("Sell-side analyst consensus, as published by the data vendor — not "
-                                 "computed here. Targets are twelve-month price objectives; the badge is "
-                                 "the vendor's summary of the individual ratings behind them.\n\n"
-                                 "CONSENSUS is the mean of the individual ratings on a 1–5 scale where 5 "
-                                 "is Strong Buy — the orientation Bloomberg's ANR standardises every "
-                                 "contributor onto. The vendor publishes this figure INVERTED (its 1 is "
-                                 "Strong Buy), so the number here is 6 minus the raw value; compare it "
-                                 "against a vendor screen with that in mind.\n\n"
-                                 "One discipline this consensus does NOT have: Bloomberg drops a "
-                                 "contributor from ANR once its rating is a year stale. The vendor "
-                                 "applies no such rule and publishes no per-analyst dates, so a rating "
-                                 "here may rest partly on views nobody has revisited in some time.\n\n"
-                                 "This is a fundamental view, and it is measuring something different "
-                                 "from the STRONG BUY … STRONG SELL verdict on the Technicals tab, which "
-                                 "describes the trend currently in the price. The two routinely disagree, "
-                                 "and most sharply when price has moved a long way from where analysts "
-                                 "last set their targets. That gap is information; it is not an error in "
-                                 "either reading."));
+    p->setToolTip(QStringLiteral("Sell-side consensus as published by the data vendor; targets are twelve-month "
+                                 "price objectives. CONSENSUS is the mean rating on a 1–5 scale, 5 = Strong Buy "
+                                 "(the vendor's raw figure is inverted).\nA fundamental view, not the Technicals "
+                                 "verdict — the two often disagree."));
     target_high_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     target_mean_val_ = add_row(p, "MEAN", YELLOW);
     target_low_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
@@ -1956,11 +1938,8 @@ QWidget* EquityOverviewTab::build_analyst_panel() {
 
 QWidget* EquityOverviewTab::build_52w_panel() {
     auto* p = make_panel("52 WEEK RANGE", YELLOW);
-    p->setToolTip(QStringLiteral("Unadjusted (raw) prices, the same basis as the quote header and the "
-                                 "analyst targets — so all three can be compared directly.\n\n"
-                                 "The chart and its crosshair use split/dividend-ADJUSTED prices, which "
-                                 "answer a different question (total return). For a dividend payer the "
-                                 "two bands differ by roughly the cumulative yield over the year."));
+    p->setToolTip(QStringLiteral("Unadjusted (raw) prices, the same basis as the quote header and the analyst "
+                                 "targets. The chart uses split/dividend-adjusted prices, so its band can differ."));
     w52h_val_ = add_row(p, "HIGH", ui::colors::POSITIVE);
     w52l_val_ = add_row(p, "LOW", ui::colors::NEGATIVE);
     avg_vol_val_ = add_row(p, "AVG VOL", CYAN);

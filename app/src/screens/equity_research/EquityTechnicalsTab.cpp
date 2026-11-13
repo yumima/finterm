@@ -428,25 +428,16 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
                "the bands \xe2\x80\x94 a statistically stretched move.";
     if (col_key == "bb_wband")
         return "Bollinger Band Width\n\n"
-               "The distance between the bands as a PERCENT of the midline \xe2\x80\x94 a direct read "
-               "of volatility (typical equity readings run about 2\xe2\x80\x93"
-               "20). A tight squeeze "
-               "(under ~5) often precedes a sharp breakout; unusually wide bands (over ~30) mark "
-               "volatility that tends to fade.";
+               "The distance between the bands as a percent of the midline \xe2\x80\x94 a read of "
+               "volatility. A tight squeeze (under ~5) often precedes a sharp breakout.";
     if (col_key == "obv")
         return "On-Balance Volume (OBV)\n\n"
-               "Running total that adds the day's volume on up closes and subtracts it on down "
-               "closes. Rising OBV confirms an uptrend has volume behind it; OBV falling while "
-               "price rises warns the rally is thin.\n\n"
-               "The level itself is arbitrary — the total starts at zero on the first bar "
-               "fetched, so it moves with the PERIOD selection. Only the slope carries meaning, "
-               "and that is what the rating scores.";
+               "Running total that adds volume on up closes and subtracts it on down closes. "
+               "Only the slope matters; the level depends on the PERIOD selected.";
     if (col_key == "vwap")
         return "VWAP (14-bar rolling)\n\n"
-               "The average traded price weighted by volume over the last 14 bars. This is a "
-               "rolling average, not the single-session VWAP institutions benchmark execution "
-               "against \xe2\x80\x94 it does not reset each day. Price above it means buyers have "
-               "been in control over that window; below, sellers.";
+               "The volume-weighted average price over the last 14 bars \xe2\x80\x94 rolling, not the "
+               "daily-reset session VWAP. Price above it: buyers in control over that window.";
     if (col_key == "cmf")
         return "Chaikin Money Flow (CMF)\n\n"
                "Volume-weighted buying versus selling pressure over the period, from \xe2\x88\x92"
@@ -458,11 +449,7 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
     if (col_key == "adi")
         return "Accumulation/Distribution Index (ADI)\n\n"
                "Cumulative volume weighted by where each close lands within its bar's range. "
-               "Rising ADI shows accumulation confirming the trend; divergence from price "
-               "warns of a hidden shift in flow.\n\n"
-               "The level itself is arbitrary — the total starts at zero on the first bar "
-               "fetched, so it moves with the PERIOD selection. Only the slope carries meaning, "
-               "and that is what the rating scores.";
+               "Only the slope matters; the level depends on the PERIOD selected.";
     if (col_key.startsWith("sma_"))
         return "Simple Moving Average (SMA)\n\n"
                "The arithmetic average close over the period \xe2\x80\x94 the plain trend baseline. "
@@ -476,9 +463,7 @@ QString EquityTechnicalsTab::indicator_help(const QString& col_key) {
     if (col_key == "ichimoku_base")
         return "Ichimoku Base Line (Kijun-sen)\n\n"
                "The midpoint of the highest high and lowest low over the last 26 periods \xe2\x80\x94 "
-               "not an average of closes but the centre of the recent range, which makes it a "
-               "slower, steadier reference than a moving average of the same length. Price "
-               "holding above it is bullish; losing it often marks the point a trend stalls.";
+               "the centre of the recent range. Price holding above it is bullish.";
     if (col_key.startsWith("wma_"))
         return "Weighted Moving Average (WMA)\n\n"
                "A moving average with linearly increasing weight on the most recent prices \xe2\x80\x94 "
@@ -598,11 +583,8 @@ void EquityTechnicalsTab::build_ui() {
     // pulled, not the bar size the indicators are built from — and since every
     // reading is taken off the latest daily bar with a fixed lookback, the
     // selections that clear the warm-up floor land on the same verdict.
-    period_lbl->setToolTip("How much price history is fetched.\n\n"
-                           "Indicators are computed from daily bars and always from at least two years of "
-                           "them, so that the 50- and 200-day averages, MACD and ADX are warmed up and the "
-                           "rating has something to stand on. Because each indicator reads off the latest "
-                           "bar with a fixed lookback, the shorter selections produce the same rating.");
+    period_lbl->setToolTip("How much price history is fetched. Indicators always use at least two years of daily "
+                           "bars, so the shorter periods give the same rating.");
     period_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
                                   .arg(ui::colors::TEXT_SECONDARY()));
     pb_hl->addWidget(period_lbl);
@@ -646,11 +628,8 @@ void EquityTechnicalsTab::build_ui() {
     // describes the multi-week one — they disagree often, and that disagreement
     // is the useful part.
     auto* bars_lbl = new QLabel("BARS");
-    bars_lbl->setToolTip("Which bars the indicators are built from.\n\n"
-                         "Daily reads the multi-week trend; weekly re-derives every indicator from weekly "
-                         "highs, lows and closes and reads the multi-month one. A stock can be neutral on "
-                         "the daily chart and strongly trending on the weekly, and vice versa \xe2\x80\x94 "
-                         "the two answer different questions.");
+    bars_lbl->setToolTip("Which bars the indicators are built from. Daily reads the multi-week trend, weekly the "
+                         "multi-month one; the two can disagree.");
     bars_lbl->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;background:transparent;border:0;")
                                 .arg(ui::colors::TEXT_SECONDARY()));
     pb_hl->addSpacing(14);
@@ -774,13 +753,8 @@ void EquityTechnicalsTab::build_ui() {
     // came from.
     auto* tally_caption = new QLabel("WHAT THE INDICATORS SAY");
     tally_caption->setAlignment(Qt::AlignCenter);
-    tally_caption->setToolTip("The table's own tally, not the verdict.\n\n"
-                              "The verdict above comes from how the 10/20/50/100/200-day averages are stacked "
-                              "and how far price sits from the 50-day, in ATRs. Averaging ~20 correlated "
-                              "indicator votes scored 80% against a 40-day trend label; those two readings score "
-                              "96% on held-out years, so the tally is reported rather than counted.\n\n"
-                              "The two disagreeing is normal and informative: oscillators fire against a move "
-                              "while the trend structure describes it.");
+    tally_caption->setToolTip("The table's own tally, not the verdict. The verdict comes from how the moving "
+                              "averages are stacked; the two often disagree.");
     tally_caption->setStyleSheet(QString("color:%1;font-size:12px;font-weight:600;letter-spacing:1px;"
                                          "background:transparent;border:0;")
                                      .arg(ui::colors::TEXT_TERTIARY()));
@@ -801,20 +775,8 @@ void EquityTechnicalsTab::build_ui() {
     accuracy_label_ = new QLabel("96% on the trend in place \xe2\x80\xb7 53% on the next 40 days");
     accuracy_label_->setAlignment(Qt::AlignCenter);
     accuracy_label_->setWordWrap(true);
-    accuracy_label_->setToolTip("This panel reports the trend that has already happened, and it is good at that: "
-                                "scored against a 40-day regression label over 178 large caps and twelve years of "
-                                "daily bars, the verdict agrees with the established trend 96% of the time.\n\n"
-                                "The verdict comes from how the 10/20/50/100/200-day averages are stacked and how far "
-                                "price sits from the 50-day, in ATRs \xe2\x80\x94 not from counting the table below. "
-                                "Averaging ~20 correlated indicator votes scored 80%; these two readings score 96% on "
-                                "held-out years. The table is shown because the detail is useful, not because the "
-                                "headline is a tally of it.\n\n"
-                                "It is not a forecast. The same evidence scored against the direction of the *next* "
-                                "40 days lands at 53% \xe2\x80\x94 barely off a coin flip \xe2\x80\x94 and its "
-                                "rank correlation with forward returns is indistinguishable from zero. Read the "
-                                "verdict as a description of the move already in place, not as a forecast of the "
-                                "next one.\n\n"
-                                "Re-run the measurement yourself: python -m factor_rating --describe");
+    accuracy_label_->setToolTip("The verdict describes the trend already in place (96% agreement over 178 large caps), "
+                                "not a forecast: against the next 40 days it scores 53%, barely off a coin flip.");
     accuracy_label_->setStyleSheet(QString("color:%1;font-size:12px;font-style:italic;background:transparent;border:0;")
                                        .arg(ui::colors::TEXT_SECONDARY()));
     rp_vl->addWidget(accuracy_label_);
@@ -1326,12 +1288,8 @@ void EquityTechnicalsTab::update_as_of(const services::equity::TechnicalsData& p
         bits << QStringLiteral("STALE \xe2\x80\x94 refreshing\xe2\x80\xa6");
 
     as_of_label_->setText(bits.join(QStringLiteral(" \xc2\xb7 ")));
-    as_of_label_->setToolTip("Which bar the verdict describes and when the data was fetched.\n\n"
-                             "Indicators read the latest bar in the series. During market hours that "
-                             "bar is still forming — its close, high and low can all change until the "
-                             "session (or, for weekly bars, the week) ends, and the verdict can move "
-                             "with them. STALE means the value came from cache past its refresh "
-                             "window; a background refetch is already running.");
+    as_of_label_->setToolTip("Which bar the verdict describes and when the data was fetched. During market hours "
+                             "the latest bar is still forming, so the verdict can move. STALE: cached, refetching.");
     as_of_label_->setVisible(!bits.isEmpty());
 }
 

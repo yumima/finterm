@@ -1,7 +1,9 @@
 // src/ui/theme/Tooltips.cpp
 #include "ui/theme/Tooltips.h"
 
+#include <QAbstractItemView>
 #include <QApplication>
+#include <QHeaderView>
 #include <QHelpEvent>
 #include <QProxyStyle>
 #include <QStyle>
@@ -16,6 +18,12 @@ namespace {
 /// explanation doesn't become six, narrow enough to read without tracking
 /// across the monitor.
 constexpr int kWrapWidthPx = 380;
+
+/// Longest text a tooltip shows (≈ 12 lines at kWrapWidthPx). A hover box is
+/// for a reminder, not an article: anything longer is cut at the last
+/// paragraph (or sentence) break that fits, so it can never grow down the
+/// screen the way it could across it.
+constexpr int kMaxChars = 600;
 
 /// Below this a tooltip is a label ("Refresh", "Held in: Growth"), and boxing
 /// it would put a paragraph-shaped frame around three words.
@@ -43,14 +51,48 @@ class InstantTooltipStyle : public QProxyStyle {
 /// table is what actually bounds the box. Without it, "rich text" only buys
 /// word wrap at whatever width the paragraph happens to want, which for a long
 /// tooltip is still the whole screen.
-QString to_box(const QString& plain) {
-    QString html = plain.toHtmlEscaped();
-    // Author-intended line breaks survive; the wrap does the rest.
-    html.replace(QLatin1Char('\n'), QLatin1String("<br>"));
+QString clamp(const QString& text) {
+    if (text.size() <= kMaxChars)
+        return text;
+    const QString head = text.left(kMaxChars);
+    int cut = head.lastIndexOf(QLatin1String("\n\n"));
+    if (cut < kMaxChars / 2)
+        cut = head.lastIndexOf(QLatin1String(". ")) + 1;
+    if (cut < kMaxChars / 2)
+        cut = kMaxChars;
+    return head.left(cut).trimmed() + QStringLiteral(" …");
+}
+
+QString to_box(const QString& tip) {
+    QString html;
+    if (Qt::mightBeRichText(tip)) {
+        html = tip; // rich already: keep its markup, only bound its width
+    } else {
+        html = clamp(tip).toHtmlEscaped();
+        // Author-intended line breaks survive; the wrap does the rest.
+        html.replace(QLatin1Char('\n'), QLatin1String("<br>"));
+    }
     return QStringLiteral("<qt><table width=\"%1\" cellpadding=\"0\" cellspacing=\"0\">"
                           "<tr><td>%2</td></tr></table></qt>")
         .arg(kWrapWidthPx)
         .arg(html);
+}
+
+/// The model tooltip under `pos` when `w` is an item view's viewport or a
+/// header; empty otherwise.
+QString item_tooltip(QWidget* w, const QPoint& pos) {
+    // Events reach the view's viewport, a child of the view (headers too).
+    auto* view = w->parentWidget() ? qobject_cast<QAbstractItemView*>(w->parentWidget()) : nullptr;
+    if (!view || view->viewport() != w)
+        return {};
+    if (auto* header = qobject_cast<QHeaderView*>(view)) {
+        const int section = header->logicalIndexAt(pos);
+        if (section >= 0 && header->model())
+            return header->model()->headerData(section, header->orientation(), Qt::ToolTipRole).toString();
+        return {};
+    }
+    const QModelIndex idx = view->indexAt(pos);
+    return idx.isValid() ? idx.data(Qt::ToolTipRole).toString() : QString();
 }
 
 class TooltipFormatter : public QObject {
@@ -66,23 +108,24 @@ class TooltipFormatter : public QObject {
         if (!w)
             return QObject::eventFilter(obj, event);
 
-        const QString tip = w->toolTip();
-        // An empty widget tooltip means somebody else answers this event.
-        // Item views resolve Qt::ToolTipRole from the model inside their own
-        // handler, so consuming it here would silence every table cell in the
-        // app. Let the default path run.
+        auto* help = static_cast<QHelpEvent*>(event);
+        QString tip = w->toolTip();
+        // Tables and headers keep their tooltips in the model (ToolTipRole),
+        // not on the widget: read the cell or section under the cursor, so
+        // a long cell tooltip is boxed like any other.
+        if (tip.isEmpty())
+            tip = item_tooltip(w, help->pos());
+        // Nothing here: somebody else answers this event.
         if (tip.isEmpty())
             return QObject::eventFilter(obj, event);
 
-        // Already rich (it wraps by itself), or short enough that one line is
-        // the better shape.
-        if (Qt::mightBeRichText(tip) || (tip.size() <= kWrapThresholdChars && !tip.contains(QLatin1Char('\n'))))
+        // Short enough that one line is the better shape.
+        if (tip.size() <= kWrapThresholdChars && !tip.contains(QLatin1Char('\n')))
             return QObject::eventFilter(obj, event);
 
         // Anchored on the cursor rather than the widget: for a wide row or a
         // full-width panel, "near the widget" can be a long way from the thing
         // being pointed at.
-        auto* help = static_cast<QHelpEvent*>(event);
         QToolTip::showText(help->globalPos(), to_box(tip), w);
         return true;
     }

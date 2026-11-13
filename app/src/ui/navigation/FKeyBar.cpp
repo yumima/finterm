@@ -63,7 +63,6 @@ void TabBar::add_tab(const TabDef& def) {
     btn->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
     btn->setCursor(Qt::PointingHandCursor);
     btn->setProperty("tab_id", def.id);
-    btn->setToolTip(def.label);
     connect(btn, &QPushButton::clicked, this, [this, id = def.id]() {
         set_active(id);
         emit tab_changed(id);

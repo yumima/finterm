@@ -82,7 +82,6 @@ void AiRolesSection::build_ui() {
         right->setSpacing(2);
         auto* combo = new QComboBox();
         combo->setMinimumWidth(300);
-        combo->setToolTip(role.hint);
         const QString role_id = role.id;
         connect(combo, &QComboBox::currentIndexChanged, this, [this, combo, role_id](int) {
             if (loading_)

@@ -39,9 +39,7 @@ PortfolioStatsRibbon::PortfolioStatsRibbon(QWidget* parent) : QWidget(parent) {
                                        "converted into the portfolio currency.");
 
     pnl_ = add_hero(primary_layout, "UNREALIZED P&L", ui::colors::TEXT_PRIMARY);
-    pnl_.container->setToolTip("Unrealized profit or loss across all open positions.\n"
-                               "Calculated as: market value − total cost basis.\n"
-                               "This gain/loss is not realized until you sell.");
+    pnl_.container->setToolTip("Unrealized profit or loss across open positions: market value − cost basis.");
 
     day_change_ = add_hero(primary_layout, "DAY CHANGE", ui::colors::TEXT_PRIMARY);
     day_change_.container->setToolTip("Total portfolio value change today.\n"
@@ -88,46 +86,35 @@ PortfolioStatsRibbon::PortfolioStatsRibbon(QWidget* parent) : QWidget(parent) {
                                       "for all current positions. Used to compute P&L.");
 
     realized_ = add_chip(chips_layout, "REALIZED", ui::colors::TEXT_PRIMARY);
-    realized_.container->setToolTip("Profit and loss locked in by sells, from the transaction log —\n"
-                                    "including positions that are fully closed. Average-cost basis:\n"
-                                    "realized = shares sold × (sell price − average cost at the sale).\n"
-                                    "Not part of UNREALIZED P&L above.");
+    realized_.container->setToolTip("Profit and loss locked in by sells, including fully closed positions\n"
+                                    "(average-cost basis). Not part of UNREALIZED P&L above.");
 
     dividends_ = add_chip(chips_layout, "DIV", ui::colors::CYAN);
     dividends_.container->setToolTip("Cash dividends recorded in the transaction log.\n"
-                                     "Income, kept separate from price P&L — a dividend is not a\n"
-                                     "price move, and this NAV holds no cash balance.");
+                                     "Kept separate from price P&L.");
 
     concentration_ = add_chip(chips_layout, "CONC", ui::colors::AMBER);
-    concentration_.container->setToolTip("Concentration risk: combined weight of the top 3 holdings.\n"
-                                         "Values above 50% indicate a concentrated portfolio.\n"
-                                         "Lower is generally better for diversification.");
+    concentration_.container->setToolTip("Combined weight of the top 3 holdings. Above 50% is concentrated.");
 
     sharpe_ = add_chip(chips_layout, "SHARPE (ARITH)", ui::colors::CYAN);
     sharpe_.container->setToolTip("Sharpe Ratio (arithmetic): risk-adjusted return over a risk-free rate.\n"
-                                  "Formula: (mean daily return − risk-free rate) / std dev × √252.\n"
-                                  "Above 1.0 = good, above 2.0 = very good, below 0 = worse than risk-free.");
+                                  "Above 1.0 = good, below 0 = worse than risk-free.");
 
     beta_ = add_chip(chips_layout, "BETA", ui::colors::WARNING);
     beta_.container->setToolTip("Portfolio sensitivity to broad market moves.\n"
-                                "Beta = 1.0: moves with the market. >1.0: more volatile.\n"
-                                "<1.0: less volatile. Negative: inverse correlation.");
+                                "1.0 moves with the market; above 1.0, more volatile.");
 
     // Labelled with the window it is actually measured over (set_metrics) —
     // the series spans up to a year of snapshots, not 30 days.
     volatility_ = add_chip(chips_layout, "VOL", ui::colors::AMBER);
-    volatility_.container->setToolTip("Annualized portfolio volatility (std deviation of returns).\n"
-                                      "Formula: std dev of daily returns × √252.\n"
-                                      "Higher values indicate greater price swings.");
+    volatility_.container->setToolTip("Annualized portfolio volatility (std deviation of daily returns).");
 
     max_drawdown_ = add_chip(chips_layout, "MDD", ui::colors::NEGATIVE);
-    max_drawdown_.container->setToolTip("Maximum peak-to-trough decline in portfolio value.\n"
-                                        "Measures the worst loss experienced from a high point.\n"
-                                        "Lower magnitude = better capital preservation.");
+    max_drawdown_.container->setToolTip("Maximum peak-to-trough decline in portfolio value.");
 
     var95_ = add_chip(chips_layout, "VAR 95%", ui::colors::NEGATIVE);
     var95_.container->setToolTip("Value at Risk at 95% confidence — the maximum expected\n"
-                                 "single-day loss 95% of the time based on historical returns.");
+                                 "single-day loss 95% of the time, from historical returns.");
 
     risk_score_ = add_chip(chips_layout, "RISK", ui::colors::NEGATIVE);
     risk_score_.container->setToolTip("Composite risk score from 0 (low) to 100 (high).\n"
@@ -369,9 +356,7 @@ void PortfolioStatsRibbon::set_metrics(const portfolio::ComputedMetrics& m) {
     // each tooltip names it, and the VOL label carries its span.
     const QString window = portfolio::metrics_window_note(m);
     sharpe_.container->setToolTip(tr("Sharpe Ratio (arithmetic): risk-adjusted return over a risk-free rate.\n"
-                                     "Formula: (mean daily return − risk-free rate) / std dev × √252.\n"
-                                     "The QuantStats/FFN views report the geometric variant ((CAGR − rf) / vol).\n"
-                                     "Above 1.0 = good, above 2.0 = very good, below 0 = worse than risk-free.\n\n") +
+                                     "Above 1.0 = good, below 0 = worse than risk-free.\n") +
                                   portfolio::rf_label(m) + QStringLiteral("\n") + window);
     apply_chip_styles(sharpe_, ui::colors::CYAN);
 
@@ -380,9 +365,8 @@ void PortfolioStatsRibbon::set_metrics(const portfolio::ComputedMetrics& m) {
                                                     : QStringLiteral("BETA vs %1").arg(m.beta_benchmark));
     beta_.value->setText(fmt_opt(m.beta));
     beta_.container->setToolTip(
-        tr("Portfolio sensitivity to broad market moves (OLS slope of daily returns vs %1).\n"
-           "Beta = 1.0: moves with the market. >1.0: more volatile.\n"
-           "<1.0: less volatile. Negative: inverse correlation.\n\n")
+        tr("Portfolio sensitivity to %1 (slope of daily returns).\n"
+           "1.0 moves with the market; above 1.0, more volatile.\n")
             .arg(m.beta_benchmark.isEmpty() ? QStringLiteral("the benchmark") : m.beta_benchmark) +
         window);
     apply_chip_styles(beta_, ui::colors::WARNING);
@@ -391,24 +375,21 @@ void PortfolioStatsRibbon::set_metrics(const portfolio::ComputedMetrics& m) {
     volatility_.label->setText(span.isEmpty() ? QStringLiteral("VOL") : QStringLiteral("VOL %1").arg(span));
     volatility_.value->setText(m.volatility.has_value() ? QString("%1%").arg(QString::number(*m.volatility, 'f', 1))
                                                         : "--");
-    volatility_.container->setToolTip(tr("Annualized portfolio volatility (std deviation of returns).\n"
-                                         "Formula: std dev of one-session returns × √252.\n"
-                                         "Higher values indicate greater price swings.\n\n") +
+    volatility_.container->setToolTip(tr("Annualized portfolio volatility (std deviation of daily returns).\n") +
                                       window);
     apply_chip_styles(volatility_, ui::colors::AMBER);
 
     max_drawdown_.value->setText(
         m.max_drawdown.has_value() ? QString("%1%").arg(QString::number(*m.max_drawdown, 'f', 1)) : "--");
-    max_drawdown_.container->setToolTip(tr("Maximum peak-to-trough decline in portfolio value\n"
-                                           "(flow-adjusted growth index, so deposits and withdrawals\n"
-                                           "are neither gains nor crashes).\n\n") +
+    max_drawdown_.container->setToolTip(tr("Maximum peak-to-trough decline in portfolio value,\n"
+                                           "with deposits and withdrawals excluded.\n") +
                                         window);
     apply_chip_styles(max_drawdown_, ui::colors::NEGATIVE);
 
     var95_.value->setText(m.var_95.has_value() ? QString::number(*m.var_95, 'f', 2) : ui::formatting::placeholder());
     var95_.container->setToolTip(m.var_95.has_value()
                                      ? tr("Value at Risk at 95% confidence — the maximum expected\n"
-                                          "single-day loss 95% of the time based on historical returns.\n\n") +
+                                          "single-day loss 95% of the time, from historical returns.\n") +
                                            window
                                  : m.return_days < portfolio::kMinVarSample
                                      ? tr("VaR 95%: insufficient history (n=%1; needs %2 one-session returns).")

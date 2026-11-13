@@ -438,11 +438,8 @@ void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
         return;
     aft_state_ = state;
     static constexpr auto kBase =
-        QLatin1String("Move in extended-hours trading against the last regular close — pre-market "
-                      "before the open, post-market after it, overnight (20:00–04:00 ET) between. "
-                      "Live: it moves with every print. The cell says which session it came from.\n\n"
-                      "During the regular session this is the LAST extended move, not a live one, and "
-                      "it is already inside DAY CHG% — the two are not additive.");
+        QLatin1String("Extended-hours move against the last regular close (pre-market, post-market or "
+                      "overnight).\nDuring the regular session it is already inside DAY CHG% — not additive.");
     switch (state) {
         case AftState::Idle:
             aft_header_->setText(QStringLiteral("AFT%"));
@@ -458,7 +455,7 @@ void PortfolioSummaryWidget::set_aft_header_state(AftState state) {
         case AftState::Failed:
             aft_header_->setText(QStringLiteral("AFT% !"));
             aft_header_->setToolTip(QString("%1\n\nThe last extended-hours fetch failed: %2\nRetrying on the next "
-                                            "refresh; the tile's refresh button retries immediately.")
+                                            "refresh.")
                                         .arg(kBase, aft_error_));
             break;
     }

@@ -131,27 +131,15 @@ QString index_future_tooltip(const IndexFutureQuote& q, const QString& label) {
     if (q.index == QLatin1String("^IXIC"))
         s += QStringLiteral("\n\nThe Composite has no future; the Nasdaq-100 future stands in for it.");
     if (q.index == QLatin1String("^N225"))
-        s += QStringLiteral("\n\nThis is the CME contract, so its day runs on Chicago's clock: the "
-                            "change is since the CME close (17:00 ET), not since Tokyo's 15:30 close, "
-                            "and while Tokyo trades it overlaps CHG%.");
-    else
-        s += QStringLiteral("\n\nAfter the 16:00 ET cash close this is the index's after-hours move; "
-                            "during the session it runs alongside CHG% (futures carry a small premium "
-                            "to the index, so the two differ slightly).");
-    s += QStringLiteral("\n\nLive day and night, print by print. The previous close is the contract's own "
-                        "(Yahoo's \"previous close\", read in the same snapshot as the price), so "
-                        "half-days and holidays need no calendar. One contract month is quoted "
-                        "throughout, so a quarterly roll can't show up as a move. Yahoo's futures "
-                        "data runs about 10 minutes behind.");
+        s += QStringLiteral("\n\nCME contract: the change is since the CME close (17:00 ET), not Tokyo's close.");
+    s += QStringLiteral("\n\nYahoo's futures data runs about 10 minutes behind.");
     return s;
 }
 
 QString index_future_unavailable_tooltip(const QString& index, const QString& label) {
     if (!index_future_for(index))
         return QStringLiteral("%1 has no futures quote: the data feed carries no future for this index.").arg(label);
-    return QStringLiteral("%1 futures: no sound reading right now — still fetching, the contract has "
-                          "stopped printing while the market is open (a feed gap), or the feed has no "
-                          "data for it. Shown as a dash rather than an old quote.")
+    return QStringLiteral("%1 futures: no reliable reading right now (still fetching, or a feed gap).")
         .arg(label);
 }
 

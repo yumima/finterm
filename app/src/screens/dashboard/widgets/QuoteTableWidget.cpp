@@ -34,11 +34,8 @@ namespace {
 // and chart window through the daemon's cache, and only while on screen.
 constexpr int kFutRefreshMs = 60'000;
 constexpr int kColFut = 4;
-constexpr auto kFutTip = "Each index's futures quote: the future's change since its previous close, live day and "
-                         "night — after the cash close this is the index's after-hours move. Hover a cell for the "
-                         "contract, its last price and the close it is measured from.\n\n"
-                         "A dash means there is no honest number for that row right now; hover it for why (no future "
-                         "on the feed for that index, or still fetching).";
+constexpr auto kFutTip = "Each index's futures change since its previous close, live day and night — after the "
+                         "cash close, the index's after-hours move. Hover a cell for details.";
 } // namespace
 
 void QuoteTableWidget::build_table() {

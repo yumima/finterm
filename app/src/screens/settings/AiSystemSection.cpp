@@ -59,10 +59,8 @@ void AiSystemSection::build_ui() {
     // re-reads the flag on every keystroke, so the change is live
     // without restart.
     inline_completion_cb_ = new QCheckBox(QStringLiteral("Enable inline (ghost-text) completion in chat composer"));
-    inline_completion_cb_->setToolTip(QStringLiteral("After ~450 ms idle, finterm asks the active LLM for a "
-                                                     "continuation and shows it in italic gray.  Tab accepts; "
-                                                     "any other key dismisses.  Off by default — latency is "
-                                                     "API-bound until a fast local model is configured."));
+    inline_completion_cb_->setToolTip(QStringLiteral("After a short pause, the active LLM suggests a continuation "
+                                                     "in gray. Tab accepts; any other key dismisses."));
     {
         auto r = SettingsRepository::instance().get(QStringLiteral("inline_completion.enabled"));
         const QString v = r.is_ok() ? r.value().trimmed().toLower() : QString();
@@ -425,10 +423,8 @@ void AiSystemSection::on_trace_double_clicked(int row, int /*column*/) {
         const QString skill = cd.isObject() ? cd.object().value(QStringLiteral("skill")).toString() : QString();
         if (!skill.isEmpty()) {
             propose_btn = new QPushButton(QStringLiteral("🧠 Propose SKILL.md fix"));
-            propose_btn->setToolTip(QStringLiteral("Send this turn + the current SKILL.md to the "
-                                                   "active LLM and ask for a proposed revision.  "
-                                                   "Output is shown for review — nothing is written "
-                                                   "to disk automatically."));
+            propose_btn->setToolTip(QStringLiteral("Ask the active LLM for a revised SKILL.md from this turn. "
+                                                   "Shown for review; nothing is written to disk."));
             connect(propose_btn, &QPushButton::clicked, this, [this, t]() { on_propose_skill_fix(t); });
         }
     }

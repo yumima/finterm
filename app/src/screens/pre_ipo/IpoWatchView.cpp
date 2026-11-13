@@ -2198,8 +2198,8 @@ void IpoWatchView::render_calendar() {
     table_->setHorizontalHeaderLabels(headers);
     table_->horizontalHeaderItem(C_Expected)
         ->setToolTip(QStringLiteral(
-            "Projected pricing date. Bold = firm (Nasdaq-scheduled, or 8-A / CERT / EFFECT on EDGAR). "
-            "~date · N% = estimate from comparable filers; N% of them priced at all. Hover for the basis."));
+            "Projected pricing date. Bold = firm (scheduled or registered). ~date · N% = estimate from "
+            "comparable filers, N% of which priced. Hover a cell for the basis."));
     table_->horizontalHeaderItem(C_Stage)->setToolTip(
         QStringLiteral("Furthest step on EDGAR: S-1 / amendments → 8-A (exchange registration) → "
                        "CERT (listing certified) → EFFECT (SEC effective) → 424B (priced)"));
@@ -2621,8 +2621,8 @@ void IpoWatchView::render_lockups() {
             l.assumed
                 ? QStringLiteral("Nasdaq has no lock-up term for this deal; 180 days is the convention, not a fact")
                 : QStringLiteral(
-                      "Lock-up term from the deal's prospectus, as Nasdaq records it. Early-release "
-                      "clauses (price- or earnings-triggered, staggered tranches) and waivers are not modelled."));
+                      "Lock-up term from the deal's prospectus, as Nasdaq records it. Early releases and "
+                      "waivers are not modelled."));
         if (l.assumed)
             basis->setForeground(QBrush(QColor(TEXT_SECONDARY())));
         table_->setItem(r, 8, basis);

@@ -188,23 +188,21 @@ void OwnershipCalendarWidget::populate() {
                 what = QStringLiteral("Q%1 %2 holdings must be filed — the holder tables can change")
                            .arg((e.basis.month() - 1) / 3 + 1)
                            .arg(e.basis.year());
-                tip = QStringLiteral("13F is due 45 days after the quarter end (%1). Most filers use the "
-                                     "whole window, so the register on every stock page moves on this day.")
+                tip = QStringLiteral("13F is due 45 days after the quarter end (%1); most filers file near "
+                                     "the deadline.")
                           .arg(e.basis.toString(QStringLiteral("d MMM yyyy")));
                 break;
             case CalendarEntry::Kind::FinraPublication:
                 what =
                     QStringLiteral("FINRA publishes the %1 settlement").arg(e.basis.toString(QStringLiteral("d MMM")));
-                tip = QStringLiteral("Firms report short positions two business days after settlement; "
-                                     "FINRA publishes about eight business days after that. The short "
-                                     "figures on the stock pages and the SHORT-CONSTRAINED scan refresh then.");
+                tip = QStringLiteral("FINRA publishes short positions about ten business days after settlement; "
+                                     "the short figures refresh then.");
                 break;
             case CalendarEntry::Kind::LockupExpiry:
                 what = QStringLiteral("<b>%1</b> — %2 (priced %3)")
                            .arg(e.symbol, e.company, e.basis.toString(QStringLiteral("d MMM")));
-                tip = QStringLiteral("The customary 180-day lock-up after an IPO — a convention, not a "
-                                     "per-deal fact; the prospectus governs. When it ends, insider and "
-                                     "pre-IPO shares can trade: the float can grow sharply. Click to open.");
+                tip = QStringLiteral("The customary 180-day lock-up — a convention, not a per-deal fact. When "
+                                     "it ends, pre-IPO shares can trade and the float can grow sharply.");
                 break;
         }
         auto* what_lbl = new QLabel(what);

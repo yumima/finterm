@@ -299,8 +299,7 @@ void PerformanceRiskView::update_metrics() {
     // information; a fabricated number is a trap.
     auto fmt = [](double v, int dp = 2) { return QString::number(v, 'f', dp); };
     const QString need_history = tr("Not enough daily NAV history yet (%1 return observations so far).\n"
-                                    "The series grows one point per day; a backfill from the transaction\n"
-                                    "log fills it immediately.")
+                                    "The series grows one point per day.")
                                      .arg(metrics_.return_days);
 
     auto set_card = [&](MetricCard& card, const std::optional<double>& v, const QString& text, const char* color) {

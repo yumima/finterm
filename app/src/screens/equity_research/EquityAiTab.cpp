@@ -613,16 +613,13 @@ void EquityAiTab::build_ui() {
     horizon_sel_->addItem(QStringLiteral("1 month"), 30);
     horizon_sel_->setCurrentIndex(1); // default 1 week
     horizon_sel_->setToolTip(QStringLiteral("Horizon for the quant forecast. The news engine "
-                                            "(FinGPT) always calls the coming week — that is the "
-                                            "window its method was built for."));
+                                            "(FinGPT) always calls the coming week."));
     ctl->addWidget(horizon_sel_);
 
     run_btn_ = new QPushButton(QStringLiteral("Run AI Analysis"));
     run_btn_->setCursor(Qt::PointingHandCursor);
-    run_btn_->setToolTip(QStringLiteral("One click, both engines: the quant read (fundamentals + "
-                                        "price), the FinGPT news forecast, then a sentiment label "
-                                        "per headline. Both forecasts are recorded to the track "
-                                        "record below."));
+    run_btn_->setToolTip(QStringLiteral("Runs the quant forecast, the FinGPT news forecast and headline "
+                                        "sentiment. Both forecasts go to the track record below."));
     run_btn_->setStyleSheet(QString("QPushButton{background:%1;color:%2;border:1px solid %3;border-radius:4px;"
                                     "padding:6px 14px;font-weight:700;}"
                                     "QPushButton:hover{background:%4;border-color:%2;}"
@@ -638,10 +635,8 @@ void EquityAiTab::build_ui() {
     // provider pays per stock viewed, and the forecast is a deliberate action
     // rather than a side effect of browsing. Run is one click away.
     auto_chk_->setChecked(QSettings().value(QStringLiteral("equity_ai/auto_forecast"), false).toBool());
-    auto_chk_->setToolTip(QStringLiteral("Automatically record one forecast per engine per day for "
-                                         "each stock you view (no headline labelling). Off by "
-                                         "default — viewing a stock otherwise costs model calls "
-                                         "you did not ask for."));
+    auto_chk_->setToolTip(QStringLiteral("Record one forecast per engine per day for each stock you view. "
+                                         "Costs model calls on every stock opened."));
     connect(auto_chk_, &QCheckBox::toggled, this, [this](bool on) {
         QSettings().setValue(QStringLiteral("equity_ai/auto_forecast"), on);
         if (on)
@@ -663,9 +658,7 @@ void EquityAiTab::build_ui() {
     verdicts->setSpacing(8);
     quant_chip_ = new QLabel;
     quant_chip_->setToolTip(QStringLiteral("The quant engine's latest recorded forecast — "
-                                           "fundamentals + price action. Leads with the model's own "
-                                           "recommendation (buy / accumulate / hold / reduce / sell), "
-                                           "then direction, target and confidence."));
+                                           "fundamentals + price action."));
     verdicts->addWidget(quant_chip_);
     news_chip_ = new QLabel;
     news_chip_->setToolTip(QStringLiteral("The FinGPT news engine's structured reading of the "
@@ -673,8 +666,7 @@ void EquityAiTab::build_ui() {
     verdicts->addWidget(news_chip_);
     sentiment_chip_ = new QLabel;
     sentiment_chip_->setToolTip(QStringLiteral("Per-headline FinGPT sentiment tally of the current "
-                                               "news. A separate read from both forecasts — the "
-                                               "strip shows all three, it does not average them."));
+                                               "news — separate from both forecasts, not averaged."));
     verdicts->addWidget(sentiment_chip_);
     verdicts->addStretch(1);
     root->addLayout(verdicts);

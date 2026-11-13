@@ -89,9 +89,8 @@ HoldersTable::HoldersTable(QWidget* parent) : QWidget(parent) {
     sort_->addItem(QStringLiteral("by position size"), false);
     sort_->addItem(QStringLiteral("by % of their book (books ≥ $1B)"), true);
     sort_->setToolTip(ui::tooltip_wrap(
-        QStringLiteral("Position size is who owns the most of this company. Weight is how much of the "
-                       "filer's own book this is — a different question, answered with a floor on book size "
-                       "so that a two-person adviser with one name in the account does not outrank Berkshire.")));
+        QStringLiteral("Position size: who owns the most of this company. Weight: how much of the filer's own "
+                       "book this is, among books of $1B or more.")));
     connect(sort_, &QComboBox::activated, this, [this](int i) { emit sort_requested(sort_->itemData(i).toBool()); });
     bar->addWidget(sort_);
     root->addLayout(bar);
@@ -211,8 +210,8 @@ void HoldersTable::render() {
             h.tier == QLatin1String("index")
                 ? QStringLiteral("A named passive complex. Its quarterly change is an index rebalance, not a view.")
             : h.tier == QLatin1String("broad")
-                ? QStringLiteral("A book of a thousand or more names — tracking a benchmark or running client "
-                                 "mandates, not expressing a view on this company.")
+                ? QStringLiteral("A book of a thousand or more names — tracking a benchmark, not a view on "
+                                 "this company.")
                 : QStringLiteral("A book narrow enough that a position in it is a decision.")));
         table_->setItem(i, 1, tier);
 

@@ -436,9 +436,8 @@ QWidget* LlmConfigSection::build_form_panel() {
     lbl_style(eng_lbl);
     engine_status_lbl_ = new QLabel("checking…");
     engine_status_lbl_->setStyleSheet("color:" + QString(ui::colors::TEXT_SECONDARY()) + ";");
-    engine_status_lbl_->setToolTip("Local AI engine (hearth) detected at the resolved base URL.\n"
-                                   "Chat + embeddings default to hearth on 127.0.0.1:11435 with no config;\n"
-                                   "set Base URL above (or $FINTERM_ENGINE_BASE_URL) to override.");
+    engine_status_lbl_->setToolTip("Local AI engine (hearth), default 127.0.0.1:11435.\n"
+                                   "Set Base URL above to override.");
     form->addRow(eng_lbl, engine_status_lbl_);
     connect(&HearthService::instance(), &HearthService::detected, this, &LlmConfigSection::refresh_engine_status);
     HearthService::instance().detect();
@@ -456,9 +455,8 @@ QWidget* LlmConfigSection::build_form_panel() {
                                 "QCheckBox::indicator:checked{background:" +
                                 QString(ui::colors::AMBER()) + ";border-color:" + QString(ui::colors::AMBER()) + ";}";
     manage_engine_check_->setStyleSheet(check_style);
-    manage_engine_check_->setToolTip("When checked, finterm starts `hearth start` on launch and keeps it running.\n"
-                                     "Disable if you manage the hearth engine yourself, or use bare Ollama.\n"
-                                     "Requires the `hearth` binary on PATH (or install: pip install hearth).");
+    manage_engine_check_->setToolTip("Starts hearth on launch and keeps it running.\n"
+                                     "Requires the `hearth` binary on PATH.");
     {
         auto r = SettingsRepository::instance().get("hearth.manage", "false");
         manage_engine_check_->setChecked(r.is_ok() && r.value() == "true");

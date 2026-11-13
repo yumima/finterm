@@ -131,18 +131,15 @@ void EarningsCalendarWidget::build_body() {
     // column look out of line.
     auto* eps_hdr = make_hdr("EPS EST", 3, Qt::AlignHCenter);
     eps_hdr->setToolTip(QStringLiteral("Consensus EPS estimate for the quarter being reported.\n"
-                                       "▲ green / ▼ red compares it with the same quarter a year ago —\n"
-                                       "i.e. whether analysts expect growth, not a beat or a miss."));
+                                       "▲ / ▼ compares it with the same quarter a year ago (expected growth, "
+                                       "not a beat or miss)."));
     // Sequential: the estimate in the column to the left, measured against what
     // the last quarter actually printed. Numerator is the current figure,
     // denominator the previous one.
     surprise_header_ = make_hdr("vs PREV Q", 3, Qt::AlignHCenter);
-    surprise_header_->setToolTip(QStringLiteral("The coming quarter's consensus against what the last reported\n"
-                                                "quarter actually printed:\n"
-                                                "   (this estimate − last quarter's actual) ÷ last quarter's actual\n"
-                                                "Sequential, so it reflects seasonality — a retailer's Q1 will read\n"
-                                                "badly against Q4 every year. The ▲▼ on the estimate itself is the\n"
-                                                "year-on-year comparison, which is the seasonally honest one."));
+    surprise_header_->setToolTip(QStringLiteral("The coming quarter's consensus against what the last quarter "
+                                                "actually printed. Sequential, so it reflects seasonality; the ▲▼ "
+                                                "on the estimate is the year-on-year read."));
     weight_header_ = make_hdr("WT%", 2, Qt::AlignRight);
     vl->addWidget(header_widget_);
 
@@ -955,10 +952,8 @@ void EarningsCalendarWidget::populate() {
                                   .arg(fmt_eps(e.eps_est), fmt_eps(e.eps_ly), source);
                     break;
                 case Growth::Flat:
-                    eps_tip = QStringLiteral("Consensus %1 for the coming quarter — within 1%% of the %2 "
-                                             "reported a year ago, so effectively flat. Consensus panels "
-                                             "differ by more than that, so it isn't called either way."
-                                             "\nBoth figures: %3.")
+                    eps_tip = QStringLiteral("Consensus %1 for the coming quarter — within 1% of the %2 "
+                                             "reported a year ago, so effectively flat.\nBoth figures: %3.")
                                   .arg(fmt_eps(e.eps_est), fmt_eps(e.eps_ly), source);
                     break;
                 case Growth::Unknown:
@@ -997,9 +992,8 @@ void EarningsCalendarWidget::populate() {
                     seq_colour = ui::colors::TEXT_PRIMARY(); // inside the flat band
                     break;
             }
-            seq_tip = QStringLiteral("Consensus %1 for the coming quarter against %2 actually reported for "
-                                     "the quarter of %3 → %4%5%.\nSequential, so seasonality shows up here; "
-                                     "the ▲▼ on the estimate is the year-on-year read.")
+            seq_tip = QStringLiteral("Consensus %1 against %2 reported for the quarter of %3 → %4%5%.\n"
+                                     "Sequential, so seasonality shows up here.")
                           .arg(fmt_eps(e.eps_est), fmt_eps(e.prev_actual), e.prev_date.toString("MMM yyyy"),
                                seq_pct >= 0 ? QStringLiteral("+") : QStringLiteral(""))
                           .arg(seq_pct, 0, 'f', 1);
@@ -1010,8 +1004,7 @@ void EarningsCalendarWidget::populate() {
             }
         } else if (e.has_prev_values || e.has_surprise) {
             seq_tip = QStringLiteral("Not shown: the estimate and the last reported figure come from "
-                                     "different consensus panels, and the difference between panels is "
-                                     "wider than the change being measured.");
+                                     "different consensus panels, which aren't comparable.");
         }
         auto* seq_lbl = cell(seq_text, Qt::AlignHCenter, seq_colour);
         seq_lbl->setToolTip(seq_tip);

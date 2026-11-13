@@ -213,12 +213,8 @@ bool PriceRangeStrip::event(QEvent* e) {
         t << QString();
         // The honest reading, stated once, where someone is about to draw the
         // wrong conclusion from the picture.
-        t << QStringLiteral("Position, not a recommendation. Trading below an average is not evidence of a "
-                            "good entry at these horizons: nearness to the 52-week HIGH is what predicts "
-                            "higher subsequent returns (George & Hwang, 2004), reversal of past losers takes "
-                            "three to five years (De Bondt & Thaler, 1985), and short-horizon mean reversion "
-                            "plays out inside about two weeks. The averages are marked because they are the "
-                            "levels most capital watches, not because crossing one is a signal.");
+        t << QStringLiteral("Position, not a recommendation: trading below an average is not evidence of a "
+                            "good entry.");
         QToolTip::showText(he->globalPos(), t.join(QStringLiteral("\n")), this);
         return true;
     }

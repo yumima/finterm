@@ -191,8 +191,8 @@ void InsidersPanel::render() {
         auto* act = cell(action, colour);
         if (t.acquired && t.ten_percent_owner && t.open_market)
             act->setToolTip(ui::tooltip_wrap(
-                QStringLiteral("Bought by a 10% beneficial owner — a holder, not an insider in the sense the "
-                               "evidence is about. Shown, not scored: their purchase ranking inverts.")));
+                QStringLiteral("Bought by a 10% beneficial owner — a large holder, not a company insider. "
+                               "Shown, not scored.")));
         table_->setItem(i, 4, act);
 
         table_->setItem(i, 5, num_cell(compact_or_dash(t.shares), colour));

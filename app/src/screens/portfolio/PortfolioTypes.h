@@ -348,8 +348,7 @@ inline QString metrics_window_label(const ComputedMetrics& m) {
 inline QString metrics_window_note(const ComputedMetrics& m) {
     if (m.window_start.isEmpty())
         return QStringLiteral("No NAV history yet.");
-    return QStringLiteral("Window: %1 → %2 (%3 one-session returns; weekend rows merged, "
-                          "multi-day gaps excluded).")
+    return QStringLiteral("Window: %1 → %2 (%3 one-session returns).")
         .arg(m.window_start, m.window_end)
         .arg(m.return_days);
 }
@@ -368,7 +367,7 @@ inline QString rf_label(const ComputedMetrics& m) {
                                               : QStringLiteral("unknown date");
     return QStringLiteral("Risk-free rate: %1% (10y Treasury, ^TNX) as of %2%3")
         .arg(QString::number(*m.rf_rate * 100.0, 'f', 2), when,
-             rf_is_stale(m) ? QStringLiteral(" — STALE: today's fetch failed, last fetched value used.")
+             rf_is_stale(m) ? QStringLiteral(" — STALE: today's fetch failed.")
                             : QStringLiteral("."));
 }
 

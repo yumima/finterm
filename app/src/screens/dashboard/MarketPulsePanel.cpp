@@ -434,8 +434,8 @@ QWidget* MarketPulsePanel::build_fear_greed_section() {
     // disagree with no explanation.
     fg_header_label_ = new QLabel(QString("MOOD (%1-STOCK BASKET + VIX)").arg(breadth_basket_size()));
     fg_header_label_->setToolTip(
-        QString("finterm's own gauge: advancing vs declining share of a fixed %1-stock watch basket, "
-                "adjusted by VIX bands. Not CNN's Fear & Greed Index and not market-wide breadth.")
+        QString("finterm's own gauge: advancing vs declining share of a fixed %1-stock basket, adjusted "
+                "by VIX. Not CNN's Fear & Greed Index.")
             .arg(breadth_basket_size()));
     hrl->addWidget(fg_header_label_);
     hrl->addStretch();

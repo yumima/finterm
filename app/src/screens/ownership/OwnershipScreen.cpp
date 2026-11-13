@@ -91,8 +91,7 @@ void OwnershipScreen::build_ui() {
     filer_search_->setMaximumWidth(300);
     filer_search_->setToolTip(ui::tooltip_wrap(
         QStringLiteral("Open one 13F filer's whole disclosed equity book — what they hold, at what weight, and "
-                       "what moved last quarter. A drill, not a ranking: the question starts with a firm you have "
-                       "in mind.")));
+                       "what moved last quarter.")));
     bar->addWidget(filer_search_);
     root->addLayout(bar);
     // The index state gets its own line: on the title bar it ran off the

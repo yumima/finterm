@@ -6,6 +6,7 @@ A local-first, **AI-native**, **offline-capable** financial-research terminal. Q
 
 Latest first.
 
+- [`0191b5b7e`](https://github.com/yumima/finterm/commit/0191b5b7e) data: your own price source — Tiingo, Polygon/Massive, Alpaca, Finnhub, FMP
 - [`07c4255e7`](https://github.com/yumima/finterm/commit/07c4255e7) news: drawer headlines shrink again when the drawer narrows
 - [`d195c3201`](https://github.com/yumima/finterm/commit/d195c3201) rename: fincept-qt/ → app/
 - [`3c2b0e3c8`](https://github.com/yumima/finterm/commit/3c2b0e3c8) rename: product names, IDs and file names off "fincept"

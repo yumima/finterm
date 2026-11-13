@@ -241,9 +241,7 @@ inline QVector<Flag> derive_flags(const OwnershipSnapshot& s, const QDate& today
                      c.total_value > 0.0 ? QStringLiteral(", $") + compact(c.total_value) + QStringLiteral(" in total")
                                          : QString());
         f.basis = QStringLiteral("%1 or more distinct insiders with code-P purchases inside %2 "
-                                 "days; 10% owners and 10b5-1 plan trades excluded. Lakonishok "
-                                 "& Lee 2001: +4.8%/yr, +7.3%/yr in small caps (t 3.1). The "
-                                 "return is front-loaded — most of it inside a month.")
+                                 "days; 10% owners and 10b5-1 plan trades excluded.")
                       .arg(kClusterMinInsiders)
                       .arg(kClusterWindowDays);
         f.as_of = c.end;
@@ -271,12 +269,8 @@ inline QVector<Flag> derive_flags(const OwnershipSnapshot& s, const QDate& today
             f.detail = bits.join(QStringLiteral(" · ")) +
                        QStringLiteral(". Shorts cannot exit quickly, and the borrow is scarce; "
                                       "the position is fragile in both directions.");
-            f.basis = QStringLiteral("Days to cover ≥ %1 with ≥ %2 of float short (Hong et al. "
-                                     "2015: 1.19%/mo, t 6.7, a small-cap effect), or short "
-                                     "interest ÷ institutional shares in the top decile "
-                                     "(Drechsler & Drechsler: 1.51%/mo four-factor alpha, "
-                                     "t 9.0). Squeeze cost at high utilisation eats two-thirds "
-                                     "of it (Schultz 2024) — a risk statement, not a trade.")
+            f.basis = QStringLiteral("Days to cover ≥ %1 with ≥ %2 of float short, or short interest ÷ "
+                                     "institutional shares in the top decile. A risk statement, not a trade.")
                           .arg(QString::number(kDaysToCoverElevated, 'f', 0), pct(kShortFloatElevated));
             f.as_of = h.si_settlement;
             out.push_back(f);
@@ -291,11 +285,8 @@ inline QVector<Flag> derive_flags(const OwnershipSnapshot& s, const QDate& today
         f.detail = QStringLiteral("The ten largest 13F holders own %1 of the company (%2 of "
                                   "institutional value, across %3 filers).")
                        .arg(pct(*h.top10_pct_out), pct(*h.top10_share), QString::number(s.summary.holder_count));
-        f.basis = QStringLiteral("Top-10 holders ≥ %1 of shares outstanding. Ben-David et al. "
-                                 "2021: concentrated ownership raises volatility and returns "
-                                 "fall in the worst 5%% of quarters, ≈ zero otherwise. A "
-                                 "volatility read, not a forecast — and the count of owners "
-                                 "cuts the other way (Greenwood & Thesmar).")
+        f.basis = QStringLiteral("Top-10 holders ≥ %1 of shares outstanding. Concentrated ownership "
+                                 "raises volatility — a volatility read, not a forecast.")
                       .arg(pct(kTop10OfSharesOut));
         f.as_of = s.summary.quarter;
         out.push_back(f);

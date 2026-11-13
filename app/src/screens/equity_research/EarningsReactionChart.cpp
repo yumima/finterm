@@ -184,8 +184,7 @@ QString EarningsReactionChart::tooltip_for(const Column& c) const {
         // A reported quarter whose reaction session has not closed yet.
         rows << QString("<span style='color:%1'>Solid line</span> — no point yet: the session "
                         "after this print is still open. The stock is <b>%2</b> against the "
-                        "pre-print close, but that is a running number, and the line plots "
-                        "settled closes only. It joins up after the bell.")
+                        "pre-print close so far.")
                     .arg(kLineColor, pct_label(*c.live_move, 2));
     }
 

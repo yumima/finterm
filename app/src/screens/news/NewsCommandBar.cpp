@@ -141,8 +141,7 @@ void NewsCommandBar::build_command_row(QVBoxLayout* root) {
     // when active the label includes an inline count badge ("PTF 7").
     view_ptf_ = make_pill("PTF", "PTF", hl);
     view_ptf_->setCheckable(true);
-    view_ptf_->setToolTip(QStringLiteral("Filter the feed to articles tagged with tickers in your portfolio. "
-                                         "With no holdings the filter yields an empty feed — load a portfolio first."));
+    view_ptf_->setToolTip(QStringLiteral("Filter the feed to articles tagged with tickers in your portfolio."));
     connect(view_ptf_, &QPushButton::clicked, this, [this]() {
         portfolio_active_ = view_ptf_->isChecked();
         refresh_portfolio_pill();
@@ -279,9 +278,8 @@ void NewsCommandBar::build_intel_row(QVBoxLayout* root) {
     tldr_btn_->setObjectName("newsIntelTldr");
     tldr_btn_->setFlat(true);
     tldr_btn_->setCursor(Qt::PointingHandCursor);
-    tldr_btn_->setToolTip(QStringLiteral("DIGEST — a broader AI read of the whole feed, grouped by theme "
-                                         "(vs the command-row TL;DR, a quick brief of your current view). "
-                                         "Renders into the article detail pane (the middle window)."));
+    tldr_btn_->setToolTip(QStringLiteral("AI digest of the whole feed, grouped by theme, shown in the article "
+                                         "pane. TL;DR briefs only your current view."));
     connect(tldr_btn_, &QPushButton::clicked, this, &NewsCommandBar::tldr_clicked);
     hl->addWidget(tldr_btn_);
 
